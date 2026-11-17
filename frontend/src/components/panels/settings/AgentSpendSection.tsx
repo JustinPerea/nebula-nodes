@@ -57,7 +57,7 @@ function useOutsideSpend() {
       .then((next) => { setView(next); setError(null); })
       .catch((exc: unknown) => {
         // GM r6 (2): what retries on the promote says why in the "because" form.
-        const line = isPersonRefusal(exc) ? notConnectedBecause('load the connected apps') : failureMessage(exc, "Couldn't load the connected apps.");
+        const line = isPersonRefusal(exc) ? notConnectedBecause('load the connected apps') : failureMessage(exc, "Couldn’t load the connected apps.");
         setError(line);
         // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
         // promote the line goes and the read runs again, through retryOnPromote.

@@ -128,8 +128,8 @@ export function AssetsPanel() {
     };
     load()
       .catch((err) => {
-        // Each list's request names itself ("Couldn't load the boards. <reason>").
-        if (!cancelled) setError(failureMessage(err, "Couldn't load your assets."));
+        // Each list's request names itself ("Couldn’t load the boards. <reason>").
+        if (!cancelled) setError(failureMessage(err, "Couldn’t load your assets."));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -198,7 +198,7 @@ export function AssetsPanel() {
       useAssetStudioDraftStore.getState().rehome(kind, id, result.to);
       setRelistKey((value) => value + 1);
     } catch (err) {
-      setMoveError(failureMessage(err, kind === 'moodboard' ? "Couldn't move the moodboard." : "Couldn't move the character."));
+      setMoveError(failureMessage(err, kind === 'moodboard' ? "Couldn’t move the moodboard." : "Couldn’t move the character."));
     }
     setMovingId(null);
   };

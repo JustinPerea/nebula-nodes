@@ -228,6 +228,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
 const EXEMPT: Record<string, string> = {
   'components/projects/ProjectHome.tsx: notice.text': 'the catalog restore notice\'s own status line (PR #199): what Nebula did, never a refusal of a request, so it can\'t be a not-connected line',
   'components/moodboard-studio/MoodboardStudioView.tsx: notices': 'a block of elements, each line in it a FailureLines',
+  'components/projects/ProjectWorkspaceControls.tsx: failedLine': 'the failed-save description for the header\'s Try again: the header renders nothing for a failed save while Nebula is offline (status === \'error\' && offline), so the line never shows while not connected',
   'components/commons/CommonsDetail.tsx: analysisFailureReason(asset.last_error_kind)': 'a too-transparent reference\'s muted reason (#208): from the asset\'s own analysis, never a request\'s refusal',
 };
 

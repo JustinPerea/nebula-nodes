@@ -118,7 +118,7 @@ describe('a deferred panel whose chunk failed once', () => {
     await flush();
     // Error copy round 3b (GM's WRAP rule): Try again sits beside it and
     // redoes the load, so the line drops its own "try again".
-    expect(screen.getByRole('alert').textContent).toBe("Couldn't load the mask painter. Nebula's server isn't answering. Make sure it's running.");
+    expect(screen.getByRole('alert').textContent).toBe('Nebula couldn’t load the mask painter because the server isn’t answering. Try again.');
     first.unmount();
 
     // Paint Mask again mounts it again, which fetches again (and fails, the second time).

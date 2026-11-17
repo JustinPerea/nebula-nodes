@@ -35,7 +35,7 @@ import { currentProject } from '../../lib/currentProject';
 
 const MAX_CONCURRENT = 2;
 /** A Generate that didn't start, named by its button (error copy round 3e). */
-// GM, round 3f: "Couldn't generate." → "Couldn't start the generation."; GM r12 (2), #204 round 9:
+// GM, round 3f: "Couldn’t generate." → "Couldn’t start the generation."; GM r12 (2), #204 round 9:
 // every Generate line opens "Nebula couldn’t start the generation." (lib/errorCopy's GENERATE_HEADING).
 
 export function CreateView() {
@@ -189,7 +189,7 @@ export function CreateView() {
       if (styleName.current === body.name) styleName.current = null;
       if (mounted.current) setPresetReloadKey((k) => k + 1);
     } catch (err) {
-      if (!isPersonRefusal(err)) { styleLine(failureMessage(err, "Couldn't save the style."), err); return; }
+      if (!isPersonRefusal(err)) { styleLine(failureMessage(err, "Couldn’t save the style."), err); return; }
       styleLine(notConnectedBecause('save the style'), err);
       retryOnPromote(err, `create.style:${projectId}:${body.name}`, () => { // clears-on-promote: create.style-retry
         if ((currentProject()?.id ?? null) !== projectId) return;
@@ -463,7 +463,7 @@ export function CreateView() {
           isLaunching={createLaunchingIds.length > 0 || isImportingGraph}
           referencesBlocked={uploads.length > 0}
           referenceStatus={uploads.some((upload) => upload.status === 'uploading')
-            ? 'Uploading references…' : uploads.length > 0 ? 'Retry, attach again or remove failed references to generate.' : undefined}
+            ? 'Uploading references…' : uploads.length > 0 ? 'Try again, attach again or remove failed references to generate.' : undefined}
           maxConcurrent={MAX_CONCURRENT}
           quantity={quantity}
           onPromptChange={setPrompt}

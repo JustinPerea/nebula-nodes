@@ -10,7 +10,7 @@ import { useGraphStore } from '../store/graphStore';
 import { useUIStore } from '../store/uiStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type CinemaMotionHandoff } from '../store/cinemaMotionStore';
 import type { NodeData } from '../types';
-import { becauseLine, copyForAnswer, isNoAnswer, readRefusal } from './errorCopy';
+import { becauseLine, CONNECTION_LOST_COPY, copyForAnswer, isNoAnswer, readRefusal } from './errorCopy';
 
 /** A refused handoff's reason: a person-only refusal says GM's line, by its
  * code (Q116 a); else the backend's reason or GM's line for the status. */
@@ -22,7 +22,7 @@ async function refusalReason(response: Response): Promise<string> {
 // The handoff's lines sit beside its "Retry connection" button, so they name
 // what failed and why and leave the retry to the button (GM's WRAP rule, error
 // copy round 3c-2; round 2: every failure starts "Couldn't").
-const UNCONFIRMED = "Couldn't confirm the video connection.";
+const UNCONFIRMED = 'Nebula couldn’t confirm the video connection.';
 
 /** A handoff failure whose message is already the person's line. */
 class HandoffError extends Error {}
@@ -90,7 +90,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
       if (!owns(handoff)) return;
       if (!response.ok) {
         throw new HandoffError(response.status === 409
-          ? 'The shot changed before it could be connected. Retry with the current result.'
+          ? 'Nebula couldn’t connect the video node because the shot changed first. Try again with the current result.'
           // headedLine (review 5, L4): a backend line that already says what
           // couldn't be done shows once, never under a second heading.
           : becauseLine({ heading: "Couldn’t connect the video node.", reason: await refusalReason(response), status: response.status }, 'button'));
@@ -103,9 +103,9 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
         || (useCinemaMotionStore.getState().graphRevision !== handoff.graphRevision
           && !cinemaMotionTarget(live.nodes, live.edges, nodeId, shotId, result.node.id))) {
         // A newer authoritative graph can omit a pair deleted after the POST
-        // committed. Its older HTTP reply cannot put that pair back. Retry
+        // committed. Its older HTTP reply cannot put that pair back. Try again
         // asks the idempotent endpoint to confirm today's connection.
-        throw new HandoffError("Couldn't confirm the current video connection.");
+        throw new HandoffError('Nebula couldn’t confirm the current video connection.');
       }
       // Adopt only the confirmed pair when its socket event is delayed. Never
       // replace current source authoring or an already hydrated target's edits.
@@ -137,9 +137,8 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
       return;
     }
     replace({ ...handoff, status: 'error', error: error instanceof HandoffError ? error.message
-      // GM, round 3f: "don't stack two "Couldn't"s, and Nebula is local, so →
-      // "Couldn't confirm the video connection. Nebula didn't respond."".
-      : isNoAnswer(error, controller.signal) ? `${UNCONFIRMED} Nebula didn’t respond.` : UNCONFIRMED });
+      // No answer says why, in the because form beside the Try again button.
+      : isNoAnswer(error, controller.signal) ? becauseLine({ heading: 'Couldn’t confirm the video connection.', reason: CONNECTION_LOST_COPY }, 'button') : UNCONFIRMED });
   } finally { controllers.delete(handoff.attempt); }
 }
 

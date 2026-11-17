@@ -171,7 +171,7 @@ describe('Create lifecycle across view visits', () => {
     mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain('Nebula couldn’t start the generation. Its nodes weren’t added to the canvas.'));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain('Nebula couldn’t start the generation because its nodes weren’t added to the canvas. Try again.'));
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(0);
     expect(mocks.execute).not.toHaveBeenCalled();
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
@@ -207,7 +207,7 @@ describe('Create lifecycle across view visits', () => {
     mocks.author.mockResolvedValueOnce({ modelNodeIds: [], allNodeIds: [] });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
-    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain('Nebula couldn’t start the generation.'));
+    await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toContain('Nebula couldn’t start the generation'));
     act(() => mocks.store!.setState({ messageNotice: { id: 7, text: 'Another line.', tone: 'info' } }));
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
     await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));

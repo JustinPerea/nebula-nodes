@@ -19,42 +19,6 @@
       "text": "+ New Character"
     },
     {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/character-studio/CharacterStudioToolbar.tsx",
-      "rule": "retry-button",
-      "text": "Retry"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/character-studio/CharacterStudioToolbar.tsx",
-      "rule": "retry-button",
-      "text": "Retry save"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
-      "rule": "retry-button",
-      "text": "Retry"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
-      "rule": "retry-button",
-      "text": "Retry loading"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't load the character."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't save the character."
-    },
-    {
       "family": "title-case-labels",
       "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
       "rule": "title-case",
@@ -77,12 +41,6 @@
       "file": "frontend/src/components/cinema-studio/CinemaSharedControls.tsx",
       "rule": "em-dash",
       "text": "Connected from the canvas — disconnect on the canvas to remove"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/cinema-studio/CinemaShotPanel.tsx",
-      "rule": "retry-button",
-      "text": "Retry connection"
     },
     {
       "family": "sentence-punctuation",
@@ -115,12 +73,6 @@
       "text": "Select Shot {}"
     },
     {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/commons/CommonsDetail.tsx",
-      "rule": "retry-button",
-      "text": "Retry"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/commons/CommonsEvaluation.tsx",
       "rule": "sentence-punctuation",
@@ -133,46 +85,16 @@
       "text": "Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here."
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/commons/CommonsLeavePopover.tsx",
-      "rule": "straight-quote",
-      "text": "Your labels aren't saved."
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/commons/CommonsView.tsx",
       "rule": "sentence-punctuation",
       "text": "Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling){}"
     },
     {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/components/commons/CommonsView.tsx",
-      "rule": "sentence-punctuation",
-      "text": "Library analysis is stopped: it used this run's call budget ({} of {} calls). Restart Nebula to reset it. Analysis then stays paused until {}."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/commons/CommonsView.tsx",
-      "rule": "straight-quote",
-      "text": "Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling{}"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/commons/CommonsView.tsx",
-      "rule": "straight-quote",
-      "text": "Library analysis is stopped: it used this run's call budget ({} of {} calls). Restart Nebula to reset it. Analysis then stays paused until {}."
-    },
-    {
       "family": "title-case-labels",
       "file": "frontend/src/components/ContextMenu.tsx",
       "rule": "title-case",
       "text": "Run This Node"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/create-studio/ReferenceTray.tsx",
-      "rule": "retry-button",
-      "text": "Retry"
     },
     {
       "family": "sentence-punctuation",
@@ -193,24 +115,6 @@
       "text": "Render Preview"
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardBrief.tsx",
-      "rule": "straight-quote",
-      "text": "An agent's brief"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardBrief.tsx",
-      "rule": "straight-quote",
-      "text": "Generators don't get these."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardBrief.tsx",
-      "rule": "straight-quote",
-      "text": "You kept these. They aren't pinned."
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/moodboard-studio/MoodboardListView.tsx",
       "rule": "sentence-punctuation",
@@ -222,18 +126,6 @@
       "rule": "title-case",
       "text": "Add Images",
       "count": 2
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "retry-button",
-      "text": "Retry"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "retry-button",
-      "text": "Retry loading"
     },
     {
       "family": "sentence-punctuation",
@@ -252,54 +144,6 @@
       "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
       "rule": "sentence-punctuation",
       "text": "On: generators get these notes with the brief."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't analyze the moodboard."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't load the moodboard."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't redo the change."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't restore the moodboard."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't save your brief."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't undo the change."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't upload the image."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "straight-quote",
-      "text": "the total the moodboard's images share on Krea 2"
     },
     {
       "family": "title-case-labels",
@@ -344,18 +188,6 @@
       "text": "TypeSafe marks image input as experimental: results can change between releases."
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/JevResult.tsx",
-      "rule": "straight-quote",
-      "text": "Jev couldn't tell whether it's there, so there is no box, crop or mask."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/MeshPreview.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't download the 3D model."
-    },
-    {
       "family": "em-dashes",
       "file": "frontend/src/components/nodes/ModelNode.tsx",
       "rule": "em-dash",
@@ -366,24 +198,6 @@
       "file": "frontend/src/components/nodes/ModelNode.tsx",
       "rule": "em-dash",
       "text": "Out of date — source updated"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/ModelNode.tsx",
-      "rule": "straight-quote",
-      "text": "Ask Claude to rewrite this prompt for the node it's connected to"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/ModelNode.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't download the output."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/MoodboardNode.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't load this moodboard"
     },
     {
       "family": "title-case-labels",
@@ -398,40 +212,16 @@
       "text": "Open Moodboard"
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/PaperSourceNode.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't refresh the source."
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/nodes/ReferenceSetNode.tsx",
       "rule": "sentence-punctuation",
       "text": "Connect to Cinema scene. Reference priority sets image order; 0 excludes."
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/RepresentationViewer.tsx",
-      "rule": "straight-quote",
-      "text": "This value does not match Nebula's versioned spatial contract."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/nodes/StructuredValuePreview.tsx",
-      "rule": "straight-quote",
-      "text": ": open the node's settings to read them"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/nodes/WorldPreview.tsx",
       "rule": "sentence-punctuation",
       "text": "Drag to look. Use W A S D or arrow keys to move; on touch, use two fingers to move and pinch."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/OutsideImageNote.tsx",
-      "rule": "straight-quote",
-      "text": "This image is a link to another site, so Nebula doesn't load it. Replace it with an upload."
     },
     {
       "family": "title-case-labels",
@@ -489,12 +279,6 @@
       "text": "Device Code"
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/DeferredMaskPainter.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't load the mask painter."
-    },
-    {
       "family": "title-case-labels",
       "file": "frontend/src/components/panels/DeferredMaskPainter.tsx",
       "rule": "title-case",
@@ -504,25 +288,7 @@
       "family": "em-dashes",
       "file": "frontend/src/components/panels/Inspector.tsx",
       "rule": "em-dash",
-      "text": "Connect the source image to the edit node's Image port too — mask-painter only passes the mask. Reconnect the mask, and Nebula connects the base image for you."
-    },
-    {
-      "family": "em-dashes",
-      "file": "frontend/src/components/panels/Inspector.tsx",
-      "rule": "em-dash",
       "text": "Node info — inputs, outputs, and settings"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/Inspector.tsx",
-      "rule": "straight-quote",
-      "text": "Connect the source image to the edit node's Image port too — mask-painter only passes the mask. Reconnect the mask, and Nebula connects the base image for you."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/Inspector.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't load the models."
     },
     {
       "family": "title-case-labels",
@@ -579,40 +345,10 @@
       "text": "Recovery ID unavailable — check Marble and the live World node"
     },
     {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
-      "rule": "retry-button",
-      "text": "Retry failed"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
-      "rule": "retry-button",
-      "text": "Retry failed {} run"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
-      "rule": "straight-quote",
-      "text": "Can't clear while a World Labs recovery ID is saved."
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
-      "rule": "title-case",
-      "text": "Clear Run History"
-    },
-    {
       "family": "title-case-labels",
       "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
       "rule": "title-case",
       "text": "Run History"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/Settings.tsx",
-      "rule": "straight-quote",
-      "text": "This part of Settings couldn't load. Reload the tab to try again."
     },
     {
       "family": "sentence-punctuation",
@@ -627,12 +363,6 @@
       "text": "and choose Nous Portal. It signs in through Hermes in your browser; there's no key to paste."
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/settings/PreferencesTab.tsx",
-      "rule": "straight-quote",
-      "text": "Every agent's actions, bottom right"
-    },
-    {
       "family": "title-case-labels",
       "file": "frontend/src/components/panels/settings/ServiceAccountInput.tsx",
       "rule": "title-case",
@@ -643,30 +373,6 @@
       "file": "frontend/src/components/panels/Toolbar.tsx",
       "rule": "em-dash",
       "text": "Clear canvas — asks for confirmation"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/projects/ProjectWorkspaceControls.tsx",
-      "rule": "retry-button",
-      "text": "Retry saving"
-    },
-    {
-      "family": "retry-buttons",
-      "file": "frontend/src/components/projects/ProjectWorkspaceControls.tsx",
-      "rule": "retry-button",
-      "text": "Save failed · Retry"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/projects/ProjectWorkspaceControls.tsx",
-      "rule": "title-case",
-      "text": "Save failed · Retry"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/ProviderRecoveryStatus.tsx",
-      "rule": "straight-quote",
-      "text": "Nebula couldn't save the hold, so keep Nebula running until this run finishes."
     },
     {
       "family": "em-dashes",
@@ -3422,30 +3128,6 @@
       "text": "Text Input"
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/hooks/useAssetDelete.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete the {}."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/hooks/useAssetDelete.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't restore the {}."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/hooks/useStudioAssetMove.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't move the character."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/hooks/useStudioAssetMove.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't move the moodboard."
-    },
-    {
       "family": "title-case-labels",
       "file": "frontend/src/lib/agentCursorSays.ts",
       "rule": "title-case",
@@ -3522,136 +3204,6 @@
       "file": "frontend/src/lib/reopenHoldLines.ts",
       "rule": "title-case",
       "text": "Resume Operation ID"
-    },
-    {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "sentence-punctuation",
-      "text": "Nebula was updated, but this window still has the frontend from before the update, so it can't save or run. Rebuild the frontend (or restart the dev server), then reload.{}"
-    },
-    {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "sentence-punctuation",
-      "text": "Try again checks your saved projects; it won't make the change twice."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't confirm the project change."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't confirm the project was deleted."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't create the project.",
-      "count": 2
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete {} nodes."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete the node."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete the project for good."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't delete the project.",
-      "count": 3
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't download a copy."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't empty Recently deleted."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't load the project."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't load your projects."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't open the project.",
-      "count": 3
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't rename the project."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't restore the project."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't save the project.",
-      "count": 2
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Couldn't set the cover."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Nebula was updated, but this window still has the frontend from before the update, so it can't save or run. Rebuild the frontend (or restart the dev server), then reload.{}"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "This window's frontend is newer than the Nebula backend it is connected to, so it can't save or run. Restart the backend, then reload.{}"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/store/projectFlows.ts",
-      "rule": "straight-quote",
-      "text": "Try again checks your saved projects; it won't make the change twice."
     }
   ]
 }

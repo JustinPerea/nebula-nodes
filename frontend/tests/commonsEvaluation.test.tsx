@@ -115,27 +115,27 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   await waitFor(() => expect(work?.unsaved).toBe(true));
 
   api.labels.mockRejectedValueOnce(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false });
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because Labels changed in another window. Reload before saving.', retry: false });
   // The API's error carries the copy (lib/commonsApi, error-copy); round 2:
-  // the leave popover offers Save and leave, so its line is GM's short one.
-  api.labels.mockRejectedValueOnce(new CommonsRequestError("Nebula didn't respond. Try again.", 503));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: "Nebula didn't respond.", retry: true });
-  api.labels.mockRejectedValueOnce(new CommonsRequestError("Nebula's server isn't answering. Make sure it's running, then try again.", 0));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: "Nebula's server isn't answering. Make sure it's running.", retry: true });
+  // the leave popover's line is the one because line, the same as the panel's banner.
+  api.labels.mockRejectedValueOnce(new CommonsRequestError('Nebula didn’t respond. Try again.', 503));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server didn’t respond. Try again.', retry: true });
+  api.labels.mockRejectedValueOnce(new CommonsRequestError('Nebula’s server isn’t answering. Make sure it’s running, then try again.', 0));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.', retry: true });
   // An error that didn't come through the API never shows its own message
   // (GM), and a TypeError the API didn't classify is not "isn't answering"
   // (typeerror, 2026-10-24): GM's general line.
   api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Try again, or reload if it keeps happening.',
-    message: "Couldn’t save your labels. Try again, or reload if it keeps happening.", retry: true });
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.',
+    message: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.', retry: true });
   // GM: a timeout or a rate limit is a 4xx that works on a second try.
   for (const status of [408, 429]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));
-    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Try again', retry: true });
+    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels. Try again', retry: true });
   }
   for (const status of [400, 401, 403, 404, 413, 422]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Refused', status));
-    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Refused', retry: false });
+    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because Refused', retry: false });
   }
 });
 

@@ -200,14 +200,14 @@ describe.each([
       { ...(kind === 'moodboard' ? board : character), projectId: 'pA' }]);
     // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
-    api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError("Couldn't move it.", 404, { reason: 'No project has the id.' }));
+    api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError('Couldn’t move it.', 404, { reason: 'No project has the id.' }));
     await openTab(tab);
     fireEvent.click(screen.getByRole('tab', { name: 'Project' }));
     fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${item}`) }));
     fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
     expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Move to Global']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Global' }));
-    expect(await screen.findByText("Couldn't move it. No project has the id.")).toBeTruthy();
+    expect(await screen.findByText('Nebula couldn’t move it. No project has the id.')).toBeTruthy();
     expect(api.moveStoredAsset).toHaveBeenCalledWith(kind, id, null);
   });
 });
@@ -276,7 +276,7 @@ describe('Assets panel Styles', () => {
       deletedAt: '2026-10-20T12:00:00Z', deletedBy: { kind: 'agent', name: 'GM - Design' } }]);
     // What deletePreset throws (error-copy round 2): its heading and the backend's reason.
     presets.deletePreset.mockRejectedValueOnce(
-      new RequestFailedError("Couldn't delete the style.", 404, { detail: "Style 's1' not found" }));
+      new RequestFailedError('Couldn’t delete the style.', 404, { detail: "Style 's1' not found" }));
     renderPanel();
     fireEvent.click(screen.getByRole('tab', { name: 'Styles' }));
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
@@ -286,7 +286,7 @@ describe('Assets panel Styles', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Neon noir/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));
-    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't delete the style. Style 's1' not found");
+    expect((await screen.findByRole('alert')).textContent).toBe("Nebula couldn’t delete the style because Style 's1' not found");
     expect(screen.queryByText(/to Recently deleted/)).toBeNull();
   });
 

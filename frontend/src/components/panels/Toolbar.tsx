@@ -47,7 +47,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { isKeyLocked, runKeyLockLine, withKeyLock } from '../../lib/runKeyLock';
 import { FILES_VERB, RUN_LOCK_VERBS, lockLine, runFinishesLine, type LockWait } from '../../lib/runLock';
 
-const CLEAR_CANVAS = "Couldn't clear the canvas.";
+const CLEAR_CANVAS = "Couldn’t clear the canvas.";
 
 
 export function Toolbar() {
@@ -230,7 +230,7 @@ export function Toolbar() {
     try {
       // force: the person just confirmed, and a project with nodes needs it
       // (the backend refuses a clear without it, 409).
-      // GM, error-copy round 2: "Couldn't clear the canvas." then the reason.
+      // GM, error-copy round 2: "Couldn’t clear the canvas." then the reason.
       const response = await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
       // The canvas Nebula holds now (round 19): writes to it carry it.
       await adoptCanvasRevisionFrom(response);

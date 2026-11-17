@@ -205,7 +205,7 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
   useEffect(() => {
     let live = true;
     load(project.id).then((found) => { if (live) setChoices(found); })
-      .catch((error: unknown) => { if (live) setFailed(failureMessage(error, "Couldn't load the cover choices.")); });
+      .catch((error: unknown) => { if (live) setFailed(failureMessage(error, "Couldn’t load the cover choices.")); });
     return () => { live = false; };
   }, [load, project.id]);
   const pinned = choices?.pinned ?? null;

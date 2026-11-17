@@ -90,7 +90,7 @@ describe('/clear in the chat panel', () => {
     expect(await screen.findByText(
       "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.")).toBeTruthy();
     await waitFor(() => expect(document.querySelector('[data-chat-notice]')?.textContent).toBe(
-      "Couldn't clear the canvas. A run is still going. Wait for it to finish or stop it first."));
+      'Nebula couldn’t clear the canvas because a run is still going. Wait for it to finish or stop it first.'));
     expect(screen.queryByText(/with an empty canvas/)).toBeNull();
   });
 

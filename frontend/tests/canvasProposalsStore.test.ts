@@ -287,7 +287,7 @@ describe('GM round 22 (4b): Accept after the canvas was cleared or replaced', ()
       { heading: "Couldn't accept the proposal.", code: 'proposal_canvas_replaced' } as never));
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(useCanvasProposalsStore.getState().errors.p_a).toBe(
-      "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.");
+      'Couldn’t accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.');
   });
 });
 
@@ -338,7 +338,7 @@ describe('Accept that would make the canvas too complex to save', () => {
   });
   it('control: another refusal keeps the alert style', async () => {
     const { isNeutralProposalLine } = await import('../src/store/canvasProposalsStore');
-    expect(isNeutralProposalLine("Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.")).toBe(false);
+    expect(isNeutralProposalLine('Couldn’t accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.')).toBe(false);
   });
 });
 

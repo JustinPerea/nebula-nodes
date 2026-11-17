@@ -292,7 +292,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             aria-busy={motionHandoff?.status === 'pending' || undefined}>
             {motionHandoff?.status === 'ready' ? 'View video node'
               : motionHandoff?.status === 'pending' ? 'Connecting video node…'
-                : motionHandoff?.status === 'error' ? 'Retry connection' : 'Send to motion'}
+                : motionHandoff?.status === 'error' ? 'Try again' : 'Send to motion'}
           </button>
           {motionHandoff?.status === 'error' ? (
             <p className="cinema-shot-panel__motion-feedback" role="alert"><LineText text={motionHandoff.error} /></p>

@@ -9,7 +9,7 @@ import {
 } from '../../lib/trash';
 import type { AssetScope } from '../../store/uiStore';
 import { wsClient } from '../../lib/wsClient';
-import { failureMessage, oneLine, besideButton, type FailureCopy } from '../../lib/errorCopy';
+import { failureMessage, failureText, besideButton, type FailureCopy } from '../../lib/errorCopy';
 import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
@@ -172,7 +172,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
       .catch((err) => {
         if (cancelled) return;
         setItemsFor(where);
-        setLoadError(failureMessage(err, "Couldn't load Recently deleted."));
+        setLoadError(failureMessage(err, "Couldn’t load Recently deleted."));
       });
     return () => { cancelled = true; };
   }, [kind, scope, projectId, noProject, where, refreshKey, reload]);
@@ -272,7 +272,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
 export interface UndoDeleteToastProps {
   name: string;
   busy?: boolean;
-  /** Undo's own failure, one line (GM: "Couldn't {verb} {object}. {reason}"
+  /** Undo's own failure, one line (GM: "Couldn’t {verb} {object}. {reason}"
    * in one string), short: the Undo beside it redoes it (round 3b). */
   error?: string | FailureCopy | null;
   onUndo: () => void;
@@ -297,7 +297,7 @@ export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDi
       <div className="asset-trash__toast" role="status" aria-live="polite" {...leave}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="asset-trash__toast-text">{error ? <LineText text={besideButton(typeof error === 'string' ? error : oneLine(error))} /> : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
+        <span className="asset-trash__toast-text">{error ? <LineText text={typeof error === 'string' ? besideButton(error) : failureText(error, true)} /> : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
         <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
         <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>

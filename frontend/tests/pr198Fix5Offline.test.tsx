@@ -81,7 +81,7 @@ describe('GM: the offline reason for a disabled action', () => {
       'You can rerun it when Nebula reconnects.',
       // Run history's Retry and Recover (PR #200 fix round 3, GM's round 3
       // answers), one list since the merge with #200.
-      'You can retry it when Nebula reconnects.',
+      'You can run its failed nodes again when Nebula reconnects.',
       'You can recover it when Nebula reconnects.',
     ]);
   });

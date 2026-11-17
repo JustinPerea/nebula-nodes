@@ -316,7 +316,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
       image.onload = () => { if (!controller.signal.aborted && canvas.current) {
         canvas.current.getContext('2d')?.drawImage(image, 0, 0); setUrl(objectUrl); setImageError('');
       } };
-      image.onerror = () => { if (!controller.signal.aborted) setImageError("Couldn’t show this reference. Reload to try again."); };
+      image.onerror = () => { if (!controller.signal.aborted) setImageError("Nebula couldn’t show this reference. Reload to try again."); };
       image.src = objectUrl;
     }, (e: unknown) => { if (!controller.signal.aborted) imageLine.show(e, "Couldn’t load this reference.", { reload: true }); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };

@@ -152,8 +152,7 @@ describe('Blind labeling keeps its draft across sections', () => {
     await waitFor(() => expect(commonsUnsaved()).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Back to Canvas' }));
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
-    expect(popover()).toHaveTextContent('Labels changed in another window. Reload before saving.');
+    await waitFor(() => expect(popover()).toHaveTextContent('Nebula couldn’t save your labels because Labels changed in another window. Reload before saving.'));
     expect(useUIStore.getState().viewMode).toBe('commons');
     expect((screen.getByLabelText('type style') as HTMLSelectElement).value).toBe('humanist_sans');
   });
@@ -262,7 +261,7 @@ describe('Preparing the held-out set outlives the panel', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     await comeBack();
-    expect(await screen.findByText(/A reference is still downloading from iCloud\./)).toHaveAttribute('role', 'alert');
+    expect(await screen.findByText(/a reference is still downloading from iCloud\./)).toHaveAttribute('role', 'alert');
     expect(screen.getByRole('button', { name: 'Prepare 15 held-out references' })).toBeEnabled();
     expect(evaluation.prepare).toHaveBeenCalledTimes(1);
   });

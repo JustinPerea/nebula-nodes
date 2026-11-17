@@ -184,13 +184,13 @@ describe('project autosave', () => {
 
   it('shows the retry state when a save fails, and Retry saves it', async () => {
     // Round 3e: the API's typed refusal (ProjectRequestError is one); a plain Error's text is never shown.
-    saveProject.mockRejectedValueOnce(new RequestFailedError("Couldn't save the project.", 507, { reason: 'Disk full.' }));
+    saveProject.mockRejectedValueOnce(new RequestFailedError('Couldn’t save the project.', 507, { reason: 'Disk full.' }));
     setPrompt('b');
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(savedPrompts()).toEqual(['b']);
     expect(flushCalls).toBe(1);
-    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: "Couldn't save the project. Disk full." });
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Nebula couldn’t save the project because Disk full.' });
 
     vi.mocked(api.listProjects).mockResolvedValueOnce({ projects: [summary], activeProjectId: 'p1', workspaceRevision: 'r1' });
     await useProjectStore.getState().retry();

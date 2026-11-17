@@ -90,7 +90,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
         {' '}{ambiguity?.message ?? warning}
         {ambiguity && !ambiguity.durable && (
           // GM, round 3f.
-          <> Nebula couldn't save the hold, so keep Nebula running until this run finishes.</>
+          <> Nebula couldn’t save the hold, so keep Nebula running until this run finishes.</>
         )}
         {ambiguities.length > 1 && (
           <> {moreNodesNeedCheck(ambiguities.length - 1)}</>

@@ -19,7 +19,7 @@ import { ModalPortal } from '../ModalPortal';
  * After a download that couldn't be written (`downloadFailed`), GM's line 2
  * is the body in place of the reason; the heading and both choices stay.
  * After a download past the browser's string cap (`downloadTooBig`), GM's
- * pair (2026-10-25): "Couldn't download your edits." over "It's too big to
+ * pair (2026-10-25): "Couldn’t download your edits." over "It's too big to
  * download in a browser."; both choices stay.
  * `keptIn`: the edits are the open project's own canvas, kept in that
  * project by the backend's switch, and the confirm says so (Q118 review).

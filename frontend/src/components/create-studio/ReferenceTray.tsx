@@ -31,14 +31,15 @@ function UploadChip({ upload, canRetry, onRetry, onRemove }: {
       <div>
         <span className="reference-tray__name">{upload.name}</span>
         <span className="reference-tray__status" role={uploading ? 'status' : 'alert'}>
-          {/* GM's WRAP rule: the chip's Retry / Attach again is the retry. */}
-          {uploading ? 'Uploading…' : <LineText text={besideButton(upload.error ?? "Couldn't upload this image.")} />}
+          {/* The chip's Try again / Attach again is the retry, so the line ends “Try again.” The draft keeps only the line
+              (it is saved with the page), so the button's ending is swapped in here (besideButton). */}
+          {uploading ? 'Uploading…' : <LineText text={besideButton(upload.error ?? 'Nebula couldn’t upload this image.')} />}
         </span>
       </div>
       {!uploading && <button type="button" className="reference-tray__retry"
         onClick={() => canRetry ? onRetry() : input.current?.click()}
-        aria-label={`${canRetry ? 'Retry' : 'Attach again'} ${upload.name}`}>
-        {canRetry ? 'Retry' : 'Attach again'}
+        aria-label={canRetry ? `Try again to upload “${upload.name}”` : `Attach again ${upload.name}`}>
+        {canRetry ? 'Try again' : 'Attach again'}
       </button>}
       <input ref={input} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden
         onChange={(event) => {

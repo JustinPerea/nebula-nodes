@@ -157,7 +157,7 @@ function InvalidRepresentation({ type, compact }: { readonly type: PortDataType;
       <span className="spatial-preview__eyebrow">Invalid structured output</span>
       <strong className="spatial-preview__title">{type} unavailable</strong>
       <p className="spatial-preview__subtitle">
-        This value does not match Nebula&apos;s versioned spatial contract.
+        Nebula can’t show this value because it isn’t in a 3D format Nebula reads.
       </p>
     </section>
   );

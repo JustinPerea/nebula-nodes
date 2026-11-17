@@ -238,7 +238,7 @@ describe('Canvas file drop', () => {
   it('says so when an upload fails, with the reason', async () => {
     api.fetch.mockImplementation(async () => new Response('', { status: 503 }));
     await drop([file('side.png', 'image/png')]);
-    expect(notice()).toBe("Couldn't upload “side.png”. Nebula didn't respond. Try again.");
+    expect(notice()).toBe('Nebula couldn’t upload “side.png” because the server didn’t respond. Try again.');
   });
 
   it('says so when the server does not answer', async () => {
@@ -246,7 +246,7 @@ describe('Canvas file drop', () => {
     api.fetch.mockImplementation(async () => { throw new ConnectionLostError(new TypeError('Failed to fetch')); });
     await drop([file('tone.wav', 'audio/wav')]);
     expect(notice()).toBe(
-      "Couldn't upload “tone.wav”. Nebula's server isn't answering. Make sure it's running, then try again.");
+      'Nebula couldn’t upload “tone.wav” because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('gives a drop one notice: a count over the shared reason (GM)', async () => {

@@ -182,7 +182,7 @@ export function SelectionToolbar() {
     try {
       await downloadSelectedOutputs(selectedNodes);
     } catch (error) {
-      setDownloadError(failureMessage(error, "Couldn't download the outputs."));
+      setDownloadError(failureMessage(error, "Couldn’t download the outputs."));
     } finally {
       setDownloading(false);
     }

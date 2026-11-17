@@ -113,7 +113,7 @@ describe('GM r6 (1): Save style retries on the promote, and says so in the notic
   it('another failure keeps the heading form in the notice region, and nothing retries', async () => {
     answers.set('POST /api/presets', { status: 409, body: { detail: 'Preset storage unavailable.' } });
     await saveStyle();
-    await waitFor(() => expect(notice()).toContain('Couldn\'t save the style.'));
+    await waitFor(() => expect(notice()).toContain('Nebula couldn’t save the style'));
     await act(async () => { session.notePersonPromoted(); });
     expect(presets()).toHaveLength(1);
   });

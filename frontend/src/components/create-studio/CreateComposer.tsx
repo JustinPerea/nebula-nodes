@@ -86,7 +86,7 @@ export function CreateComposer({
       onPromptChange(enhanced);
     } catch (err) {
       if (mounted.current && request === enhanceRequest.current && currentPrompt.current === original) {
-        const line = failureMessage(err, "Couldn't enhance the prompt.");
+        const line = failureMessage(err, "Couldn’t enhance the prompt.");
         setEnhanceError(line);
         clearSetterOnPromote(err, setEnhanceError, line, null); // clears-on-promote: create.enhance (GM, #204 r3)
       }

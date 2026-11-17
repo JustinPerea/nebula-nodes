@@ -45,7 +45,7 @@ interface NodeCardBoundaryProps {
  * Review 4, L3: "missing or damaged" only when the data check
  * (nodeDataProblem) finds what's wrong, and the Agent log names that field.
  * Data that checks out reads GM r5's neutral line, and the Agent log names
- * the error ("Couldn't draw “X”, node n4. <error message>").
+ * the error ("Couldn’t draw “X”, node n4. <error message>").
  *
  * Review 5, L5: the card retries on every data change, and a running node's
  * data changes with each progress event, so the Agent log gets each

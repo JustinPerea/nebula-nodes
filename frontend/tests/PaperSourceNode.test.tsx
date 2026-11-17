@@ -182,7 +182,7 @@ describe('Paper source explicit UI lifecycle', () => {
     vi.mocked(openExternalUrl).mockRejectedValue(new Error('No protocol handler'));
     render(<Harness />);
     fireEvent.click(screen.getByRole('link', { name: 'Open in Paper' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't open Paper Desktop. Use Open source link."));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Nebula couldn’t open the source because Paper Desktop didn’t open it. Use “Open source link”.'));
     expect(screen.queryByText(/Opening this object/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open source link' })).toHaveAttribute('href', 'https://app.paper.design/file/file-a/page-a/logo-a');
     expect(useGraphStore.getState().nodes[0].data.params._paperSource).toBe(source);

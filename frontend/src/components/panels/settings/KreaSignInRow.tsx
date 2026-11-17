@@ -40,7 +40,7 @@ function KreaPlans() {
     setError(null);
     try { await action(); }
     catch (value) {
-      const line = failureMessage(value, "Couldn't load the Krea plans.");
+      const line = failureMessage(value, "Couldn’t load the Krea plans.");
       setError(line);
       // The trial and the plans are person-only (krea_connector person_only): gone on the promote (#204 r4).
       clearSetterOnPromote(value, setError, line, null); // clears-on-promote: krea.plans
@@ -167,8 +167,8 @@ export function KreaSignInRow({ krea, mode, lock }: { krea: KreaController; mode
               if (!bridge) return;
               event.preventDefault();
               void bridge.open(authUrl).then((result) => {
-                if (!result.ok) krea.setError("Couldn't open Krea sign-in in your browser.");
-              }).catch(() => krea.setError("Couldn't open Krea sign-in in your browser."));
+                if (!result.ok) krea.setError("Nebula couldn’t open Krea sign-in in your browser.");
+              }).catch(() => krea.setError("Nebula couldn’t open Krea sign-in in your browser."));
             }}>Open Krea sign-in ↗</a>}
             {problem && <p className="settings-row__error" role="alert"><LineText text={problem} /></p>}
             {(started || mode === 'mcp') && <KreaDefault mode={mode} lock={lock} />}

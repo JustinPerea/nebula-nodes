@@ -67,7 +67,7 @@ export function BriefPanel({
       {override ? (
         <>
           <label className="moodboard-field">
-            <span>{byAgent ? "An agent's brief" : 'Your brief'}</span>
+            <span>{byAgent ? 'An agent’s brief' : 'Your brief'}</span>
             <textarea rows={5} value={override.text} maxLength={BRIEF_LIMITS.override}
               onChange={(event) => onEdit(event.target.value)} onBlur={onEditDone} />
           </label>
@@ -139,12 +139,12 @@ function BriefClashes({
   const choose = (choice: ColorChoice, hex: string) => onColorChoice?.(choice, hex);
   return (
     <div className="moodboard-clashes">
-      <ClashList label="Left out of the brief" items={brief.leftOut} hint="Generators don't get these."
+      <ClashList label="Left out of the brief" items={brief.leftOut} hint="Generators don’t get these."
         action={(item) => item.why === 'choice'
           ? { label: `Undo leaving ${item.hex} out`, text: 'Undo', run: () => choose('reset', item.hex!) }
           : { label: `Keep ${item.hex} anyway`, text: 'Keep anyway', run: () => choose('keep', item.hex!) }}
         busy={busy} />
-      <ClashList label="Kept anyway" items={brief.kept ?? []} hint="You kept these. They aren't pinned."
+      <ClashList label="Kept anyway" items={brief.kept ?? []} hint="You kept these. They aren’t pinned."
         action={(item) => ({ label: `Undo keeping ${item.hex}`, text: 'Undo', run: () => choose('reset', item.hex!) })}
         busy={busy} />
       <ClashList label={flagMode ? 'Flagged' : 'May clash'} items={mayClash}

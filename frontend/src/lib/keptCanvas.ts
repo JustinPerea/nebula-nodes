@@ -77,7 +77,7 @@ export type KeptAction = 'run' | 'rerun' | 'retry' | 'recover' | 'run-nodes' | '
 const KEPT_LINES: Record<Exclude<KeptAction, 'ask'>, string> = {
   run: 'You can run this after you save it as a project.',
   rerun: 'You can rerun it after you save it as a project.',
-  retry: 'You can retry it after you save it as a project.',
+  retry: 'You can run its failed nodes again after you save it as a project.',
   recover: 'You can recover it after you save it as a project.',
   // GM r23 (c), verbatim: the selection bar's Run and the bottom bar's Run.
   'run-nodes': 'You can run nodes after you save it as a project.',

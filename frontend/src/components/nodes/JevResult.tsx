@@ -399,7 +399,7 @@ function JevBoxView({ result, params, image, fieldText }: {
           </div>
         )
       )}
-      {result.found === 'unsure' && <p className="jev-result__hint">Jev couldn&apos;t tell whether it&apos;s there, so there is no box, crop or mask.</p>}
+      {result.found === 'unsure' && <p className="jev-result__hint">Jev couldn’t tell whether it’s there, so there is no box, crop or mask.</p>}
       <div className="jev-result__footer">
         <span>
           Presence {presence !== null ? <span className="jev-result__figure">{formatJevPercent(presence)}</span> : <span className="jev-result__muted">unknown</span>}

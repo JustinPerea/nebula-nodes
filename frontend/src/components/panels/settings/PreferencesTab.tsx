@@ -89,7 +89,7 @@ export function PreferencesTab() {
       <section aria-labelledby="settings-agent-heading">
         <div className="settings-label"><h3 id="settings-agent-heading">Agent</h3></div>
         <div className="settings-list">
-          <SwitchRow title="Agent log" description="Every agent's actions, bottom right"
+          <SwitchRow title="Agent log" description="Every agent’s actions, bottom right"
             checked={ui.agentLogEnabled} onChange={ui.setAgentLogEnabled} />
         </div>
       </section>

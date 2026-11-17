@@ -20,13 +20,13 @@ const statuses = new Set<ProviderHealthStatus>(['not_configured', 'configured_un
 let requestVersion = 0;
 // The providers whose key changed while a check runs (forget): its result for them is dropped.
 const forgottenSinceCheck = new Set<string>();
-/** GM, round 3f: "Couldn't check the connections. Nebula's server isn't
+/** GM, round 3f: "Couldn’t check the connections. Nebula's server isn't
  * answering. Make sure it's running, then try again." That is the request
  * with no answer (CONNECTION_LOST_COPY). Round 3g, GM: ""Nebula didn't
- * respond" is wrong when something did answer. → "Couldn't check the
+ * respond" is wrong when something did answer. → "Couldn’t check the
  * connections. Try again, or reload if it keeps happening."", for any
  * answered failure, a malformed answer included. */
-const CHECK_HEADING = "Couldn't check the connections.";
+const CHECK_HEADING = "Couldn’t check the connections.";
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
 function clearExpiry() {

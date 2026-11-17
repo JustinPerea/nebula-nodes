@@ -245,7 +245,7 @@ describe('review N-7: Run History\'s disabled Rerun and Retry give the reason', 
   it('following: GM\'s tooltip', () => {
     render(<RunHistoryPanel />);
     follow();
-    for (const name of ['Retry failed Full canvas run', 'Rerun Full canvas']) {
+    for (const name of ['Run failed nodes again, from the Full canvas run', 'Rerun Full canvas']) {
       const control = screen.getByRole('button', { name });
       expect(control, name).toBeDisabled();
       expect(control, name).toHaveAttribute('title', WAIT);
@@ -256,7 +256,7 @@ describe('review N-7: Run History\'s disabled Rerun and Retry give the reason', 
   it('offline: the reconnect tooltip with its verb; the panel itself stays open and live (review 2 check 2)', () => {
     render(<RunHistoryPanel />);
     offline();
-    for (const [name, line] of [['Retry failed Full canvas run', 'You can retry it when Nebula reconnects.'],
+    for (const [name, line] of [['Run failed nodes again, from the Full canvas run', 'You can run its failed nodes again when Nebula reconnects.'],
       ['Rerun Full canvas', 'You can rerun it when Nebula reconnects.']]) {
       const control = screen.getByRole('button', { name });
       expect(control, name).toBeDisabled();

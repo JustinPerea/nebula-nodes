@@ -244,13 +244,13 @@ describe('an agent’s edit saves at once', () => {
 
   it('a failed save of an agent’s edit reads unsaved and keeps the unload prompt armed', async () => {
     // Round 3e: the API's typed refusal (ProjectRequestError is one); a plain Error's text is never shown.
-    saveProject.mockRejectedValueOnce(new RequestFailedError("Couldn't save the project.", 507, { reason: 'Disk full.' }));
+    saveProject.mockRejectedValueOnce(new RequestFailedError('Couldn’t save the project.', 507, { reason: 'Disk full.' }));
     dispatch(agentEdit(['n1', 'n2', 'n3']));
     const whileSaving = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(whileSaving);
     expect(whileSaving.defaultPrevented).toBe(true);
     await vi.advanceTimersByTimeAsync(0);
-    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: "Couldn't save the project. Disk full." });
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Nebula couldn’t save the project because Disk full.' });
     const afterFailure = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(afterFailure);
     expect(afterFailure.defaultPrevented).toBe(true);

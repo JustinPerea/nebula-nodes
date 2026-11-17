@@ -239,16 +239,16 @@ describe('asset studio workspace continuity', () => {
     expect(screen.getByText('Settings changed while saving. Analyze again when ready.')).toBeTruthy();
   });
 
-  it('keeps a failed asset load behind explicit Retry instead of authoring an accidental replacement', async () => {
+  it('keeps a failed asset load behind explicit Try again instead of authoring an accidental replacement', async () => {
     api.characters.mockRejectedValue(new Error('Offline fixture'));
     useUIStore.getState().enterCharacterEditor('character-a'); render(<CharacterStudioView />); await settle();
     // error-copy round 2 (GM): the heading and a written reason, never the
     // error's own text.
-    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the character.");
+    expect(screen.getByRole('alert')).toHaveTextContent('Nebula couldn’t load the character because the server didn’t accept it. Try again.');
     expect(screen.getByRole('alert')).not.toHaveTextContent('Offline fixture');
     expect(screen.queryByLabelText('Name')).toBeNull();
     api.characters.mockImplementation(async (scope: string) => scope === 'global' ? [character()] : []);
-    fireEvent.click(screen.getByRole('button', { name: 'Retry loading' })); await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' })); await settle();
     expect(screen.getByLabelText('Name')).toHaveValue('Original character');
     expect(api.createCharacter).not.toHaveBeenCalled(); expect(api.updateCharacter).not.toHaveBeenCalled();
   });

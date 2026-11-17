@@ -377,24 +377,24 @@ describe('ProjectHome', () => {
   });
 
   it('error-copy round 2: beside "Try again" the line is in the because form and ends in "Try again."', () => {
-    render(<ProjectHome {...props({ projects: [], error: "Couldn't load your projects. Nebula didn't respond. Try again." })} />);
+    render(<ProjectHome {...props({ projects: [], error: 'Nebula couldn’t load your projects because the server didn’t respond. Try again.' })} />);
     expect(screen.getByRole('alert').querySelector('span')?.textContent)
       .toBe('Nebula couldn’t load your projects because the server didn’t respond. Try again.');
   });
 
   it('error-copy round 3b: Try again shows only where it redoes the failure, and keeps the full line where it only reloads', () => {
-    const line = "Couldn't open the project. Nebula didn't respond. Try again.";
+    const line = 'Nebula couldn’t open the project because the server didn’t respond. Try again.';
     const { rerender } = render(<ProjectHome {...props({ error: line, retry: 'redo' })} />);
     expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe('Nebula couldn’t open the project because the server didn’t respond. Try again.');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     // A refusal the same request would get again: no Try again, the whole line.
-    const refusal = "Couldn't open the project. A World Labs run needs your check first. Use the notice at the top of the screen.";
+    const refusal = 'Nebula couldn’t open the project because a World Labs run needs your check first. Use the notice at the top of the screen.';
     rerender(<ProjectHome {...props({ error: refusal, retry: 'none' })} />);
     expect(screen.getByRole('alert').textContent).toBe(refusal);
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     // Try again only reloads the saved projects: the button stays, the line stays whole.
-    rerender(<ProjectHome {...props({ error: "Couldn't load the project. Nebula didn't respond. Try again.", retry: 'reload' })} />);
-    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe("Couldn't load the project. Nebula didn't respond. Try again.");
+    rerender(<ProjectHome {...props({ error: 'Nebula couldn’t load the project because the server didn’t respond. Try again.', retry: 'reload' })} />);
+    expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe('Nebula couldn’t load the project because the server didn’t respond. Try again.');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 

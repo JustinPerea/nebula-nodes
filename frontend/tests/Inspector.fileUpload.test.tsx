@@ -85,7 +85,7 @@ describe("the Inspector's file control", () => {
     const { container } = show(inputNode('audio-input'));
     await choose(container, new File([new Uint8Array(8)], 'tone.wav', { type: 'audio/wav' }));
     await waitFor(() => expect(useGraphStore.getState().undoNotice?.text)
-      .toBe("Couldn't upload “tone.wav”. Nebula didn't respond. Try again."));
+      .toBe('Nebula couldn’t upload “tone.wav” because the server didn’t respond. Try again.'));
     expect(useGraphStore.getState().nodes[0].data.params.filePath).toBe('');
   });
 

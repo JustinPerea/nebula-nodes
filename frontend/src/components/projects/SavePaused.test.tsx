@@ -2,8 +2,8 @@
  * Q118, GM - Design's layout and lines for "saving paused", verbatim:
  * - the header: "Saving paused · {size} MB" in the same warning colour as
  *   "Save failed", clickable, tooltip "This project is over the 16 MB save
- *   limit. Click to see what's large.";
- * - the notice's "See what's large" button opens the same panel;
+ *   limit. Click to see what’s large.";
+ * - the notice's "See what’s large" button opens the same panel;
  * - the panel: heading "Saving paused"; "This project is {size} MB. Make it
  *   {over} MB smaller and it saves again by itself. Until then, changes stay
  *   only in this tab."; "Download a copy"; "Largest first"; the top ten
@@ -67,7 +67,7 @@ describe('the header', () => {
     const button = screen.getByRole('button', { name: 'Saving paused · 16.4 MB' });
     expect(button.tagName).toBe('BUTTON');
     expect(button.className).toContain('project-workspace-controls__retry');
-    expect(button.getAttribute('title')).toBe("This project is over the 16 MB save limit. Click to see what's large.");
+    expect(button.getAttribute('title')).toBe("This project is over the 16 MB save limit. Click to see what’s large.");
     expect(button.getAttribute('aria-haspopup')).toBe('dialog');
     expect(button.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(button);
@@ -76,12 +76,12 @@ describe('the header', () => {
 });
 
 describe('the notice', () => {
-  it("has GM's line and its See what's large button opens the panel", () => {
+  it("has GM's line and its See what’s large button opens the panel", () => {
     useProjectStore.setState({ sizeNotice: { id: 7, text: 'Saving paused. This project is 16.4 MB, over the 16 MB limit.', action: true } } as never);
     render(<SavePausedNotice />);
     const notice = screen.getByRole('status');
     expect(within(notice).getByText('Saving paused. This project is 16.4 MB, over the 16 MB limit.')).toBeTruthy();
-    fireEvent.click(within(notice).getByRole('button', { name: "See what's large" }));
+    fireEvent.click(within(notice).getByRole('button', { name: 'See what’s large' }));
     expect((useProjectStore.getState() as never as { sizePanelOpen: boolean }).sizePanelOpen).toBe(true);
     fireEvent.click(within(notice).getByRole('button', { name: 'Dismiss' }));
     expect((useProjectStore.getState() as never as { sizeNotice: unknown }).sizeNotice).toBeNull();
@@ -91,7 +91,7 @@ describe('the notice', () => {
     useProjectStore.setState({ sizeNotice: { id: 8, text: 'Saving again. This project is 15.9 MB.', action: false } } as never);
     render(<SavePausedNotice />);
     expect(screen.getByText('Saving again. This project is 15.9 MB.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: "See what's large" })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'See what’s large' })).toBeNull();
   });
 });
 

@@ -60,8 +60,8 @@ describe('CommonsDetail and agents\' proposals', () => {
   });
 });
 
-// error-copy round 3 (GM - Design, item 4): 'heading "Couldn't analyze this
-// reference.", with the reason mapped from last_error's kind ... Keep Retry.
+// error-copy round 3 (design, item 4): one because line ("Nebula couldn’t analyze this
+// reference because ..."), with the reason mapped from last_error's kind ... Try again.
 // Put the raw last_error behind a collapsed "Details" toggle.' On 867f254e it
 // read "Analysis failed: <raw last_error>".
 describe('a reference whose analysis failed', () => {
@@ -78,13 +78,14 @@ describe('a reference whose analysis failed', () => {
   });
 
   it.each([
-    ['unavailable', "The analysis service didn't respond."],
-    ['unreadable', "The analyzer couldn't read this image."],
-    ['other', 'Something went wrong during analysis.'],
-    [null, 'Something went wrong during analysis.'],
-    [undefined, 'Something went wrong during analysis.'],
-    ['a-kind-from-a-newer-backend', 'Something went wrong during analysis.'],
-  ])('kind %s: the heading over GM\'s reason, Retry, and the raw text only behind Details', async (kind, reason) => {
+    ['unavailable', 'Nebula couldn’t analyze this reference because the analysis service didn’t respond. Try again.', true],
+    // The analyzer's refusal would get the same answer again: the line ends at its reason, with no button.
+    ['unreadable', 'Nebula couldn’t analyze this reference because the analyzer couldn’t read this image.', false],
+    ['other', 'Nebula couldn’t analyze this reference because something went wrong during analysis. Try again.', true],
+    [null, 'Nebula couldn’t analyze this reference because something went wrong during analysis. Try again.', true],
+    [undefined, 'Nebula couldn’t analyze this reference because something went wrong during analysis. Try again.', true],
+    ['a-kind-from-a-newer-backend', 'Nebula couldn’t analyze this reference because something went wrong during analysis. Try again.', true],
+  ])('kind %s: one because line, Try again where trying again helps, and the raw text only behind Details', async (kind, line, retries) => {
     asset.mockResolvedValue(failed(kind));
     render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
     const block = await waitFor(() => {
@@ -92,8 +93,8 @@ describe('a reference whose analysis failed', () => {
       expect(shown).not.toBeNull();
       return shown as HTMLElement;
     });
-    expect(block.querySelector('.failure-lines__heading')?.textContent).toBe("Couldn't analyze this reference.");
-    expect(block.querySelector('.failure-lines__reason')?.textContent).toBe(reason);
+    expect(block.querySelector('.failure-lines__heading')).toBeNull();
+    expect(block.querySelector('.failure-lines__reason')?.textContent).toBe(line);
     expect(screen.queryByText(/Analysis failed/)).toBeNull();
     // Details: a native disclosure, collapsed, holding the raw text as plain text.
     const details = block.querySelector('details')!;
@@ -103,9 +104,13 @@ describe('a reference whose analysis failed', () => {
     expect(details.textContent).toContain(RAW);
     fireEvent.click(details.querySelector('summary')!);
     expect(details.open).toBe(true);
-    // Retry kept: it asks for the analysis again.
+    if (!retries) {
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+      return;
+    }
+    // Try again asks for the analysis again.
     reanalyze.mockResolvedValue({});
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(reanalyze).toHaveBeenCalledWith('ast_1'));
   });
 
@@ -115,8 +120,8 @@ describe('a reference whose analysis failed', () => {
     const line = await screen.findByText('This image is too transparent to analyze.');
     expect(line.className).toBe('commons-notice commons-notice--muted');
     expect(document.querySelector('.commons-notice--error')).toBeNull();
-    expect(screen.queryByText("Couldn't analyze this reference.")).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByText(/couldn’t analyze this reference/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
   // GM r6 on #208, items 2 and 3: nothing broke, so the badge is the neutral,
@@ -157,6 +162,6 @@ describe('a reference whose analysis failed', () => {
       return shown as HTMLElement;
     });
     expect(block.querySelector('details')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 });

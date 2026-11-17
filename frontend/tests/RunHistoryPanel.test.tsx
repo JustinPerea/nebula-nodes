@@ -71,7 +71,7 @@ describe('RunHistoryPanel replay actions', () => {
     render(<RunHistoryPanel />);
     expect(screen.getByText(/target target-node/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry failed Single node run' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run failed nodes again, from the Single node run' }));
     fireEvent.click(screen.getByRole('button', { name: 'Rerun Full canvas' }));
 
     expect(retryFailedRun).toHaveBeenCalledWith('failed-run');
@@ -95,7 +95,7 @@ describe('RunHistoryPanel replay actions', () => {
     });
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     const { unmount } = render(<RunHistoryPanel />);
-    for (const name of ['Retry failed Single node run', 'Rerun Full canvas']) {
+    for (const name of ['Run failed nodes again, from the Single node run', 'Rerun Full canvas']) {
       const button = screen.getByRole('button', { name });
       expect(button).toHaveAttribute('aria-disabled', 'true');
       expect(button).not.toBeDisabled();
@@ -171,7 +171,7 @@ describe('RunHistoryPanel replay actions', () => {
 
     render(<RunHistoryPanel />);
 
-    expect(screen.getByRole('button', { name: 'Retry failed Full canvas run' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Run failed nodes again, from the Full canvas run' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toBeDisabled();
   });
 
@@ -187,7 +187,7 @@ describe('RunHistoryPanel replay actions', () => {
     useGraphStore.setState({ runHistory: [record('failed-run', 'failed'), record('complete-run', 'complete'), recovered, paper], isExecuting: true });
     render(<RunHistoryPanel />);
     expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toHaveAttribute('title', 'You can rerun it when the run finishes.');
-    expect(screen.getByRole('button', { name: 'Retry failed Full canvas run' })).toHaveAttribute('title', 'You can retry it when the run finishes.');
+    expect(screen.getByRole('button', { name: 'Run failed nodes again, from the Full canvas run' })).toHaveAttribute('title', 'You can run its failed nodes again when the run finishes.');
     expect(screen.getByRole('button', { name: 'Recover Single node run' })).toHaveAttribute('title', 'You can recover it when the run finishes.');
     const latest = screen.getByRole('button', { name: 'Rerun Single node with latest source' });
     expect(latest).toBeDisabled();
@@ -271,7 +271,7 @@ describe('RunHistoryPanel replay actions', () => {
           durable: true,
         }],
       },
-      title: "Can't clear while a World Labs recovery ID is saved.",
+      title: 'You can clear run history after you forget the World Labs recovery ID.',
     },
     {
       label: 'an ambiguous provider start',
@@ -284,7 +284,7 @@ describe('RunHistoryPanel replay actions', () => {
           durable: true,
         }],
       },
-      title: "Can't clear while a World Labs recovery ID is saved.",
+      title: 'You can clear run history after you forget the World Labs recovery ID.',
     },
   ])('disables Clear while $label owns safety state', ({ state, title }) => {
     const clearRunHistory = vi.fn();
@@ -369,7 +369,7 @@ describe('RunHistoryPanel replay actions', () => {
 
     const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “Harbor world”?' });
     expect(dialog).toHaveAccessibleDescription(
-      "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.");
+      'Only do this after you’ve checked the run in Marble. Without the ID, Nebula can’t stop you from paying for the same run twice.');
     // On the page body, through ModalPortal (the round 21 merge with #195).
     expect(dialog.closest('.modal-portal')?.parentElement).toBe(document.body);
     // GM, round 14: Cancel on the left, the action on the right, in the
@@ -472,7 +472,7 @@ describe('RunHistoryPanel replay actions', () => {
     // Error copy round 3b: an error that isn't a request's never shows its
     // own message; it says GM's general line under the button's heading.
     await waitFor(() => expect(alert).toHaveBeenCalledWith(
-      "Couldn't forget the recovery safeguard. Try again, or reload if it keeps happening.",
+      'Nebula couldn’t forget the recovery safeguard because the server didn’t accept it. Try again, or reload if it keeps happening.',
     ));
     expect(screen.getByTitle('A removed World Labs node · Operation ID operation-saved')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Forget the recovery ID for a removed World Labs node' })).toBeEnabled();
@@ -588,7 +588,7 @@ describe('RunHistoryPanel replay actions', () => {
 
     render(<RunHistoryPanel />);
     expect(screen.getByText(WORLD_LABS_FAILURE_NOTE)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Retry failed/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Run failed nodes again/ })).not.toBeInTheDocument();
   });
 
   it('offers Recover for an exact journal-hydrated World Labs snapshot', () => {

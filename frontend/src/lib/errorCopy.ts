@@ -716,7 +716,7 @@ const NOT_A_REASON = new RegExp('^(?:' + [
   'Rename', 'Replace', 'Edit', 'Show', 'Allow', 'To', 'Please', 'Still', 'Nothing', 'Only', 'No', 'Not', 'Saved', 'Opened', 'Added', 'Done',
 ].join('|') + ')\\b');
 /** The sentence rule's lead words that take a lower-case letter after "because". */
-const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An|They|Their)\b/;
+const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An|They|Their|Part|Labels|Something)\b/;
 
 /** The sentence rule: a written sentence as the clause after "because". Its first word is lower-cased only when
  * it is one of the lead words above (a name, a quoted name and a {} slot stay); apostrophes are curled between

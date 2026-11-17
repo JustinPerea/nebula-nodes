@@ -82,6 +82,16 @@ body.app-slava-restraint .project-workspace-controls__count::before {
   margin-right: 9px;
   color: var(--sr-ink-faint);
 }
+body.app-slava-restraint .project-workspace-controls__failed {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+body.app-slava-restraint .project-workspace-controls__not-saved {
+  color: #e6a395;
+  font: 11px/1.4 var(--sr-ui);
+}
 body.app-slava-restraint .project-workspace-controls__retry {
   border: 0;
   background: transparent;

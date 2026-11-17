@@ -247,7 +247,7 @@ export interface ProjectState {
   /** The person closed the held-reopen line's callout. */
   dismissHeldReopenLine: () => void;
   /** A stale tab's unsaved edits that Nebula refused for good as a recovered
-   * project (too large, say): the Projects screen shows GM's "Couldn't save
+   * project (too large, say): the Projects screen shows GM's "Couldn’t save
    * your edits." with this reason, and offers to download them or continue
    * without them (Q116 a). Null otherwise. `downloadFailed`: the last
    * download couldn't be written, so the screen says GM's line 2 instead of
@@ -259,7 +259,7 @@ export interface ProjectState {
   /** `agentOpening`: an agent's switch left the project (GM, 2026-10-24:
    * "{agent} is opening “{name}”." above the screen's lines). */
   /** `downloadTooBig`: the last download was past the browser's string cap
-   * (GM, 2026-10-25: "Couldn't download your edits." / "It's too big to
+   * (GM, 2026-10-25: "Couldn’t download your edits." / "It's too big to
    * download in a browser."), not a write that failed. */
   unsavedEdits: { reason: string; downloadFailed?: true; downloadTooBig?: true; keptIn?: string;
     agentOpening?: { agent: string; projectName: string } } | null;

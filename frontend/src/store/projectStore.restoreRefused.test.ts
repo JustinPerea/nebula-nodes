@@ -59,20 +59,20 @@ describe('Undo past the project limit (Justin, 2026-10-29)', () => {
   it('an older backend\'s limit refusal is the banner, never a refusal toast', async () => {
     useProjectStore.setState({ lastDeleted: { id: ALPHA, name: 'Alpha' } });
     restoreProject.mockRejectedValueOnce(new api.ProjectRequestError('Project limit reached', 413,
-      { heading: "Couldn't restore the project.", detail: 'Project limit reached', storageLimit: 'projects' }));
+      { heading: 'Couldn’t restore the project.', detail: 'Project limit reached', storageLimit: 'projects' }));
     await useProjectStore.getState().restore(ALPHA, 'undo');
     const state = useProjectStore.getState();
     expect(state.lastDeleted).toEqual({ id: ALPHA, name: 'Alpha' });
-    expect(state.error).toMatch(/^Couldn't restore the project\./);
+    expect(state.error).toMatch(/^Nebula couldn’t restore the project/);
   });
 
   it('keeps other refusals as they were', async () => {
     useProjectStore.setState({ lastDeleted: { id: ALPHA, name: 'Alpha' } });
     restoreProject.mockRejectedValueOnce(new api.ProjectRequestError('Project storage limit reached', 413,
-      { heading: "Couldn't restore the project.", storageLimit: 'storage' }));
+      { heading: 'Couldn’t restore the project.', storageLimit: 'storage' }));
     await useProjectStore.getState().restore(ALPHA, 'undo');
     const state = useProjectStore.getState();
     expect(state.lastDeleted).toEqual({ id: ALPHA, name: 'Alpha' });
-    expect(state.error).toMatch(/^Couldn't restore the project\./);
+    expect(state.error).toMatch(/^Nebula couldn’t restore the project/);
   });
 });

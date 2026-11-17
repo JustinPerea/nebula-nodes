@@ -78,7 +78,7 @@ describe('ProviderRecoveryStatus', () => {
     render(<ProviderRecoveryStatus />);
     expect(screen.getByRole('alert')).toHaveTextContent(
       // Error copy round 3e (GM): no "could not", and the reason in words.
-      "Nebula couldn't save the hold, so keep Nebula running until this run finishes.",
+      'Nebula couldn’t save the hold, so keep Nebula running until this run finishes.',
     );
   });
 
@@ -96,7 +96,7 @@ describe('ProviderRecoveryStatus', () => {
     });
 
     render(<ProviderRecoveryStatus />);
-    expect(screen.getByRole('alert')).toHaveTextContent("Nebula can't tell if this World Labs run started.");
+    expect(screen.getByRole('alert')).toHaveTextContent('Nebula can’t tell if this World Labs run started.');
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {

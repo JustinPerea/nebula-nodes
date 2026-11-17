@@ -177,7 +177,7 @@ function StructuredBody({ view, variant, json, name, storedOnly }: {
               </dl>
               {view.total > view.fields.length && (
                 <p className="structured-preview__note">
-                  {plural(view.total - view.fields.length, 'more field')}: open the node's settings to read them
+                  {plural(view.total - view.fields.length, 'more field')}. Open the node’s settings to read them.
                 </p>
               )}
             </ExpandableBlock>

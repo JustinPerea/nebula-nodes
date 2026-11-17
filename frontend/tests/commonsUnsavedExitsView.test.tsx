@@ -149,7 +149,7 @@ describe("the header's Projects button", () => {
     expect(home).toBeEnabled();
     expect(home).toHaveAttribute('title', 'Projects');
     fireEvent.click(home);
-    expect(screen.getByRole('alertdialog')).toHaveTextContent("Your labels aren't saved.");
+    expect(screen.getByRole('alertdialog')).toHaveTextContent("Your labels aren’t saved.");
     expect(useProjectStore.getState().screen).toBe('workspace');
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Stay' }));
 

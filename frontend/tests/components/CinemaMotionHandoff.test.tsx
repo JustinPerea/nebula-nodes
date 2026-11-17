@@ -87,7 +87,7 @@ describe('Cinema motion handoff', () => {
     'never announces success for an unconfirmed reply %#', async (value) => {
       mocks.fetch.mockResolvedValueOnce(response(value)); render(panel());
       fireEvent.click(screen.getByRole('button', { name: 'Send to motion' }));
-      await screen.findByRole('alert'); expect(screen.getByRole('button', { name: 'Retry connection' })).toBeEnabled();
+      await screen.findByRole('alert'); expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
       expect(screen.queryByRole('button', { name: 'View video node' })).toBeNull();
       expect(useGraphStore.getState().nodes).toHaveLength(1); expect(useGraphStore.getState().edges).toEqual([]);
     });
@@ -99,7 +99,7 @@ describe('Cinema motion handoff', () => {
     act(() => useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, data: { ...node.data,
       params: { scene: { ...scene(), shots: scene().shots.map((shot) => shot.id === 'a'
         ? { ...shot, output: { status: 'done', imageUrl: '/api/outputs/new.png' } } : shot) } } } })) })));
-    mocks.fetch.mockResolvedValueOnce(response()); fireEvent.click(screen.getByRole('button', { name: 'Retry connection' }));
+    mocks.fetch.mockResolvedValueOnce(response()); fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await screen.findByRole('button', { name: 'View video node' });
     expect(JSON.parse(requests()[1][1].body)).toEqual({ nodeId: 'n1', shotId: 'a', expectedImageUrl: '/api/outputs/new.png' });
     expect(requests()).toHaveLength(2);

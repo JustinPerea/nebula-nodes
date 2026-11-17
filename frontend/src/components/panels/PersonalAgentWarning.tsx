@@ -36,7 +36,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
     try {
       await onAccept();
     } catch (exc) {
-      const line = failureMessage(exc, "Couldn't save your answer.");
+      const line = failureMessage(exc, "Couldn’t save your answer.");
       setError(line);
       clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agent-warning (GM, #204 r3)
       setBusy(false);

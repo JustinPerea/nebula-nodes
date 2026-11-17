@@ -19,7 +19,7 @@ import { refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
 import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, waitUntilOnline } from '../lib/backendConnection';
-import { RequestFailedError, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, oneLine, CONNECTION_LOST_COPY, NO_RESPONSE_COPY } from '../lib/errorCopy';
+import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, oneLine } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
@@ -45,9 +45,9 @@ const get = useProjectStore.getState;
 
 /** The store's methods that run here; projectStore.ts's stubs call them. */
 
-/** After "Couldn't confirm …" and its short reason (GM, round 3c): what the
+/** After "Couldn’t confirm …" and its short reason (GM, round 3c): what the
  * Try again beside it does, since it only re-reads. */
-const TRY_AGAIN_CHECKS = "Try again checks your saved projects; it won't make the change twice.";
+const TRY_AGAIN_CHECKS = '“Try again” checks your saved projects and won’t make the change twice.';
 
 
 /** A refusal the same request would get again (a 4xx other than 408/429:
@@ -558,7 +558,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
   // GM r20 on PR #199: nothing replaces a kept canvas.
   if (refuseLeavingKeptCanvas()) return false;
   if (!state.initialized || state.busy) return false;
-  const heading = retry.action === 'open' ? "Couldn't open the project." : "Couldn't create the project.";
+  const heading = retry.action === 'open' ? "Couldn’t open the project." : "Couldn’t create the project.";
   // A create's Try again keeps what was to follow it (Q120: the file loads).
   const offered: ProjectRetry = retry.action === 'create' && then ? { ...retry, then } : retry;
   const held = worldLabsHold(heading);
@@ -692,10 +692,9 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // again only reloads, and says so.
     if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
       if (retry.action === 'open') {
-        preserveWorkspaceConflict(failureMessage(error, "Couldn't open the project."), undefined, undefined,
+        preserveWorkspaceConflict(failureMessage(error, "Couldn’t open the project."), undefined, undefined,
           { action: 'load', reopen: retry.id });
-      } else preserveWorkspaceConflict(sentences("Couldn't confirm the project change.", reasonSentence(error, true),
-        TRY_AGAIN_CHECKS));
+      } else preserveWorkspaceConflict(becauseThen("Couldn’t confirm the project change.", error, TRY_AGAIN_CHECKS));
     } else showError(error, offered);
     return false;
   }
@@ -759,10 +758,10 @@ export function updateSummary(project: SavedProject): void {
   }));
 }
 
-/** GM, round 3f: "Projects startup: drop "That didn't work." → "Couldn't load
- * your projects. Try again, or reload the page if it keeps happening." A full
+/** GM, round 3f: "Projects startup: drop "That didn't work." → "Couldn’t load
+ * your projects. Try again, or reload if it keeps happening." A full
  * disk is the one cause a person can fix, so give it its own line". */
-const LOAD_GENERAL = 'Try again, or reload the page if it keeps happening.';
+const LOAD_GENERAL = 'Try again, or reload if it keeps happening.';
 
 const LOAD_DISK_FULL = 'Your disk is full. Free up some space, then try again.';
 
@@ -775,16 +774,16 @@ function resumeSaving(bytes: number): void {
     sizeNotice: { id: ++core.sizeNoticeId, text: savingAgainNotice(bytes), action: false } });
 }
 
-export const LOAD_HEADING = "Couldn't load your projects.";
+export const LOAD_HEADING = "Couldn’t load your projects.";
 
 /** The heading each Projects action's failure reads under: the same words
  * as its request (lib/projects.ts), so a failure that isn't a request's
  * (a plain Error) names the action too. */
 export const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
-  load: LOAD_HEADING, list: LOAD_HEADING, save: "Couldn't save the project.", open: "Couldn't open the project.",
-  create: "Couldn't create the project.", rename: "Couldn't rename the project.", delete: "Couldn't delete the project.",
-  restore: "Couldn't restore the project.", purge: "Couldn't delete the project for good.",
-  emptyTrash: "Couldn't empty Recently deleted.", cover: "Couldn't set the cover.", saveRecovered: "Nebula couldn’t save your edits as a project.",
+  load: LOAD_HEADING, list: LOAD_HEADING, save: "Couldn’t save the project.", open: "Couldn’t open the project.",
+  create: "Couldn’t create the project.", rename: "Couldn’t rename the project.", delete: "Couldn’t delete the project.",
+  restore: "Couldn’t restore the project.", purge: "Couldn’t delete the project for good.",
+  emptyTrash: "Couldn’t empty Recently deleted.", cover: "Couldn’t set the cover.", saveRecovered: "Nebula couldn’t save your edits as a project.",
   reloadForUpdate: LOAD_HEADING, openFollowed: "Nebula couldn’t open the project.", part: "Nebula couldn’t open the project.",
 };
 
@@ -797,8 +796,8 @@ function retryActionLine(heading: string, error: unknown): string | null {
     // A refusal the same request would get again (refusedForGood) keeps its own words and has no Try again.
     if (error.code === PERSON_REQUIRED_CODE || !canTryAgain(error.status)) return null;
   } else if (!isNoAnswer(error)) return null;
-  const what = heading.replace(/^(?:Nebula )?[Cc]ouldn['’]t /, '').replace(/\.$/, '');
-  return actionFailedLine(what, error).line || null;
+  const what = failedWhat(heading);
+  return what === null ? null : actionFailedLine(what, error).line || null;
 }
 
 /** Show `error` with what Try again does for it: `retry`, unless the backend
@@ -912,18 +911,35 @@ const RUN_STILL_GOING = 'A run is still going. Let it finish or stop it.';
 export const runStillGoing = (heading: string) => new FailureNotice(heading, RUN_STILL_GOING);
 
 
-/** A failure's reason as its own sentence (GM, round 3c: "Reasons in
- * parentheses: move each into its own sentence after the heading. No
- * parentheses in error copy."): the request's line (never an error's own
- * message), short when a Try again sits beside it (GM's WRAP rule). A failure
- * with no reason of its own says none: GM's general line says "reload",
- * which these lines warn would lose the unsaved edits. */
-export function reasonSentence(error: unknown, short: boolean): string {
+/** A failure's bare reason, never an error's own message. A failure with no
+ * reason of its own says none: the general line says "reload", which the held
+ * edits' lines warn would lose the unsaved edits. */
+export function reasonSentence(error: unknown): string {
   const { cause: reason = '' } = failureCopy(error);
-  if (reason === REFUSED_FALLBACK_COPY) return '';
-  if (!short) return reason;
-  if (reason === CONNECTION_LOST_COPY) return 'Nebula’s server isn’t answering. Make sure it’s running.';
-  return reason === NO_RESPONSE_COPY ? 'Nebula didn’t respond.' : reason;
+  return reason === REFUSED_FALLBACK_COPY ? '' : reason;
+}
+
+/** The clause after "because" for a request's failure, with the button's own "Try again." taken off, for a
+ * line that goes on to say what Try again does. Null when the failure says no reason (a refusal with
+ * nothing readable, a write refused offline). */
+function clauseBeforeTryAgain(error: unknown): string | null {
+  const { cause, status } = failureCopy(error);
+  if (!cause || cause === REFUSED_FALLBACK_COPY) return null;
+  return clauseFor({ reason: cause, status }, 'button')?.replace(/ Try again\.$/, '') ?? null;
+}
+
+/** "Nebula couldn’t ‹what› because ‹reason›." with `then` after it, for a line whose Try again does something else
+ * than the request again. */
+function becauseThen(heading: string, error: unknown, ...then: string[]): string {
+  const what = failedWhat(heading) ?? heading.replace(/\.$/, '');
+  const clause = clauseBeforeTryAgain(error);
+  return sentences(clause === null ? `Nebula couldn’t ${what}.` : `Nebula couldn’t ${what} because ${clause}`, ...then);
+}
+
+/** The follow-failed line: what happened, then that the page could not follow it, then because and the reason (no because when no reason is known). */
+function followFailedLine(stem: string, error: unknown): string {
+  const clause = clauseBeforeTryAgain(error);
+  return clause === null ? `${stem}.` : `${stem} because ${clause}`;
 }
 
 export const sentences = (...parts: string[]) => parts.filter(Boolean).join(' ');
@@ -1009,7 +1025,7 @@ function carriedStudio(kept: KeptStudio, before: KeptStudio, renumbered: Record<
 
 /** `heading` names the action that loads it, for the busy line. */
 export function applyProject(project: SavedProject, revision: string, bootstrap = false,
-  heading = "Couldn't load the project.", canvas?: string): void {
+  heading = "Couldn’t load the project.", canvas?: string): void {
   core.applying = true;
   const previous = getProjectContext();
   try {
@@ -1186,7 +1202,7 @@ function heldEditsReason(error: unknown): string {
   if (error instanceof RequestFailedError && error.status === 413 && error.storageLimit === null) {
     return sentences(EDITS_TOO_LARGE, KEEP_OR_CONTINUE);
   }
-  return sentences(asSentence(reasonSentence(error, false)), KEEP_OR_CONTINUE);
+  return sentences(asSentence(reasonSentence(error)), KEEP_OR_CONTINUE);
 }
 
 
@@ -1462,9 +1478,9 @@ export function handleParamsVersionChange(backendVersion: number | null): Promis
       // what this screen was doing: saving the unsaved edits as a recovered copy.
       if (showNotConnectedLoad(error, 'save your unsaved edits')) return;
       // Try again sends the same recovered copy again (initialize does it first).
-      const line = sentences(
-        `Nebula was updated while this ${TAB} was open, and your unsaved edits haven’t been saved yet.`,
-        reasonSentence(error, true), 'Try again before you reload, or they’ll be lost.');
+      // The update is why this screen is up at all, so it leads; then the failure, in the because form.
+      const line = sentences(`Nebula was updated while this ${TAB} was open.`,
+        becauseThen('Couldn’t save your edits as a project.', error, 'Try again before you reload, or they’ll be lost.'));
       useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error), errorRetry: { action: 'load' } });
       return;
     }
@@ -1502,8 +1518,8 @@ export function handleParamsVersionChange(backendVersion: number | null): Promis
       return;
     }
     useProjectStore.setState({ errorRetry: null, error: newer
-      ? `Nebula was updated, but this window still has the frontend from before the update, so it can't save or run. Rebuild the frontend (or restart the dev server), then reload.${kept}`
-      : `This window's frontend is newer than the Nebula backend it is connected to, so it can't save or run. Restart the backend, then reload.${kept}` });
+      ? `Nebula was updated, but this ${TAB} still has the frontend from before the update, so it can’t save or run. Rebuild the frontend or restart the dev server, then reload.${kept}`
+      : `This ${TAB}’s frontend is newer than the Nebula backend it’s connected to, so it can’t save or run. Restart the backend, then reload.${kept}` });
   })();
   return core.paramsVersionChange;
 }
@@ -2057,10 +2073,10 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // item 5): the node is back on the canvas, and the line says why.
     if (deletesKept.length > 0 && getProjectContext()) sayDeletesKept(deletesKept);
     if (deletesHeld.length > 0 && getProjectContext()) {
-      // Never silent: "Couldn't delete “X”. It has a saved World Labs …", as
+      // Never silent: "Couldn’t delete “X”. It has a saved World Labs …", as
       // the canvas says a refused delete.
-      useGraphStore.getState().notify(deleteRefusalText(deletesHeld.length === 1 ? "Couldn't delete the node."
-        : `Couldn't delete ${deletesHeld.length} nodes.`, deletesHeld.length, deletesHeld), 'info');
+      useGraphStore.getState().notify(deleteRefusalText(deletesHeld.length === 1 ? "Couldn’t delete the node."
+        : `Couldn’t delete ${deletesHeld.length} nodes.`, deletesHeld.length, deletesHeld), 'info');
     }
     // The toast names the project the tab landed on (round 17, review 16
     // M1), from the newest switch to it; the way back is the project this
@@ -2101,8 +2117,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     const nebula = quietSwitch(newest);
     const line = byPerson(newest) ? personFollowFailedLine(newest.projectName)
       : nebula ? nebulaFollowFailedLine(newest.projectName)
-      : sentences(`${newest.actor?.name ?? 'Another app'} opened “${newest.projectName}”, but this ${TAB} couldn’t follow it.`,
-        reasonSentence(error, true));
+      : followFailedLine(`${newest.actor?.name ?? 'Another app'} opened “${newest.projectName}”, but this ${TAB} couldn’t follow it`, error);
     useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(core.pendingRecovery),
       error: line, errorDetails: detailsFor(line, error),
       errorRetry: nebula ? { action: 'openFollowed', id: newest.projectId, name: newest.projectName } : { action: 'load' } });
@@ -2378,7 +2393,7 @@ export const actions = {
       console.error('[nebula] project copy download', error);
       // GM's heading (2026-10-25), the button's own words; past the string
       // cap the error carries "It's too big to download in a browser."
-      showNotice(failureMessage(error, "Couldn't download a copy."), 'error', error);
+      showNotice(failureMessage(error, "Couldn’t download a copy."), 'error', error);
     }
   },
     switchBack: async () => {
@@ -2465,13 +2480,13 @@ export const actions = {
     // other caller are safe alike; the line says what unlocks it.
     if (isCanvasKept() && (deletingActive || id === state.keptEdits?.sourceId)) {
       pulseKeptCanvas();
-      showError(new Error('kept'), null, sentences('Couldn’t delete the project.', KEPT_SOURCE_DELETE_LINE));
+      showError(new Error('kept'), null, becauseLine({ heading: 'Couldn’t delete the project.', reason: KEPT_SOURCE_DELETE_LINE }));
       return;
     }
-    const held = deletingActive ? worldLabsHold("Couldn't delete the project.") : null;
+    const held = deletingActive ? worldLabsHold("Couldn’t delete the project.") : null;
     if (held) { showError(held, { action: 'delete', id }); return; }
     if (deletingActive && !useGraphStore.getState().canSwitchProject()) {
-      showError(runStillGoing("Couldn't delete the project."), { action: 'delete', id });
+      showError(runStillGoing("Couldn’t delete the project."), { action: 'delete', id });
       return;
     }
     set({ busy: true, error: null, errorRetry: null });
@@ -2484,7 +2499,7 @@ export const actions = {
         cancelPendingSaves();
         await core.saveQueue.catch(() => {});
         reserved = useGraphStore.getState().reserveGraphImport();
-        if (!reserved) throw runStillGoing("Couldn't delete the project.");
+        if (!reserved) throw runStillGoing("Couldn’t delete the project.");
       }
       const result = await api.deleteProject(id, get().workspaceRevision);
       if (deletingActive) {
@@ -2505,8 +2520,7 @@ export const actions = {
         // Round 3b: a second delete of the open project after an unknown
         // answer isn't small (it may be gone, or open elsewhere): Try again
         // reloads, as the line says.
-        preserveWorkspaceConflict(sentences("Couldn't confirm the project was deleted.", reasonSentence(error, true),
-          TRY_AGAIN_CHECKS));
+        preserveWorkspaceConflict(becauseThen("Couldn’t confirm the project was deleted.", error, TRY_AGAIN_CHECKS));
       } else showError(error, { action: 'delete', id });
     } finally {
       if (reserved) useGraphStore.getState().releaseGraphImport();
@@ -2889,7 +2903,7 @@ export const actions = {
         if (wasPaused) core.resumePending = true;
         const notice = get().sizeNotice;
         // GM r6: it retries on the promote, so a "not connected" refusal says the "because" form.
-        const saveLine = isPersonRefusal(error) ? notConnectedBecause('save the project') : failureMessage(error, "Couldn't save the project.");
+        const saveLine = isPersonRefusal(error) ? notConnectedBecause('save the project') : failureMessage(error, "Couldn’t save the project.");
         set({ dirty: true, saveStatus: 'error', saveError: saveLine,
           ...(state.savePaused ? { savePaused: null, sizePanelOpen: false, ...(notice?.action ? { sizeNotice: null } : {}) } : {}) });
         // PR #204 round 4 (review 2 MEDIUM): a save the gate refused for this tab only (a held tab

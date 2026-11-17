@@ -191,7 +191,7 @@ describe('review 8', () => {
         { status: 400, headers: { 'Content-Type': 'application/json' } }));
       await vi.waitFor(() => expect(lines()).toHaveLength(2));
       expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Codex changed the canvas.', offer: 'undo' });
-      expect(lines()[1]).toMatch(/^Couldn't make that connection\./);
+      expect(lines()[1]).toMatch(/^Nebula couldn’t make that connection/);
     });
 
     it('a held delete: the refusal shows beside the Undo too', () => {

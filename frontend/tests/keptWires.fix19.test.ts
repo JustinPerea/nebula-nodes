@@ -90,7 +90,7 @@ describe('GM r27, 1: each kept control its own verb', () => {
   it('a note’s Delete, GM’s line verbatim; Rerun, Retry and Recover by their own verbs', () => {
     expect(keptLockTitle('delete-note')).toBe('You can delete the note after you save it as a project.');
     expect(keptLockTitle('rerun')).toBe('You can rerun it after you save it as a project.');
-    expect(keptLockTitle('retry')).toBe('You can retry it after you save it as a project.');
+    expect(keptLockTitle('retry')).toBe('You can run its failed nodes again after you save it as a project.');
     expect(keptLockTitle('recover')).toBe('You can recover it after you save it as a project.');
   });
 

@@ -109,7 +109,7 @@ export class StudioBoundary extends Component<StudioBoundaryProps, { failed: boo
     if (!node || typeof window === 'undefined') return;
     const field = this.field();
     const label = node.label || null;
-    // GM r6 item 5 and r8: both lines name the studio, "Couldn't open “X” in
+    // GM r6 item 5 and r8: both lines name the studio, "Couldn’t open “X” in
     // <studio>, node n4. …".
     const message = field ? studioBoundaryLogLine(label, node.id, field, this.props.studio)
       : studioDrawFailedLogLine(this.props.studio, label, node.id, error);

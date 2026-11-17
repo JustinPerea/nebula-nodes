@@ -4,10 +4,10 @@ import { noticeSpy } from '../helpers/noticeSpy';
 /**
  * Round 14 of PR #114, GM's gap wording, verbatim:
  * - a failed param edit (an edit in flight when the connection drops, or a
- *   refused one): "Couldn't save “<param label>” for “<node>”. It's back to
+ *   refused one): "Couldn’t save “<param label>” for “<node>”. It’s back to
  *   its last saved value." The second sentence goes when the value doesn't
  *   revert (a newer edit to the node is still on its way).
- * - a failed model change: "Couldn't change the model for “<node>”. It's
+ * - a failed model change: "Couldn’t change the model for “<node>”. It’s
  *   still on <route label of current model>."
  * Until round 14 both went to the console only, and a failed param edit kept
  * the unsaved value on the card until the next sync silently replaced it.
@@ -108,7 +108,7 @@ describe('a failed model change', () => {
   it('OpenRouter: GM\'s line names the node and the model it is still on', async () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'no key' }, 400));
     await useGraphStore.getState().configureOpenRouterModel('n4', 'anthropic/claude-x');
-    expect(alerted()).toEqual(["Couldn't change the model for “Writer”. It's still on openai/gpt-5."]);
+    expect(alerted()).toEqual(["Couldn’t change the model for “Writer”. It’s still on openai/gpt-5."]);
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n4')?.data.params.model).toBe('openai/gpt-5');
   });
 
@@ -120,7 +120,7 @@ describe('a failed model change', () => {
         params: { model_id: 'acme/other', _model_ports: { model: 'acme/up' } } } }) }));
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await useGraphStore.getState().fetchReplicateSchemaAndConfigure('n4', 'acme', 'other');
-    expect(alerted()).toEqual(["Couldn't change the model for “Upscaler”. It's still on acme/up."]);
+    expect(alerted()).toEqual(["Couldn’t change the model for “Upscaler”. It’s still on acme/up."]);
   });
 
   it('Replicate never configured: only the first sentence (the typed id is not what it is on)', async () => {
@@ -128,7 +128,7 @@ describe('a failed model change', () => {
       : { ...node, data: { ...node.data, label: 'Upscaler', definitionId: 'replicate-universal', params: { model_id: 'acme/up' } } }) }));
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await useGraphStore.getState().fetchReplicateSchemaAndConfigure('n4', 'acme', 'up');
-    expect(alerted()).toEqual(["Couldn't change the model for “Upscaler”."]);
+    expect(alerted()).toEqual(["Couldn’t change the model for “Upscaler”."]);
   });
 
   it('no model yet: only the first sentence', async () => {
@@ -136,6 +136,6 @@ describe('a failed model change', () => {
       : { ...node, data: { ...node.data, params: {} } }) }));
     fetchMock.mockResolvedValueOnce(json({ detail: 'no key' }, 400));
     await useGraphStore.getState().configureOpenRouterModel('n4', 'anthropic/claude-x');
-    expect(alerted()).toEqual(["Couldn't change the model for “Writer”."]);
+    expect(alerted()).toEqual(["Couldn’t change the model for “Writer”."]);
   });
 });

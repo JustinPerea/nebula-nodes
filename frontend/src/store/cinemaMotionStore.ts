@@ -54,7 +54,7 @@ export const useCinemaMotionStore = create<{
       if (confirmed) return [{ ...item, status: 'ready', targetId: confirmed }];
       if (item.status === 'ready' && !cinemaMotionTarget(nodes, edges, item.nodeId, item.shotId, item.targetId)) {
         return [{ ...item, status: 'error', targetId: undefined,
-          error: 'The video connection was removed. Retry to connect a video node.' }];
+          error: 'Nebula couldn’t send the shot to motion because the video connection was removed. Try again to connect a video node.' }];
       }
       return [item];
     });

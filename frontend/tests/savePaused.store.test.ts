@@ -1,14 +1,14 @@
 /**
  * Q118 (Justin, 2026-10-23, option a, verbatim): "Let Load graph open bigger
  * .nebula files (up to the 512 MiB it already allows for a bundle) as a new
- * project. A project over 16 MiB still can't be saved, so the canvas says
+ * project. A project over 16 MiB still can’t be saved, so the canvas says
  * so, and you remove what you don't need until it saves. GM writes that
  * state's lines."
  *
  * The project store's "saving paused" state. GM - Design's lines, verbatim:
  * the notice on entering, "Saving paused. This project is {size} MB, over
  * the 16 MB limit." with "See what's large"; after Load graph, "Opened
- * {filename}. It's {size} MB, over the save limit." with the same
+ * {filename}. It’s {size} MB, over the save limit." with the same
  * button; on leaving it, "Saving again. This project is {size} MB.", the
  * header back to "Saved" and the panel closed.
  */
@@ -129,7 +129,7 @@ afterEach(async () => {
 });
 
 describe('entering the paused state', () => {
-  it('an autosave over the limit sends nothing: the header says so and one notice offers what\'s large', async () => {
+  it('an autosave over the limit sends nothing: the header says so and one notice offers what’s large', async () => {
     editCanvas(BIG);
     // Debounced like autosave: nothing is measured or sent before it fires.
     expect(state().saveStatus).toBe('unsaved');
@@ -160,7 +160,7 @@ describe('entering the paused state', () => {
   it("the backend's own 413 for the size pauses too, from its measure", async () => {
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError(
       'Project snapshot exceeds the 16 MiB limit', 413,
-      { heading: "Couldn't save the project.", overSaveLimit: true, sizeBytes: PROJECT_SAVE_LIMIT_BYTES + 5 } as never));
+      { heading: "Couldn’t save the project.", overSaveLimit: true, sizeBytes: PROJECT_SAVE_LIMIT_BYTES + 5 } as never));
     editCanvas('small, but the server counted it over');
     await useProjectStore.getState().flush();
     expect(state().saveStatus).toBe('paused');
@@ -175,7 +175,7 @@ describe('entering the paused state', () => {
     state().noteLoadedGraph!('Big campaign.nebula');
     expect(state().saveStatus).toBe('paused');
     expect(state().sizeNotice).toMatchObject({
-      text: `Opened Big campaign.nebula. It's ${displaySize(measured())} MB, over the save limit.`, action: true });
+      text: `Opened Big campaign.nebula. It’s ${displaySize(measured())} MB, over the save limit.`, action: true });
     const notice = state().sizeNotice;
     await useProjectStore.getState().flush();
     expect(state().sizeNotice).toBe(notice);
@@ -188,7 +188,7 @@ describe('entering the paused state', () => {
     expect(state().saveStatus).toBe('paused');
     // The header shows the name (from the file) and the size, so the line
     // doesn't repeat them and fits on one line beside its button (GM).
-    expect(state().sizeNotice?.text).toBe("Opened as a new project. It's over the save limit.");
+    expect(state().sizeNotice?.text).toBe("Opened as a new project. It’s over the save limit.");
   });
 
   it("a Load graph whose own sync lands first and fires an autosave shows only the Load graph line (live check)", async () => {
@@ -199,7 +199,7 @@ describe('entering the paused state', () => {
     expect(state().sizeNotice ?? null).toBeNull();
     useGraphStore.setState({ isImportingGraph: false });
     state().noteLoadedGraph!('Big campaign.nebula');
-    expect(state().sizeNotice?.text).toBe(`Opened Big campaign.nebula. It's ${displaySize(measured())} MB, over the save limit.`);
+    expect(state().sizeNotice?.text).toBe(`Opened Big campaign.nebula. It’s ${displaySize(measured())} MB, over the save limit.`);
     expect(projects.saveProject).not.toHaveBeenCalled();
   });
 
@@ -240,7 +240,7 @@ describe('a save that fails while resuming (review)', () => {
     await useProjectStore.getState().flush();
     state().openSizePanel!();
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError(
-      'Internal Server Error', 500, { heading: "Couldn't save the project." } as never));
+      'Internal Server Error', 500, { heading: "Couldn’t save the project." } as never));
     editCanvas('trimmed');
     await expect(useProjectStore.getState().flush()).rejects.toThrow();
     expect(state().saveStatus).toBe('error');
@@ -262,7 +262,7 @@ describe('a save that fails while resuming (review)', () => {
     await useProjectStore.getState().flush();
     const first = state().sizeNotice;
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError(
-      'Internal Server Error', 500, { heading: "Couldn't save the project." } as never));
+      'Internal Server Error', 500, { heading: "Couldn’t save the project." } as never));
     editCanvas('trimmed');
     await expect(useProjectStore.getState().flush()).rejects.toThrow();
     editCanvas(`${BIG}again`);
@@ -277,7 +277,7 @@ describe('a save that fails while resuming (review)', () => {
     editCanvas(BIG);
     await useProjectStore.getState().flush();
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError(
-      'Internal Server Error', 500, { heading: "Couldn't save the project." } as never));
+      'Internal Server Error', 500, { heading: "Couldn’t save the project." } as never));
     editCanvas('trimmed');
     await expect(useProjectStore.getState().flush()).rejects.toThrow();
     expect(state().saveStatus).toBe('error');
@@ -290,7 +290,7 @@ describe('a save that fails while resuming (review)', () => {
 });
 
 describe('nothing is lost without asking', () => {
-  it('leaving the tab while paused asks with the browser prompt; once it saves again, it doesn\'t', async () => {
+  it('leaving the tab while paused asks with the browser prompt; once it saves again, it doesn’t', async () => {
     editCanvas(BIG);
     await useProjectStore.getState().flush();
     expect(unloadPrompts()).toBe(true);
@@ -313,7 +313,7 @@ describe('nothing is lost without asking', () => {
     // 2026-10-24: the screen names the agent and the project it opens.
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign',
       agentOpening: { agent: 'Claude', projectName: 'beta' } });
-    // A download that couldn't be written keeps the line.
+    // A download that couldn’t be written keeps the line.
     vi.mocked(saveEditsToFile).mockRejectedValueOnce(new Error('disk full'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await state().downloadUnsavedEdits!();
@@ -338,7 +338,7 @@ describe('nothing is lost without asking', () => {
     expect(projects.openProject).not.toHaveBeenCalled();
     expect(projects.recoverProject).not.toHaveBeenCalled();
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign' });
-    // A download that couldn't be written keeps the screen as it was.
+    // A download that couldn’t be written keeps the screen as it was.
     vi.mocked(saveEditsToFile).mockRejectedValueOnce(new Error('disk full'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await state().downloadUnsavedEdits!();
@@ -357,7 +357,7 @@ describe('nothing is lost without asking', () => {
     vi.mocked(saveEditsToFile).mockRejectedValueOnce(new BrowserStringLimitError());
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await state().downloadUnsavedEdits!();
-    // Not the disk line: GM's "Couldn't download your edits. It's too big to download in a browser."
+    // Not the disk line: GM's "Couldn’t download your edits. It’s too big to download in a browser."
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, downloadTooBig: true, keptIn: 'Glass campaign' });
     expect(projects.openProject).not.toHaveBeenCalled();
   });
@@ -379,7 +379,7 @@ describe("#178's recovery copy and the open project's own save", () => {
   it("the open project's own autosave refused for its size pauses; a stale tab's copy refused for its size still gets the download screen", async () => {
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError(
       'Project snapshot exceeds the 16 MiB limit', 413,
-      { heading: "Couldn't save the project.", overSaveLimit: true, sizeBytes: PROJECT_SAVE_LIMIT_BYTES + 9 } as never));
+      { heading: "Couldn’t save the project.", overSaveLimit: true, sizeBytes: PROJECT_SAVE_LIMIT_BYTES + 9 } as never));
     editCanvas('the open project');
     await useProjectStore.getState().flush();
     expect(state().saveStatus).toBe('paused');
@@ -391,7 +391,7 @@ describe("#178's recovery copy and the open project's own save", () => {
     emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true });
     vi.mocked(projects.recoverProject).mockRejectedValue(new projects.ProjectRequestError(
       'Project snapshot exceeds the 16 MiB limit', 413,
-      { heading: "Couldn't recover the project.", overSaveLimit: true, sizeBytes: PROJECT_SAVE_LIMIT_BYTES + 9 } as never));
+      { heading: "Couldn’t recover the project.", overSaveLimit: true, sizeBytes: PROJECT_SAVE_LIMIT_BYTES + 9 } as never));
     await useProjectStore.getState().retry();
     expect(projects.recoverProject).toHaveBeenCalledTimes(1);
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE });

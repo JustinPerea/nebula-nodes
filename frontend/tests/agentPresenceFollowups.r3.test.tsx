@@ -175,7 +175,7 @@ describe('LOW-1: Run history\'s Rerun, Retry and Recover say their verb offline'
 
   it('the constants are GM\'s lines', () => {
     expect(offlineDisabledReason(OFFLINE_RERUN)).toBe('You can rerun it when Nebula reconnects.');
-    expect(offlineDisabledReason(OFFLINE_RETRY)).toBe('You can retry it when Nebula reconnects.');
+    expect(offlineDisabledReason(OFFLINE_RETRY)).toBe('You can run its failed nodes again when Nebula reconnects.');
     expect(offlineDisabledReason(OFFLINE_RECOVER)).toBe('You can recover it when Nebula reconnects.');
   });
 
@@ -185,7 +185,7 @@ describe('LOW-1: Run history\'s Rerun, Retry and Recover say their verb offline'
     render(<RunHistoryPanel />);
     offline();
     expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toHaveAttribute('title', 'You can rerun it when Nebula reconnects.');
-    expect(screen.getByRole('button', { name: 'Retry failed Full canvas run' })).toHaveAttribute('title', 'You can retry it when Nebula reconnects.');
+    expect(screen.getByRole('button', { name: 'Run failed nodes again, from the Full canvas run' })).toHaveAttribute('title', 'You can run its failed nodes again when Nebula reconnects.');
     act(() => resetBackendConnectionForTests());
     follow();
     expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toHaveAttribute('title', WAIT);
