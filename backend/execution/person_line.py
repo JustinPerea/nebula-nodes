@@ -406,6 +406,11 @@ def count_field(definition_id: str, key: str = "num_images") -> str:
     return f"“{label}”" if label else "the number of images"
 
 
+def _without_aside(label: object) -> str:
+    """A label less its aside: a note in parentheses, or what follows " · "."""
+    return re.sub(r"\s*\([^)]*\)", "", str(label or "").split(" · ")[0]).strip()
+
+
 def option_label(definition_id: str, key: str, value: object) -> str | None:
     """How the node shows one of a field's options ("Claude Opus 5.5" for
     "claude-opus-5-5"), less any note in parentheses; None when the field
@@ -413,7 +418,7 @@ def option_label(definition_id: str, key: str, value: object) -> str | None:
     param = _param(definition_id, key) or {}
     for option in param.get("options") or []:
         if isinstance(option, dict) and str(option.get("value")) == str(value):
-            label = re.sub(r"\s*\([^)]*\)", "", str(option.get("label") or "")).strip()
+            label = _without_aside(option.get("label"))
             return label or None
     return None
 
@@ -536,7 +541,7 @@ def connect_line(label: object) -> str:
 def port_name(label: object) -> str:
     """An input's label as a line names it: a note in its parentheses
     ("Mask (white = edit)", "Images (1-4)") left out (GM: no parentheses)."""
-    return re.sub(r"\s*\([^)]*\)", "", str(label or "")).strip()
+    return _without_aside(label)
 
 
 def port_line(label: str) -> str:

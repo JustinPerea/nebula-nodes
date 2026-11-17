@@ -144,8 +144,8 @@ describe('GM round 11, items 4 and 5: rows name the settings that choose which m
     expect(krea('krea-enhance-topaz-standard-enhance', { model: 'CGI' }).setting).toBe('Model: CGI');
   });
 
-  it("Krea Style Train's Training Model is named by its card label", () => {
-    expect(krea('krea-style-train', {}).setting).toBe('Training Model: FLUX Dev');
+  it("Krea Style Train's Training model is named by its card label", () => {
+    expect(krea('krea-style-train', {}).setting).toBe('Training model: FLUX Dev');
   });
 
   it('items 2 and 3 unchanged: Topaz video card labels and the node app\'s "Version"', () => {

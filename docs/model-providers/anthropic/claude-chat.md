@@ -67,7 +67,7 @@ Menu as of 2026-10-16, newest first (Anthropic models overview and deprecations 
 
 | Label | API ID | Notes |
 |---|---|---|
-| Claude Fable 5.1 (flagship) | `claude-fable-5-1` | Released 2026-09-01. 1M context, 128K sync output, default effort `high` |
+| Claude Fable 5.1 · flagship | `claude-fable-5-1` | Released 2026-09-01. 1M context, 128K sync output, default effort `high` |
 | Claude Opus 5.5 | `claude-opus-5-5` | Node default (from 2026-10-16). Released 2026-09-22. 1M / 128K, default effort `medium` |
 | Claude Sonnet 5.5 | `claude-sonnet-5-5` | Released 2026-09-28. 1M / 128K, default effort `high` |
 | Claude Haiku 5.5 | `claude-haiku-5-5` | Released 2026-10-07. 1M / 128K, default effort `medium` |
@@ -75,8 +75,8 @@ Menu as of 2026-10-16, newest first (Anthropic models overview and deprecations 
 | Claude Opus 4.8 | `claude-opus-4-8` | Not sooner than 2027-05-28. Effort, adaptive thinking only (off by default) |
 | Claude Sonnet 4.6 | `claude-sonnet-4-6` | Node default until 2026-10-16. Effort (no `xhigh`, API default `high`) plus an adaptive-thinking toggle; sampling kept |
 | Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | "Not sooner than October 15, 2026"; no deprecation announced yet |
-| Claude Opus 4.7 (legacy) | `claude-opus-4-7` | Not sooner than 2027-04-16. Effort, adaptive thinking only (off by default) |
-| Claude Opus 4.6 (legacy) | `claude-opus-4-6` | Not sooner than 2027-02-05. Effort (no `xhigh`, API default `high`) plus an adaptive-thinking toggle; sampling kept |
+| Claude Opus 4.7 · legacy | `claude-opus-4-7` | Not sooner than 2027-04-16. Effort, adaptive thinking only (off by default) |
+| Claude Opus 4.6 · legacy | `claude-opus-4-6` | Not sooner than 2027-02-05. Effort (no `xhigh`, API default `high`) plus an adaptive-thinking toggle; sampling kept |
 
 ### Call shape for Fable 5.1 and the 5.5 generation (2026-10-16)
 

@@ -322,7 +322,7 @@ def test_route_docs_describe_pr5_behaviour():
     assert route(krea3, {"model": "jam"}, keys).kind == main.node_route.UNSET
     for doc in (REPO / "docs" / "model-providers" / "krea" / "krea-3.md", REPO / ".agents" / "skills" / "krea" / "SKILL.md"):
         text = doc.read_text()
-        assert "Hidden settings" in text and "Model Jam (speed)" in text, doc
+        assert "Hidden settings" in text and "Model Jam · speed" in text, doc
 
 
 # -- Idol: keyless again (PR #203 round 7); the keyed rules stay ------------------

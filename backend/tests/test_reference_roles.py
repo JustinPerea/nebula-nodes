@@ -75,13 +75,13 @@ APPROVED_PARAM_FIELD_ADDITIONS = {
 }
 APPROVED_PARAM_LABEL_CHANGES = {
     "reference-set": {
-        "style_weight": ("Style Weight", "Style Priority"),
-        "identity_weight": ("Identity Weight", "Identity Priority"),
-        "composition_weight": ("Composition Weight", "Composition Priority"),
-        "pose_weight": ("Pose Weight", "Pose Priority"),
-        "lighting_weight": ("Lighting Weight", "Lighting Priority"),
-        "subject_weight": ("Subject Weight", "Subject Priority"),
-        "background_weight": ("Background Weight", "Background Priority"),
+        "style_weight": ("Style Weight", "Style priority"),
+        "identity_weight": ("Identity Weight", "Identity priority"),
+        "composition_weight": ("Composition Weight", "Composition priority"),
+        "pose_weight": ("Pose Weight", "Pose priority"),
+        "lighting_weight": ("Lighting Weight", "Lighting priority"),
+        "subject_weight": ("Subject Weight", "Subject priority"),
+        "background_weight": ("Background Weight", "Background priority"),
     },
 }
 APPROVED_PORT_LABEL_CHANGES = {
@@ -135,8 +135,8 @@ APPROVED_OPTION_FIELD_ADDITIONS = {
 # values stay so saved graphs still open; only their labels say so.
 APPROVED_OPTION_LABEL_CHANGES = {
     "elevenlabs-tts": {"model_id": {
-        "eleven_turbo_v2_5": ("Turbo v2.5 (Low Latency)", "Turbo v2.5 (deprecated: use Flash v2.5)"),
-        "eleven_turbo_v2": ("Turbo v2", "Turbo v2 (deprecated: use Flash v2)"),
+        "eleven_turbo_v2_5": ("Turbo v2.5 (Low Latency)", "Turbo v2.5 · deprecated, use Flash v2.5"),
+        "eleven_turbo_v2": ("Turbo v2", "Turbo v2 · deprecated, use Flash v2"),
     }},
 }
 # Sizes read "768 × 768", with spaces, the option's own label on every
@@ -247,7 +247,7 @@ APPROVED_DUAL_ROUTE_SPLITS.update({
 # direct-only param each gains is pinned exactly here (`directParams`), so a
 # change to any existing param, or to the new one, still fails.
 _ELEVENLABS_VOICE_ID = {"key": "voice_id", "label": "ElevenLabs voice ID", "type": "string", "required": False,
-                        "placeholder": "ElevenLabs voice ID (runs on your ElevenLabs key)"}
+                        "placeholder": "ElevenLabs voice ID · uses your ElevenLabs key"}
 APPROVED_DUAL_ROUTE_SPLITS.update({
     "elevenlabs-music": {
         "envKeyName": ("FAL_KEY", ["ELEVENLABS_API_KEY", "FAL_KEY"]), "directKeyName": "ELEVENLABS_API_KEY",
@@ -399,7 +399,7 @@ _FLUX2_ROUTES = [
      "endpointWhen": [{"when": {"model": model}, "endpoint": endpoint} for model, endpoint in (
          ("max", "fal-ai/flux-2-max"), ("flash", "fal-ai/flux-2/flash"), ("flex", "fal-ai/flux-2-flex"),
          ("klein-9b", "fal-ai/flux-2/klein/9b"), ("klein-4b", "fal-ai/flux-2/klein/4b"))],
-     "params": [{"key": "enable_safety_checker", "label": "Safety Checker", "type": "boolean", "required": False,
+     "params": [{"key": "enable_safety_checker", "label": "Safety checker", "type": "boolean", "required": False,
                  "default": True}],
      "rules": {"accepts": {"model": {"values": _FLUX2_FAL_MODELS},
                            "num_inference_steps": {"min": 2, "max": 50, "integer": True}}},
@@ -411,17 +411,17 @@ APPROVED_ROUTE_TABLE_CONVERSIONS = {
                 "apiEndpoint": ("fal-ai/flux-2-pro", "/v1/flux-2-pro"),
                 "envKeyName": ("FAL_KEY", ["BFL_API_KEY", "FAL_KEY"])},
         "added": {"directKeyName": ["BFL_API_KEY"],
-                  "description": "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and "
-                                 "[klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
+                  "description": "Black Forest Labs’ FLUX.2 family for text to image, covering FLUX.2 [pro], [max], "
+                                 "[flex], [klein] 9B and [klein] 4B, plus fal’s FLUX 2 Flash. Runs on BFL or fal.ai.",
                   "routes": _FLUX2_ROUTES,
                   "params": [{"key": "_provider", "label": "Provider", "type": "enum", "required": False,
                               "default": "auto", "options": [{"label": {"auto": "Auto", "bfl": "Black Forest Labs", "fal": "fal.ai"}[v], "value": v}
                                           for v in ("auto", "bfl", "fal")],
                               "hidden": True}]},
         "addedShared": [
-            {"key": "num_inference_steps", "label": "Steps (Flex)", "type": "integer", "required": False, "min": 1,
+            {"key": "num_inference_steps", "label": "Steps (flex)", "type": "integer", "required": False, "min": 1,
              "max": 50, "step": 1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
-            {"key": "guidance_scale", "label": "Guidance (Flex)", "type": "float", "required": False, "min": 1.5,
+            {"key": "guidance_scale", "label": "Guidance (flex)", "type": "float", "required": False, "min": 1.5,
              "max": 10, "step": 0.1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
         ],
         "routeParams": {"fal": ["enable_safety_checker"]},
@@ -449,8 +449,8 @@ APPROVED_APPENDED_OPTIONS = {
                              {"label": "FLUX.2 [klein] 4B", "value": "klein-4b"}]},
     "krea-style-train": {"model": [
         {"label": "Krea 2", "value": "k2"}, {"label": "Krea 2 Large", "value": "k2-large"},
-        {"label": "Krea 1 (Krea account)", "value": "k1"},
-        {"label": "LTX 2.3 22B (Krea account)", "value": "ltx-23-22b"},
+        {"label": "Krea 1 · Krea account", "value": "k1"},
+        {"label": "LTX 2.3 22B · Krea account", "value": "ltx-23-22b"},
     ]},
 }
 
@@ -496,13 +496,13 @@ _GEM_NEW = ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.
 _GEM_THINKING_OLD = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite"]
 APPROVED_LEADING_OPTIONS = {
     "claude-chat": {"model": [
-        {"label": "Claude Fable 5.1 (flagship)", "value": "claude-fable-5-1"},
+        {"label": "Claude Fable 5.1 · flagship", "value": "claude-fable-5-1"},
         {"label": "Claude Opus 5.5", "value": "claude-opus-5-5"},
         {"label": "Claude Sonnet 5.5", "value": "claude-sonnet-5-5"},
         {"label": "Claude Haiku 5.5", "value": "claude-haiku-5-5"},
     ]},
     "gpt-4o-chat": {"model": [
-        {"label": "GPT-6 Astra (flagship)", "value": "gpt-6-astra"},
+        {"label": "GPT-6 Astra · flagship", "value": "gpt-6-astra"},
         {"label": "GPT-6.1 Sol", "value": "gpt-6.1-sol"},
         {"label": "GPT-6 Sol", "value": "gpt-6-sol"},
         {"label": "GPT-6 Luna", "value": "gpt-6-luna"},
@@ -521,16 +521,16 @@ APPROVED_OPTION_LABEL_CHANGES.update({
     "claude-chat": {"model": {"claude-fable-5": ("Claude Fable 5 (flagship)", "Claude Fable 5")}},
     "gpt-4o-chat": {"model": {
         "gpt-5.5": ("GPT-5.5 (flagship)", "GPT-5.5"),
-        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 nano (retiring 2027-04-01)"),
-        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o (legacy, retiring 2027-01-14)"),
-        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini (legacy, retiring 2027-01-14)"),
-        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 (legacy, retiring 2027-01-14)"),
-        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini (legacy, retiring 2027-01-14)"),
-        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano (legacy, retiring 2026-10-23)"),
+        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 nano · retiring 2027-04-01"),
+        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o · legacy, retiring 2027-01-14"),
+        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini · legacy, retiring 2027-01-14"),
+        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 · legacy, retiring 2027-01-14"),
+        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini · legacy, retiring 2027-01-14"),
+        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano · legacy, retiring 2026-10-23"),
     }},
     "gemini-chat": {"model": {
-        "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)"),
-        "gemini-3.1-flash-lite": ("Gemini 3.1 Flash-Lite", "Gemini 3.1 Flash-Lite (retiring 2027-05-07)"),
+        "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash · deprecated, runs Gemini 3.6 Flash"),
+        "gemini-3.1-flash-lite": ("Gemini 3.1 Flash-Lite", "Gemini 3.1 Flash-Lite · retiring 2027-05-07"),
     }},
 })
 APPROVED_PARAM_FIELD_CHANGES = {
@@ -676,8 +676,8 @@ def _remove_approved_fields(container: dict[str, Any], additions: dict[str, Any]
 # a public param agents can set (services/agent_params.py). Character gains a
 # leading `character` param; Moodboard's hidden string `moodboard` becomes the
 # required reference. Both gain a description saying where the ids come from.
-APPROVED_TOP_LEVEL_FIELD_ADDITIONS["character"] = {"description": "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them."}
-APPROVED_TOP_LEVEL_FIELD_ADDITIONS["nebula-moodboard"] = {"description": "A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards."}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["character"] = {"description": "A saved character’s identity, including reference views, frozen traits and seed, for cinematic and edit nodes. Set character to a character id. GET /api/characters lists them."}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["nebula-moodboard"] = {"description": "A saved Nebula moodboard as creative direction, with its style brief, negative prompt, palette and representative images. Set moodboard to a board id. GET /api/moodboards lists the boards."}
 APPROVED_LEADING_PARAM_ADDITIONS["character"] = {"key": "character", "label": "Character", "type": "character",
                                                  "required": True}
 # The model picker's loading placeholder takes the ellipsis character (GM, 2026-11 copy sweep item 16).
@@ -718,7 +718,7 @@ for _node_id in (
 APPROVED_INSERTED_PARAMS["nebula-moodboard"] = [("moodboard", {
     "key": "send_notes", "label": "Moodboard notes to generators", "type": "enum", "required": False,
     "default": "board", "options": [{"label": "As the moodboard says", "value": "board"},
-                                    {"label": "Send", "value": "yes"}, {"label": "Don't send", "value": "no"}],
+                                    {"label": "Send", "value": "yes"}, {"label": "Don’t send", "value": "no"}],
 })]
 
 
@@ -865,9 +865,30 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
     return normalized
 
 
+# Free text a person reads and no program does. The fingerprint leaves these out,
+# so a copy edit (a label's case, a description's wording) is not a structural
+# change; a port's dataType, an id, a key, an option's value or the order and
+# membership of options still are. The label entries in the approved tables
+# above still assert the current text and are now redundant for the hash.
+COPY_ONLY_FIELDS = frozenset({
+    "label", "description", "placeholder", "hint", "tooltip", "helperText",
+    "capabilityNote", "disabledReason", "note", "_note",
+})
+
+
+def _without_copy(value: Any) -> Any:
+    """The value with every copy-only text field removed, at any depth."""
+    if isinstance(value, dict):
+        return {key: _without_copy(item) for key, item in value.items()
+                if not (key in COPY_ONLY_FIELDS and isinstance(item, str))}
+    if isinstance(value, list):
+        return [_without_copy(item) for item in value]
+    return value
+
+
 def _node_fingerprint(node_id: str, node: dict[str, Any]) -> str:
     canonical = json.dumps(
-        _without_role_additions(node_id, node),
+        _without_copy(_without_role_additions(node_id, node)),
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
@@ -879,6 +900,34 @@ def _baseline_fingerprints() -> dict[str, str]:
     payload = json.loads(BASELINE_FINGERPRINTS_PATH.read_text())
     assert payload["baselineCommit"] == "c708400"
     return payload["nodes"]
+
+
+def regenerate_baseline_fingerprints(definitions_path: Path, source_commit: str) -> None:
+    """Rewrite the stored fingerprints from a commit's node definitions.
+
+    The approved tables above assert the labels of the commit they were written
+    against, so run this with that commit's copy of this file:
+        git show <commit>:backend/data/node_definitions.json > /tmp/defs.json
+        python backend/tests/test_reference_roles.py --regenerate /tmp/defs.json <commit>
+    It keeps the node list and baselineCommit of the stored file.
+    """
+    definitions = json.loads(definitions_path.read_text())
+    payload = json.loads(BASELINE_FINGERPRINTS_PATH.read_text())
+    payload["nodes"] = {node_id: _node_fingerprint(node_id, definitions[node_id]) for node_id in payload["nodes"]}
+    payload["copyFieldsLeftOut"] = sorted(COPY_ONLY_FIELDS)
+    payload["regeneratedFrom"] = source_commit
+    payload["note"] = ("Fingerprints leave out copy-only text fields (copyFieldsLeftOut) and were regenerated "
+                       f"from the node definitions at {source_commit}; baselineCommit names the original baseline.")
+    BASELINE_FINGERPRINTS_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import sys
+
+    if len(sys.argv) == 4 and sys.argv[1] == "--regenerate":
+        regenerate_baseline_fingerprints(Path(sys.argv[2]), sys.argv[3])
+    else:
+        raise SystemExit("usage: test_reference_roles.py --regenerate <definitions.json> <commit>")
 
 
 def _role_map(defs: dict[str, dict[str, Any]]) -> dict[str, dict[str, str]]:
@@ -1044,7 +1093,7 @@ def test_approved_art_direction_normalization_preserves_fixture_and_other_fields
     ("character", "params", "strength_override", "disabledReason", "Strength works"),
     # identity-edit's params live in sharedParams since its Google route (2026-10-14).
     ("identity-edit", "sharedParams", "identity_strength", "disabledReason", "Strength works"),
-    ("reference-set", "params", "style_weight", "label", "Style Strength"),
+    ("reference-set", "params", "style_weight", "label", "Style strength"),
     ("seedream-4-5", "falParams", "seed", "visibleWhen", {"model": ["4.5", "5.0-lite"]}),
     ("seedream-4-5", None, None, "directKeyName", "FAL_KEY"),
     ("identity-edit", "inputPorts", "mask", "label", "Mask"),

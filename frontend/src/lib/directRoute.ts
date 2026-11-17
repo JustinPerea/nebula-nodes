@@ -1045,7 +1045,7 @@ function why(route: RouteSpec, block: DirectBlock): string {
 // node_route._why_person and _fix_person are the same, word for word.
 
 function plain(text: string): string {
-  return String(text).replace(/\s*\([^)]*\)/g, '').trim();
+  return String(text).split(' · ')[0].replace(/\s*\([^)]*\)/g, '').trim();
 }
 
 /** A rule's own label ("a video continuation longer than 15 s") in GM's rules. */

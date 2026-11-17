@@ -335,7 +335,7 @@ costs more than they agreed to, nor a node, model, price or extra cost
 they didn't see (a model or price that changed asks them again, even a
 cheaper one, and a switch on a free-text model such as OpenRouter's counts,
 as does a Meshy node's mesh type, or a Krea node's Variant, Engine, Model,
-Training Model, Version, Enhancement model or Frame interpolation model (the
+Training model, Version, Enhancement model or Frame interpolation model (the
 Topaz video upscalers), or grain model while Grain is on);
 if you delete or disconnect one, it tells them it's no longer in the run,
 and a replay of a saved run then runs its saved copy, as it does when you
@@ -730,7 +730,7 @@ nebula moodboard delete <board>
   `request_id_scope`): pick a new one. Ids are kept for 7 days.
 - Before connecting a board to a generator's `moodboard` port, `nebula info
   <node-id>` says what that node takes from it: the `MOODBOARD:` line is the
-  card's ("Moodboard images: on · up to 10 to Image Style Refs", or the brief as
+  card's ("Moodboard images: on · up to 10 to Image style refs", or the brief as
   text only), with `(on <route>)` after it on a node with more than one
   route, then the channel, weights, ports the board never fills, and the
   models or routes that change it.

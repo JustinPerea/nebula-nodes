@@ -130,8 +130,8 @@ describe('Canvas inspector enum controls', () => {
   });
 
   it.each([
-    ['character', 'strength_override', 'Strength Override'],
-    ['identity-edit', 'identity_strength', 'Identity Strength'],
+    ['character', 'strength_override', 'Strength override'],
+    ['identity-edit', 'identity_strength', 'Identity strength'],
   ])('preserves the unavailable strength value for %s', (definitionId, key, label) => {
     renderModel(definitionId, { [key]: 0.37 });
     const control = screen.getByRole('textbox', { name: label });
@@ -181,15 +181,15 @@ describe('Canvas inspector enum controls', () => {
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true,
       apiKeys: { IDEOGRAM_API_KEY: 'fixture-only' } } });
     renderModel('ideogram-reframe', {});
-    const resolution = screen.getByRole('combobox', { name: 'Target Resolution' });
+    const resolution = screen.getByRole('combobox', { name: 'Target resolution' });
     expect(resolution).toHaveValue('');
     expect(resolution.querySelector('option[value=""]')).toHaveTextContent('Choose…');
-    expect(screen.getByRole('combobox', { name: 'Target Size' })).toBeVisible();
+    expect(screen.getByRole('combobox', { name: 'Target size' })).toBeVisible();
     fireEvent.change(resolution, { target: { value: '1024x1024' } });
     expect(currentParams()).toEqual({ resolution: '1024x1024' });
     // Now the direct route runs it: fal's sizing goes away.
-    expect(screen.queryByRole('combobox', { name: 'Target Size' })).toBeNull();
-    expect(screen.getByRole('combobox', { name: 'Target Resolution' })).toHaveValue('1024x1024');
+    expect(screen.queryByRole('combobox', { name: 'Target size' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Target resolution' })).toHaveValue('1024x1024');
   });
 
   it('writes original numeric Krea duration choices and preserves the default', () => {
@@ -283,7 +283,7 @@ describe('Inspector per-model Max Tokens', () => {
     renderModel('gemini-chat', { model: 'gemini-3.6-flash', max_tokens: 12000 });
     fireEvent.change(model(), { target: { value: 'gemini-4-argon' } });
     expect(currentParams()).toMatchObject({ model: 'gemini-4-argon', max_tokens: 12000 });
-    expect(screen.getByText('Max Tokens stays at 12,000, the value you set. The Gemini 4 Argon default is 65,536.')).toBeVisible();
+    expect(screen.getByText('Max tokens stays at 12,000, the value you set. The Gemini 4 Argon default is 65,536.')).toBeVisible();
     // The note is about that change; the next edit clears it.
     fireEvent.change(maxTokens(), { target: { value: '30000' } });
     expect(screen.queryByText(/Gemini 4 Argon default/)).toBeNull();

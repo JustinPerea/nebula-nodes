@@ -1807,7 +1807,7 @@ def route_unavailable(
 
 
 def _plain(text: str) -> str:
-    return re.sub(r"\s*\([^)]*\)", "", str(text)).strip()
+    return re.sub(r"\s*\([^)]*\)", "", str(text).split(" · ")[0]).strip()
 
 
 def _person_words(text: str) -> str:

@@ -368,7 +368,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     expect(inspectorParam('safety_tolerance')).not.toBeNull();
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'klein-9b' } });
     expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'klein-9b', safety_tolerance: '2' });
-    expect(useProviderNoteStore.getState().notes.n1).toBe("Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2");
+    expect(useProviderNoteStore.getState().notes.n1).toBe("Safety 5 · permissive isn't on fal.ai with FLUX.2 [klein] 9B: back to 2");
     expect(inspectorParam('safety_tolerance')).toBeNull();
     // Nothing stops: the switcher has no stop line.
     expect(document.querySelector('.provider-switcher__stop')).toBeNull();
@@ -502,7 +502,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     fireEvent.change(screen.getByTitle('Model').querySelector('select')!, { target: { value: 'klein-9b' } });
     expect(changes.at(-1)).toEqual({ _provider: 'fal', model: 'klein-9b', safety_tolerance: '2' });
     expect(screen.queryByTitle('Safety')).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent("Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2");
+    expect(screen.getByRole('status')).toHaveTextContent("Safety 5 · permissive isn't on fal.ai with FLUX.2 [klein] 9B: back to 2");
   });
 });
 

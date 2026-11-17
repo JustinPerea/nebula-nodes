@@ -196,7 +196,7 @@ def test_frame_ports_are_never():
     entry = _refs(slots=[{"port": "tail_image", "max": 1}], never=["image"])
     problems = _adapters().table_problems(_with_entry("kling-v2-1", entry), definitions, CATALOG)
     assert "kling-v2-1: tail_image reads as a frame (tail), so it must be in never" in problems
-    assert _adapters().frame_word("reference_images", "Reference Images") is None
+    assert _adapters().frame_word("reference_images", "Reference images") is None
     assert _adapters().frame_word("first_frame_image", "First frame") == "first"
     assert _adapters().frame_word("keyframes", "Keyframes") == "keyframes"
 
@@ -926,7 +926,7 @@ def test_card_line_reads_as_the_card_says_it():
     assert line("fast-sdxl") == "This model takes the brief as text."
     assert line("gpt-image-2-edit") == "Moodboard images: off · the brief goes as text"
     assert line("nano-banana") == "Moodboard images: off · the brief goes as text"
-    assert line("krea-2-generate") == "Moodboard images: on · up to 10 to Image Style Refs"
+    assert line("krea-2-generate") == "Moodboard images: on · up to 10 to Image style refs"
     assert adapters.card_line(None, DEFINITIONS["flux-2-pro"]) == "This model takes the brief as text."
 
 
@@ -951,6 +951,6 @@ def test_describe_variants_resolve_on_the_route_their_own_run_takes(monkeypatch)
     route = adapters.run_route(definition, {"image_size": "square"}, wired, keys)
     run = adapters.resolve(definition["id"], {"image_size": "square"}, route, definition=definition)
     assert route == "fal" and square["route"] == "fal"
-    assert square["slots"] == [{"port": "images", "label": "Reference Images", "max": run["slots"][0]["max"]}] == [
-        {"port": "images", "label": "Reference Images", "max": 4}]
+    assert square["slots"] == [{"port": "images", "label": "Reference images", "max": run["slots"][0]["max"]}] == [
+        {"port": "images", "label": "Reference images", "max": 4}]
     assert square["order"] == "upload"

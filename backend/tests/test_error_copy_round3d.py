@@ -507,7 +507,7 @@ async def test_krea_2_style_search_fields_the_account_cant_use() -> None:
                                                                              "filter": "user"}))
     assert str(exc) == ("User, Liked only, Filter needs a Krea API key; the Krea account lists the styles "
                         "available to you. Nothing was sent")
-    assert person_line(exc) == ("To use “User”, “Liked Only” and “Filter”, switch to the “API key” connection. "
+    assert person_line(exc) == ("To use “User”, “Liked only” and “Filter”, switch to the “API key” connection. "
                                 "The “Krea account” connection lists every style you can use. Nothing was sent to Krea.")
     exc = await _araised(_account_style_search, _node("krea-style-search", {"user": "me"}))
     assert person_line(exc) == ("To use “User”, switch to the “API key” connection. The “Krea account” connection "
@@ -522,7 +522,7 @@ async def test_krea_3_training_settings_the_account_cant_use() -> None:
     exc = await _araised(_account_style_train, node, "mine", "flux_dev", ["https://e.com/a.png"], None)
     assert str(exc) == ("Max steps, Type: Default needs a Krea API key; the Krea account trains with Krea's "
                         "defaults. Nothing was sent")
-    assert person_line(exc) == ("To use “Max Steps” and “Type” set to Default, switch to the “API key” connection. "
+    assert person_line(exc) == ("To use “Max steps” and “Type” set to Default, switch to the “API key” connection. "
                                 "The “Krea account” connection trains with Krea's default settings. "
                                 "Nothing was sent to Krea.")
 

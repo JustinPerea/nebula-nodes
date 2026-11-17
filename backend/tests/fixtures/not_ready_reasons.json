@@ -1015,11 +1015,11 @@
    "kind": "route_block",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
-   "many": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
-   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
-   "logOne": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai. Then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai. Then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai.",
+   "many": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai.",
+   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai.",
+   "logOne": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1155,11 +1155,11 @@
    "kind": "route_block",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on.",
-   "many": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on.",
-   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on.",
-   "logOne": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on.",
+   "many": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on.",
+   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on.",
+   "logOne": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, then run the nodes again."
   },
   {
    "kind": "route_block",

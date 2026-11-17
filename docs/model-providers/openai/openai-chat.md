@@ -57,7 +57,7 @@ The 2026-10-16 GPT-6 refresh was checked against OpenAI's own pages, fetched tha
 
 | Label | Value | Notes |
 |---|---|---|
-| GPT-6 Astra (flagship) | `gpt-6-astra` | Effort low…max; **no `none`** (400) |
+| GPT-6 Astra · flagship | `gpt-6-astra` | Effort low…max; **no `none`** (400) |
 | GPT-6.1 Sol | `gpt-6.1-sol` | **Node default** (from 2026-10-16), Effort `medium`. Effort low…max, default medium; **no `none` / `minimal`** |
 | GPT-6 Sol | `gpt-6-sol` | Effort none…max, default medium. OpenAI points to GPT-6.1 Sol as "the newer Sol model"; no deprecation listed |
 | GPT-6 Luna | `gpt-6-luna` | Effort none…max, default medium |
@@ -85,7 +85,7 @@ selected model)".
 | GPT-5.5 | `gpt-5.5` | |
 | GPT-5.4 | `gpt-5.4` | Default until 2026-10-16 |
 | GPT-5.4 Mini | `gpt-5.4-mini` | |
-| GPT-5.4 nano (retiring 2027-04-01) | `gpt-5.4-nano` | Deprecated 2026-10-01, shutdown 2027-04-01; replacement `gpt-6-luna` |
+| GPT-5.4 nano · retiring 2027-04-01 | `gpt-5.4-nano` | Deprecated 2026-10-01, shutdown 2027-04-01; replacement `gpt-6-luna` |
 
 Uses `reasoning_effort`. Handler **omits** `temperature`, `top_p`, `frequency_penalty`, and
 `presence_penalty` for any model id starting with `gpt-5`.

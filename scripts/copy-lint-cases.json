@@ -554,6 +554,38 @@
    "text": "Gemini 2.5 Flash Image",
    "kind": "label",
    "rules": []
+  },
+  {
+   "text": "Magnific Illusio",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Magnific Sharpy",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Magnific Sparkle",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Gemini 3 Pro Image",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Create in Krea Nodes",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Magnific Foo",
+   "kind": "label",
+   "rules": [
+    "title-case"
+   ]
   }
  ]
 }

@@ -8234,7 +8234,7 @@
         "block": {
           "reason": "unsupported",
           "param": "reasoning_level",
-          "detail": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+          "detail": "high reasoning without a reference image · fal.ai takes it on krea/v3/edit only"
         },
         "missing": []
       },
@@ -8244,13 +8244,13 @@
         "block": {
           "reason": "unsupported",
           "param": "reasoning_level",
-          "detail": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+          "detail": "high reasoning without a reference image · fal.ai takes it on krea/v3/edit only"
         },
         "alternatives": [
           "krea"
         ],
         "fixes": [],
-        "message": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image (fal.ai takes it on krea/v3/edit only). Change that setting, or switch provider. Krea can take it."
+        "message": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image · fal.ai takes it on krea/v3/edit only. Change that setting, or switch provider. Krea can take it."
       },
       "unavailableLine": "“Krea 3” can’t run on fal.ai with high reasoning without a reference image. Change that setting, or switch to Krea.",
       "paramKeys": [
@@ -8807,7 +8807,7 @@
           "reason": "hidden",
           "param": "enable_safety_checker",
           "on": "fal",
-          "detail": "Safety Checker off"
+          "detail": "Safety checker off"
         },
         "missing": []
       },
@@ -8818,7 +8818,7 @@
           "reason": "hidden",
           "param": "enable_safety_checker",
           "on": "fal",
-          "detail": "Safety Checker off"
+          "detail": "Safety checker off"
         },
         "alternatives": [
           "fal"
@@ -8829,9 +8829,9 @@
             "value": true
           }
         ],
-        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider. fal.ai can take it."
+        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety checker off. Turn Safety checker on, or switch provider. fal.ai can take it."
       },
-      "unavailableLine": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
+      "unavailableLine": "“FLUX.2” can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai.",
       "paramKeys": [
         "guidance_scale",
         "image_size",
@@ -9955,7 +9955,7 @@
           "reason": "hidden",
           "param": "safety_tolerance",
           "on": "bfl",
-          "detail": "Safety 5 (Permissive)",
+          "detail": "Safety 5 · permissive",
           "when": "Model FLUX.2 [klein] 9B"
         },
         "missing": []
@@ -9967,7 +9967,7 @@
           "reason": "hidden",
           "param": "safety_tolerance",
           "on": "bfl",
-          "detail": "Safety 5 (Permissive)",
+          "detail": "Safety 5 · permissive",
           "when": "Model FLUX.2 [klein] 9B"
         },
         "alternatives": [],
@@ -9977,7 +9977,7 @@
             "value": "2"
           }
         ],
-        "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
+        "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 · permissive with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
       },
       "unavailableLine": "“FLUX.2” can’t run on fal.ai with “Safety” set to 5 and “Model” set to FLUX.2 [klein] 9B. Set “Safety” back to 2, or add your Black Forest Labs API key in Settings and switch to Black Forest Labs.",
       "shownRoute": "fal",
@@ -10745,7 +10745,7 @@
           "reason": "hidden",
           "param": "model",
           "on": "fal",
-          "detail": "Model Jam (speed)"
+          "detail": "Model Jam · speed"
         },
         "missing": []
       },
@@ -10756,7 +10756,7 @@
           "reason": "hidden",
           "param": "model",
           "on": "fal",
-          "detail": "Model Jam (speed)"
+          "detail": "Model Jam · speed"
         },
         "alternatives": [
           "fal"
@@ -10767,7 +10767,7 @@
             "value": "berry"
           }
         ],
-        "message": "Krea 3 can't run on Krea: it doesn't offer Model Jam (speed). Set Model back to Berry (quality), or switch provider. fal.ai can take it."
+        "message": "Krea 3 can't run on Krea: it doesn't offer Model Jam · speed. Set Model back to Berry · quality, or switch provider. fal.ai can take it."
       },
       "unavailableLine": "“Krea 3” can’t run on Krea with “Model” set to Jam. Set “Model” back to Berry, or switch to fal.ai.",
       "shownRoute": "krea",
@@ -11094,7 +11094,7 @@
           "reason": "hidden",
           "param": "safety_tolerance",
           "on": "bfl",
-          "detail": "Safety 5 (Permissive)",
+          "detail": "Safety 5 · permissive",
           "when": "Model FLUX.2 [klein] 9B"
         },
         "missing": []
@@ -11106,7 +11106,7 @@
           "reason": "hidden",
           "param": "safety_tolerance",
           "on": "bfl",
-          "detail": "Safety 5 (Permissive)",
+          "detail": "Safety 5 · permissive",
           "when": "Model FLUX.2 [klein] 9B"
         },
         "alternatives": [],
@@ -11116,7 +11116,7 @@
             "value": "2"
           }
         ],
-        "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider."
+        "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 · permissive with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider."
       },
       "unavailableLine": "“FLUX.2” can’t run on fal.ai with “Safety” set to 5 and “Model” set to FLUX.2 [klein] 9B. Set “Safety” back to 2.",
       "shownRoute": "fal",
@@ -11224,7 +11224,7 @@
           "reason": "hidden",
           "param": "enable_safety_checker",
           "on": "fal",
-          "detail": "Safety Checker off"
+          "detail": "Safety checker off"
         },
         "missing": []
       },
@@ -11235,7 +11235,7 @@
           "reason": "hidden",
           "param": "enable_safety_checker",
           "on": "fal",
-          "detail": "Safety Checker off"
+          "detail": "Safety checker off"
         },
         "alternatives": [],
         "fixes": [
@@ -11244,9 +11244,9 @@
             "value": true
           }
         ],
-        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider."
+        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety checker off. Turn Safety checker on, or switch provider."
       },
-      "unavailableLine": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on.",
+      "unavailableLine": "“FLUX.2” can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on.",
       "shownRoute": "bfl",
       "routeParams": [
         {

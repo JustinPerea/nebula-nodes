@@ -61,7 +61,7 @@ describe('per-model defaults (defaultBy)', () => {
     const before = { model: 'claude-haiku-4-5-20251001', max_tokens: 10000 };
     const snap = snapParamDefaults(CLAUDE, before, { ...before, model: 'claude-fable-5-1' });
     expect(snap.params).toEqual({ model: 'claude-fable-5-1', max_tokens: 10000 });
-    // The status suffix "(flagship)" isn't part of the name.
+    // The note after " · " ("flagship") isn't part of the name.
     expect(snap.notes[0].text).toBe('Max Tokens stays at 10,000, the value you set. The Claude Fable 5.1 default is 64,000.');
   });
 
@@ -96,6 +96,6 @@ describe('per-model defaults (defaultBy)', () => {
     // No stored model is the default model, Argon.
     const snap = snapParamDefaults(GEMINI, {}, { model: 'gemini-3.6-flash' });
     expect(snap.params).toEqual({ model: 'gemini-3.6-flash', max_tokens: 8192 });
-    expect(snap.notes[0].text).toBe('Max Tokens moved to 8,192, the Gemini 3.6 Flash default.');
+    expect(snap.notes[0].text).toBe('Max tokens moved to 8,192, the Gemini 3.6 Flash default.');
   });
 });

@@ -236,7 +236,7 @@ The server exposes these tools for building and running (see
   moodboard does there, from the adapter table (contract 07 section 1.16) at
   the node's defaults on the route a run takes here (`route`, when it has
   more than one). `line` is the card's Moodboard line ("Moodboard images: on ·
-  up to 10 to Image Style Refs"). The rest are the entry's own fields as
+  up to 10 to Image style refs"). The rest are the entry's own fields as
   section 1.16 defines them, without its sources: `channel`, `default`,
   `handler`, `slots` (port, `label`, `max`, `sharesLimitWith`),
   `needsWired`, `never`, `textSlot`, `text`, `negativeField`, `weight`
@@ -1364,7 +1364,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `selection.changed` | the selected set changed, or how many selected nodes only the person's tab has ("selected 1 node only their tab has") | `nodeIds`, `count`; `tabOnlyCount`, `tabOnlyNote` when there are such nodes |
 | `run.started` / `run.finished` / `run.failed` | per node, attributed to whoever started the run | `runId`, `error`; `proposalId` on the run the canvas starts for an accepted proposal; on `run.failed`, `proposalNeeded: true` when the node stopped at a call only the person may make (Idol with `HF_TOKEN` set): its `error` is then the whole text saying so and how to propose, and its `summary` ends "stopped" |
 | `run.cancelled` | a run stopped, attributed to whoever pressed Stop or called `cancel_run` (the starter when another backend took the Stop) | `runId`, `startedBy` (`kind`, `name`) |
-| `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
+| `run.skipped` | a gate upstream (Jev Decide's On pass / On fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart (a reopen of the open project keeps its ids, apart from `renumbered`) | `reason`; `renumbered` (an open that gave nodes Nebula's ids, at most 50) and `renumberedCount` (all of them); `proposalsKept: true` on a reopen of the open project, whose open proposals stay open with the same ids, and `proposalsOpen` (how many; the summary says "1 open proposal stayed open") |
 | `node.result` | the person's tab handed over a node's result from a newer run than Nebula's, which replaced it (in the person's name; no Agent log line) | `projectId`, `runId` (the tab's run), `replaced: true` |
 | `canvas.cleared` | Clear canvas | |
@@ -3297,11 +3297,11 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   shows it, "“Writer” · openai/gpt-4o-mini · price not listed", so a switch
   to another model is a changed row, even when the node is named after its
   model; a Meshy node names its Model option and its mesh type, even at
-  the default, "Mesh type: Smart Topology (Meshy T2)", since it picks the
+  the default, "Mesh type: Smart topology · Meshy T2", since it picks the
   model that runs; a Krea node also names its
   sub-model setting as its card does, even at the default: "“Hero” · Krea 2
   · Variant: Medium · on your Krea plan", "Engine: …" on Magnific Creative,
-  "Model: …" on Topaz Image Upscale and Topaz Standard, "Training Model: …" on Krea Style
+  "Model: …" on Topaz Image Upscale and Topaz Standard, "Training model: …" on Krea Style
   Train, "Grain model: …" on Topaz Bloom 2 and Wonder 3.5 while Grain is on
   (with Grain off no grain model runs), "Enhancement model: …" and "Frame
   interpolation model: …" on Topaz Video Upscale, "Frame interpolation

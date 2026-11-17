@@ -189,7 +189,7 @@ async def test_a_gate_that_leaves_out_a_conditional_port_fails_closed():
     nodes[2].params["omit"] = True  # returns on_pass only, and no withheld entry for on_fail
     events = await run(nodes, edges, fakes.registry())
     [skipped] = of(events, "skipped", "redo")
-    assert skipped.reason == "Jev Decide sent nothing on On Fail"
+    assert skipped.reason == "Jev Decide sent nothing on On fail"
     assert "redo" not in fakes.calls
 
 
@@ -275,8 +275,8 @@ async def test_skipped_nodes_never_reach_their_handler_so_the_spend_hold_gives_t
 
 def test_split_and_join_round_trip_and_keep_withheld_entries_out_of_port_values():
     definition = {"displayName": "Gate", "outputPorts": [
-        {"id": "pass", "label": "Pass"}, {"id": "on_pass", "label": "On Pass", "conditional": True},
-        {"id": "on_fail", "label": "On Fail", "conditional": True}]}
+        {"id": "pass", "label": "Pass"}, {"id": "on_pass", "label": "On pass", "conditional": True},
+        {"id": "on_fail", "label": "On fail", "conditional": True}]}
     outputs = {"pass": {"type": "Text", "value": "true"}, "on_pass": {"type": "Text", "value": "x"},
                "on_fail": withheld("  Gate   passed ")}
     ports, held = split_outputs(outputs, definition)

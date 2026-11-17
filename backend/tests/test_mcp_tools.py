@@ -410,9 +410,9 @@ def test_describe_node_says_what_a_wired_moodboard_does(nebula):
     """describe_node carries the node's adapter entry, resolved at its defaults
     on the route a run takes here: the facts behind the card's Moodboard line."""
     krea = _call_tool("describe_node", {"definition_id": "krea-2-generate"})["moodboardAdapter"]
-    assert krea["line"] == "Moodboard images: on · up to 10 to Image Style Refs"
+    assert krea["line"] == "Moodboard images: on · up to 10 to Image style refs"
     assert krea["channel"] == "weighted-style" and krea["default"] == "images" and krea["handler"] == "reads-board"
-    assert krea["slots"] == [{"port": "image_style_references", "label": "Image Style Refs", "max": 10,
+    assert krea["slots"] == [{"port": "image_style_references", "label": "Image style refs", "max": 10,
                               "sharesLimitWith": ["style_images"]}]
     assert krea["never"] == ["style_images", "styles"]
     assert krea["weight"]["mode"] == "native" and krea["weight"]["range"] == [0, 1]
@@ -472,7 +472,7 @@ def test_nebula_info_prints_what_a_wired_moodboard_does(nebula, capsys):
     nodes.run_info(client, "krea-2-generate")
     out = capsys.readouterr().out
     board = [line for line in out.splitlines() if line.startswith("MOODBOARD")]
-    assert board == ["MOODBOARD: Moodboard images: on · up to 10 to Image Style Refs"]
+    assert board == ["MOODBOARD: Moodboard images: on · up to 10 to Image style refs"]
     detail = out.splitlines()[out.splitlines().index(board[0]) + 1]
     assert "weighted-style" in detail and "weight native strength 0-1" in detail
     assert "never style_images, styles" in detail

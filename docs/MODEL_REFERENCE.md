@@ -25,17 +25,17 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Image Size | enum | square_hd | Square HD, Square, Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
+| Image size | enum | square_hd | Square HD, Square, Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
 | Count | int | 1 | 1–4 |
 | Steps | int | 25 | 1–50 |
-| Guidance Scale | float | 7.5 | 1–20 |
-| Negative Prompt | string | — | — |
-| Expand Prompt | bool | false | — |
+| Guidance scale | float | 7.5 | 1–20 |
+| Negative prompt | string | — | — |
+| Expand prompt | bool | false | — |
 | LoRAs (JSON) | textarea | — | — |
 | Embeddings (JSON) | textarea | — | — |
 | Format | enum | jpeg | JPEG, PNG |
-| Safety Checker | bool | true | — |
-| Safety Checker Version | enum | v1 | v1 (Default), v2 (ViT) |
+| Safety checker | bool | true | — |
+| Safety checker version | enum | v1 | v1 · default, v2 · ViT |
 | Seed | int | — | 0–4294967295 |
 
 ---
@@ -49,7 +49,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/flux-pro/v1.1-ultra` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Image Guide (Image) |
+| **Inputs** | Prompt (Text)*, Image guide (Image) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -57,18 +57,18 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | 21:9, 16:9, 4:3, 3:2, 1:1, 2:3, 3:4, 9:16, … |
+| Aspect ratio | enum | 16:9 | 21:9, 16:9, 4:3, 3:2, 1:1, 2:3, 3:4, 9:16, … |
 | Count | int | 1 | 1–4 |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Safety Tolerance | enum | 2 | 1 (Strict), 2, 3, 4, 5, 6 (Permissive) |
-| Enhance Prompt | bool | false | — |
+| Safety tolerance | enum | 2 | 1 · strict, 2, 3, 4, 5, 6 · permissive |
+| Enhance prompt | bool | false | — |
 | Format | enum | jpeg | JPEG, PNG |
 | Seed | int | — | — |
-| Image Influence | float | 0.1 | 0–1 |
+| Image influence | float | 0.1 | 0–1 |
 
 ---
 
@@ -99,10 +99,10 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Model | `model` | enum | pro | `pro` FLUX.2 [pro], `max` FLUX.2 [max], `flex` FLUX.2 [flex], `klein-9b` FLUX.2 [klein] 9B, `klein-4b` FLUX.2 [klein] 4B | always |
 | Size | `image_size` | enum | landscape_4_3 | `square_hd` Square HD, `square` Square, `portrait_4_3` Portrait 4:3, `portrait_16_9` Portrait 16:9, `landscape_4_3` Landscape 4:3, `landscape_16_9` Landscape 16:9 | always |
 | Format | `output_format` | enum | jpeg | `jpeg` JPEG, `png` PNG | always |
-| Safety | `safety_tolerance` | enum | 2 | `1` 1 (Strict), `2`, `3`, `4`, `5` 5 (Permissive) | always |
+| Safety | `safety_tolerance` | enum | 2 | `1` 1 · strict, `2`, `3`, `4`, `5` 5 · permissive | always |
 | Seed | `seed` | int | — | — | always |
-| Steps (Flex) | `num_inference_steps` | int | — | 1–50 | `model` = `flex` |
-| Guidance (Flex) | `guidance_scale` | float | — | 1.5–10 | `model` = `flex` |
+| Steps (flex) | `num_inference_steps` | int | — | 1–50 | `model` = `flex` |
+| Guidance (flex) | `guidance_scale` | float | — | 1.5–10 | `model` = `flex` |
 
 **fal.ai (`fal`) settings**
 
@@ -111,11 +111,11 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Model | `model` | enum | pro | `pro` FLUX.2 [pro], `max` FLUX.2 [max], `flash` FLUX 2 Flash, `flex` FLUX.2 [flex], `klein-9b` FLUX.2 [klein] 9B, `klein-4b` FLUX.2 [klein] 4B | always |
 | Size | `image_size` | enum | landscape_4_3 | `square_hd` Square HD, `square` Square, `portrait_4_3` Portrait 4:3, `portrait_16_9` Portrait 16:9, `landscape_4_3` Landscape 4:3, `landscape_16_9` Landscape 16:9 | always |
 | Format | `output_format` | enum | jpeg | `jpeg` JPEG, `png` PNG | always |
-| Safety | `safety_tolerance` | enum | 2 | `1` 1 (Strict), `2`, `3`, `4`, `5` 5 (Permissive) | `model` = `pro` / `max` / `flex` |
+| Safety | `safety_tolerance` | enum | 2 | `1` 1 · strict, `2`, `3`, `4`, `5` 5 · permissive | `model` = `pro` / `max` / `flex` |
 | Seed | `seed` | int | — | — | always |
-| Steps (Flex) | `num_inference_steps` | int | — | 2–50 | `model` = `flex` |
-| Guidance (Flex) | `guidance_scale` | float | — | 1.5–10 | `model` = `flex` |
-| Safety Checker | `enable_safety_checker` | bool | true | — | always |
+| Steps (flex) | `num_inference_steps` | int | — | 2–50 | `model` = `flex` |
+| Guidance (flex) | `guidance_scale` | float | — | 1.5–10 | `model` = `flex` |
+| Safety checker | `enable_safety_checker` | bool | true | — | always |
 
 ---
 
@@ -259,7 +259,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/flux-pro/v1/fill` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Base Image (Image)*, Mask (white = edit) (Image)* |
+| **Inputs** | Prompt (Text)*, Base image (Image)*, Mask (white = edit) (Image)* |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -267,7 +267,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Count | int | 1 | 1–4 |
 | Format | enum | jpeg | JPEG, PNG |
-| Enhance Prompt | bool | false | — |
+| Enhance prompt | bool | false | — |
 | Seed | int | — | — |
 
 ---
@@ -288,12 +288,12 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | base | Kontext, Kontext Max |
-| Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 21:9, … |
+| Aspect ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 21:9, … |
 | Count | int | 1 | 1–4 |
-| Guidance Scale | float | 3.5 | 1–20 |
-| Enhance Prompt | bool | false | — |
+| Guidance scale | float | 3.5 | 1–20 |
+| Enhance prompt | bool | false | — |
 | Format | enum | jpeg | JPEG, PNG |
-| Safety | enum | 2 | 1 (Strict), 2, 3, 4, 5, 6 (Permissive) |
+| Safety | enum | 2 | 1 · strict, 2, 3, 4, 5, 6 · permissive |
 | Seed | int | — | — |
 
 ---
@@ -313,13 +313,13 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Image Size | enum | landscape_4_3 | Square HD (1024 × 1024), Square (512 × 512), Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
+| Image size | enum | landscape_4_3 | Square HD · 1024 × 1024, Square · 512 × 512, Landscape 4:3, Landscape 16:9, Portrait 4:3, Portrait 16:9 |
 | Steps | int | 4 | 1–4 |
-| Guidance Scale | float | 3.5 | 1–5 |
+| Guidance scale | float | 3.5 | 1–5 |
 | Count | int | 1 | 1–4 |
 | Format | enum | jpeg | JPEG, PNG, WebP |
 | Acceleration | enum | none | None, Regular, High |
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 | Seed | int | — | 0–2147483647 |
 
 ---
@@ -356,7 +356,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/gpt-image-1.5/edit` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)*, Moodboard (Moodboard) |
+| **Inputs** | Prompt (Text)*, Reference images (Image ×n)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -364,7 +364,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536 |
 | Quality | enum | high | Low, Medium, High |
-| Input Fidelity | enum | high | Low, High |
+| Input fidelity | enum | high | Low, High |
 | Background | enum | auto | Auto, Transparent, Opaque |
 | Count | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG, WebP |
@@ -386,10 +386,10 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-image-2.5-sunburst | GPT Image 1 (shuts down Oct 23, 2026), GPT Image 1.5 (shuts down Dec 1, 2026), GPT Image 1 Mini (shuts down Dec 1, 2026), GPT Image 2.5 Flare (fastest), GPT Image 2.5 Sunburst (most precise edits) |
+| Model | enum | gpt-image-2.5-sunburst | GPT Image 1 · shuts down October 23, 2026, GPT Image 1.5 · shuts down December 1, 2026, GPT Image 1 Mini · shuts down December 1, 2026, GPT Image 2.5 Flare · fastest, GPT Image 2.5 Sunburst · most precise edits |
 | Count | int | 1 | 1–10 |
 | Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536 |
-| Quality | enum | auto | Auto, Low, Medium, High, Extra High, Max |
+| Quality | enum | auto | Auto, Low, Medium, High, Extra high, Max |
 | Format | enum | png | PNG, JPEG, WebP |
 | Background | enum | auto | Auto, Transparent, Opaque |
 
@@ -410,9 +410,9 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-image-2.5-flare | GPT Image 1 (shuts down Oct 23, 2026), GPT Image 1.5 (shuts down Dec 1, 2026), GPT Image 1 Mini (shuts down Dec 1, 2026), GPT Image 2.5 Flare (fastest), GPT Image 2.5 Sunburst (most precise edits) |
+| Model | enum | gpt-image-2.5-flare | GPT Image 1 · shuts down October 23, 2026, GPT Image 1.5 · shuts down December 1, 2026, GPT Image 1 Mini · shuts down December 1, 2026, GPT Image 2.5 Flare · fastest, GPT Image 2.5 Sunburst · most precise edits |
 | Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536 |
-| Quality | enum | auto | Auto, Low, Medium, High, Extra High, Max |
+| Quality | enum | auto | Auto, Low, Medium, High, Extra high, Max |
 | Format | enum | png | PNG, JPEG, WebP |
 | Background | enum | auto | Auto, Transparent, Opaque |
 
@@ -434,7 +434,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gpt-image-2.5-flare | Flare · fast, Sunburst · most precise |
-| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 2560 × 1440, 3840 × 2160 (4K landscape, experimental), … |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 2560 × 1440, 3840 × 2160 · 4K landscape, experimental, … |
 | Quality | enum | auto | Auto, Low, Medium, High, Extra high, Max |
 | Background | enum | auto | Auto, Opaque, Transparent (PNG/WebP) |
 | Format | enum | png | PNG, JPEG, WebP |
@@ -459,7 +459,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gpt-image-2.5-flare | Flare · fast, Sunburst · most precise |
-| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 2560 × 1440, 3840 × 2160 (4K landscape, experimental), … |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 2560 × 1440, 3840 × 2160 · 4K landscape, experimental, … |
 | Quality | enum | auto | Auto, Low, Medium, High, Extra high, Max |
 | Background | enum | auto | Auto, Opaque, Transparent (PNG/WebP) |
 | Format | enum | png | PNG, JPEG, WebP |
@@ -483,7 +483,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 3840 × 2160 (4K landscape), 2160 × 3840 (4K portrait) |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 3840 × 2160 · 4K landscape, 2160 × 3840 · 4K portrait |
 | Quality | enum | auto | Auto, Low, Medium, High |
 | Format | enum | png | PNG, JPEG, WebP |
 | Compression | int | 90 | 0–100 |
@@ -500,17 +500,17 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `openai/gpt-image-2/edit` |
 | **Execution** | stream |
-| **Inputs** | Reference Images (Image ×n)*, Prompt (Text)*, Moodboard (Moodboard) |
+| **Inputs** | Reference images (Image ×n)*, Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, Square HD (1024 × 1024), Square (512 × 512), Portrait 4:3 (768 × 1024), Portrait 16:9 (576 × 1024), Landscape 4:3 (1024 × 768), Landscape 16:9 (1024 × 576) |
+| Size | enum | auto | Auto, Square HD · 1024 × 1024, Square · 512 × 512, Portrait 4:3 · 768 × 1024, Portrait 16:9 · 576 × 1024, Landscape 4:3 · 1024 × 768, Landscape 16:9 · 1024 × 576 |
 | Quality | enum | high | Auto, Low, Medium, High |
 | Count | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG, WebP |
-| Preview Frames | int | 2 | 0–3 |
+| Preview frames | int | 2 | 0–3 |
 
 ---
 
@@ -529,11 +529,11 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | landscape_4_3 | Square HD (1024 × 1024), Square (512 × 512), Portrait 4:3 (768 × 1024), Portrait 16:9 (576 × 1024), Landscape 4:3 (1024 × 768), Landscape 16:9 (1024 × 576) |
+| Size | enum | landscape_4_3 | Square HD · 1024 × 1024, Square · 512 × 512, Portrait 4:3 · 768 × 1024, Portrait 16:9 · 576 × 1024, Landscape 4:3 · 1024 × 768, Landscape 16:9 · 1024 × 576 |
 | Quality | enum | high | Auto, Low, Medium, High |
 | Count | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG, WebP |
-| Preview Frames | int | 2 | 0–3 |
+| Preview frames | int | 2 | 0–3 |
 
 ---
 
@@ -552,7 +552,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 3840 × 2160 (4K landscape), 2160 × 3840 (4K portrait) |
+| Size | enum | auto | Auto, 1024 × 1024, 1536 × 1024, 1024 × 1536, 2048 × 2048, 2048 × 1152, 3840 × 2160 · 4K landscape, 2160 × 3840 · 4K portrait |
 | Quality | enum | auto | Auto, Low, Medium, High |
 | Format | enum | png | PNG, JPEG, WebP |
 | Compression | int | 90 | 0–100 |
@@ -577,15 +577,15 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Number of Images | int | 1 | 1–4 |
-| Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 2:1, … |
+| Number of images | int | 1 | 1–4 |
+| Aspect ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 2:1, … |
 | Resolution | enum | 1k | 1K, 2K |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Output Format | enum | jpeg | JPEG, PNG, WebP |
+| Output format | enum | jpeg | JPEG, PNG, WebP |
 
 ---
 
@@ -598,7 +598,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | XAI_API_KEY, FAL_KEY |
 | **Endpoint** | `xai/grok-imagine-image/edit` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Source Images (Image ×n)* |
+| **Inputs** | Prompt (Text)*, Source images (Image ×n)* |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -606,14 +606,14 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Number of Images | int | 1 | 1–10 |
+| Number of images | int | 1 | 1–10 |
 | Resolution | enum | 1k | 1K, 2K |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Output Format | enum | jpeg | JPEG, PNG, WebP |
+| Output format | enum | jpeg | JPEG, PNG, WebP |
 
 ---
 
@@ -633,8 +633,8 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Resolution | enum | 1024 | 1024, 2048 |
-| Thinking Level | enum | low | Low, Medium, High |
-| Identity Strength | float | 0.8 | Unavailable: this model uses reference images and traits without an identity-strength control. Your stored value is retained. |
+| Thinking level | enum | low | Low, Medium, High |
+| Identity strength | float | 0.8 | Unavailable: this model uses reference images and traits without an identity-strength control. Your stored value is retained. |
 
 ---
 
@@ -647,7 +647,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | IDEOGRAM_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/ideogram/character` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Character (Character), Character Refs (Image ×n), Style Refs (Image ×n) |
+| **Inputs** | Prompt (Text)*, Character (Character), Character Refs (Image ×n), Style refs (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -655,7 +655,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Negative Prompt | string | — | — |
+| Negative prompt | string | — | — |
 | Images | int | 1 | 1–4 |
 | Seed | int | — | — |
 
@@ -665,18 +665,18 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Style | enum | AUTO | Auto, Realistic, Fiction |
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
-| Rendering Speed | enum | BALANCED | Turbo, Balanced, Quality |
-| Magic Prompt | bool | true | — |
+| Rendering speed | enum | BALANCED | Turbo, Balanced, Quality |
+| Magic prompt | bool | true | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 1x1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 16:10, … |
-| Style Type | enum | AUTO | Auto, Realistic, Fiction |
-| Magic Prompt | enum | AUTO | Auto, On, Off |
-| Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
-| Custom Model URI | string | — | — |
+| Aspect ratio | enum | 1x1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 16:10, … |
+| Style type | enum | AUTO | Auto, Realistic, Fiction |
+| Magic prompt | enum | AUTO | Auto, On, Off |
+| Rendering speed | enum | DEFAULT | Turbo, Default, Quality |
+| Custom model URI | string | — | — |
 
 ---
 
@@ -689,7 +689,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | IDEOGRAM_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/ideogram/v3/edit` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Base Image (Image)*, Mask (black = edit) (Image)*, Style Refs (Image ×n) |
+| **Inputs** | Prompt (Text)*, Base Image (Image)*, Mask (black = edit) (Image)*, Style refs (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -704,15 +704,15 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Rendering Speed | enum | BALANCED | Turbo, Balanced, Quality |
-| Magic Prompt | bool | true | — |
+| Rendering speed | enum | BALANCED | Turbo, Balanced, Quality |
+| Magic prompt | bool | true | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
-| Magic Prompt | enum | AUTO | Auto, On, Off |
+| Rendering speed | enum | DEFAULT | Turbo, Default, Quality |
+| Magic prompt | enum | AUTO | Auto, On, Off |
 
 ---
 
@@ -725,15 +725,15 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | IDEOGRAM_API_KEY |
 | **Endpoint** | `/v1/edit` |
 | **Execution** | sync |
-| **Inputs** | Edit Instruction (Text)*, Image (Image), Images (Image ×n) |
+| **Inputs** | Edit instruction (Text)*, Image (Image), Images (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Magic Prompt | enum | AUTO | Auto, On, Off |
-| Aspect Ratio | enum | — | Keep input, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
-| Transparent Background | bool | false | — |
+| Magic prompt | enum | AUTO | Auto, On, Off |
+| Aspect ratio | enum | — | Keep input, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
+| Transparent background | bool | false | — |
 | Images | int | 1 | 1–4 |
 | Seed | int | — | — |
 
@@ -748,7 +748,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | IDEOGRAM_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/ideogram/v3/remix` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Source Image (Image)*, Style Refs (Image ×n) |
+| **Inputs** | Prompt (Text)*, Source Image (Image)*, Style refs (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -756,12 +756,12 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Image Strength | float | 0.8 | 0–1 |
+| Image strength | float | 0.8 | 0–1 |
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Style | enum | AUTO | Auto, General, Realistic, Design |
-| Negative Prompt | string | — | — |
-| Rendering Speed | enum | BALANCED | Turbo, Balanced, Quality |
-| Magic Prompt | bool | true | — |
+| Negative prompt | string | — | — |
+| Rendering speed | enum | BALANCED | Turbo, Balanced, Quality |
+| Magic prompt | bool | true | — |
 | Images | int | 1 | 1–4 |
 | Seed | int | — | — |
 
@@ -769,10 +769,10 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Image Weight | int | — | 1–100 |
+| Image weight | int | — | 1–100 |
 | Resolution (2K) | enum | — | Auto, 2048 × 2048, 1440 × 2880, 2880 × 1440, 1664 × 2496, 2496 × 1664, 1792 × 2240, 2240 × 1792, … |
-| Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
-| Copyright Detection | bool | false | — |
+| Rendering speed | enum | DEFAULT | Turbo, Default, Quality |
+| Copyright detection | bool | false | — |
 
 ---
 
@@ -785,7 +785,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | IDEOGRAM_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/ideogram/v3/replace-background` |
 | **Execution** | async-poll |
-| **Inputs** | New Background (Text)*, Subject Image (Image)*, Style Refs (Image ×n) |
+| **Inputs** | New Background (Text)*, Subject Image (Image)*, Style refs (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -801,15 +801,15 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Style | enum | AUTO | Auto, General, Realistic, Design |
-| Rendering Speed | enum | BALANCED | Turbo, Balanced, Quality |
-| Magic Prompt | bool | true | — |
+| Rendering speed | enum | BALANCED | Turbo, Balanced, Quality |
+| Magic prompt | bool | true | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Magic Prompt | enum | AUTO | Auto, On, Off |
-| Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
+| Magic prompt | enum | AUTO | Auto, On, Off |
+| Rendering speed | enum | DEFAULT | Turbo, Default, Quality |
 
 ---
 
@@ -822,8 +822,8 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | IDEOGRAM_API_KEY |
 | **Endpoint** | `/v1/ideogram-v3/train-model` |
 | **Execution** | async-poll |
-| **Inputs** | Training Images (Image ×n)* |
-| **Outputs** | Custom Model URI (Text), Model ID (Text) |
+| **Inputs** | Training images (Image ×n)* |
+| **Outputs** | Custom model URI (Text), Model ID (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
@@ -847,11 +847,11 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 1x1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 16:10, … |
+| Aspect ratio | enum | 1x1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 16:10, … |
 | Upscale | enum | X1 | 1x, 2x, 4x |
-| Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
-| Magic Prompt | enum | AUTO | Auto, On, Off |
-| Negative Prompt | string | — | — |
+| Rendering speed | enum | DEFAULT | Turbo, Default, Quality |
+| Magic prompt | enum | AUTO | Auto, On, Off |
+| Negative prompt | string | — | — |
 | Images | int | 1 | 1–4 |
 | Seed | int | — | — |
 
@@ -874,22 +874,22 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Rendering Speed | enum | BALANCED | Turbo, Balanced, Quality |
+| Rendering speed | enum | BALANCED | Turbo, Balanced, Quality |
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
-| Prompt Expansion | enum | Medium | None (no expansion fee), Medium, Large |
+| Prompt expansion | enum | Medium | None · no expansion fee, Medium, Large |
 | Acceleration | enum | none | None, Low, Regular, High |
 | Images | int | 1 | 1–4 |
 | Format | enum | png | PNG, JPEG |
 | Seed | int | — | — |
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Resolution (2K) | enum | 2048x2048 | 2048 × 2048, 1440 × 2880, 2880 × 1440, 1664 × 2496, 2496 × 1664, 1792 × 2240, 2240 × 1792, 1440 × 2560, … |
-| Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
-| Copyright Detection | bool | false | — |
+| Rendering speed | enum | DEFAULT | Turbo, Default, Quality |
+| Copyright detection | bool | false | — |
 
 ---
 
@@ -902,7 +902,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/krea/krea-2/{variant}` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Style Images (Image ×n), Image Style Refs (Any ×n), Styles (Any ×n), Moodboard (Moodboard) |
+| **Inputs** | Prompt (Text)*, Style images (Image ×n), Image style refs (Any ×n), Styles (Any ×n), Moodboard (Moodboard) |
 | **Outputs** | Image (Image), Job (Any) |
 | **Audited** | 2026-10-09 |
 
@@ -910,15 +910,15 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API key · API balance, Krea account · workspace compute |
 | Variant | enum | medium | Medium, Large |
-| Aspect Ratio | enum | 1:1 | 1:1, 4:3, 3:2, 16:9, 2.35:1, 4:5, 2:3, 9:16 |
+| Aspect ratio | enum | 1:1 | 1:1, 4:3, 3:2, 16:9, 2.35:1, 4:5, 2:3, 9:16 |
 | Resolution | enum | 1K | 1K |
 | Creativity | enum | medium | Raw, Low, Medium, High |
 | Seed | int | — | 0–2147483647 |
-| Style Ref Strength | float | 0.5 | 0–1 |
+| Style ref strength | float | 0.5 | 0–1 |
 | Style ID | string | — | — |
-| Style Strength | float | 1 | -2–2 |
+| Style strength | float | 1 | -2–2 |
 | Moodboard ID | string | — | — |
-| Moodboard Strength | float | 0.23 | 0–1 |
+| Moodboard strength | float | 0.23 | 0–1 |
 
 ---
 
@@ -957,9 +957,9 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Seed | `seed` | int | — | — | always |
-| Model | `model` | enum | berry | `berry` Berry (quality), `jam` Jam (speed) | always |
+| Model | `model` | enum | berry | `berry` Berry · quality, `jam` Jam · speed | always |
 | Reasoning level | `reasoning_level` | enum | low | `low` Low, `medium` Medium, `high` High | always |
-| Image size | `image_size` | enum | auto | `auto`, `square_hd`, `square`, `portrait_4_3`, `portrait_16_9`, `landscape_4_3`, `landscape_16_9` | always |
+| Image size | `image_size` | enum | auto | `auto`, `square_hd` Square HD, `square`, `portrait_4_3` Portrait 4:3, `portrait_16_9` Portrait 16:9, `landscape_4_3` Landscape 4:3, `landscape_16_9` Landscape 16:9 | always |
 | Negative prompt | `negative_prompt` | string | — | — | `model` = `berry` |
 | Output format | `output_format` | enum | png | `png`, `jpeg` | always |
 
@@ -1466,7 +1466,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Krea connection | enum | api-token | API key · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Seed | int | — | 0–2147483647 |
-| Quality | enum | high | very_low, low, medium, high |
+| Quality | enum | high | Very low, low, medium, high |
 | Preserve source size | bool | false | — |
 | Skip prompt expansion | bool | false | — |
 | Aspect ratio | enum | 1:1 | 1:1, 4:3, 3:2, 16:9, 2.4:1, 4:5, 2:3, 9:16 |
@@ -1493,7 +1493,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Krea connection | enum | api-token | API key · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Seed | int | — | 0–2147483647 |
-| Quality | enum | high | very_low, low, medium, high |
+| Quality | enum | high | Very low, low, medium, high |
 | Image URL | string | — | — |
 | Mask URL | string | — | — |
 | Reference images (JSON) | textarea | [] | — |
@@ -1916,7 +1916,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | KREA_API_TOKEN |
 | **Endpoint** | `/styles/train` |
 | **Execution** | async-poll |
-| **Inputs** | Training Images (Image ×n)* |
+| **Inputs** | Training images (Image ×n)* |
 | **Outputs** | Style (Any), Style ID (Text), Job (Any) |
 | **Audited** | 2026-10-09 |
 
@@ -1924,14 +1924,14 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API key · API balance, Krea account · workspace compute |
 | Name | string | — | — |
-| Training Model | enum | flux_dev | FLUX Dev, FLUX Schnell, Wan, Wan 2.2, Qwen, Z-Image, Krea 2, Krea 2 Large, … |
+| Training model | enum | flux_dev | FLUX Dev, FLUX Schnell, Wan, Wan 2.2, Qwen, Z-Image, Krea 2, Krea 2 Large, … |
 | Type | enum | Style | Style, Object, Character, Default |
-| Trigger Word | string | — | — |
-| Max Steps | int | — | 1–2000 |
-| Learning Rate | float | — | — |
-| Batch Size | int | — | 1–… |
-| Output Strength | float | 1 | -2–2 |
-| Share Workspace | bool | false | — |
+| Trigger word | string | — | — |
+| Max steps | int | — | 1–2000 |
+| Learning rate | float | — | — |
+| Batch size | int | — | 1–… |
+| Output strength | float | 1 | -2–2 |
+| Share workspace | bool | false | — |
 
 ---
 
@@ -1944,7 +1944,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | MESHY_API_KEY |
 | **Endpoint** | `/openapi/v1/image-to-image` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
+| **Inputs** | Prompt (Text)*, Reference images (Image ×n)* |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-06-03 |
 
@@ -1972,8 +1972,8 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Model | enum | nano-banana | Nano Banana, Nano Banana 2, Nano Banana Pro, GPT Image 2 |
 | Multi-View | bool | false | — |
-| Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4 |
-| Pose Mode | enum | — | None, A-Pose, T-Pose |
+| Aspect ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4 |
+| Pose mode | enum | — | None, A-Pose, T-Pose |
 
 ---
 
@@ -1992,9 +1992,9 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-3.1-flash-image | Nano Banana 2.1, Nano Banana 2 (3.1 Flash), Nano Banana 2 Lite (3.1 Flash-Lite), Nano Banana Pro (3 Pro), Nano Banana (2.5 Flash) |
-| Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 5:4, … |
-| Image Size | enum | 1K | 512, 1K, 2K, 4K |
+| Model | enum | gemini-3.1-flash-image | Nano Banana 2.1, Nano Banana 2 · 3.1 Flash, Nano Banana 2 Lite · 3.1 Flash-Lite, Nano Banana Pro · 3 Pro, Nano Banana · 2.5 Flash |
+| Aspect ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 5:4, … |
+| Image size | enum | 1K | 512, 1K, 2K, 4K |
 
 ---
 
@@ -2015,12 +2015,12 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana-2 | Nano Banana 2, Nano Banana Pro, Nano Banana (2.5 Flash), Gemini 2.5 Flash Image, Gemini 3 Pro Image |
-| Aspect Ratio | enum | 1:1 | Auto, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
+| Model | enum | nano-banana-2 | Nano Banana 2, Nano Banana Pro, Nano Banana · 2.5 Flash, Gemini 2.5 Flash Image, Gemini 3 Pro Image |
+| Aspect ratio | enum | 1:1 | Auto, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
 | Resolution | enum | 1K | 0.5K, 1K, 2K, 4K |
 | Count | int | 1 | 1–4 |
-| Thinking Level | enum | — | Off, Minimal, High |
-| Web Search | bool | false | — |
+| Thinking level | enum | — | Off, Minimal, High |
+| Web search | bool | false | — |
 
 **FAL Parameters**
 
@@ -2040,7 +2040,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2/edit` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)*, Moodboard (Moodboard) |
+| **Inputs** | Prompt (Text)*, Reference images (Image ×n)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-10-10 |
 
@@ -2048,12 +2048,12 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | nano-banana-2 | Nano Banana 2, Nano Banana Pro, Nano Banana (2.5 Flash), Gemini 2.5 Flash Image, Gemini 3 Pro Image |
-| Aspect Ratio | enum | auto | Auto, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
+| Model | enum | nano-banana-2 | Nano Banana 2, Nano Banana Pro, Nano Banana · 2.5 Flash, Gemini 2.5 Flash Image, Gemini 3 Pro Image |
+| Aspect ratio | enum | auto | Auto, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
 | Resolution | enum | 1K | 0.5K, 1K, 2K, 4K |
 | Count | int | 1 | 1–4 |
-| Thinking Level | enum | — | Off, Minimal, High |
-| Web Search | bool | false | — |
+| Thinking level | enum | — | Off, Minimal, High |
+| Web search | bool | false | — |
 
 **FAL Parameters**
 
@@ -2079,13 +2079,13 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | arrow-1.1 | Arrow 1.1 (20 credits), Arrow 1.1 max (25 credits), Arrow 1 (30 credits, legacy) |
+| Model | enum | arrow-1.1 | Arrow 1.1 · 20 credits, Arrow 1.1 max · 25 credits, Arrow 1 · 30 credits, legacy |
 | Outputs | int | 1 | 1–16 |
 | Instructions | textarea | — | — |
 | Temperature | float | 1 | 0–2 |
 | Top P | float | 1 | 0–1 |
-| Presence Penalty | float | 0 | -2–2 |
-| Max Output Tokens | int | 16384 | 1–131072 |
+| Presence penalty | float | 0 | -2–2 |
+| Max output tokens | int | 16384 | 1–131072 |
 
 ---
 
@@ -2104,13 +2104,13 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | arrow-1.1 | Arrow 1.1 (15 credits), Arrow 1.1 max (20 credits), Arrow 1 (30 credits, legacy) |
+| Model | enum | arrow-1.1 | Arrow 1.1 · 15 credits, Arrow 1.1 max · 20 credits, Arrow 1 · 30 credits, legacy |
 | Auto-crop to subject | bool | false | — |
-| Target Size (px) | int | 1024 | 128–4096 |
+| Target size (px) | int | 1024 | 128–4096 |
 | Temperature | float | 1 | 0–2 |
 | Top P | float | 1 | 0–1 |
-| Presence Penalty | float | 0 | -2–2 |
-| Max Output Tokens | int | 16384 | 1–131072 |
+| Presence penalty | float | 0 | -2–2 |
+| Max output tokens | int | 16384 | 1–131072 |
 
 ---
 
@@ -2131,9 +2131,9 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Style ID | string | — | — |
-| Color Palette | string | — | — |
-| Background Color | string | — | — |
-| Safety Checker | bool | true | — |
+| Color palette | string | — | — |
+| Background color | string | — | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -2154,9 +2154,9 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |-----------|------|---------|---------------|
 | Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Style ID | string | — | — |
-| Color Palette | string | — | — |
-| Background Color | string | — | — |
-| Safety Checker | bool | true | — |
+| Color palette | string | — | — |
+| Background color | string | — | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -2169,13 +2169,13 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | RUNWAY_API_KEY |
 | **Endpoint** | `/v1/text_to_image` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n) |
+| **Inputs** | Prompt (Text)*, Reference images (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gen4_image | Gen-4 Image, Gen-4 Image Turbo, Nano Banana Pro (Gemini 3), GPT Image 2, Gemini 2.5 Flash, Seedream 5.0 Pro, Seedream 5.0 Lite |
+| Model | enum | gen4_image | Gen-4 Image, Gen-4 Image Turbo, Nano Banana Pro · Gemini 3, GPT Image 2, Gemini 2.5 Flash, Seedream 5.0 Pro, Seedream 5.0 Lite |
 | Ratio | enum | 1360:768 | 1360 × 768 (16:9), 720 × 1280 (9:16), 1024 × 1024 (1:1), 1080 × 1080, 1168 × 880, 1440 × 1080, 1080 × 1440, 1920 × 1080, … |
 | Seed | int | — | 0–4294967295 |
 | Web grounding | bool | false | — |
@@ -2200,15 +2200,15 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | 4.5 | Seedream 4.5, Seedream 5.0 Lite |
-| Size | enum | square_hd | Square HD (2048 × 2048), Square (512 × 512), Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9, Auto 2K, Auto 4K, … |
+| Size | enum | square_hd | Square HD · 2048 × 2048, Square · 512 × 512, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9, Auto 2K, Auto 4K, … |
 | Generations | int | 1 | 1–6 |
-| Images per Generation | int | 1 | 1–6 |
+| Images per generation | int | 1 | 1–6 |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 | Seed | int | — | — |
 
 ---
@@ -2243,7 +2243,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Duration | `duration` | int | 5 | 5–20 | always |
-| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p), `qhd` QHD (1440p), `uhd` UHD (4K) | `draft` = `false` |
+| Resolution | `resolution` | enum | hd | `hd` HD · 720p, `fhd` Full HD · 1080p, `qhd` QHD · 1440p, `uhd` UHD · 4K | `draft` = `false` |
 | Aspect ratio | `aspect_ratio` | enum | 16:9 | `auto`, `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `9:21` | always |
 | Generate audio | `generate_audio` | bool | true | — | always |
 | Draft (fast preview) | `draft` | bool | false | — | always |
@@ -2253,7 +2253,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Duration | `duration` | int | 5 | 5–20 | always |
-| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p), `qhd` QHD (1440p), `uhd` UHD (4K) | `draft` = `false` |
+| Resolution | `resolution` | enum | hd | `hd` HD · 720p, `fhd` Full HD · 1080p, `qhd` QHD · 1440p, `uhd` UHD · 4K | `draft` = `false` |
 | Aspect ratio | `aspect_ratio` | enum | 16:9 | `auto`, `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
 | Generate audio | `generate_audio` | bool | true | — | always |
 | Draft (fast preview) | `draft` | bool | false | — | always |
@@ -2263,7 +2263,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Duration | `duration` | int | 5 | 5–20 | always |
-| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p) | `draft` = `false` |
+| Resolution | `resolution` | enum | hd | `hd` HD · 720p, `fhd` Full HD · 1080p | `draft` = `false` |
 | Aspect ratio | `aspect_ratio` | enum | 16:9 | `auto`, `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
 | Generate audio | `generate_audio` | bool | true | — | always |
 | Draft (fast preview) | `draft` | bool | false | — | always |
@@ -2273,7 +2273,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Duration | `duration` | int | 5 | 5–20 | always |
-| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p), `qhd` QHD (1440p), `uhd` UHD (4K) | always |
+| Resolution | `resolution` | enum | hd | `hd` HD · 720p, `fhd` Full HD · 1080p, `qhd` QHD · 1440p, `uhd` UHD · 4K | always |
 | Aspect ratio | `aspect_ratio` | enum | 16:9 | `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
 | Generate audio | `generate_audio` | bool | true | — | always |
 
@@ -2282,7 +2282,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Key | Type | Default | Options/Range | Shown when |
 |---|---|---|---|---|---|
 | Duration | `duration` | int | 5 | 5–20 | always |
-| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p) | always |
+| Resolution | `resolution` | enum | hd | `hd` HD · 720p, `fhd` Full HD · 1080p | always |
 | Aspect ratio | `aspect_ratio` | enum | 16:9 | `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
 | Generate audio | `generate_audio` | bool | true | — | always |
 
@@ -2332,16 +2332,16 @@ No settings.
 | **API Key** | GOOGLE_API_KEY |
 | **Endpoint** | `gemini-omni-1.1-flash` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n), Video (Video), Previous Interaction (Text) |
+| **Inputs** | Prompt (Text)*, Reference images (Image ×n), Video (Video), Previous interaction (Text) |
 | **Outputs** | Video (Video), Interaction ID (Text) |
 | **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Task | enum | — | Auto (infer), Text to Video, Image to Video, Reference to Video, Edit |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
-| Delivery | enum | uri | URI (recommended), Inline |
-| Previous Interaction | string | — | — |
+| Task | enum | — | Auto · infer, Text to video, Image to video, Reference to video, Edit |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16 |
+| Delivery | enum | uri | URI · recommended, Inline |
+| Previous interaction | string | — | — |
 
 ---
 
@@ -2361,7 +2361,7 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration | int | 5 | 1–15 |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3 |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3 |
 | Resolution | enum | 480p | 480p, 720p |
 
 ---
@@ -2381,9 +2381,9 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | higgsfield-ai/dop/standard | DoP Standard (T2V + I2V), DoP Preview, Kling v2.1 Pro (I2V), Seedance v1 Pro (I2V) |
+| Model | enum | higgsfield-ai/dop/standard | DoP Standard · T2V + I2V, DoP Preview, Kling v2.1 Pro · I2V, Seedance v1 Pro · I2V |
 | Duration | int | 5 | 1–15 |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
 
 ---
 
@@ -2403,11 +2403,11 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Resolution | enum | 720p | 480p, 580p, 720p |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
-| Number of Frames | enum | 129 | 129 (~5s), 85 (~3.5s) |
-| Pro Mode | bool | false | — |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16 |
+| Number of frames | enum | 129 | 129 · ~5s, 85 · ~3.5s |
+| Pro mode | bool | false | — |
 | Seed | int | — | — |
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -2454,14 +2454,14 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/kling-video/v2.6/pro/motion-control` |
 | **Execution** | async-poll |
-| **Inputs** | Character Image (Image)*, Motion Reference Video (Video)*, Prompt (Text) |
+| **Inputs** | Character image (Image)*, Motion reference video (Video)*, Prompt (Text) |
 | **Outputs** | Video (Video) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Character Orientation | enum | video | Image, Video |
-| Keep Original Sound | bool | true | — |
+| Character orientation | enum | video | Image, Video |
+| Keep original sound | bool | true | — |
 
 ---
 
@@ -2474,7 +2474,7 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/kling-video/o3/standard/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Prompt (Text), End Frame (Image) |
+| **Inputs** | Image (Image)*, Prompt (Text), End frame (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -2482,11 +2482,11 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | enum | standard | Standard, Pro |
 | Duration | enum | 5 | 3 seconds, 5 seconds, 10 seconds, 15 seconds |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
-| Generate Audio | bool | false | — |
-| Negative Prompt | string | blur, distort, and low quality | — |
-| CFG Scale | float | 0.5 | 0–1 |
-| Shot Type | enum | customize | Customize, Intelligent (auto) |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Generate audio | bool | false | — |
+| Negative prompt | string | blur, distort, and low quality | — |
+| CFG scale | float | 0.5 | 0–1 |
+| Shot type | enum | customize | Customize, Intelligent · auto |
 
 ---
 
@@ -2499,16 +2499,16 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/kling-video/o3/pro/reference-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Start Image (Image), End Image (Image), Reference Images (Image ×n) |
+| **Inputs** | Prompt (Text)*, Start image (Image), End image (Image), Reference images (Image ×n) |
 | **Outputs** | Video (Video) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration | enum | 5 | 3 seconds, 5 seconds, 10 seconds, 15 seconds |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
-| Generate Audio | bool | false | — |
-| Shot Type | enum | customize | Customize, Intelligent |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Generate audio | bool | false | — |
+| Shot type | enum | customize | Customize, Intelligent |
 
 ---
 
@@ -2521,7 +2521,7 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/kling-video/v2.6/pro/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Start Image (Image)*, Prompt (Text), End Image (Image) |
+| **Inputs** | Start image (Image)*, Prompt (Text), End image (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | — |
 
@@ -2529,9 +2529,9 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | enum | v2.6-pro | Kling 2.6 Pro, Kling v3 Pro |
 | Duration | enum | 5 | 3s, 4s, 5s, 6s, 7s, 8s, 9s, 10s, … |
-| Negative Prompt | string | blur, distort, and low quality | — |
-| Generate Audio | bool | false | — |
-| CFG Scale | float | 0.5 | 0–1 |
+| Negative prompt | string | blur, distort, and low quality | — |
+| Generate audio | bool | false | — |
+| CFG scale | float | 0.5 | 0–1 |
 
 ---
 
@@ -2544,15 +2544,15 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/kling-video/v2.1/pro/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Prompt (Text), End Frame (Image) |
+| **Inputs** | Image (Image)*, Prompt (Text), End frame (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration | enum | 5 | 5 seconds, 10 seconds |
-| Negative Prompt | string | blur, distort, and low quality | — |
-| CFG Scale | float | 0.5 | 0–1 |
+| Negative prompt | string | blur, distort, and low quality | — |
+| CFG scale | float | 0.5 | 0–1 |
 
 ---
 
@@ -2565,7 +2565,7 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/kling-video/v3/standard/text-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Start Image (Image), End Image (Image) |
+| **Inputs** | Prompt (Text)*, Start image (Image), End image (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -2573,12 +2573,12 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | enum | standard | Standard, Pro |
 | Duration | enum | 5 | 3 seconds, 5 seconds, 10 seconds, 15 seconds |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
-| Negative Prompt | string | blur, distort, and low quality | — |
-| Shot Type | enum | customize | Customize, Intelligent (auto) |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+| Negative prompt | string | blur, distort, and low quality | — |
+| Shot type | enum | customize | Customize, Intelligent · auto |
 | Multi-Shot (JSON) | textarea | — | — |
-| Generate Audio | bool | true | — |
-| CFG Scale | float | 0.5 | 0–1 |
+| Generate audio | bool | true | — |
+| CFG scale | float | 0.5 | 0–1 |
 
 ---
 
@@ -3270,7 +3270,7 @@ No settings.
 | Duration | enum | 6 | 6, 8, 10, 12, 14, 16, 18, 20 |
 | Resolution | enum | 720p | 720p, 1080p, 1440p, 4k |
 | Generate audio | bool | true | — |
-| Camera motion | enum | — | dolly_in, dolly_out, dolly_left, dolly_right, jib_up, jib_down, static, focus_shift |
+| Camera motion | enum | — | Dolly in, Dolly out, Dolly left, Dolly right, Jib up, Jib down, static, Focus shift |
 | End image | string | — | — |
 
 ---
@@ -3297,7 +3297,7 @@ No settings.
 | Duration | enum | 6 | 6, 8, 10 |
 | Resolution | enum | 1080p | 720p, 1080p |
 | Generate audio | bool | true | — |
-| Camera motion | enum | — | dolly_in, dolly_out, dolly_left, dolly_right, jib_up, jib_down, static, focus_shift |
+| Camera motion | enum | — | Dolly in, Dolly out, Dolly left, Dolly right, Jib up, Jib down, static, Focus shift |
 | End image | string | — | — |
 
 ---
@@ -3713,7 +3713,7 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/ltx-2.3/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image), Prompt (Text)*, End Image (Image), Audio (Audio) |
+| **Inputs** | Image (Image), Prompt (Text)*, End image (Image), Audio (Audio) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -3721,9 +3721,9 @@ No settings.
 |-----------|------|---------|---------------|
 | Duration | enum | 6 | 6 seconds, 8 seconds, 10 seconds |
 | Resolution | enum | 1080p | 1080p, 1440p, 2160p |
-| Aspect Ratio | enum | auto | Auto, 16:9, 9:16 |
+| Aspect ratio | enum | auto | Auto, 16:9, 9:16 |
 | FPS | enum | 25 | 24, 25, 48, 50 |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 ---
 
@@ -3743,10 +3743,10 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration | enum | 6 | 6s, 8s, 10s, 12s, 14s, 16s, 18s, 20s |
-| Resolution | enum | 1080p | 1080p, 1440p, 2160p (4K) |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
+| Resolution | enum | 1080p | 1080p, 1440p, 2160p · 4K |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16 |
 | FPS | enum | 25 | 24, 25, 48, 50 |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 ---
 
@@ -3765,8 +3765,8 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Guidance Scale | float | 5 | 1–50 |
-| Aspect Ratio | enum | auto | Auto, 16:9, 9:16 |
+| Guidance scale | float | 5 | 1–50 |
+| Aspect ratio | enum | auto | Auto, 16:9, 9:16 |
 
 ---
 
@@ -3788,7 +3788,7 @@ No settings.
 | Duration | enum | 6 | 6 seconds, 8 seconds, 10 seconds |
 | Resolution | enum | 1080p | 1080p, 1440p, 2160p |
 | FPS | enum | 25 | 25, 50 |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 ---
 
@@ -3801,13 +3801,13 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/luma-dream-machine/ray-2-flash/modify` |
 | **Execution** | async-poll |
-| **Inputs** | Video (Video)*, Prompt (Text), Reference Image (Image) |
+| **Inputs** | Video (Video)*, Prompt (Text), Reference image (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Modification Mode | enum | flex_1 | Adhere 1 (least), Adhere 2, Adhere 3, Flex 1, Flex 2, Flex 3, Reimagine 1, Reimagine 2, … |
+| Modification mode | enum | flex_1 | Adhere 1 · least, Adhere 2, Adhere 3, Flex 1, Flex 2, Flex 3, Reimagine 1, Reimagine 2, … |
 
 ---
 
@@ -3820,16 +3820,16 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/luma-dream-machine/ray-2/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, End Image (Image), Prompt (Text) |
+| **Inputs** | Image (Image)*, End image (Image), Prompt (Text) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 4:3, 3:4, 21:9, 9:21 |
-| Resolution | enum | 540p | 540p, 720p (2x cost), 1080p (4x cost) |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 4:3, 3:4, 21:9, 9:21 |
+| Resolution | enum | 540p | 540p, 720p · 2x cost, 1080p · 4x cost |
 | Duration | enum | 5s | 5 seconds, 9 seconds |
-| Seamless Loop | bool | false | — |
+| Seamless loop | bool | false | — |
 
 ---
 
@@ -3848,9 +3848,9 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 4:3, 3:4, 21:9, 9:21 |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 4:3, 3:4, 21:9, 9:21 |
 | Duration | enum | 5s | 5 seconds, 9 seconds |
-| Seamless Loop | bool | false | — |
+| Seamless loop | bool | false | — |
 | Resolution | enum | 540p | 540p, 720p, 1080p |
 
 ---
@@ -3864,13 +3864,13 @@ No settings.
 | **API Key** | MINIMAX_API_KEY |
 | **Endpoint** | `https://api.minimaxi.com/v1/video_generation` |
 | **Execution** | async-poll |
-| **Inputs** | First Frame (Image)*, Prompt (Text)* |
+| **Inputs** | First frame (Image)*, Prompt (Text)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-16 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | MiniMax-Hailuo-2.3 | Hailuo 2.3, Hailuo 2.3 Fast, Hailuo 02 (legacy) |
+| Model | enum | MiniMax-Hailuo-2.3 | Hailuo 2.3, Hailuo 2.3 Fast, Hailuo 02 · legacy |
 | Duration | enum | 6 | 6 seconds, 10 seconds |
 | Resolution | enum | 768P | 768P, 1080P |
 
@@ -3885,7 +3885,7 @@ No settings.
 | **API Key** | MINIMAX_API_KEY |
 | **Endpoint** | `https://api.minimaxi.com/v1/video_generation` |
 | **Execution** | async-poll |
-| **Inputs** | Character Image (Image)*, Prompt (Text)* |
+| **Inputs** | Character image (Image)*, Prompt (Text)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-16 |
 
@@ -3910,7 +3910,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | MiniMax-Hailuo-2.3 | Hailuo 2.3, Hailuo 2.3 Fast, Hailuo 02 (legacy) |
+| Model | enum | MiniMax-Hailuo-2.3 | Hailuo 2.3, Hailuo 2.3 Fast, Hailuo 02 · legacy |
 | Duration | enum | 6 | 6 seconds, 10 seconds |
 | Resolution | enum | 768P | 768P, 1080P |
 
@@ -3994,7 +3994,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Resolution | enum | 720p | 720p, 1080p |
 | Duration | enum | 5 | 5s, 10s |
-| Negative Prompt | string | — | — |
+| Negative prompt | string | — | — |
 | Seed | int | — | — |
 
 ---
@@ -4015,10 +4015,10 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration | enum | 5 | 5 seconds, 8 seconds |
-| Aspect Ratio | enum | 16:9 | 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Aspect ratio | enum | 16:9 | 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Resolution | enum | 720p | 360p, 540p, 720p, 1080p |
-| Style | enum | — | None, Anime, 3D Animation, Clay, Comic, Cyberpunk |
-| Negative Prompt | string | — | — |
+| Style | enum | — | None, Anime, 3D animation, Clay, Comic, Cyberpunk |
+| Negative prompt | string | — | — |
 | Seed | int | — | — |
 
 ---
@@ -4032,14 +4032,14 @@ No settings.
 | **API Key** | RUNWAY_API_KEY |
 | **Endpoint** | `/v1/character_performance` |
 | **Execution** | async-poll |
-| **Inputs** | Character Image (Image), Character Video (Video), Performance Video (Video)* |
+| **Inputs** | Character image (Image), Character video (Video), Performance video (Video)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Body Control | bool | false | — |
-| Expression Intensity | int | 3 | 1–5 |
+| Body control | bool | false | — |
+| Expression intensity | int | 3 | 1–5 |
 | Ratio | enum | 1280:720 | 1280 × 720 (16:9), 720 × 1280 (9:16), 960 × 960 (1:1), 1104 × 832 (4:3), 832 × 1104 (3:4), 1584 × 672 (21:9) |
 | Seed | int | — | 0–4294967295 |
 
@@ -4054,7 +4054,7 @@ No settings.
 | **API Key** | RUNWAY_API_KEY |
 | **Endpoint** | `/v1/video_to_video` |
 | **Execution** | async-poll |
-| **Inputs** | Video (Video)*, Prompt (Text)*, Reference Image (Image) |
+| **Inputs** | Video (Video)*, Prompt (Text)*, Reference image (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-10-14 |
 
@@ -4106,17 +4106,17 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Aspect ratio | enum | 16:9 | 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Resolution | enum | 1080p | 480p, 720p, 1080p |
 | Duration | enum | 5 | 2s, 3s, 4s, 5s, 6s, 7s, 8s, 9s, … |
-| Camera Fixed | bool | false | — |
+| Camera fixed | bool | false | — |
 | Seed | int | — | — |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -4129,7 +4129,7 @@ No settings.
 | **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/fast/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Prompt (Text)*, End Frame (Image) |
+| **Inputs** | Image (Image)*, Prompt (Text)*, End frame (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -4137,10 +4137,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Aspect ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 **FAL Parameters**
 
@@ -4167,10 +4167,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Aspect ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 **FAL Parameters**
 
@@ -4189,7 +4189,7 @@ No settings.
 | **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Prompt (Text)*, End Frame (Image) |
+| **Inputs** | Image (Image)*, Prompt (Text)*, End frame (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -4197,10 +4197,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Aspect ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 **FAL Parameters**
 
@@ -4219,7 +4219,7 @@ No settings.
 | **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/reference-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
+| **Inputs** | Prompt (Text)*, Reference images (Image ×n)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -4227,10 +4227,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 9:16, 4:3, 1:1, 3:4 |
+| Aspect ratio | enum | auto | Auto, 21:9, 16:9, 9:16, 4:3, 1:1, 3:4 |
 | Duration | enum | auto | Auto, 4s, 6s, 8s, 10s, 15s |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 **FAL Parameters**
 
@@ -4257,10 +4257,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
+| Aspect ratio | enum | auto | Auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 |
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
-| Generate Audio | bool | true | — |
+| Generate audio | bool | true | — |
 
 **FAL Parameters**
 
@@ -4279,7 +4279,7 @@ No settings.
 | **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/bytedance/seedance/v1.5/pro/image-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Image (Image)*, End Image (Image) |
+| **Inputs** | Prompt (Text)*, Image (Image)*, End image (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -4287,10 +4287,10 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | enum | 1.5 | Seedance 1.5 Pro, Seedance 1.0 Pro |
 | Duration | enum | 5 | 4 seconds, 5 seconds, 6 seconds, 7 seconds, 8 seconds, 9 seconds, 10 seconds, 11 seconds, … |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 21:9, 4:3, 3:4, Auto |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1, 21:9, 4:3, 3:4, Auto |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
-| Generate Audio | bool | true | — |
-| Camera Fixed | bool | false | — |
+| Generate audio | bool | true | — |
+| Camera fixed | bool | false | — |
 | Seed | int | — | — |
 
 ---
@@ -4311,7 +4311,7 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | sync-3 | Sync 3, Sync Lipsync v2 Pro, VEED Lipsync |
-| Sync Mode | enum | cut_off | Cut Off, Loop, Bounce, Silence, Remap |
+| Sync mode | enum | cut_off | Cut off, Loop, Bounce, Silence, Remap |
 
 ---
 
@@ -4324,7 +4324,7 @@ No settings.
 | **API Key** | GOOGLE_VERTEX_CREDENTIALS, GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `veo-3.1-generate-001` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, First Frame (Image), Last Frame (Image), Extend Video (Video) |
+| **Inputs** | Prompt (Text)*, First frame (Image), Last frame (Image), Extend Video (Video) |
 | **Outputs** | Video (Video), Source URI (Video) |
 | **Audited** | 2026-05-17 |
 
@@ -4332,24 +4332,24 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16 |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16 |
 | Duration | enum | 8 | 4 seconds, 6 seconds, 8 seconds |
 | Resolution | enum | 720p | 720p, 1080p, 4K |
-| Person Generation | enum | allow_adult | Allow All, Allow Adult, Don't Allow |
+| Person generation | enum | allow_adult | Allow all, Allow adult, Don’t allow |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Negative Prompt | string | — | — |
+| Negative prompt | string | — | — |
 | Seed | int | — | — |
-| Safety Tolerance | enum | 4 | 1 (Strict), 2, 3, 4, 5, 6 (Permissive) |
+| Safety tolerance | enum | 4 | 1 · strict, 2, 3, 4, 5, 6 · permissive |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | veo-3.1-generate-001 | Veo 3.1, Veo 3.1 Fast, Veo 3.1 Lite (preview on Vertex) |
+| Model | enum | veo-3.1-generate-001 | Veo 3.1, Veo 3.1 Fast, Veo 3.1 Lite · preview on Vertex |
 | Seed | int | — | — |
 
 ---
@@ -4363,19 +4363,19 @@ No settings.
 | **API Key** | GOOGLE_VERTEX_CREDENTIALS, FAL_KEY |
 | **Endpoint** | `fal-ai/veo3.1/first-last-frame-to-video` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, First Frame (Image)*, Last Frame (Image)* |
+| **Inputs** | Prompt (Text)*, First frame (Image)*, Last frame (Image)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-10-10 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | auto | Auto, 16:9, 9:16 |
+| Aspect ratio | enum | auto | Auto, 16:9, 9:16 |
 | Duration | enum | 4s | 4s, 6s, 8s |
 | Resolution | enum | 720p | 720p, 1080p, 4K |
-| Generate Audio | bool | true | — |
-| Negative Prompt | string | — | — |
+| Generate audio | bool | true | — |
+| Negative prompt | string | — | — |
 | Seed | int | — | — |
-| Safety Tolerance | enum | 2 | 1 (Strict), 2, 3, 4, 5, 6 (Permissive) |
+| Safety tolerance | enum | 2 | 1 · strict, 2, 3, 4, 5, 6 · permissive |
 
 ---
 
@@ -4396,13 +4396,13 @@ No settings.
 |-----------|------|---------|---------------|
 | Duration | enum | 5 | 5 seconds, 10 seconds, 15 seconds |
 | Resolution | enum | 720p | 720p, 1080p |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
-| Negative Prompt | string | — | — |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
+| Negative prompt | string | — | — |
 | Seed | int | — | — |
-| Generate Audio | bool | true | — |
-| Prompt Expansion | bool | true | — |
+| Generate audio | bool | true | — |
+| Prompt expansion | bool | true | — |
 | Multi-Shot | bool | false | — |
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -4423,12 +4423,12 @@ No settings.
 |-----------|------|---------|---------------|
 | Duration | enum | 5 | 5 seconds, 10 seconds |
 | Resolution | enum | 1080p | 720p, 1080p |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
-| Negative Prompt | string | — | — |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
+| Negative prompt | string | — | — |
 | Seed | int | — | — |
-| Prompt Expansion | bool | true | — |
+| Prompt expansion | bool | true | — |
 | Multi-Shot | bool | true | — |
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -4450,13 +4450,13 @@ No settings.
 | Model | enum | 2.6 | WAN 2.6, WAN 2.7 |
 | Duration | enum | 5 | 5 seconds, 10 seconds, 15 seconds |
 | Resolution | enum | 720p | 720p, 1080p |
-| Aspect Ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
-| Negative Prompt | string | — | — |
+| Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1, 4:3, 3:4 |
+| Negative prompt | string | — | — |
 | Seed | int | — | — |
-| Generate Audio | bool | true | — |
-| Prompt Expansion | bool | true | — |
+| Generate audio | bool | true | — |
+| Prompt expansion | bool | true | — |
 | Multi-Shot | bool | true | — |
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -4476,10 +4476,10 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Resolution | enum | 480p | 480p, 580p, 720p |
-| Guidance Scale | float | 1 | 1–20 |
+| Guidance scale | float | 1 | 1–20 |
 | Seed | int | — | — |
-| Inference Steps | int | 20 | 1–50 |
-| Safety Checker | bool | true | — |
+| Inference steps | int | 20 | 1–50 |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -4499,10 +4499,10 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Resolution | enum | 480p | 480p, 580p, 720p |
-| Guidance Scale | float | 1 | 1–20 |
+| Guidance scale | float | 1 | 1–20 |
 | Seed | int | — | — |
-| Inference Steps | int | 20 | 1–50 |
-| Safety Checker | bool | true | — |
+| Inference steps | int | 20 | 1–50 |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -4523,16 +4523,16 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | claude-opus-5-5 | Claude Fable 5.1 (flagship), Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, Claude Fable 5, Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, … |
+| Model | enum | claude-opus-5-5 | Claude Fable 5.1 · flagship, Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, Claude Fable 5, Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, … |
 | Max Tokens | int | 64000; 4096 for model claude-fable-5, claude-haiku-4-5-20251001 | 1–128000 |
 | Temperature | float | 1 | 0–1 |
-| System Prompt | textarea | — | — |
+| System prompt | textarea | — | — |
 | Top P | float | — | 0–1 |
-| Stop Sequences | string | — | — |
-| Extended Thinking | bool | false | — |
-| Thinking Budget | int | 10000 | 1024–200000 |
+| Stop sequences | string | — | — |
+| Extended thinking | bool | false | — |
+| Thinking budget | int | 10000 | 1024–200000 |
 | Effort | enum | medium | Default, Low, Medium, High, X-High, Max |
-| Prompt Caching | bool | false | — |
+| Prompt caching | bool | false | — |
 
 ---
 
@@ -4551,16 +4551,16 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-4-argon | Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash), Gemini 3.1 Pro (preview), Gemini 3 Flash (preview), Gemini 3.1 Flash-Lite (retiring 2027-05-07), … |
-| Max Tokens | int | 65536; 8192 for model gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.5-flash, gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-3.1-flash-lite, gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite | 1–65536 |
+| Model | enum | gemini-4-argon | Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.5 Flash · deprecated, runs Gemini 3.6 Flash, Gemini 3.1 Pro · preview, Gemini 3 Flash · preview, Gemini 3.1 Flash-Lite · retiring 2027-05-07, … |
+| Max tokens | int | 65536; 8192 for model gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.5-flash, gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-3.1-flash-lite, gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite | 1–65536 |
 | Temperature | float | 1 | 0–2 |
-| System Prompt | textarea | — | — |
+| System prompt | textarea | — | — |
 | Thinking Level | enum | medium | Default, Minimal, Low, Medium, High |
-| Thinking Budget | int | — | 0–65536 |
+| Thinking budget | int | — | 0–65536 |
 | Top P | float | — | 0–1 |
 | Top K | int | — | — |
-| Stop Sequences | string | — | — |
-| Response Format | enum | text/plain | Text, JSON |
+| Stop sequences | string | — | — |
+| Response format | enum | text/plain | Text, JSON |
 
 ---
 
@@ -4579,14 +4579,14 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-6.1-sol | GPT-6 Astra (flagship), GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5, … |
+| Model | enum | gpt-6.1-sol | GPT-6 Astra · flagship, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5, … |
 | Reasoning Effort | enum | medium | None, Low, Medium, High, X-High, Max |
-| Max Tokens | int | 25000; 4096 for model gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano | 1–128000 |
+| Max tokens | int | 25000; 4096 for model gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano | 1–128000 |
 | Temperature | float | 1 | 0–2 |
 | Top P | float | — | 0–1 |
-| Frequency Penalty | float | 0 | -2–2 |
-| Presence Penalty | float | 0 | -2–2 |
-| Response Format | enum | text | Text, JSON |
+| Frequency penalty | float | 0 | -2–2 |
+| Presence penalty | float | 0 | -2–2 |
+| Response format | enum | text | Text, JSON |
 
 ---
 
@@ -4600,12 +4600,12 @@ No settings.
 | **Endpoint** | `/v1/ideogram-v4/magic-prompt` |
 | **Execution** | sync |
 | **Inputs** | Prompt (Text)* |
-| **Outputs** | Expanded Prompt (Text), JSON Prompt (v4) (Text) |
+| **Outputs** | Expanded prompt (Text), JSON prompt (v4) (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Aspect Ratio | enum | AUTO | AUTO, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
+| Aspect ratio | enum | AUTO | AUTO, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
 
 ---
 
@@ -4626,11 +4626,11 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Style Tags | string | — | — |
+| Style tags | string | — | — |
 | Lyrics | textarea | [instrumental] | — |
 | Duration (seconds) | int | 30 | 5–60 |
 | Steps | int | 27 | 1–200 |
-| Guidance Scale | float | 15 | 1–30 |
+| Guidance scale | float | 15 | 1–30 |
 | Seed | int | — | — |
 
 ---
@@ -4650,10 +4650,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | htdemucs_ft | HT-Demucs FT (best 4-stem), HT-Demucs, HDemucs MMI, MDX, MDX Extra |
-| Quality (Shifts) | int | 1 | 1–10 |
+| Model | enum | htdemucs_ft | HT-Demucs FT · best 4-stem, HT-Demucs, HDemucs MMI, MDX, MDX Extra |
+| Quality (shifts) | int | 1 | 1–10 |
 | Overlap | float | 0.25 | 0–1 |
-| Output Format | enum | mp3 | MP3, WAV |
+| Output format | enum | mp3 | MP3, WAV |
 
 ---
 
@@ -4676,7 +4676,7 @@ No settings.
 | Stability | float | 0.5 | 0–1 |
 | Similarity | float | 0.75 | 0–1 |
 | Language Code | string | — | — |
-| Output Format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 16kHz, PCM 24kHz, PCM 44.1kHz |
+| Output format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 16kHz, PCM 24kHz, PCM 44.1kHz |
 | Seed | int | — | 0–4294967295 |
 
 ---
@@ -4691,16 +4691,16 @@ No settings.
 | **Endpoint** | `/v1/dubbing` |
 | **Execution** | sync |
 | **Inputs** | Audio (Audio)* |
-| **Outputs** | Dubbed Audio (Audio) |
+| **Outputs** | Dubbed audio (Audio) |
 | **Audited** | 2026-05-17 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Target Language | enum | es | English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, … |
-| Source Language | enum | auto | Auto-detect, English, Spanish, French, German, Japanese, Chinese |
-| Number of Speakers | int | — | 0–10 |
-| Drop Background Audio | bool | false | — |
-| Disable Voice Cloning | bool | false | — |
+| Target language | enum | es | English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, … |
+| Source language | enum | auto | Auto-detect, English, Spanish, French, German, Japanese, Chinese |
+| Number of speakers | int | — | 0–10 |
+| Drop background audio | bool | false | — |
+| Disable voice cloning | bool | false | — |
 
 ---
 
@@ -4714,7 +4714,7 @@ No settings.
 | **Endpoint** | `/v1/audio-isolation` |
 | **Execution** | sync |
 | **Inputs** | Audio (Audio)* |
-| **Outputs** | Isolated Audio (Audio) |
+| **Outputs** | Isolated audio (Audio) |
 | **Audited** | 2026-05-17 |
 
 ---
@@ -4737,7 +4737,7 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration (ms) | int | 30000 | 3000–600000 |
-| Instrumental Only | bool | false | — |
+| Instrumental only | bool | false | — |
 
 **Direct Parameters**
 
@@ -4763,9 +4763,9 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration (sec) | float | — | 0.5–30 |
-| Prompt Influence | float | 0.3 | 0–1 |
-| Seamless Loop | bool | false | — |
-| Output Format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 44.1kHz, PCM 24kHz |
+| Prompt influence | float | 0.3 | 0–1 |
+| Seamless loop | bool | false | — |
+| Output format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 44.1kHz, PCM 24kHz |
 
 ---
 
@@ -4787,10 +4787,10 @@ No settings.
 | Voice ID | string | 21m00Tcm4TlvDq8ikWAM | — |
 | Model | enum | eleven_english_sts_v2 | English STS v2, Multilingual STS v2 |
 | Stability | float | 0.5 | 0–1 |
-| Similarity Boost | float | 0.75 | 0–1 |
-| Remove Background Noise | bool | false | — |
+| Similarity boost | float | 0.75 | 0–1 |
+| Remove background noise | bool | false | — |
 | Seed | int | — | — |
-| Output Format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 44.1kHz, PCM 24kHz |
+| Output format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 44.1kHz, PCM 24kHz |
 
 ---
 
@@ -4812,9 +4812,9 @@ No settings.
 | Model | enum | scribe_v1 | Scribe v1, Scribe v2 |
 | Language | string | — | — |
 | Diarize (label speakers) | bool | false | — |
-| Max Speakers | int | — | 1–32 |
-| Tag Audio Events | bool | true | — |
-| Output Format | enum | text | Plain Text, SRT Subtitles, VTT Subtitles |
+| Max speakers | int | — | 1–32 |
+| Tag audio events | bool | true | — |
+| Output format | enum | text | Plain text, SRT subtitles, VTT subtitles |
 
 ---
 
@@ -4833,14 +4833,14 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | eleven_multilingual_v2 | v3 (Highest Quality), Multilingual v2, Turbo v2.5 (deprecated: use Flash v2.5), Flash v2.5 (Fastest), Turbo v2 (deprecated: use Flash v2), Flash v2 |
+| Model | enum | eleven_multilingual_v2 | v3 · highest quality, Multilingual v2, Turbo v2.5 · deprecated, use Flash v2.5, Flash v2.5 · fastest, Turbo v2 · deprecated, use Flash v2, Flash v2 |
 | Stability | float | 0.5 | 0–1 |
 | Voice ID | string | 21m00Tcm4TlvDq8ikWAM | — |
-| Similarity Boost | float | 0.75 | 0–1 |
+| Similarity boost | float | 0.75 | 0–1 |
 | Style | float | 0 | 0–1 |
-| Speaker Boost | bool | true | — |
+| Speaker boost | bool | true | — |
 | Speed | float | 1 | 0.7–1.2 |
-| Output Format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 16kHz, PCM 24kHz, PCM 44.1kHz |
+| Output format | enum | mp3_44100_128 | MP3 44.1kHz, MP3 22kHz, PCM 16kHz, PCM 24kHz, PCM 44.1kHz |
 | Seed | int | — | — |
 
 ---
@@ -4860,8 +4860,8 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-3.8-flash-tts | Gemini 3.1 Flash TTS (preview, shuts down Nov 17, 2026), 2.5 Flash TTS (shuts down Nov 17, 2026), 2.5 Pro TTS (shuts down Nov 17, 2026), 3.8 Flash TTS, 3.8 Flash-Lite TTS |
-| Voice | enum | Kore | Zephyr — Bright, Puck — Upbeat, Charon — Informative, Kore — Firm, Fenrir — Excitable, Leda — Youthful, Orus — Firm, Aoede — Breezy, … |
+| Model | enum | gemini-3.8-flash-tts | 3.1 Flash TTS · preview, shuts down November 17, 2026, 2.5 Flash TTS · shuts down November 17, 2026, 2.5 Pro TTS · shuts down November 17, 2026, 3.8 Flash TTS, 3.8 Flash-Lite TTS |
+| Voice | enum | Kore | Zephyr · bright, Puck · upbeat, Charon · informative, Kore · firm, Fenrir · excitable, Leda · youthful, Orus · firm, Aoede · breezy, … |
 
 ---
 
@@ -4880,9 +4880,9 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Sound Effect Prompt | string | — | — |
-| Background Music Prompt | string | — | — |
-| ASMR Mode | bool | false | — |
+| Sound effect prompt | string | — | — |
+| Background music prompt | string | — | — |
+| ASMR mode | bool | false | — |
 
 ---
 
@@ -5009,8 +5009,8 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | lyria-3-clip-preview | Lyria 3 Clip (30s), Lyria 3 Pro (full song) |
-| Output Format | enum | mp3 | MP3, WAV |
+| Model | enum | lyria-3-clip-preview | Lyria 3 Clip · 30s, Lyria 3 Pro · full song |
+| Output format | enum | mp3 | MP3, WAV |
 
 ---
 
@@ -5023,13 +5023,13 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/mmaudio-v2` |
 | **Execution** | async-poll |
-| **Inputs** | Video (Video)*, Audio Prompt (Text)* |
+| **Inputs** | Video (Video)*, Audio prompt (Text)* |
 | **Outputs** | Video (with audio) (Video) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Negative Prompt | string | — | — |
+| Negative prompt | string | — | — |
 | Duration (seconds) | int | 8 | 1–30 |
 | Steps | int | 25 | 10–100 |
 | Guidance (CFG) | float | 4.5 | 1–20 |
@@ -5055,7 +5055,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | enum | whisper-1 | Whisper 1, GPT-4o Transcribe, GPT-4o Mini Transcribe |
 | Language | enum | auto | Auto-detect, English, Spanish, French, German, Italian, Portuguese, Japanese, … |
-| Output Format | enum | text | Text, JSON, Verbose JSON, SRT Subtitles, VTT Subtitles |
+| Output format | enum | text | Text, JSON, Verbose JSON, SRT subtitles, VTT subtitles |
 | Temperature | float | 0 | 0–1 |
 | Prompt | string | — | — |
 
@@ -5071,12 +5071,12 @@ No settings.
 | **Endpoint** | `/v1/audio/translations` |
 | **Execution** | sync |
 | **Inputs** | Audio (Audio)* |
-| **Outputs** | English Text (Text) |
+| **Outputs** | English text (Text) |
 | **Audited** | 2026-06-30 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Output Format | enum | text | Text, JSON, Verbose JSON, SRT Subtitles, VTT Subtitles |
+| Output format | enum | text | Text, JSON, Verbose JSON, SRT subtitles, VTT subtitles |
 | Temperature | float | 0 | 0–1 |
 | Prompt | string | — | — |
 
@@ -5101,7 +5101,7 @@ No settings.
 | Voice | enum | alloy | Alloy, Ash, Ballad, Cedar, Coral, Echo, Fable, Marin, … |
 | Speed | float | 1 | 0.25–4 |
 | Format | enum | mp3 | MP3, WAV, FLAC, Opus, AAC, PCM |
-| Voice Instructions | string | — | — |
+| Voice instructions | string | — | — |
 
 ---
 
@@ -5120,10 +5120,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Target Language | enum | es | English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, … |
-| Disable Voice Cloning | bool | false | — |
-| Drop Background Audio | bool | false | — |
-| Number of Speakers | int | — | 1–10 |
+| Target language | enum | es | English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, … |
+| Disable voice cloning | bool | false | — |
+| Drop background audio | bool | false | — |
+| Number of speakers | int | — | 1–10 |
 
 ---
 
@@ -5144,7 +5144,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Remove Background Noise | bool | false | — |
+| Remove background noise | bool | false | — |
 
 **Runway Parameters**
 
@@ -5204,7 +5204,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Duration (seconds) | int | 60 | 1–190 |
 | Steps | int | 8 | 1–50 |
-| Guidance Scale | float | 7.5 | 0–20 |
+| Guidance scale | float | 7.5 | 0–20 |
 | Seed | int | — | — |
 
 ---
@@ -5220,16 +5220,16 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/hunyuan3d-v3/image-to-3d` |
 | **Execution** | async-poll |
-| **Inputs** | Front Image (Image)*, Back Image (Image), Left Image (Image), Right Image (Image) |
+| **Inputs** | Front image (Image)*, Back image (Image), Left image (Image), Right image (Image) |
 | **Outputs** | Mesh (Mesh) |
 | **Audited** | 2026-07-22 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Quality | enum | Normal | Normal, Low Poly, Geometry Only |
-| Face Count | int | 500000 | 40000–1500000 |
-| PBR Materials | bool | false | — |
-| Polygon Type | enum | triangle | Triangle, Quadrilateral |
+| Quality | enum | Normal | Normal, Low poly, Geometry only |
+| Face count | int | 500000 | 40000–1500000 |
+| PBR materials | bool | false | — |
+| Polygon type | enum | triangle | Triangle, Quadrilateral |
 
 ---
 
@@ -5248,10 +5248,10 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Quality | enum | Normal | Normal, Low Poly, Geometry Only |
-| Face Count | int | 500000 | 40000–1500000 |
-| PBR Materials | bool | false | — |
-| Polygon Type | enum | triangle | Triangle, Quadrilateral |
+| Quality | enum | Normal | Normal, Low poly, Geometry only |
+| Face count | int | 500000 | 40000–1500000 |
+| PBR materials | bool | false | — |
+| Polygon type | enum | triangle | Triangle, Quadrilateral |
 
 ---
 
@@ -5520,13 +5520,13 @@ No settings.
 | **Endpoint** | `/openapi/v1/print/multi-color` |
 | **Execution** | async-poll |
 | **Inputs** | Task ID (Text)* |
-| **Outputs** | Print File (Mesh) |
+| **Outputs** | Print file (Mesh) |
 | **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Max Colors | int | 4 | 1–16 |
-| Color Depth | int | 4 | 3–6 |
+| Max colors | int | 4 | 1–16 |
+| Color depth | int | 4 | 3–6 |
 
 ---
 
@@ -5540,13 +5540,13 @@ No settings.
 | **Endpoint** | `/openapi/v1/animations` |
 | **Execution** | async-poll |
 | **Inputs** | Rig Task ID (Text)* |
-| **Outputs** | Animated Mesh (Mesh) |
+| **Outputs** | Animated mesh (Mesh) |
 | **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Animation | enum | 92 | Idle, Walking, Running, Jumping, Dancing, Waving, Sitting, Clapping, … |
-| Output FPS | enum | — | Default (30), 24 fps, 25 fps, 30 fps, 60 fps |
+| Output FPS | enum | — | Default · 30, 24 fps, 25 fps, 30 fps, 60 fps |
 
 ---
 
@@ -5572,27 +5572,27 @@ No settings.
 | Symmetry | enum | auto | Off, Auto, On |
 | Remesh | bool | false | — |
 | Texture | bool | true | — |
-| PBR Materials | bool | false | — |
-| Pose Mode | enum | — | None, A-Pose, T-Pose |
-| Texture Prompt | string | — | — |
+| PBR materials | bool | false | — |
+| Pose mode | enum | — | None, A-Pose, T-Pose |
+| Texture prompt | string | — | — |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 | Seed | int | — | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6, Meshy 6 Lite (2K textures), Meshy 7.1 (needs Meshy entitlement) |
-| Mesh Type | enum | standard | Standard, Low Poly (retires Oct 30, 2026), Smart Topology (Meshy T2) |
+| AI model | enum | latest | Latest · Meshy 7.1, Meshy 6, Meshy 6 Lite · 2K textures, Meshy 7.1 · needs Meshy entitlement |
+| Mesh type | enum | standard | Standard, Low poly · retires October 30, 2026, Smart topology · Meshy T2 |
 | HD Texture (4K) | bool | false | — |
-| Image Enhancement | bool | true | — |
-| Remove Lighting | bool | true | — |
-| Output Formats | string | glb | — |
+| Image enhancement | bool | true | — |
+| Remove lighting | bool | true | — |
+| Output formats | string | glb | — |
 
 ---
 
@@ -5611,17 +5611,17 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6, Meshy 6 Lite (2K textures), Meshy 7.1 (needs Meshy entitlement) |
+| AI model | enum | latest | Latest · Meshy 7.1, Meshy 6, Meshy 6 Lite · 2K textures, Meshy 7.1 · needs Meshy entitlement |
 | Remesh | bool | false | — |
 | Topology | enum | triangle | Triangle, Quad |
 | Polycount | int | 30000 | 100–300000 |
 | Symmetry (deprecated) | enum | auto | Off, Auto, On |
 | Texture | bool | true | — |
-| PBR Materials | bool | false | — |
-| Pose Mode | enum | — | None, A-Pose, T-Pose |
+| PBR materials | bool | false | — |
+| Pose mode | enum | — | None, A-Pose, T-Pose |
 | HD Texture (4K) | bool | false | — |
-| Image Enhancement | bool | true | — |
-| Remove Lighting | bool | true | — |
+| Image enhancement | bool | true | — |
+| Remove lighting | bool | true | — |
 
 ---
 
@@ -5642,9 +5642,9 @@ No settings.
 |-----------|------|---------|---------------|
 | Topology | enum | triangle | Triangle, Quad |
 | Polycount | int | 30000 | 100–300000 |
-| Output Formats | string | glb | — |
-| Resize Height (m) | float | 0 | 0–100 |
-| Convert Format Only | bool | false | — |
+| Output formats | string | glb | — |
+| Resize height (m) | float | 0 | 0–100 |
+| Convert format only | bool | false | — |
 
 ---
 
@@ -5657,16 +5657,16 @@ No settings.
 | **API Key** | MESHY_API_KEY |
 | **Endpoint** | `/openapi/v1/retexture` |
 | **Execution** | async-poll |
-| **Inputs** | Model URL (Text)*, Style Prompt (Text) |
+| **Inputs** | Model URL (Text)*, Style prompt (Text) |
 | **Outputs** | Mesh (Mesh) |
 | **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7), Meshy 6, Meshy 6 Lite, Meshy 7 (needs Meshy entitlement) |
-| Keep Original UV | bool | true | — |
-| PBR Materials | bool | false | — |
-| Remove Lighting | bool | true | — |
+| AI model | enum | latest | Latest · Meshy 7, Meshy 6, Meshy 6 Lite, Meshy 7 · needs Meshy entitlement |
+| Keep original UV | bool | true | — |
+| PBR materials | bool | false | — |
+| Remove lighting | bool | true | — |
 
 ---
 
@@ -5680,7 +5680,7 @@ No settings.
 | **Endpoint** | `/openapi/v1/rigging` |
 | **Execution** | async-poll |
 | **Inputs** | Model URL (Text)* |
-| **Outputs** | Rigged Mesh (Mesh), Rig Task ID (Text) |
+| **Outputs** | Rigged mesh (Mesh), Rig task ID (Text) |
 | **Audited** | 2026-06-03 |
 
 | Parameter | Type | Default | Options/Range |
@@ -5707,31 +5707,31 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Mode | enum | full | Preview, Full |
-| Mesh Type | enum | standard | Standard, Low Poly (retires Oct 30, 2026), Smart Topology (Meshy T2) |
+| Mesh type | enum | standard | Standard, Low poly · retires October 30, 2026, Smart topology · Meshy T2 |
 | Remesh | bool | false | — |
 | Topology | enum | triangle | Triangle, Quad |
 | Polycount | int | 30000 | 100–300000 |
 | Symmetry | enum | auto | Off, Auto, On |
-| PBR Materials | bool | false | — |
-| Pose Mode | enum | — | None, A-Pose, T-Pose |
+| PBR materials | bool | false | — |
+| Pose mode | enum | — | None, A-Pose, T-Pose |
 | Seed | int | — | — |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Texture Prompt | string | — | — |
-| Enhance Prompt | bool | false | — |
-| Safety Checker | bool | true | — |
+| Texture prompt | string | — | — |
+| Enhance prompt | bool | false | — |
+| Safety checker | bool | true | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6, Meshy 6 Lite (2K textures), Meshy 7.1 (needs Meshy entitlement) |
+| AI model | enum | latest | Latest · Meshy 7.1, Meshy 6, Meshy 6 Lite · 2K textures, Meshy 7.1 · needs Meshy entitlement |
 | HD Texture (4K) | bool | false | — |
-| Remove Lighting | bool | true | — |
-| Output Formats | string | glb | — |
+| Remove lighting | bool | true | — |
+| Output formats | string | glb | — |
 
 ---
 
@@ -5776,19 +5776,19 @@ No settings.
 | **API Key** | WORLDLABS_API_KEY |
 | **Endpoint** | `/marble/v1/worlds:generate` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt / Guidance (Text), Image(s) (Image ×n), Video (Video) |
+| **Inputs** | Prompt / guidance (Text), Image(s) (Image ×n), Video (Video) |
 | **Outputs** | World (World), Panorama (Image), Collider (Mesh), Thumbnail (Image), Caption (Text) |
 | **Audited** | 2026-09-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Marble Model | enum | marble-1.1 | Marble 1.0 Draft, Marble 1.0, Marble 1.1, Marble 1.1 Plus |
+| Marble model | enum | marble-1.1 | Marble 1.0 Draft, Marble 1.0, Marble 1.1, Marble 1.1 Plus |
 | World Name | string | — | — |
 | Seed | int | — | 0–4294967295 |
-| Single Image Is Panorama | enum | auto | Auto Detect, Yes, No |
+| Single image is panorama | enum | auto | Auto detect, Yes, No |
 | Reconstruct Image Set | bool | false | — |
 | Image Azimuths | string | — | — |
-| Use Prompt Verbatim | bool | false | — |
+| Use prompt verbatim | bool | false | — |
 | Tags | string | — | — |
 | Resume Operation ID | string | — | — |
 | Existing World ID | string | — | — |
@@ -5812,8 +5812,8 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Enhancement Prompt | string | masterpiece, best quality, highres | — |
-| Upscale Factor | float | 2 | 1–4 |
+| Enhancement prompt | string | masterpiece, best quality, highres | — |
+| Upscale factor | float | 2 | 1–4 |
 | Creativity (added detail) | float | 0.35 | 0–1 |
 | Resemblance (fidelity) | float | 0.6 | 0–1 |
 | Steps | int | 18 | 10–50 |
@@ -5836,11 +5836,11 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | RealESRGAN_x4plus | x4plus (General), x2plus (General), x4plus Anime 6B, x4 v3 (General), x4 WDN v3 (Denoise), x4 Anime v3 |
+| Model | enum | RealESRGAN_x4plus | x4plus · general, x2plus · general, x4plus Anime 6B, x4 v3 · general, x4 WDN v3 · denoise, x4 Anime v3 |
 | Scale | float | 2 | 1–8 |
-| Face Enhancement | bool | false | — |
-| Tile Size (0=none) | int | 0 | 0–1000 |
-| Output Format | enum | png | PNG, JPEG |
+| Face enhancement | bool | false | — |
+| Tile size (0=none) | int | 0 | 0–1000 |
+| Output format | enum | png | PNG, JPEG |
 
 ---
 
@@ -5910,7 +5910,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Mode | enum | first_frame | First Frame, Last Frame, Middle Frame, At Timestamp |
+| Mode | enum | first_frame | First frame, Last frame, Middle frame, At timestamp |
 | Timestamp (s) | float | 0 | 0–… |
 
 ---
@@ -5925,7 +5925,7 @@ No settings.
 | **Endpoint** | `/v1/ideogram-v3/layerize-text` |
 | **Execution** | sync |
 | **Inputs** | Image (Image)*, Guidance (optional) (Text) |
-| **Outputs** | Base Plate (text removed) (Image) |
+| **Outputs** | Base plate (text removed) (Image) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
@@ -5943,7 +5943,7 @@ No settings.
 | **API Key** | IDEOGRAM_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/ideogram/v3/reframe` |
 | **Execution** | async-poll |
-| **Inputs** | Source Image (Image)*, Style Refs (Image ×n) |
+| **Inputs** | Source Image (Image)*, Style refs (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -5958,16 +5958,16 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Target Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
+| Target size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Style | enum | AUTO | Auto, General, Realistic, Design |
-| Rendering Speed | enum | BALANCED | Turbo, Balanced, Quality |
+| Rendering speed | enum | BALANCED | Turbo, Balanced, Quality |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Target Resolution | enum | 1024x1024 | 1024 × 1024, 1280 × 800, 800 × 1280, 1344 × 768, 768 × 1344, 1152 × 896, 896 × 1152, 1216 × 832, … |
-| Rendering Speed | enum | DEFAULT | Turbo, Default, Quality |
+| Target resolution | enum | 1024x1024 | 1024 × 1024, 1280 × 800, 800 × 1280, 1344 × 768, 768 × 1344, 1152 × 896, 896 × 1152, 1216 × 832, … |
+| Rendering speed | enum | DEFAULT | Turbo, Default, Quality |
 
 ---
 
@@ -6011,13 +6011,13 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Magic Prompt | bool | false | — |
+| Magic prompt | bool | false | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Magic Prompt | enum | AUTO | Auto, On, Off |
+| Magic prompt | enum | AUTO | Auto, On, Off |
 
 ---
 
@@ -6030,8 +6030,8 @@ No settings.
 | **API Key** | KREA_API_TOKEN |
 | **Endpoint** | `/export/3d` |
 | **Execution** | sync |
-| **Inputs** | Krea 3D Job (Any) |
-| **Outputs** | Mesh (Mesh), Model File (Text), Files (Array), ZIP (Text) |
+| **Inputs** | Krea 3D job (Any) |
+| **Outputs** | Mesh (Mesh), Model file (Text), Files (Array), ZIP (Text) |
 | **Audited** | 2026-10-09 |
 
 | Parameter | Type | Default | Options/Range |
@@ -6147,12 +6147,12 @@ No settings.
 | Seed | float | 1337 | — |
 | Image URL | string | — | — |
 | Output format | enum | png | png, jpg, webp |
-| Optimized for | enum | standard | standard, soft_portraits, hard_portraits, art_n_illustration, videogame_assets, nature_n_landscapes, films_n_photography, 3d_renders, … |
+| Optimized for | enum | standard | standard, Soft portraits, Hard portraits, Art and illustration, Videogame assets, Nature and landscapes, Films and photography, 3d_renders, … |
 | Creativity | int | 0 | -10–10 |
 | Hdr | int | 0 | -10–10 |
 | Resemblance | int | 0 | -10–10 |
 | Fractality | int | 0 | -10–10 |
-| Engine | enum | automatic | automatic, magnific_illusio, magnific_sharpy, magnific_sparkle |
+| Engine | enum | automatic | automatic, Magnific Illusio, Magnific Sharpy, Magnific Sparkle |
 | Upscaling activated | bool | true | — |
 | Image scaling factor | float | 2 | 2–16 |
 
@@ -6182,7 +6182,7 @@ No settings.
 | Sharpen | int | 7 | 0–100 |
 | Smart grain | int | 7 | 0–100 |
 | Ultra detail | int | 30 | 0–100 |
-| Flavor | enum | — | sublime, photo, photo_denoiser |
+| Flavor | enum | — | sublime, photo, Photo denoiser |
 | Upscaling activated | bool | true | — |
 | Image scaling factor | float | 2 | 2–16 |
 
@@ -6204,7 +6204,7 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API key · API balance, Krea account · workspace compute |
-| Output format | enum | hdr10 | hdr10, hlg, hdr_prores |
+| Output format | enum | hdr10 | hdr10, hlg, HDR ProRes |
 | Video URL | string | — | — |
 | Prores profile | enum | — | 422, 4444, 422 HQ |
 
@@ -6530,7 +6530,7 @@ No settings.
 | Crop to fit | bool | false | — |
 | Video URL | string | — | — |
 | Enhancement | bool | true | — |
-| Enhancement video type | enum | Progressive | Progressive, Interlaced, ProgressiveInterlaced |
+| Enhancement video type | enum | Progressive | Progressive, Interlaced, Progressive interlaced |
 | Enhancement model | enum | prob-4 | aaa-9, ahq-12, alq-13, alqs-2, amq-13, amqs-2, ddv-3, dtd-4, … |
 | Enhancement focus fix | enum | None | None, Normal, Strong |
 | Enhancement parameters | enum | Auto | Auto, Manual |
@@ -6601,7 +6601,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Safety Checker | bool | true | — |
+| Safety checker | bool | true | — |
 
 ---
 
@@ -6620,7 +6620,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Crop to Subject | bool | false | — |
+| Crop to subject | bool | false | — |
 
 ---
 
@@ -6639,11 +6639,11 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Scale Factor | enum | 2 | 2x, 4x, 8x, 16x |
-| Flavor | enum | photo | Photo, Photo Denoiser, Sublime (illustration) |
+| Scale factor | enum | 2 | 2x, 4x, 8x, 16x |
+| Flavor | enum | photo | Photo, Photo denoiser, Sublime · illustration |
 | Sharpen | int | — | 0–100 |
-| Smart Grain | int | — | 0–100 |
-| Ultra Detail | int | — | 0–100 |
+| Smart grain | int | — | 0–100 |
+| Ultra detail | int | — | 0–100 |
 
 ---
 
@@ -6662,11 +6662,11 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Mode | enum | factor | Factor (multiplier), Target resolution |
-| Upscale Factor | float | 2 | 1–4 |
-| Target Resolution | enum | 1080p | 720p, 1080p, 1440p, 2160p (4K) |
-| Noise Scale | float | 0.1 | 0–1 |
-| Output Quality | enum | high | Low, Medium, High, Maximum |
+| Mode | enum | factor | Factor · multiplier, Target resolution |
+| Upscale factor | float | 2 | 1–4 |
+| Target resolution | enum | 1080p | 720p, 1080p, 1440p, 2160p · 4K |
+| Noise scale | float | 0.1 | 0–1 |
+| Output quality | enum | high | Low, Medium, High, Maximum |
 | Seed | int | — | — |
 
 ---
@@ -6681,15 +6681,15 @@ No settings.
 | **Endpoint** | `fal-ai/seedvr/upscale/image` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)* |
-| **Outputs** | Upscaled Image (Image) |
+| **Outputs** | Upscaled image (Image) |
 | **Audited** | 2026-05-19 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Mode | enum | factor | Factor, Target Resolution |
+| Mode | enum | factor | Factor, Target resolution |
 | Factor | float | 2 | 1–4 |
-| Target Resolution | enum | 1080p | 720p, 1080p, 1440p, 2160p (4K) |
-| Noise Scale | float | 0.1 | 0–1 |
+| Target resolution | enum | 1080p | 720p, 1080p, 1440p, 2160p · 4K |
+| Noise scale | float | 0.1 | 0–1 |
 | Format | enum | jpg | JPG, PNG, WebP |
 | Seed | int | — | — |
 
@@ -6724,20 +6724,20 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/topaz/upscale/image` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Prompt (Redefine only) (Text) |
+| **Inputs** | Image (Image)*, Prompt (redefine only) (Text) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | Standard V2 | Standard V2, High Fidelity V2, Low Resolution V2, Recovery V2, Redefine, CGI, Text Refine, Recovery |
-| Face Enhancement | bool | true | — |
-| Face Enhancement Strength | float | 0.8 | 0–1 |
-| Upscale Factor | float | 2 | 1–6 |
+| Face enhancement | bool | true | — |
+| Face enhancement strength | float | 0.8 | 0–1 |
+| Upscale factor | float | 2 | 1–6 |
 | Sharpen | float | 0 | 0–1 |
 | Denoise | float | 0 | 0–1 |
-| Fix Compression | float | 0 | 0–1 |
-| Output Format | enum | jpeg | JPEG, PNG |
+| Fix compression | float | 0 | 0–1 |
+| Output format | enum | jpeg | JPEG, PNG |
 
 ---
 
@@ -6757,14 +6757,14 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | Proteus | Proteus, Artemis HQ, Artemis MQ, Artemis LQ, Nyx, Nyx Fast, Nyx XL, Nyx HF, … |
-| Upscale Factor | float | 2 | 1–4 |
+| Upscale factor | float | 2 | 1–4 |
 | Target FPS | int | — | 16–120 |
 | Compression | float | 0 | 0–1 |
 | Noise | float | 0 | 0–1 |
 | Halo | float | 0 | 0–1 |
 | Grain | float | 0 | 0–1 |
-| Recover Detail | float | 0 | 0–1 |
-| H264 Output | bool | false | — |
+| Recover detail | float | 0 | 0–1 |
+| H264 output | bool | false | — |
 
 ---
 
@@ -6778,14 +6778,14 @@ No settings.
 | **Endpoint** | `/marble/v1/worlds/{world_id}:export` |
 | **Execution** | async-poll |
 | **Inputs** | World (World)* |
-| **Outputs** | Exported 3D File (Mesh), Format (Text) |
+| **Outputs** | Exported 3D file (Mesh), Format (Text) |
 | **Audited** | 2026-09-03 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Export Format | enum | ply | Gaussian Splat (PLY), High-Quality Mesh (GLB) |
-| PLY Resolution | enum | full_res | Full Resolution, 500K, 150K, 100K |
-| GLB Mesh Variant | enum | textured | Textured, Vertex Colored |
+| Export format | enum | ply | Gaussian splat (PLY), High-quality mesh (GLB) |
+| PLY resolution | enum | full_res | Full resolution, 500K, 150K, 100K |
+| GLB mesh variant | enum | textured | Textured, Vertex colored |
 | Resume Export Operation ID | string | — | — |
 
 ---
@@ -6802,12 +6802,12 @@ No settings.
 | **Endpoint** | `/v1/ideogram-v4/describe` |
 | **Execution** | sync |
 | **Inputs** | Image (Image)* |
-| **Outputs** | Description (Text), JSON Prompt (v4) (Text) |
+| **Outputs** | Description (Text), JSON prompt (v4) (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Include Layout (bbox) | bool | true | — |
+| Include layout (bbox) | bool | true | — |
 
 ---
 
@@ -6827,10 +6827,10 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Target | string | — | — |
-| Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), jev-preview (moves) |
+| Model | enum | jev-1.14.0 | Jev 1.14.0 · pinned, jev-preview · moves |
 | Presence Threshold | float | 0.5 | 0–1 |
 | Minimum Confidence | float | 0.5 | 0–1 |
-| Crop Padding (fraction of image) | float | 0.05 | 0–0.5 |
+| Crop padding (fraction of image) | float | 0.05 | 0–0.5 |
 
 ---
 
@@ -6844,23 +6844,23 @@ No settings.
 | **Endpoint** | `/v1/systemone` |
 | **Execution** | sync |
 | **Inputs** | Context (Text), Images (Image ×n), Through (Any) |
-| **Outputs** | Answer (Text), Pass (Text), Probability (Text), Confidence (Text), Probabilities (JSON) (Text), Report (Text), On Pass (Any, gate), On Fail (Any, gate) |
+| **Outputs** | Answer (Text), Pass (Text), Probability (Text), Confidence (Text), Probabilities (JSON) (Text), Report (Text), On pass (Any, gate), On fail (Any, gate) |
 | **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
-| Answer Type | enum | yes_no | Yes / No, Pick one option, Score on a scale |
+| Model | enum | jev-1.14.0 | Jev 1.14.0 · pinned, Jev 1.13.0 · pinned, jev-latest · moves, re-check thresholds, jev-preview · moves |
+| Answer type | enum | yes_no | Yes / no, Pick one option, Score on a scale |
 | Question | textarea | — | — |
-| Yes Means (optional) | string | — | — |
-| No Means (optional) | string | — | — |
+| Yes means (optional) | string | — | — |
+| No means (optional) | string | — | — |
 | Options (one per line) | textarea | — | — |
-| Passing Options (one per line) | textarea | — | — |
-| Levels, Low to High (one per line) | textarea | — | — |
+| Passing options (one per line) | textarea | — | — |
+| Levels, low to high · one per line | textarea | — | — |
 | Pass Threshold | float | 0.5 | 0–1 |
 | Minimum Confidence | float | 0.5 | 0–1 |
-| When Unsure | enum | fail | Take the fail branch, Take the pass branch, Take neither branch |
-| Long Context (slower, less accurate) | bool | false | — |
+| When unsure | enum | fail | Take the fail branch, Take the pass branch, Take neither branch |
+| Long context (slower, less accurate) | bool | false | — |
 
 ---
 
@@ -6879,7 +6879,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
+| Model | enum | jev-1.14.0 | Jev 1.14.0 · pinned, Jev 1.13.0 · pinned, jev-latest · moves, re-check thresholds, jev-preview · moves |
 | Question | textarea | Which image best matches the brief? | — |
 | Minimum Confidence | float | 0.5 | 0–1 |
 
@@ -6901,7 +6901,7 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | mcp | Krea account · workspace compute |
-| Action | enum | list-apps | List connected apps, List an app's tools, Run a tool |
+| Action | enum | list-apps | List connected apps, List an app’s tools, Run a tool |
 | App ID | string | — | — |
 | Tool | string | — | — |
 | Tool input (JSON) | textarea | — | — |
@@ -6993,7 +6993,7 @@ No settings.
 | **API Key** | KREA_API_TOKEN |
 | **Endpoint** | `/styles/{id}` |
 | **Execution** | sync |
-| **Inputs** | Style or Moodboard (Any) |
+| **Inputs** | Style or moodboard (Any) |
 | **Outputs** | ID (Text), Result (Any), Summary (Text) |
 | **Audited** | 2026-10-09 |
 
@@ -7094,7 +7094,7 @@ No settings.
 | Model | string | — | — |
 | IDs | string | — | — |
 | User | string | — | — |
-| Liked Only | bool | false | — |
+| Liked only | bool | false | — |
 | Limit | int | 25 | 1–1000 |
 | Cursor | string | — | — |
 
@@ -7128,16 +7128,16 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | sync |
-| **Inputs** | Video (Video)*, Reference Frame (Image) |
-| **Outputs** | Annotated Frames (Image), QC Report (Text) |
+| **Inputs** | Video (Video)*, Reference frame (Image) |
+| **Outputs** | Annotated frames (Image), QC report (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
-| Expected Angle | string | — | — |
-| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
-| Jev Minimum Confidence | float | 0.5 | 0–1 |
+| Analysis mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev · TypeSafe, experimental |
+| Expected angle | string | — | — |
+| Jev model | enum | jev-1.14.0 | Jev 1.14.0 · pinned, Jev 1.13.0 · pinned, jev-latest · moves, re-check thresholds, jev-preview · moves |
+| Jev minimum confidence | float | 0.5 | 0–1 |
 
 ---
 
@@ -7150,15 +7150,15 @@ No settings.
 | **API Key** | — |
 | **Execution** | sync |
 | **Inputs** | Video (Video)* |
-| **Outputs** | Annotated Frames (Image), QC Report (Text) |
+| **Outputs** | Annotated frames (Image), QC report (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
-| Sample Density | int | 5 | 2–12 |
-| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
-| Jev Minimum Confidence | float | 0.5 | 0–1 |
+| Analysis mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev · TypeSafe, experimental |
+| Sample density | int | 5 | 2–12 |
+| Jev model | enum | jev-1.14.0 | Jev 1.14.0 · pinned, Jev 1.13.0 · pinned, jev-latest · moves, re-check thresholds, jev-preview · moves |
+| Jev minimum confidence | float | 0.5 | 0–1 |
 
 ---
 
@@ -7171,16 +7171,16 @@ No settings.
 | **API Key** | — |
 | **Execution** | sync |
 | **Inputs** | Video (Video)* |
-| **Outputs** | Annotated Frames (Image), QC Report (Text) |
+| **Outputs** | Annotated frames (Image), QC report (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
-| Samples Per Second | float | 1 | 0.1–4 |
-| Track Faces | bool | true | — |
-| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
-| Jev Minimum Confidence | float | 0.5 | 0–1 |
+| Analysis mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev · TypeSafe, experimental |
+| Samples per second | float | 1 | 0.1–4 |
+| Track faces | bool | true | — |
+| Jev model | enum | jev-1.14.0 | Jev 1.14.0 · pinned, Jev 1.13.0 · pinned, jev-latest · moves, re-check thresholds, jev-preview · moves |
+| Jev minimum confidence | float | 0.5 | 0–1 |
 
 ---
 
@@ -7193,15 +7193,15 @@ No settings.
 | **API Key** | — |
 | **Execution** | sync |
 | **Inputs** | Video (Video)* |
-| **Outputs** | Annotated Frame (Image), QC Report (Text) |
+| **Outputs** | Annotated frame (Image), QC report (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
-| Sample Density | int | 5 | 2–12 |
-| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
-| Jev Minimum Confidence | float | 0.5 | 0–1 |
+| Analysis mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev · TypeSafe, experimental |
+| Sample density | int | 5 | 2–12 |
+| Jev model | enum | jev-1.14.0 | Jev 1.14.0 · pinned, Jev 1.13.0 · pinned, jev-latest · moves, re-check thresholds, jev-preview · moves |
+| Jev minimum confidence | float | 0.5 | 0–1 |
 
 ---
 
@@ -7213,7 +7213,7 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | sync |
-| **Inputs** | Video (Video)*, Requested Duration (Text) |
+| **Inputs** | Video (Video)*, Requested duration (Text) |
 | **Outputs** | Report (Text), Match (Text) |
 | **Audited** | — |
 
@@ -7238,7 +7238,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Detailed Analysis | bool | false | — |
+| Detailed analysis | bool | false | — |
 
 ---
 
@@ -7326,7 +7326,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | string | — | — |
 | Temperature | float | 1 | 0–2 |
-| Max Tokens | int | 4096 | 1–200000 |
+| Max tokens | int | 4096 | 1–200000 |
 
 ---
 
@@ -7347,9 +7347,9 @@ No settings.
 |-----------|------|---------|---------------|
 | Model | string | — | — |
 | Temperature | float | 1 | 0–2 |
-| Max Tokens | int | 4096 | 1–200000 |
-| Response Format | enum | text | Text, JSON |
-| Prompt Caching | bool | false | — |
+| Max tokens | int | 4096 | 1–200000 |
+| Response format | enum | text | Text, JSON |
+| Prompt caching | bool | false | — |
 
 ---
 
@@ -7390,8 +7390,8 @@ No settings.
 |-----------|------|---------|---------------|
 | Palette | palette |  | — |
 | Strength | float | 0.7 | 0–1 |
-| Method | enum | lab-transfer | Lab Transfer, Reinhard, Histogram |
-| Palette Source | file | — | — |
+| Method | enum | lab-transfer | Lab transfer, Reinhard, Histogram |
+| Palette source | file | — | — |
 
 ---
 
@@ -7455,9 +7455,9 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Character | character | — | — |
-| Override Prompt | textarea | — | — |
-| Override Refs | file | — | — |
-| Strength Override | float | — | Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained. |
+| Override prompt | textarea | — | — |
+| Override refs | file | — | — |
+| Strength override | float | — | Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained. |
 
 ---
 
@@ -7491,7 +7491,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Mode | enum | first | First, Last, Random, By Index |
+| Mode | enum | first | First, Last, Random, By index |
 | Index | int | 0 | 0–… |
 
 ---
@@ -7530,7 +7530,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Name | string | Batch | — |
 | Items | textarea | — | — |
-| Split mode | enum | by_line | By line (one item per line), None (entire text is one item) |
+| Split mode | enum | by_line | By line · one item per line, None · entire text is one item |
 | Item cap | int | 10 | 1–25 |
 
 ---
@@ -7543,7 +7543,7 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | sync |
-| **Inputs** | Camera Poses (CameraPose ×n)* |
+| **Inputs** | Camera poses (CameraPose ×n)* |
 | **Outputs** | Camera Path (CameraPath) |
 | **Audited** | — |
 
@@ -7551,7 +7551,7 @@ No settings.
 |-----------|------|---------|---------------|
 | Path ID | string | — | — |
 | Interpolation | enum | linear | Linear, Step, Catmull-Rom |
-| Closed Path | bool | false | — |
+| Closed path | bool | false | — |
 
 ---
 
@@ -7564,18 +7564,18 @@ No settings.
 | **API Key** | — |
 | **Execution** | sync |
 | **Inputs** | — |
-| **Outputs** | Camera Pose (CameraPose) |
+| **Outputs** | Camera pose (CameraPose) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Pose ID | string | — | — |
-| Coordinate System ID | string | nebula-world | — |
+| Coordinate system ID | string | nebula-world | — |
 | Handedness | enum | right | Right-handed, Left-handed |
-| Up Axis | enum | y | +X, -X, +Y, -Y, +Z, -Z |
-| Forward Axis | enum | -z | +X, -X, +Y, -Y, +Z, -Z |
-| Spatial Unit | enum | meters | Meters, Centimeters, Millimeters, Custom |
-| Meters per Custom Unit | float | 1 | 0.000001–… |
+| Up axis | enum | y | +X, -X, +Y, -Y, +Z, -Z |
+| Forward axis | enum | -z | +X, -X, +Y, -Y, +Z, -Z |
+| Spatial unit | enum | meters | Meters, Centimeters, Millimeters, Custom |
+| Meters per custom unit | float | 1 | 0.000001–… |
 | Origin X (m) | float | 0 | — |
 | Origin Y (m) | float | 0 | — |
 | Origin Z (m) | float | 0 | — |
@@ -7587,9 +7587,9 @@ No settings.
 | Quaternion Z | float | 0 | -1–1 |
 | Quaternion W | float | 1 | -1–1 |
 | Timestamp (s) | float | 0 | 0–… |
-| Include Pinhole Intrinsics | bool | true | — |
-| Image Width | int | 1920 | 1–32768 |
-| Image Height | int | 1080 | 1–32768 |
+| Include pinhole intrinsics | bool | true | — |
+| Image width | int | 1920 | 1–32768 |
+| Image height | int | 1080 | 1–32768 |
 | Focal X | float | 1000 | 0.000001–10000000 |
 | Focal Y | float | 1000 | 0.000001–10000000 |
 | Principal X | float | 960 | 0–32768 |
@@ -7616,11 +7616,11 @@ No settings.
 | Pitch (°) | float | 0 | -90–90 |
 | Yaw (°) | float | 0 | 0–360 |
 | Roll (°) | float | 0 | -45–45 |
-| Focal Length (mm) | float | 35 | 10–200 |
-| Subject Distance (m) | float | 3 | 0.5–50 |
-| Focus Distance (m) | float | 3 | 0.5–100 |
-| Subject Screen X | float | 0.5 | 0–1 |
-| Subject Screen Y | float | 0.5 | 0–1 |
+| Focal length (mm) | float | 35 | 10–200 |
+| Subject distance (m) | float | 3 | 0.5–50 |
+| Focus distance (m) | float | 3 | 0.5–100 |
+| Subject screen X | float | 0.5 | 0–1 |
+| Subject screen Y | float | 0.5 | 0–1 |
 
 ---
 
@@ -7676,8 +7676,8 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-embedding-001 | Embedding 001 (text), Embedding 2 (multimodal) |
-| Task Type | enum | SEMANTIC_SIMILARITY | Semantic Similarity, Retrieval Query, Retrieval Document, Classification, Clustering, Code Retrieval, Question Answering, Fact Verification |
+| Model | enum | gemini-embedding-001 | Embedding 001 · text, Embedding 2 · multimodal |
+| Task type | enum | SEMANTIC_SIMILARITY | Semantic similarity, Retrieval query, Retrieval document, Classification, Clustering, Code retrieval, Question answering, Fact verification |
 | Dimensions | enum | 768 | 768, 1536, 3072 |
 
 ---
@@ -7759,7 +7759,7 @@ No settings.
 | **API Key** | — |
 | **Execution** | sync |
 | **Inputs** | Image (Image)* |
-| **Outputs** | Image Style Ref (Any) |
+| **Outputs** | Image style ref (Any) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
@@ -7820,7 +7820,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Painted Area Means | enum | white-edit | White = edit (FLUX Fill), Black = edit (Ideogram) |
+| Painted area means | enum | white-edit | White = edit · FLUX Fill, Black = edit · Ideogram |
 
 ---
 
@@ -7866,13 +7866,13 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Style Priority | float | 1 | 0–1 |
-| Identity Priority | float | 1 | 0–1 |
-| Composition Priority | float | 1 | 0–1 |
-| Pose Priority | float | 1 | 0–1 |
-| Lighting Priority | float | 1 | 0–1 |
-| Subject Priority | float | 1 | 0–1 |
-| Background Priority | float | 1 | 0–1 |
+| Style priority | float | 1 | 0–1 |
+| Identity priority | float | 1 | 0–1 |
+| Composition priority | float | 1 | 0–1 |
+| Pose priority | float | 1 | 0–1 |
+| Lighting priority | float | 1 | 0–1 |
+| Subject priority | float | 1 | 0–1 |
+| Background priority | float | 1 | 0–1 |
 
 ---
 
@@ -7884,8 +7884,8 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | async-poll |
-| **Inputs** | Track Sources (Any) |
-| **Outputs** | Rendered Video (Video) |
+| **Inputs** | Track sources (Any) |
+| **Outputs** | Rendered video (Video) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
@@ -7930,14 +7930,14 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | sync |
-| **Inputs** | Sensor Poses (CameraPose ×n)* |
+| **Inputs** | Sensor poses (CameraPose ×n)* |
 | **Outputs** | Sensor Rig (SensorRig) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Rig ID | string | — | — |
-| Sensor Modality | enum | rgb | RGB, Depth, RGB + Depth, LiDAR, IMU |
+| Sensor modality | enum | rgb | RGB, Depth, RGB + depth, LiDAR, IMU |
 
 ---
 
@@ -7949,14 +7949,14 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | sync |
-| **Inputs** | Camera Poses (CameraPose ×n)*, Local Images (Image ×n)* |
+| **Inputs** | Camera poses (CameraPose ×n)*, Local images (Image ×n)* |
 | **Outputs** | Spatial Context (SpatialContext) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Context ID | string | — | — |
-| Anchor Role | enum | reference | Reference, Observation, Target |
+| Anchor role | enum | reference | Reference, Observation, Target |
 
 ---
 
@@ -7968,13 +7968,13 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | sync |
-| **Inputs** | Spatial Value (Any)* |
-| **Outputs** | Validated Value (Any), Validation Summary (Text) |
+| **Inputs** | Spatial value (Any)* |
+| **Outputs** | Validated value (Any), Validation summary (Text) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Expected Type | enum | CameraPose | Camera Pose, Camera Path, Spatial Context, Depth Map, Depth Sequence, Point Cloud, Sensor Rig, Sensor Stream, … |
+| Expected type | enum | CameraPose | Camera pose, Camera path, Spatial context, Depth map, Depth sequence, Point cloud, Sensor rig, Sensor stream, … |
 
 ---
 
@@ -8013,9 +8013,9 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Reference Image | file | — | — |
-| Description Mode | enum | auto | Auto (Gemini), Manual, Image only |
+| Description Mode | enum | auto | Auto · Gemini, Manual, Image only |
 | Description | textarea | — | — |
-| Focus | enum | all | All (palette + lighting + medium + mood), Palette only, Lighting only, Medium / texture only |
+| Focus | enum | all | All · palette + lighting + medium + mood, Palette only, Lighting only, Medium / texture only |
 | Strength | float | 0.7 | 0–1 |
 
 ---
@@ -8046,16 +8046,16 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | async-poll |
-| **Inputs** | Source Video (Video)* |
-| **Outputs** | Edited Video (Video) |
+| **Inputs** | Source video (Video)* |
+| **Outputs** | Edited video (Video) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Clips | string | — | — |
-| Source Duration | float | — | — |
+| Source duration | float | — | — |
 | Source FPS | float | — | — |
-| Source Is VFR | bool | — | — |
+| Source is VFR | bool | — | — |
 
 ---
 

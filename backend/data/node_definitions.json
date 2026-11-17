@@ -58,23 +58,23 @@
         "default": "gpt-image-2.5-flare",
         "options": [
           {
-            "label": "GPT Image 1 (shuts down Oct 23, 2026)",
+            "label": "GPT Image 1 · shuts down October 23, 2026",
             "value": "gpt-image-1"
           },
           {
-            "label": "GPT Image 1.5 (shuts down Dec 1, 2026)",
+            "label": "GPT Image 1.5 · shuts down December 1, 2026",
             "value": "gpt-image-1.5"
           },
           {
-            "label": "GPT Image 1 Mini (shuts down Dec 1, 2026)",
+            "label": "GPT Image 1 Mini · shuts down December 1, 2026",
             "value": "gpt-image-1-mini"
           },
           {
-            "label": "GPT Image 2.5 Flare (fastest)",
+            "label": "GPT Image 2.5 Flare · fastest",
             "value": "gpt-image-2.5-flare"
           },
           {
-            "label": "GPT Image 2.5 Sunburst (most precise edits)",
+            "label": "GPT Image 2.5 Sunburst · most precise edits",
             "value": "gpt-image-2.5-sunburst"
           }
         ]
@@ -128,7 +128,7 @@
             "value": "high"
           },
           {
-            "label": "Extra High",
+            "label": "Extra high",
             "value": "xhigh",
             "visibleWhen": {
               "model": [
@@ -233,7 +233,7 @@
         "default": "claude-opus-5-5",
         "options": [
           {
-            "label": "Claude Fable 5.1 (flagship)",
+            "label": "Claude Fable 5.1 · flagship",
             "value": "claude-fable-5-1"
           },
           {
@@ -265,11 +265,11 @@
             "value": "claude-haiku-4-5-20251001"
           },
           {
-            "label": "Claude Opus 4.7 (legacy)",
+            "label": "Claude Opus 4.7 · legacy",
             "value": "claude-opus-4-7"
           },
           {
-            "label": "Claude Opus 4.6 (legacy)",
+            "label": "Claude Opus 4.6 · legacy",
             "value": "claude-opus-4-6"
           }
         ]
@@ -308,7 +308,7 @@
       },
       {
         "key": "system",
-        "label": "System Prompt",
+        "label": "System prompt",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -333,14 +333,14 @@
       },
       {
         "key": "stop_sequences",
-        "label": "Stop Sequences",
+        "label": "Stop sequences",
         "type": "string",
         "required": false,
         "placeholder": "Comma-separated"
       },
       {
         "key": "extended_thinking",
-        "label": "Extended Thinking",
+        "label": "Extended thinking",
         "type": "boolean",
         "required": false,
         "default": false,
@@ -356,7 +356,7 @@
       },
       {
         "key": "thinkingBudget",
-        "label": "Thinking Budget",
+        "label": "Thinking budget",
         "type": "integer",
         "required": false,
         "default": 10000,
@@ -427,7 +427,7 @@
       },
       {
         "key": "prompt_caching",
-        "label": "Prompt Caching",
+        "label": "Prompt caching",
         "type": "boolean",
         "required": false,
         "default": false
@@ -1253,7 +1253,7 @@
       },
       {
         "id": "reference",
-        "label": "Reference Image",
+        "label": "Reference image",
         "dataType": "Image",
         "required": false
       }
@@ -1308,7 +1308,7 @@
       },
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -1340,7 +1340,7 @@
             "value": "gen4_image_turbo"
           },
           {
-            "label": "Nano Banana Pro (Gemini 3)",
+            "label": "Nano Banana Pro · Gemini 3",
             "value": "gemini_image3_pro"
           },
           {
@@ -1802,7 +1802,7 @@
             }
           },
           {
-            "label": "Auto (model picks)",
+            "label": "Auto · model picks",
             "value": "auto",
             "visibleWhen": {
               "model": [
@@ -2354,20 +2354,20 @@
     "inputPorts": [
       {
         "id": "character_image",
-        "label": "Character Image",
+        "label": "Character image",
         "dataType": "Image",
         "required": false,
         "role": "identity"
       },
       {
         "id": "character_video",
-        "label": "Character Video",
+        "label": "Character video",
         "dataType": "Video",
         "required": false
       },
       {
         "id": "reference",
-        "label": "Performance Video",
+        "label": "Performance video",
         "dataType": "Video",
         "required": true
       }
@@ -2383,14 +2383,14 @@
     "params": [
       {
         "key": "bodyControl",
-        "label": "Body Control",
+        "label": "Body control",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "expressionIntensity",
-        "label": "Expression Intensity",
+        "label": "Expression intensity",
         "type": "integer",
         "required": false,
         "default": 3,
@@ -2608,7 +2608,7 @@
         "label": "ElevenLabs voice ID",
         "type": "string",
         "required": false,
-        "placeholder": "ElevenLabs voice ID (runs on your ElevenLabs key)"
+        "placeholder": "ElevenLabs voice ID · uses your ElevenLabs key"
       }
     ]
   },
@@ -2661,7 +2661,7 @@
     "sharedParams": [
       {
         "key": "removeBackgroundNoise",
-        "label": "Remove Background Noise",
+        "label": "Remove background noise",
         "type": "boolean",
         "required": false,
         "default": false
@@ -2760,7 +2760,7 @@
         "label": "ElevenLabs voice ID",
         "type": "string",
         "required": false,
-        "placeholder": "ElevenLabs voice ID (runs on your ElevenLabs key)"
+        "placeholder": "ElevenLabs voice ID · uses your ElevenLabs key"
       }
     ]
   },
@@ -2796,7 +2796,7 @@
     "sharedParams": [
       {
         "key": "targetLang",
-        "label": "Target Language",
+        "label": "Target language",
         "type": "enum",
         "required": true,
         "default": "es",
@@ -2917,21 +2917,21 @@
       },
       {
         "key": "disableVoiceCloning",
-        "label": "Disable Voice Cloning",
+        "label": "Disable voice cloning",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "dropBackgroundAudio",
-        "label": "Drop Background Audio",
+        "label": "Drop background audio",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "numSpeakers",
-        "label": "Number of Speakers",
+        "label": "Number of speakers",
         "type": "integer",
         "required": false,
         "placeholder": "Auto-detect",
@@ -2975,7 +2975,7 @@
         "default": "eleven_multilingual_v2",
         "options": [
           {
-            "label": "v3 (Highest Quality)",
+            "label": "v3 · highest quality",
             "value": "eleven_v3"
           },
           {
@@ -2983,15 +2983,15 @@
             "value": "eleven_multilingual_v2"
           },
           {
-            "label": "Turbo v2.5 (deprecated: use Flash v2.5)",
+            "label": "Turbo v2.5 · deprecated, use Flash v2.5",
             "value": "eleven_turbo_v2_5"
           },
           {
-            "label": "Flash v2.5 (Fastest)",
+            "label": "Flash v2.5 · fastest",
             "value": "eleven_flash_v2_5"
           },
           {
-            "label": "Turbo v2 (deprecated: use Flash v2)",
+            "label": "Turbo v2 · deprecated, use Flash v2",
             "value": "eleven_turbo_v2"
           },
           {
@@ -3020,7 +3020,7 @@
       },
       {
         "key": "similarity_boost",
-        "label": "Similarity Boost",
+        "label": "Similarity boost",
         "type": "float",
         "required": false,
         "default": 0.75,
@@ -3040,7 +3040,7 @@
       },
       {
         "key": "use_speaker_boost",
-        "label": "Speaker Boost",
+        "label": "Speaker boost",
         "type": "boolean",
         "required": false,
         "default": true
@@ -3057,7 +3057,7 @@
       },
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "mp3_44100_128",
@@ -3101,7 +3101,7 @@
     "apiEndpoint": "/v1/text-to-dialogue",
     "envKeyName": "ELEVENLABS_API_KEY",
     "executionPattern": "sync",
-    "description": "A conversation between several ElevenLabs voices in one audio file (Eleven v4 by default). The script input is one line per turn, \"<voice name>: <text>\", for example \"Rachel: Hello there.\" then \"Adam: Hi!\". The speaker is everything before the first colon. Use names from the person's ElevenLabs voice library; they match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices (a free call). A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text.",
+    "description": "A conversation between several ElevenLabs voices in one audio file, using Eleven v4 by default. The script input is one line per turn, “<voice name>: <text>”, for example “Rachel: Hello there.” then “Adam: Hi!”. The speaker is everything before the first colon. Use names from the person’s ElevenLabs voice library. They match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices, which is a free call. A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text.",
     "capabilityNote": "Write one line per turn as Name: text, with voice names from your ElevenLabs voices (for example Rachel: Hi there. then Adam: Hey!). Nebula looks the names up before generating. If a name matches no voice, or more than one, the run stops and lists the voices with their IDs; you can write a voice ID in place of the name. Up to 10 voices and 2,000 characters per run.",
     "inputPorts": [
       {
@@ -3166,7 +3166,7 @@
       },
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "mp3_44100_128",
@@ -3313,7 +3313,7 @@
       },
       {
         "key": "response_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "text",
@@ -3331,11 +3331,11 @@
             "value": "verbose_json"
           },
           {
-            "label": "SRT Subtitles",
+            "label": "SRT subtitles",
             "value": "srt"
           },
           {
-            "label": "VTT Subtitles",
+            "label": "VTT subtitles",
             "value": "vtt"
           }
         ]
@@ -3378,7 +3378,7 @@
     "outputPorts": [
       {
         "id": "text",
-        "label": "English Text",
+        "label": "English text",
         "dataType": "Text",
         "required": false
       }
@@ -3386,7 +3386,7 @@
     "params": [
       {
         "key": "response_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "text",
@@ -3404,11 +3404,11 @@
             "value": "verbose_json"
           },
           {
-            "label": "SRT Subtitles",
+            "label": "SRT subtitles",
             "value": "srt"
           },
           {
-            "label": "VTT Subtitles",
+            "label": "VTT subtitles",
             "value": "vtt"
           }
         ]
@@ -3428,7 +3428,7 @@
         "label": "Prompt",
         "type": "string",
         "required": false,
-        "placeholder": "Guide the model (must be in English)"
+        "placeholder": "Guide the model. Must be in English."
       }
     ]
   },
@@ -3584,10 +3584,10 @@
       },
       {
         "key": "instructions",
-        "label": "Voice Instructions",
+        "label": "Voice instructions",
         "type": "string",
         "required": false,
-        "placeholder": "e.g. \"Speak slowly with warmth\" (gpt-4o-mini-tts only)"
+        "placeholder": "e.g. “Speak slowly with warmth” · gpt-4o-mini-tts only"
       }
     ]
   },
@@ -3628,7 +3628,7 @@
       },
       {
         "key": "prompt_influence",
-        "label": "Prompt Influence",
+        "label": "Prompt influence",
         "type": "float",
         "required": false,
         "default": 0.3,
@@ -3638,14 +3638,14 @@
       },
       {
         "key": "loop",
-        "label": "Seamless Loop",
+        "label": "Seamless loop",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "mp3_44100_128",
@@ -3732,7 +3732,7 @@
       },
       {
         "key": "similarity_boost",
-        "label": "Similarity Boost",
+        "label": "Similarity boost",
         "type": "float",
         "required": false,
         "default": 0.75,
@@ -3742,7 +3742,7 @@
       },
       {
         "key": "remove_background_noise",
-        "label": "Remove Background Noise",
+        "label": "Remove background noise",
         "type": "boolean",
         "required": false,
         "default": false
@@ -3756,7 +3756,7 @@
       },
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "mp3_44100_128",
@@ -3800,7 +3800,7 @@
     "outputPorts": [
       {
         "id": "audio",
-        "label": "Isolated Audio",
+        "label": "Isolated audio",
         "dataType": "Audio",
         "required": false
       }
@@ -3865,7 +3865,7 @@
       },
       {
         "key": "num_speakers",
-        "label": "Max Speakers",
+        "label": "Max speakers",
         "type": "integer",
         "required": false,
         "placeholder": "Auto",
@@ -3874,28 +3874,28 @@
       },
       {
         "key": "tag_audio_events",
-        "label": "Tag Audio Events",
+        "label": "Tag audio events",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "transcript_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "text",
         "options": [
           {
-            "label": "Plain Text",
+            "label": "Plain text",
             "value": "text"
           },
           {
-            "label": "SRT Subtitles",
+            "label": "SRT subtitles",
             "value": "srt"
           },
           {
-            "label": "VTT Subtitles",
+            "label": "VTT subtitles",
             "value": "vtt"
           }
         ]
@@ -3921,7 +3921,7 @@
     "outputPorts": [
       {
         "id": "audio",
-        "label": "Dubbed Audio",
+        "label": "Dubbed audio",
         "dataType": "Audio",
         "required": false
       }
@@ -3929,7 +3929,7 @@
     "params": [
       {
         "key": "target_lang",
-        "label": "Target Language",
+        "label": "Target language",
         "type": "enum",
         "required": true,
         "default": "es",
@@ -4002,7 +4002,7 @@
       },
       {
         "key": "source_lang",
-        "label": "Source Language",
+        "label": "Source language",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -4039,7 +4039,7 @@
       },
       {
         "key": "num_speakers",
-        "label": "Number of Speakers",
+        "label": "Number of speakers",
         "type": "integer",
         "required": false,
         "placeholder": "Auto-detect",
@@ -4048,14 +4048,14 @@
       },
       {
         "key": "drop_background_audio",
-        "label": "Drop Background Audio",
+        "label": "Drop background audio",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "disable_voice_cloning",
-        "label": "Disable Voice Cloning",
+        "label": "Disable voice cloning",
         "type": "boolean",
         "required": false,
         "default": false
@@ -4079,7 +4079,7 @@
       },
       {
         "id": "image",
-        "label": "Image Guide",
+        "label": "Image guide",
         "dataType": "Image",
         "required": false
       }
@@ -4096,7 +4096,7 @@
     "sharedParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -4152,13 +4152,13 @@
     "falParams": [
       {
         "key": "safety_tolerance",
-        "label": "Safety Tolerance",
+        "label": "Safety tolerance",
         "type": "enum",
         "required": false,
         "default": "2",
         "options": [
           {
-            "label": "1 (Strict)",
+            "label": "1 · strict",
             "value": "1"
           },
           {
@@ -4178,14 +4178,14 @@
             "value": "5"
           },
           {
-            "label": "6 (Permissive)",
+            "label": "6 · permissive",
             "value": "6"
           }
         ]
       },
       {
         "key": "enhance_prompt",
-        "label": "Enhance Prompt",
+        "label": "Enhance prompt",
         "type": "boolean",
         "required": false,
         "default": false
@@ -4216,7 +4216,7 @@
       },
       {
         "key": "image_prompt_strength",
-        "label": "Image Influence",
+        "label": "Image influence",
         "type": "float",
         "required": false,
         "default": 0.1,
@@ -4347,7 +4347,7 @@
         "default": "auto",
         "options": [
           {
-            "label": "Auto (Gemini)",
+            "label": "Auto · Gemini",
             "value": "auto"
           },
           {
@@ -4386,7 +4386,7 @@
         },
         "options": [
           {
-            "label": "All (palette + lighting + medium + mood)",
+            "label": "All · palette + lighting + medium + mood",
             "value": "all"
           },
           {
@@ -4426,7 +4426,7 @@
     "inputPorts": [
       {
         "id": "video_in",
-        "label": "Source Video",
+        "label": "Source video",
         "dataType": "Video",
         "required": true
       }
@@ -4434,7 +4434,7 @@
     "outputPorts": [
       {
         "id": "video",
-        "label": "Edited Video",
+        "label": "Edited video",
         "dataType": "Video",
         "required": false
       }
@@ -4449,7 +4449,7 @@
       },
       {
         "key": "sourceDuration",
-        "label": "Source Duration",
+        "label": "Source duration",
         "type": "float",
         "required": false,
         "hidden": true
@@ -4463,7 +4463,7 @@
       },
       {
         "key": "sourceIsVfr",
-        "label": "Source Is VFR",
+        "label": "Source is VFR",
         "type": "boolean",
         "required": false,
         "hidden": true
@@ -4481,7 +4481,7 @@
     "inputPorts": [
       {
         "id": "sources",
-        "label": "Track Sources",
+        "label": "Track sources",
         "dataType": "Any",
         "required": false
       }
@@ -4489,7 +4489,7 @@
     "outputPorts": [
       {
         "id": "video",
-        "label": "Rendered Video",
+        "label": "Rendered video",
         "dataType": "Video",
         "required": false
       }
@@ -4554,7 +4554,7 @@
         "default": "lab-transfer",
         "options": [
           {
-            "label": "Lab Transfer",
+            "label": "Lab transfer",
             "value": "lab-transfer"
           },
           {
@@ -4569,7 +4569,7 @@
       },
       {
         "key": "source_image",
-        "label": "Palette Source",
+        "label": "Palette source",
         "type": "file",
         "required": false,
         "default": ""
@@ -4804,7 +4804,7 @@
   "character": {
     "id": "character",
     "displayName": "Character",
-    "description": "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them.",
+    "description": "A saved character’s identity, including reference views, frozen traits and seed, for cinematic and edit nodes. Set character to a character id. GET /api/characters lists them.",
     "category": "character",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4828,22 +4828,22 @@
       },
       {
         "key": "override_prompt",
-        "label": "Override Prompt",
+        "label": "Override prompt",
         "type": "textarea",
         "required": false,
         "default": "",
-        "placeholder": "Optional per-shot direction: pose, expression, wardrobe, framing"
+        "placeholder": "Optional per-shot direction covering pose, expression, wardrobe and framing"
       },
       {
         "key": "override_refs",
-        "label": "Override Refs",
+        "label": "Override refs",
         "type": "file",
         "required": false,
         "default": ""
       },
       {
         "key": "strength_override",
-        "label": "Strength Override",
+        "label": "Strength override",
         "type": "float",
         "required": false,
         "default": "",
@@ -4857,7 +4857,7 @@
   "nebula-moodboard": {
     "id": "nebula-moodboard",
     "displayName": "Moodboard",
-    "description": "A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards.",
+    "description": "A saved Nebula moodboard as creative direction, with its style brief, negative prompt, palette and representative images. Set moodboard to a board id. GET /api/moodboards lists the boards.",
     "category": "moodboard",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4873,13 +4873,13 @@
       },
       {
         "id": "style_brief",
-        "label": "Style Brief",
+        "label": "Style brief",
         "dataType": "Text",
         "required": false
       },
       {
         "id": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "dataType": "Text",
         "required": false
       },
@@ -4919,7 +4919,7 @@
             "value": "yes"
           },
           {
-            "label": "Don't send",
+            "label": "Don’t send",
             "value": "no"
           }
         ]
@@ -5013,7 +5013,7 @@
       },
       {
         "key": "focalLength",
-        "label": "Focal Length (mm)",
+        "label": "Focal length (mm)",
         "type": "float",
         "required": false,
         "default": 35,
@@ -5023,7 +5023,7 @@
       },
       {
         "key": "subjectDistance",
-        "label": "Subject Distance (m)",
+        "label": "Subject distance (m)",
         "type": "float",
         "required": false,
         "default": 3,
@@ -5033,7 +5033,7 @@
       },
       {
         "key": "focusDistance",
-        "label": "Focus Distance (m)",
+        "label": "Focus distance (m)",
         "type": "float",
         "required": false,
         "default": 3,
@@ -5043,7 +5043,7 @@
       },
       {
         "key": "subjectScreenX",
-        "label": "Subject Screen X",
+        "label": "Subject screen X",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -5053,7 +5053,7 @@
       },
       {
         "key": "subjectScreenY",
-        "label": "Subject Screen Y",
+        "label": "Subject screen Y",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -5076,7 +5076,7 @@
     "outputPorts": [
       {
         "id": "pose",
-        "label": "Camera Pose",
+        "label": "Camera pose",
         "dataType": "CameraPose",
         "required": false
       }
@@ -5092,7 +5092,7 @@
       },
       {
         "key": "coordinate_system_id",
-        "label": "Coordinate System ID",
+        "label": "Coordinate system ID",
         "type": "string",
         "required": false,
         "default": "nebula-world"
@@ -5116,7 +5116,7 @@
       },
       {
         "key": "up_axis",
-        "label": "Up Axis",
+        "label": "Up axis",
         "type": "enum",
         "required": false,
         "default": "y",
@@ -5149,7 +5149,7 @@
       },
       {
         "key": "forward_axis",
-        "label": "Forward Axis",
+        "label": "Forward axis",
         "type": "enum",
         "required": false,
         "default": "-z",
@@ -5182,7 +5182,7 @@
       },
       {
         "key": "unit",
-        "label": "Spatial Unit",
+        "label": "Spatial unit",
         "type": "enum",
         "required": false,
         "default": "meters",
@@ -5207,7 +5207,7 @@
       },
       {
         "key": "meters_per_unit",
-        "label": "Meters per Custom Unit",
+        "label": "Meters per custom unit",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5318,14 +5318,14 @@
       },
       {
         "key": "include_intrinsics",
-        "label": "Include Pinhole Intrinsics",
+        "label": "Include pinhole intrinsics",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "image_width",
-        "label": "Image Width",
+        "label": "Image width",
         "type": "integer",
         "required": false,
         "default": 1920,
@@ -5339,7 +5339,7 @@
       },
       {
         "key": "image_height",
-        "label": "Image Height",
+        "label": "Image height",
         "type": "integer",
         "required": false,
         "default": 1080,
@@ -5440,7 +5440,7 @@
     "inputPorts": [
       {
         "id": "poses",
-        "label": "Camera Poses",
+        "label": "Camera poses",
         "dataType": "CameraPose",
         "required": true,
         "multiple": true,
@@ -5487,7 +5487,7 @@
       },
       {
         "key": "closed",
-        "label": "Closed Path",
+        "label": "Closed path",
         "type": "boolean",
         "required": false,
         "default": false
@@ -5506,7 +5506,7 @@
     "inputPorts": [
       {
         "id": "poses",
-        "label": "Camera Poses",
+        "label": "Camera poses",
         "dataType": "CameraPose",
         "required": true,
         "multiple": true,
@@ -5514,7 +5514,7 @@
       },
       {
         "id": "assets",
-        "label": "Local Images",
+        "label": "Local images",
         "dataType": "Image",
         "required": true,
         "multiple": true,
@@ -5540,7 +5540,7 @@
       },
       {
         "key": "role",
-        "label": "Anchor Role",
+        "label": "Anchor role",
         "type": "enum",
         "required": false,
         "default": "reference",
@@ -5573,7 +5573,7 @@
     "inputPorts": [
       {
         "id": "poses",
-        "label": "Sensor Poses",
+        "label": "Sensor poses",
         "dataType": "CameraPose",
         "required": true,
         "multiple": true,
@@ -5599,7 +5599,7 @@
       },
       {
         "key": "modality",
-        "label": "Sensor Modality",
+        "label": "Sensor modality",
         "type": "enum",
         "required": false,
         "default": "rgb",
@@ -5613,7 +5613,7 @@
             "value": "depth"
           },
           {
-            "label": "RGB + Depth",
+            "label": "RGB + depth",
             "value": "rgbd"
           },
           {
@@ -5640,7 +5640,7 @@
     "inputPorts": [
       {
         "id": "input",
-        "label": "Spatial Value",
+        "label": "Spatial value",
         "dataType": "Any",
         "required": true
       }
@@ -5648,13 +5648,13 @@
     "outputPorts": [
       {
         "id": "value",
-        "label": "Validated Value",
+        "label": "Validated value",
         "dataType": "Any",
         "required": false
       },
       {
         "id": "summary",
-        "label": "Validation Summary",
+        "label": "Validation summary",
         "dataType": "Text",
         "required": false
       }
@@ -5662,45 +5662,45 @@
     "params": [
       {
         "key": "expected_type",
-        "label": "Expected Type",
+        "label": "Expected type",
         "type": "enum",
         "required": true,
         "default": "CameraPose",
         "options": [
           {
-            "label": "Camera Pose",
+            "label": "Camera pose",
             "value": "CameraPose"
           },
           {
-            "label": "Camera Path",
+            "label": "Camera path",
             "value": "CameraPath"
           },
           {
-            "label": "Spatial Context",
+            "label": "Spatial context",
             "value": "SpatialContext"
           },
           {
-            "label": "Depth Map",
+            "label": "Depth map",
             "value": "DepthMap"
           },
           {
-            "label": "Depth Sequence",
+            "label": "Depth sequence",
             "value": "DepthSequence"
           },
           {
-            "label": "Point Cloud",
+            "label": "Point cloud",
             "value": "PointCloud"
           },
           {
-            "label": "Sensor Rig",
+            "label": "Sensor rig",
             "value": "SensorRig"
           },
           {
-            "label": "Sensor Stream",
+            "label": "Sensor stream",
             "value": "SensorStream"
           },
           {
-            "label": "Spatial Session",
+            "label": "Spatial session",
             "value": "SpatialSession"
           },
           {
@@ -5774,7 +5774,7 @@
     "params": [
       {
         "key": "style_weight",
-        "label": "Style Priority",
+        "label": "Style priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5784,7 +5784,7 @@
       },
       {
         "key": "identity_weight",
-        "label": "Identity Priority",
+        "label": "Identity priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5794,7 +5794,7 @@
       },
       {
         "key": "composition_weight",
-        "label": "Composition Priority",
+        "label": "Composition priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5804,7 +5804,7 @@
       },
       {
         "key": "pose_weight",
-        "label": "Pose Priority",
+        "label": "Pose priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5814,7 +5814,7 @@
       },
       {
         "key": "lighting_weight",
-        "label": "Lighting Priority",
+        "label": "Lighting priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5824,7 +5824,7 @@
       },
       {
         "key": "subject_weight",
-        "label": "Subject Priority",
+        "label": "Subject priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5834,7 +5834,7 @@
       },
       {
         "key": "background_weight",
-        "label": "Background Priority",
+        "label": "Background priority",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -5895,7 +5895,7 @@
         "type": "textarea",
         "required": false,
         "default": "",
-        "placeholder": "Optional: use {text1}, {text2}, {text3} placeholders"
+        "placeholder": "Optional. Use {text1}, {text2}, {text3} placeholders"
       }
     ]
   },
@@ -6008,7 +6008,7 @@
       },
       {
         "key": "max_tokens",
-        "label": "Max Tokens",
+        "label": "Max tokens",
         "type": "integer",
         "required": false,
         "default": 4096,
@@ -6017,7 +6017,7 @@
       },
       {
         "key": "response_format",
-        "label": "Response Format",
+        "label": "Response format",
         "type": "enum",
         "required": false,
         "default": "text",
@@ -6034,7 +6034,7 @@
       },
       {
         "key": "prompt_caching",
-        "label": "Prompt Caching",
+        "label": "Prompt caching",
         "type": "boolean",
         "required": false,
         "default": false
@@ -6093,7 +6093,7 @@
       },
       {
         "key": "max_tokens",
-        "label": "Max Tokens",
+        "label": "Max tokens",
         "type": "integer",
         "required": false,
         "default": 4096,
@@ -6222,7 +6222,7 @@
         "default": "gpt-6.1-sol",
         "options": [
           {
-            "label": "GPT-6 Astra (flagship)",
+            "label": "GPT-6 Astra · flagship",
             "value": "gpt-6-astra"
           },
           {
@@ -6262,27 +6262,27 @@
             "value": "gpt-5.4-mini"
           },
           {
-            "label": "GPT-5.4 nano (retiring 2027-04-01)",
+            "label": "GPT-5.4 nano · retiring 2027-04-01",
             "value": "gpt-5.4-nano"
           },
           {
-            "label": "GPT-4o (legacy, retiring 2027-01-14)",
+            "label": "GPT-4o · legacy, retiring 2027-01-14",
             "value": "gpt-4o"
           },
           {
-            "label": "GPT-4o Mini (legacy, retiring 2027-01-14)",
+            "label": "GPT-4o Mini · legacy, retiring 2027-01-14",
             "value": "gpt-4o-mini"
           },
           {
-            "label": "GPT-4.1 (legacy, retiring 2027-01-14)",
+            "label": "GPT-4.1 · legacy, retiring 2027-01-14",
             "value": "gpt-4.1"
           },
           {
-            "label": "GPT-4.1 Mini (legacy, retiring 2027-01-14)",
+            "label": "GPT-4.1 Mini · legacy, retiring 2027-01-14",
             "value": "gpt-4.1-mini"
           },
           {
-            "label": "GPT-4.1 nano (legacy, retiring 2026-10-23)",
+            "label": "GPT-4.1 nano · legacy, retiring 2026-10-23",
             "value": "gpt-4.1-nano"
           }
         ]
@@ -6361,7 +6361,7 @@
       },
       {
         "key": "max_completion_tokens",
-        "label": "Max Tokens",
+        "label": "Max tokens",
         "type": "integer",
         "required": false,
         "default": 25000,
@@ -6421,7 +6421,7 @@
       },
       {
         "key": "frequency_penalty",
-        "label": "Frequency Penalty",
+        "label": "Frequency penalty",
         "type": "float",
         "required": false,
         "default": 0,
@@ -6440,7 +6440,7 @@
       },
       {
         "key": "presence_penalty",
-        "label": "Presence Penalty",
+        "label": "Presence penalty",
         "type": "float",
         "required": false,
         "default": 0,
@@ -6459,7 +6459,7 @@
       },
       {
         "key": "response_format",
-        "label": "Response Format",
+        "label": "Response format",
         "type": "enum",
         "required": false,
         "default": "text",
@@ -6532,19 +6532,19 @@
             "value": "gemini-3.5-flash-lite"
           },
           {
-            "label": "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)",
+            "label": "Gemini 3.5 Flash · deprecated, runs Gemini 3.6 Flash",
             "value": "gemini-3.5-flash"
           },
           {
-            "label": "Gemini 3.1 Pro (preview)",
+            "label": "Gemini 3.1 Pro · preview",
             "value": "gemini-3.1-pro-preview"
           },
           {
-            "label": "Gemini 3 Flash (preview)",
+            "label": "Gemini 3 Flash · preview",
             "value": "gemini-3-flash-preview"
           },
           {
-            "label": "Gemini 3.1 Flash-Lite (retiring 2027-05-07)",
+            "label": "Gemini 3.1 Flash-Lite · retiring 2027-05-07",
             "value": "gemini-3.1-flash-lite"
           },
           {
@@ -6563,7 +6563,7 @@
       },
       {
         "key": "max_tokens",
-        "label": "Max Tokens",
+        "label": "Max tokens",
         "type": "integer",
         "required": false,
         "default": 65536,
@@ -6606,7 +6606,7 @@
       },
       {
         "key": "system",
-        "label": "System Prompt",
+        "label": "System prompt",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -6664,7 +6664,7 @@
       },
       {
         "key": "thinkingBudget",
-        "label": "Thinking Budget",
+        "label": "Thinking budget",
         "type": "integer",
         "required": false,
         "visibleWhen": {
@@ -6717,14 +6717,14 @@
       },
       {
         "key": "stop_sequences",
-        "label": "Stop Sequences",
+        "label": "Stop sequences",
         "type": "string",
         "required": false,
         "placeholder": "Comma-separated"
       },
       {
         "key": "response_format",
-        "label": "Response Format",
+        "label": "Response format",
         "type": "enum",
         "required": false,
         "default": "text/plain",
@@ -6765,7 +6765,7 @@
       },
       {
         "id": "tail_image",
-        "label": "End Frame",
+        "label": "End frame",
         "dataType": "Image",
         "required": false
       }
@@ -6798,14 +6798,14 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "default": "blur, distort, and low quality"
       },
       {
         "key": "cfg_scale",
-        "label": "CFG Scale",
+        "label": "CFG scale",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -6873,26 +6873,26 @@
             "value": "gemini-nano-banana-2.1"
           },
           {
-            "label": "Nano Banana 2 (3.1 Flash)",
+            "label": "Nano Banana 2 · 3.1 Flash",
             "value": "gemini-3.1-flash-image"
           },
           {
-            "label": "Nano Banana 2 Lite (3.1 Flash-Lite)",
+            "label": "Nano Banana 2 Lite · 3.1 Flash-Lite",
             "value": "gemini-3.1-flash-lite-image"
           },
           {
-            "label": "Nano Banana Pro (3 Pro)",
+            "label": "Nano Banana Pro · 3 Pro",
             "value": "gemini-3-pro-image"
           },
           {
-            "label": "Nano Banana (2.5 Flash)",
+            "label": "Nano Banana · 2.5 Flash",
             "value": "gemini-2.5-flash-image"
           }
         ]
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1:1",
@@ -6981,7 +6981,7 @@
       },
       {
         "key": "imageSize",
-        "label": "Image Size",
+        "label": "Image size",
         "type": "enum",
         "required": false,
         "default": "1K",
@@ -7086,7 +7086,7 @@
             "value": "nano-banana-pro"
           },
           {
-            "label": "Nano Banana (2.5 Flash)",
+            "label": "Nano Banana · 2.5 Flash",
             "value": "nano-banana"
           },
           {
@@ -7101,7 +7101,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1:1",
@@ -7241,7 +7241,7 @@
       },
       {
         "key": "thinking_level",
-        "label": "Thinking Level",
+        "label": "Thinking level",
         "type": "enum",
         "required": false,
         "default": "",
@@ -7267,7 +7267,7 @@
       },
       {
         "key": "enable_web_search",
-        "label": "Web Search",
+        "label": "Web search",
         "type": "boolean",
         "required": false,
         "default": false,
@@ -7332,7 +7332,7 @@
       },
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": true,
         "multiple": true,
@@ -7372,7 +7372,7 @@
             "value": "nano-banana-pro"
           },
           {
-            "label": "Nano Banana (2.5 Flash)",
+            "label": "Nano Banana · 2.5 Flash",
             "value": "nano-banana"
           },
           {
@@ -7387,7 +7387,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -7527,7 +7527,7 @@
       },
       {
         "key": "thinking_level",
-        "label": "Thinking Level",
+        "label": "Thinking level",
         "type": "enum",
         "required": false,
         "default": "",
@@ -7553,7 +7553,7 @@
       },
       {
         "key": "enable_web_search",
-        "label": "Web Search",
+        "label": "Web search",
         "type": "boolean",
         "required": false,
         "default": false,
@@ -7643,18 +7643,18 @@
         "default": "lyria-3-clip-preview",
         "options": [
           {
-            "label": "Lyria 3 Clip (30s)",
+            "label": "Lyria 3 Clip · 30s",
             "value": "lyria-3-clip-preview"
           },
           {
-            "label": "Lyria 3 Pro (full song)",
+            "label": "Lyria 3 Pro · full song",
             "value": "lyria-3-pro-preview"
           }
         ]
       },
       {
         "key": "outputFormat",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "mp3",
@@ -7709,15 +7709,15 @@
         "default": "gemini-3.8-flash-tts",
         "options": [
           {
-            "label": "Gemini 3.1 Flash TTS (preview, shuts down Nov 17, 2026)",
+            "label": "3.1 Flash TTS · preview, shuts down November 17, 2026",
             "value": "gemini-3.1-flash-tts-preview"
           },
           {
-            "label": "2.5 Flash TTS (shuts down Nov 17, 2026)",
+            "label": "2.5 Flash TTS · shuts down November 17, 2026",
             "value": "gemini-2.5-flash-preview-tts"
           },
           {
-            "label": "2.5 Pro TTS (shuts down Nov 17, 2026)",
+            "label": "2.5 Pro TTS · shuts down November 17, 2026",
             "value": "gemini-2.5-pro-preview-tts"
           },
           {
@@ -7738,123 +7738,123 @@
         "default": "Kore",
         "options": [
           {
-            "label": "Zephyr — Bright",
+            "label": "Zephyr · bright",
             "value": "Zephyr"
           },
           {
-            "label": "Puck — Upbeat",
+            "label": "Puck · upbeat",
             "value": "Puck"
           },
           {
-            "label": "Charon — Informative",
+            "label": "Charon · informative",
             "value": "Charon"
           },
           {
-            "label": "Kore — Firm",
+            "label": "Kore · firm",
             "value": "Kore"
           },
           {
-            "label": "Fenrir — Excitable",
+            "label": "Fenrir · excitable",
             "value": "Fenrir"
           },
           {
-            "label": "Leda — Youthful",
+            "label": "Leda · youthful",
             "value": "Leda"
           },
           {
-            "label": "Orus — Firm",
+            "label": "Orus · firm",
             "value": "Orus"
           },
           {
-            "label": "Aoede — Breezy",
+            "label": "Aoede · breezy",
             "value": "Aoede"
           },
           {
-            "label": "Callirrhoe — Easy-going",
+            "label": "Callirrhoe · easy-going",
             "value": "Callirrhoe"
           },
           {
-            "label": "Autonoe — Bright",
+            "label": "Autonoe · bright",
             "value": "Autonoe"
           },
           {
-            "label": "Enceladus — Breathy",
+            "label": "Enceladus · breathy",
             "value": "Enceladus"
           },
           {
-            "label": "Iapetus — Clear",
+            "label": "Iapetus · clear",
             "value": "Iapetus"
           },
           {
-            "label": "Umbriel — Easy-going",
+            "label": "Umbriel · easy-going",
             "value": "Umbriel"
           },
           {
-            "label": "Algieba — Smooth",
+            "label": "Algieba · smooth",
             "value": "Algieba"
           },
           {
-            "label": "Despina — Smooth",
+            "label": "Despina · smooth",
             "value": "Despina"
           },
           {
-            "label": "Erinome — Clear",
+            "label": "Erinome · clear",
             "value": "Erinome"
           },
           {
-            "label": "Algenib — Gravelly",
+            "label": "Algenib · gravelly",
             "value": "Algenib"
           },
           {
-            "label": "Rasalgethi — Informative",
+            "label": "Rasalgethi · informative",
             "value": "Rasalgethi"
           },
           {
-            "label": "Laomedeia — Upbeat",
+            "label": "Laomedeia · upbeat",
             "value": "Laomedeia"
           },
           {
-            "label": "Achernar — Soft",
+            "label": "Achernar · soft",
             "value": "Achernar"
           },
           {
-            "label": "Alnilam — Firm",
+            "label": "Alnilam · firm",
             "value": "Alnilam"
           },
           {
-            "label": "Schedar — Even",
+            "label": "Schedar · even",
             "value": "Schedar"
           },
           {
-            "label": "Gacrux — Mature",
+            "label": "Gacrux · mature",
             "value": "Gacrux"
           },
           {
-            "label": "Pulcherrima — Forward",
+            "label": "Pulcherrima · forward",
             "value": "Pulcherrima"
           },
           {
-            "label": "Achird — Friendly",
+            "label": "Achird · friendly",
             "value": "Achird"
           },
           {
-            "label": "Zubenelgenubi — Casual",
+            "label": "Zubenelgenubi · casual",
             "value": "Zubenelgenubi"
           },
           {
-            "label": "Vindemiatrix — Gentle",
+            "label": "Vindemiatrix · gentle",
             "value": "Vindemiatrix"
           },
           {
-            "label": "Sadachbia — Lively",
+            "label": "Sadachbia · lively",
             "value": "Sadachbia"
           },
           {
-            "label": "Sadaltager — Knowledgeable",
+            "label": "Sadaltager · knowledgeable",
             "value": "Sadaltager"
           },
           {
-            "label": "Sulafat — Warm",
+            "label": "Sulafat · warm",
             "value": "Sulafat"
           }
         ]
@@ -7900,32 +7900,32 @@
         "default": "gemini-embedding-001",
         "options": [
           {
-            "label": "Embedding 001 (text)",
+            "label": "Embedding 001 · text",
             "value": "gemini-embedding-001"
           },
           {
-            "label": "Embedding 2 (multimodal)",
+            "label": "Embedding 2 · multimodal",
             "value": "gemini-embedding-2-preview"
           }
         ]
       },
       {
         "key": "taskType",
-        "label": "Task Type",
+        "label": "Task type",
         "type": "enum",
         "required": false,
         "default": "SEMANTIC_SIMILARITY",
         "options": [
           {
-            "label": "Semantic Similarity",
+            "label": "Semantic similarity",
             "value": "SEMANTIC_SIMILARITY"
           },
           {
-            "label": "Retrieval Query",
+            "label": "Retrieval query",
             "value": "RETRIEVAL_QUERY"
           },
           {
-            "label": "Retrieval Document",
+            "label": "Retrieval document",
             "value": "RETRIEVAL_DOCUMENT"
           },
           {
@@ -7937,15 +7937,15 @@
             "value": "CLUSTERING"
           },
           {
-            "label": "Code Retrieval",
+            "label": "Code retrieval",
             "value": "CODE_RETRIEVAL_QUERY"
           },
           {
-            "label": "Question Answering",
+            "label": "Question answering",
             "value": "QUESTION_ANSWERING"
           },
           {
-            "label": "Fact Verification",
+            "label": "Fact verification",
             "value": "FACT_VERIFICATION"
           }
         ]
@@ -7991,7 +7991,7 @@
       },
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": false,
         "multiple": true
@@ -8005,7 +8005,7 @@
       },
       {
         "id": "previous_interaction_id",
-        "label": "Previous Interaction",
+        "label": "Previous interaction",
         "dataType": "Text",
         "required": false,
         "_note": "Connect an upstream Interaction ID output for conversational video edits."
@@ -8035,19 +8035,19 @@
         "default": "",
         "options": [
           {
-            "label": "Auto (infer)",
+            "label": "Auto · infer",
             "value": ""
           },
           {
-            "label": "Text to Video",
+            "label": "Text to video",
             "value": "text_to_video"
           },
           {
-            "label": "Image to Video",
+            "label": "Image to video",
             "value": "image_to_video"
           },
           {
-            "label": "Reference to Video",
+            "label": "Reference to video",
             "value": "reference_to_video"
           },
           {
@@ -8058,7 +8058,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -8081,7 +8081,7 @@
         "default": "uri",
         "options": [
           {
-            "label": "URI (recommended)",
+            "label": "URI · recommended",
             "value": "uri"
           },
           {
@@ -8092,7 +8092,7 @@
       },
       {
         "key": "previous_interaction_id",
-        "label": "Previous Interaction",
+        "label": "Previous interaction",
         "type": "string",
         "required": false,
         "placeholder": "Paste an ID or connect the Previous Interaction input"
@@ -8124,14 +8124,14 @@
       },
       {
         "id": "image",
-        "label": "First Frame",
+        "label": "First frame",
         "dataType": "Image",
         "required": false,
         "role": "subject"
       },
       {
         "id": "last_frame",
-        "label": "Last Frame",
+        "label": "Last frame",
         "dataType": "Image",
         "required": false
       },
@@ -8162,7 +8162,7 @@
     "sharedParams": [
       {
         "key": "aspectRatio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -8227,21 +8227,21 @@
       },
       {
         "key": "personGeneration",
-        "label": "Person Generation",
+        "label": "Person generation",
         "type": "enum",
         "required": false,
         "default": "allow_adult",
         "options": [
           {
-            "label": "Allow All",
+            "label": "Allow all",
             "value": "allow_all"
           },
           {
-            "label": "Allow Adult",
+            "label": "Allow adult",
             "value": "allow_adult"
           },
           {
-            "label": "Don't Allow",
+            "label": "Don’t allow",
             "value": "dont_allow"
           }
         ]
@@ -8264,7 +8264,7 @@
             "value": "veo-3.1-fast-generate-001"
           },
           {
-            "label": "Veo 3.1 Lite (preview on Vertex)",
+            "label": "Veo 3.1 Lite · preview on Vertex",
             "value": "veo-3.1-lite-generate-001"
           }
         ]
@@ -8280,7 +8280,7 @@
     "falParams": [
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -8294,13 +8294,13 @@
       },
       {
         "key": "safety_tolerance",
-        "label": "Safety Tolerance",
+        "label": "Safety tolerance",
         "type": "enum",
         "required": false,
         "default": "4",
         "options": [
           {
-            "label": "1 (Strict)",
+            "label": "1 · strict",
             "value": "1"
           },
           {
@@ -8320,7 +8320,7 @@
             "value": "5"
           },
           {
-            "label": "6 (Permissive)",
+            "label": "6 · permissive",
             "value": "6"
           }
         ]
@@ -8354,17 +8354,17 @@
     "params": [
       {
         "key": "image_size",
-        "label": "Image Size",
+        "label": "Image size",
         "type": "enum",
         "required": false,
         "default": "landscape_4_3",
         "options": [
           {
-            "label": "Square HD (1024 × 1024)",
+            "label": "Square HD · 1024 × 1024",
             "value": "square_hd"
           },
           {
-            "label": "Square (512 × 512)",
+            "label": "Square · 512 × 512",
             "value": "square"
           },
           {
@@ -8396,7 +8396,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 3.5,
@@ -8456,7 +8456,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -8522,7 +8522,7 @@
         "default": "htdemucs_ft",
         "options": [
           {
-            "label": "HT-Demucs FT (best 4-stem)",
+            "label": "HT-Demucs FT · best 4-stem",
             "value": "htdemucs_ft"
           },
           {
@@ -8545,7 +8545,7 @@
       },
       {
         "key": "shifts",
-        "label": "Quality (Shifts)",
+        "label": "Quality (shifts)",
         "type": "integer",
         "required": false,
         "default": 1,
@@ -8564,7 +8564,7 @@
       },
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "mp3",
@@ -8598,7 +8598,7 @@
       },
       {
         "id": "prompt",
-        "label": "Audio Prompt",
+        "label": "Audio prompt",
         "dataType": "Text",
         "required": true
       }
@@ -8614,7 +8614,7 @@
     "params": [
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "e.g. music, talking, static"
@@ -8683,7 +8683,7 @@
     "params": [
       {
         "key": "tags",
-        "label": "Style Tags",
+        "label": "Style tags",
         "type": "string",
         "required": true,
         "placeholder": "e.g. lofi hiphop, chill, jazzy piano, 90 BPM"
@@ -8716,7 +8716,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 15,
@@ -8778,7 +8778,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 7.5,
@@ -8812,7 +8812,7 @@
       },
       {
         "id": "image",
-        "label": "Base Image",
+        "label": "Base image",
         "dataType": "Image",
         "required": true
       },
@@ -8860,7 +8860,7 @@
       },
       {
         "key": "enhance_prompt",
-        "label": "Enhance Prompt",
+        "label": "Enhance prompt",
         "type": "boolean",
         "required": false,
         "default": false
@@ -8908,7 +8908,7 @@
     "params": [
       {
         "key": "image_size",
-        "label": "Image Size",
+        "label": "Image size",
         "type": "enum",
         "required": false,
         "default": "square_hd",
@@ -8959,7 +8959,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 7.5,
@@ -8969,7 +8969,7 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "default": "",
@@ -8977,7 +8977,7 @@
       },
       {
         "key": "expand_prompt",
-        "label": "Expand Prompt",
+        "label": "Expand prompt",
         "type": "boolean",
         "required": false,
         "default": false
@@ -9017,24 +9017,24 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "safety_checker_version",
-        "label": "Safety Checker Version",
+        "label": "Safety checker version",
         "type": "enum",
         "required": false,
         "default": "v1",
         "options": [
           {
-            "label": "v1 (Default)",
+            "label": "v1 · default",
             "value": "v1"
           },
           {
-            "label": "v2 (ViT)",
+            "label": "v2 · ViT",
             "value": "v2"
           }
         ]
@@ -9137,7 +9137,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -9166,7 +9166,7 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -9180,14 +9180,14 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "enable_prompt_expansion",
-        "label": "Prompt Expansion",
+        "label": "Prompt expansion",
         "type": "boolean",
         "required": false,
         "default": true
@@ -9201,7 +9201,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -9235,7 +9235,7 @@
     "params": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -9285,7 +9285,7 @@
       },
       {
         "key": "loop",
-        "label": "Seamless Loop",
+        "label": "Seamless loop",
         "type": "boolean",
         "required": false,
         "default": false
@@ -9405,7 +9405,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -9467,7 +9467,7 @@
       },
       {
         "key": "model_type",
-        "label": "Mesh Type",
+        "label": "Mesh type",
         "type": "enum",
         "required": false,
         "default": "standard",
@@ -9477,11 +9477,11 @@
             "value": "standard"
           },
           {
-            "label": "Low Poly (retires Oct 30, 2026)",
+            "label": "Low poly · retires October 30, 2026",
             "value": "lowpoly"
           },
           {
-            "label": "Smart Topology (Meshy T2)",
+            "label": "Smart topology · Meshy T2",
             "value": "smart-topology"
           }
         ]
@@ -9542,14 +9542,14 @@
       },
       {
         "key": "enable_pbr",
-        "label": "PBR Materials",
+        "label": "PBR materials",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "pose_mode",
-        "label": "Pose Mode",
+        "label": "Pose mode",
         "type": "enum",
         "required": false,
         "default": "",
@@ -9579,13 +9579,13 @@
     "directParams": [
       {
         "key": "ai_model",
-        "label": "AI Model",
+        "label": "AI model",
         "type": "enum",
         "required": false,
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 7.1)",
+            "label": "Latest · Meshy 7.1",
             "value": "latest"
           },
           {
@@ -9593,11 +9593,11 @@
             "value": "meshy-6"
           },
           {
-            "label": "Meshy 6 Lite (2K textures)",
+            "label": "Meshy 6 Lite · 2K textures",
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7.1 (needs Meshy entitlement)",
+            "label": "Meshy 7.1 · needs Meshy entitlement",
             "value": "meshy-7.1"
           }
         ]
@@ -9611,14 +9611,14 @@
       },
       {
         "key": "remove_lighting",
-        "label": "Remove Lighting",
+        "label": "Remove lighting",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "target_formats",
-        "label": "Output Formats",
+        "label": "Output formats",
         "type": "string",
         "required": false,
         "default": "glb",
@@ -9628,21 +9628,21 @@
     "falParams": [
       {
         "key": "texture_prompt",
-        "label": "Texture Prompt",
+        "label": "Texture prompt",
         "type": "string",
         "required": false,
         "placeholder": "Guide the texturing process"
       },
       {
         "key": "enable_prompt_expansion",
-        "label": "Enhance Prompt",
+        "label": "Enhance prompt",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -9748,14 +9748,14 @@
       },
       {
         "key": "enable_pbr",
-        "label": "PBR Materials",
+        "label": "PBR materials",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "pose_mode",
-        "label": "Pose Mode",
+        "label": "Pose mode",
         "type": "enum",
         "required": false,
         "default": "",
@@ -9776,7 +9776,7 @@
       },
       {
         "key": "texture_prompt",
-        "label": "Texture Prompt",
+        "label": "Texture prompt",
         "type": "string",
         "required": false,
         "placeholder": "Guide the texturing process"
@@ -9785,13 +9785,13 @@
     "directParams": [
       {
         "key": "ai_model",
-        "label": "AI Model",
+        "label": "AI model",
         "type": "enum",
         "required": false,
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 7.1)",
+            "label": "Latest · Meshy 7.1",
             "value": "latest"
           },
           {
@@ -9799,18 +9799,18 @@
             "value": "meshy-6"
           },
           {
-            "label": "Meshy 6 Lite (2K textures)",
+            "label": "Meshy 6 Lite · 2K textures",
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7.1 (needs Meshy entitlement)",
+            "label": "Meshy 7.1 · needs Meshy entitlement",
             "value": "meshy-7.1"
           }
         ]
       },
       {
         "key": "model_type",
-        "label": "Mesh Type",
+        "label": "Mesh type",
         "type": "enum",
         "required": false,
         "default": "standard",
@@ -9820,11 +9820,11 @@
             "value": "standard"
           },
           {
-            "label": "Low Poly (retires Oct 30, 2026)",
+            "label": "Low poly · retires October 30, 2026",
             "value": "lowpoly"
           },
           {
-            "label": "Smart Topology (Meshy T2)",
+            "label": "Smart topology · Meshy T2",
             "value": "smart-topology"
           }
         ]
@@ -9838,21 +9838,21 @@
       },
       {
         "key": "image_enhancement",
-        "label": "Image Enhancement",
+        "label": "Image enhancement",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "remove_lighting",
-        "label": "Remove Lighting",
+        "label": "Remove lighting",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "target_formats",
-        "label": "Output Formats",
+        "label": "Output formats",
         "type": "string",
         "required": false,
         "default": "glb",
@@ -9862,7 +9862,7 @@
     "falParams": [
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -9904,13 +9904,13 @@
     "params": [
       {
         "key": "ai_model",
-        "label": "AI Model",
+        "label": "AI model",
         "type": "enum",
         "required": false,
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 7.1)",
+            "label": "Latest · Meshy 7.1",
             "value": "latest"
           },
           {
@@ -9918,11 +9918,11 @@
             "value": "meshy-6"
           },
           {
-            "label": "Meshy 6 Lite (2K textures)",
+            "label": "Meshy 6 Lite · 2K textures",
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7.1 (needs Meshy entitlement)",
+            "label": "Meshy 7.1 · needs Meshy entitlement",
             "value": "meshy-7.1"
           }
         ]
@@ -9991,14 +9991,14 @@
       },
       {
         "key": "enable_pbr",
-        "label": "PBR Materials",
+        "label": "PBR materials",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "pose_mode",
-        "label": "Pose Mode",
+        "label": "Pose mode",
         "type": "enum",
         "required": false,
         "default": "",
@@ -10026,14 +10026,14 @@
       },
       {
         "key": "image_enhancement",
-        "label": "Image Enhancement",
+        "label": "Image enhancement",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "remove_lighting",
-        "label": "Remove Lighting",
+        "label": "Remove lighting",
         "type": "boolean",
         "required": false,
         "default": true
@@ -10057,7 +10057,7 @@
       },
       {
         "id": "prompt",
-        "label": "Style Prompt",
+        "label": "Style prompt",
         "dataType": "Text",
         "required": false
       }
@@ -10073,13 +10073,13 @@
     "params": [
       {
         "key": "ai_model",
-        "label": "AI Model",
+        "label": "AI model",
         "type": "enum",
         "required": false,
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 7)",
+            "label": "Latest · Meshy 7",
             "value": "latest"
           },
           {
@@ -10091,28 +10091,28 @@
             "value": "meshy-6-lite"
           },
           {
-            "label": "Meshy 7 (needs Meshy entitlement)",
+            "label": "Meshy 7 · needs Meshy entitlement",
             "value": "meshy-7"
           }
         ]
       },
       {
         "key": "enable_original_uv",
-        "label": "Keep Original UV",
+        "label": "Keep original UV",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "enable_pbr",
-        "label": "PBR Materials",
+        "label": "PBR materials",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "remove_lighting",
-        "label": "Remove Lighting",
+        "label": "Remove lighting",
         "type": "boolean",
         "required": false,
         "default": true
@@ -10138,13 +10138,13 @@
     "outputPorts": [
       {
         "id": "mesh",
-        "label": "Rigged Mesh",
+        "label": "Rigged mesh",
         "dataType": "Mesh",
         "required": false
       },
       {
         "id": "task_id",
-        "label": "Rig Task ID",
+        "label": "Rig task ID",
         "dataType": "Text",
         "required": false
       }
@@ -10181,7 +10181,7 @@
     "outputPorts": [
       {
         "id": "mesh",
-        "label": "Animated Mesh",
+        "label": "Animated mesh",
         "dataType": "Mesh",
         "required": false
       }
@@ -10235,7 +10235,7 @@
             "value": "35"
           },
           {
-            "label": "Sword Swing",
+            "label": "Sword swing",
             "value": "92"
           }
         ]
@@ -10248,7 +10248,7 @@
         "default": "",
         "options": [
           {
-            "label": "Default (30)",
+            "label": "Default · 30",
             "value": ""
           },
           {
@@ -10324,7 +10324,7 @@
       },
       {
         "key": "target_formats",
-        "label": "Output Formats",
+        "label": "Output formats",
         "type": "string",
         "required": false,
         "default": "glb",
@@ -10332,7 +10332,7 @@
       },
       {
         "key": "resize_height",
-        "label": "Resize Height (m)",
+        "label": "Resize height (m)",
         "type": "float",
         "required": false,
         "default": 0,
@@ -10343,7 +10343,7 @@
       },
       {
         "key": "convert_format_only",
-        "label": "Convert Format Only",
+        "label": "Convert format only",
         "type": "boolean",
         "required": false,
         "default": false
@@ -10409,7 +10409,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1:1",
@@ -10443,7 +10443,7 @@
       },
       {
         "key": "pose_mode",
-        "label": "Pose Mode",
+        "label": "Pose mode",
         "type": "enum",
         "required": false,
         "default": "",
@@ -10481,7 +10481,7 @@
       },
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": true,
         "multiple": true
@@ -10549,7 +10549,7 @@
     "outputPorts": [
       {
         "id": "mesh",
-        "label": "Print File",
+        "label": "Print file",
         "dataType": "Mesh",
         "required": false
       }
@@ -10557,7 +10557,7 @@
     "params": [
       {
         "key": "max_colors",
-        "label": "Max Colors",
+        "label": "Max colors",
         "type": "integer",
         "required": false,
         "default": 4,
@@ -10566,7 +10566,7 @@
       },
       {
         "key": "max_depth",
-        "label": "Color Depth",
+        "label": "Color depth",
         "type": "integer",
         "required": false,
         "default": 4,
@@ -10612,18 +10612,18 @@
             "value": "Normal"
           },
           {
-            "label": "Low Poly",
+            "label": "Low poly",
             "value": "LowPoly"
           },
           {
-            "label": "Geometry Only",
+            "label": "Geometry only",
             "value": "Geometry"
           }
         ]
       },
       {
         "key": "face_count",
-        "label": "Face Count",
+        "label": "Face count",
         "type": "integer",
         "required": false,
         "default": 500000,
@@ -10632,14 +10632,14 @@
       },
       {
         "key": "enable_pbr",
-        "label": "PBR Materials",
+        "label": "PBR materials",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "polygon_type",
-        "label": "Polygon Type",
+        "label": "Polygon type",
         "type": "enum",
         "required": false,
         "default": "triangle",
@@ -10667,25 +10667,25 @@
     "inputPorts": [
       {
         "id": "front_image",
-        "label": "Front Image",
+        "label": "Front image",
         "dataType": "Image",
         "required": true
       },
       {
         "id": "back_image",
-        "label": "Back Image",
+        "label": "Back image",
         "dataType": "Image",
         "required": false
       },
       {
         "id": "left_image",
-        "label": "Left Image",
+        "label": "Left image",
         "dataType": "Image",
         "required": false
       },
       {
         "id": "right_image",
-        "label": "Right Image",
+        "label": "Right image",
         "dataType": "Image",
         "required": false
       }
@@ -10711,18 +10711,18 @@
             "value": "Normal"
           },
           {
-            "label": "Low Poly",
+            "label": "Low poly",
             "value": "LowPoly"
           },
           {
-            "label": "Geometry Only",
+            "label": "Geometry only",
             "value": "Geometry"
           }
         ]
       },
       {
         "key": "face_count",
-        "label": "Face Count",
+        "label": "Face count",
         "type": "integer",
         "required": false,
         "default": 500000,
@@ -10731,14 +10731,14 @@
       },
       {
         "key": "enable_pbr",
-        "label": "PBR Materials",
+        "label": "PBR materials",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "polygon_type",
-        "label": "Polygon Type",
+        "label": "Polygon type",
         "type": "enum",
         "required": false,
         "default": "triangle",
@@ -10813,23 +10813,23 @@
         "default": "gpt-image-2.5-sunburst",
         "options": [
           {
-            "label": "GPT Image 1 (shuts down Oct 23, 2026)",
+            "label": "GPT Image 1 · shuts down October 23, 2026",
             "value": "gpt-image-1"
           },
           {
-            "label": "GPT Image 1.5 (shuts down Dec 1, 2026)",
+            "label": "GPT Image 1.5 · shuts down December 1, 2026",
             "value": "gpt-image-1.5"
           },
           {
-            "label": "GPT Image 1 Mini (shuts down Dec 1, 2026)",
+            "label": "GPT Image 1 Mini · shuts down December 1, 2026",
             "value": "gpt-image-1-mini"
           },
           {
-            "label": "GPT Image 2.5 Flare (fastest)",
+            "label": "GPT Image 2.5 Flare · fastest",
             "value": "gpt-image-2.5-flare"
           },
           {
-            "label": "GPT Image 2.5 Sunburst (most precise edits)",
+            "label": "GPT Image 2.5 Sunburst · most precise edits",
             "value": "gpt-image-2.5-sunburst"
           }
         ]
@@ -10892,7 +10892,7 @@
             "value": "high"
           },
           {
-            "label": "Extra High",
+            "label": "Extra high",
             "value": "xhigh",
             "visibleWhen": {
               "model": [
@@ -10984,7 +10984,7 @@
     "params": [
       {
         "key": "crop_to_bbox",
-        "label": "Crop to Subject",
+        "label": "Crop to subject",
         "type": "boolean",
         "required": false,
         "default": false
@@ -11054,25 +11054,25 @@
         "label": "Style ID",
         "type": "string",
         "required": false,
-        "placeholder": "Custom style UUID (Recraft style reference)"
+        "placeholder": "Custom style UUID · Recraft style reference"
       },
       {
         "key": "colors",
-        "label": "Color Palette",
+        "label": "Color palette",
         "type": "string",
         "required": false,
         "placeholder": "[{\"r\":255,\"g\":0,\"b\":0},{\"r\":0,\"g\":255,\"b\":0}]"
       },
       {
         "key": "background_color",
-        "label": "Background Color",
+        "label": "Background color",
         "type": "string",
         "required": false,
         "placeholder": "{\"r\":255,\"g\":255,\"b\":255}"
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -11142,25 +11142,25 @@
         "label": "Style ID",
         "type": "string",
         "required": false,
-        "placeholder": "Custom style UUID (Recraft style reference)"
+        "placeholder": "Custom style UUID · Recraft style reference"
       },
       {
         "key": "colors",
-        "label": "Color Palette",
+        "label": "Color palette",
         "type": "string",
         "required": false,
         "placeholder": "[{\"r\":255,\"g\":0,\"b\":0},{\"r\":0,\"g\":255,\"b\":0}]"
       },
       {
         "key": "background_color",
-        "label": "Background Color",
+        "label": "Background color",
         "type": "string",
         "required": false,
         "placeholder": "{\"r\":255,\"g\":255,\"b\":255}"
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -11209,15 +11209,15 @@
         "default": "arrow-1.1",
         "options": [
           {
-            "label": "Arrow 1.1 (20 credits)",
+            "label": "Arrow 1.1 · 20 credits",
             "value": "arrow-1.1"
           },
           {
-            "label": "Arrow 1.1 max (25 credits)",
+            "label": "Arrow 1.1 max · 25 credits",
             "value": "arrow-1.1-max"
           },
           {
-            "label": "Arrow 1 (30 credits, legacy)",
+            "label": "Arrow 1 · 30 credits, legacy",
             "value": "arrow-1"
           }
         ]
@@ -11236,7 +11236,7 @@
         "label": "Instructions",
         "type": "textarea",
         "required": false,
-        "placeholder": "Optional style/formatting guidance (e.g. \"thin uniform stroke, no fill\")"
+        "placeholder": "Optional style/formatting guidance, e.g. “thin uniform stroke, no fill”"
       },
       {
         "key": "temperature",
@@ -11260,7 +11260,7 @@
       },
       {
         "key": "presence_penalty",
-        "label": "Presence Penalty",
+        "label": "Presence penalty",
         "type": "float",
         "required": false,
         "default": 0,
@@ -11270,7 +11270,7 @@
       },
       {
         "key": "max_output_tokens",
-        "label": "Max Output Tokens",
+        "label": "Max output tokens",
         "type": "integer",
         "required": false,
         "default": 16384,
@@ -11312,15 +11312,15 @@
         "default": "arrow-1.1",
         "options": [
           {
-            "label": "Arrow 1.1 (15 credits)",
+            "label": "Arrow 1.1 · 15 credits",
             "value": "arrow-1.1"
           },
           {
-            "label": "Arrow 1.1 max (20 credits)",
+            "label": "Arrow 1.1 max · 20 credits",
             "value": "arrow-1.1-max"
           },
           {
-            "label": "Arrow 1 (30 credits, legacy)",
+            "label": "Arrow 1 · 30 credits, legacy",
             "value": "arrow-1"
           }
         ]
@@ -11334,7 +11334,7 @@
       },
       {
         "key": "target_size",
-        "label": "Target Size (px)",
+        "label": "Target size (px)",
         "type": "integer",
         "required": false,
         "default": 1024,
@@ -11363,7 +11363,7 @@
       },
       {
         "key": "presence_penalty",
-        "label": "Presence Penalty",
+        "label": "Presence penalty",
         "type": "float",
         "required": false,
         "default": 0,
@@ -11373,7 +11373,7 @@
       },
       {
         "key": "max_output_tokens",
-        "label": "Max Output Tokens",
+        "label": "Max output tokens",
         "type": "integer",
         "required": false,
         "default": 16384,
@@ -11423,7 +11423,7 @@
             "value": "MiniMax-Hailuo-2.3-Fast"
           },
           {
-            "label": "Hailuo 02 (legacy)",
+            "label": "Hailuo 02 · legacy",
             "value": "MiniMax-Hailuo-02"
           }
         ]
@@ -11475,7 +11475,7 @@
     "inputPorts": [
       {
         "id": "first_frame_image",
-        "label": "First Frame",
+        "label": "First frame",
         "dataType": "Image",
         "required": true,
         "role": "subject"
@@ -11512,7 +11512,7 @@
             "value": "MiniMax-Hailuo-2.3-Fast"
           },
           {
-            "label": "Hailuo 02 (legacy)",
+            "label": "Hailuo 02 · legacy",
             "value": "MiniMax-Hailuo-02"
           }
         ]
@@ -11564,7 +11564,7 @@
     "inputPorts": [
       {
         "id": "subject_reference",
-        "label": "Character Image",
+        "label": "Character image",
         "dataType": "Image",
         "required": true,
         "role": "identity"
@@ -11617,14 +11617,14 @@
       },
       {
         "id": "image",
-        "label": "Start Image",
+        "label": "Start image",
         "dataType": "Image",
         "required": false,
         "role": "subject"
       },
       {
         "id": "end_image",
-        "label": "End Image",
+        "label": "End image",
         "dataType": "Image",
         "required": false
       }
@@ -11682,7 +11682,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -11703,14 +11703,14 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "default": "blur, distort, and low quality"
       },
       {
         "key": "shot_type",
-        "label": "Shot Type",
+        "label": "Shot type",
         "type": "enum",
         "required": false,
         "default": "customize",
@@ -11720,7 +11720,7 @@
             "value": "customize"
           },
           {
-            "label": "Intelligent (auto)",
+            "label": "Intelligent · auto",
             "value": "intelligent"
           }
         ]
@@ -11735,14 +11735,14 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "cfg_scale",
-        "label": "CFG Scale",
+        "label": "CFG scale",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -11769,7 +11769,7 @@
       },
       {
         "id": "end_image",
-        "label": "End Image",
+        "label": "End image",
         "dataType": "Image",
         "required": false
       },
@@ -11791,7 +11791,7 @@
     "params": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -11834,11 +11834,11 @@
             "value": "540p"
           },
           {
-            "label": "720p (2x cost)",
+            "label": "720p · 2x cost",
             "value": "720p"
           },
           {
-            "label": "1080p (4x cost)",
+            "label": "1080p · 4x cost",
             "value": "1080p"
           }
         ]
@@ -11862,7 +11862,7 @@
       },
       {
         "key": "loop",
-        "label": "Seamless Loop",
+        "label": "Seamless loop",
         "type": "boolean",
         "required": false,
         "default": false
@@ -11940,7 +11940,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -11969,7 +11969,7 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -11983,14 +11983,14 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "enable_prompt_expansion",
-        "label": "Prompt Expansion",
+        "label": "Prompt expansion",
         "type": "boolean",
         "required": false,
         "default": true
@@ -12004,7 +12004,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -12138,7 +12138,7 @@
       },
       {
         "id": "image",
-        "label": "Reference Image",
+        "label": "Reference image",
         "dataType": "Image",
         "required": false,
         "role": "style"
@@ -12155,13 +12155,13 @@
     "params": [
       {
         "key": "mode",
-        "label": "Modification Mode",
+        "label": "Modification mode",
         "type": "enum",
         "required": false,
         "default": "flex_1",
         "options": [
           {
-            "label": "Adhere 1 (least)",
+            "label": "Adhere 1 · least",
             "value": "adhere_1"
           },
           {
@@ -12193,7 +12193,7 @@
             "value": "reimagine_2"
           },
           {
-            "label": "Reimagine 3 (most)",
+            "label": "Reimagine 3 · most",
             "value": "reimagine_3"
           }
         ]
@@ -12279,7 +12279,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -12308,7 +12308,7 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -12322,7 +12322,7 @@
       },
       {
         "key": "enable_prompt_expansion",
-        "label": "Prompt Expansion",
+        "label": "Prompt expansion",
         "type": "boolean",
         "required": false,
         "default": true
@@ -12336,7 +12336,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -12393,7 +12393,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -12460,7 +12460,7 @@
             "value": "anime"
           },
           {
-            "label": "3D Animation",
+            "label": "3D animation",
             "value": "3d_animation"
           },
           {
@@ -12479,7 +12479,7 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -12521,7 +12521,7 @@
       },
       {
         "id": "end_image",
-        "label": "End Image",
+        "label": "End image",
         "dataType": "Image",
         "required": false
       }
@@ -12600,7 +12600,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -12658,14 +12658,14 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "camera_fixed",
-        "label": "Camera Fixed",
+        "label": "Camera fixed",
         "type": "boolean",
         "required": false,
         "default": false
@@ -12708,7 +12708,7 @@
       },
       {
         "id": "end_image",
-        "label": "End Frame",
+        "label": "End frame",
         "dataType": "Image",
         "required": false
       }
@@ -12766,7 +12766,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -12787,21 +12787,21 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "default": "blur, distort, and low quality"
       },
       {
         "key": "cfg_scale",
-        "label": "CFG Scale",
+        "label": "CFG scale",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -12811,7 +12811,7 @@
       },
       {
         "key": "shot_type",
-        "label": "Shot Type",
+        "label": "Shot type",
         "type": "enum",
         "required": false,
         "default": "customize",
@@ -12821,7 +12821,7 @@
             "value": "customize"
           },
           {
-            "label": "Intelligent (auto)",
+            "label": "Intelligent · auto",
             "value": "intelligent"
           }
         ]
@@ -12851,7 +12851,7 @@
       },
       {
         "id": "end_image",
-        "label": "End Image",
+        "label": "End image",
         "dataType": "Image",
         "required": false
       },
@@ -12915,7 +12915,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -12961,7 +12961,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -13001,19 +13001,19 @@
         "default": "first_frame",
         "options": [
           {
-            "label": "First Frame",
+            "label": "First frame",
             "value": "first_frame"
           },
           {
-            "label": "Last Frame",
+            "label": "Last frame",
             "value": "last_frame"
           },
           {
-            "label": "Middle Frame",
+            "label": "Middle frame",
             "value": "middle_frame"
           },
           {
-            "label": "At Timestamp",
+            "label": "At timestamp",
             "value": "timestamp"
           }
         ]
@@ -13143,7 +13143,7 @@
             "value": "random"
           },
           {
-            "label": "By Index",
+            "label": "By index",
             "value": "index"
           }
         ]
@@ -13239,7 +13239,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -13332,7 +13332,7 @@
         "default": "higgsfield-ai/dop/standard",
         "options": [
           {
-            "label": "DoP Standard (T2V + I2V)",
+            "label": "DoP Standard · T2V + I2V",
             "value": "higgsfield-ai/dop/standard"
           },
           {
@@ -13340,11 +13340,11 @@
             "value": "higgsfield-ai/dop/preview"
           },
           {
-            "label": "Kling v2.1 Pro (I2V)",
+            "label": "Kling v2.1 Pro · I2V",
             "value": "kling-video/v2.1/pro/image-to-video"
           },
           {
-            "label": "Seedance v1 Pro (I2V)",
+            "label": "Seedance v1 Pro · I2V",
             "value": "bytedance/seedance/v1/pro/image-to-video"
           }
         ]
@@ -13360,7 +13360,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -13413,7 +13413,7 @@
     "sharedParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -13512,7 +13512,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -13563,7 +13563,7 @@
       },
       {
         "id": "end_image",
-        "label": "End Frame",
+        "label": "End frame",
         "dataType": "Image",
         "required": false
       }
@@ -13580,7 +13580,7 @@
     "sharedParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -13679,7 +13679,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -13723,7 +13723,7 @@
       },
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": true,
         "multiple": true,
@@ -13742,7 +13742,7 @@
     "sharedParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -13833,7 +13833,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -13888,7 +13888,7 @@
     "sharedParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -13983,7 +13983,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -14033,7 +14033,7 @@
       },
       {
         "id": "end_image",
-        "label": "End Frame",
+        "label": "End frame",
         "dataType": "Image",
         "required": false
       }
@@ -14050,7 +14050,7 @@
     "sharedParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -14145,7 +14145,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -14219,7 +14219,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1:1",
@@ -14273,7 +14273,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 3.5,
@@ -14283,7 +14283,7 @@
       },
       {
         "key": "enhance_prompt",
-        "label": "Enhance Prompt",
+        "label": "Enhance prompt",
         "type": "boolean",
         "required": false,
         "default": false
@@ -14313,7 +14313,7 @@
         "default": "2",
         "options": [
           {
-            "label": "1 (Strict)",
+            "label": "1 · strict",
             "value": "1"
           },
           {
@@ -14333,7 +14333,7 @@
             "value": "5"
           },
           {
-            "label": "6 (Permissive)",
+            "label": "6 · permissive",
             "value": "6"
           }
         ]
@@ -14350,7 +14350,7 @@
   "flux-2-pro": {
     "id": "flux-2-pro",
     "displayName": "FLUX.2",
-    "description": "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
+    "description": "Black Forest Labs’ FLUX.2 family for text to image, covering FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal’s FLUX 2 Flash. Runs on BFL or fal.ai.",
     "category": "image-gen",
     "apiProvider": "bfl",
     "apiEndpoint": "/v1/flux-2-pro",
@@ -14501,7 +14501,7 @@
         "default": "2",
         "options": [
           {
-            "label": "1 (Strict)",
+            "label": "1 · strict",
             "value": "1"
           },
           {
@@ -14517,7 +14517,7 @@
             "value": "4"
           },
           {
-            "label": "5 (Permissive)",
+            "label": "5 · permissive",
             "value": "5"
           }
         ]
@@ -14531,7 +14531,7 @@
       },
       {
         "key": "num_inference_steps",
-        "label": "Steps (Flex)",
+        "label": "Steps (flex)",
         "type": "integer",
         "required": false,
         "min": 1,
@@ -14546,7 +14546,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance (Flex)",
+        "label": "Guidance (flex)",
         "type": "float",
         "required": false,
         "min": 1.5,
@@ -14693,7 +14693,7 @@
         "params": [
           {
             "key": "enable_safety_checker",
-            "label": "Safety Checker",
+            "label": "Safety checker",
             "type": "boolean",
             "required": false,
             "default": true
@@ -14882,7 +14882,7 @@
       },
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": true,
         "multiple": true
@@ -14952,7 +14952,7 @@
       },
       {
         "key": "input_fidelity",
-        "label": "Input Fidelity",
+        "label": "Input fidelity",
         "type": "enum",
         "required": false,
         "default": "high",
@@ -15084,11 +15084,11 @@
             "value": "2048x1152"
           },
           {
-            "label": "3840 × 2160 (4K landscape)",
+            "label": "3840 × 2160 · 4K landscape",
             "value": "3840x2160"
           },
           {
-            "label": "2160 × 3840 (4K portrait)",
+            "label": "2160 × 3840 · 4K portrait",
             "value": "2160x3840"
           }
         ]
@@ -15244,11 +15244,11 @@
             "value": "2048x1152"
           },
           {
-            "label": "3840 × 2160 (4K landscape)",
+            "label": "3840 × 2160 · 4K landscape",
             "value": "3840x2160"
           },
           {
-            "label": "2160 × 3840 (4K portrait)",
+            "label": "2160 × 3840 · 4K portrait",
             "value": "2160x3840"
           }
         ]
@@ -15412,11 +15412,11 @@
             "value": "2560x1440"
           },
           {
-            "label": "3840 × 2160 (4K landscape, experimental)",
+            "label": "3840 × 2160 · 4K landscape, experimental",
             "value": "3840x2160"
           },
           {
-            "label": "2160 × 3840 (4K portrait, experimental)",
+            "label": "2160 × 3840 · 4K portrait, experimental",
             "value": "2160x3840"
           }
         ]
@@ -15622,11 +15622,11 @@
             "value": "2560x1440"
           },
           {
-            "label": "3840 × 2160 (4K landscape, experimental)",
+            "label": "3840 × 2160 · 4K landscape, experimental",
             "value": "3840x2160"
           },
           {
-            "label": "2160 × 3840 (4K portrait, experimental)",
+            "label": "2160 × 3840 · 4K portrait, experimental",
             "value": "2160x3840"
           }
         ]
@@ -15787,27 +15787,27 @@
         "default": "landscape_4_3",
         "options": [
           {
-            "label": "Square HD (1024 × 1024)",
+            "label": "Square HD · 1024 × 1024",
             "value": "square_hd"
           },
           {
-            "label": "Square (512 × 512)",
+            "label": "Square · 512 × 512",
             "value": "square"
           },
           {
-            "label": "Portrait 4:3 (768 × 1024)",
+            "label": "Portrait 4:3 · 768 × 1024",
             "value": "portrait_4_3"
           },
           {
-            "label": "Portrait 16:9 (576 × 1024)",
+            "label": "Portrait 16:9 · 576 × 1024",
             "value": "portrait_16_9"
           },
           {
-            "label": "Landscape 4:3 (1024 × 768)",
+            "label": "Landscape 4:3 · 1024 × 768",
             "value": "landscape_4_3"
           },
           {
-            "label": "Landscape 16:9 (1024 × 576)",
+            "label": "Landscape 16:9 · 1024 × 576",
             "value": "landscape_16_9"
           }
         ]
@@ -15869,7 +15869,7 @@
       },
       {
         "key": "partial_images",
-        "label": "Preview Frames",
+        "label": "Preview frames",
         "type": "integer",
         "required": false,
         "default": 2,
@@ -15902,7 +15902,7 @@
     "inputPorts": [
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": true,
         "multiple": true
@@ -15942,27 +15942,27 @@
             "value": "auto"
           },
           {
-            "label": "Square HD (1024 × 1024)",
+            "label": "Square HD · 1024 × 1024",
             "value": "square_hd"
           },
           {
-            "label": "Square (512 × 512)",
+            "label": "Square · 512 × 512",
             "value": "square"
           },
           {
-            "label": "Portrait 4:3 (768 × 1024)",
+            "label": "Portrait 4:3 · 768 × 1024",
             "value": "portrait_4_3"
           },
           {
-            "label": "Portrait 16:9 (576 × 1024)",
+            "label": "Portrait 16:9 · 576 × 1024",
             "value": "portrait_16_9"
           },
           {
-            "label": "Landscape 4:3 (1024 × 768)",
+            "label": "Landscape 4:3 · 1024 × 768",
             "value": "landscape_4_3"
           },
           {
-            "label": "Landscape 16:9 (1024 × 576)",
+            "label": "Landscape 16:9 · 1024 × 576",
             "value": "landscape_16_9"
           }
         ]
@@ -16024,7 +16024,7 @@
       },
       {
         "key": "partial_images",
-        "label": "Preview Frames",
+        "label": "Preview frames",
         "type": "integer",
         "required": false,
         "default": 2,
@@ -16050,7 +16050,7 @@
       },
       {
         "id": "style_images",
-        "label": "Style Images",
+        "label": "Style images",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -16059,7 +16059,7 @@
       },
       {
         "id": "image_style_references",
-        "label": "Image Style Refs",
+        "label": "Image style refs",
         "dataType": "Any",
         "required": false,
         "multiple": true,
@@ -16131,7 +16131,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1:1",
@@ -16219,7 +16219,7 @@
       },
       {
         "key": "style_reference_strength",
-        "label": "Style Ref Strength",
+        "label": "Style ref strength",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -16236,7 +16236,7 @@
       },
       {
         "key": "style_strength",
-        "label": "Style Strength",
+        "label": "Style strength",
         "type": "float",
         "required": false,
         "default": 1,
@@ -16253,7 +16253,7 @@
       },
       {
         "key": "moodboard_strength",
-        "label": "Moodboard Strength",
+        "label": "Moodboard strength",
         "type": "float",
         "required": false,
         "default": 0.23,
@@ -16284,7 +16284,7 @@
     "outputPorts": [
       {
         "id": "image_style_reference",
-        "label": "Image Style Ref",
+        "label": "Image style ref",
         "dataType": "Any",
         "required": false
       }
@@ -16491,7 +16491,7 @@
       },
       {
         "key": "liked",
-        "label": "Liked Only",
+        "label": "Liked only",
         "type": "boolean",
         "required": false,
         "default": false
@@ -16525,7 +16525,7 @@
     "inputPorts": [
       {
         "id": "images",
-        "label": "Training Images",
+        "label": "Training images",
         "dataType": "Image",
         "required": true,
         "multiple": true
@@ -16578,7 +16578,7 @@
       },
       {
         "key": "model",
-        "label": "Training Model",
+        "label": "Training model",
         "type": "enum",
         "required": false,
         "default": "flux_dev",
@@ -16616,11 +16616,11 @@
             "value": "k2-large"
           },
           {
-            "label": "Krea 1 (Krea account)",
+            "label": "Krea 1 · Krea account",
             "value": "k1"
           },
           {
-            "label": "LTX 2.3 22B (Krea account)",
+            "label": "LTX 2.3 22B · Krea account",
             "value": "ltx-23-22b"
           }
         ]
@@ -16652,13 +16652,13 @@
       },
       {
         "key": "trigger_word",
-        "label": "Trigger Word",
+        "label": "Trigger word",
         "type": "string",
         "required": false
       },
       {
         "key": "max_train_steps",
-        "label": "Max Steps",
+        "label": "Max steps",
         "type": "integer",
         "required": false,
         "min": 1,
@@ -16666,7 +16666,7 @@
       },
       {
         "key": "learning_rate",
-        "label": "Learning Rate",
+        "label": "Learning rate",
         "type": "float",
         "required": false,
         "visibleWhen": {
@@ -16680,7 +16680,7 @@
       },
       {
         "key": "batch_size",
-        "label": "Batch Size",
+        "label": "Batch size",
         "type": "integer",
         "required": false,
         "min": 1,
@@ -16695,7 +16695,7 @@
       },
       {
         "key": "generation_strength",
-        "label": "Output Strength",
+        "label": "Output strength",
         "type": "float",
         "required": false,
         "default": 1,
@@ -16705,7 +16705,7 @@
       },
       {
         "key": "share_with_workspace",
-        "label": "Share Workspace",
+        "label": "Share workspace",
         "type": "boolean",
         "required": false,
         "default": false
@@ -16864,7 +16864,7 @@
     "inputPorts": [
       {
         "id": "id",
-        "label": "Style or Moodboard",
+        "label": "Style or moodboard",
         "dataType": "Any",
         "required": false
       }
@@ -16978,7 +16978,7 @@
     "inputPorts": [
       {
         "id": "job",
-        "label": "Krea 3D Job",
+        "label": "Krea 3D job",
         "dataType": "Any",
         "required": false
       }
@@ -16992,7 +16992,7 @@
       },
       {
         "id": "file",
-        "label": "Model File",
+        "label": "Model file",
         "dataType": "Text",
         "required": false
       },
@@ -17319,7 +17319,7 @@
         "label": "Node app version ID",
         "type": "string",
         "required": true,
-        "placeholder": "From Krea or the agent's get_node_apps"
+        "placeholder": "From Krea or the agent’s get_node_apps"
       },
       {
         "key": "input",
@@ -17962,7 +17962,7 @@
             "value": "list-apps"
           },
           {
-            "label": "List an app's tools",
+            "label": "List an app’s tools",
             "value": "list-tools"
           },
           {
@@ -18096,14 +18096,14 @@
     "params": [
       {
         "key": "prompt",
-        "label": "Enhancement Prompt",
+        "label": "Enhancement prompt",
         "type": "string",
         "required": false,
         "default": "masterpiece, best quality, highres"
       },
       {
         "key": "upscale_factor",
-        "label": "Upscale Factor",
+        "label": "Upscale factor",
         "type": "float",
         "required": false,
         "default": 2,
@@ -18182,7 +18182,7 @@
         "default": "factor",
         "options": [
           {
-            "label": "Factor (multiplier)",
+            "label": "Factor · multiplier",
             "value": "factor"
           },
           {
@@ -18193,7 +18193,7 @@
       },
       {
         "key": "upscale_factor",
-        "label": "Upscale Factor",
+        "label": "Upscale factor",
         "type": "float",
         "required": false,
         "default": 2,
@@ -18203,7 +18203,7 @@
       },
       {
         "key": "target_resolution",
-        "label": "Target Resolution",
+        "label": "Target resolution",
         "type": "enum",
         "required": false,
         "default": "1080p",
@@ -18221,14 +18221,14 @@
             "value": "1440p"
           },
           {
-            "label": "2160p (4K)",
+            "label": "2160p · 4K",
             "value": "2160p"
           }
         ]
       },
       {
         "key": "noise_scale",
-        "label": "Noise Scale",
+        "label": "Noise scale",
         "type": "float",
         "required": false,
         "default": 0.1,
@@ -18238,7 +18238,7 @@
       },
       {
         "key": "output_quality",
-        "label": "Output Quality",
+        "label": "Output quality",
         "type": "enum",
         "required": false,
         "default": "high",
@@ -18289,7 +18289,7 @@
     "outputPorts": [
       {
         "id": "image",
-        "label": "Upscaled Image",
+        "label": "Upscaled image",
         "dataType": "Image",
         "required": false
       }
@@ -18307,7 +18307,7 @@
             "value": "factor"
           },
           {
-            "label": "Target Resolution",
+            "label": "Target resolution",
             "value": "target"
           }
         ]
@@ -18329,7 +18329,7 @@
       },
       {
         "key": "target_resolution",
-        "label": "Target Resolution",
+        "label": "Target resolution",
         "type": "enum",
         "required": false,
         "default": "1080p",
@@ -18352,14 +18352,14 @@
             "value": "1440p"
           },
           {
-            "label": "2160p (4K)",
+            "label": "2160p · 4K",
             "value": "2160p"
           }
         ]
       },
       {
         "key": "noise_scale",
-        "label": "Noise Scale",
+        "label": "Noise scale",
         "type": "float",
         "required": false,
         "default": 0.1,
@@ -18460,11 +18460,11 @@
         "default": "square_hd",
         "options": [
           {
-            "label": "Square HD (2048 × 2048)",
+            "label": "Square HD · 2048 × 2048",
             "value": "square_hd"
           },
           {
-            "label": "Square (512 × 512)",
+            "label": "Square · 512 × 512",
             "value": "square"
           },
           {
@@ -18513,7 +18513,7 @@
       },
       {
         "key": "max_images",
-        "label": "Images per Generation",
+        "label": "Images per generation",
         "type": "integer",
         "required": false,
         "default": 1,
@@ -18524,7 +18524,7 @@
     "falParams": [
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -18671,11 +18671,11 @@
         "default": "by_line",
         "options": [
           {
-            "label": "By line (one item per line)",
+            "label": "By line · one item per line",
             "value": "by_line"
           },
           {
-            "label": "None (entire text is one item)",
+            "label": "None · entire text is one item",
             "value": "none"
           }
         ]
@@ -18790,7 +18790,7 @@
     "params": [
       {
         "key": "scaleFactor",
-        "label": "Scale Factor",
+        "label": "Scale factor",
         "type": "enum",
         "required": false,
         "default": 2,
@@ -18825,11 +18825,11 @@
             "value": "photo"
           },
           {
-            "label": "Photo Denoiser",
+            "label": "Photo denoiser",
             "value": "photo_denoiser"
           },
           {
-            "label": "Sublime (illustration)",
+            "label": "Sublime · illustration",
             "value": "sublime"
           }
         ]
@@ -18845,7 +18845,7 @@
       },
       {
         "key": "smartGrain",
-        "label": "Smart Grain",
+        "label": "Smart grain",
         "type": "integer",
         "required": false,
         "min": 0,
@@ -18854,7 +18854,7 @@
       },
       {
         "key": "ultraDetail",
-        "label": "Ultra Detail",
+        "label": "Ultra detail",
         "type": "integer",
         "required": false,
         "min": 0,
@@ -18895,7 +18895,7 @@
     "falParams": [
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "BALANCED",
@@ -18949,13 +18949,13 @@
       },
       {
         "key": "expansion_model",
-        "label": "Prompt Expansion",
+        "label": "Prompt expansion",
         "type": "enum",
         "required": false,
         "default": "Medium",
         "options": [
           {
-            "label": "None (no expansion fee)",
+            "label": "None · no expansion fee",
             "value": "None"
           },
           {
@@ -19028,7 +19028,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -19138,7 +19138,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "DEFAULT",
@@ -19159,7 +19159,7 @@
       },
       {
         "key": "enable_copyright_detection",
-        "label": "Copyright Detection",
+        "label": "Copyright detection",
         "type": "boolean",
         "required": false,
         "default": false
@@ -19208,7 +19208,7 @@
       },
       {
         "id": "images",
-        "label": "Style Refs",
+        "label": "Style refs",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -19237,7 +19237,7 @@
     "falParams": [
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "BALANCED",
@@ -19258,7 +19258,7 @@
       },
       {
         "key": "expand_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "boolean",
         "required": false,
         "default": true
@@ -19267,7 +19267,7 @@
     "directParams": [
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "DEFAULT",
@@ -19288,7 +19288,7 @@
       },
       {
         "key": "magic_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -19345,7 +19345,7 @@
       },
       {
         "id": "images",
-        "label": "Style Refs",
+        "label": "Style refs",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -19357,7 +19357,7 @@
     "falParams": [
       {
         "key": "strength",
-        "label": "Image Strength",
+        "label": "Image strength",
         "type": "float",
         "required": false,
         "default": 0.8,
@@ -19425,14 +19425,14 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "BALANCED",
@@ -19453,7 +19453,7 @@
       },
       {
         "key": "expand_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "boolean",
         "required": false,
         "default": true
@@ -19478,7 +19478,7 @@
     "directParams": [
       {
         "key": "image_weight",
-        "label": "Image Weight",
+        "label": "Image weight",
         "type": "integer",
         "required": false,
         "min": 1,
@@ -19592,7 +19592,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "DEFAULT",
@@ -19613,7 +19613,7 @@
       },
       {
         "key": "enable_copyright_detection",
-        "label": "Copyright Detection",
+        "label": "Copyright detection",
         "type": "boolean",
         "required": false,
         "default": false
@@ -19650,7 +19650,7 @@
       },
       {
         "id": "images",
-        "label": "Style Refs",
+        "label": "Style refs",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -19679,7 +19679,7 @@
     "falParams": [
       {
         "key": "image_size",
-        "label": "Target Size",
+        "label": "Target size",
         "type": "enum",
         "required": true,
         "default": "square_hd",
@@ -19737,7 +19737,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "BALANCED",
@@ -19760,7 +19760,7 @@
     "directParams": [
       {
         "key": "resolution",
-        "label": "Target Resolution",
+        "label": "Target resolution",
         "type": "enum",
         "required": true,
         "default": "1024x1024",
@@ -19809,7 +19809,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "DEFAULT",
@@ -19866,7 +19866,7 @@
       },
       {
         "id": "images",
-        "label": "Style Refs",
+        "label": "Style refs",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -19920,7 +19920,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "BALANCED",
@@ -19941,7 +19941,7 @@
       },
       {
         "key": "expand_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "boolean",
         "required": false,
         "default": true
@@ -19950,7 +19950,7 @@
     "directParams": [
       {
         "key": "magic_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -19971,7 +19971,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "DEFAULT",
@@ -20035,7 +20035,7 @@
       },
       {
         "id": "images",
-        "label": "Style Refs",
+        "label": "Style refs",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -20046,7 +20046,7 @@
     "sharedParams": [
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -20125,7 +20125,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "BALANCED",
@@ -20146,7 +20146,7 @@
       },
       {
         "key": "expand_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "boolean",
         "required": false,
         "default": true
@@ -20155,7 +20155,7 @@
     "directParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1x1",
@@ -20224,7 +20224,7 @@
       },
       {
         "key": "style_type",
-        "label": "Style Type",
+        "label": "Style type",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -20245,7 +20245,7 @@
       },
       {
         "key": "magic_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -20266,7 +20266,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "DEFAULT",
@@ -20287,7 +20287,7 @@
       },
       {
         "key": "custom_model_uri",
-        "label": "Custom Model URI",
+        "label": "Custom model URI",
         "type": "string",
         "required": false,
         "placeholder": "From an Ideogram Train Model node"
@@ -20359,7 +20359,7 @@
     "falParams": [
       {
         "key": "expand_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "boolean",
         "required": false,
         "default": false
@@ -20368,7 +20368,7 @@
     "directParams": [
       {
         "key": "magic_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -20417,17 +20417,17 @@
     "params": [
       {
         "key": "polarity",
-        "label": "Painted Area Means",
+        "label": "Painted area means",
         "type": "enum",
         "required": false,
         "default": "white-edit",
         "options": [
           {
-            "label": "White = edit (FLUX Fill)",
+            "label": "White = edit · FLUX Fill",
             "value": "white-edit"
           },
           {
-            "label": "Black = edit (Ideogram)",
+            "label": "Black = edit · Ideogram",
             "value": "black-edit"
           }
         ]
@@ -20459,7 +20459,7 @@
       },
       {
         "id": "json_prompt",
-        "label": "JSON Prompt (v4)",
+        "label": "JSON prompt (v4)",
         "dataType": "Text",
         "required": false
       }
@@ -20467,7 +20467,7 @@
     "params": [
       {
         "key": "include_bbox",
-        "label": "Include Layout (bbox)",
+        "label": "Include layout (bbox)",
         "type": "boolean",
         "required": false,
         "default": true
@@ -20493,13 +20493,13 @@
     "outputPorts": [
       {
         "id": "description",
-        "label": "Expanded Prompt",
+        "label": "Expanded prompt",
         "dataType": "Text",
         "required": false
       },
       {
         "id": "json_prompt",
-        "label": "JSON Prompt (v4)",
+        "label": "JSON prompt (v4)",
         "dataType": "Text",
         "required": false
       }
@@ -20507,7 +20507,7 @@
     "params": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -20615,7 +20615,7 @@
     "params": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1x1",
@@ -20705,7 +20705,7 @@
       },
       {
         "key": "rendering_speed",
-        "label": "Rendering Speed",
+        "label": "Rendering speed",
         "type": "enum",
         "required": false,
         "default": "DEFAULT",
@@ -20726,7 +20726,7 @@
       },
       {
         "key": "magic_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -20747,7 +20747,7 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -20821,7 +20821,7 @@
     "outputPorts": [
       {
         "id": "image",
-        "label": "Base Plate (text removed)",
+        "label": "Base plate (text removed)",
         "dataType": "Image",
         "required": false
       }
@@ -20847,7 +20847,7 @@
     "inputPorts": [
       {
         "id": "prompt",
-        "label": "Edit Instruction",
+        "label": "Edit instruction",
         "dataType": "Text",
         "required": true
       },
@@ -20876,7 +20876,7 @@
     "params": [
       {
         "key": "magic_prompt",
-        "label": "Magic Prompt",
+        "label": "Magic prompt",
         "type": "enum",
         "required": false,
         "default": "AUTO",
@@ -20897,7 +20897,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "",
@@ -20970,7 +20970,7 @@
       },
       {
         "key": "transparent_background",
-        "label": "Transparent Background",
+        "label": "Transparent background",
         "type": "boolean",
         "required": false,
         "default": false
@@ -21004,7 +21004,7 @@
     "inputPorts": [
       {
         "id": "images",
-        "label": "Training Images",
+        "label": "Training images",
         "dataType": "Image",
         "required": true,
         "multiple": true
@@ -21013,7 +21013,7 @@
     "outputPorts": [
       {
         "id": "custom_model_uri",
-        "label": "Custom Model URI",
+        "label": "Custom model URI",
         "dataType": "Text",
         "required": false
       },
@@ -21088,13 +21088,13 @@
       },
       {
         "key": "sync_mode",
-        "label": "Sync Mode",
+        "label": "Sync mode",
         "type": "enum",
         "required": false,
         "default": "cut_off",
         "options": [
           {
-            "label": "Cut Off",
+            "label": "Cut off",
             "value": "cut_off"
           },
           {
@@ -21134,7 +21134,7 @@
       },
       {
         "id": "prompt",
-        "label": "Prompt (Redefine only)",
+        "label": "Prompt (redefine only)",
         "dataType": "Text",
         "required": false
       }
@@ -21191,14 +21191,14 @@
       },
       {
         "key": "face_enhancement",
-        "label": "Face Enhancement",
+        "label": "Face enhancement",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "face_enhancement_strength",
-        "label": "Face Enhancement Strength",
+        "label": "Face enhancement strength",
         "type": "float",
         "required": false,
         "default": 0.8,
@@ -21207,7 +21207,7 @@
       },
       {
         "key": "upscale_factor",
-        "label": "Upscale Factor",
+        "label": "Upscale factor",
         "type": "float",
         "required": false,
         "default": 2.0,
@@ -21234,7 +21234,7 @@
       },
       {
         "key": "fix_compression",
-        "label": "Fix Compression",
+        "label": "Fix compression",
         "type": "float",
         "required": false,
         "default": 0.0,
@@ -21243,7 +21243,7 @@
       },
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "jpeg",
@@ -21281,14 +21281,14 @@
       },
       {
         "id": "image",
-        "label": "First Frame",
+        "label": "First frame",
         "dataType": "Image",
         "required": true,
         "role": "subject"
       },
       {
         "id": "end_image",
-        "label": "Last Frame",
+        "label": "Last frame",
         "dataType": "Image",
         "required": true
       }
@@ -21304,7 +21304,7 @@
     "params": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -21367,14 +21367,14 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "placeholder": "What to avoid"
@@ -21388,13 +21388,13 @@
       },
       {
         "key": "safety_tolerance",
-        "label": "Safety Tolerance",
+        "label": "Safety tolerance",
         "type": "enum",
         "required": false,
         "default": "2",
         "options": [
           {
-            "label": "1 (Strict)",
+            "label": "1 · strict",
             "value": "1"
           },
           {
@@ -21414,7 +21414,7 @@
             "value": "5"
           },
           {
-            "label": "6 (Permissive)",
+            "label": "6 · permissive",
             "value": "6"
           }
         ]
@@ -21432,7 +21432,7 @@
     "inputPorts": [
       {
         "id": "image",
-        "label": "Start Image",
+        "label": "Start image",
         "dataType": "Image",
         "required": true,
         "role": "subject"
@@ -21445,7 +21445,7 @@
       },
       {
         "id": "end_image",
-        "label": "End Image",
+        "label": "End image",
         "dataType": "Image",
         "required": false
       }
@@ -21539,21 +21539,21 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "default": "blur, distort, and low quality"
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "cfg_scale",
-        "label": "CFG Scale",
+        "label": "CFG scale",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -21579,20 +21579,20 @@
       },
       {
         "id": "image",
-        "label": "Start Image",
+        "label": "Start image",
         "dataType": "Image",
         "required": false,
         "role": "subject"
       },
       {
         "id": "end_image",
-        "label": "End Image",
+        "label": "End image",
         "dataType": "Image",
         "required": false
       },
       {
         "id": "images",
-        "label": "Reference Images",
+        "label": "Reference images",
         "dataType": "Image",
         "required": false,
         "multiple": true,
@@ -21635,7 +21635,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -21656,14 +21656,14 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "shot_type",
-        "label": "Shot Type",
+        "label": "Shot type",
         "type": "enum",
         "required": false,
         "default": "customize",
@@ -21691,14 +21691,14 @@
     "inputPorts": [
       {
         "id": "image",
-        "label": "Character Image",
+        "label": "Character image",
         "dataType": "Image",
         "required": true,
         "role": "identity"
       },
       {
         "id": "video",
-        "label": "Motion Reference Video",
+        "label": "Motion reference video",
         "dataType": "Video",
         "required": true
       },
@@ -21720,7 +21720,7 @@
     "params": [
       {
         "key": "character_orientation",
-        "label": "Character Orientation",
+        "label": "Character orientation",
         "type": "enum",
         "required": true,
         "default": "video",
@@ -21737,7 +21737,7 @@
       },
       {
         "key": "keep_original_sound",
-        "label": "Keep Original Sound",
+        "label": "Keep original sound",
         "type": "boolean",
         "required": false,
         "default": true
@@ -21824,7 +21824,7 @@
       },
       {
         "key": "upscale_factor",
-        "label": "Upscale Factor",
+        "label": "Upscale factor",
         "type": "float",
         "required": false,
         "default": 2.0,
@@ -21877,7 +21877,7 @@
       },
       {
         "key": "recover_detail",
-        "label": "Recover Detail",
+        "label": "Recover detail",
         "type": "float",
         "required": false,
         "default": 0.0,
@@ -21886,7 +21886,7 @@
       },
       {
         "key": "H264_output",
-        "label": "H264 Output",
+        "label": "H264 output",
         "type": "boolean",
         "required": false,
         "default": false
@@ -21934,7 +21934,7 @@
     "sharedParams": [
       {
         "key": "num_images",
-        "label": "Number of Images",
+        "label": "Number of images",
         "type": "integer",
         "required": false,
         "default": 1,
@@ -21943,7 +21943,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "1:1",
@@ -22007,7 +22007,7 @@
     "falParams": [
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "jpeg",
@@ -22059,7 +22059,7 @@
       },
       {
         "id": "images",
-        "label": "Source Images",
+        "label": "Source images",
         "dataType": "Image",
         "required": true,
         "multiple": true
@@ -22077,7 +22077,7 @@
     "sharedParams": [
       {
         "key": "num_images",
-        "label": "Number of Images",
+        "label": "Number of images",
         "type": "integer",
         "required": false,
         "default": 1,
@@ -22105,7 +22105,7 @@
     "falParams": [
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "jpeg",
@@ -22160,11 +22160,11 @@
         "default": "RealESRGAN_x4plus",
         "options": [
           {
-            "label": "x4plus (General)",
+            "label": "x4plus · general",
             "value": "RealESRGAN_x4plus"
           },
           {
-            "label": "x2plus (General)",
+            "label": "x2plus · general",
             "value": "RealESRGAN_x2plus"
           },
           {
@@ -22172,11 +22172,11 @@
             "value": "RealESRGAN_x4plus_anime_6B"
           },
           {
-            "label": "x4 v3 (General)",
+            "label": "x4 v3 · general",
             "value": "RealESRGAN_x4_v3"
           },
           {
-            "label": "x4 WDN v3 (Denoise)",
+            "label": "x4 WDN v3 · denoise",
             "value": "RealESRGAN_x4_wdn_v3"
           },
           {
@@ -22196,14 +22196,14 @@
       },
       {
         "key": "face",
-        "label": "Face Enhancement",
+        "label": "Face enhancement",
         "type": "boolean",
         "required": false,
         "default": false
       },
       {
         "key": "tile",
-        "label": "Tile Size (0=none)",
+        "label": "Tile size (0=none)",
         "type": "integer",
         "required": false,
         "default": 0,
@@ -22212,7 +22212,7 @@
       },
       {
         "key": "output_format",
-        "label": "Output Format",
+        "label": "Output format",
         "type": "enum",
         "required": false,
         "default": "png",
@@ -22256,7 +22256,7 @@
     "params": [
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -22330,7 +22330,7 @@
       },
       {
         "key": "negative_prompt",
-        "label": "Negative Prompt",
+        "label": "Negative prompt",
         "type": "string",
         "required": false,
         "default": ""
@@ -22393,7 +22393,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -22410,24 +22410,24 @@
       },
       {
         "key": "num_frames",
-        "label": "Number of Frames",
+        "label": "Number of frames",
         "type": "enum",
         "required": false,
         "default": "129",
         "options": [
           {
-            "label": "129 (~5s)",
+            "label": "129 · ~5s",
             "value": "129"
           },
           {
-            "label": "85 (~3.5s)",
+            "label": "85 · ~3.5s",
             "value": "85"
           }
         ]
       },
       {
         "key": "pro_mode",
-        "label": "Pro Mode",
+        "label": "Pro mode",
         "type": "boolean",
         "required": false,
         "default": false
@@ -22442,7 +22442,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -22490,7 +22490,7 @@
       },
       {
         "key": "force_instrumental",
-        "label": "Instrumental Only",
+        "label": "Instrumental only",
         "type": "boolean",
         "required": false,
         "default": false
@@ -22576,7 +22576,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -22593,7 +22593,7 @@
       },
       {
         "key": "num_inference_steps",
-        "label": "Inference Steps",
+        "label": "Inference steps",
         "type": "integer",
         "required": false,
         "default": 20,
@@ -22602,7 +22602,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -22664,7 +22664,7 @@
       },
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -22681,7 +22681,7 @@
       },
       {
         "key": "num_inference_steps",
-        "label": "Inference Steps",
+        "label": "Inference steps",
         "type": "integer",
         "required": false,
         "default": 20,
@@ -22690,7 +22690,7 @@
       },
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -22730,21 +22730,21 @@
     "params": [
       {
         "key": "sound_effect_prompt",
-        "label": "Sound Effect Prompt",
+        "label": "Sound effect prompt",
         "type": "string",
         "required": false,
         "default": ""
       },
       {
         "key": "background_music_prompt",
-        "label": "Background Music Prompt",
+        "label": "Background music prompt",
         "type": "string",
         "required": false,
         "default": ""
       },
       {
         "key": "asmr_mode",
-        "label": "ASMR Mode",
+        "label": "ASMR mode",
         "type": "boolean",
         "required": false,
         "default": false
@@ -22783,7 +22783,7 @@
     "sharedParams": [
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -22890,7 +22890,7 @@
       },
       {
         "key": "camera_fixed",
-        "label": "Camera Fixed",
+        "label": "Camera fixed",
         "type": "boolean",
         "required": false,
         "default": false
@@ -22906,7 +22906,7 @@
     "falParams": [
       {
         "key": "enable_safety_checker",
-        "label": "Safety Checker",
+        "label": "Safety checker",
         "type": "boolean",
         "required": false,
         "default": true
@@ -22963,7 +22963,7 @@
     "params": [
       {
         "key": "guidance_scale",
-        "label": "Guidance Scale",
+        "label": "Guidance scale",
         "type": "float",
         "required": false,
         "default": 5.0,
@@ -22972,7 +22972,7 @@
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "auto",
@@ -23026,7 +23026,7 @@
     "params": [
       {
         "key": "detailed_analysis",
-        "label": "Detailed Analysis",
+        "label": "Detailed analysis",
         "type": "boolean",
         "required": false,
         "default": false
@@ -23115,14 +23115,14 @@
             "value": "1440p"
           },
           {
-            "label": "2160p (4K)",
+            "label": "2160p · 4K",
             "value": "2160p"
           }
         ]
       },
       {
         "key": "aspect_ratio",
-        "label": "Aspect Ratio",
+        "label": "Aspect ratio",
         "type": "enum",
         "required": false,
         "default": "16:9",
@@ -23164,7 +23164,7 @@
       },
       {
         "key": "generate_audio",
-        "label": "Generate Audio",
+        "label": "Generate audio",
         "type": "boolean",
         "required": false,
         "default": true
@@ -23188,7 +23188,7 @@
       },
       {
         "id": "requested_duration",
-        "label": "Requested Duration",
+        "label": "Requested duration",
         "dataType": "Text",
         "required": false
       }
@@ -23238,13 +23238,13 @@
     "outputPorts": [
       {
         "id": "frame",
-        "label": "Annotated Frame",
+        "label": "Annotated frame",
         "dataType": "Image",
         "required": false
       },
       {
         "id": "text",
-        "label": "QC Report",
+        "label": "QC report",
         "dataType": "Text",
         "required": false
       }
@@ -23252,7 +23252,7 @@
     "params": [
       {
         "key": "mode",
-        "label": "Analysis Mode",
+        "label": "Analysis mode",
         "type": "enum",
         "required": false,
         "default": "heuristic",
@@ -23270,14 +23270,14 @@
             "value": "opencv"
           },
           {
-            "label": "Jev (TypeSafe, experimental)",
+            "label": "Jev · TypeSafe, experimental",
             "value": "jev"
           }
         ]
       },
       {
         "key": "sample_density",
-        "label": "Sample Density",
+        "label": "Sample density",
         "type": "integer",
         "required": false,
         "default": 5,
@@ -23287,25 +23287,25 @@
       },
       {
         "key": "model",
-        "label": "Jev Model",
+        "label": "Jev model",
         "type": "enum",
         "required": false,
         "default": "jev-1.14.0",
         "options": [
           {
-            "label": "Jev 1.14.0 (pinned)",
+            "label": "Jev 1.14.0 · pinned",
             "value": "jev-1.14.0"
           },
           {
-            "label": "Jev 1.13.0 (pinned)",
+            "label": "Jev 1.13.0 · pinned",
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest (moves; re-check thresholds)",
+            "label": "jev-latest · moves, re-check thresholds",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview (moves)",
+            "label": "jev-preview · moves",
             "value": "jev-preview"
           }
         ],
@@ -23317,7 +23317,7 @@
       },
       {
         "key": "min_confidence",
-        "label": "Jev Minimum Confidence",
+        "label": "Jev minimum confidence",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -23373,13 +23373,13 @@
     "outputPorts": [
       {
         "id": "frame",
-        "label": "Annotated Frames",
+        "label": "Annotated frames",
         "dataType": "Image",
         "required": false
       },
       {
         "id": "text",
-        "label": "QC Report",
+        "label": "QC report",
         "dataType": "Text",
         "required": false
       }
@@ -23387,7 +23387,7 @@
     "params": [
       {
         "key": "mode",
-        "label": "Analysis Mode",
+        "label": "Analysis mode",
         "type": "enum",
         "required": false,
         "default": "heuristic",
@@ -23405,14 +23405,14 @@
             "value": "opencv"
           },
           {
-            "label": "Jev (TypeSafe, experimental)",
+            "label": "Jev · TypeSafe, experimental",
             "value": "jev"
           }
         ]
       },
       {
         "key": "sample_rate",
-        "label": "Samples Per Second",
+        "label": "Samples per second",
         "type": "float",
         "required": false,
         "default": 1.0,
@@ -23422,32 +23422,32 @@
       },
       {
         "key": "track_faces",
-        "label": "Track Faces",
+        "label": "Track faces",
         "type": "boolean",
         "required": false,
         "default": true
       },
       {
         "key": "model",
-        "label": "Jev Model",
+        "label": "Jev model",
         "type": "enum",
         "required": false,
         "default": "jev-1.14.0",
         "options": [
           {
-            "label": "Jev 1.14.0 (pinned)",
+            "label": "Jev 1.14.0 · pinned",
             "value": "jev-1.14.0"
           },
           {
-            "label": "Jev 1.13.0 (pinned)",
+            "label": "Jev 1.13.0 · pinned",
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest (moves; re-check thresholds)",
+            "label": "jev-latest · moves, re-check thresholds",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview (moves)",
+            "label": "jev-preview · moves",
             "value": "jev-preview"
           }
         ],
@@ -23459,7 +23459,7 @@
       },
       {
         "key": "min_confidence",
-        "label": "Jev Minimum Confidence",
+        "label": "Jev minimum confidence",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -23515,13 +23515,13 @@
     "outputPorts": [
       {
         "id": "frame",
-        "label": "Annotated Frames",
+        "label": "Annotated frames",
         "dataType": "Image",
         "required": false
       },
       {
         "id": "text",
-        "label": "QC Report",
+        "label": "QC report",
         "dataType": "Text",
         "required": false
       }
@@ -23529,7 +23529,7 @@
     "params": [
       {
         "key": "mode",
-        "label": "Analysis Mode",
+        "label": "Analysis mode",
         "type": "enum",
         "required": false,
         "default": "heuristic",
@@ -23547,14 +23547,14 @@
             "value": "opencv"
           },
           {
-            "label": "Jev (TypeSafe, experimental)",
+            "label": "Jev · TypeSafe, experimental",
             "value": "jev"
           }
         ]
       },
       {
         "key": "sample_density",
-        "label": "Sample Density",
+        "label": "Sample density",
         "type": "integer",
         "required": false,
         "default": 5,
@@ -23564,25 +23564,25 @@
       },
       {
         "key": "model",
-        "label": "Jev Model",
+        "label": "Jev model",
         "type": "enum",
         "required": false,
         "default": "jev-1.14.0",
         "options": [
           {
-            "label": "Jev 1.14.0 (pinned)",
+            "label": "Jev 1.14.0 · pinned",
             "value": "jev-1.14.0"
           },
           {
-            "label": "Jev 1.13.0 (pinned)",
+            "label": "Jev 1.13.0 · pinned",
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest (moves; re-check thresholds)",
+            "label": "jev-latest · moves, re-check thresholds",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview (moves)",
+            "label": "jev-preview · moves",
             "value": "jev-preview"
           }
         ],
@@ -23594,7 +23594,7 @@
       },
       {
         "key": "min_confidence",
-        "label": "Jev Minimum Confidence",
+        "label": "Jev minimum confidence",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -23648,7 +23648,7 @@
       },
       {
         "id": "reference",
-        "label": "Reference Frame",
+        "label": "Reference frame",
         "dataType": "Image",
         "required": false,
         "role": "composition"
@@ -23657,13 +23657,13 @@
     "outputPorts": [
       {
         "id": "frame",
-        "label": "Annotated Frames",
+        "label": "Annotated frames",
         "dataType": "Image",
         "required": false
       },
       {
         "id": "text",
-        "label": "QC Report",
+        "label": "QC report",
         "dataType": "Text",
         "required": false
       }
@@ -23671,7 +23671,7 @@
     "params": [
       {
         "key": "mode",
-        "label": "Analysis Mode",
+        "label": "Analysis mode",
         "type": "enum",
         "required": false,
         "default": "heuristic",
@@ -23689,14 +23689,14 @@
             "value": "opencv"
           },
           {
-            "label": "Jev (TypeSafe, experimental)",
+            "label": "Jev · TypeSafe, experimental",
             "value": "jev"
           }
         ]
       },
       {
         "key": "expected_angle",
-        "label": "Expected Angle",
+        "label": "Expected angle",
         "type": "string",
         "required": false,
         "default": "",
@@ -23704,25 +23704,25 @@
       },
       {
         "key": "model",
-        "label": "Jev Model",
+        "label": "Jev model",
         "type": "enum",
         "required": false,
         "default": "jev-1.14.0",
         "options": [
           {
-            "label": "Jev 1.14.0 (pinned)",
+            "label": "Jev 1.14.0 · pinned",
             "value": "jev-1.14.0"
           },
           {
-            "label": "Jev 1.13.0 (pinned)",
+            "label": "Jev 1.13.0 · pinned",
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest (moves; re-check thresholds)",
+            "label": "jev-latest · moves, re-check thresholds",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview (moves)",
+            "label": "jev-preview · moves",
             "value": "jev-preview"
           }
         ],
@@ -23734,7 +23734,7 @@
       },
       {
         "key": "min_confidence",
-        "label": "Jev Minimum Confidence",
+        "label": "Jev minimum confidence",
         "type": "float",
         "required": false,
         "default": 0.5,
@@ -23782,7 +23782,7 @@
     "inputPorts": [
       {
         "id": "prompt",
-        "label": "Prompt / Guidance",
+        "label": "Prompt / guidance",
         "dataType": "Text",
         "required": false
       },
@@ -23836,7 +23836,7 @@
     "params": [
       {
         "key": "model",
-        "label": "Marble Model",
+        "label": "Marble model",
         "type": "enum",
         "required": false,
         "default": "marble-1.1",
@@ -23879,13 +23879,13 @@
       },
       {
         "key": "is_pano",
-        "label": "Single Image Is Panorama",
+        "label": "Single image is panorama",
         "type": "enum",
         "required": false,
         "default": "auto",
         "options": [
           {
-            "label": "Auto Detect",
+            "label": "Auto detect",
             "value": "auto"
           },
           {
@@ -23915,7 +23915,7 @@
       },
       {
         "key": "disable_recaption",
-        "label": "Use Prompt Verbatim",
+        "label": "Use prompt verbatim",
         "type": "boolean",
         "required": false,
         "default": false
@@ -23965,7 +23965,7 @@
     "outputPorts": [
       {
         "id": "file",
-        "label": "Exported 3D File",
+        "label": "Exported 3D file",
         "dataType": "Mesh",
         "required": false
       },
@@ -23979,24 +23979,24 @@
     "params": [
       {
         "key": "format",
-        "label": "Export Format",
+        "label": "Export format",
         "type": "enum",
         "required": false,
         "default": "ply",
         "options": [
           {
-            "label": "Gaussian Splat (PLY)",
+            "label": "Gaussian splat (PLY)",
             "value": "ply"
           },
           {
-            "label": "High-Quality Mesh (GLB)",
+            "label": "High-quality mesh (GLB)",
             "value": "glb"
           }
         ]
       },
       {
         "key": "resolution",
-        "label": "PLY Resolution",
+        "label": "PLY resolution",
         "type": "enum",
         "required": false,
         "default": "full_res",
@@ -24007,7 +24007,7 @@
         },
         "options": [
           {
-            "label": "Full Resolution",
+            "label": "Full resolution",
             "value": "full_res"
           },
           {
@@ -24026,7 +24026,7 @@
       },
       {
         "key": "mesh_variant",
-        "label": "GLB Mesh Variant",
+        "label": "GLB mesh variant",
         "type": "enum",
         "required": false,
         "default": "textured",
@@ -24041,7 +24041,7 @@
             "value": "textured"
           },
           {
-            "label": "Vertex Colored",
+            "label": "Vertex colored",
             "value": "vertex_colored"
           }
         ]
@@ -24285,7 +24285,7 @@
       },
       {
         "key": "thinking_level",
-        "label": "Thinking Level",
+        "label": "Thinking level",
         "type": "enum",
         "required": false,
         "default": "low",
@@ -24306,7 +24306,7 @@
       },
       {
         "key": "identity_strength",
-        "label": "Identity Strength",
+        "label": "Identity strength",
         "type": "float",
         "required": false,
         "default": 0.8,
@@ -24323,7 +24323,7 @@
   "jev-decide": {
     "id": "jev-decide",
     "displayName": "Jev Decide (judge / classify / yes-no)",
-    "description": "Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. Also a gate: whatever is connected to “Through” comes out of “On Pass” or “On Fail”, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.",
+    "description": "Judge, classify or score text and images with one typed question. The question can be yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. It also works as a gate. Whatever is connected to “Through” comes out of “On pass” or “On fail”, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.",
     "category": "analyzer",
     "apiProvider": "typesafe",
     "apiEndpoint": "/v1/systemone",
@@ -24392,14 +24392,14 @@
       },
       {
         "id": "on_pass",
-        "label": "On Pass",
+        "label": "On pass",
         "dataType": "Any",
         "required": false,
         "conditional": true
       },
       {
         "id": "on_fail",
-        "label": "On Fail",
+        "label": "On fail",
         "dataType": "Any",
         "required": false,
         "conditional": true
@@ -24414,32 +24414,32 @@
         "default": "jev-1.14.0",
         "options": [
           {
-            "label": "Jev 1.14.0 (pinned)",
+            "label": "Jev 1.14.0 · pinned",
             "value": "jev-1.14.0"
           },
           {
-            "label": "Jev 1.13.0 (pinned)",
+            "label": "Jev 1.13.0 · pinned",
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest (moves; re-check thresholds)",
+            "label": "jev-latest · moves, re-check thresholds",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview (moves)",
+            "label": "jev-preview · moves",
             "value": "jev-preview"
           }
         ]
       },
       {
         "key": "answer_type",
-        "label": "Answer Type",
+        "label": "Answer type",
         "type": "enum",
         "required": false,
         "default": "yes_no",
         "options": [
           {
-            "label": "Yes / No",
+            "label": "Yes / no",
             "value": "yes_no"
           },
           {
@@ -24461,7 +24461,7 @@
       },
       {
         "key": "yes_means",
-        "label": "Yes Means (optional)",
+        "label": "Yes means (optional)",
         "type": "string",
         "required": false,
         "default": "",
@@ -24473,7 +24473,7 @@
       },
       {
         "key": "no_means",
-        "label": "No Means (optional)",
+        "label": "No means (optional)",
         "type": "string",
         "required": false,
         "default": "",
@@ -24498,7 +24498,7 @@
       },
       {
         "key": "pass_when",
-        "label": "Passing Options (one per line)",
+        "label": "Passing options (one per line)",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -24510,7 +24510,7 @@
       },
       {
         "key": "levels",
-        "label": "Levels, Low to High (one per line)",
+        "label": "Levels, low to high · one per line",
         "type": "textarea",
         "required": false,
         "default": "",
@@ -24549,7 +24549,7 @@
       },
       {
         "key": "when_unsure",
-        "label": "When Unsure",
+        "label": "When unsure",
         "type": "enum",
         "required": false,
         "default": "fail",
@@ -24570,7 +24570,7 @@
       },
       {
         "key": "long_context",
-        "label": "Long Context (slower, less accurate)",
+        "label": "Long context (slower, less accurate)",
         "type": "boolean",
         "required": false,
         "default": false
@@ -24580,7 +24580,7 @@
   "jev-pick-best": {
     "id": "jev-pick-best",
     "displayName": "Jev Pick Best (rank / choose best image)",
-    "description": "Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate's probability and how confident the pick is; low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.",
+    "description": "Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate’s probability and how confident the pick is. Low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.",
     "category": "analyzer",
     "apiProvider": "typesafe",
     "apiEndpoint": "/v1/systemone",
@@ -24645,19 +24645,19 @@
         "default": "jev-1.14.0",
         "options": [
           {
-            "label": "Jev 1.14.0 (pinned)",
+            "label": "Jev 1.14.0 · pinned",
             "value": "jev-1.14.0"
           },
           {
-            "label": "Jev 1.13.0 (pinned)",
+            "label": "Jev 1.13.0 · pinned",
             "value": "jev-1.13.0"
           },
           {
-            "label": "jev-latest (moves; re-check thresholds)",
+            "label": "jev-latest · moves, re-check thresholds",
             "value": "jev-latest"
           },
           {
-            "label": "jev-preview (moves)",
+            "label": "jev-preview · moves",
             "value": "jev-preview"
           }
         ]
@@ -24765,11 +24765,11 @@
         "default": "jev-1.14.0",
         "options": [
           {
-            "label": "Jev 1.14.0 (pinned)",
+            "label": "Jev 1.14.0 · pinned",
             "value": "jev-1.14.0"
           },
           {
-            "label": "jev-preview (moves)",
+            "label": "jev-preview · moves",
             "value": "jev-preview"
           }
         ]
@@ -24796,7 +24796,7 @@
       },
       {
         "key": "pad",
-        "label": "Crop Padding (fraction of image)",
+        "label": "Crop padding (fraction of image)",
         "type": "float",
         "required": false,
         "default": 0.05,
@@ -24809,7 +24809,7 @@
   "flux-3-image": {
     "id": "flux-3-image",
     "displayName": "FLUX 3 Image",
-    "description": "Black Forest Labs' FLUX 3 image model: text to image, or edit and combine up to 10 reference images. Runs on BFL, fal.ai, Replicate or OpenRouter.",
+    "description": "Black Forest Labs’ FLUX 3 image model for text to image, or to edit and combine up to 10 reference images. Runs on BFL, fal.ai, Replicate or OpenRouter.",
     "category": "image-gen",
     "apiProvider": "bfl",
     "apiEndpoint": "/v1/flux-3-image",
@@ -25134,7 +25134,7 @@
   "flux-3-image-klein": {
     "id": "flux-3-image-klein",
     "displayName": "FLUX 3 Image Klein",
-    "description": "Black Forest Labs' fast open-weights FLUX 3 Image Klein (5.6B, distilled): text to image, or edit with up to 10 reference images. Runs on BFL or OpenRouter.",
+    "description": "Black Forest Labs’ fast open-weights FLUX 3 Image Klein, 5.6B and distilled, for text to image or to edit with up to 10 reference images. Runs on BFL or OpenRouter.",
     "category": "image-gen",
     "apiProvider": "bfl",
     "apiEndpoint": "/v1/flux-3-image-klein",
@@ -25398,7 +25398,7 @@
   "flux-3-image-klein-base": {
     "id": "flux-3-image-klein-base",
     "displayName": "FLUX 3 Image Klein Base",
-    "description": "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model (50 steps, for LoRA and research): text to image or edit with up to 10 reference images. On fal.ai only; BFL's API doesn't serve it.",
+    "description": "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model at 50 steps, for LoRA and research. It does text to image or edit with up to 10 reference images. On fal.ai only. BFL’s API doesn’t serve it.",
     "category": "image-gen",
     "apiProvider": "fal",
     "apiEndpoint": "blackforestlabs/flux-3/klein/base/text-to-image",
@@ -25557,7 +25557,7 @@
   "flux-3-video": {
     "id": "flux-3-video",
     "displayName": "FLUX 3 Video",
-    "description": "Black Forest Labs' FLUX 3 Video: text to video with sound, animate a start image, an end image or up to 10 keyframes, or continue a video clip. Runs on BFL, fal.ai, Replicate, OpenRouter or Krea.",
+    "description": "Black Forest Labs’ FLUX 3 Video does text to video with sound, animates a start image, an end image or up to 10 keyframes, or continues a video clip. Runs on BFL, fal.ai, Replicate, OpenRouter or Krea.",
     "category": "video-gen",
     "apiProvider": "bfl",
     "apiEndpoint": "/v1/flux-3-video",
@@ -25686,19 +25686,19 @@
         "default": "hd",
         "options": [
           {
-            "label": "HD (720p)",
+            "label": "HD · 720p",
             "value": "hd"
           },
           {
-            "label": "Full HD (1080p)",
+            "label": "Full HD · 1080p",
             "value": "fhd"
           },
           {
-            "label": "QHD (1440p)",
+            "label": "QHD · 1440p",
             "value": "qhd"
           },
           {
-            "label": "UHD (4K)",
+            "label": "UHD · 4K",
             "value": "uhd"
           }
         ]
@@ -26230,7 +26230,7 @@
   "flux-video-edit": {
     "id": "flux-video-edit",
     "displayName": "FLUX Video Edit [fast]",
-    "description": "Black Forest Labs' FLUX Video Edit [fast]: change a video clip with a text prompt; the edit keeps the clip's length. Runs on BFL, fal.ai or Krea.",
+    "description": "Black Forest Labs’ FLUX Video Edit [fast] changes a video clip with a text prompt. The edit keeps the clip’s length. Runs on BFL, fal.ai or Krea.",
     "category": "video-gen",
     "apiProvider": "bfl",
     "apiEndpoint": "/v1/flux-tools/video-edit-v1",
@@ -26346,7 +26346,7 @@
   "flux-video-upscale": {
     "id": "flux-video-upscale",
     "displayName": "FLUX Video Upscale",
-    "description": "Black Forest Labs' FLUX Video Upscale: upscale a video clip 1.5x to 3x, precise or creative, with an optional prompt. Runs on BFL, fal.ai, Replicate or Krea.",
+    "description": "Black Forest Labs’ FLUX Video Upscale upscales a video clip 1.5x to 3x, precise or creative, with an optional prompt. Runs on BFL, fal.ai, Replicate or Krea.",
     "category": "transform",
     "apiProvider": "bfl",
     "apiEndpoint": "/v1/flux-tools/video-upscale-v1",
@@ -26819,7 +26819,7 @@
   "krea-3": {
     "id": "krea-3",
     "displayName": "Krea 3",
-    "description": "Krea's own Krea 3 image model: text to image, or edit with up to 8 reference images. Runs on Krea (early access for beta workspaces) or fal.ai.",
+    "description": "Krea’s own Krea 3 image model, for text to image or to edit with up to 8 reference images. Runs on Krea, where beta workspaces have early access, or on fal.ai.",
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/krea/krea-3",
@@ -27050,11 +27050,11 @@
             "default": "berry",
             "options": [
               {
-                "label": "Berry (quality)",
+                "label": "Berry · quality",
                 "value": "berry"
               },
               {
-                "label": "Jam (speed)",
+                "label": "Jam · speed",
                 "value": "jam"
               }
             ]
@@ -27092,7 +27092,7 @@
                 "value": "auto"
               },
               {
-                "label": "square_hd",
+                "label": "Square HD",
                 "value": "square_hd"
               },
               {
@@ -27100,19 +27100,19 @@
                 "value": "square"
               },
               {
-                "label": "portrait_4_3",
+                "label": "Portrait 4:3",
                 "value": "portrait_4_3"
               },
               {
-                "label": "portrait_16_9",
+                "label": "Portrait 16:9",
                 "value": "portrait_16_9"
               },
               {
-                "label": "landscape_4_3",
+                "label": "Landscape 4:3",
                 "value": "landscape_4_3"
               },
               {
-                "label": "landscape_16_9",
+                "label": "Landscape 16:9",
                 "value": "landscape_16_9"
               }
             ]
@@ -27159,7 +27159,7 @@
                 "reasoning_level": "high",
                 "images": "(unset)"
               },
-              "label": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+              "label": "high reasoning without a reference image · fal.ai takes it on krea/v3/edit only"
             }
           ]
         }
@@ -28015,7 +28015,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "very_low",
+            "label": "Very low",
             "value": "very_low"
           },
           {
@@ -35677,27 +35677,27 @@
             "value": "standard"
           },
           {
-            "label": "soft_portraits",
+            "label": "Soft portraits",
             "value": "soft_portraits"
           },
           {
-            "label": "hard_portraits",
+            "label": "Hard portraits",
             "value": "hard_portraits"
           },
           {
-            "label": "art_n_illustration",
+            "label": "Art and illustration",
             "value": "art_n_illustration"
           },
           {
-            "label": "videogame_assets",
+            "label": "Videogame assets",
             "value": "videogame_assets"
           },
           {
-            "label": "nature_n_landscapes",
+            "label": "Nature and landscapes",
             "value": "nature_n_landscapes"
           },
           {
-            "label": "films_n_photography",
+            "label": "Films and photography",
             "value": "films_n_photography"
           },
           {
@@ -35705,7 +35705,7 @@
             "value": "3d_renders"
           },
           {
-            "label": "science_fiction_n_horror",
+            "label": "Science fiction and horror",
             "value": "science_fiction_n_horror"
           }
         ],
@@ -35762,15 +35762,15 @@
             "value": "automatic"
           },
           {
-            "label": "magnific_illusio",
+            "label": "Magnific Illusio",
             "value": "magnific_illusio"
           },
           {
-            "label": "magnific_sharpy",
+            "label": "Magnific Sharpy",
             "value": "magnific_sharpy"
           },
           {
-            "label": "magnific_sparkle",
+            "label": "Magnific Sparkle",
             "value": "magnific_sparkle"
           }
         ],
@@ -35954,7 +35954,7 @@
             "value": "photo"
           },
           {
-            "label": "photo_denoiser",
+            "label": "Photo denoiser",
             "value": "photo_denoiser"
           }
         ]
@@ -43175,27 +43175,27 @@
         "type": "enum",
         "options": [
           {
-            "label": "dolly_in",
+            "label": "Dolly in",
             "value": "dolly_in"
           },
           {
-            "label": "dolly_out",
+            "label": "Dolly out",
             "value": "dolly_out"
           },
           {
-            "label": "dolly_left",
+            "label": "Dolly left",
             "value": "dolly_left"
           },
           {
-            "label": "dolly_right",
+            "label": "Dolly right",
             "value": "dolly_right"
           },
           {
-            "label": "jib_up",
+            "label": "Jib up",
             "value": "jib_up"
           },
           {
-            "label": "jib_down",
+            "label": "Jib down",
             "value": "jib_down"
           },
           {
@@ -43203,7 +43203,7 @@
             "value": "static"
           },
           {
-            "label": "focus_shift",
+            "label": "Focus shift",
             "value": "focus_shift"
           }
         ]
@@ -43398,27 +43398,27 @@
         "type": "enum",
         "options": [
           {
-            "label": "dolly_in",
+            "label": "Dolly in",
             "value": "dolly_in"
           },
           {
-            "label": "dolly_out",
+            "label": "Dolly out",
             "value": "dolly_out"
           },
           {
-            "label": "dolly_left",
+            "label": "Dolly left",
             "value": "dolly_left"
           },
           {
-            "label": "dolly_right",
+            "label": "Dolly right",
             "value": "dolly_right"
           },
           {
-            "label": "jib_up",
+            "label": "Jib up",
             "value": "jib_up"
           },
           {
-            "label": "jib_down",
+            "label": "Jib down",
             "value": "jib_down"
           },
           {
@@ -43426,7 +43426,7 @@
             "value": "static"
           },
           {
-            "label": "focus_shift",
+            "label": "Focus shift",
             "value": "focus_shift"
           }
         ]
@@ -44848,7 +44848,7 @@
             "value": "Interlaced"
           },
           {
-            "label": "ProgressiveInterlaced",
+            "label": "Progressive interlaced",
             "value": "ProgressiveInterlaced"
           }
         ],
@@ -46529,7 +46529,7 @@
             "value": "hlg"
           },
           {
-            "label": "hdr_prores",
+            "label": "HDR ProRes",
             "value": "hdr_prores"
           }
         ],
@@ -46597,7 +46597,7 @@
             "value": "hlg"
           },
           {
-            "label": "hdr_prores",
+            "label": "HDR ProRes",
             "value": "hdr_prores"
           }
         ],
@@ -48156,7 +48156,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "very_low",
+            "label": "Very low",
             "value": "very_low"
           },
           {
@@ -48237,7 +48237,7 @@
         "type": "enum",
         "options": [
           {
-            "label": "very_low",
+            "label": "Very low",
             "value": "very_low"
           },
           {

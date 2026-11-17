@@ -1089,6 +1089,34 @@ def label(field):
     return field.replace("_", " ").capitalize().replace(" url", " URL")
 
 
+# An enum value that reads as a raw key (snake_case, camelCase, PascalCase) gets
+# a plain-words label in sentence case: "dolly_in" is "Dolly in", "landscape_16_9"
+# is "Landscape 16:9". Other values (png, 2K, 1080p, auto) are their own label.
+RAW_KEY = re.compile(r"^(?:[a-z]+(?:[A-Z][a-z0-9]*)+|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+|[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)$")
+OPTION_LABELS = {"hdr_prores": "HDR ProRes", "magnific_illusio": "Magnific Illusio",
+                 "magnific_sharpy": "Magnific Sharpy", "magnific_sparkle": "Magnific Sparkle"}
+LABEL_CAPS = {"hd": "HD", "hdr": "HDR"}
+
+
+def option_label(item):
+    text = str(item)
+    if text in OPTION_LABELS:
+        return OPTION_LABELS[text]
+    if not isinstance(item, str) or not RAW_KEY.match(text):
+        return text
+    words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", text).split("_")
+    joined = []
+    for word in words:
+        if word == "n":
+            word = "and"
+        if joined and word.isdigit() and joined[-1].isdigit():
+            joined[-1] += ":" + word
+        else:
+            joined.append(word)
+    shown = [LABEL_CAPS.get(word.lower(), word.lower()) for word in joined]
+    return shown[0][:1].upper() + shown[0][1:] + "".join(" " + word for word in shown[1:])
+
+
 def port_type(field, schema):
     simple = simple_schema(schema)
     if simple.get("type") == "array":
@@ -1114,7 +1142,7 @@ def fields_for(schema):
         kind = simple.get("type")
         param = {"key": field, "label": label(field), "required": field in required}
         if "enum" in simple:
-            param.update(type="enum", options=[{"label": str(item), "value": item}
+            param.update(type="enum", options=[{"label": option_label(item), "value": item}
                                                for item in simple["enum"]])
         elif kind == "boolean":
             param["type"] = "boolean"
