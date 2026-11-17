@@ -93,16 +93,12 @@ body.app-slava-restraint .project-workspace-controls__not-saved {
   font: 11px/1.4 var(--sr-ui);
 }
 /* The failed save's Try again keeps the quiet button's look (canvas-undo-notice__action--quiet),
-   at the header's text size; its hover is the quiet one (the filled button's hover is more
-   specific, so it is restated here). */
+   at the header's text size; its hover is the quiet button's own. */
 body.app-slava-restraint .project-workspace-controls__failed .canvas-undo-notice__action {
   height: 24px;
   padding: 0 10px;
   font-size: 11px;
   line-height: 1;
-}
-body.app-slava-restraint .project-workspace-controls__failed .canvas-undo-notice__action--quiet:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.08);
 }
 /* The save-paused state reads as the warning-coloured text; the failed save's Try again is a
    button (design: the quiet button the canvas notices use, canvas-undo-notice__action--quiet),

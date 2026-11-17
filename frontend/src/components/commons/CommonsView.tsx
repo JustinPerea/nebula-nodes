@@ -32,7 +32,7 @@ import { ToolbarMenuPopover } from '../asset-move/AssetMoveMenu';
 import { workspaceLabel } from '../../lib/workspaceLabel';
 import { setCommonsUnsaved } from '../../lib/commonsUnsaved';
 import { useProjectStore } from '../../store/projectStore';
-import { CommonsLeaveFailure, useCommonsLeave } from './commonsLeave';
+import { CommonsLeaveFailure, leaveFailureFor, useCommonsLeave } from './commonsLeave';
 import { CommonsLeavePopover } from './CommonsLeavePopover';
 import '../../styles/commons.css';
 import { useCommonsLine, useCommonsLoadLines } from './useCommonsLine';
@@ -949,18 +949,20 @@ function CommonsViewBody({ view }: {
 
       {/* Hidden, not unmounted, while another section shows (display: contents
           otherwise, so each panel stays the view's grid item; commons.css). */}
-      <CommonsLeaveFailure.Provider value={leave.asking?.failure || null}>
-        {!commonsOff && opened.includes('review') && (
+      {!commonsOff && opened.includes('review') && (
+        <CommonsLeaveFailure.Provider value={leaveFailureFor(leave.asking, 'review')}>
           <div className="commons-panel-slot" hidden={tab !== 'review'}>
             <CommonsReview key={view} active={tab === 'review'} onWork={leave.report.review} />
           </div>
-        )}
-        {!commonsOff && opened.includes('labeling') && (
+        </CommonsLeaveFailure.Provider>
+      )}
+      {!commonsOff && opened.includes('labeling') && (
+        <CommonsLeaveFailure.Provider value={leaveFailureFor(leave.asking, 'labeling')}>
           <div className="commons-panel-slot" hidden={tab !== 'labeling'}>
             <CommonsEvaluation key={view} active={tab === 'labeling'} onWork={leave.report.labeling} />
           </div>
-        )}
-      </CommonsLeaveFailure.Provider>
+        </CommonsLeaveFailure.Provider>
+      )}
       {commonsOff || tab === 'review' || tab === 'labeling' ? null : tab === 'settings' ? (
         <main className="commons-main commons-main--settings">
           <CommonsSettings key={view} status={status} onOpenAsset={openAsset} onChanged={refresh} />

@@ -3,6 +3,7 @@
  * (tests/helpers/cssCascade): its ink, and that it draws no left bar.
  */
 import { cascaded } from './cssCascade';
+import { declIsBar } from './leftBarReader';
 
 /** A value with its var() resolved through the element's own custom properties (one level, as
  * the sheet sets them), then the root tokens are what they are. */
@@ -15,14 +16,17 @@ export function lineLook(box: Element) {
   const won = cascaded(box);
   return { color: resolve(won, won.get('|color')?.value ?? '') };
 }
-/** Whether a left border thicker than 1px (a bar down the edge) wins on the box. Design: it never does. */
+/** Whether a bar down the left edge wins on the box: a border thicker than 1px in any spelling
+ * (the same reader as the stylesheet ratchet, tests/noLeftBar.ratchet), or an inset left shadow.
+ * Design: it never does. */
 export function leftBar(box: Element): boolean {
   const won = cascaded(box);
-  const shorthand = won.get('|border-left')?.value ?? '';
-  const width = won.get('|border-left-width')?.value ?? shorthand.split(/\s+/)[0] ?? '';
-  const px = /^(\d*\.?\d+)px$/.exec(width.trim());
-  return px ? Number(px[1]) > 1 : /^var\(/.test(width.trim());
+  return LEFT_BAR_PROPS.some((prop) => {
+    const value = won.get(`|${prop}`)?.value;
+    return value !== undefined && declIsBar(prop, value);
+  });
 }
+const LEFT_BAR_PROPS = ['border-left', 'border-left-width', 'border-inline-start', 'border-inline-start-width', 'border-width', 'box-shadow'];
 /** Round 18c (GM r30 1): the box's fill, the winner of `background` and `background-color`. */
 export function lineFill(box: Element): string {
   const won = cascaded(box);

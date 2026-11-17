@@ -102,7 +102,7 @@ describe('a Character save that fails', () => {
     // The block centres its two rows as a group with a small gap, not each in its own half of the page.
     const css = readFileSync(resolve(__dirname, '../../styles/character-studio.css'), 'utf8');
     const rule = css.match(/\.character-studio-view__loading \{([^}]*)\}/)?.[1] ?? '';
-    expect(rule).toMatch(/place-content:\s*center/);
+    expect(rule).toMatch(/place-content:\s*safe center/);
     expect(rule).toMatch(/gap:\s*\d+px/);
     expect(rule).not.toMatch(/place-items:\s*center/);
   });
