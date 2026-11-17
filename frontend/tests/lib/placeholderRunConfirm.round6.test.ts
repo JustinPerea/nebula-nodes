@@ -81,7 +81,7 @@ describe('GM round 6, item 3 and review 5, L5: every dollar in the total has a r
   it('a paid node that is no placeholder gets a muted row with no agent, after the placeholders', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', summaryOf({ low: 0.5, high: 0.5,
       lines: [line('h', 'Hero still', 0.43, 0.43), line('p', 'Plate', 0.07, 0.07)] }))!;
-    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $0.43', '“Plate” · Nano Banana 2 (3.1 Flash) · $0.07']);
+    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 · 3.1 Flash · $0.43', '“Plate” · Nano Banana 2 · 3.1 Flash · $0.07']);
     expect(model.rows.map((row) => row.agent?.name ?? null)).toEqual(['Codex', null]);
     expect(model.totalLine).toBe('This run could cost up to $0.50 at list prices.');
     expect(model.runLabel).toBe('Run for $0.50');
@@ -90,7 +90,7 @@ describe('GM round 6, item 3 and review 5, L5: every dollar in the total has a r
   it('a normal paid node with no list price: "price not listed", plain "Run", the listed total and a footnote', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', summaryOf({ low: 0.067, high: 0.067,
       lines: [line('h', 'Hero still', 0.067, 0.067)], unpriced: ['Plate'] }))!;
-    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $0.067', '“Plate” · Nano Banana 2 (3.1 Flash) · price not listed']);
+    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 · 3.1 Flash · $0.067', '“Plate” · Nano Banana 2 · 3.1 Flash · price not listed']);
     expect(model.runLabel).toBe('Run');
     // In cents, rounded up (review 6, L-e; GM round 7); the row keeps $0.067.
     expect(model.totalLine).toBe('The listed prices total $0.07.');
@@ -115,7 +115,7 @@ describe('GM round 6, item 3: from Cinema the button says Generate', () => {
   it('“Shot 1” · Nano Banana · $0.07 above the free line, and "Generate for up to $0.50"', () => {
     const model = placeholderRunConfirm(nodes, edges, 'cine', range, { verb: 'Generate', names: { cine: 'Shot 1' } })!;
     expect(model.heading).toBe('Run 2 nodes Codex is still setting up?');
-    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $0.0047–$0.43', '“Shot 1” · Nano Banana · $0.07']);
+    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 · 3.1 Flash · $0.0047–$0.43', '“Shot 1” · Nano Banana · $0.07']);
     expect(model.freeLine).toBe('Plus 1 free node.');
     expect(model.totalLine).toBe('This run could cost up to $0.50 at list prices.');
     expect(model.runLabel).toBe('Generate for up to $0.50');
@@ -144,7 +144,7 @@ describe('review 5, H1 (GM copy answer): once no placeholder is left', () => {
     expect(model.heading).toBe("Run with Codex's changes?");
     // One finished node: "this node" (GM - Design, round 7, item 1).
     expect(model.intro).toBe('Codex finished setting up this node.');
-    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 (3.1 Flash) · $9.00', '“Plate” · Nano Banana 2 (3.1 Flash) · $0.07']);
+    expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 · 3.1 Flash · $9.00', '“Plate” · Nano Banana 2 · 3.1 Flash · $0.07']);
     expect(model.rows.map((row) => row.agent?.name ?? null)).toEqual(['Codex', null]);
     expect(model.runLabel).toBe('Run for $9.07');
     expect(model.confirmIds).toEqual([]);

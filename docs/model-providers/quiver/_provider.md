@@ -83,7 +83,7 @@ Credit costs per operation are unchanged (see model catalog above).
 Example: Arrow 1.1 generate costs 20 credits → a Free user gets ~10
 generates per week (200 ÷ 20). The `credits` field on every Quiver
 response carries the per-call cost, which we surface in the model
-dropdown labels (e.g. "Arrow 1.1 max (25 credits)") so users see the
+dropdown labels (e.g. "Arrow 1.1 max · 25 credits") so users see the
 price before picking a variant.
 
 **Code impact:** None — our credit-cost accounting was already correct

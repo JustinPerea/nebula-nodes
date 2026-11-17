@@ -10,13 +10,13 @@ const QC_PROVIDER_VIA: ProviderVia = {
   byValue: { jev: { anyKey: ['TYPESAFE_API_KEY'], provider: 'typesafe' } },
 };
 const QC_JEV_PARAMS: ParamDefinition[] = [
-  { key: 'model', label: 'Jev Model', type: 'enum', required: false, default: 'jev-1.14.0', options: [
-    { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
-    { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
-    { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
-    { label: 'jev-preview (moves)', value: 'jev-preview' },
+  { key: 'model', label: 'Jev model', type: 'enum', required: false, default: 'jev-1.14.0', options: [
+    { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
+    { label: 'Jev 1.13.0 · pinned', value: 'jev-1.13.0' },
+    { label: 'jev-latest · updates itself, so check thresholds again', value: 'jev-latest' },
+    { label: 'jev-preview · updates itself', value: 'jev-preview' },
   ], visibleWhen: { mode: ['jev'] } },
-  { key: 'min_confidence', label: 'Jev Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { mode: ['jev'] } },
+  { key: 'min_confidence', label: 'Jev minimum confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { mode: ['jev'] } },
 ];
 
 export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
@@ -55,11 +55,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'gpt-image-2.5-flare',
         options: [
-          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
-          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
-          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
+          { label: 'GPT Image 1 · shuts down October 23, 2026', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 · shuts down December 1, 2026', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini · shuts down December 1, 2026', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare · fastest', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst · most precise edits', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -86,7 +86,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
-          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Extra high', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
           { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
@@ -140,7 +140,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'claude-opus-5-5',
         options: [
-          { label: 'Claude Fable 5.1 (flagship)', value: 'claude-fable-5-1' },
+          { label: 'Claude Fable 5.1 · flagship', value: 'claude-fable-5-1' },
           { label: 'Claude Opus 5.5', value: 'claude-opus-5-5' },
           { label: 'Claude Sonnet 5.5', value: 'claude-sonnet-5-5' },
           { label: 'Claude Haiku 5.5', value: 'claude-haiku-5-5' },
@@ -148,8 +148,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Claude Opus 4.8', value: 'claude-opus-4-8' },
           { label: 'Claude Sonnet 4.6', value: 'claude-sonnet-4-6' },
           { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
-          { label: 'Claude Opus 4.7 (legacy)', value: 'claude-opus-4-7' },
-          { label: 'Claude Opus 4.6 (legacy)', value: 'claude-opus-4-6' },
+          { label: 'Claude Opus 4.7 · legacy', value: 'claude-opus-4-7' },
+          { label: 'Claude Opus 4.6 · legacy', value: 'claude-opus-4-6' },
         ],
       },
       {
@@ -182,7 +182,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'system',
-        label: 'System Prompt',
+        label: 'System prompt',
         type: 'textarea',
         required: false,
         default: '',
@@ -201,14 +201,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'stop_sequences',
-        label: 'Stop Sequences',
+        label: 'Stop sequences',
         type: 'string',
         required: false,
         placeholder: 'Comma-separated',
       },
       {
         key: 'extended_thinking',
-        label: 'Extended Thinking',
+        label: 'Extended thinking',
         type: 'boolean',
         required: false,
         default: false,
@@ -220,7 +220,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'thinkingBudget',
-        label: 'Thinking Budget',
+        label: 'Thinking budget',
         type: 'integer',
         required: false,
         default: 10000,
@@ -247,13 +247,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
-          { label: 'X-High', value: 'xhigh', visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] } },
+          { label: 'Extra high', value: 'xhigh', visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] } },
           { label: 'Max', value: 'max' },
         ],
       },
       {
         key: 'prompt_caching',
-        label: 'Prompt Caching',
+        label: 'Prompt caching',
         type: 'boolean',
         required: false,
         default: false,
@@ -388,7 +388,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'resolution',
-        label: 'Resolution (with image)',
+        label: 'Resolution · with image',
         type: 'enum',
         required: false,
         default: '720p',
@@ -420,7 +420,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'reference', label: 'Reference Image', dataType: 'Image', required: false },
+      { id: 'reference', label: 'Reference image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -458,7 +458,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true, role: 'subject' },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: false, multiple: true, role: 'subject' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -473,7 +473,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Gen-4 Image', value: 'gen4_image' },
           { label: 'Gen-4 Image Turbo', value: 'gen4_image_turbo' },
-          { label: 'Nano Banana Pro (Gemini 3)', value: 'gemini_image3_pro' },
+          { label: 'Nano Banana Pro · Gemini 3', value: 'gemini_image3_pro' },
           { label: 'GPT Image 2', value: 'gpt_image_2' },
           { label: 'Gemini 2.5 Flash', value: 'gemini_2.5_flash' },
           { label: 'Seedream 5.0 Pro', value: 'seedream5_pro' },
@@ -533,7 +533,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2448 × 3264 (3:4)', value: '2448:3264', visibleWhen: { model: ['gpt_image_2'] } },
           { label: '2336 × 3504 (2:3)', value: '2336:3504', visibleWhen: { model: ['gpt_image_2'] } },
           { label: '2160 × 3840 (9:16)', value: '2160:3840', visibleWhen: { model: ['gpt_image_2'] } },
-          { label: 'Auto (model picks)', value: 'auto', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: 'Auto · model picks', value: 'auto', visibleWhen: { model: ['gpt_image_2'] } },
           { label: '1344 × 768 (16:9)', value: '1344:768', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
           { label: '768 × 1344 (9:16)', value: '768:1344', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
           { label: '1184 × 864 (4:3)', value: '1184:864', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
@@ -628,7 +628,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'scaleFactor',
-        label: 'Scale Factor',
+        label: 'Scale factor',
         type: 'enum',
         required: false,
         default: 2,
@@ -647,8 +647,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'photo',
         options: [
           { label: 'Photo', value: 'photo' },
-          { label: 'Photo Denoiser', value: 'photo_denoiser' },
-          { label: 'Sublime (illustration)', value: 'sublime' },
+          { label: 'Photo denoiser', value: 'photo_denoiser' },
+          { label: 'Sublime · illustration', value: 'sublime' },
         ],
       },
       {
@@ -662,7 +662,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'smartGrain',
-        label: 'Smart Grain',
+        label: 'Smart grain',
         type: 'integer',
         required: false,
         min: 0,
@@ -671,7 +671,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'ultraDetail',
-        label: 'Ultra Detail',
+        label: 'Ultra detail',
         type: 'integer',
         required: false,
         min: 0,
@@ -690,9 +690,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'RUNWAY_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'character_image', label: 'Character Image', dataType: 'Image', required: false, role: 'identity' },
-      { id: 'character_video', label: 'Character Video', dataType: 'Video', required: false },
-      { id: 'reference', label: 'Performance Video', dataType: 'Video', required: true },
+      { id: 'character_image', label: 'Character image', dataType: 'Image', required: false, role: 'identity' },
+      { id: 'character_video', label: 'Character video', dataType: 'Video', required: false },
+      { id: 'reference', label: 'Performance video', dataType: 'Video', required: true },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -700,14 +700,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'bodyControl',
-        label: 'Body Control',
+        label: 'Body control',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'expressionIntensity',
-        label: 'Expression Intensity',
+        label: 'Expression intensity',
         type: 'integer',
         required: false,
         default: 3,
@@ -805,7 +805,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'ElevenLabs voice ID',
         type: 'string',
         required: false,
-        placeholder: 'ElevenLabs voice ID (runs on your ElevenLabs key)',
+        placeholder: 'ElevenLabs voice ID · runs on your ElevenLabs key',
       },
     ],
   },
@@ -837,7 +837,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'removeBackgroundNoise',
-        label: 'Remove Background Noise',
+        label: 'Remove background noise',
         type: 'boolean',
         required: false,
         default: false,
@@ -879,7 +879,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'ElevenLabs voice ID',
         type: 'string',
         required: false,
-        placeholder: 'ElevenLabs voice ID (runs on your ElevenLabs key)',
+        placeholder: 'ElevenLabs voice ID · runs on your ElevenLabs key',
       },
     ],
   },
@@ -903,7 +903,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'targetLang',
-        label: 'Target Language',
+        label: 'Target language',
         type: 'enum',
         required: true,
         default: 'es',
@@ -940,21 +940,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'disableVoiceCloning',
-        label: 'Disable Voice Cloning',
+        label: 'Disable voice cloning',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'dropBackgroundAudio',
-        label: 'Drop Background Audio',
+        label: 'Drop background audio',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'numSpeakers',
-        label: 'Number of Speakers',
+        label: 'Number of speakers',
         type: 'integer',
         required: false,
         placeholder: 'Auto-detect',
@@ -988,11 +988,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'eleven_multilingual_v2',
         options: [
-          { label: 'v3 (Highest Quality)', value: 'eleven_v3' },
+          { label: 'v3 · highest quality', value: 'eleven_v3' },
           { label: 'Multilingual v2', value: 'eleven_multilingual_v2' },
-          { label: 'Turbo v2.5 (deprecated: use Flash v2.5)', value: 'eleven_turbo_v2_5' },
-          { label: 'Flash v2.5 (Fastest)', value: 'eleven_flash_v2_5' },
-          { label: 'Turbo v2 (deprecated: use Flash v2)', value: 'eleven_turbo_v2' },
+          { label: 'Turbo v2.5 · deprecated, use Flash v2.5', value: 'eleven_turbo_v2_5' },
+          { label: 'Flash v2.5 · fastest', value: 'eleven_flash_v2_5' },
+          { label: 'Turbo v2 · deprecated, use Flash v2', value: 'eleven_turbo_v2' },
           { label: 'Flash v2', value: 'eleven_flash_v2' },
         ],
       },
@@ -1016,7 +1016,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'similarity_boost',
-        label: 'Similarity Boost',
+        label: 'Similarity boost',
         type: 'float',
         required: false,
         default: 0.75,
@@ -1036,7 +1036,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'use_speaker_boost',
-        label: 'Speaker Boost',
+        label: 'Speaker boost',
         type: 'boolean',
         required: false,
         default: true,
@@ -1053,7 +1053,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'mp3_44100_128',
@@ -1088,7 +1088,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: '/v1/text-to-dialogue',
     envKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'sync',
-    description: "A conversation between several ElevenLabs voices in one audio file (Eleven v4 by default). The script input is one line per turn, \"<voice name>: <text>\", for example \"Rachel: Hello there.\" then \"Adam: Hi!\". The speaker is everything before the first colon. Use names from the person's ElevenLabs voice library; they match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices (a free call). A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text.",
+    description: "A conversation between several ElevenLabs voices in one audio file, using Eleven v4 by default. The script input is one line per turn, “<voice name>: <text>”, for example “Rachel: Hello there.” then “Adam: Hi!”. The speaker is everything before the first colon. Use names from the person’s ElevenLabs voice library. They match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices, which is a free call. A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text.",
     capabilityNote: "Write one line per turn as Name: text, with voice names from your ElevenLabs voices (for example Rachel: Hi there. then Adam: Hey!). Nebula looks the names up before generating. If a name matches no voice, or more than one, the run stops and lists the voices with their IDs; you can write a voice ID in place of the name. Up to 10 voices and 2,000 characters per run.",
     inputPorts: [
       { id: 'script', label: 'Script', dataType: 'Text', required: true },
@@ -1110,10 +1110,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       { key: 'stability', label: 'Stability', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
       { key: 'similarity', label: 'Similarity', type: 'float', required: false, default: 0.75, min: 0, max: 1, step: 0.05 },
-      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto (e.g. en, es)' },
+      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto, or a code such as en' },
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'mp3_44100_128',
@@ -1180,7 +1180,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'response_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'text',
@@ -1188,8 +1188,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Text', value: 'text' },
           { label: 'JSON', value: 'json' },
           { label: 'Verbose JSON', value: 'verbose_json' },
-          { label: 'SRT Subtitles', value: 'srt' },
-          { label: 'VTT Subtitles', value: 'vtt' },
+          { label: 'SRT subtitles', value: 'srt' },
+          { label: 'VTT subtitles', value: 'vtt' },
         ],
       },
       {
@@ -1224,12 +1224,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: true },
     ],
     outputPorts: [
-      { id: 'text', label: 'English Text', dataType: 'Text', required: false },
+      { id: 'text', label: 'English text', dataType: 'Text', required: false },
     ],
     params: [
       {
         key: 'response_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'text',
@@ -1237,8 +1237,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Text', value: 'text' },
           { label: 'JSON', value: 'json' },
           { label: 'Verbose JSON', value: 'verbose_json' },
-          { label: 'SRT Subtitles', value: 'srt' },
-          { label: 'VTT Subtitles', value: 'vtt' },
+          { label: 'SRT subtitles', value: 'srt' },
+          { label: 'VTT subtitles', value: 'vtt' },
         ],
       },
       {
@@ -1256,7 +1256,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Prompt',
         type: 'string',
         required: false,
-        placeholder: 'Guide the model (must be in English)',
+        placeholder: 'Guide the model in English',
       },
     ],
   },
@@ -1337,10 +1337,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'instructions',
-        label: 'Voice Instructions',
+        label: 'Voice instructions · gpt-4o-mini-tts only',
         type: 'string',
         required: false,
-        placeholder: 'e.g. "Speak slowly with warmth" (gpt-4o-mini-tts only)',
+        placeholder: 'Speak slowly with warmth',
       },
     ],
   },
@@ -1372,7 +1372,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'prompt_influence',
-        label: 'Prompt Influence',
+        label: 'Prompt influence',
         type: 'float',
         required: false,
         default: 0.3,
@@ -1382,14 +1382,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'loop',
-        label: 'Seamless Loop',
+        label: 'Seamless loop',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'mp3_44100_128',
@@ -1449,7 +1449,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'similarity_boost',
-        label: 'Similarity Boost',
+        label: 'Similarity boost',
         type: 'float',
         required: false,
         default: 0.75,
@@ -1459,7 +1459,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'remove_background_noise',
-        label: 'Remove Background Noise',
+        label: 'Remove background noise',
         type: 'boolean',
         required: false,
         default: false,
@@ -1473,7 +1473,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'mp3_44100_128',
@@ -1499,7 +1499,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: true },
     ],
     outputPorts: [
-      { id: 'audio', label: 'Isolated Audio', dataType: 'Audio', required: false },
+      { id: 'audio', label: 'Isolated audio', dataType: 'Audio', required: false },
     ],
     params: [],
   },
@@ -1516,12 +1516,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: true },
     ],
     outputPorts: [
-      { id: 'audio', label: 'Dubbed Audio', dataType: 'Audio', required: false },
+      { id: 'audio', label: 'Dubbed audio', dataType: 'Audio', required: false },
     ],
     params: [
       {
         key: 'target_lang',
-        label: 'Target Language',
+        label: 'Target language',
         type: 'enum',
         required: true,
         default: 'es',
@@ -1546,7 +1546,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'source_lang',
-        label: 'Source Language',
+        label: 'Source language',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -1562,7 +1562,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'num_speakers',
-        label: 'Number of Speakers',
+        label: 'Number of speakers',
         type: 'integer',
         required: false,
         placeholder: 'Auto-detect',
@@ -1571,14 +1571,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'drop_background_audio',
-        label: 'Drop Background Audio',
+        label: 'Drop background audio',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'disable_voice_cloning',
-        label: 'Disable Voice Cloning',
+        label: 'Disable voice cloning',
         type: 'boolean',
         required: false,
         default: false,
@@ -1617,18 +1617,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Language',
         type: 'string',
         required: false,
-        placeholder: 'Auto-detect (ISO code, e.g. en)',
+        placeholder: 'Auto-detect, or an ISO code such as en',
       },
       {
         key: 'diarize',
-        label: 'Diarize (label speakers)',
+        label: 'Diarize · label speakers',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'num_speakers',
-        label: 'Max Speakers',
+        label: 'Max speakers',
         type: 'integer',
         required: false,
         placeholder: 'Auto',
@@ -1637,21 +1637,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'tag_audio_events',
-        label: 'Tag Audio Events',
+        label: 'Tag audio events',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'transcript_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'text',
         options: [
-          { label: 'Plain Text', value: 'text' },
-          { label: 'SRT Subtitles', value: 'srt' },
-          { label: 'VTT Subtitles', value: 'vtt' },
+          { label: 'Plain text', value: 'text' },
+          { label: 'SRT subtitles', value: 'srt' },
+          { label: 'VTT subtitles', value: 'vtt' },
         ],
       },
     ],
@@ -1682,7 +1682,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'htdemucs_ft',
         options: [
-          { label: 'HT-Demucs FT (best 4-stem)', value: 'htdemucs_ft' },
+          { label: 'HT-Demucs FT · best 4-stem', value: 'htdemucs_ft' },
           { label: 'HT-Demucs', value: 'htdemucs' },
           { label: 'HDemucs MMI', value: 'hdemucs_mmi' },
           { label: 'MDX', value: 'mdx' },
@@ -1691,7 +1691,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'shifts',
-        label: 'Quality (Shifts)',
+        label: 'Quality · shifts',
         type: 'integer',
         required: false,
         default: 1,
@@ -1710,7 +1710,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'mp3',
@@ -1732,18 +1732,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
-      { id: 'prompt', label: 'Audio Prompt', dataType: 'Text', required: true },
+      { id: 'prompt', label: 'Audio prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'video', label: 'Video (with audio)', dataType: 'Video', required: false },
+      { id: 'video', label: 'Video · with audio', dataType: 'Video', required: false },
     ],
     params: [
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
-        placeholder: 'e.g. music, talking, static',
+        placeholder: 'music, talking, static',
       },
       {
         key: 'duration',
@@ -1765,7 +1765,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'cfg_strength',
-        label: 'Guidance (CFG)',
+        label: 'Guidance · CFG',
         type: 'float',
         required: false,
         default: 4.5,
@@ -1805,10 +1805,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'tags',
-        label: 'Style Tags',
+        label: 'Style tags',
         type: 'string',
         required: true,
-        placeholder: 'e.g. lofi hiphop, chill, jazzy piano, 90 BPM',
+        placeholder: 'lofi hiphop, chill, jazzy piano, 90 BPM',
       },
       {
         key: 'lyrics',
@@ -1838,7 +1838,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 15,
@@ -1891,7 +1891,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 7.5,
@@ -1919,7 +1919,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image Guide', dataType: 'Image', required: false },
+      { id: 'image', label: 'Image guide', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -1928,7 +1928,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -1957,22 +1957,22 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'safety_tolerance',
-        label: 'Safety Tolerance',
+        label: 'Safety tolerance',
         type: 'enum',
         required: false,
         default: '2',
         options: [
-          { label: '1 (Strict)', value: '1' },
+          { label: '1 · strict', value: '1' },
           { label: '2', value: '2' },
           { label: '3', value: '3' },
           { label: '4', value: '4' },
           { label: '5', value: '5' },
-          { label: '6 (Permissive)', value: '6' },
+          { label: '6 · permissive', value: '6' },
         ],
       },
       {
         key: 'enhance_prompt',
-        label: 'Enhance Prompt',
+        label: 'Enhance prompt',
         type: 'boolean',
         required: false,
         default: false,
@@ -1997,7 +1997,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'image_prompt_strength',
-        label: 'Image Influence',
+        label: 'Image influence',
         type: 'float',
         required: false,
         default: 0.1,
@@ -2070,7 +2070,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'filePath',
-        label: 'Document (PDF / text)',
+        label: 'Document · PDF or text',
         type: 'file',
         required: true,
         default: '',
@@ -2100,7 +2100,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'auto',
         options: [
-          { label: 'Auto (Gemini)', value: 'auto' },
+          { label: 'Auto · Gemini', value: 'auto' },
           { label: 'Manual', value: 'manual' },
           { label: 'Image only', value: 'passthrough' },
         ],
@@ -2111,7 +2111,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'textarea',
         required: false,
         default: '',
-        placeholder: 'e.g. wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film',
+        placeholder: 'wabi-sabi minimalism, warm tungsten lighting, grainy 35mm film',
         visibleWhen: { mode: ['manual'] },
       },
       {
@@ -2122,7 +2122,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'all',
         visibleWhen: { mode: ['auto'] },
         options: [
-          { label: 'All (palette + lighting + medium + mood)', value: 'all' },
+          { label: 'All · palette, lighting, medium and mood', value: 'all' },
           { label: 'Palette only', value: 'palette' },
           { label: 'Lighting only', value: 'lighting' },
           { label: 'Medium / texture only', value: 'medium' },
@@ -2141,18 +2141,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: [],
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'video_in', label: 'Source Video', dataType: 'Video', required: true },
+      { id: 'video_in', label: 'Source video', dataType: 'Video', required: true },
     ],
     outputPorts: [
-      { id: 'video', label: 'Edited Video', dataType: 'Video', required: false },
+      { id: 'video', label: 'Edited video', dataType: 'Video', required: false },
     ],
     params: [
       // Runtime editor state. These stay hidden from the generic inspector,
       // but must be declared so POST/PUT /api/graph/node can persist edits.
       { key: 'clips', label: 'Clips', type: 'string', required: false, hidden: true },
-      { key: 'sourceDuration', label: 'Source Duration', type: 'float', required: false, hidden: true },
+      { key: 'sourceDuration', label: 'Source duration', type: 'float', required: false, hidden: true },
       { key: 'sourceFps', label: 'Source FPS', type: 'float', required: false, hidden: true },
-      { key: 'sourceIsVfr', label: 'Source Is VFR', type: 'boolean', required: false, hidden: true },
+      { key: 'sourceIsVfr', label: 'Source is VFR', type: 'boolean', required: false, hidden: true },
     ],
   },
 
@@ -2165,10 +2165,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: [],
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'sources', label: 'Track Sources', dataType: 'Any', required: false },
+      { id: 'sources', label: 'Track sources', dataType: 'Any', required: false },
     ],
     outputPorts: [
-      { id: 'video', label: 'Rendered Video', dataType: 'Video', required: false },
+      { id: 'video', label: 'Rendered video', dataType: 'Video', required: false },
     ],
     params: [
       // Structured composition state is edited by the dedicated Remotion UI.
@@ -2200,12 +2200,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'lab-transfer',
         options: [
-          { label: 'Lab Transfer', value: 'lab-transfer' },
+          { label: 'Lab transfer', value: 'lab-transfer' },
           { label: 'Reinhard', value: 'reinhard' },
           { label: 'Histogram', value: 'histogram' },
         ],
       },
-      { key: 'source_image', label: 'Palette Source', type: 'file', required: false, default: '' },
+      { key: 'source_image', label: 'Palette source', type: 'file', required: false, default: '' },
     ],
   },
 
@@ -2245,7 +2245,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'contrast', label: 'Contrast', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
       { key: 'saturation', label: 'Saturation', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
       { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.05, visibleWhen: { preset: ['custom'] } },
-      { key: 'lut', label: 'LUT (.cube)', type: 'file', required: false, default: '' },
+      { key: 'lut', label: 'LUT · .cube', type: 'file', required: false, default: '' },
     ],
   },
 
@@ -2289,7 +2289,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'character': {
     id: 'character',
     displayName: 'Character',
-    description: "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them.",
+    description: "A saved character’s identity, including reference views, frozen traits and seed, for cinematic and edit nodes. Set character to a character id. GET /api/characters lists them.",
     category: 'character',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2306,16 +2306,16 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'character', label: 'Character', type: 'character', required: true },
       {
         key: 'override_prompt',
-        label: 'Override Prompt',
+        label: 'Override prompt',
         type: 'textarea',
         required: false,
         default: '',
-        placeholder: 'Optional per-shot direction: pose, expression, wardrobe, framing',
+        placeholder: 'Optional per-shot direction covering pose, expression, wardrobe and framing',
       },
       // Optional extra Image refs layered on top of the stored referenceViews.
-      { key: 'override_refs', label: 'Override Refs', type: 'file', required: false, default: '' },
+      { key: 'override_refs', label: 'Override refs', type: 'file', required: false, default: '' },
       // Empty string = inherit the Character's stored consistencyStrength.
-      { key: 'strength_override', label: 'Strength Override', type: 'float', required: false, default: '', min: 0, max: 1, step: 0.05,
+      { key: 'strength_override', label: 'Strength override', type: 'float', required: false, default: '', min: 0, max: 1, step: 0.05,
         disabledReason: 'Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained.' },
     ],
   },
@@ -2323,7 +2323,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'nebula-moodboard': {
     id: 'nebula-moodboard',
     displayName: 'Moodboard',
-    description: 'A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards.',
+    description: 'A saved Nebula moodboard as creative direction, with its style brief, negative prompt, palette and representative images. Set moodboard to a board id. GET /api/moodboards lists the boards.',
     category: 'moodboard',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2332,8 +2332,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [],
     outputPorts: [
       { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false },
-      { id: 'style_brief', label: 'Style Brief', dataType: 'Text', required: false },
-      { id: 'negative_prompt', label: 'Negative Prompt', dataType: 'Text', required: false },
+      { id: 'style_brief', label: 'Style brief', dataType: 'Text', required: false },
+      { id: 'negative_prompt', label: 'Negative prompt', dataType: 'Text', required: false },
       { id: 'representative_images', label: 'Images', dataType: 'Array', required: false },
       { id: 'palette', label: 'Palette', dataType: 'Array', required: false },
     ],
@@ -2344,7 +2344,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'send_notes', label: 'Moodboard notes to generators', type: 'enum', required: false, default: 'board', options: [
         { label: 'As the moodboard says', value: 'board' },
         { label: 'Send', value: 'yes' },
-        { label: "Don't send", value: 'no' },
+        { label: "Don’t send", value: 'no' },
       ] },
     ],
   },
@@ -2386,11 +2386,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'pitch', label: 'Pitch (°)', type: 'float', required: false, default: 0, min: -90, max: 90, step: 1 },
       { key: 'yaw', label: 'Yaw (°)', type: 'float', required: false, default: 0, min: 0, max: 360, step: 1 },
       { key: 'roll', label: 'Roll (°)', type: 'float', required: false, default: 0, min: -45, max: 45, step: 1 },
-      { key: 'focalLength', label: 'Focal Length (mm)', type: 'float', required: false, default: 35, min: 10, max: 200, step: 1 },
-      { key: 'subjectDistance', label: 'Subject Distance (m)', type: 'float', required: false, default: 3, min: 0.5, max: 50, step: 0.1 },
-      { key: 'focusDistance', label: 'Focus Distance (m)', type: 'float', required: false, default: 3, min: 0.5, max: 100, step: 0.1 },
-      { key: 'subjectScreenX', label: 'Subject Screen X', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.01 },
-      { key: 'subjectScreenY', label: 'Subject Screen Y', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.01 },
+      { key: 'focalLength', label: 'Focal length (mm)', type: 'float', required: false, default: 35, min: 10, max: 200, step: 1 },
+      { key: 'subjectDistance', label: 'Subject distance (m)', type: 'float', required: false, default: 3, min: 0.5, max: 50, step: 0.1 },
+      { key: 'focusDistance', label: 'Focus distance (m)', type: 'float', required: false, default: 3, min: 0.5, max: 100, step: 0.1 },
+      { key: 'subjectScreenX', label: 'Subject screen X', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.01 },
+      { key: 'subjectScreenY', label: 'Subject screen Y', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.01 },
     ],
   },
 
@@ -2405,27 +2405,27 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     capabilityNote: 'Authors a provider-neutral, versioned camera transform locally. No provider request is made.',
     inputPorts: [],
     outputPorts: [
-      { id: 'pose', label: 'Camera Pose', dataType: 'CameraPose', required: false },
+      { id: 'pose', label: 'Camera pose', dataType: 'CameraPose', required: false },
     ],
     params: [
       { key: 'pose_id', label: 'Pose ID', type: 'string', required: false, default: '', placeholder: 'Defaults to node ID' },
-      { key: 'coordinate_system_id', label: 'Coordinate System ID', type: 'string', required: false, default: 'nebula-world' },
+      { key: 'coordinate_system_id', label: 'Coordinate system ID', type: 'string', required: false, default: 'nebula-world' },
       { key: 'handedness', label: 'Handedness', type: 'enum', required: false, default: 'right', options: [
         { label: 'Right-handed', value: 'right' }, { label: 'Left-handed', value: 'left' },
       ] },
-      { key: 'up_axis', label: 'Up Axis', type: 'enum', required: false, default: 'y', options: [
+      { key: 'up_axis', label: 'Up axis', type: 'enum', required: false, default: 'y', options: [
         { label: '+X', value: 'x' }, { label: '-X', value: '-x' }, { label: '+Y', value: 'y' },
         { label: '-Y', value: '-y' }, { label: '+Z', value: 'z' }, { label: '-Z', value: '-z' },
       ] },
-      { key: 'forward_axis', label: 'Forward Axis', type: 'enum', required: false, default: '-z', options: [
+      { key: 'forward_axis', label: 'Forward axis', type: 'enum', required: false, default: '-z', options: [
         { label: '+X', value: 'x' }, { label: '-X', value: '-x' }, { label: '+Y', value: 'y' },
         { label: '-Y', value: '-y' }, { label: '+Z', value: 'z' }, { label: '-Z', value: '-z' },
       ] },
-      { key: 'unit', label: 'Spatial Unit', type: 'enum', required: false, default: 'meters', options: [
+      { key: 'unit', label: 'Spatial unit', type: 'enum', required: false, default: 'meters', options: [
         { label: 'Meters', value: 'meters' }, { label: 'Centimeters', value: 'centimeters' },
         { label: 'Millimeters', value: 'millimeters' }, { label: 'Custom', value: 'custom' },
       ] },
-      { key: 'meters_per_unit', label: 'Meters per Custom Unit', type: 'float', required: false, default: 1, min: 0.000001, step: 0.001, visibleWhen: { unit: ['custom'] } },
+      { key: 'meters_per_unit', label: 'Meters per custom unit', type: 'float', required: false, default: 1, min: 0.000001, step: 0.001, visibleWhen: { unit: ['custom'] } },
       { key: 'origin_x', label: 'Origin X (m)', type: 'float', required: false, default: 0, step: 0.01 },
       { key: 'origin_y', label: 'Origin Y (m)', type: 'float', required: false, default: 0, step: 0.01 },
       { key: 'origin_z', label: 'Origin Z (m)', type: 'float', required: false, default: 0, step: 0.01 },
@@ -2437,9 +2437,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'orientation_z', label: 'Quaternion Z', type: 'float', required: false, default: 0, min: -1, max: 1, step: 0.01 },
       { key: 'orientation_w', label: 'Quaternion W', type: 'float', required: false, default: 1, min: -1, max: 1, step: 0.01 },
       { key: 'timestamp_seconds', label: 'Timestamp (s)', type: 'float', required: false, default: 0, min: 0, step: 0.01 },
-      { key: 'include_intrinsics', label: 'Include Pinhole Intrinsics', type: 'boolean', required: false, default: true },
-      { key: 'image_width', label: 'Image Width', type: 'integer', required: false, default: 1920, min: 1, max: 32768, visibleWhen: { include_intrinsics: [true] } },
-      { key: 'image_height', label: 'Image Height', type: 'integer', required: false, default: 1080, min: 1, max: 32768, visibleWhen: { include_intrinsics: [true] } },
+      { key: 'include_intrinsics', label: 'Include pinhole intrinsics', type: 'boolean', required: false, default: true },
+      { key: 'image_width', label: 'Image width', type: 'integer', required: false, default: 1920, min: 1, max: 32768, visibleWhen: { include_intrinsics: [true] } },
+      { key: 'image_height', label: 'Image height', type: 'integer', required: false, default: 1080, min: 1, max: 32768, visibleWhen: { include_intrinsics: [true] } },
       { key: 'fx', label: 'Focal X', type: 'float', required: false, default: 1000, min: 0.000001, max: 10000000, step: 0.1, visibleWhen: { include_intrinsics: [true] } },
       { key: 'fy', label: 'Focal Y', type: 'float', required: false, default: 1000, min: 0.000001, max: 10000000, step: 0.1, visibleWhen: { include_intrinsics: [true] } },
       { key: 'cx', label: 'Principal X', type: 'float', required: false, default: 960, min: 0, max: 32768, step: 0.1, visibleWhen: { include_intrinsics: [true] } },
@@ -2458,7 +2458,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     capabilityNote: 'Combines timestamped Camera Pose values locally; timestamps and coordinate systems are validated.',
     inputPorts: [
-      { id: 'poses', label: 'Camera Poses', dataType: 'CameraPose', required: true, multiple: true, maxConnections: 10000 },
+      { id: 'poses', label: 'Camera poses', dataType: 'CameraPose', required: true, multiple: true, maxConnections: 10000 },
     ],
     outputPorts: [
       { id: 'path', label: 'Camera Path', dataType: 'CameraPath', required: false },
@@ -2468,7 +2468,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'interpolation', label: 'Interpolation', type: 'enum', required: false, default: 'linear', options: [
         { label: 'Linear', value: 'linear' }, { label: 'Step', value: 'step' }, { label: 'Catmull-Rom', value: 'catmull-rom' },
       ] },
-      { key: 'closed', label: 'Closed Path', type: 'boolean', required: false, default: false },
+      { key: 'closed', label: 'Closed path', type: 'boolean', required: false, default: false },
     ],
   },
 
@@ -2482,15 +2482,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     capabilityNote: 'Pairs local image outputs with Camera Pose anchors. Remote or signed asset URLs are rejected.',
     inputPorts: [
-      { id: 'poses', label: 'Camera Poses', dataType: 'CameraPose', required: true, multiple: true, maxConnections: 4096 },
-      { id: 'assets', label: 'Local Images', dataType: 'Image', required: true, multiple: true, maxConnections: 4096 },
+      { id: 'poses', label: 'Camera poses', dataType: 'CameraPose', required: true, multiple: true, maxConnections: 4096 },
+      { id: 'assets', label: 'Local images', dataType: 'Image', required: true, multiple: true, maxConnections: 4096 },
     ],
     outputPorts: [
       { id: 'context', label: 'Spatial Context', dataType: 'SpatialContext', required: false },
     ],
     params: [
       { key: 'context_id', label: 'Context ID', type: 'string', required: false, default: '', placeholder: 'Defaults to node ID' },
-      { key: 'role', label: 'Anchor Role', type: 'enum', required: false, default: 'reference', options: [
+      { key: 'role', label: 'Anchor role', type: 'enum', required: false, default: 'reference', options: [
         { label: 'Reference', value: 'reference' }, { label: 'Observation', value: 'observation' }, { label: 'Target', value: 'target' },
       ] },
     ],
@@ -2506,15 +2506,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     capabilityNote: 'Builds a local sensor-rig description from Camera Pose inputs; optical and non-optical intrinsics rules are enforced.',
     inputPorts: [
-      { id: 'poses', label: 'Sensor Poses', dataType: 'CameraPose', required: true, multiple: true, maxConnections: 256 },
+      { id: 'poses', label: 'Sensor poses', dataType: 'CameraPose', required: true, multiple: true, maxConnections: 256 },
     ],
     outputPorts: [
       { id: 'rig', label: 'Sensor Rig', dataType: 'SensorRig', required: false },
     ],
     params: [
       { key: 'rig_id', label: 'Rig ID', type: 'string', required: false, default: '', placeholder: 'Defaults to node ID' },
-      { key: 'modality', label: 'Sensor Modality', type: 'enum', required: false, default: 'rgb', options: [
-        { label: 'RGB', value: 'rgb' }, { label: 'Depth', value: 'depth' }, { label: 'RGB + Depth', value: 'rgbd' },
+      { key: 'modality', label: 'Sensor modality', type: 'enum', required: false, default: 'rgb', options: [
+        { label: 'RGB', value: 'rgb' }, { label: 'Depth', value: 'depth' }, { label: 'RGB and depth', value: 'rgbd' },
         { label: 'LiDAR', value: 'lidar' }, { label: 'IMU', value: 'imu' },
       ] },
     ],
@@ -2530,19 +2530,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     capabilityNote: 'Strictly validates a versioned spatial value locally. Legacy World v1 values are adapted to World v2 in memory only.',
     inputPorts: [
-      { id: 'input', label: 'Spatial Value', dataType: 'Any', required: true },
+      { id: 'input', label: 'Spatial value', dataType: 'Any', required: true },
     ],
     outputPorts: [
-      { id: 'value', label: 'Validated Value', dataType: 'Any', required: false },
-      { id: 'summary', label: 'Validation Summary', dataType: 'Text', required: false },
+      { id: 'value', label: 'Validated value', dataType: 'Any', required: false },
+      { id: 'summary', label: 'Validation summary', dataType: 'Text', required: false },
     ],
     params: [
-      { key: 'expected_type', label: 'Expected Type', type: 'enum', required: true, default: 'CameraPose', options: [
-        { label: 'Camera Pose', value: 'CameraPose' }, { label: 'Camera Path', value: 'CameraPath' },
-        { label: 'Spatial Context', value: 'SpatialContext' }, { label: 'Depth Map', value: 'DepthMap' },
-        { label: 'Depth Sequence', value: 'DepthSequence' }, { label: 'Point Cloud', value: 'PointCloud' },
-        { label: 'Sensor Rig', value: 'SensorRig' }, { label: 'Sensor Stream', value: 'SensorStream' },
-        { label: 'Spatial Session', value: 'SpatialSession' }, { label: 'World', value: 'World' },
+      { key: 'expected_type', label: 'Expected type', type: 'enum', required: true, default: 'CameraPose', options: [
+        { label: 'Camera pose', value: 'CameraPose' }, { label: 'Camera path', value: 'CameraPath' },
+        { label: 'Spatial context', value: 'SpatialContext' }, { label: 'Depth map', value: 'DepthMap' },
+        { label: 'Depth sequence', value: 'DepthSequence' }, { label: 'Point cloud', value: 'PointCloud' },
+        { label: 'Sensor rig', value: 'SensorRig' }, { label: 'Sensor stream', value: 'SensorStream' },
+        { label: 'Spatial session', value: 'SpatialSession' }, { label: 'World', value: 'World' },
       ] },
     ],
   },
@@ -2571,13 +2571,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'reference_set', label: 'Reference set', dataType: 'ReferenceSet', required: false },
     ],
     params: [
-      { key: 'style_weight', label: 'Style Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'identity_weight', label: 'Identity Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'composition_weight', label: 'Composition Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'pose_weight', label: 'Pose Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'lighting_weight', label: 'Lighting Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'subject_weight', label: 'Subject Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
-      { key: 'background_weight', label: 'Background Priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'style_weight', label: 'Style priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'identity_weight', label: 'Identity priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'composition_weight', label: 'Composition priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'pose_weight', label: 'Pose priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'lighting_weight', label: 'Lighting priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'subject_weight', label: 'Subject priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
+      { key: 'background_weight', label: 'Background priority', type: 'float', required: false, default: 1.0, min: 0.0, max: 1.0, step: 0.05 },
     ],
   },
 
@@ -2612,7 +2612,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'textarea',
         required: false,
         default: '',
-        placeholder: 'Optional: use {text1}, {text2}, {text3} placeholders',
+        placeholder: 'Optional. Use {text1}, {text2}, {text3} placeholders.',
       },
     ],
   },
@@ -2688,7 +2688,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'max_tokens',
-        label: 'Max Tokens',
+        label: 'Max tokens',
         type: 'integer',
         required: false,
         default: 4096,
@@ -2697,7 +2697,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'response_format',
-        label: 'Response Format',
+        label: 'Response format',
         type: 'enum',
         required: false,
         default: 'text',
@@ -2708,7 +2708,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'prompt_caching',
-        label: 'Prompt Caching',
+        label: 'Prompt caching',
         type: 'boolean',
         required: false,
         default: false,
@@ -2754,7 +2754,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'max_tokens',
-        label: 'Max Tokens',
+        label: 'Max tokens',
         type: 'integer',
         required: false,
         default: 4096,
@@ -2781,7 +2781,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: true,
         default: '',
-        placeholder: 'owner/name (e.g. stability-ai/sdxl)',
+        placeholder: 'owner/name, such as stability-ai/sdxl',
       },
     ],
   },
@@ -2842,7 +2842,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'gpt-6.1-sol',
         options: [
-          { label: 'GPT-6 Astra (flagship)', value: 'gpt-6-astra' },
+          { label: 'GPT-6 Astra · flagship', value: 'gpt-6-astra' },
           { label: 'GPT-6.1 Sol', value: 'gpt-6.1-sol' },
           { label: 'GPT-6 Sol', value: 'gpt-6-sol' },
           { label: 'GPT-6 Luna', value: 'gpt-6-luna' },
@@ -2852,12 +2852,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'GPT-5.5', value: 'gpt-5.5' },
           { label: 'GPT-5.4', value: 'gpt-5.4' },
           { label: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
-          { label: 'GPT-5.4 nano (retiring 2027-04-01)', value: 'gpt-5.4-nano' },
-          { label: 'GPT-4o (legacy, retiring 2027-01-14)', value: 'gpt-4o' },
-          { label: 'GPT-4o Mini (legacy, retiring 2027-01-14)', value: 'gpt-4o-mini' },
-          { label: 'GPT-4.1 (legacy, retiring 2027-01-14)', value: 'gpt-4.1' },
-          { label: 'GPT-4.1 Mini (legacy, retiring 2027-01-14)', value: 'gpt-4.1-mini' },
-          { label: 'GPT-4.1 nano (legacy, retiring 2026-10-23)', value: 'gpt-4.1-nano' },
+          { label: 'GPT-5.4 nano · shuts down April 1, 2027', value: 'gpt-5.4-nano' },
+          { label: 'GPT-4o · shuts down January 14, 2027', value: 'gpt-4o' },
+          { label: 'GPT-4o Mini · shuts down January 14, 2027', value: 'gpt-4o-mini' },
+          { label: 'GPT-4.1 · shuts down January 14, 2027', value: 'gpt-4.1' },
+          { label: 'GPT-4.1 Mini · shuts down January 14, 2027', value: 'gpt-4.1-mini' },
+          { label: 'GPT-4.1 nano · shuts down October 23, 2026', value: 'gpt-4.1-nano' },
         ],
       },
       {
@@ -2872,7 +2872,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
-          { label: 'X-High', value: 'xhigh' },
+          { label: 'Extra high', value: 'xhigh' },
           // GPT-5.5 and older list no "max" (OpenAI's gpt-5.5 page).
           { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] } },
         ],
@@ -2880,7 +2880,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'max_completion_tokens',
-        label: 'Max Tokens',
+        label: 'Max tokens',
         type: 'integer',
         required: false,
         // Reasoning tokens count toward max_completion_tokens. OpenAI's reasoning
@@ -2916,7 +2916,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'frequency_penalty',
-        label: 'Frequency Penalty',
+        label: 'Frequency penalty',
         type: 'float',
         required: false,
         default: 0,
@@ -2927,7 +2927,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'presence_penalty',
-        label: 'Presence Penalty',
+        label: 'Presence penalty',
         type: 'float',
         required: false,
         default: 0,
@@ -2938,7 +2938,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'response_format',
-        label: 'Response Format',
+        label: 'Response format',
         type: 'enum',
         required: false,
         default: 'text',
@@ -2978,10 +2978,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Gemini 3.6 Flash', value: 'gemini-3.6-flash' },
           { label: 'Gemini 3.5 Flash-Lite', value: 'gemini-3.5-flash-lite' },
           // Deprecated 2026-10-08; Google routes this id to gemini-3.6-flash.
-          { label: 'Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)', value: 'gemini-3.5-flash' },
-          { label: 'Gemini 3.1 Pro (preview)', value: 'gemini-3.1-pro-preview' },
-          { label: 'Gemini 3 Flash (preview)', value: 'gemini-3-flash-preview' },
-          { label: 'Gemini 3.1 Flash-Lite (retiring 2027-05-07)', value: 'gemini-3.1-flash-lite' },
+          { label: 'Gemini 3.5 Flash · deprecated, runs Gemini 3.6 Flash', value: 'gemini-3.5-flash' },
+          { label: 'Gemini 3.1 Pro · preview', value: 'gemini-3.1-pro-preview' },
+          { label: 'Gemini 3 Flash · preview', value: 'gemini-3-flash-preview' },
+          { label: 'Gemini 3.1 Flash-Lite · shuts down May 7, 2027', value: 'gemini-3.1-flash-lite' },
           { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
           { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
           { label: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
@@ -2989,7 +2989,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'max_tokens',
-        label: 'Max Tokens',
+        label: 'Max tokens',
         type: 'integer',
         required: false,
         // Gemini 4 Argon spends more of the limit on thinking; for standard tasks
@@ -3018,7 +3018,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'system',
-        label: 'System Prompt',
+        label: 'System prompt',
         type: 'textarea',
         required: false,
         default: '',
@@ -3044,7 +3044,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'thinkingBudget',
-        label: 'Thinking Budget',
+        label: 'Thinking budget',
         type: 'integer',
         required: false,
         visibleWhen: { model: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
@@ -3073,14 +3073,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'stop_sequences',
-        label: 'Stop Sequences',
+        label: 'Stop sequences',
         type: 'string',
         required: false,
         placeholder: 'Comma-separated',
       },
       {
         key: 'response_format',
-        label: 'Response Format',
+        label: 'Response format',
         type: 'enum',
         required: false,
         default: 'text/plain',
@@ -3103,7 +3103,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
-      { id: 'tail_image', label: 'End Frame', dataType: 'Image', required: false },
+      { id: 'tail_image', label: 'End frame', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -3122,14 +3122,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         default: 'blur, distort, and low quality',
       },
       {
         key: 'cfg_scale',
-        label: 'CFG Scale',
+        label: 'CFG scale',
         type: 'float',
         required: false,
         default: 0.5,
@@ -3167,15 +3167,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'gemini-3.1-flash-image',
         options: [
           { label: 'Nano Banana 2.1', value: 'gemini-nano-banana-2.1' },
-          { label: 'Nano Banana 2 (3.1 Flash)', value: 'gemini-3.1-flash-image' },
-          { label: 'Nano Banana 2 Lite (3.1 Flash-Lite)', value: 'gemini-3.1-flash-lite-image' },
-          { label: 'Nano Banana Pro (3 Pro)', value: 'gemini-3-pro-image' },
-          { label: 'Nano Banana (2.5 Flash)', value: 'gemini-2.5-flash-image' },
+          { label: 'Nano Banana 2 · 3.1 Flash', value: 'gemini-3.1-flash-image' },
+          { label: 'Nano Banana 2 Lite · 3.1 Flash-Lite', value: 'gemini-3.1-flash-lite-image' },
+          { label: 'Nano Banana Pro · 3 Pro', value: 'gemini-3-pro-image' },
+          { label: 'Nano Banana · 2.5 Flash', value: 'gemini-2.5-flash-image' },
         ],
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1:1',
@@ -3198,7 +3198,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'imageSize',
-        label: 'Image Size',
+        label: 'Image size',
         type: 'enum',
         required: false,
         default: '1K',
@@ -3240,14 +3240,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Nano Banana 2', value: 'nano-banana-2' },
           { label: 'Nano Banana Pro', value: 'nano-banana-pro' },
-          { label: 'Nano Banana (2.5 Flash)', value: 'nano-banana' },
+          { label: 'Nano Banana · 2.5 Flash', value: 'nano-banana' },
           { label: 'Gemini 2.5 Flash Image', value: 'gemini-25-flash-image' },
           { label: 'Gemini 3 Pro Image', value: 'gemini-3-pro-image' },
         ],
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1:1',
@@ -3294,7 +3294,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'thinking_level',
-        label: 'Thinking Level',
+        label: 'Thinking level',
         type: 'enum',
         required: false,
         default: '',
@@ -3307,7 +3307,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_web_search',
-        label: 'Web Search',
+        label: 'Web search',
         type: 'boolean',
         required: false,
         default: false,
@@ -3349,7 +3349,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true, role: 'identity' },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: true, multiple: true, role: 'identity' },
       { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
@@ -3366,14 +3366,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Nano Banana 2', value: 'nano-banana-2' },
           { label: 'Nano Banana Pro', value: 'nano-banana-pro' },
-          { label: 'Nano Banana (2.5 Flash)', value: 'nano-banana' },
+          { label: 'Nano Banana · 2.5 Flash', value: 'nano-banana' },
           { label: 'Gemini 2.5 Flash Image', value: 'gemini-25-flash-image' },
           { label: 'Gemini 3 Pro Image', value: 'gemini-3-pro-image' },
         ],
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -3420,7 +3420,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'thinking_level',
-        label: 'Thinking Level',
+        label: 'Thinking level',
         type: 'enum',
         required: false,
         default: '',
@@ -3433,7 +3433,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_web_search',
-        label: 'Web Search',
+        label: 'Web search',
         type: 'boolean',
         required: false,
         default: false,
@@ -3488,13 +3488,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'lyria-3-clip-preview',
         options: [
-          { label: 'Lyria 3 Clip (30s)', value: 'lyria-3-clip-preview' },
-          { label: 'Lyria 3 Pro (full song)', value: 'lyria-3-pro-preview' },
+          { label: 'Lyria 3 Clip · 30s', value: 'lyria-3-clip-preview' },
+          { label: 'Lyria 3 Pro · full song', value: 'lyria-3-pro-preview' },
         ],
       },
       {
         key: 'outputFormat',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'mp3',
@@ -3529,9 +3529,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'gemini-3.8-flash-tts',
         options: [
-          { label: '3.1 Flash TTS (preview, shuts down Nov 17, 2026)', value: 'gemini-3.1-flash-tts-preview' },
-          { label: '2.5 Flash TTS (shuts down Nov 17, 2026)', value: 'gemini-2.5-flash-preview-tts' },
-          { label: '2.5 Pro TTS (shuts down Nov 17, 2026)', value: 'gemini-2.5-pro-preview-tts' },
+          { label: '3.1 Flash TTS · preview, shuts down November 17, 2026', value: 'gemini-3.1-flash-tts-preview' },
+          { label: '2.5 Flash TTS · shuts down November 17, 2026', value: 'gemini-2.5-flash-preview-tts' },
+          { label: '2.5 Pro TTS · shuts down November 17, 2026', value: 'gemini-2.5-pro-preview-tts' },
           { label: '3.8 Flash TTS', value: 'gemini-3.8-flash-tts' },
           { label: '3.8 Flash-Lite TTS', value: 'gemini-3.8-flash-lite-tts' },
         ],
@@ -3543,36 +3543,36 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'Kore',
         options: [
-          { label: 'Zephyr — Bright', value: 'Zephyr' },
-          { label: 'Puck — Upbeat', value: 'Puck' },
-          { label: 'Charon — Informative', value: 'Charon' },
-          { label: 'Kore — Firm', value: 'Kore' },
-          { label: 'Fenrir — Excitable', value: 'Fenrir' },
-          { label: 'Leda — Youthful', value: 'Leda' },
-          { label: 'Orus — Firm', value: 'Orus' },
-          { label: 'Aoede — Breezy', value: 'Aoede' },
-          { label: 'Callirrhoe — Easy-going', value: 'Callirrhoe' },
-          { label: 'Autonoe — Bright', value: 'Autonoe' },
-          { label: 'Enceladus — Breathy', value: 'Enceladus' },
-          { label: 'Iapetus — Clear', value: 'Iapetus' },
-          { label: 'Umbriel — Easy-going', value: 'Umbriel' },
-          { label: 'Algieba — Smooth', value: 'Algieba' },
-          { label: 'Despina — Smooth', value: 'Despina' },
-          { label: 'Erinome — Clear', value: 'Erinome' },
-          { label: 'Algenib — Gravelly', value: 'Algenib' },
-          { label: 'Rasalgethi — Informative', value: 'Rasalgethi' },
-          { label: 'Laomedeia — Upbeat', value: 'Laomedeia' },
-          { label: 'Achernar — Soft', value: 'Achernar' },
-          { label: 'Alnilam — Firm', value: 'Alnilam' },
-          { label: 'Schedar — Even', value: 'Schedar' },
-          { label: 'Gacrux — Mature', value: 'Gacrux' },
-          { label: 'Pulcherrima — Forward', value: 'Pulcherrima' },
-          { label: 'Achird — Friendly', value: 'Achird' },
-          { label: 'Zubenelgenubi — Casual', value: 'Zubenelgenubi' },
-          { label: 'Vindemiatrix — Gentle', value: 'Vindemiatrix' },
-          { label: 'Sadachbia — Lively', value: 'Sadachbia' },
-          { label: 'Sadaltager — Knowledgeable', value: 'Sadaltager' },
-          { label: 'Sulafat — Warm', value: 'Sulafat' },
+          { label: 'Zephyr · bright', value: 'Zephyr' },
+          { label: 'Puck · upbeat', value: 'Puck' },
+          { label: 'Charon · informative', value: 'Charon' },
+          { label: 'Kore · firm', value: 'Kore' },
+          { label: 'Fenrir · excitable', value: 'Fenrir' },
+          { label: 'Leda · youthful', value: 'Leda' },
+          { label: 'Orus · firm', value: 'Orus' },
+          { label: 'Aoede · breezy', value: 'Aoede' },
+          { label: 'Callirrhoe · easy-going', value: 'Callirrhoe' },
+          { label: 'Autonoe · bright', value: 'Autonoe' },
+          { label: 'Enceladus · breathy', value: 'Enceladus' },
+          { label: 'Iapetus · clear', value: 'Iapetus' },
+          { label: 'Umbriel · easy-going', value: 'Umbriel' },
+          { label: 'Algieba · smooth', value: 'Algieba' },
+          { label: 'Despina · smooth', value: 'Despina' },
+          { label: 'Erinome · clear', value: 'Erinome' },
+          { label: 'Algenib · gravelly', value: 'Algenib' },
+          { label: 'Rasalgethi · informative', value: 'Rasalgethi' },
+          { label: 'Laomedeia · upbeat', value: 'Laomedeia' },
+          { label: 'Achernar · soft', value: 'Achernar' },
+          { label: 'Alnilam · firm', value: 'Alnilam' },
+          { label: 'Schedar · even', value: 'Schedar' },
+          { label: 'Gacrux · mature', value: 'Gacrux' },
+          { label: 'Pulcherrima · forward', value: 'Pulcherrima' },
+          { label: 'Achird · friendly', value: 'Achird' },
+          { label: 'Zubenelgenubi · casual', value: 'Zubenelgenubi' },
+          { label: 'Vindemiatrix · gentle', value: 'Vindemiatrix' },
+          { label: 'Sadachbia · lively', value: 'Sadachbia' },
+          { label: 'Sadaltager · knowledgeable', value: 'Sadaltager' },
+          { label: 'Sulafat · warm', value: 'Sulafat' },
         ],
       },
     ],
@@ -3601,25 +3601,25 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'gemini-embedding-001',
         options: [
-          { label: 'Embedding 001 (text)', value: 'gemini-embedding-001' },
-          { label: 'Embedding 2 (multimodal)', value: 'gemini-embedding-2-preview' },
+          { label: 'Embedding 001 · text', value: 'gemini-embedding-001' },
+          { label: 'Embedding 2 · multimodal', value: 'gemini-embedding-2-preview' },
         ],
       },
       {
         key: 'taskType',
-        label: 'Task Type',
+        label: 'Task type',
         type: 'enum',
         required: false,
         default: 'SEMANTIC_SIMILARITY',
         options: [
-          { label: 'Semantic Similarity', value: 'SEMANTIC_SIMILARITY' },
-          { label: 'Retrieval Query', value: 'RETRIEVAL_QUERY' },
-          { label: 'Retrieval Document', value: 'RETRIEVAL_DOCUMENT' },
+          { label: 'Semantic similarity', value: 'SEMANTIC_SIMILARITY' },
+          { label: 'Retrieval query', value: 'RETRIEVAL_QUERY' },
+          { label: 'Retrieval document', value: 'RETRIEVAL_DOCUMENT' },
           { label: 'Classification', value: 'CLASSIFICATION' },
           { label: 'Clustering', value: 'CLUSTERING' },
-          { label: 'Code Retrieval', value: 'CODE_RETRIEVAL_QUERY' },
-          { label: 'Question Answering', value: 'QUESTION_ANSWERING' },
-          { label: 'Fact Verification', value: 'FACT_VERIFICATION' },
+          { label: 'Code retrieval', value: 'CODE_RETRIEVAL_QUERY' },
+          { label: 'Question answering', value: 'QUESTION_ANSWERING' },
+          { label: 'Fact verification', value: 'FACT_VERIFICATION' },
         ],
       },
       {
@@ -3648,9 +3648,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     capabilityNote: 'Stateful prompts edit the existing clip in place. Gemini Omni cannot extend duration; use Veo 3.1 for video extension.',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: false, multiple: true },
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
-      { id: 'previous_interaction_id', label: 'Previous Interaction', dataType: 'Text', required: false },
+      { id: 'previous_interaction_id', label: 'Previous interaction', dataType: 'Text', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -3664,16 +3664,16 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: '',
         options: [
-          { label: 'Auto (infer)', value: '' },
-          { label: 'Text to Video', value: 'text_to_video' },
-          { label: 'Image to Video', value: 'image_to_video' },
-          { label: 'Reference to Video', value: 'reference_to_video' },
+          { label: 'Auto · infer', value: '' },
+          { label: 'Text to video', value: 'text_to_video' },
+          { label: 'Image to video', value: 'image_to_video' },
+          { label: 'Reference to video', value: 'reference_to_video' },
           { label: 'Edit', value: 'edit' },
         ],
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -3689,13 +3689,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'uri',
         options: [
-          { label: 'URI (recommended)', value: 'uri' },
+          { label: 'URI · recommended', value: 'uri' },
           { label: 'Inline', value: 'inline' },
         ],
       },
       {
         key: 'previous_interaction_id',
-        label: 'Previous Interaction',
+        label: 'Previous interaction',
         type: 'string',
         required: false,
         placeholder: 'Paste an ID or connect the Previous Interaction input',
@@ -3714,8 +3714,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: ['GOOGLE_VERTEX_CREDENTIALS', 'GOOGLE_API_KEY'],
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'First Frame', dataType: 'Image', required: false, role: 'subject' },
-      { id: 'last_frame', label: 'Last Frame', dataType: 'Image', required: false },
+      { id: 'image', label: 'First frame', dataType: 'Image', required: false, role: 'subject' },
+      { id: 'last_frame', label: 'Last frame', dataType: 'Image', required: false },
       { id: 'video', label: 'Extend Video', dataType: 'Video', required: false },
     ],
     outputPorts: [
@@ -3726,7 +3726,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspectRatio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -3761,14 +3761,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'personGeneration',
-        label: 'Person Generation',
+        label: 'Person generation',
         type: 'enum',
         required: false,
         default: 'allow_adult',
         options: [
-          { label: 'Allow All', value: 'allow_all' },
-          { label: 'Allow Adult', value: 'allow_adult' },
-          { label: "Don't Allow", value: 'dont_allow' },
+          { label: 'Allow all', value: 'allow_all' },
+          { label: 'Allow adult', value: 'allow_adult' },
+          { label: "Don’t allow", value: 'dont_allow' },
         ],
       },
     ],
@@ -3782,7 +3782,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Veo 3.1', value: 'veo-3.1-generate-001' },
           { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-001' },
-          { label: 'Veo 3.1 Lite (preview on Vertex)', value: 'veo-3.1-lite-generate-001' },
+          { label: 'Veo 3.1 Lite · preview on Vertex', value: 'veo-3.1-lite-generate-001' },
         ],
       },
       {
@@ -3796,7 +3796,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -3810,17 +3810,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'safety_tolerance',
-        label: 'Safety Tolerance',
+        label: 'Safety tolerance',
         type: 'enum',
         required: false,
         default: '4',
         options: [
-          { label: '1 (Strict)', value: '1' },
+          { label: '1 · strict', value: '1' },
           { label: '2', value: '2' },
           { label: '3', value: '3' },
           { label: '4', value: '4' },
           { label: '5', value: '5' },
-          { label: '6 (Permissive)', value: '6' },
+          { label: '6 · permissive', value: '6' },
         ],
       },
     ],
@@ -3843,13 +3843,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'image_size',
-        label: 'Image Size',
+        label: 'Image size',
         type: 'enum',
         required: false,
         default: 'landscape_4_3',
         options: [
-          { label: 'Square HD (1024 × 1024)', value: 'square_hd' },
-          { label: 'Square (512 × 512)', value: 'square' },
+          { label: 'Square HD · 1024 × 1024', value: 'square_hd' },
+          { label: 'Square · 512 × 512', value: 'square' },
           { label: 'Landscape 4:3', value: 'landscape_4_3' },
           { label: 'Landscape 16:9', value: 'landscape_16_9' },
           { label: 'Portrait 4:3', value: 'portrait_4_3' },
@@ -3867,7 +3867,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 3.5,
@@ -3909,7 +3909,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -3935,8 +3935,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Base Image', dataType: 'Image', required: true },
-      { id: 'mask', label: 'Mask (white = edit)', dataType: 'Image', required: true },
+      { id: 'image', label: 'Base image', dataType: 'Image', required: true },
+      { id: 'mask', label: 'Mask · white means edit', dataType: 'Image', required: true },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -3954,7 +3954,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'PNG', value: 'png' },
         ],
       },
-      { key: 'enhance_prompt', label: 'Enhance Prompt', type: 'boolean', required: false, default: false },
+      { key: 'enhance_prompt', label: 'Enhance prompt', type: 'boolean', required: false, default: false },
       { key: 'seed', label: 'Seed', type: 'integer', required: false, placeholder: 'Random' },
     ],
   },
@@ -3977,7 +3977,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'image_size',
-        label: 'Image Size',
+        label: 'Image size',
         type: 'enum',
         required: false,
         default: 'square_hd',
@@ -4010,7 +4010,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 7.5,
@@ -4020,7 +4020,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         default: '',
@@ -4028,14 +4028,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'expand_prompt',
-        label: 'Expand Prompt',
+        label: 'Expand prompt',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'loras',
-        label: 'LoRAs (JSON)',
+        label: 'LoRAs · JSON',
         type: 'textarea',
         required: false,
         default: '',
@@ -4043,7 +4043,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'embeddings',
-        label: 'Embeddings (JSON)',
+        label: 'Embeddings · JSON',
         type: 'textarea',
         required: false,
         default: '',
@@ -4062,20 +4062,20 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'safety_checker_version',
-        label: 'Safety Checker Version',
+        label: 'Safety checker version',
         type: 'enum',
         required: false,
         default: 'v1',
         options: [
-          { label: 'v1 (Default)', value: 'v1' },
-          { label: 'v2 (ViT)', value: 'v2' },
+          { label: 'v1 · default', value: 'v1' },
+          { label: 'v2 · ViT', value: 'v2' },
         ],
       },
       {
@@ -4141,7 +4141,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -4155,7 +4155,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -4169,14 +4169,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'enable_prompt_expansion',
-        label: 'Prompt Expansion',
+        label: 'Prompt expansion',
         type: 'boolean',
         required: false,
         default: true,
@@ -4190,7 +4190,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -4215,7 +4215,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -4241,7 +4241,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'loop',
-        label: 'Seamless Loop',
+        label: 'Seamless loop',
         type: 'boolean',
         required: false,
         default: false,
@@ -4314,7 +4314,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -4331,7 +4331,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'WORLDLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'prompt', label: 'Prompt / Guidance', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Prompt / guidance', dataType: 'Text', required: false },
       { id: 'images', label: 'Image(s)', dataType: 'Image', required: false, multiple: true, role: 'composition' },
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
@@ -4345,7 +4345,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'model',
-        label: 'Marble Model',
+        label: 'Marble model',
         type: 'enum',
         required: false,
         default: 'marble-1.1',
@@ -4376,12 +4376,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'is_pano',
-        label: 'Single Image Is Panorama',
+        label: 'Single image is panorama',
         type: 'enum',
         required: false,
         default: 'auto',
         options: [
-          { label: 'Auto Detect', value: 'auto' },
+          { label: 'Auto detect', value: 'auto' },
           { label: 'Yes', value: 'true' },
           { label: 'No', value: 'false' },
         ],
@@ -4399,11 +4399,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '',
-        placeholder: 'Optional, e.g. 0, 90, 180, 270',
+        placeholder: 'Optional, such as 0, 90, 180, 270',
       },
       {
         key: 'disable_recaption',
-        label: 'Use Prompt Verbatim',
+        label: 'Use prompt verbatim',
         type: 'boolean',
         required: false,
         default: false,
@@ -4447,30 +4447,30 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'world', label: 'World', dataType: 'World', required: true },
     ],
     outputPorts: [
-      { id: 'file', label: 'Exported 3D File', dataType: 'Mesh', required: false },
+      { id: 'file', label: 'Exported 3D file', dataType: 'Mesh', required: false },
       { id: 'format', label: 'Format', dataType: 'Text', required: false },
     ],
     params: [
       {
         key: 'format',
-        label: 'Export Format',
+        label: 'Export format',
         type: 'enum',
         required: false,
         default: 'ply',
         options: [
-          { label: 'Gaussian Splat (PLY)', value: 'ply' },
-          { label: 'High-Quality Mesh (GLB)', value: 'glb' },
+          { label: 'Gaussian splat · PLY', value: 'ply' },
+          { label: 'High-quality mesh · GLB', value: 'glb' },
         ],
       },
       {
         key: 'resolution',
-        label: 'PLY Resolution',
+        label: 'PLY resolution',
         type: 'enum',
         required: false,
         default: 'full_res',
         visibleWhen: { format: ['ply'] },
         options: [
-          { label: 'Full Resolution', value: 'full_res' },
+          { label: 'Full resolution', value: 'full_res' },
           { label: '500K', value: '500k' },
           { label: '150K', value: '150k' },
           { label: '100K', value: '100k' },
@@ -4478,14 +4478,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'mesh_variant',
-        label: 'GLB Mesh Variant',
+        label: 'GLB mesh variant',
         type: 'enum',
         required: false,
         default: 'textured',
         visibleWhen: { format: ['glb'] },
         options: [
           { label: 'Textured', value: 'textured' },
-          { label: 'Vertex Colored', value: 'vertex_colored' },
+          { label: 'Vertex colored', value: 'vertex_colored' },
         ],
       },
       {
@@ -4659,14 +4659,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'model_type',
-        label: 'Mesh Type',
+        label: 'Mesh type',
         type: 'enum',
         required: false,
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
-          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
+          { label: 'Low poly · shuts down October 30, 2026', value: 'lowpoly' },
+          { label: 'Smart topology · Meshy T2', value: 'smart-topology' },
         ],
       },
       {
@@ -4710,14 +4710,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_pbr',
-        label: 'PBR Materials',
+        label: 'PBR materials',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'pose_mode',
-        label: 'Pose Mode',
+        label: 'Pose mode',
         type: 'enum',
         required: false,
         default: '',
@@ -4738,15 +4738,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'ai_model',
-        label: 'AI Model',
+        label: 'AI model',
         type: 'enum',
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 7.1)', value: 'latest' },
+          { label: 'Latest · Meshy 7.1', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
-          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
+          { label: 'Meshy 6 Lite · 2K textures', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 · needs access from Meshy', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4758,14 +4758,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'remove_lighting',
-        label: 'Remove Lighting',
+        label: 'Remove lighting',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'target_formats',
-        label: 'Output Formats',
+        label: 'Output formats',
         type: 'string',
         required: false,
         default: 'glb',
@@ -4775,21 +4775,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'texture_prompt',
-        label: 'Texture Prompt',
+        label: 'Texture prompt',
         type: 'string',
         required: false,
         placeholder: 'Guide the texturing process',
       },
       {
         key: 'enable_prompt_expansion',
-        label: 'Enhance Prompt',
+        label: 'Enhance prompt',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -4863,14 +4863,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_pbr',
-        label: 'PBR Materials',
+        label: 'PBR materials',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'pose_mode',
-        label: 'Pose Mode',
+        label: 'Pose mode',
         type: 'enum',
         required: false,
         default: '',
@@ -4882,7 +4882,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'texture_prompt',
-        label: 'Texture Prompt',
+        label: 'Texture prompt',
         type: 'string',
         required: false,
         placeholder: 'Guide the texturing process',
@@ -4891,27 +4891,27 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'ai_model',
-        label: 'AI Model',
+        label: 'AI model',
         type: 'enum',
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 7.1)', value: 'latest' },
+          { label: 'Latest · Meshy 7.1', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
-          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
+          { label: 'Meshy 6 Lite · 2K textures', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 · needs access from Meshy', value: 'meshy-7.1' },
         ],
       },
       {
         key: 'model_type',
-        label: 'Mesh Type',
+        label: 'Mesh type',
         type: 'enum',
         required: false,
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
-          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
+          { label: 'Low poly · shuts down October 30, 2026', value: 'lowpoly' },
+          { label: 'Smart topology · Meshy T2', value: 'smart-topology' },
         ],
       },
       {
@@ -4923,21 +4923,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'image_enhancement',
-        label: 'Image Enhancement',
+        label: 'Image enhancement',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'remove_lighting',
-        label: 'Remove Lighting',
+        label: 'Remove lighting',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'target_formats',
-        label: 'Output Formats',
+        label: 'Output formats',
         type: 'string',
         required: false,
         default: 'glb',
@@ -4947,7 +4947,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -4979,15 +4979,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'ai_model',
-        label: 'AI Model',
+        label: 'AI model',
         type: 'enum',
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 7.1)', value: 'latest' },
+          { label: 'Latest · Meshy 7.1', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
-          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
+          { label: 'Meshy 6 Lite · 2K textures', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 · needs access from Meshy', value: 'meshy-7.1' },
         ],
       },
       {
@@ -5019,7 +5019,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'symmetry_mode',
-        label: 'Symmetry (deprecated)',
+        label: 'Symmetry · deprecated',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -5039,14 +5039,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_pbr',
-        label: 'PBR Materials',
+        label: 'PBR materials',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'pose_mode',
-        label: 'Pose Mode',
+        label: 'Pose mode',
         type: 'enum',
         required: false,
         default: '',
@@ -5065,14 +5065,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'image_enhancement',
-        label: 'Image Enhancement',
+        label: 'Image enhancement',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'remove_lighting',
-        label: 'Remove Lighting',
+        label: 'Remove lighting',
         type: 'boolean',
         required: false,
         default: true,
@@ -5090,7 +5090,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'model_url', label: 'Model URL', dataType: 'Text', required: true },
-      { id: 'prompt', label: 'Style Prompt', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Style prompt', dataType: 'Text', required: false },
     ],
     outputPorts: [
       { id: 'mesh', label: 'Mesh', dataType: 'Mesh', required: false },
@@ -5098,34 +5098,34 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'ai_model',
-        label: 'AI Model',
+        label: 'AI model',
         type: 'enum',
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 7)', value: 'latest' },
+          { label: 'Latest · Meshy 7', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
           { label: 'Meshy 6 Lite', value: 'meshy-6-lite' },
-          { label: 'Meshy 7 (needs Meshy entitlement)', value: 'meshy-7' },
+          { label: 'Meshy 7 · needs access from Meshy', value: 'meshy-7' },
         ],
       },
       {
         key: 'enable_original_uv',
-        label: 'Keep Original UV',
+        label: 'Keep original UV',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'enable_pbr',
-        label: 'PBR Materials',
+        label: 'PBR materials',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'remove_lighting',
-        label: 'Remove Lighting',
+        label: 'Remove lighting',
         type: 'boolean',
         required: false,
         default: true,
@@ -5145,8 +5145,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'model_url', label: 'Model URL', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'mesh', label: 'Rigged Mesh', dataType: 'Mesh', required: false },
-      { id: 'task_id', label: 'Rig Task ID', dataType: 'Text', required: false },
+      { id: 'mesh', label: 'Rigged mesh', dataType: 'Mesh', required: false },
+      { id: 'task_id', label: 'Rig task ID', dataType: 'Text', required: false },
     ],
     params: [
       {
@@ -5174,7 +5174,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'rig_task_id', label: 'Rig Task ID', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'mesh', label: 'Animated Mesh', dataType: 'Mesh', required: false },
+      { id: 'mesh', label: 'Animated mesh', dataType: 'Mesh', required: false },
     ],
     params: [
       {
@@ -5194,7 +5194,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Clapping', value: '25' },
           { label: 'Punching', value: '30' },
           { label: 'Kicking', value: '35' },
-          { label: 'Sword Swing', value: '92' },
+          { label: 'Sword swing', value: '92' },
         ],
       },
       {
@@ -5204,7 +5204,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: '',
         options: [
-          { label: 'Default (30)', value: '' },
+          { label: 'Default · 30', value: '' },
           { label: '24 fps', value: '24' },
           { label: '25 fps', value: '25' },
           { label: '30 fps', value: '30' },
@@ -5251,7 +5251,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'target_formats',
-        label: 'Output Formats',
+        label: 'Output formats',
         type: 'string',
         required: false,
         default: 'glb',
@@ -5259,7 +5259,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'resize_height',
-        label: 'Resize Height (m)',
+        label: 'Resize height (m)',
         type: 'float',
         required: false,
         default: 0,
@@ -5270,7 +5270,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'convert_format_only',
-        label: 'Convert Format Only',
+        label: 'Convert format only',
         type: 'boolean',
         required: false,
         default: false,
@@ -5315,7 +5315,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1:1',
@@ -5330,7 +5330,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'pose_mode',
-        label: 'Pose Mode',
+        label: 'Pose mode',
         type: 'enum',
         required: false,
         default: '',
@@ -5353,7 +5353,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: true, multiple: true },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -5394,12 +5394,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'task_id', label: 'Task ID', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'mesh', label: 'Print File', dataType: 'Mesh', required: false },
+      { id: 'mesh', label: 'Print file', dataType: 'Mesh', required: false },
     ],
     params: [
       {
         key: 'max_colors',
-        label: 'Max Colors',
+        label: 'Max colors',
         type: 'integer',
         required: false,
         default: 4,
@@ -5408,7 +5408,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'max_depth',
-        label: 'Color Depth',
+        label: 'Color depth',
         type: 'integer',
         required: false,
         default: 4,
@@ -5441,13 +5441,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'Normal',
         options: [
           { label: 'Normal', value: 'Normal' },
-          { label: 'Low Poly', value: 'LowPoly' },
-          { label: 'Geometry Only', value: 'Geometry' },
+          { label: 'Low poly', value: 'LowPoly' },
+          { label: 'Geometry only', value: 'Geometry' },
         ],
       },
       {
         key: 'face_count',
-        label: 'Face Count',
+        label: 'Face count',
         type: 'integer',
         required: false,
         default: 500000,
@@ -5456,14 +5456,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_pbr',
-        label: 'PBR Materials',
+        label: 'PBR materials',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'polygon_type',
-        label: 'Polygon Type',
+        label: 'Polygon type',
         type: 'enum',
         required: false,
         default: 'triangle',
@@ -5484,10 +5484,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'front_image', label: 'Front Image', dataType: 'Image', required: true },
-      { id: 'back_image', label: 'Back Image', dataType: 'Image', required: false },
-      { id: 'left_image', label: 'Left Image', dataType: 'Image', required: false },
-      { id: 'right_image', label: 'Right Image', dataType: 'Image', required: false },
+      { id: 'front_image', label: 'Front image', dataType: 'Image', required: true },
+      { id: 'back_image', label: 'Back image', dataType: 'Image', required: false },
+      { id: 'left_image', label: 'Left image', dataType: 'Image', required: false },
+      { id: 'right_image', label: 'Right image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'mesh', label: 'Mesh', dataType: 'Mesh', required: false },
@@ -5501,13 +5501,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'Normal',
         options: [
           { label: 'Normal', value: 'Normal' },
-          { label: 'Low Poly', value: 'LowPoly' },
-          { label: 'Geometry Only', value: 'Geometry' },
+          { label: 'Low poly', value: 'LowPoly' },
+          { label: 'Geometry only', value: 'Geometry' },
         ],
       },
       {
         key: 'face_count',
-        label: 'Face Count',
+        label: 'Face count',
         type: 'integer',
         required: false,
         default: 500000,
@@ -5516,14 +5516,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_pbr',
-        label: 'PBR Materials',
+        label: 'PBR materials',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'polygon_type',
-        label: 'Polygon Type',
+        label: 'Polygon type',
         type: 'enum',
         required: false,
         default: 'triangle',
@@ -5561,11 +5561,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'gpt-image-2.5-sunburst',
         options: [
-          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
-          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
-          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
+          { label: 'GPT Image 1 · shuts down October 23, 2026', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 · shuts down December 1, 2026', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini · shuts down December 1, 2026', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare · fastest', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst · most precise edits', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -5601,7 +5601,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
-          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Extra high', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
           { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
@@ -5649,7 +5649,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'crop_to_bbox',
-        label: 'Crop to Subject',
+        label: 'Crop to subject',
         type: 'boolean',
         required: false,
         default: false,
@@ -5692,25 +5692,25 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Style ID',
         type: 'string',
         required: false,
-        placeholder: 'Custom style UUID (Recraft style reference)',
+        placeholder: 'Custom style ID · Recraft style reference',
       },
       {
         key: 'colors',
-        label: 'Color Palette',
+        label: 'Color palette',
         type: 'string',
         required: false,
         placeholder: '[{"r":255,"g":0,"b":0},{"r":0,"g":255,"b":0}]',
       },
       {
         key: 'background_color',
-        label: 'Background Color',
+        label: 'Background color',
         type: 'string',
         required: false,
         placeholder: '{"r":255,"g":255,"b":255}',
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -5753,25 +5753,25 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Style ID',
         type: 'string',
         required: false,
-        placeholder: 'Custom style UUID (Recraft style reference)',
+        placeholder: 'Custom style ID · Recraft style reference',
       },
       {
         key: 'colors',
-        label: 'Color Palette',
+        label: 'Color palette',
         type: 'string',
         required: false,
         placeholder: '[{"r":255,"g":0,"b":0},{"r":0,"g":255,"b":0}]',
       },
       {
         key: 'background_color',
-        label: 'Background Color',
+        label: 'Background color',
         type: 'string',
         required: false,
         placeholder: '{"r":255,"g":255,"b":255}',
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -5803,9 +5803,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'arrow-1.1',
         options: [
-          { label: 'Arrow 1.1 (20 credits)', value: 'arrow-1.1' },
-          { label: 'Arrow 1.1 max (25 credits)', value: 'arrow-1.1-max' },
-          { label: 'Arrow 1 (30 credits, legacy)', value: 'arrow-1' },
+          { label: 'Arrow 1.1 · 20 credits', value: 'arrow-1.1' },
+          { label: 'Arrow 1.1 max · 25 credits', value: 'arrow-1.1-max' },
+          { label: 'Arrow 1 · 30 credits, legacy', value: 'arrow-1' },
         ],
       },
       { key: 'n', label: 'Outputs', type: 'integer', required: false, default: 1, min: 1, max: 16 },
@@ -5814,12 +5814,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Instructions',
         type: 'textarea',
         required: false,
-        placeholder: 'Optional style/formatting guidance (e.g. "thin uniform stroke, no fill")',
+        placeholder: 'Optional style or formatting guidance, such as “thin uniform stroke, no fill”',
       },
       { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 1.0, min: 0, max: 2, step: 0.1 },
       { key: 'top_p', label: 'Top P', type: 'float', required: false, default: 1.0, min: 0, max: 1, step: 0.05 },
-      { key: 'presence_penalty', label: 'Presence Penalty', type: 'float', required: false, default: 0.0, min: -2, max: 2, step: 0.1 },
-      { key: 'max_output_tokens', label: 'Max Output Tokens', type: 'integer', required: false, default: 16384, min: 1, max: 131072 },
+      { key: 'presence_penalty', label: 'Presence penalty', type: 'float', required: false, default: 0.0, min: -2, max: 2, step: 0.1 },
+      { key: 'max_output_tokens', label: 'Max output tokens', type: 'integer', required: false, default: 16384, min: 1, max: 131072 },
     ],
   },
 
@@ -5845,17 +5845,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'arrow-1.1',
         options: [
-          { label: 'Arrow 1.1 (15 credits)', value: 'arrow-1.1' },
-          { label: 'Arrow 1.1 max (20 credits)', value: 'arrow-1.1-max' },
-          { label: 'Arrow 1 (30 credits, legacy)', value: 'arrow-1' },
+          { label: 'Arrow 1.1 · 15 credits', value: 'arrow-1.1' },
+          { label: 'Arrow 1.1 max · 20 credits', value: 'arrow-1.1-max' },
+          { label: 'Arrow 1 · 30 credits, legacy', value: 'arrow-1' },
         ],
       },
       { key: 'auto_crop', label: 'Auto-crop to subject', type: 'boolean', required: false, default: false },
-      { key: 'target_size', label: 'Target Size (px)', type: 'integer', required: false, default: 1024, min: 128, max: 4096 },
+      { key: 'target_size', label: 'Target size (px)', type: 'integer', required: false, default: 1024, min: 128, max: 4096 },
       { key: 'temperature', label: 'Temperature', type: 'float', required: false, default: 1.0, min: 0, max: 2, step: 0.1 },
       { key: 'top_p', label: 'Top P', type: 'float', required: false, default: 1.0, min: 0, max: 1, step: 0.05 },
-      { key: 'presence_penalty', label: 'Presence Penalty', type: 'float', required: false, default: 0.0, min: -2, max: 2, step: 0.1 },
-      { key: 'max_output_tokens', label: 'Max Output Tokens', type: 'integer', required: false, default: 16384, min: 1, max: 131072 },
+      { key: 'presence_penalty', label: 'Presence penalty', type: 'float', required: false, default: 0.0, min: -2, max: 2, step: 0.1 },
+      { key: 'max_output_tokens', label: 'Max output tokens', type: 'integer', required: false, default: 16384, min: 1, max: 131072 },
     ],
   },
 
@@ -5883,7 +5883,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Hailuo 2.3', value: 'MiniMax-Hailuo-2.3' },
           { label: 'Hailuo 2.3 Fast', value: 'MiniMax-Hailuo-2.3-Fast' },
-          { label: 'Hailuo 02 (legacy)', value: 'MiniMax-Hailuo-02' },
+          { label: 'Hailuo 02 · legacy', value: 'MiniMax-Hailuo-02' },
         ],
       },
       {
@@ -5920,7 +5920,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'MINIMAX_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'first_frame_image', label: 'First Frame', dataType: 'Image', required: true, role: 'subject' },
+      { id: 'first_frame_image', label: 'First frame', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
@@ -5936,7 +5936,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Hailuo 2.3', value: 'MiniMax-Hailuo-2.3' },
           { label: 'Hailuo 2.3 Fast', value: 'MiniMax-Hailuo-2.3-Fast' },
-          { label: 'Hailuo 02 (legacy)', value: 'MiniMax-Hailuo-02' },
+          { label: 'Hailuo 02 · legacy', value: 'MiniMax-Hailuo-02' },
         ],
       },
       {
@@ -5973,7 +5973,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'MINIMAX_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'subject_reference', label: 'Character Image', dataType: 'Image', required: true, role: 'identity' },
+      { id: 'subject_reference', label: 'Character image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
@@ -6003,8 +6003,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Start Image', dataType: 'Image', required: false, role: 'subject' },
-      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'Start image', dataType: 'Image', required: false, role: 'subject' },
+      { id: 'end_image', label: 'End image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -6036,7 +6036,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -6048,25 +6048,25 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         default: 'blur, distort, and low quality',
       },
       {
         key: 'shot_type',
-        label: 'Shot Type',
+        label: 'Shot type',
         type: 'enum',
         required: false,
         default: 'customize',
         options: [
           { label: 'Customize', value: 'customize' },
-          { label: 'Intelligent (auto)', value: 'intelligent' },
+          { label: 'Intelligent · auto', value: 'intelligent' },
         ],
       },
       {
         key: 'multi_prompt',
-        label: 'Multi-Shot (JSON)',
+        label: 'Multi-Shot · JSON',
         type: 'textarea',
         required: false,
         default: '',
@@ -6074,14 +6074,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'cfg_scale',
-        label: 'CFG Scale',
+        label: 'CFG scale',
         type: 'float',
         required: false,
         default: 0.5,
@@ -6102,7 +6102,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End image', dataType: 'Image', required: false },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
     ],
     outputPorts: [
@@ -6111,7 +6111,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -6132,8 +6132,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: '540p',
         options: [
           { label: '540p', value: '540p' },
-          { label: '720p (2x cost)', value: '720p' },
-          { label: '1080p (4x cost)', value: '1080p' },
+          { label: '720p · 2x cost', value: '720p' },
+          { label: '1080p · 4x cost', value: '1080p' },
         ],
       },
       {
@@ -6149,7 +6149,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'loop',
-        label: 'Seamless Loop',
+        label: 'Seamless loop',
         type: 'boolean',
         required: false,
         default: false,
@@ -6198,7 +6198,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -6212,7 +6212,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -6226,14 +6226,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'enable_prompt_expansion',
-        label: 'Prompt Expansion',
+        label: 'Prompt expansion',
         type: 'boolean',
         required: false,
         default: true,
@@ -6247,7 +6247,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -6344,7 +6344,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
-      { id: 'image', label: 'Reference Image', dataType: 'Image', required: false, role: 'style' },
+      { id: 'image', label: 'Reference image', dataType: 'Image', required: false, role: 'style' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -6352,12 +6352,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'mode',
-        label: 'Modification Mode',
+        label: 'Modification mode',
         type: 'enum',
         required: false,
         default: 'flex_1',
         options: [
-          { label: 'Adhere 1 (least)', value: 'adhere_1' },
+          { label: 'Adhere 1 · least', value: 'adhere_1' },
           { label: 'Adhere 2', value: 'adhere_2' },
           { label: 'Adhere 3', value: 'adhere_3' },
           { label: 'Flex 1', value: 'flex_1' },
@@ -6365,7 +6365,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Flex 3', value: 'flex_3' },
           { label: 'Reimagine 1', value: 'reimagine_1' },
           { label: 'Reimagine 2', value: 'reimagine_2' },
-          { label: 'Reimagine 3 (most)', value: 'reimagine_3' },
+          { label: 'Reimagine 3 · most', value: 'reimagine_3' },
         ],
       },
     ],
@@ -6412,7 +6412,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -6426,7 +6426,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -6440,7 +6440,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_prompt_expansion',
-        label: 'Prompt Expansion',
+        label: 'Prompt expansion',
         type: 'boolean',
         required: false,
         default: true,
@@ -6454,7 +6454,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -6490,7 +6490,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -6523,7 +6523,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'None', value: '' },
           { label: 'Anime', value: 'anime' },
-          { label: '3D Animation', value: '3d_animation' },
+          { label: '3D animation', value: '3d_animation' },
           { label: 'Clay', value: 'clay' },
           { label: 'Comic', value: 'comic' },
           { label: 'Cyberpunk', value: 'cyberpunk' },
@@ -6531,7 +6531,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -6557,7 +6557,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
-      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -6595,7 +6595,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -6623,14 +6623,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'camera_fixed',
-        label: 'Camera Fixed',
+        label: 'Camera fixed',
         type: 'boolean',
         required: false,
         default: false,
@@ -6661,7 +6661,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
-      { id: 'end_image', label: 'End Frame', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End frame', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -6693,7 +6693,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -6705,21 +6705,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         default: 'blur, distort, and low quality',
       },
       {
         key: 'cfg_scale',
-        label: 'CFG Scale',
+        label: 'CFG scale',
         type: 'float',
         required: false,
         default: 0.5,
@@ -6729,13 +6729,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'shot_type',
-        label: 'Shot Type',
+        label: 'Shot type',
         type: 'enum',
         required: false,
         default: 'customize',
         options: [
           { label: 'Customize', value: 'customize' },
-          { label: 'Intelligent (auto)', value: 'intelligent' },
+          { label: 'Intelligent · auto', value: 'intelligent' },
         ],
       },
     ],
@@ -6751,7 +6751,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End image', dataType: 'Image', required: false },
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
     outputPorts: [
@@ -6784,7 +6784,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -6809,7 +6809,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -6839,10 +6839,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'first_frame',
         options: [
-          { label: 'First Frame', value: 'first_frame' },
-          { label: 'Last Frame', value: 'last_frame' },
-          { label: 'Middle Frame', value: 'middle_frame' },
-          { label: 'At Timestamp', value: 'timestamp' },
+          { label: 'First frame', value: 'first_frame' },
+          { label: 'Last frame', value: 'last_frame' },
+          { label: 'Middle frame', value: 'middle_frame' },
+          { label: 'At timestamp', value: 'timestamp' },
         ],
       },
       {
@@ -6907,7 +6907,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'First', value: 'first' },
           { label: 'Last', value: 'last' },
           { label: 'Random', value: 'random' },
-          { label: 'By Index', value: 'index' },
+          { label: 'By index', value: 'index' },
         ],
       },
       {
@@ -6968,7 +6968,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -7019,10 +7019,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'higgsfield-ai/dop/standard',
         options: [
-          { label: 'DoP Standard (T2V + I2V)', value: 'higgsfield-ai/dop/standard' },
+          { label: 'DoP Standard · text and image to video', value: 'higgsfield-ai/dop/standard' },
           { label: 'DoP Preview', value: 'higgsfield-ai/dop/preview' },
-          { label: 'Kling v2.1 Pro (I2V)', value: 'kling-video/v2.1/pro/image-to-video' },
-          { label: 'Seedance v1 Pro (I2V)', value: 'bytedance/seedance/v1/pro/image-to-video' },
+          { label: 'Kling v2.1 Pro · image to video', value: 'kling-video/v2.1/pro/image-to-video' },
+          { label: 'Seedance v1 Pro · image to video', value: 'bytedance/seedance/v1/pro/image-to-video' },
         ],
       },
       {
@@ -7036,7 +7036,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -7068,7 +7068,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -7113,7 +7113,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -7148,7 +7148,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'end_image', label: 'End Frame', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End frame', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -7157,7 +7157,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -7202,7 +7202,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -7236,7 +7236,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true, role: 'identity' },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: true, multiple: true, role: 'identity' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -7245,7 +7245,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -7288,7 +7288,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -7330,7 +7330,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -7374,7 +7374,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -7409,7 +7409,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'end_image', label: 'End Frame', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End frame', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -7418,7 +7418,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -7462,7 +7462,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -7514,7 +7514,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1:1',
@@ -7541,7 +7541,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 3.5,
@@ -7551,7 +7551,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enhance_prompt',
-        label: 'Enhance Prompt',
+        label: 'Enhance prompt',
         type: 'boolean',
         required: false,
         default: false,
@@ -7574,12 +7574,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: '2',
         options: [
-          { label: '1 (Strict)', value: '1' },
+          { label: '1 · strict', value: '1' },
           { label: '2', value: '2' },
           { label: '3', value: '3' },
           { label: '4', value: '4' },
           { label: '5', value: '5' },
-          { label: '6 (Permissive)', value: '6' },
+          { label: '6 · permissive', value: '6' },
         ],
       },
       {
@@ -7595,7 +7595,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-2-pro': {
     id: 'flux-2-pro',
     displayName: 'FLUX.2',
-    description: "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
+    description: "Black Forest Labs’ FLUX.2 family for text to image, covering FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal’s FLUX 2 Flash. Runs on BFL or fal.ai.",
     category: 'image-gen',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-2-pro',
@@ -7673,11 +7673,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: '2',
         options: [
-          { label: '1 (Strict)', value: '1' },
+          { label: '1 · strict', value: '1' },
           { label: '2', value: '2' },
           { label: '3', value: '3' },
           { label: '4', value: '4' },
-          { label: '5 (Permissive)', value: '5' },
+          { label: '5 · permissive', value: '5' },
         ],
       },
       {
@@ -7689,7 +7689,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'num_inference_steps',
-        label: 'Steps (Flex)',
+        label: 'Steps · flex only',
         type: 'integer',
         required: false,
         min: 1,
@@ -7700,7 +7700,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance (Flex)',
+        label: 'Guidance · flex only',
         type: 'float',
         required: false,
         min: 1.5,
@@ -7757,7 +7757,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         params: [
           {
             key: 'enable_safety_checker',
-            label: 'Safety Checker',
+            label: 'Safety checker',
             type: 'boolean',
             required: false,
             default: true,
@@ -7862,7 +7862,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: true, multiple: true },
       { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
@@ -7896,7 +7896,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'input_fidelity',
-        label: 'Input Fidelity',
+        label: 'Input fidelity',
         type: 'enum',
         required: false,
         default: 'high',
@@ -7970,8 +7970,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '1024 × 1536', value: '1024x1536' },
           { label: '2048 × 2048', value: '2048x2048' },
           { label: '2048 × 1152', value: '2048x1152' },
-          { label: '3840 × 2160 (4K landscape)', value: '3840x2160' },
-          { label: '2160 × 3840 (4K portrait)', value: '2160x3840' },
+          { label: '3840 × 2160 · 4K landscape', value: '3840x2160' },
+          { label: '2160 × 3840 · 4K portrait', value: '2160x3840' },
         ],
       },
       {
@@ -8053,8 +8053,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '1024 × 1536', value: '1024x1536' },
           { label: '2048 × 2048', value: '2048x2048' },
           { label: '2048 × 1152', value: '2048x1152' },
-          { label: '3840 × 2160 (4K landscape)', value: '3840x2160' },
-          { label: '2160 × 3840 (4K portrait)', value: '2160x3840' },
+          { label: '3840 × 2160 · 4K landscape', value: '3840x2160' },
+          { label: '2160 × 3840 · 4K portrait', value: '2160x3840' },
         ],
       },
       {
@@ -8156,8 +8156,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2048 × 2048', value: '2048x2048' },
           { label: '2048 × 1152', value: '2048x1152' },
           { label: '2560 × 1440', value: '2560x1440' },
-          { label: '3840 × 2160 (4K landscape, experimental)', value: '3840x2160' },
-          { label: '2160 × 3840 (4K portrait, experimental)', value: '2160x3840' },
+          { label: '3840 × 2160 · 4K landscape, experimental', value: '3840x2160' },
+          { label: '2160 × 3840 · 4K portrait, experimental', value: '2160x3840' },
         ],
       },
       {
@@ -8184,7 +8184,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Auto', value: 'auto' },
           { label: 'Opaque', value: 'opaque' },
-          { label: 'Transparent (PNG/WebP)', value: 'transparent' },
+          { label: 'Transparent · PNG or WebP', value: 'transparent' },
         ],
       },
       {
@@ -8286,8 +8286,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2048 × 2048', value: '2048x2048' },
           { label: '2048 × 1152', value: '2048x1152' },
           { label: '2560 × 1440', value: '2560x1440' },
-          { label: '3840 × 2160 (4K landscape, experimental)', value: '3840x2160' },
-          { label: '2160 × 3840 (4K portrait, experimental)', value: '2160x3840' },
+          { label: '3840 × 2160 · 4K landscape, experimental', value: '3840x2160' },
+          { label: '2160 × 3840 · 4K portrait, experimental', value: '2160x3840' },
         ],
       },
       {
@@ -8314,7 +8314,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Auto', value: 'auto' },
           { label: 'Opaque', value: 'opaque' },
-          { label: 'Transparent (PNG/WebP)', value: 'transparent' },
+          { label: 'Transparent · PNG or WebP', value: 'transparent' },
         ],
       },
       {
@@ -8377,12 +8377,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'landscape_4_3',
         options: [
-          { label: 'Square HD (1024 × 1024)', value: 'square_hd' },
-          { label: 'Square (512 × 512)', value: 'square' },
-          { label: 'Portrait 4:3 (768 × 1024)', value: 'portrait_4_3' },
-          { label: 'Portrait 16:9 (576 × 1024)', value: 'portrait_16_9' },
-          { label: 'Landscape 4:3 (1024 × 768)', value: 'landscape_4_3' },
-          { label: 'Landscape 16:9 (1024 × 576)', value: 'landscape_16_9' },
+          { label: 'Square HD · 1024 × 1024', value: 'square_hd' },
+          { label: 'Square · 512 × 512', value: 'square' },
+          { label: 'Portrait 4:3 · 768 × 1024', value: 'portrait_4_3' },
+          { label: 'Portrait 16:9 · 576 × 1024', value: 'portrait_16_9' },
+          { label: 'Landscape 4:3 · 1024 × 768', value: 'landscape_4_3' },
+          { label: 'Landscape 16:9 · 1024 × 576', value: 'landscape_16_9' },
         ],
       },
       {
@@ -8421,7 +8421,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'partial_images',
-        label: 'Preview Frames',
+        label: 'Preview frames',
         type: 'integer',
         required: false,
         default: 2,
@@ -8442,7 +8442,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directRoute: { rejects: { image_size: ['square', 'portrait_16_9', 'landscape_16_9'] } },
     executionPattern: 'stream',
     inputPorts: [
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: true, multiple: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
@@ -8458,12 +8458,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'auto',
         options: [
           { label: 'Auto', value: 'auto' },
-          { label: 'Square HD (1024 × 1024)', value: 'square_hd' },
-          { label: 'Square (512 × 512)', value: 'square' },
-          { label: 'Portrait 4:3 (768 × 1024)', value: 'portrait_4_3' },
-          { label: 'Portrait 16:9 (576 × 1024)', value: 'portrait_16_9' },
-          { label: 'Landscape 4:3 (1024 × 768)', value: 'landscape_4_3' },
-          { label: 'Landscape 16:9 (1024 × 576)', value: 'landscape_16_9' },
+          { label: 'Square HD · 1024 × 1024', value: 'square_hd' },
+          { label: 'Square · 512 × 512', value: 'square' },
+          { label: 'Portrait 4:3 · 768 × 1024', value: 'portrait_4_3' },
+          { label: 'Portrait 16:9 · 576 × 1024', value: 'portrait_16_9' },
+          { label: 'Landscape 4:3 · 1024 × 768', value: 'landscape_4_3' },
+          { label: 'Landscape 16:9 · 1024 × 576', value: 'landscape_16_9' },
         ],
       },
       {
@@ -8502,7 +8502,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'partial_images',
-        label: 'Preview Frames',
+        label: 'Preview frames',
         type: 'integer',
         required: false,
         default: 2,
@@ -8522,8 +8522,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'style_images', label: 'Style Images', dataType: 'Image', required: false, multiple: true, maxConnections: 10, role: 'style' },
-      { id: 'image_style_references', label: 'Image Style Refs', dataType: 'Any', required: false, multiple: true, maxConnections: 10 },
+      { id: 'style_images', label: 'Style images', dataType: 'Image', required: false, multiple: true, maxConnections: 10, role: 'style' },
+      { id: 'image_style_references', label: 'Image style refs', dataType: 'Any', required: false, multiple: true, maxConnections: 10 },
       { id: 'styles', label: 'Styles', dataType: 'Any', required: false, multiple: true },
       { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
@@ -8562,7 +8562,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1:1',
@@ -8611,7 +8611,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'style_reference_strength',
-        label: 'Style Ref Strength',
+        label: 'Style ref strength',
         type: 'float',
         required: false,
         default: 0.5,
@@ -8628,7 +8628,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'style_strength',
-        label: 'Style Strength',
+        label: 'Style strength',
         type: 'float',
         required: false,
         default: 1,
@@ -8645,7 +8645,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'moodboard_strength',
-        label: 'Moodboard Strength',
+        label: 'Moodboard strength',
         type: 'float',
         required: false,
         default: 0.23,
@@ -8669,7 +8669,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'style' },
     ],
     outputPorts: [
-      { id: 'image_style_reference', label: 'Image Style Ref', dataType: 'Any', required: false },
+      { id: 'image_style_reference', label: 'Image style ref', dataType: 'Any', required: false },
     ],
     params: [
       {
@@ -8825,7 +8825,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'liked',
-        label: 'Liked Only',
+        label: 'Liked only',
         type: 'boolean',
         required: false,
         default: false,
@@ -8858,7 +8858,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'KREA_API_TOKEN',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'images', label: 'Training Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Training images', dataType: 'Image', required: true, multiple: true },
     ],
     outputPorts: [
       { id: 'style', label: 'Style', dataType: 'Any', required: false },
@@ -8892,7 +8892,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'model',
-        label: 'Training Model',
+        label: 'Training model',
         type: 'enum',
         required: false,
         default: 'flux_dev',
@@ -8905,8 +8905,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Z-Image', value: 'z-image' },
           { label: 'Krea 2', value: 'k2' },
           { label: 'Krea 2 Large', value: 'k2-large' },
-          { label: 'Krea 1 (Krea account)', value: 'k1' },
-          { label: 'LTX 2.3 22B (Krea account)', value: 'ltx-23-22b' },
+          { label: 'Krea 1 · Krea account', value: 'k1' },
+          { label: 'LTX 2.3 22B · Krea account', value: 'ltx-23-22b' },
         ],
       },
       {
@@ -8924,13 +8924,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'trigger_word',
-        label: 'Trigger Word',
+        label: 'Trigger word',
         type: 'string',
         required: false,
       },
       {
         key: 'max_train_steps',
-        label: 'Max Steps',
+        label: 'Max steps',
         type: 'integer',
         required: false,
         min: 1,
@@ -8938,14 +8938,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'learning_rate',
-        label: 'Learning Rate',
+        label: 'Learning rate',
         type: 'float',
         required: false,
         visibleWhen: { model: ['flux_dev', 'flux_schnell', 'wan', 'wan22'] },
       },
       {
         key: 'batch_size',
-        label: 'Batch Size',
+        label: 'Batch size',
         type: 'integer',
         required: false,
         min: 1,
@@ -8953,7 +8953,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generation_strength',
-        label: 'Output Strength',
+        label: 'Output strength',
         type: 'float',
         required: false,
         default: 1,
@@ -8963,7 +8963,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'share_with_workspace',
-        label: 'Share Workspace',
+        label: 'Share workspace',
         type: 'boolean',
         required: false,
         default: false,
@@ -9125,7 +9125,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       {
         id: 'id',
-        label: 'Style or Moodboard',
+        label: 'Style or moodboard',
         dataType: 'Any',
         required: false,
       },
@@ -9240,7 +9240,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       {
         id: 'job',
-        label: 'Krea 3D Job',
+        label: 'Krea 3D job',
         dataType: 'Any',
         required: false,
       },
@@ -9254,7 +9254,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         id: 'file',
-        label: 'Model File',
+        label: 'Model file',
         dataType: 'Text',
         required: false,
       },
@@ -9444,7 +9444,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Job types',
         type: 'string',
         required: false,
-        placeholder: 'e.g. flux,k1,externalImage',
+        placeholder: 'flux,k1,externalImage',
       },
       {
         key: 'limit',
@@ -9583,11 +9583,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Node app version ID',
         type: 'string',
         required: true,
-        placeholder: 'From Krea or the agent\'s get_node_apps',
+        placeholder: 'From Krea, or ask your agent to list node apps',
       },
       {
         key: 'input',
-        label: 'Input (JSON)',
+        label: 'Input · JSON',
         type: 'textarea',
         required: false,
         placeholder: '{"idea": "..."}',
@@ -9735,7 +9735,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'tags',
-        label: 'Tags (all of)',
+        label: 'Tags · all of',
         type: 'string',
         required: false,
         placeholder: 'comma,separated',
@@ -9944,7 +9944,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'spec',
-        label: 'Nodes and edges (JSON)',
+        label: 'Nodes and edges · JSON',
         type: 'textarea',
         required: false,
         placeholder: '{"nodes": [...], "edges": [...]}',
@@ -10231,7 +10231,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             value: 'list-apps',
           },
           {
-            label: 'List an app\'s tools',
+            label: 'List an app’s tools',
             value: 'list-tools',
           },
           {
@@ -10257,7 +10257,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Tool',
         type: 'string',
         required: false,
-        placeholder: 'e.g. ae.addLayer',
+        placeholder: 'ae.addLayer',
         visibleWhen: {
           action: [
             'call-tool',
@@ -10266,7 +10266,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'input',
-        label: 'Tool input (JSON)',
+        label: 'Tool input · JSON',
         type: 'textarea',
         required: false,
         visibleWhen: {
@@ -10357,14 +10357,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'prompt',
-        label: 'Enhancement Prompt',
+        label: 'Enhancement prompt',
         type: 'string',
         required: false,
         default: 'masterpiece, best quality, highres',
       },
       {
         key: 'upscale_factor',
-        label: 'Upscale Factor',
+        label: 'Upscale factor',
         type: 'float',
         required: false,
         default: 2,
@@ -10374,7 +10374,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'creativity',
-        label: 'Creativity (added detail)',
+        label: 'Creativity · added detail',
         type: 'float',
         required: false,
         default: 0.35,
@@ -10384,7 +10384,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'resemblance',
-        label: 'Resemblance (fidelity)',
+        label: 'Resemblance · fidelity',
         type: 'float',
         required: false,
         default: 0.6,
@@ -10433,13 +10433,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'factor',
         options: [
-          { label: 'Factor (multiplier)', value: 'factor' },
+          { label: 'Factor · multiplier', value: 'factor' },
           { label: 'Target resolution', value: 'target' },
         ],
       },
       {
         key: 'upscale_factor',
-        label: 'Upscale Factor',
+        label: 'Upscale factor',
         type: 'float',
         required: false,
         default: 2,
@@ -10449,7 +10449,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'target_resolution',
-        label: 'Target Resolution',
+        label: 'Target resolution',
         type: 'enum',
         required: false,
         default: '1080p',
@@ -10457,12 +10457,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '720p', value: '720p' },
           { label: '1080p', value: '1080p' },
           { label: '1440p', value: '1440p' },
-          { label: '2160p (4K)', value: '2160p' },
+          { label: '2160p · 4K', value: '2160p' },
         ],
       },
       {
         key: 'noise_scale',
-        label: 'Noise Scale',
+        label: 'Noise scale',
         type: 'float',
         required: false,
         default: 0.1,
@@ -10472,7 +10472,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'output_quality',
-        label: 'Output Quality',
+        label: 'Output quality',
         type: 'enum',
         required: false,
         default: 'high',
@@ -10505,7 +10505,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
     ],
     outputPorts: [
-      { id: 'image', label: 'Upscaled Image', dataType: 'Image', required: false },
+      { id: 'image', label: 'Upscaled image', dataType: 'Image', required: false },
     ],
     params: [
       {
@@ -10516,7 +10516,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'factor',
         options: [
           { label: 'Factor', value: 'factor' },
-          { label: 'Target Resolution', value: 'target' },
+          { label: 'Target resolution', value: 'target' },
         ],
       },
       {
@@ -10532,7 +10532,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'target_resolution',
-        label: 'Target Resolution',
+        label: 'Target resolution',
         type: 'enum',
         required: false,
         default: '1080p',
@@ -10541,12 +10541,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '720p', value: '720p' },
           { label: '1080p', value: '1080p' },
           { label: '1440p', value: '1440p' },
-          { label: '2160p (4K)', value: '2160p' },
+          { label: '2160p · 4K', value: '2160p' },
         ],
       },
       {
         key: 'noise_scale',
-        label: 'Noise Scale',
+        label: 'Noise scale',
         type: 'float',
         required: false,
         default: 0.1,
@@ -10612,8 +10612,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'square_hd',
         options: [
-          { label: 'Square HD (2048 × 2048)', value: 'square_hd' },
-          { label: 'Square (512 × 512)', value: 'square' },
+          { label: 'Square HD · 2048 × 2048', value: 'square_hd' },
+          { label: 'Square · 512 × 512', value: 'square' },
           { label: 'Portrait 4:3', value: 'portrait_4_3' },
           { label: 'Portrait 16:9', value: 'portrait_16_9' },
           { label: 'Landscape 4:3', value: 'landscape_4_3' },
@@ -10634,7 +10634,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'max_images',
-        label: 'Images per Generation',
+        label: 'Images per generation',
         type: 'integer',
         required: false,
         default: 1,
@@ -10645,7 +10645,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -10695,7 +10695,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'BALANCED',
@@ -10722,12 +10722,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'expansion_model',
-        label: 'Prompt Expansion',
+        label: 'Prompt expansion',
         type: 'enum',
         required: false,
         default: 'Medium',
         options: [
-          { label: 'None (no expansion fee)', value: 'None' },
+          { label: 'None · no expansion fee', value: 'None' },
           { label: 'Medium', value: 'Medium' },
           { label: 'Large', value: 'Large' },
         ],
@@ -10774,7 +10774,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -10815,7 +10815,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'DEFAULT',
@@ -10827,7 +10827,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_copyright_detection',
-        label: 'Copyright Detection',
+        label: 'Copyright detection',
         type: 'boolean',
         required: false,
         default: false,
@@ -10847,8 +10847,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Base Image', dataType: 'Image', required: true, role: 'subject' },
-      { id: 'mask', label: 'Mask (black = edit)', dataType: 'Image', required: true },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
+      { id: 'mask', label: 'Mask · black means edit', dataType: 'Image', required: true },
+      { id: 'images', label: 'Style refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -10875,7 +10875,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'BALANCED',
@@ -10887,7 +10887,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'expand_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'boolean',
         required: false,
         default: true,
@@ -10896,7 +10896,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'DEFAULT',
@@ -10908,7 +10908,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'magic_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -10933,7 +10933,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'image', label: 'Source Image', dataType: 'Image', required: true, role: 'subject' },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
+      { id: 'images', label: 'Style refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -10943,7 +10943,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'strength',
-        label: 'Image Strength',
+        label: 'Image strength',
         type: 'float',
         required: false,
         default: 0.8,
@@ -10981,14 +10981,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'BALANCED',
@@ -11000,7 +11000,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'expand_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'boolean',
         required: false,
         default: true,
@@ -11025,7 +11025,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'image_weight',
-        label: 'Image Weight',
+        label: 'Image weight',
         type: 'integer',
         required: false,
         min: 1,
@@ -11067,7 +11067,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'DEFAULT',
@@ -11079,7 +11079,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_copyright_detection',
-        label: 'Copyright Detection',
+        label: 'Copyright detection',
         type: 'boolean',
         required: false,
         default: false,
@@ -11098,7 +11098,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'image', label: 'Source Image', dataType: 'Image', required: true, role: 'subject' },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
+      { id: 'images', label: 'Style refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -11125,7 +11125,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'image_size',
-        label: 'Target Size',
+        label: 'Target size',
         type: 'enum',
         required: true,
         default: 'square_hd',
@@ -11153,7 +11153,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'BALANCED',
@@ -11167,7 +11167,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'resolution',
-        label: 'Target Resolution',
+        label: 'Target resolution',
         type: 'enum',
         required: true,
         default: '1024x1024',
@@ -11186,7 +11186,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'DEFAULT',
@@ -11211,7 +11211,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'New Background', dataType: 'Text', required: true },
       { id: 'image', label: 'Subject Image', dataType: 'Image', required: true, role: 'subject' },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
+      { id: 'images', label: 'Style refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -11251,7 +11251,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'BALANCED',
@@ -11263,7 +11263,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'expand_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'boolean',
         required: false,
         default: true,
@@ -11272,7 +11272,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'magic_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -11284,7 +11284,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'DEFAULT',
@@ -11310,7 +11310,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
       { id: 'reference_images', label: 'Character Refs', dataType: 'Image', required: false, multiple: true, role: 'identity' },
-      { id: 'images', label: 'Style Refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
+      { id: 'images', label: 'Style refs', dataType: 'Image', required: false, multiple: true, role: 'style' },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -11319,7 +11319,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -11371,7 +11371,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'BALANCED',
@@ -11383,7 +11383,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'expand_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'boolean',
         required: false,
         default: true,
@@ -11392,7 +11392,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1x1',
@@ -11416,7 +11416,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'style_type',
-        label: 'Style Type',
+        label: 'Style type',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -11428,7 +11428,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'magic_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -11440,7 +11440,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'DEFAULT',
@@ -11452,7 +11452,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'custom_model_uri',
-        label: 'Custom Model URI',
+        label: 'Custom model URI',
         type: 'string',
         required: false,
         placeholder: 'From an Ideogram Train Model node',
@@ -11471,7 +11471,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'IDEOGRAM_API_KEY',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Guidance (optional)', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Guidance · optional', dataType: 'Text', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -11507,7 +11507,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'expand_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'boolean',
         required: false,
         default: false,
@@ -11516,7 +11516,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directParams: [
       {
         key: 'magic_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -11542,12 +11542,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'description', label: 'Description', dataType: 'Text', required: false },
-      { id: 'json_prompt', label: 'JSON Prompt (v4)', dataType: 'Text', required: false },
+      { id: 'json_prompt', label: 'JSON prompt · v4', dataType: 'Text', required: false },
     ],
     params: [
       {
         key: 'include_bbox',
-        label: 'Include Layout (bbox)',
+        label: 'Include layout · bbox',
         type: 'boolean',
         required: false,
         default: true,
@@ -11567,13 +11567,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'description', label: 'Expanded Prompt', dataType: 'Text', required: false },
-      { id: 'json_prompt', label: 'JSON Prompt (v4)', dataType: 'Text', required: false },
+      { id: 'description', label: 'Expanded prompt', dataType: 'Text', required: false },
+      { id: 'json_prompt', label: 'JSON prompt · v4', dataType: 'Text', required: false },
     ],
     params: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -11613,12 +11613,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
     ],
     outputPorts: [
-      { id: 'image', label: 'Image (alpha)', dataType: 'Image', required: false },
+      { id: 'image', label: 'Image · alpha', dataType: 'Image', required: false },
     ],
     params: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1x1',
@@ -11654,7 +11654,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'rendering_speed',
-        label: 'Rendering Speed',
+        label: 'Rendering speed',
         type: 'enum',
         required: false,
         default: 'DEFAULT',
@@ -11666,7 +11666,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'magic_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -11678,7 +11678,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -11714,7 +11714,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
     ],
     outputPorts: [
-      { id: 'image', label: 'Image (alpha)', dataType: 'Image', required: false },
+      { id: 'image', label: 'Image · alpha', dataType: 'Image', required: false },
     ],
     params: [],
   },
@@ -11729,10 +11729,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Guidance (optional)', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Guidance · optional', dataType: 'Text', required: false },
     ],
     outputPorts: [
-      { id: 'image', label: 'Base Plate (text removed)', dataType: 'Image', required: false },
+      { id: 'image', label: 'Base plate · text removed', dataType: 'Image', required: false },
     ],
     params: [
       {
@@ -11754,7 +11754,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'IDEOGRAM_API_KEY',
     executionPattern: 'sync',
     inputPorts: [
-      { id: 'prompt', label: 'Edit Instruction', dataType: 'Text', required: true },
+      { id: 'prompt', label: 'Edit instruction', dataType: 'Text', required: true },
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
       { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true },
     ],
@@ -11764,7 +11764,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'magic_prompt',
-        label: 'Magic Prompt',
+        label: 'Magic prompt',
         type: 'enum',
         required: false,
         default: 'AUTO',
@@ -11776,7 +11776,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '',
@@ -11801,7 +11801,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'transparent_background',
-        label: 'Transparent Background',
+        label: 'Transparent background',
         type: 'boolean',
         required: false,
         default: false,
@@ -11834,10 +11834,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'IDEOGRAM_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'images', label: 'Training Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Training images', dataType: 'Image', required: true, multiple: true },
     ],
     outputPorts: [
-      { id: 'custom_model_uri', label: 'Custom Model URI', dataType: 'Text', required: false },
+      { id: 'custom_model_uri', label: 'Custom model URI', dataType: 'Text', required: false },
       { id: 'model_id', label: 'Model ID', dataType: 'Text', required: false },
     ],
     params: [
@@ -11868,13 +11868,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'polarity',
-        label: 'Painted Area Means',
+        label: 'Painted area means',
         type: 'enum',
         required: false,
         default: 'white-edit',
         options: [
-          { label: 'White = edit (FLUX Fill)', value: 'white-edit' },
-          { label: 'Black = edit (Ideogram)', value: 'black-edit' },
+          { label: 'White = edit · FLUX Fill', value: 'white-edit' },
+          { label: 'Black = edit · Ideogram', value: 'black-edit' },
         ],
       },
     ],
@@ -11946,8 +11946,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       {
         key: 'split_mode', label: 'Split mode', type: 'enum', required: false, default: 'by_line',
         options: [
-          { label: 'By line (one item per line)', value: 'by_line' },
-          { label: 'None (entire text is one item)', value: 'none' },
+          { label: 'By line · one item per line', value: 'by_line' },
+          { label: 'None · the whole text is one item', value: 'none' },
         ],
       },
       { key: 'batch_size_cap', label: 'Item cap', type: 'integer', required: false, default: 10, min: 1, max: 25 },
@@ -12038,12 +12038,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'sync_mode',
-        label: 'Sync Mode',
+        label: 'Sync mode',
         type: 'enum',
         required: false,
         default: 'cut_off',
         options: [
-          { label: 'Cut Off', value: 'cut_off' },
+          { label: 'Cut off', value: 'cut_off' },
           { label: 'Loop', value: 'loop' },
           { label: 'Bounce', value: 'bounce' },
           { label: 'Silence', value: 'silence' },
@@ -12062,7 +12062,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
-      { id: 'prompt', label: 'Prompt (Redefine only)', dataType: 'Text', required: false },
+      { id: 'prompt', label: 'Prompt · Redefine only', dataType: 'Text', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -12087,14 +12087,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'face_enhancement',
-        label: 'Face Enhancement',
+        label: 'Face enhancement',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'face_enhancement_strength',
-        label: 'Face Enhancement Strength',
+        label: 'Face enhancement strength',
         type: 'float',
         required: false,
         default: 0.8,
@@ -12103,7 +12103,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'upscale_factor',
-        label: 'Upscale Factor',
+        label: 'Upscale factor',
         type: 'float',
         required: false,
         default: 2.0,
@@ -12130,7 +12130,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'fix_compression',
-        label: 'Fix Compression',
+        label: 'Fix compression',
         type: 'float',
         required: false,
         default: 0.0,
@@ -12139,7 +12139,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'jpeg',
@@ -12161,8 +12161,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: 'GOOGLE_VERTEX_CREDENTIALS',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'First Frame', dataType: 'Image', required: true, role: 'subject' },
-      { id: 'end_image', label: 'Last Frame', dataType: 'Image', required: true },
+      { id: 'image', label: 'First frame', dataType: 'Image', required: true, role: 'subject' },
+      { id: 'end_image', label: 'Last frame', dataType: 'Image', required: true },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -12170,7 +12170,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -12206,14 +12206,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         placeholder: 'What to avoid',
@@ -12227,17 +12227,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'safety_tolerance',
-        label: 'Safety Tolerance',
+        label: 'Safety tolerance',
         type: 'enum',
         required: false,
         default: '2',
         options: [
-          { label: '1 (Strict)', value: '1' },
+          { label: '1 · strict', value: '1' },
           { label: '2', value: '2' },
           { label: '3', value: '3' },
           { label: '4', value: '4' },
           { label: '5', value: '5' },
-          { label: '6 (Permissive)', value: '6' },
+          { label: '6 · permissive', value: '6' },
         ],
       },
     ],
@@ -12252,9 +12252,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Start Image', dataType: 'Image', required: true, role: 'subject' },
+      { id: 'image', label: 'Start image', dataType: 'Image', required: true, role: 'subject' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
-      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
+      { id: 'end_image', label: 'End image', dataType: 'Image', required: false },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -12295,21 +12295,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         default: 'blur, distort, and low quality',
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'cfg_scale',
-        label: 'CFG Scale',
+        label: 'CFG scale',
         type: 'float',
         required: false,
         default: 0.5,
@@ -12328,9 +12328,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Start Image', dataType: 'Image', required: false, role: 'subject' },
-      { id: 'end_image', label: 'End Image', dataType: 'Image', required: false },
-      { id: 'images', label: 'Reference Images', dataType: 'Image', required: false, multiple: true, role: 'identity' },
+      { id: 'image', label: 'Start image', dataType: 'Image', required: false, role: 'subject' },
+      { id: 'end_image', label: 'End image', dataType: 'Image', required: false },
+      { id: 'images', label: 'Reference images', dataType: 'Image', required: false, multiple: true, role: 'identity' },
     ],
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
@@ -12351,7 +12351,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -12363,14 +12363,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'shot_type',
-        label: 'Shot Type',
+        label: 'Shot type',
         type: 'enum',
         required: false,
         default: 'customize',
@@ -12390,8 +12390,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     envKeyName: 'FAL_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
-      { id: 'image', label: 'Character Image', dataType: 'Image', required: true, role: 'identity' },
-      { id: 'video', label: 'Motion Reference Video', dataType: 'Video', required: true },
+      { id: 'image', label: 'Character image', dataType: 'Image', required: true, role: 'identity' },
+      { id: 'video', label: 'Motion reference video', dataType: 'Video', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: false },
     ],
     outputPorts: [
@@ -12400,7 +12400,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'character_orientation',
-        label: 'Character Orientation',
+        label: 'Character orientation',
         type: 'enum',
         required: true,
         default: 'video',
@@ -12411,7 +12411,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'keep_original_sound',
-        label: 'Keep Original Sound',
+        label: 'Keep original sound',
         type: 'boolean',
         required: false,
         default: true,
@@ -12455,7 +12455,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'upscale_factor',
-        label: 'Upscale Factor',
+        label: 'Upscale factor',
         type: 'float',
         required: false,
         default: 2.0,
@@ -12508,7 +12508,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'recover_detail',
-        label: 'Recover Detail',
+        label: 'Recover detail',
         type: 'float',
         required: false,
         default: 0.0,
@@ -12517,7 +12517,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'H264_output',
-        label: 'H264 Output',
+        label: 'H264 output',
         type: 'boolean',
         required: false,
         default: false,
@@ -12546,7 +12546,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'num_images',
-        label: 'Number of Images',
+        label: 'Number of images',
         type: 'integer',
         required: false,
         default: 1,
@@ -12555,7 +12555,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '1:1',
@@ -12586,7 +12586,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'jpeg',
@@ -12613,7 +12613,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'images', label: 'Source Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'images', label: 'Source images', dataType: 'Image', required: true, multiple: true },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -12622,7 +12622,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'num_images',
-        label: 'Number of Images',
+        label: 'Number of images',
         type: 'integer',
         required: false,
         default: 1,
@@ -12644,7 +12644,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'jpeg',
@@ -12679,11 +12679,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'RealESRGAN_x4plus',
         options: [
-          { label: 'x4plus (General)', value: 'RealESRGAN_x4plus' },
-          { label: 'x2plus (General)', value: 'RealESRGAN_x2plus' },
+          { label: 'x4plus · general', value: 'RealESRGAN_x4plus' },
+          { label: 'x2plus · general', value: 'RealESRGAN_x2plus' },
           { label: 'x4plus Anime 6B', value: 'RealESRGAN_x4plus_anime_6B' },
-          { label: 'x4 v3 (General)', value: 'RealESRGAN_x4_v3' },
-          { label: 'x4 WDN v3 (Denoise)', value: 'RealESRGAN_x4_wdn_v3' },
+          { label: 'x4 v3 · general', value: 'RealESRGAN_x4_v3' },
+          { label: 'x4 WDN v3 · denoise', value: 'RealESRGAN_x4_wdn_v3' },
           { label: 'x4 Anime v3', value: 'RealESRGAN_x4_anime_v3' },
         ],
       },
@@ -12698,14 +12698,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'face',
-        label: 'Face Enhancement',
+        label: 'Face enhancement',
         type: 'boolean',
         required: false,
         default: false,
       },
       {
         key: 'tile',
-        label: 'Tile Size (0=none)',
+        label: 'Tile size · 0 means none',
         type: 'integer',
         required: false,
         default: 0,
@@ -12714,7 +12714,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'output_format',
-        label: 'Output Format',
+        label: 'Output format',
         type: 'enum',
         required: false,
         default: 'png',
@@ -12742,7 +12742,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -12789,7 +12789,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'negative_prompt',
-        label: 'Negative Prompt',
+        label: 'Negative prompt',
         type: 'string',
         required: false,
         default: '',
@@ -12833,7 +12833,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -12844,18 +12844,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'num_frames',
-        label: 'Number of Frames',
+        label: 'Number of frames',
         type: 'enum',
         required: false,
         default: '129',
         options: [
-          { label: '129 (~5s)', value: '129' },
-          { label: '85 (~3.5s)', value: '85' },
+          { label: '129 · ~5s', value: '129' },
+          { label: '85 · ~3.5s', value: '85' },
         ],
       },
       {
         key: 'pro_mode',
-        label: 'Pro Mode',
+        label: 'Pro mode',
         type: 'boolean',
         required: false,
         default: false,
@@ -12870,7 +12870,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -12905,7 +12905,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'force_instrumental',
-        label: 'Instrumental Only',
+        label: 'Instrumental only',
         type: 'boolean',
         required: false,
         default: false,
@@ -12957,7 +12957,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 1.0,
@@ -12974,7 +12974,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'num_inference_steps',
-        label: 'Inference Steps',
+        label: 'Inference steps',
         type: 'integer',
         required: false,
         default: 20,
@@ -12983,7 +12983,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -13020,7 +13020,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 1.0,
@@ -13037,7 +13037,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'num_inference_steps',
-        label: 'Inference Steps',
+        label: 'Inference steps',
         type: 'integer',
         required: false,
         default: 20,
@@ -13046,7 +13046,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -13071,21 +13071,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'sound_effect_prompt',
-        label: 'Sound Effect Prompt',
+        label: 'Sound effect prompt',
         type: 'string',
         required: false,
         default: '',
       },
       {
         key: 'background_music_prompt',
-        label: 'Background Music Prompt',
+        label: 'Background music prompt',
         type: 'string',
         required: false,
         default: '',
       },
       {
         key: 'asmr_mode',
-        label: 'ASMR Mode',
+        label: 'ASMR mode',
         type: 'boolean',
         required: false,
         default: false,
@@ -13111,7 +13111,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     sharedParams: [
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -13158,7 +13158,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'camera_fixed',
-        label: 'Camera Fixed',
+        label: 'Camera fixed',
         type: 'boolean',
         required: false,
         default: false,
@@ -13174,7 +13174,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     falParams: [
       {
         key: 'enable_safety_checker',
-        label: 'Safety Checker',
+        label: 'Safety checker',
         type: 'boolean',
         required: false,
         default: true,
@@ -13205,7 +13205,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'guidance_scale',
-        label: 'Guidance Scale',
+        label: 'Guidance scale',
         type: 'float',
         required: false,
         default: 5.0,
@@ -13214,7 +13214,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: 'auto',
@@ -13244,7 +13244,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       {
         key: 'detailed_analysis',
-        label: 'Detailed Analysis',
+        label: 'Detailed analysis',
         type: 'boolean',
         required: false,
         default: false,
@@ -13292,12 +13292,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '1080p', value: '1080p' },
           { label: '1440p', value: '1440p' },
-          { label: '2160p (4K)', value: '2160p' },
+          { label: '2160p · 4K', value: '2160p' },
         ],
       },
       {
         key: 'aspect_ratio',
-        label: 'Aspect Ratio',
+        label: 'Aspect ratio',
         type: 'enum',
         required: false,
         default: '16:9',
@@ -13321,7 +13321,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'generate_audio',
-        label: 'Generate Audio',
+        label: 'Generate audio',
         type: 'boolean',
         required: false,
         default: true,
@@ -13340,7 +13340,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
       {
         id: 'requested_duration',
-        label: 'Requested Duration',
+        label: 'Requested duration',
         dataType: 'Text',
         required: false,
       },
@@ -13367,15 +13367,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiProvider: 'utility', apiEndpoint: '', envKeyName: [], executionPattern: 'sync',
     inputPorts: [{ id: 'video', label: 'Video', dataType: 'Video', required: true }],
     outputPorts: [
-      { id: 'frame', label: 'Annotated Frame', dataType: 'Image', required: false },
-      { id: 'text', label: 'QC Report', dataType: 'Text', required: false },
+      { id: 'frame', label: 'Annotated frame', dataType: 'Image', required: false },
+      { id: 'text', label: 'QC report', dataType: 'Text', required: false },
     ],
     params: [
-      { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
+      { key: 'mode', label: 'Analysis mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
-        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
+        { label: 'Jev · TypeSafe, experimental', value: 'jev' },
       ] },
-      { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
+      { key: 'sample_density', label: 'Sample density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
       ...QC_JEV_PARAMS,
     ],
     providerVia: QC_PROVIDER_VIA,
@@ -13385,16 +13385,16 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiProvider: 'utility', apiEndpoint: '', envKeyName: [], executionPattern: 'sync',
     inputPorts: [{ id: 'video', label: 'Video', dataType: 'Video', required: true }],
     outputPorts: [
-      { id: 'frame', label: 'Annotated Frames', dataType: 'Image', required: false },
-      { id: 'text', label: 'QC Report', dataType: 'Text', required: false },
+      { id: 'frame', label: 'Annotated frames', dataType: 'Image', required: false },
+      { id: 'text', label: 'QC report', dataType: 'Text', required: false },
     ],
     params: [
-      { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
+      { key: 'mode', label: 'Analysis mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
-        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
+        { label: 'Jev · TypeSafe, experimental', value: 'jev' },
       ] },
-      { key: 'sample_rate', label: 'Samples Per Second', type: 'float', required: false, default: 1, min: 0.1, max: 4, step: 0.1 },
-      { key: 'track_faces', label: 'Track Faces', type: 'boolean', required: false, default: true },
+      { key: 'sample_rate', label: 'Samples per second', type: 'float', required: false, default: 1, min: 0.1, max: 4, step: 0.1 },
+      { key: 'track_faces', label: 'Track faces', type: 'boolean', required: false, default: true },
       ...QC_JEV_PARAMS,
     ],
     providerVia: QC_PROVIDER_VIA,
@@ -13404,15 +13404,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiProvider: 'utility', apiEndpoint: '', envKeyName: [], executionPattern: 'sync',
     inputPorts: [{ id: 'video', label: 'Video', dataType: 'Video', required: true }],
     outputPorts: [
-      { id: 'frame', label: 'Annotated Frames', dataType: 'Image', required: false },
-      { id: 'text', label: 'QC Report', dataType: 'Text', required: false },
+      { id: 'frame', label: 'Annotated frames', dataType: 'Image', required: false },
+      { id: 'text', label: 'QC report', dataType: 'Text', required: false },
     ],
     params: [
-      { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
+      { key: 'mode', label: 'Analysis mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
-        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
+        { label: 'Jev · TypeSafe, experimental', value: 'jev' },
       ] },
-      { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
+      { key: 'sample_density', label: 'Sample density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
       ...QC_JEV_PARAMS,
     ],
     providerVia: QC_PROVIDER_VIA,
@@ -13422,18 +13422,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiProvider: 'utility', apiEndpoint: '', envKeyName: [], executionPattern: 'sync',
     inputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: true },
-      { id: 'reference', label: 'Reference Frame', dataType: 'Image', required: false, role: 'composition' },
+      { id: 'reference', label: 'Reference frame', dataType: 'Image', required: false, role: 'composition' },
     ],
     outputPorts: [
-      { id: 'frame', label: 'Annotated Frames', dataType: 'Image', required: false },
-      { id: 'text', label: 'QC Report', dataType: 'Text', required: false },
+      { id: 'frame', label: 'Annotated frames', dataType: 'Image', required: false },
+      { id: 'text', label: 'QC report', dataType: 'Text', required: false },
     ],
     params: [
-      { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
+      { key: 'mode', label: 'Analysis mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
-        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
+        { label: 'Jev · TypeSafe, experimental', value: 'jev' },
       ] },
-      { key: 'expected_angle', label: 'Expected Angle', type: 'string', required: false, default: '', placeholder: 'e.g. low-angle push-in' },
+      { key: 'expected_angle', label: 'Expected angle', type: 'string', required: false, default: '', placeholder: 'low-angle push-in' },
       ...QC_JEV_PARAMS,
     ],
     providerVia: QC_PROVIDER_VIA,
@@ -13444,7 +13444,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'jev-decide': {
     id: 'jev-decide',
     displayName: 'Jev Decide (judge / classify / yes-no)',
-    description: 'Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. Also a gate: whatever is connected to “Through” comes out of “On Pass” or “On Fail”, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
+    description: 'Judge, classify or score text and images with one typed question. The question can be yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. It also works as a gate. Whatever is connected to “Through” comes out of “On pass” or “On fail”, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
     category: 'analyzer',
     apiProvider: 'typesafe',
     apiEndpoint: '/v1/systemone',
@@ -13463,12 +13463,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'pass', label: 'Pass', dataType: 'Text', required: false },
       { id: 'probability', label: 'Probability', dataType: 'Text', required: false },
       { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
-      { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
+      { id: 'probabilities', label: 'Probabilities · JSON', dataType: 'Text', required: false },
       { id: 'report', label: 'Report', dataType: 'Text', required: false },
       // Exactly one carries a value; nodes wired to the other are skipped
       // (backend/execution/gating.py).
-      { id: 'on_pass', label: 'On Pass', dataType: 'Any', required: false, conditional: true },
-      { id: 'on_fail', label: 'On Fail', dataType: 'Any', required: false, conditional: true },
+      { id: 'on_pass', label: 'On pass', dataType: 'Any', required: false, conditional: true },
+      { id: 'on_fail', label: 'On fail', dataType: 'Any', required: false, conditional: true },
     ],
     params: [
       {
@@ -13478,35 +13478,35 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'jev-1.14.0',
         options: [
-          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
-          { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
-          { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
-          { label: 'jev-preview (moves)', value: 'jev-preview' },
+          { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
+          { label: 'Jev 1.13.0 · pinned', value: 'jev-1.13.0' },
+          { label: 'jev-latest · updates itself, so check thresholds again', value: 'jev-latest' },
+          { label: 'jev-preview · updates itself', value: 'jev-preview' },
         ],
       },
       {
         key: 'answer_type',
-        label: 'Answer Type',
+        label: 'Answer type',
         type: 'enum',
         required: false,
         default: 'yes_no',
         options: [
-          { label: 'Yes / No', value: 'yes_no' },
+          { label: 'Yes / no', value: 'yes_no' },
           { label: 'Pick one option', value: 'choice' },
           { label: 'Score on a scale', value: 'score' },
         ],
       },
       { key: 'question', label: 'Question', type: 'textarea', required: true, placeholder: 'Is the product on a plain white background?' },
-      { key: 'yes_means', label: 'Yes Means (optional)', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
-      { key: 'no_means', label: 'No Means (optional)', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
-      { key: 'options', label: 'Options (one per line)', type: 'textarea', required: false, default: '', placeholder: 'Product photo\nLifestyle shot\nIllustration', visibleWhen: { answer_type: ['choice'] } },
-      { key: 'pass_when', label: 'Passing Options (one per line)', type: 'textarea', required: false, default: '', visibleWhen: { answer_type: ['choice'] } },
-      { key: 'levels', label: 'Levels, Low to High (one per line)', type: 'textarea', required: false, default: '', placeholder: 'Off brief\nPartly on brief\nOn brief', visibleWhen: { answer_type: ['score'] } },
+      { key: 'yes_means', label: 'Yes means · optional', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
+      { key: 'no_means', label: 'No means · optional', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
+      { key: 'options', label: 'Options · one per line', type: 'textarea', required: false, default: '', placeholder: 'Product photo\nLifestyle shot\nIllustration', visibleWhen: { answer_type: ['choice'] } },
+      { key: 'pass_when', label: 'Passing options · one per line', type: 'textarea', required: false, default: '', visibleWhen: { answer_type: ['choice'] } },
+      { key: 'levels', label: 'Levels, low to high · one per line', type: 'textarea', required: false, default: '', placeholder: 'Off brief\nPartly on brief\nOn brief', visibleWhen: { answer_type: ['score'] } },
       { key: 'threshold', label: 'Pass Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { answer_type: ['yes_no', 'score'] } },
       { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
       {
         key: 'when_unsure',
-        label: 'When Unsure',
+        label: 'When unsure',
         type: 'enum',
         required: false,
         default: 'fail',
@@ -13516,7 +13516,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Take neither branch', value: 'neither' },
         ],
       },
-      { key: 'long_context', label: 'Long Context (slower, less accurate)', type: 'boolean', required: false, default: false },
+      { key: 'long_context', label: 'Long context · slower, less accurate', type: 'boolean', required: false, default: false },
     ],
   },
 
@@ -13524,7 +13524,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'jev-pick-best': {
     id: 'jev-pick-best',
     displayName: 'Jev Pick Best (rank / choose best image)',
-    description: 'Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate\'s probability and how confident the pick is; low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
+    description: 'Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate’s probability and how confident the pick is. Low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
     category: 'analyzer',
     apiProvider: 'typesafe',
     apiEndpoint: '/v1/systemone',
@@ -13539,7 +13539,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'winner', label: 'Winner', dataType: 'Image', required: false },
       { id: 'index', label: 'Index', dataType: 'Text', required: false },
-      { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
+      { id: 'probabilities', label: 'Probabilities · JSON', dataType: 'Text', required: false },
       { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
       { id: 'report', label: 'Report', dataType: 'Text', required: false },
     ],
@@ -13551,10 +13551,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'jev-1.14.0',
         options: [
-          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
-          { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
-          { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
-          { label: 'jev-preview (moves)', value: 'jev-preview' },
+          { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
+          { label: 'Jev 1.13.0 · pinned', value: 'jev-1.13.0' },
+          { label: 'jev-latest · updates itself, so check thresholds again', value: 'jev-latest' },
+          { label: 'jev-preview · updates itself', value: 'jev-preview' },
         ],
       },
       { key: 'question', label: 'Question', type: 'textarea', required: false, default: 'Which image best matches the brief?', placeholder: 'Which image best matches the brief?' },
@@ -13580,7 +13580,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'found', label: 'Found', dataType: 'Text', required: false },
-      { id: 'box', label: 'Box (JSON)', dataType: 'Text', required: false },
+      { id: 'box', label: 'Box · JSON', dataType: 'Text', required: false },
       { id: 'crop', label: 'Crop', dataType: 'Image', required: false, conditional: true },
       { id: 'mask', label: 'Mask', dataType: 'Mask', required: false, conditional: true },
       { id: 'annotated', label: 'Annotated', dataType: 'Image', required: false, conditional: true },
@@ -13595,13 +13595,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'jev-1.14.0',
         options: [
-          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
-          { label: 'jev-preview (moves)', value: 'jev-preview' },
+          { label: 'Jev 1.14.0 · pinned', value: 'jev-1.14.0' },
+          { label: 'jev-preview · updates itself', value: 'jev-preview' },
         ],
       },
       { key: 'presence_threshold', label: 'Presence Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
       { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
-      { key: 'pad', label: 'Crop Padding (fraction of image)', type: 'float', required: false, default: 0.05, min: 0, max: 0.5, step: 0.01 },
+      { key: 'pad', label: 'Crop padding · fraction of image', type: 'float', required: false, default: 0.05, min: 0, max: 0.5, step: 0.01 },
     ],
   },
 
@@ -13624,7 +13624,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
-      { id: 'mask', label: 'Mask (unavailable)', dataType: 'Mask', required: false },
+      { id: 'mask', label: 'Mask · unavailable', dataType: 'Mask', required: false },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -13644,7 +13644,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'thinking_level',
-        label: 'Thinking Level',
+        label: 'Thinking level',
         type: 'enum',
         required: false,
         default: 'low',
@@ -13656,7 +13656,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'identity_strength',
-        label: 'Identity Strength',
+        label: 'Identity strength',
         disabledReason: 'Unavailable: this model uses reference images and traits without an identity-strength control. Your stored value is retained.',
         type: 'float',
         required: false,
@@ -13676,7 +13676,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-3-image': {
     id: 'flux-3-image',
     displayName: 'FLUX 3 Image',
-    description: "Black Forest Labs' FLUX 3 image model: text to image, or edit and combine up to 10 reference images. Runs on BFL, fal.ai, Replicate or OpenRouter.",
+    description: "Black Forest Labs’ FLUX 3 image model for text to image, or to edit and combine up to 10 reference images. Runs on BFL, fal.ai, Replicate or OpenRouter.",
     category: 'image-gen',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-3-image',
@@ -13774,7 +13774,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         params: [
           {
             key: 'grounding',
-            label: 'Grounding (web + image search)',
+            label: 'Grounding · web and image search',
             type: 'boolean',
             required: false,
             default: true,
@@ -13830,7 +13830,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         params: [
           {
             key: 'grounding',
-            label: 'Grounding (web + image search)',
+            label: 'Grounding · web and image search',
             type: 'boolean',
             required: false,
             default: true,
@@ -13852,7 +13852,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-3-image-klein': {
     id: 'flux-3-image-klein',
     displayName: 'FLUX 3 Image Klein',
-    description: "Black Forest Labs' fast open-weights FLUX 3 Image Klein (5.6B, distilled): text to image, or edit with up to 10 reference images. Runs on BFL or OpenRouter.",
+    description: "Black Forest Labs’ fast open-weights FLUX 3 Image Klein, 5.6B and distilled, for text to image or to edit with up to 10 reference images. Runs on BFL or OpenRouter.",
     category: 'image-gen',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-3-image-klein',
@@ -13992,7 +13992,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-3-image-klein-base': {
     id: 'flux-3-image-klein-base',
     displayName: 'FLUX 3 Image Klein Base',
-    description: "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model (50 steps, for LoRA and research): text to image or edit with up to 10 reference images. On fal.ai only; BFL's API doesn't serve it.",
+    description: "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model at 50 steps, for LoRA and research. It does text to image or edit with up to 10 reference images. On fal.ai only. BFL’s API doesn’t serve it.",
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'blackforestlabs/flux-3/klein/base/text-to-image',
@@ -14076,7 +14076,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-3-video': {
     id: 'flux-3-video',
     displayName: 'FLUX 3 Video',
-    description: "Black Forest Labs' FLUX 3 Video: text to video with sound, animate a start image, an end image or up to 10 keyframes, or continue a video clip. Runs on BFL, fal.ai, Replicate, OpenRouter or Krea.",
+    description: "Black Forest Labs’ FLUX 3 Video does text to video with sound, animates a start image, an end image or up to 10 keyframes, or continues a video clip. Runs on BFL, fal.ai, Replicate, OpenRouter or Krea.",
     category: 'video-gen',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-3-video',
@@ -14145,10 +14145,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'hd',
         options: [
-          { label: 'HD (720p)', value: 'hd' },
-          { label: 'Full HD (1080p)', value: 'fhd' },
-          { label: 'QHD (1440p)', value: 'qhd' },
-          { label: 'UHD (4K)', value: 'uhd' },
+          { label: 'HD · 720p', value: 'hd' },
+          { label: 'Full HD · 1080p', value: 'fhd' },
+          { label: 'QHD · 1440p', value: 'qhd' },
+          { label: 'UHD · 4K', value: 'uhd' },
         ],
       },
       {
@@ -14179,7 +14179,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         keys: ['BFL_API_KEY'],
         handler: 'bfl',
         endpoint: '/v1/flux-3-video',
-        params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
+        params: [{ key: 'draft', label: 'Draft · fast preview', type: 'boolean', required: false, default: false }],
         paramVisibleWhen: { resolution: { draft: [false] } },
         rules: {
           rejectsWhen: [
@@ -14210,7 +14210,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           // start image, keyframes and end image together; all read 2026-10-15.
           ports: {
             keyframes: { max: 10 },
-            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start, keyframes and end)' },
           },
         },
       },
@@ -14243,7 +14243,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { when: { start_image: '(set)' }, endpoint: 'blackforestlabs/flux-3/image-to-video' },
           { when: { draft: true }, endpoint: 'blackforestlabs/flux-3/text-to-video/draft' },
         ],
-        params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
+        params: [{ key: 'draft', label: 'Draft · fast preview', type: 'boolean', required: false, default: false }],
         valueMap: { resolution: { hd: '720p', fhd: '1080p', qhd: '1440p', uhd: '2160p' } },
         paramVisibleWhen: { resolution: { draft: [false] } },
         rules: {
@@ -14268,7 +14268,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           ],
           ports: {
             keyframes: { max: 10 },
-            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start, keyframes and end)' },
           },
         },
       },
@@ -14278,7 +14278,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         keys: ['REPLICATE_API_TOKEN'],
         handler: 'replicate-model',
         endpoint: 'black-forest-labs/flux-3',
-        params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
+        params: [{ key: 'draft', label: 'Draft · fast preview', type: 'boolean', required: false, default: false }],
         valueMap: {
           resolution: { hd: '720p', fhd: '1080p' },
           duration: {
@@ -14323,7 +14323,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           ],
           ports: {
             keyframes: { max: 10 },
-            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start, keyframes and end)' },
           },
         },
       },
@@ -14370,7 +14370,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-video-edit': {
     id: 'flux-video-edit',
     displayName: 'FLUX Video Edit [fast]',
-    description: "Black Forest Labs' FLUX Video Edit [fast]: change a video clip with a text prompt; the edit keeps the clip's length. Runs on BFL, fal.ai or Krea.",
+    description: "Black Forest Labs’ FLUX Video Edit [fast] changes a video clip with a text prompt. The edit keeps the clip’s length. Runs on BFL, fal.ai or Krea.",
     category: 'video-gen',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-tools/video-edit-v1',
@@ -14439,7 +14439,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-video-upscale': {
     id: 'flux-video-upscale',
     displayName: 'FLUX Video Upscale',
-    description: "Black Forest Labs' FLUX Video Upscale: upscale a video clip 1.5x to 3x, precise or creative, with an optional prompt. Runs on BFL, fal.ai, Replicate or Krea.",
+    description: "Black Forest Labs’ FLUX Video Upscale upscales a video clip 1.5x to 3x, precise or creative, with an optional prompt. Runs on BFL, fal.ai, Replicate or Krea.",
     category: 'transform',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-tools/video-upscale-v1',
@@ -14702,7 +14702,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'krea-3': {
     id: 'krea-3',
     displayName: 'Krea 3',
-    description: "Krea's own Krea 3 image model: text to image, or edit with up to 8 reference images. Runs on Krea (early access for beta workspaces) or fal.ai.",
+    description: "Krea’s own Krea 3 image model, for text to image or to edit with up to 8 reference images. Runs on Krea, where beta workspaces have early access, or on fal.ai.",
     category: 'image-gen',
     apiProvider: 'krea',
     apiEndpoint: '/generate/image/krea/krea-3',
@@ -14808,7 +14808,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             type: 'enum',
             required: false,
             default: 'berry',
-            options: [{ label: 'Berry (quality)', value: 'berry' }, { label: 'Jam (speed)', value: 'jam' }],
+            options: [{ label: 'Berry · quality', value: 'berry' }, { label: 'Jam · speed', value: 'jam' }],
           },
           {
             key: 'reasoning_level',
@@ -14829,13 +14829,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             required: false,
             default: 'auto',
             options: [
-              { label: 'auto', value: 'auto' },
-              { label: 'square_hd', value: 'square_hd' },
-              { label: 'square', value: 'square' },
-              { label: 'portrait_4_3', value: 'portrait_4_3' },
-              { label: 'portrait_16_9', value: 'portrait_16_9' },
-              { label: 'landscape_4_3', value: 'landscape_4_3' },
-              { label: 'landscape_16_9', value: 'landscape_16_9' },
+              { label: 'Auto', value: 'auto' },
+              { label: 'Square HD', value: 'square_hd' },
+              { label: 'Square', value: 'square' },
+              { label: 'Portrait 4:3', value: 'portrait_4_3' },
+              { label: 'Portrait 16:9', value: 'portrait_16_9' },
+              { label: 'Landscape 4:3', value: 'landscape_4_3' },
+              { label: 'Landscape 16:9', value: 'landscape_16_9' },
             ],
           },
           {
@@ -14852,7 +14852,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             type: 'enum',
             required: false,
             default: 'png',
-            options: [{ label: 'png', value: 'png' }, { label: 'jpeg', value: 'jpeg' }],
+            options: [{ label: 'PNG', value: 'png' }, { label: 'JPEG', value: 'jpeg' }],
           },
         ],
         rules: {
@@ -14860,7 +14860,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           rejectsWhen: [
             {
               match: { reasoning_level: 'high', images: '(unset)' },
-              label: 'high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)',
+              label: 'high reasoning without a reference image · fal.ai runs it only for edits',
             },
           ],
         },
@@ -14972,14 +14972,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15047,19 +15047,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15097,7 +15097,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15225,14 +15225,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15300,19 +15300,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15350,7 +15350,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15478,14 +15478,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15553,19 +15553,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "raw",
+            "label": "Raw",
             "value": "raw"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15603,7 +15603,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "moodboards",
-        "label": "Moodboards (JSON)",
+        "label": "Moodboards · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15717,19 +15717,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "very_low",
+            "label": "Very low",
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -15805,7 +15805,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15952,7 +15952,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -15979,14 +15979,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "image_style_references",
-        "label": "Image style references (JSON)",
+        "label": "Image style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16130,7 +16130,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16240,7 +16240,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16343,7 +16343,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16536,7 +16536,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16651,7 +16651,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16856,7 +16856,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -16949,15 +16949,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "minimal",
+            "label": "Minimal",
             "value": "minimal"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -16992,7 +16992,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17085,15 +17085,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "minimal",
+            "label": "Minimal",
             "value": "minimal"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -17219,7 +17219,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17301,7 +17301,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17473,7 +17473,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -17555,7 +17555,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18132,14 +18132,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "character_reference_images",
-        "label": "Character reference images (JSON)",
+        "label": "Character reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18201,7 +18201,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "character_reference_images",
-        "label": "Character reference images (JSON)",
+        "label": "Character reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18210,7 +18210,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "falParams": [
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18411,7 +18411,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18473,7 +18473,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18621,19 +18621,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -18641,14 +18641,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18740,19 +18740,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -18760,7 +18760,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -18877,19 +18877,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ],
@@ -18897,7 +18897,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19077,23 +19077,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19101,7 +19101,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19177,15 +19177,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -19224,23 +19224,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19248,7 +19248,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19324,15 +19324,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -19429,23 +19429,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19453,7 +19453,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19556,23 +19556,23 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           },
           {
-            "label": "xhigh",
+            "label": "Extra high",
             "value": "xhigh"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -19580,7 +19580,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19741,11 +19741,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -19829,7 +19829,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -19868,11 +19868,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -19958,7 +19958,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "falParams": [
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20057,11 +20057,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -20086,7 +20086,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20125,11 +20125,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           }
         ],
@@ -20154,7 +20154,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20287,7 +20287,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20399,7 +20399,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20511,7 +20511,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20523,15 +20523,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "transparent",
+            "label": "Transparent",
             "value": "transparent"
           },
           {
-            "label": "opaque",
+            "label": "Opaque",
             "value": "opaque"
           },
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           }
         ]
@@ -20640,11 +20640,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "standard",
+            "label": "Standard",
             "value": "standard"
           },
           {
-            "label": "max",
+            "label": "Max",
             "value": "max"
           }
         ],
@@ -20657,11 +20657,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "manga",
+            "label": "Manga",
             "value": "manga"
           }
         ],
@@ -20674,11 +20674,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpeg",
+            "label": "JPEG",
             "value": "jpeg"
           }
         ]
@@ -20692,7 +20692,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20919,7 +20919,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -20979,7 +20979,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21112,7 +21112,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21172,7 +21172,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21305,7 +21305,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21365,7 +21365,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21524,7 +21524,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21640,7 +21640,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21700,7 +21700,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_images",
-        "label": "Style images (JSON)",
+        "label": "Style images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -21812,7 +21812,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "ai_strength",
-        "label": "Ai strength",
+        "label": "AI strength",
         "required": false,
         "type": "float",
         "min": 0.1,
@@ -21957,7 +21957,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "ai_strength",
-        "label": "Ai strength",
+        "label": "AI strength",
         "required": false,
         "type": "float",
         "min": 0.1,
@@ -21994,7 +21994,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "scene_image_url",
-        "label": "Scene image URL (JSON)",
+        "label": "Scene image URL · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -22180,15 +22180,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22463,15 +22463,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22704,15 +22704,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22887,15 +22887,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -22953,15 +22953,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "silver",
+            "label": "Silver",
             "value": "silver"
           },
           {
-            "label": "gaussian",
+            "label": "Gaussian",
             "value": "gaussian"
           },
           {
-            "label": "grey",
+            "label": "Grey",
             "value": "grey"
           }
         ],
@@ -23122,15 +23122,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -23150,15 +23150,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -23178,15 +23178,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "silver",
+            "label": "Silver",
             "value": "silver"
           },
           {
-            "label": "gaussian",
+            "label": "Gaussian",
             "value": "gaussian"
           },
           {
-            "label": "grey",
+            "label": "Grey",
             "value": "grey"
           }
         ],
@@ -23354,15 +23354,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -23375,39 +23375,39 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "standard",
+            "label": "Standard",
             "value": "standard"
           },
           {
-            "label": "soft_portraits",
+            "label": "Soft portraits",
             "value": "soft_portraits"
           },
           {
-            "label": "hard_portraits",
+            "label": "Hard portraits",
             "value": "hard_portraits"
           },
           {
-            "label": "art_n_illustration",
+            "label": "Art and illustration",
             "value": "art_n_illustration"
           },
           {
-            "label": "videogame_assets",
+            "label": "Video game assets",
             "value": "videogame_assets"
           },
           {
-            "label": "nature_n_landscapes",
+            "label": "Nature and landscapes",
             "value": "nature_n_landscapes"
           },
           {
-            "label": "films_n_photography",
+            "label": "Films and photography",
             "value": "films_n_photography"
           },
           {
-            "label": "3d_renders",
+            "label": "3D renders",
             "value": "3d_renders"
           },
           {
-            "label": "science_fiction_n_horror",
+            "label": "Science fiction and horror",
             "value": "science_fiction_n_horror"
           }
         ],
@@ -23425,7 +23425,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "hdr",
-        "label": "Hdr",
+        "label": "HDR",
         "required": false,
         "type": "integer",
         "min": -10,
@@ -23460,19 +23460,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "automatic",
+            "label": "Automatic",
             "value": "automatic"
           },
           {
-            "label": "magnific_illusio",
+            "label": "Magnific Illusio",
             "value": "magnific_illusio"
           },
           {
-            "label": "magnific_sharpy",
+            "label": "Magnific Sharpy",
             "value": "magnific_sharpy"
           },
           {
-            "label": "magnific_sparkle",
+            "label": "Magnific Sparkle",
             "value": "magnific_sparkle"
           }
         ],
@@ -23597,15 +23597,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "png",
+            "label": "PNG",
             "value": "png"
           },
           {
-            "label": "jpg",
+            "label": "JPG",
             "value": "jpg"
           },
           {
-            "label": "webp",
+            "label": "WebP",
             "value": "webp"
           }
         ],
@@ -23648,15 +23648,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "sublime",
+            "label": "Sublime",
             "value": "sublime"
           },
           {
-            "label": "photo",
+            "label": "Photo",
             "value": "photo"
           },
           {
-            "label": "photo_denoiser",
+            "label": "Photo denoiser",
             "value": "photo_denoiser"
           }
         ]
@@ -24084,15 +24084,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "std",
+            "label": "Standard",
             "value": "std"
           },
           {
-            "label": "pro",
+            "label": "Pro",
             "value": "pro"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -24100,7 +24100,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "multi_prompt",
-        "label": "Multi prompt (JSON)",
+        "label": "Multi prompt · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -24251,21 +24251,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "style_references",
-        "label": "Style references (JSON)",
+        "label": "Style references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "element_references",
-        "label": "Element references (JSON)",
+        "label": "Element references · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "video_reference",
-        "label": "Video reference (JSON)",
+        "label": "Video reference · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25182,7 +25182,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -25220,14 +25220,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25243,7 +25243,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25298,7 +25298,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -25336,21 +25336,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25598,19 +25598,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "disabled",
+            "label": "Disabled",
             "value": "disabled"
           },
           {
-            "label": "fast",
+            "label": "Fast",
             "value": "fast"
           },
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -25618,14 +25618,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25641,7 +25641,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -25819,11 +25819,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -25965,11 +25965,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "balanced",
+            "label": "Balanced",
             "value": "balanced"
           },
           {
-            "label": "quality",
+            "label": "Quality",
             "value": "quality"
           }
         ],
@@ -25977,7 +25977,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "camera_trajectory",
-        "label": "Camera trajectory (JSON)",
+        "label": "Camera trajectory · JSON",
         "required": true,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -26116,7 +26116,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -26517,7 +26517,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "adaptive",
+            "label": "Adaptive",
             "value": "adaptive"
           },
           {
@@ -26605,21 +26605,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27209,7 +27209,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27321,7 +27321,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27502,7 +27502,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -27614,7 +27614,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28005,14 +28005,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28146,14 +28146,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28220,14 +28220,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28392,7 +28392,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -28533,7 +28533,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29025,21 +29025,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29073,7 +29073,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "1080p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -29096,7 +29096,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29189,21 +29189,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29237,7 +29237,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "1080p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -29262,7 +29262,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29470,21 +29470,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29533,7 +29533,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29626,21 +29626,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29691,7 +29691,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -29891,21 +29891,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30026,21 +30026,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30267,21 +30267,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30334,7 +30334,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30427,21 +30427,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_videos",
-        "label": "Reference videos (JSON)",
+        "label": "Reference videos · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
       },
       {
         "key": "reference_audios",
-        "label": "Reference audios (JSON)",
+        "label": "Reference audios · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30496,7 +30496,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "effects",
-        "label": "Effects (JSON)",
+        "label": "Effects · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30716,7 +30716,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "styles",
-        "label": "Styles (JSON)",
+        "label": "Styles · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -30877,35 +30877,35 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "dolly_in",
+            "label": "Dolly in",
             "value": "dolly_in"
           },
           {
-            "label": "dolly_out",
+            "label": "Dolly out",
             "value": "dolly_out"
           },
           {
-            "label": "dolly_left",
+            "label": "Dolly left",
             "value": "dolly_left"
           },
           {
-            "label": "dolly_right",
+            "label": "Dolly right",
             "value": "dolly_right"
           },
           {
-            "label": "jib_up",
+            "label": "Jib up",
             "value": "jib_up"
           },
           {
-            "label": "jib_down",
+            "label": "Jib down",
             "value": "jib_down"
           },
           {
-            "label": "static",
+            "label": "Static",
             "value": "static"
           },
           {
-            "label": "focus_shift",
+            "label": "Focus shift",
             "value": "focus_shift"
           }
         ]
@@ -31080,7 +31080,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "1440p"
           },
           {
-            "label": "4k",
+            "label": "4K",
             "value": "4k"
           }
         ],
@@ -31100,35 +31100,35 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "dolly_in",
+            "label": "Dolly in",
             "value": "dolly_in"
           },
           {
-            "label": "dolly_out",
+            "label": "Dolly out",
             "value": "dolly_out"
           },
           {
-            "label": "dolly_left",
+            "label": "Dolly left",
             "value": "dolly_left"
           },
           {
-            "label": "dolly_right",
+            "label": "Dolly right",
             "value": "dolly_right"
           },
           {
-            "label": "jib_up",
+            "label": "Jib up",
             "value": "jib_up"
           },
           {
-            "label": "jib_down",
+            "label": "Jib down",
             "value": "jib_down"
           },
           {
-            "label": "static",
+            "label": "Static",
             "value": "static"
           },
           {
-            "label": "focus_shift",
+            "label": "Focus shift",
             "value": "focus_shift"
           }
         ]
@@ -31289,19 +31289,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "auto",
+            "label": "Auto",
             "value": "auto"
           },
           {
-            "label": "small",
+            "label": "Small",
             "value": "small"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "large",
+            "label": "Large",
             "value": "large"
           }
         ],
@@ -32014,7 +32014,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32123,7 +32123,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model"
@@ -32550,7 +32550,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             "value": "Interlaced"
           },
           {
-            "label": "ProgressiveInterlaced",
+            "label": "Progressive interlaced",
             "value": "ProgressiveInterlaced"
           }
         ],
@@ -32764,7 +32764,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33007,7 +33007,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33223,7 +33223,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33431,11 +33431,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -33456,7 +33456,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33670,15 +33670,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "middle",
+            "label": "Middle",
             "value": "middle"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -33724,7 +33724,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -33940,7 +33940,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "frame_interpolation_fps",
-        "label": "Frame interpolation fps",
+        "label": "Frame interpolation FPS",
         "required": false,
         "type": "integer",
         "min": 15,
@@ -34223,15 +34223,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "hdr10",
+            "label": "HDR10",
             "value": "hdr10"
           },
           {
-            "label": "hlg",
+            "label": "HLG",
             "value": "hlg"
           },
           {
-            "label": "hdr_prores",
+            "label": "HDR ProRes",
             "value": "hdr_prores"
           }
         ],
@@ -34291,15 +34291,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "hdr10",
+            "label": "HDR10",
             "value": "hdr10"
           },
           {
-            "label": "hlg",
+            "label": "HLG",
             "value": "hlg"
           },
           {
-            "label": "hdr_prores",
+            "label": "HDR ProRes",
             "value": "hdr_prores"
           }
         ],
@@ -34468,11 +34468,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34544,7 +34544,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -34640,11 +34640,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34708,7 +34708,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -34805,11 +34805,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34824,7 +34824,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -34920,11 +34920,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -34939,7 +34939,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35035,11 +35035,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35063,7 +35063,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35160,11 +35160,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35179,7 +35179,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35276,11 +35276,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35295,7 +35295,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35384,11 +35384,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35403,7 +35403,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35502,11 +35502,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35536,7 +35536,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35583,11 +35583,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35617,7 +35617,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35718,11 +35718,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "image",
+            "label": "Image",
             "value": "image"
           },
           {
-            "label": "text",
+            "label": "Text",
             "value": "text"
           }
         ],
@@ -35744,7 +35744,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "image_urls",
-        "label": "Image URLs (JSON)",
+        "label": "Image URLs · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35858,19 +35858,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "very_low",
+            "label": "Very low",
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -35890,7 +35890,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -35939,19 +35939,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "enum",
         "options": [
           {
-            "label": "very_low",
+            "label": "Very low",
             "value": "very_low"
           },
           {
-            "label": "low",
+            "label": "Low",
             "value": "low"
           },
           {
-            "label": "medium",
+            "label": "Medium",
             "value": "medium"
           },
           {
-            "label": "high",
+            "label": "High",
             "value": "high"
           }
         ],
@@ -35971,7 +35971,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "reference_images",
-        "label": "Reference images (JSON)",
+        "label": "Reference images · JSON",
         "required": false,
         "type": "textarea",
         "placeholder": "JSON array or object matching this model",
@@ -36214,14 +36214,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "voice_id",
-        "label": "Voice id",
+        "label": "Voice ID",
         "required": false,
         "type": "string",
         "default": "hpp4J3VqNfWAUOO0d1Us"
       },
       {
         "key": "model_id",
-        "label": "Model id",
+        "label": "Model ID",
         "required": false,
         "type": "string",
         "default": "eleven_multilingual_v2"
@@ -36255,14 +36255,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         "key": "voice_id",
-        "label": "Voice id",
+        "label": "Voice ID",
         "required": false,
         "type": "string",
         "default": "hpp4J3VqNfWAUOO0d1Us"
       },
       {
         "key": "model_id",
-        "label": "Model id",
+        "label": "Model ID",
         "required": false,
         "type": "string",
         "default": "eleven_multilingual_v2"

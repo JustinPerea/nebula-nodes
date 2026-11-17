@@ -164,7 +164,7 @@ async def test_a_saved_node_keeps_running_on_fal_until_a_bfl_key_is_added(monkey
     # BFL has no safety-checker switch; fal offers one, so a saved "off" stops
     # with a reset (rule H, PR 5) instead of BFL's old rejects rule.
     ({"enable_safety_checker": False},
-     "it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider."),
+     "it doesn't offer Safety checker off. Turn Safety checker on, or switch provider."),
 ])
 async def test_a_saved_value_bfl_cant_take_stops_before_any_request_and_offers_fal(monkeypatch, saved, why):
     """Auto with both keys lands on BFL; a saved value it can't take stops the

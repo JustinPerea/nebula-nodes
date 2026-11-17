@@ -53,9 +53,9 @@ describe('addendum (b): a required model setting with nothing chosen', () => {
 });
 
 describe('GM round 12, item 2: Meshy\'s mesh type is named by its setting', () => {
-  it('"Mesh type: Smart Topology (Meshy T2)"', () => {
-    expect(row('meshy-text-to-3d', { model_type: 'smart-topology' }).setting).toBe('Mesh type: Smart Topology (Meshy T2)');
-    expect(row('meshy-image-to-3d', { model_type: 'smart-topology' }).setting).toBe('Mesh type: Smart Topology (Meshy T2)');
+  it('"Mesh type: Smart topology · Meshy T2"', () => {
+    expect(row('meshy-text-to-3d', { model_type: 'smart-topology' }).setting).toBe('Mesh type: Smart topology · Meshy T2');
+    expect(row('meshy-image-to-3d', { model_type: 'smart-topology' }).setting).toBe('Mesh type: Smart topology · Meshy T2');
   });
 
   it('named at its default too, so a switch re-asks like the other settings', () => {

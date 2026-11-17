@@ -150,9 +150,9 @@ def test_identity_edits_lines_name_its_ports_as_it_shows_them() -> None:
     assert _line_beside("execution/maker_routes_google.py", "identity-edit requires a base image") == (
         "Connect a base image to “Image”, then run the node again.")
     # The node shows its mask port as "Mask (unavailable)".
-    assert _port_label("identity-edit", "mask") == "Mask (unavailable)"
+    assert _port_label("identity-edit", "mask") == "Mask · unavailable"
     assert _line_beside("execution/maker_routes_google.py", "Identity Edit does not support masks") == (
-        "Identity Edit can’t take a mask on the Nano Banana 2 endpoint. Disconnect “Mask (unavailable)”, then run "
+        "Identity Edit can’t take a mask on the Nano Banana 2 endpoint. Disconnect “Mask”, then run "
         "the node again.")
 
 

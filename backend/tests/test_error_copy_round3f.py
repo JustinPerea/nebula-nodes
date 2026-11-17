@@ -172,7 +172,7 @@ def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None
     assert "a field label not in quotes" in rule_breaks("Set Duration to 10 or less.")
     assert "a field label not in quotes" in rule_breaks("Clear the node's Quality field, then run the node again.")
     assert "a field label not in quotes" in rule_breaks("GPT-6 Astra doesn't offer Reasoning Effort None.")
-    assert "a field label not in quotes" in rule_breaks("Use fewer references or fewer Images per Generation.")
+    assert "a field label not in quotes" in rule_breaks("Use fewer references or fewer Images per generation.")
     assert "a field label not in quotes" in rule_breaks("Raise Max Tokens or lower Effort.")
     assert "a field label not in quotes" in rule_breaks("Set the node's {} to a number from 0 to {}.")
     assert "a field label not in quotes" in rule_breaks("Set the node's Seed to a whole number from 0 to 9.")
@@ -848,7 +848,7 @@ def test_review_rule_5_reasoning_effort_and_thinking_level_are_quoted() -> None:
     exc = _raised(_listed_effort, "gpt-6-astra", "none")
     assert str(exc) == "Reasoning effort 'none' isn't available for gpt-6-astra. Pick one of: low, medium, high, xhigh, max."
     assert person_line(exc) == ("GPT-6 Astra doesn't offer None for “Reasoning Effort”. "
-                                "Pick Low, Medium, High, X-High or Max, then run the node again.")
+                                "Pick Low, Medium, High, Extra high or Max, then run the node again.")
     assert _line_beside("handlers/openai_chat.py", "Reasoning effort 'max' isn't available") == (
         "{} doesn't offer {} for “{}”. Pick another level, then run the node again.")
     assert _line_beside("handlers/google_gemini.py", "Thinking level '{}' isn't available") == (
@@ -912,7 +912,7 @@ def test_review_rule_5_seedream_names_images_per_generation_in_quotes() -> None:
     exc = _raised(seedream_fal_to_byteplus, node, {"images": refs})
     assert str(exc).startswith("BytePlus takes at most ")
     assert person_line(exc).endswith(
-        "counting references and results. Use fewer references, or lower “Images per Generation”.")
+        "counting references and results. Use fewer references, or lower “Images per generation”.")
 
 
 def test_review_rule_5_an_image_count_names_the_nodes_own_field() -> None:

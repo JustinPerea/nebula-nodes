@@ -82,8 +82,9 @@ function formatValue(value: unknown): string {
 function optionName(sources: ParamDefinition[], key: string, value: unknown): string {
   const label = sources.find((candidate) => candidate.key === key)?.options
     ?.find((option) => String(option.value) === String(value))?.label;
-  // "Claude Fable 5.1 (flagship)" -> "Claude Fable 5.1": the status suffix isn't the name.
-  return (label ?? String(value)).replace(/\s*\([^)]*\)\s*$/, '');
+  // "Claude Fable 5.1 · flagship" -> "Claude Fable 5.1": the status suffix isn't the name.
+  // A note in parentheses goes the same way.
+  return (label ?? String(value)).split(' · ')[0].replace(/\s*\([^)]*\)\s*$/, '');
 }
 
 /**

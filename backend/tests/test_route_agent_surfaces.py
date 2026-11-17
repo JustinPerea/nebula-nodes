@@ -266,7 +266,7 @@ def test_nebula_info_names_what_each_route_hides():
     flux2 = format_node_detail(REGISTRY["flux-2-pro"])
     assert "Safety only with Model FLUX.2 [pro], FLUX.2 [max] or FLUX.2 [flex]" in flux2
     video = format_node_detail(REGISTRY["flux-3-video"])
-    assert video.count("Resolution only with Draft (fast preview) off") == 3
+    assert video.count("Resolution only with Draft off") == 3
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -322,7 +322,7 @@ def test_route_docs_describe_pr5_behaviour():
     assert route(krea3, {"model": "jam"}, keys).kind == main.node_route.UNSET
     for doc in (REPO / "docs" / "model-providers" / "krea" / "krea-3.md", REPO / ".agents" / "skills" / "krea" / "SKILL.md"):
         text = doc.read_text()
-        assert "Hidden settings" in text and "Model Jam (speed)" in text, doc
+        assert "Hidden settings" in text and "Model Jam · speed" in text, doc
 
 
 # -- Idol: keyless again (PR #203 round 7); the keyed rules stay ------------------

@@ -93,6 +93,9 @@ describe('shared model discovery', () => {
 
   it('summarizes declared required/optional ports and bounds long rows', () => {
     expect(modelInputSummary(NODE_DEFINITIONS['nano-banana'])).toBe('Prompt + Images (optional) + Moodboard (optional) → Image + Text');
+    // A port label's aside is left out, so an optional port says so once.
+    expect(modelInputSummary(NODE_DEFINITIONS['ideogram-upscale'])).not.toMatch(/ · |\(optional\) \(optional\)/);
+    expect(modelInputSummary(NODE_DEFINITIONS['ideogram-upscale'])).toContain('Guidance (optional)');
     expect(modelInputSummary(NODE_DEFINITIONS['paper-source'])).toBe('No connected inputs → Image');
     expect(modelInputSummary(kling)).toBe('Prompt (optional) + Start image (optional) + End image (optional) + 1 more → Video + All videos + All artifacts + 1 more');
   });

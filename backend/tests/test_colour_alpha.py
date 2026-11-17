@@ -305,7 +305,7 @@ async def test_cinema_color_says_a_clear_source_has_no_palette() -> None:
     with pytest.raises(ValueError, match="too transparent") as caught:
         await handle_cinema_color(node, inputs, api_keys={}, emit=None)
     assert person_line(caught.value) == (
-        "The image in “Palette Source” is too transparent to match colors from. Choose another image, or "
+        "The image in “Palette source” is too transparent to match colors from. Choose another image, or "
         "add hex swatches to “Palette”.")
 
 

@@ -143,10 +143,10 @@ describe('resultContextForNode', () => {
     expect(context.inputs).toEqual([
       { label: 'Prompt', type: 'Text', value: 'Animate', resolved: true },
       { label: 'Image', type: 'Image', value: '/api/outputs/start.png', resolved: true },
-      { label: 'End Frame', type: 'Image', value: '/api/outputs/end.png', resolved: true },
+      { label: 'End frame', type: 'Image', value: '/api/outputs/end.png', resolved: true },
     ]);
     expect(context.reusableDraft).toBeUndefined();
-    expect(context.reuseUnavailableReason).toContain('End Frame');
+    expect(context.reuseUnavailableReason).toContain('End frame');
   });
 
   it('disables reuse of an unresolved optional input rather than silently dropping it', () => {
@@ -166,10 +166,10 @@ describe('resultContextForNode', () => {
     edges: [edge('prompt', 'text'), edge('previous', 'text', 'previous_interaction_id')] } });
     const context = resultContextForNode(node(), [saved]);
     expect(context.prompt).toBe('Primary prompt');
-    expect(context.inputs?.at(-1)).toEqual({ label: 'Previous Interaction', type: 'Text',
+    expect(context.inputs?.at(-1)).toEqual({ label: 'Previous interaction', type: 'Text',
       value: 'Saved previous interaction', resolved: true });
     expect(context.reusableDraft).toBeUndefined();
-    expect(context.reuseUnavailableReason).toContain('Previous Interaction');
+    expect(context.reuseUnavailableReason).toContain('Previous interaction');
   });
 
   it('retains structured additional inputs in an independent deeply frozen metadata snapshot', () => {

@@ -175,7 +175,7 @@ def _json_list(value: Any) -> list[Any]:
         except ValueError as exc:
             raise with_person_line(
                 ValueError("image_urls must be a JSON list of image URLs"),
-                "Write “Image URLs (JSON)” as a JSON list of links.") from exc
+                "Write “Image URLs” as a JSON list of links.") from exc
     return value if isinstance(value, list) else [value]
 
 

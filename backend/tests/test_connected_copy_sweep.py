@@ -135,7 +135,7 @@ def test_the_mcp_tool_docs_say_connected():
 
 
 JEV_DESCRIPTIONS = {
-    "jev-decide": "Also a gate: whatever is connected to “Through” comes out of “On Pass” or “On Fail”",
+    "jev-decide": "Whatever is connected to “Through” comes out of “On pass” or “On fail”",
     "jev-box": "no crop, and the nodes connected to “Crop”, “Mask” or “Annotated” are skipped.",
 }
 

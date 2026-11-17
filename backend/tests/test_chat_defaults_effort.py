@@ -543,7 +543,7 @@ def test_agent_brief_and_cli_show_option_limits():
         "claude-opus-4-8", "claude-opus-4-7"]}}
     assert "optionsOnlyWhen" not in main._brief_param(_param("claude-chat", "model"))
     detail = format_node_detail({"id": "claude-chat", "displayName": "Claude", "params": [_param("claude-chat", "effort")]})
-    assert "xhigh (X-High) {not for model=claude-sonnet-4-6|claude-opus-4-6}" in detail
+    assert "xhigh (Extra high) {not for model=claude-sonnet-4-6|claude-opus-4-6}" in detail
     gemini = format_node_detail({"id": "gemini-chat", "displayName": "Gemini",
                                  "params": [_param("gemini-chat", "thinkingLevel")]})
     assert "minimal (Minimal) {not for model=" in gemini

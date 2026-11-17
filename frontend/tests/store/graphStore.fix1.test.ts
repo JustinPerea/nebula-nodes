@@ -251,7 +251,7 @@ describe('M1: the path merge itself (lib/canvasUndo)', () => {
 });
 
 describe('L1: the undo line names a routed node\'s settings by their card labels', () => {
-  it('FLUX 1.1 [pro] Ultra\'s aspect_ratio is “Aspect Ratio”, never the key', async () => {
+  it('FLUX 1.1 [pro] Ultra\'s aspect_ratio is “Aspect ratio”, never the key', async () => {
     const flux = (ratio: string) => node('n1', { prompt: 'p', aspect_ratio: ratio }, 'Hero', 'flux-1-1-ultra');
     useGraphStore.setState({ nodes: [flux('1:1')] } as never);
     await acceptWith({ nodes: [], edges: [], updatedNodes: [flux('16:9')], runNodeIds: [], idMap: {} }, () => {
@@ -261,7 +261,7 @@ describe('L1: the undo line names a routed node\'s settings by their card labels
     });
     await sleep(10);
     const { notice } = await undoAndRead();
-    expect(notice).toBe('Nothing was undone. Codex changed “Aspect Ratio” for “Hero” after you accepted.');
+    expect(notice).toBe('Nothing was undone. Codex changed “Aspect ratio” for “Hero” after you accepted.');
   });
 });
 
@@ -269,7 +269,7 @@ describe('GM r1 (7): a universal node\'s setting in the undo line is its Inspect
   it('a Replicate model\'s guidance_scale is “Guidance scale”, even with an older Title Case label saved', async () => {
     const rep = (scale: number) => ({ ...node('n1', { model_id: 'o/m', guidance_scale: scale }, 'Hero still', 'replicate-universal'),
       type: 'dynamic-node', data: { ...node('n1', { model_id: 'o/m', guidance_scale: scale }, 'Hero still', 'replicate-universal').data,
-        isDynamic: true, dynamicParams: [{ key: 'guidance_scale', label: 'Guidance Scale', type: 'float' }] } });
+        isDynamic: true, dynamicParams: [{ key: 'guidance_scale', label: 'Guidance scale', type: 'float' }] } });
     useGraphStore.setState({ nodes: [rep(3)] } as never);
     await acceptWith({ nodes: [], edges: [], updatedNodes: [rep(5)], runNodeIds: [], idMap: {} }, () => {
       own([rep(5)]);

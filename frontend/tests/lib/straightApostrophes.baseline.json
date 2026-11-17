@@ -10,7 +10,7 @@
   "components/panels/settings/StorageTab.tsx": 1,
   "components/panels/settings/useKreaConnection.ts": 1,
   "components/proposals/AssetProposalStrip.tsx": 1,
-  "constants/nodeDefinitions.ts": 14,
+  "constants/nodeDefinitions.ts": 3,
   "lib/agentNotes.ts": 3,
   "lib/agentQuestions.ts": 2,
   "lib/assetProposals.ts": 2,

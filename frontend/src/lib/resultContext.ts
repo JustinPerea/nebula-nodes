@@ -5,7 +5,7 @@ import type { CreateDraftSeed } from '../store/createDraftStore';
 import { backendAssetUrlSync } from './backend';
 import { isCreateModel } from './createModels';
 import { isRecipeParam } from './billingParams';
-import { allParamDefinitions } from './directRoute';
+import { allParamDefinitions, paramName } from './directRoute';
 import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
 import { runParamsVersion, type RunRecord, type RunSnapshotNode } from './runHistory';
 import { upgradeSavedParams } from './savedParamsUpgrades';
@@ -148,7 +148,7 @@ function savedInputs(run: RunRecord, model: RunSnapshotNode, definition?: ModelN
     const images = input?.type === 'Image' ? imageRefs(input.value) : null;
     if (images) refs.push(...images);
     if (!port || (port.id !== textPort?.id && port.id !== imagePort?.id)) {
-      unavailable ??= `${port?.label ?? 'An input'} needs Canvas controls. Open this result in Canvas to reuse its recipe.`;
+      unavailable ??= `${port ? paramName(port, port.id) : 'An input'} needs Canvas controls. Open this result in Canvas to reuse its recipe.`;
       continue;
     }
     if (port.id === textPort?.id) {

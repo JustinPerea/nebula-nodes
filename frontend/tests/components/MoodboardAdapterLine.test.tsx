@@ -44,7 +44,7 @@ describe('the Moodboard line on a node card', () => {
     expect(await screen.findByText('This model takes the brief as text.')).toBeInTheDocument();
     unmount();
     renderCard('k', 'krea-2-generate', [wire('k')]);
-    expect(await screen.findByText('Moodboard images: on · up to 10 to Image Style Refs')).toBeInTheDocument();
+    expect(await screen.findByText('Moodboard images: on · up to 10 to Image style refs')).toBeInTheDocument();
   });
 
   it('shows nothing until a board is wired into the Moodboard port', () => {
