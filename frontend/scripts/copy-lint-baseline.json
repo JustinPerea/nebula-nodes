@@ -1,0 +1,3751 @@
+{
+  "entries": [
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/character-studio/CharacterDefinitionPanel.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Current models use image references and trait guidance. Strength is unsupported; saved value"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/character-studio/CharacterLibraryRail.tsx",
+      "rule": "title-case",
+      "text": "+ New Character"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/character-studio/CharacterStudioToolbar.tsx",
+      "rule": "retry-button",
+      "text": "Retry"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
+      "rule": "retry-button",
+      "text": "Retry"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
+      "rule": "retry-button",
+      "text": "Retry loading"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't load the character."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't save the character."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
+      "rule": "title-case",
+      "text": "A Character needs at least"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/character-studio/CharacterTestPanel.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Save the Character first (needs a name + ≥3 reference views)"
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/cinema-studio/CinemaSharedControls.tsx",
+      "rule": "em-dash",
+      "text": "Connected from the canvas — disconnect on the canvas to remove"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Select shot. Arrow keys change shots; Alt + arrow keys reorder."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
+      "rule": "title-case",
+      "text": "Move Shot {} earlier"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
+      "rule": "title-case",
+      "text": "Move Shot {} later"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
+      "rule": "title-case",
+      "text": "Remove Shot {}"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
+      "rule": "title-case",
+      "text": "Select Shot {}"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/commons/CommonsDetail.tsx",
+      "rule": "retry-button",
+      "text": "Retry"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/commons/CommonsEvaluation.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Closed without sealing: an assisted review record, not blind ground truth. Blind drafts are read only. SHA-256:"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/commons/CommonsEvaluation.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here."
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/commons/CommonsView.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling){}"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/commons/CommonsView.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Library analysis is stopped: it used this run's call budget ({} of {} calls). Restart Nebula to reset it. Analysis then stays paused until {}."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/commons/CommonsView.tsx",
+      "rule": "straight-quote",
+      "text": "Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling{}"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/commons/CommonsView.tsx",
+      "rule": "straight-quote",
+      "text": "Library analysis is stopped: it used this run's call budget ({} of {} calls). Restart Nebula to reset it. Analysis then stays paused until {}."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/ContextMenu.tsx",
+      "rule": "title-case",
+      "text": "Run This Node"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/create-studio/ResultComparison.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Two previews kept for this comparison. Reuse settings prepares a draft; choose Generate to run it."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/moodboard-studio/BoardSidePanel.tsx",
+      "rule": "title-case",
+      "text": "A label for you, like Liked"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/moodboard-studio/MoodboardListView.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Open the moodboard on this image. Nothing moves: no image changes number."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/moodboard-studio/MoodboardListView.tsx",
+      "rule": "title-case",
+      "text": "A label for you, like Liked"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/moodboard-studio/MoodboardListView.tsx",
+      "rule": "title-case",
+      "text": "Add Images",
+      "count": 2
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "retry-button",
+      "text": "Retry"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "retry-button",
+      "text": "Retry loading"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't analyze the moodboard."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't load the moodboard."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't redo the change."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't restore the moodboard."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't save your brief."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't undo the change."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't upload the image."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "straight-quote",
+      "text": "the total the moodboard's images share on Krea 2"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
+      "rule": "title-case",
+      "text": "+ New Moodboard"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/nodes/BatchNode.tsx",
+      "rule": "sentence-punctuation",
+      "text": ". Reduce items or raise the cap in settings (maximum 25)."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/nodes/BatchNode.tsx",
+      "rule": "title-case",
+      "text": "Edit Batch items"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/nodes/CharacterNode.tsx",
+      "rule": "title-case",
+      "text": "Open Character"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/nodes/JevResult.tsx",
+      "rule": "sentence-punctuation",
+      "text": "TypeSafe marks image input as experimental: results can change between releases."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/JevResult.tsx",
+      "rule": "straight-quote",
+      "text": "Jev couldn't tell whether it's there, so there is no box, crop or mask."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/MeshPreview.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't download the 3D model."
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/nodes/ModelNode.tsx",
+      "rule": "em-dash",
+      "text": "Out of date — source updated"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/ModelNode.tsx",
+      "rule": "straight-quote",
+      "text": "Ask Claude to rewrite this prompt for the node it's connected to"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/ModelNode.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't download the output."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/nodes/MoodboardNode.tsx",
+      "rule": "title-case",
+      "text": "Open Moodboard"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/nodes/ReferenceSetNode.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Connect to Cinema scene. Reference priority sets image order; 0 excludes."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/RepresentationViewer.tsx",
+      "rule": "straight-quote",
+      "text": "This value does not match Nebula's versioned spatial contract."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/nodes/StructuredValuePreview.tsx",
+      "rule": "straight-quote",
+      "text": ": open the node's settings to read them"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/OutsideImageNote.tsx",
+      "rule": "straight-quote",
+      "text": "This image is a link to another site, so Nebula doesn't load it. Replace it with an upload."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/AssetsPanel.tsx",
+      "rule": "title-case",
+      "text": "Double-click to use in Create"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/AssetsPanel.tsx",
+      "rule": "title-case",
+      "text": "No Characters"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/AssetsPanel.tsx",
+      "rule": "title-case",
+      "text": "No Moodboards"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/AssetsPanel.tsx",
+      "rule": "title-case",
+      "text": "No Styles"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/panels/ChatModelPicker.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Nebula doesn’t choose its model or effort. If the agent offers a choice, it shows under its name once the conversation starts; otherwise change those in the agent’s own settings."
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/panels/ChatPanel.tsx",
+      "rule": "sentence-punctuation",
+      "text": "Private reference chats: Claude or Codex."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/ChatPanel.tsx",
+      "rule": "title-case",
+      "text": "Connect ChatGPT Account"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/ChatPanel.tsx",
+      "rule": "title-case",
+      "text": "Device Code"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/DeferredMaskPainter.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't load the mask painter."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/DeferredMaskPainter.tsx",
+      "rule": "title-case",
+      "text": "Paint Mask"
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/panels/Inspector.tsx",
+      "rule": "em-dash",
+      "text": "Connect the source image to the edit node's Image port too — mask-painter only passes the mask. Reconnect the mask, and Nebula connects the base image for you."
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/panels/Inspector.tsx",
+      "rule": "em-dash",
+      "text": "Node info — inputs, outputs, and settings"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/Inspector.tsx",
+      "rule": "straight-quote",
+      "text": "Connect the source image to the edit node's Image port too — mask-painter only passes the mask. Reconnect the mask, and Nebula connects the base image for you."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/Inspector.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't load the models."
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
+      "rule": "em-dash",
+      "text": "Connect an image and run the upstream node first — the mask must match its exact dimensions."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
+      "rule": "straight-quote",
+      "text": "Couldn't load the upstream image for painting."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
+      "rule": "straight-quote",
+      "text": "Paint the region to change. Polarity is applied by the node's “Painted Area Means” setting at run time."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
+      "rule": "title-case",
+      "text": "Paint Mask"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
+      "rule": "title-case",
+      "text": "Save Mask"
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
+      "rule": "em-dash",
+      "text": "Recovery ID unavailable — check Marble and the live World node"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
+      "rule": "straight-quote",
+      "text": "Can't clear while a World Labs recovery ID is saved."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
+      "rule": "title-case",
+      "text": "Clear Run History"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
+      "rule": "title-case",
+      "text": "Run History"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/Settings.tsx",
+      "rule": "straight-quote",
+      "text": "This part of Settings couldn't load. Reload the tab to try again."
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/components/panels/settings/NousRow.tsx",
+      "rule": "sentence-punctuation",
+      "text": "and choose Nous Portal. It signs in through Hermes in your browser; there's no key to paste."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/panels/settings/NousRow.tsx",
+      "rule": "straight-quote",
+      "text": "and choose Nous Portal. It signs in through Hermes in your browser; there's no key to paste."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/panels/settings/ServiceAccountInput.tsx",
+      "rule": "title-case",
+      "text": "· needs the Vertex AI User role"
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/panels/Toolbar.tsx",
+      "rule": "em-dash",
+      "text": "Clear canvas — asks for confirmation"
+    },
+    {
+      "family": "retry-buttons",
+      "file": "frontend/src/components/projects/ProjectWorkspaceControls.tsx",
+      "rule": "retry-button",
+      "text": "Save failed · Retry"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/projects/ProjectWorkspaceControls.tsx",
+      "rule": "title-case",
+      "text": "Save failed · Retry"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/components/ProviderRecoveryStatus.tsx",
+      "rule": "straight-quote",
+      "text": "Nebula couldn't save the hold, so keep Nebula running until this run finishes."
+    },
+    {
+      "family": "em-dashes",
+      "file": "frontend/src/components/video-editor/RemotionComposition.tsx",
+      "rule": "em-dash",
+      "text": "— renderer not yet implemented]"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/video-editor/RemotionEditorToolbar.tsx",
+      "rule": "title-case",
+      "text": "+ Iso Block"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/video-editor/RemotionEditorToolbar.tsx",
+      "rule": "title-case",
+      "text": "To Back"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/video-editor/RemotionEditorToolbar.tsx",
+      "rule": "title-case",
+      "text": "To Front"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/components/video-editor/RemotionPropertiesPanel.tsx",
+      "rule": "title-case",
+      "text": "Iso Block"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Achernar — Soft"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Achird — Friendly"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Algenib — Gravelly"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Algieba — Smooth"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Alnilam — Firm"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Aoede — Breezy"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Autonoe — Bright"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Callirrhoe — Easy-going"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Charon — Informative"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Despina — Smooth"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Enceladus — Breathy"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Erinome — Clear"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Fenrir — Excitable"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Gacrux — Mature"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Iapetus — Clear"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Kore — Firm"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Laomedeia — Upbeat"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Leda — Youthful"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Orus — Firm"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Puck — Upbeat"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Pulcherrima — Forward"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Rasalgethi — Informative"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Sadachbia — Lively"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Sadaltager — Knowledgeable"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Schedar — Even"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Sulafat — Warm"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Umbriel — Easy-going"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Vindemiatrix — Gentle"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Zephyr — Bright"
+    },
+    {
+      "family": "em-dashes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "em-dash",
+      "text": "Zubenelgenubi — Casual"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "art_n_illustration"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "dolly_in",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "dolly_left",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "dolly_out",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "dolly_right",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "films_n_photography"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "focus_shift",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "hard_portraits"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "hdr_prores",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "jib_down",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "jib_up",
+      "count": 2
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "landscape_16_9"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "landscape_4_3"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "magnific_illusio"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "magnific_sharpy"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "magnific_sparkle"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "nature_n_landscapes"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "photo_denoiser"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "portrait_16_9"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "portrait_4_3"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "ProgressiveInterlaced"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "science_fiction_n_horror"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "soft_portraits"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "square_hd"
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "very_low",
+      "count": 3
+    },
+    {
+      "family": "raw-key-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "raw-key-label",
+      "text": "videogame_assets"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "3.1 Flash TTS (preview, shuts down Nov 17, 2026)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "A conversation between several ElevenLabs voices in one audio file (Eleven v4 by default). The script input is one line per turn, \"<voice name>: <text>\", for example \"Rachel: Hello there.\" then \"Adam: Hi!\". The speaker is everything before the first colon. Use names from the person's ElevenLabs voice library; they match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices (a free call). A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Black Forest Labs' fast open-weights FLUX 3 Image Klein (5.6B, distilled): text to image, or edit with up to 10 reference images. Runs on BFL or OpenRouter."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Black Forest Labs' FLUX 3 image model: text to image, or edit and combine up to 10 reference images. Runs on BFL, fal.ai, Replicate or OpenRouter."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Black Forest Labs' FLUX 3 Video: text to video with sound, animate a start image, an end image or up to 10 keyframes, or continue a video clip. Runs on BFL, fal.ai, Replicate, OpenRouter or Krea."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Black Forest Labs' FLUX Video Edit [fast]: change a video clip with a text prompt; the edit keeps the clip's length. Runs on BFL, fal.ai or Krea."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Black Forest Labs' FLUX Video Upscale: upscale a video clip 1.5x to 3x, precise or creative, with an optional prompt. Runs on BFL, fal.ai, Replicate or Krea."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Custom style UUID (Recraft style reference)",
+      "count": 2
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "e.g. \"Speak slowly with warmth\" (gpt-4o-mini-tts only)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "ElevenLabs voice ID (runs on your ElevenLabs key)",
+      "count": 2
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model (50 steps, for LoRA and research): text to image or edit with up to 10 reference images. On fal.ai only; BFL's API doesn't serve it."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Gemini 3.1 Flash-Lite (retiring 2027-05-07)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "GPT Image 1 Mini (shuts down Dec 1, 2026)",
+      "count": 2
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "GPT Image 2.5 Sunburst (most precise edits)",
+      "count": 2
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "GPT-4.1 Mini (legacy, retiring 2027-01-14)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "GPT-4.1 nano (legacy, retiring 2026-10-23)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "GPT-4o Mini (legacy, retiring 2027-01-14)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. Also a gate: whatever is connected to “Through” comes out of “On Pass” or “On Fail”, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Krea's own Krea 3 image model: text to image, or edit with up to 8 reference images. Runs on Krea (early access for beta workspaces) or fal.ai."
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Optional per-shot direction: pose, expression, wardrobe, framing"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Optional style/formatting guidance (e.g. \"thin uniform stroke, no fill\")"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Optional: use {text1}, {text2}, {text3} placeholders"
+    },
+    {
+      "family": "sentence-punctuation-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "sentence-punctuation",
+      "text": "Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate's probability and how confident the pick is; low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "A conversation between several ElevenLabs voices in one audio file (Eleven v4 by default). The script input is one line per turn, \"<voice name>: <text>\", for example \"Rachel: Hello there.\" then \"Adam: Hi!\". The speaker is everything before the first colon. Use names from the person's ElevenLabs voice library; they match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices (a free call). A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Black Forest Labs' fast open-weights FLUX 3 Image Klein (5.6B, distilled): text to image, or edit with up to 10 reference images. Runs on BFL or OpenRouter."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Black Forest Labs' FLUX 3 image model: text to image, or edit and combine up to 10 reference images. Runs on BFL, fal.ai, Replicate or OpenRouter."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Black Forest Labs' FLUX 3 Video: text to video with sound, animate a start image, an end image or up to 10 keyframes, or continue a video clip. Runs on BFL, fal.ai, Replicate, OpenRouter or Krea."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Black Forest Labs' FLUX Video Edit [fast]: change a video clip with a text prompt; the edit keeps the clip's length. Runs on BFL, fal.ai or Krea."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Black Forest Labs' FLUX Video Upscale: upscale a video clip 1.5x to 3x, precise or creative, with an optional prompt. Runs on BFL, fal.ai, Replicate or Krea."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Don't Allow"
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Don't send"
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "e.g. \"Speak slowly with warmth\" (gpt-4o-mini-tts only)"
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model (50 steps, for LoRA and research): text to image or edit with up to 10 reference images. On fal.ai only; BFL's API doesn't serve it."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "From Krea or the agent's get_node_apps"
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Krea's own Krea 3 image model: text to image, or edit with up to 8 reference images. Runs on Krea (early access for beta workspaces) or fal.ai."
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "List an app's tools"
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Optional style/formatting guidance (e.g. \"thin uniform stroke, no fill\")"
+    },
+    {
+      "family": "straight-quotes-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "straight-quote",
+      "text": "Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate's probability and how confident the pick is; low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental."
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "3D Animation"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Achernar — Soft"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Achird — Friendly"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "AI Model",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Algenib — Gravelly"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Algieba — Smooth"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Allow Adult"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Allow All"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Alnilam — Firm"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Analysis Mode",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Anchor Role"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Animated Mesh"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Annotated Frame"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Annotated Frames",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Answer Type"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Aoede — Breezy"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "ASMR Mode"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Aspect Ratio",
+      "count": 37
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "At Timestamp"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Audio Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Auto Detect"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Autonoe — Bright"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Back Image"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Background Color",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Background Music Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Background Priority"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Base Image",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Base Plate (text removed)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Batch Size"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Batch Size Cap",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Body Control"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "By Index"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Callirrhoe — Easy-going"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Camera Fixed",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Camera Path",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Camera Pose",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Camera Poses",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "CFG Scale",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Character Image",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Character Orientation"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Character Refs"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Character Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Charon — Informative"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Closed Path"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Code Retrieval"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Color Depth"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Color Palette",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Composition Priority"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Convert Format Only"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Coordinate System ID"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Copyright Detection",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Create in Krea Nodes"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Crop Padding (fraction of image)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Crop to Subject"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Custom Model URI",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Cut Off"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Depth Map"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Depth Sequence"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Description Mode"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Despina — Smooth"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Detailed Analysis"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Disable Voice Cloning",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Don't Allow"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Drop Background Audio",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Dubbed Audio"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Edit Instruction"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Edited Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Enceladus — Breathy"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "End Frame",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "End Image",
+      "count": 6
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "English Text"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Enhance Prompt",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Enhancement Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Erinome — Clear"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Expand Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Expanded Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Expected Angle"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Expected Type"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Export Format"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Exported 3D File"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Expression Intensity"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Extend Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Extended Thinking"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Extra High",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Face Count",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Face Enhancement",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Face Enhancement Strength"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Fact Verification"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Fenrir — Excitable"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "First Frame",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Fix Compression"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Flash v2.5 (Fastest)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Focal Length (mm)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Focus Distance (m)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Forward Axis"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Frequency Penalty"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Front Image"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Full Resolution"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Gacrux — Mature"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Gaussian Splat (PLY)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Gemini 3 Pro Image",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Generate Audio",
+      "count": 16
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Geometry Only",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "GLB Mesh Variant"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Guidance (Flex)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Guidance Scale",
+      "count": 8
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Guide the model (must be in English)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "H264 Output"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "HD Texture (4K)",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "High-Quality Mesh (GLB)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Iapetus — Clear"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Identity Priority"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Identity Strength"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Azimuths"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Enhancement",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Guide"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Height"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Influence"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Size",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Strength"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Style Ref"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Style Refs"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image to Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Weight"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Image Width"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Images per Generation"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Include Layout (bbox)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Include Pinhole Intrinsics"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Inference Steps",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Input Fidelity"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Instrumental Only"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Isolated Audio"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Jev Minimum Confidence"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Jev Model"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "JSON Prompt (v4)",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Keep Original Sound"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Keep Original UV"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Kore — Firm"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Krea 3D Job"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Lab Transfer"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Language Code"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Laomedeia — Upbeat"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Last Frame",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Learning Rate"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Leda — Youthful"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Left Image"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Levels, Low to High (one per line)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Lighting Priority"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Liked Only"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Local Images"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Long Context (slower, less accurate)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Low Poly",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Low Poly (retires Oct 30, 2026)",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Magic Prompt",
+      "count": 11
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Marble Model"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Max Colors"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Max Output Tokens",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Max Speakers"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Max Steps"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Max Tokens",
+      "count": 5
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Mesh Type",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Meters per Custom Unit"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Middle Frame"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Minimum Confidence",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Model File"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Model Name"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Modification Mode"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Moodboard Strength"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Motion Reference Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Negative Prompt",
+      "count": 17
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "New Background"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "No Means (optional)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Noise Scale",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Number of Frames"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Number of Images",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Number of Speakers",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Off brief Partly on brief On brief"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "On Fail"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "On Pass"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Orus — Firm"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Output Format",
+      "count": 13
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Output Formats",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Output Quality"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Output Strength"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Override Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Override Refs"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Painted Area Means"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Palette Source"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Pass Threshold"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Passing Options (one per line)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "PBR Materials",
+      "count": 6
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Performance Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Person Generation"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Photo Denoiser"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Plain Text"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "PLY Resolution"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Point Cloud"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Polygon Type",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Pose Mode",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Pose Priority"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Presence Penalty",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Presence Threshold"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Preview Frames",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Previous Interaction",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Print File"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Pro Mode"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Prompt (Redefine only)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Prompt / Guidance"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Prompt Caching",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Prompt Expansion",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Prompt Influence"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Puck — Upbeat"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Pulcherrima — Forward"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "QC Report",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Quality (Shifts)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Question Answering"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Rasalgethi — Informative"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Reasoning Effort"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Reconstruct Image Set"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Recover Detail"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Reference Frame"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Reference Image",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Reference Images",
+      "count": 8
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Reference to Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Remove Lighting",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Rendered Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Rendering Speed",
+      "count": 13
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Requested Duration"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Requested Duration (s)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Resize Height (m)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Response Format",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Resume Export Operation ID"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Resume Operation ID"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Retrieval Document"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Retrieval Query"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "RGB + Depth"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Rig Task ID",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Rigged Mesh"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Right Image"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sadachbia — Lively"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sadaltager — Knowledgeable"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Safety Checker",
+      "count": 17
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Safety Checker Version"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Safety Tolerance",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sample Density",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Samples Per Second"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Scale Factor"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Schedar — Even"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Seamless Loop",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Semantic Similarity"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sensor Modality"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sensor Poses"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sensor Rig",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sensor Stream"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Share Workspace"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Shot Type",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Similarity Boost",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Single Image Is Panorama"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Smart Grain"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Smart Topology (Meshy T2)",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sound Effect Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Source Duration"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Source Image",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Source Images"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Source Is VFR"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Source Language"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Source Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Spatial Context",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Spatial Session"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Spatial Unit"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Spatial Value"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Speaker Boost"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "SRT Subtitles",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Start Image",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Steps (Flex)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Stop Sequences",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Strength Override"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Brief"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Images"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style or Moodboard"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Priority"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Prompt"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Ref Strength"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Refs",
+      "count": 5
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Strength"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Tags"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Style Type"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Subject Distance (m)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Subject Image"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Subject Priority"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Subject Screen X"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Subject Screen Y"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sulafat — Warm"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sword Swing"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Sync Mode"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "System Prompt",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Tag Audio Events"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Target Language",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Target Resolution",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Target Size"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Target Size (px)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Task Type"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Teal & Orange"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Text to Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Texture Prompt",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Thinking Budget",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Thinking Level",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Tile Size (0=none)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Track Faces"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Track Sources"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Training Images",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Training Model"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Transparent Background"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Trigger Word"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Ultra Detail"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Umbriel — Easy-going"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Up Axis"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Upscale Factor",
+      "count": 4
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Upscaled Image"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Use Prompt Verbatim"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "v1 (Default)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "v3 (Highest Quality)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Validated Value"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Validation Summary"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Vertex Colored"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Vindemiatrix — Gentle"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Voice Instructions"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "VTT Subtitles",
+      "count": 3
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Web Search",
+      "count": 2
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "When Unsure"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "World Name"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "x2plus (General)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "x4plus (General)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Yes / No"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Yes Means (optional)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Zephyr — Bright"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Zubenelgenubi — Casual"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/sampleGraph.ts",
+      "rule": "title-case",
+      "text": "Text Input"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/hooks/useAssetDelete.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete the {}."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/hooks/useAssetDelete.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't restore the {}."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/hooks/useStudioAssetMove.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't move the character."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/hooks/useStudioAssetMove.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't move the moodboard."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/lib/agentCursorSays.ts",
+      "rule": "title-case",
+      "text": "a moodboard’s Avoid list"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/lib/agentCursorSays.ts",
+      "rule": "title-case",
+      "text": "a moodboard’s colors (Analyze)"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/lib/agentCursorSays.ts",
+      "rule": "title-case",
+      "text": "a moodboard’s Direction"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/lib/cinemaArtDirection.ts",
+      "rule": "title-case",
+      "text": "Teal & Orange"
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/lib/commandPalette.ts",
+      "rule": "title-case",
+      "text": "Open Creator Studio"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/commonsAnalysisCopy.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't analyze this reference."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/commonsAnalysisCopy.ts",
+      "rule": "straight-quote",
+      "text": "The analysis service didn't respond."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/commonsAnalysisCopy.ts",
+      "rule": "straight-quote",
+      "text": "The analyzer couldn't read this image."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteCopy.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete {}. {}"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteCopy.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete {}. Nebula ran into an error, so {}. Try again, and if it keeps happening, restart Nebula."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteCopy.ts",
+      "rule": "straight-quote",
+      "text": "it's back on the canvas"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nebula isn't answering. Make sure it's running, then try again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteCopy.ts",
+      "rule": "straight-quote",
+      "text": "they're back on the canvas"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteNotice.ts",
+      "rule": "straight-quote",
+      "text": "1 proposal couldn't be reopened."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteNotice.ts",
+      "rule": "straight-quote",
+      "text": "After the restore, {} and {} couldn't be restored."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteNotice.ts",
+      "rule": "straight-quote",
+      "text": "After the restore, {} couldn't be re-attached."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/deleteNotice.ts",
+      "rule": "straight-quote",
+      "text": "After the restore, {} couldn't be reopened."
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "sentence-punctuation",
+      "text": "no UI session: open Nebula from the desktop app or use the dev link"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nebula didn't respond."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nebula didn't respond. Try again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nebula isn't answering. Make sure it's running, then try again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nebula's backend isn't running. Start it, then reload."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nebula's server isn't answering. Make sure it's running, then try again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nebula's server isn't answering. Make sure it's running."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "That reference isn't in this held-out set. Reload to get the latest references."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "That reference isn't there anymore. Reload to get the latest references."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "That's too large to save."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "The held-out set doesn't match what was saved, so Nebula stopped and changed nothing."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "There's no held-out set yet. Prepare a folder first."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "These labels are sealed as blind ground truth, so there's nothing to close."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Those filters didn't work. Clear them and try again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/errorCopy.ts",
+      "rule": "straight-quote",
+      "text": "You don't have access to this anymore. Reload to sign in again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/failureLines.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't clear the canvas."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/failureLines.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't clear the canvas. Nothing was removed."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/failureLines.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't load the model settings for “{}”."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/failureLines.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't set up “{}”."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/nodeErrorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't generate the shot."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/nodeErrorCopy.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't run the node."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/paletteNotice.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't find colors in {}."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/paletteNotice.ts",
+      "rule": "straight-quote",
+      "text": "Nebula can't read this image. Try a PNG or JPEG."
+    },
+    {
+      "family": "title-case-labels",
+      "file": "frontend/src/lib/reopenHoldLines.ts",
+      "rule": "title-case",
+      "text": "Resume Operation ID"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/savePausedCopy.ts",
+      "rule": "straight-quote",
+      "text": "Opened {}. It's {} MB, over the save limit."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/savePausedCopy.ts",
+      "rule": "straight-quote",
+      "text": "Opened as a new project. It's over the save limit."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/savePausedCopy.ts",
+      "rule": "straight-quote",
+      "text": "See what's large"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/savePausedCopy.ts",
+      "rule": "straight-quote",
+      "text": "This project is over the 16 MB save limit. Click to see what's large."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/validationCopy.ts",
+      "rule": "straight-quote",
+      "text": "Nothing ran. Check the scene's inputs and API keys, then generate the shot again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Check the run in Marble first. Once the ID is gone, Nebula won't block a new paid run."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete {}."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete the node."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete them. {} waiting on World Labs. Check Marble, then {}"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete them. They're waiting on World Labs. Check Marble and Run History."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Nebula can't tell if this World Labs run started."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Nebula couldn't confirm whether World Labs accepted this run, so the node stays locked to avoid paying twice. Check the job in Marble before you unlock it or run it again."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/lib/worldLabsWaiting.ts",
+      "rule": "straight-quote",
+      "text": "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice."
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "sentence-punctuation",
+      "text": "Nebula was updated, but this window still has the frontend from before the update, so it can't save or run. Rebuild the frontend (or restart the dev server), then reload.{}"
+    },
+    {
+      "family": "sentence-punctuation",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "sentence-punctuation",
+      "text": "Try again checks your saved projects; it won't make the change twice."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't confirm the project change."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't confirm the project was deleted."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't create the project.",
+      "count": 2
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete {} nodes."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete the node."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete the project for good."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't delete the project.",
+      "count": 3
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't download a copy."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't empty Recently deleted."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't load the project."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't load your projects."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't open the project.",
+      "count": 3
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't rename the project."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't restore the project."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't save the project.",
+      "count": 2
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Couldn't set the cover."
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Nebula was updated, but this window still has the frontend from before the update, so it can't save or run. Rebuild the frontend (or restart the dev server), then reload.{}"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "This window's frontend is newer than the Nebula backend it is connected to, so it can't save or run. Restart the backend, then reload.{}"
+    },
+    {
+      "family": "straight-quotes",
+      "file": "frontend/src/store/projectFlows.ts",
+      "rule": "straight-quote",
+      "text": "Try again checks your saved projects; it won't make the change twice."
+    }
+  ]
+}

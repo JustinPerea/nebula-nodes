@@ -186,7 +186,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'textarea',
         required: false,
         default: '',
-        placeholder: 'System instructions...',
+        placeholder: 'System instructions…',
       },
       {
         key: 'top_p',
@@ -2027,7 +2027,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'textarea',
         required: true,
         default: '',
-        placeholder: 'Enter text or prompt...',
+        placeholder: 'Enter text or prompt…',
       },
     ],
   },
@@ -2604,7 +2604,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '\\n',
-        placeholder: 'e.g. \\n or " | " or ", "',
+        placeholder: 'e.g. \\n or " | " or ", "', // copy-lint-ignore: shows the literal separator characters a person types
       },
       {
         key: 'template',
@@ -3022,7 +3022,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'textarea',
         required: false,
         default: '',
-        placeholder: 'System instructions...',
+        placeholder: 'System instructions…',
       },
       {
         key: 'thinkingLevel',
@@ -4024,7 +4024,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '',
-        placeholder: 'What to avoid in the image...',
+        placeholder: 'What to avoid in the image…',
       },
       {
         key: 'expand_prompt',
@@ -6315,7 +6315,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'textarea',
         required: false,
         default: '',
-        placeholder: 'Add a note...',
+        placeholder: 'Add a note…',
       },
       {
         key: 'color',

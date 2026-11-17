@@ -1,0 +1,327 @@
+{
+ "cases": [
+  {
+   "text": "Couldn't load it.",
+   "kind": "text",
+   "rules": [
+    "straight-quote"
+   ]
+  },
+  {
+   "text": "Couldn’t load it.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Say \"hi\" to it.",
+   "kind": "text",
+   "rules": [
+    "straight-quote"
+   ]
+  },
+  {
+   "text": "Say “hi” to it.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Open http://localhost:8000/it's now.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Loading...",
+   "kind": "text",
+   "rules": [
+    "three-dots"
+   ]
+  },
+  {
+   "text": "Loading…",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Add a note...",
+   "kind": "text",
+   "rules": [
+    "three-dots"
+   ]
+  },
+  {
+   "text": "sk-...",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "AIza...",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Saved — done.",
+   "kind": "text",
+   "rules": [
+    "em-dash"
+   ]
+  },
+  {
+   "text": "Saved, done.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Pick one; then run it.",
+   "kind": "text",
+   "rules": [
+    "sentence-punctuation"
+   ]
+  },
+  {
+   "text": "Pick one: then run it.",
+   "kind": "text",
+   "rules": [
+    "sentence-punctuation"
+   ]
+  },
+  {
+   "text": "Pick one (or two) and run it.",
+   "kind": "text",
+   "rules": [
+    "sentence-punctuation"
+   ]
+  },
+  {
+   "text": "Pick one, then run it.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Focal length (mm)",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Starts at 12:30 today.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Use a 16:9 frame.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Open https://example.com/a:b now.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Seed: 42",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Set “Requested Duration (s)” to 10.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Takes up to 30 (s) of audio.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "It runs the `a:b` command.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Run This Node",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Run this node",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Add Images",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Open in Nano Banana",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Move to Hugging Face",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Works with the API",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Press Enter",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Runs on {}. Change provider",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Runs on {}. Change Provider",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "+ New character",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "+ New Character",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Back to Canvas",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Claude Code",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Open the GPT Image node",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "e.g. Captain Vega",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Image",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "FilePath",
+   "kind": "label",
+   "rules": [
+    "raw-key-label"
+   ]
+  },
+  {
+   "text": "filePath",
+   "kind": "label",
+   "rules": [
+    "raw-key-label"
+   ]
+  },
+  {
+   "text": "negative_prompt",
+   "kind": "label",
+   "rules": [
+    "raw-key-label"
+   ]
+  },
+  {
+   "text": "File path",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "OpenAI",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Prompt",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "filePath",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Retry",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Retry loading",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Retry connection",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Retry…",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Try again",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Retry later, it may help.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "{\"a\": 1}",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "[aria-live=\"off\"]",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "42",
+   "kind": "text",
+   "rules": []
+  }
+ ]
+}
