@@ -643,7 +643,7 @@ The server exposes these tools for building and running (see
   exist and never their values, connections in, and a universal node's `ports`
   from its model with `_model_ports` left out of params), plus `state`,
   `position` and the last `error`; then the connections, `cover`, `open`, and `runHistory`, the
-  newest 20 records of the canvas's Run History (`runHistoryCount` counts
+  newest 20 records of the canvas's Run history (`runHistoryCount` counts
   them all), each with its status, timing, `nodeIds` and which outputs it
   made, never its recipe's params or output values. Without `view` the route
   answers as before (the canvas loads it). Deleting a project over MCP waits
@@ -2249,7 +2249,7 @@ claiming nothing ran:
 - `get_run` (and `GET /api/graph/runs/{runId}`) answers `status: "unknown"`
   with `noRecord: true` (no `neverStarted`), and `cancel_run` and `get_run`
   give `next`: "Nebula has no record of run <id>. If it started before
-  Nebula restarted, check Run History for what it did."
+  Nebula restarted, check Run history for what it did."
 - `nebula cancel` and `nebula result` print that same line; `nebula result`
   exits 1.
 
@@ -2303,13 +2303,13 @@ run belongs to another project that still exists (in the list or Recently
 deleted) and the open project's run history doesn't name it; a record whose
 project Nebula can't tell holds, and run histories never release one. A start that is settling or waiting on the person's check holds by node
 id, and so does an ID in the node's settings. The text is the same whoever the
-record belongs to; tell the person, who clears it in Marble and Run History.
+record belongs to; tell the person, who clears it in Marble and Run history.
 
 Round 3b added the World Labs refusals to this split, with the same statuses
 and the same checks: the status bar's "I’ve checked Marble" (`DELETE
 /api/provider-start-ambiguities/...`: "Cannot acknowledge a World Labs
 paid-start ambiguity while that provider handshake is still active", "World
-Labs paid-start ambiguity changed; ..."), Run History's "Forget ID" (`DELETE
+Labs paid-start ambiguity changed; ..."), Run history's "Forget ID" (`DELETE
 /api/provider-recoveries/...`: "World Labs recovery checkpoint changed; ..."),
 a run start the paid-start guard refuses (`POST /api/execute`,
 `/api/execute-node`, shot runs: "Fresh paid ... start is safety-locked ...",
@@ -5016,7 +5016,7 @@ for both, the same words as `hold.detail`. `list_projects` adds `openHold`
 with a `note` that says the state, the node and its project, and what
 clears it, for example "Opening or switching projects is held (recovery):
 “World” (n1) from “Alpha” has a saved World Labs recovery ID; the person
-forgets it in Run History."; `nebula projects` prints that note.
+forgets it in Run history."; `nebula projects` prints that note.
 `openHold` covers Nebula's own holds only: while the person's tab keeps
 edits of its own, your open is refused with `code: "canvas_kept_in_tab"`
 (above), which `openHold` doesn't show.
