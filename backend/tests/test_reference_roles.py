@@ -681,6 +681,16 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["nebula-moodboard"] = {"description": "A save
 APPROVED_LEADING_PARAM_ADDITIONS["character"] = {"key": "character", "label": "Character", "type": "character",
                                                  "required": True}
 # The model picker's loading placeholder takes the ellipsis character (GM, 2026-11 copy sweep item 16).
+# Placeholders take the ellipsis character, not three dots.
+for _node_id, _param_key, _old in (
+    ("claude-chat", "system", "System instructions..."),
+    ("gemini-chat", "system", "System instructions..."),
+    ("fast-sdxl", "negative_prompt", "What to avoid in the image..."),
+    ("sticky-note", "content", "Add a note..."),
+    ("text-input", "value", "Enter text or prompt..."),
+):
+    APPROVED_PARAM_FIELD_CHANGES.setdefault(_node_id, {}).setdefault(_param_key, {})["placeholder"] = (
+        _old, _old[:-3] + "\u2026")
 APPROVED_PARAM_FIELD_CHANGES["openrouter-universal"] = {
     "model": {"placeholder": ("Loading models...", "Loading models…")},
 }

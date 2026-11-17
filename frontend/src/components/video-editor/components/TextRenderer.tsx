@@ -20,6 +20,7 @@ export function TextRenderer({ item }: TextRendererProps) {
   const scale = interpolateVec3(localFrame, item.keyframes.scale ?? [], item.spatial.scale);
   const transformOrigin = transformOriginFromAnchor(item.spatial.anchor);
 
+  // copy-lint-ignore: sample text a person replaces
   const text = (item.props.text as string) ?? 'Hello World';
   const fontSize = (item.props.fontSize as number) ?? 64;
   const color = (item.props.color as string) ?? '#ffffff';

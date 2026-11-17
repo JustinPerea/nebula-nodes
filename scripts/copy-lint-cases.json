@@ -1,0 +1,559 @@
+{
+ "cases": [
+  {
+   "text": "Couldn't load it.",
+   "kind": "text",
+   "rules": [
+    "straight-quote"
+   ]
+  },
+  {
+   "text": "Couldn’t load it.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Say \"hi\" to it.",
+   "kind": "text",
+   "rules": [
+    "straight-quote"
+   ]
+  },
+  {
+   "text": "Say “hi” to it.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Open http://localhost:8000/it's now.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Loading...",
+   "kind": "text",
+   "rules": [
+    "three-dots"
+   ]
+  },
+  {
+   "text": "Loading…",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Add a note...",
+   "kind": "text",
+   "rules": [
+    "three-dots"
+   ]
+  },
+  {
+   "text": "sk-...",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "AIza...",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Saved — done.",
+   "kind": "text",
+   "rules": [
+    "em-dash"
+   ]
+  },
+  {
+   "text": "Saved, done.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Pick one; then run it.",
+   "kind": "text",
+   "rules": [
+    "sentence-punctuation"
+   ]
+  },
+  {
+   "text": "Pick one: then run it.",
+   "kind": "text",
+   "rules": [
+    "sentence-punctuation"
+   ]
+  },
+  {
+   "text": "Pick one (or two) and run it.",
+   "kind": "text",
+   "rules": [
+    "sentence-punctuation"
+   ]
+  },
+  {
+   "text": "Pick one, then run it.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Focal length (mm)",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Starts at 12:30 today.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Use a 16:9 frame.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Open https://example.com/a:b now.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Seed: 42",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Set “Requested Duration (s)” to 10.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Takes up to 30 (s) of audio.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "It runs the `a:b` command.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Run This Node",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Run this node",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Add Images",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Open in Nano Banana",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Move to Hugging Face",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Works with the API",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Press Enter",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Runs on {}. Change provider",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Runs on {}. Change Provider",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "+ New character",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "+ New Character",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Back to Canvas",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Claude Code",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Open the GPT Image node",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "e.g. Captain Vega",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Image",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "FilePath",
+   "kind": "label",
+   "rules": [
+    "raw-key-label"
+   ]
+  },
+  {
+   "text": "filePath",
+   "kind": "label",
+   "rules": [
+    "raw-key-label"
+   ]
+  },
+  {
+   "text": "negative_prompt",
+   "kind": "label",
+   "rules": [
+    "raw-key-label"
+   ]
+  },
+  {
+   "text": "File path",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "OpenAI",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Prompt",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "filePath",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Retry",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Retry loading",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Retry connection",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Retry…",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Try again",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Retry later, it may help.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "{\"a\": 1}",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "[aria-live=\"off\"]",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "42",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "{} couldn't load.",
+   "kind": "text",
+   "rules": [
+    "straight-quote"
+   ]
+  },
+  {
+   "text": "{} proposals couldn't be reopened.",
+   "kind": "text",
+   "rules": [
+    "straight-quote"
+   ]
+  },
+  {
+   "text": "{\"a\": {}}",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "{} Can’t load.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Scroll Down",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Color Space",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Save Settings",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Pick A World",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Open Settings",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Back to Settings",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Also in Canvas",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Press Enter to send",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Press Down to move",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Hold Shift+Tab to go back",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Close (Esc)",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Switch to World Labs",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Switch to Black Forest Labs",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Open in Paper",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Paper Size",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Open Moodboard",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Open moodboard",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Run History",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Choose The Default Model For Every New Node",
+   "kind": "text",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Choose the default model for every new node",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Jev (TypeSafe, experimental)",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Retry upload",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Retry failed {} run",
+   "kind": "text",
+   "rules": [
+    "retry-button"
+   ]
+  },
+  {
+   "text": "Re-uploading...",
+   "kind": "text",
+   "rules": [
+    "three-dots"
+   ]
+  },
+  {
+   "text": "ideogram_...",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "r8_...",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "{}: it offers these for this conversation",
+   "kind": "text",
+   "rules": [
+    "sentence-punctuation"
+   ]
+  },
+  {
+   "text": "More Commons sections",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Creator Studio",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Product photo\nLifestyle shot\nIllustration",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Black Forest Labs Key",
+   "kind": "label",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Black Forest Labs key",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "World Labs",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "World Labs Environment",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Black Forest Labs Foo",
+   "kind": "label",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Gemini 2.5 Flash Image",
+   "kind": "label",
+   "rules": []
+  }
+ ]
+}
