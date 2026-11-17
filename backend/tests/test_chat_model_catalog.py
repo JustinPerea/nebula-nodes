@@ -580,9 +580,9 @@ def test_openai_labels_use_openai_spelling():
     # "GPT-5.4 nano" and "GPT-4.1 nano" (checked 2026-10-16).
     assert labels["gpt-5.4-mini"] == "GPT-5.4 Mini"
     assert labels["gpt-5.4-nano"] == "GPT-5.4 nano · shuts down April 1, 2027"
-    assert labels["gpt-4o-mini"] == "GPT-4o Mini · legacy, shuts down January 14, 2027"
-    assert labels["gpt-4.1-mini"] == "GPT-4.1 Mini · legacy, shuts down January 14, 2027"
-    assert labels["gpt-4.1-nano"] == "GPT-4.1 nano · legacy, shuts down October 23, 2026"
+    assert labels["gpt-4o-mini"] == "GPT-4o Mini · shuts down January 14, 2027"
+    assert labels["gpt-4.1-mini"] == "GPT-4.1 Mini · shuts down January 14, 2027"
+    assert labels["gpt-4.1-nano"] == "GPT-4.1 nano · shuts down October 23, 2026"
 
 
 @pytest.mark.asyncio

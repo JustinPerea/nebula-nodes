@@ -522,11 +522,11 @@ APPROVED_OPTION_LABEL_CHANGES.update({
     "gpt-4o-chat": {"model": {
         "gpt-5.5": ("GPT-5.5 (flagship)", "GPT-5.5"),
         "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 nano · shuts down April 1, 2027"),
-        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o · legacy, shuts down January 14, 2027"),
-        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini · legacy, shuts down January 14, 2027"),
-        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 · legacy, shuts down January 14, 2027"),
-        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini · legacy, shuts down January 14, 2027"),
-        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano · legacy, shuts down October 23, 2026"),
+        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o · shuts down January 14, 2027"),
+        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini · shuts down January 14, 2027"),
+        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 · shuts down January 14, 2027"),
+        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini · shuts down January 14, 2027"),
+        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano · shuts down October 23, 2026"),
     }},
     "gemini-chat": {"model": {
         "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash · deprecated, runs Gemini 3.6 Flash"),

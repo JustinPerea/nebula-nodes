@@ -6266,23 +6266,23 @@
             "value": "gpt-5.4-nano"
           },
           {
-            "label": "GPT-4o · legacy, shuts down January 14, 2027",
+            "label": "GPT-4o · shuts down January 14, 2027",
             "value": "gpt-4o"
           },
           {
-            "label": "GPT-4o Mini · legacy, shuts down January 14, 2027",
+            "label": "GPT-4o Mini · shuts down January 14, 2027",
             "value": "gpt-4o-mini"
           },
           {
-            "label": "GPT-4.1 · legacy, shuts down January 14, 2027",
+            "label": "GPT-4.1 · shuts down January 14, 2027",
             "value": "gpt-4.1"
           },
           {
-            "label": "GPT-4.1 Mini · legacy, shuts down January 14, 2027",
+            "label": "GPT-4.1 Mini · shuts down January 14, 2027",
             "value": "gpt-4.1-mini"
           },
           {
-            "label": "GPT-4.1 nano · legacy, shuts down October 23, 2026",
+            "label": "GPT-4.1 nano · shuts down October 23, 2026",
             "value": "gpt-4.1-nano"
           }
         ]

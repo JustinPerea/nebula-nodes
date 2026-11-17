@@ -1114,6 +1114,18 @@ OPTION_LABELS = {"hdr_prores": "HDR ProRes", "videogame_assets": "Video game ass
 LOWER_KEY = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
 
 
+def option_list(field, values):
+    """One option per value. Two values that read the same would leave a person
+    unable to tell them apart, so a refresh that brings one in stops here."""
+    options = [{"label": option_label(item), "value": item} for item in values]
+    labels = [option["label"] for option in options]
+    repeated = sorted({text for text in labels if labels.count(text) > 1})
+    if repeated:
+        raise SystemExit(f"{field}: two options read the same ({', '.join(repeated)}). "
+                         "Give one of them its own words in OPTION_LABELS.")
+    return options
+
+
 def option_label(item):
     text = str(item)
     if text in OPTION_LABELS:
@@ -1122,10 +1134,12 @@ def option_label(item):
         return text
     words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", text).split("_")
     joined = []
-    for word in words:
+    for index, word in enumerate(words):
         if word == "n":
             word = "and"
-        if joined and word.isdigit() and joined[-1].isdigit():
+        # Two numbers that end the value are a ratio ("landscape_16_9" is 16:9).
+        # Numbers followed by a word are a version ("flux_1_1_pro") and stay apart.
+        if joined and word.isdigit() and joined[-1].isdigit() and index == len(words) - 1:
             joined[-1] += ":" + word
         else:
             joined.append(word)
@@ -1158,8 +1172,7 @@ def fields_for(schema):
         kind = simple.get("type")
         param = {"key": field, "label": label(field), "required": field in required}
         if "enum" in simple:
-            param.update(type="enum", options=[{"label": option_label(item), "value": item}
-                                               for item in simple["enum"]])
+            param.update(type="enum", options=option_list(field, simple["enum"]))
         elif kind == "boolean":
             param["type"] = "boolean"
         elif kind in ("number", "integer"):

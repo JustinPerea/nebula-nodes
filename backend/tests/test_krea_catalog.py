@@ -351,6 +351,14 @@ def test_a_raw_value_or_field_name_is_shown_as_words_with_initialisms_in_capital
     assert SYNC.label("hdr") == "HDR" and SYNC.label("image_urls") == "Image URLs"
 
 
+def test_a_version_number_is_not_read_as_a_ratio_and_two_options_never_read_the_same():
+    assert SYNC.option_label("landscape_16_9") == "Landscape 16:9"
+    assert SYNC.option_label("flux_1_1_pro") == "Flux 1 1 pro"
+    assert [option["label"] for option in SYNC.option_list("mode", ["std", "pro"])] == ["Standard", "Pro"]
+    with pytest.raises(SystemExit, match="two options read the same"):
+        SYNC.option_list("mode", ["std", "standard"])
+
+
 def test_no_generated_krea_option_label_is_a_raw_lower_case_value():
     raw = []
     for node_id, node in REGISTRY.items():
