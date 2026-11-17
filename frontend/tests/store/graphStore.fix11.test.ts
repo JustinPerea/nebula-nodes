@@ -423,8 +423,8 @@ describe('GM r18 answer 2: a stop by another writer names that writer; a server 
       'Codex kept changing “Opening”, so your changes aren’t saved yet. Nebula will try again when Codex stops.'],
     ['an agent with no name', { kind: 'agent', name: '' },
       'An agent kept changing “Opening”, so your changes aren’t saved yet. Nebula will try again when it stops.'],
-    ['another window', { kind: 'person', name: 'You' },
-      '“Opening” kept changing in another window, so your changes aren’t saved yet. Nebula will try again when it stops.'],
+    ['another tab', { kind: 'person', name: 'You' },
+      '“Opening” kept changing in another tab, so your changes aren’t saved yet. Nebula will try again when it stops.'],
   ];
   it.each(cases)('%s: the same line in the state slot (with [Try again]) and on the mark (its tooltip and popover)', async (_who, writer, line) => {
     const h = backend(S3);

@@ -13,7 +13,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
-import { REFUSED_FALLBACK_COPY } from '../src/lib/errorCopy';
 import { createElement } from 'react';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
@@ -197,7 +196,8 @@ describe('the reopen-hold lines load on first need, not with the store', () => {
 });
 
 describe('a lines chunk that fails to load (GM r23, 1: a press always answers)', () => {
-  const HEADING = 'Nebula couldn’t open the project.';
+  // The failure is one sentence in the because form: it opens with the action, then says why.
+  const HEADING_LEAD = 'Nebula couldn’t open the project because';
   const failFirstLoad = async () => {
     const first = gate();
     chunk.gate = first.wait;
@@ -214,9 +214,9 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     await failFirstLoad();
     const state = store.useProjectStore.getState();
     expect(state.screen).toBe('home');
-    expect(state.error?.startsWith(HEADING)).toBe(true);
+    expect(state.error?.startsWith(HEADING_LEAD)).toBe(true);
     // GM's general line under the heading (the chunk's failure is no request's); only the kept form never says reload.
-    expect(state.error).toBe(`${HEADING} ${REFUSED_FALLBACK_COPY}`);
+    expect(state.error).toBe('Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.');
     expect(state.errorRetry).toEqual({ action: 'open', id: 'alpha' });
     expect(said()).toEqual([]);
     expect(chunk.loads).toBe(1);
@@ -246,7 +246,7 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     await settle();
     const state = store.useProjectStore.getState();
     expect(state.screen).toBe('home');
-    expect(state.error?.startsWith(HEADING)).toBe(true);
+    expect(state.error?.startsWith(HEADING_LEAD)).toBe(true);
     expect(state.errorRetry).toEqual({ action: 'open', id: 'alpha' });
   });
 

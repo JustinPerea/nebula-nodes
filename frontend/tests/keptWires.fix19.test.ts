@@ -112,7 +112,7 @@ describe('GM r27, 3 and review 17 NIT-2: the following lines', () => {
   });
 
   it('an agent’s: “Nebula couldn’t run …” with ’', () => {
-    expect(runWhileFollowingLine(null, 'Codex', 'Delta')).toBe('Nebula couldn’t run the canvas. Codex is opening “Delta”.');
+    expect(runWhileFollowingLine(null, 'Codex', 'Delta')).toBe('Nebula couldn’t run the canvas because Codex is opening “Delta”.');
   });
 });
 

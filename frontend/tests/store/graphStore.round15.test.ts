@@ -178,7 +178,7 @@ describe('L3 (probe P2): a failed model change names the model the node is on, i
         params: { model: 'anthropic/claude-opus', _model_ports: { model: 'anthropic/claude-opus' } } } }] } as never);
     fetchMock.mockImplementation(async () => json({ detail: 'refused' }, 409));
     await useGraphStore.getState().configureOpenRouterModel('n6', 'openai/gpt-5');
-    expect(notices).toEqual([{ line: "Couldn't change the model for “Router”. It's still on anthropic/claude-opus.",
+    expect(notices).toEqual([{ line: "Couldn’t change the model for “Router”. It’s still on anthropic/claude-opus.",
       mono: 'anthropic/claude-opus' }]);
   });
 
@@ -188,7 +188,7 @@ describe('L3 (probe P2): a failed model change names the model the node is on, i
         params: { model_id: 'new/model', _model_ports: { model: 'old/model' } } } }] } as never);
     fetchMock.mockImplementation(async () => json({ detail: 'no such model' }, 404));
     await useGraphStore.getState().fetchReplicateSchemaAndConfigure('n7', 'new', 'model');
-    expect(notices).toEqual([{ line: "Couldn't change the model for “Replicate”. It's still on old/model.", mono: 'old/model' }]);
+    expect(notices).toEqual([{ line: "Couldn’t change the model for “Replicate”. It’s still on old/model.", mono: 'old/model' }]);
   });
 });
 
@@ -230,15 +230,15 @@ describe('L1: offline mid-drag, the node springs back to where the drag started'
 describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <reason line>")', () => {
   it('one node, unconfirmed start or recovery ID', () => {
     expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
-      "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");
+      "Nebula couldn’t delete “Harbor world” because a World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(heldDeleteText(1, false, 1, '“Harbor world”')).toBe(
-      "Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
+      "Nebula couldn’t delete “Harbor world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });
 
   it('the backend\'s recovery refusal is named from its own line', () => {
     expect(deleteRefusalText("Couldn't delete the node.", 1,
       ['“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.'])).toBe(
-      "Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
+      "Nebula couldn’t delete “Harbor world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });
 
   it('the canvas refuses a held node with its name', () => {
@@ -248,7 +248,7 @@ describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <rea
       runHistory: [{ id: 'r', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }], } as never);
     useGraphStore.getState().deleteNode('n1');
     expect(useGraphStore.getState().undoNotice?.text).toBe(
-      "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");
+      "Nebula couldn’t delete “Harbor world” because a World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -263,12 +263,12 @@ describe('Create\'s cluster line (GM, round 15)', () => {
   it('a refusal with a person line: that line instead of "Try again."', async () => {
     fetchMock.mockImplementation(async () => json({ detail: 'A run is still going. Wait for it to finish or stop it first.' }, 409));
     expect(failureMessage(await failure(), 'Nebula couldn’t start the generation.')).toBe(
-      "Nebula couldn’t start the generation. Its nodes weren’t added to the canvas. A run is still going. Wait for it to finish or stop it first.");
+      "Nebula couldn’t start the generation because its nodes weren’t added to the canvas. A run is still going. Wait for it to finish or stop it first.");
   });
 
   it('a bare HTTP failure keeps "Try again."', async () => {
     fetchMock.mockImplementation(async () => new Response('', { status: 500 }));
     expect(failureMessage(await failure(), 'Nebula couldn’t start the generation.')).toBe(
-      "Nebula couldn’t start the generation. Its nodes weren’t added to the canvas. Try again.");
+      "Nebula couldn’t start the generation because its nodes weren’t added to the canvas. Try again.");
   });
 });

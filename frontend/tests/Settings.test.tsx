@@ -875,7 +875,7 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     await act(async () => { remote([]); });
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
     expect(said()).toHaveTextContent(/^Replicate token removed\.$/);
-    expect(document.body).not.toHaveTextContent(/another window/);
+    expect(document.body).not.toHaveTextContent(/another tab/);
   });
 
   it('labels the Krea row by its link’s word, "Krea · API key" (GM r21 item 7)', async () => {

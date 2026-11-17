@@ -44,13 +44,13 @@ describe('a download past the browser string cap', () => {
     capTheFile();
     const error = await failure(() => saveEditsToFile(SNAPSHOT, 'Glass campaign'));
     expect(failureMessage(error, "Couldn’t download your edits."))
-      .toBe(`Couldn’t download your edits. ${TOO_BIG}`);
+      .toBe('Nebula couldn’t download your edits because it’s too big to download in a browser.');
   });
 
   it('"Download a copy" says the same, under its own heading', async () => {
     capTheFile();
     const error = await failure(() => saveProjectCopyToFile(SNAPSHOT, 'Glass campaign'));
-    expect(failureMessage(error, "Couldn't download a copy.")).toBe(`Couldn't download a copy. ${TOO_BIG}`);
+    expect(failureMessage(error, "Couldn't download a copy.")).toBe('Nebula couldn’t download a copy because it’s too big to download in a browser.');
   });
 
   it("reuses #190's detection: a stack overflow is not the string cap", async () => {
@@ -59,7 +59,7 @@ describe('a download past the browser string cap', () => {
     capTheFile('Maximum call stack size exceeded');
     const error = await failure(() => saveEditsToFile(SNAPSHOT, 'Glass campaign'));
     expect(error).toBeInstanceOf(RangeError);
-    expect(failureMessage(error, "Couldn’t download your edits.")).not.toContain(TOO_BIG);
+    expect(failureMessage(error, "Couldn’t download your edits.")).not.toContain('too big to download in a browser');
   });
 });
 

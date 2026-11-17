@@ -41,7 +41,7 @@ describe('the current project is the open canvas project', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('a stopped tab (another window took over) has no current project', () => {
+  it('a stopped tab (another tab took over) has no current project', () => {
     useProjectStore.setState({ initialized: false });
     expect(currentProject()).toBeNull();
   });

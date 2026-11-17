@@ -71,14 +71,14 @@ export class ExecutionStartRejectedError extends RequestFailedError {
  * 507 (round 17, review 16 L5: the answer's `code`, backend
  * RUN_SAFETY_STORAGE_CODE); the project store's 507 has its own line
  * (PROJECT_LIST_REASON), since a restart doesn't clear it. */
-export const RUN_SAFEGUARDS_REASON = 'It couldn’t save its run safeguards. Restart Nebula, then try again.';
+export const RUN_SAFEGUARDS_REASON = 'It couldn’t save its run safeguards, so nothing was started. Restart Nebula, then try again.';
 /** GM - Design, r18 of PR #114 (storage case): a run start Nebula refused
  * with 507 because it couldn't read or write its project list (the project
  * store's `code`), before any provider call. A restart doesn't clear it
  * (review 17 G1); a connected drive with space does. The heading names the
  * node ("Couldn’t run “<node>”.") or the run ("Couldn’t start the run."). A
  * corrupt catalog file is a separate gap (with Justin), not this line. */
-export const PROJECT_LIST_REASON = 'It can’t read its project list. Check that the drive Nebula saves to is connected and has space, then try again.';
+export const PROJECT_LIST_REASON = 'It can’t read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.';
 /** The backend's codes for a 507 (main.py RUN_SAFETY_STORAGE_CODE, PROJECT_STORE_STORAGE_CODE). */
 export const RUN_SAFETY_STORAGE_CODE = 'run_safeguards';
 export const PROJECT_STORE_STORAGE_CODE = 'project_store';

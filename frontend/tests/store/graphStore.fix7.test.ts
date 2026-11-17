@@ -192,7 +192,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
 });
 
 describe('H2 (GM r9 decision 2): another change is merged in, never overwritten', () => {
-  it('5a: another window edits a different shot: shown, merged and saved without asking', async () => {
+  it('5a: another tab edits a different shot: shown, merged and saved without asking', async () => {
     const h = backend([boom]);
     typeIn('s1', 'mine');
     await sleep(60);
@@ -257,14 +257,14 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
     expect(unsaved()).toBeNull();
   });
 
-  it('a clash with no agent reads "another window"; Keep mine saves mine over it', async () => {
+  it('a clash with no agent reads "another tab"; Keep mine saves mine over it', async () => {
     const h = backend([boom]);
     typeIn('s1', 'mine');
     await sleep(60);
     h.answer([ok]);
     syncs({ ...WINDOW, ...graph([{ id: 's1', prompt: "window's s1" }, { id: 's2', prompt: 'b' }]) });
     await sleep(80);
-    expect(clash()).toBe('“Opening” was changed in another window while you were editing it.');
+    expect(clash()).toBe('“Opening” was changed in another tab while you were editing it.');
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(80);
     expect(h.puts.at(-1)).toEqual(['s1:mine', 's2:b']);
@@ -312,7 +312,7 @@ describe('M1: canvas_replaced says no line of its own', () => {
     expect(said.some((line) => line.includes('switched'))).toBe(false);
   });
 
-  it('C: the person\'s own clear in another window: nothing said', async () => {
+  it('C: the person\'s own clear in another tab: nothing said', async () => {
     backend([() => replaced('person')]);
     typeIn('s1', 'typed');
     await sleep(60);
@@ -366,7 +366,7 @@ describe('L2-L5', () => {
     expect(said).toEqual(["Couldn’t remove “Shot 2”. It’s still running. Stop the run first."]);
   });
 
-  it('L5: the person\'s own switch in another window', async () => {
+  it('L5: the person\'s own switch in another tab', async () => {
     backend([() => json({ detail: 'This canvas is out of date.', code: 'workspace_moved', project: { id: 'B', name: 'B' },
       switchedBy: { kind: 'person', name: 'You' } }, 409)]);
     typeIn('s1', 'typed');

@@ -154,7 +154,7 @@ describe("a followed tab when the agent's next write closes the person's project
       personsCanvasSaved: { id: savedId, projectId: 'po' } } as never);
   }
 
-  it('goes to Projects home with no "another window" line', async () => {
+  it('goes to Projects home with no "another tab" line', async () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r1', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     await follow();
     codexClears();
@@ -184,7 +184,7 @@ describe("a followed tab when the agent's next write closes the person's project
     // A later revision for another reason, with the old closed project: the usual line.
     socket()({ type: 'graphSync', workspaceRevision: 'r4', paramsVersion: GRAPH_PARAMS_VERSION,
       personsCanvasSaved: { id: 's0', projectId: 'po' } } as never);
-    expect(useProjectStore.getState().error).toBe('The active project changed in another window. Reload projects to continue.');
+    expect(useProjectStore.getState().error).toBe('The active project changed in another tab. Reload projects to continue.');
   });
 });
 

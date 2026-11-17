@@ -133,7 +133,7 @@ describe('GM r5 item 1: a save refused as "not connected" goes again on the prom
     notePersonPromoted();
     await vi.waitFor(() => expect(projects.saveProject).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(state().saveStatus).toBe('error'));
-    expect(state().saveError).toContain('The disk said no.');
+    expect(state().saveError).toContain('because the disk said no.');
     expect(pendingPromoteRetries()).toBe(0);
   });
 

@@ -8,7 +8,8 @@ import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../src/lib/canvasN
 // `code` (backend main._graph_file_refusal), never by its words; the
 // backend's words stay the error's detail, for the log and for agents.
 
-const LOAD = 'Nebula couldn’t load the canvas.';
+// The plain file's line as one because line: the action, then the line with its first letter lower-cased.
+const underLoad = (line: string) => `Nebula couldn’t load the canvas because ${line[0].toLowerCase()}${line.slice(1)}`;
 const noticeStops: (() => void)[] = [];
 
 function notices() {
@@ -71,7 +72,7 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
     const { result, said, errors } = await loadBundleAnswering(answer(status, body));
     expect(result).toBeNull();
     // GM #205 r12 item 2: a line with its own "Nebula couldn’t open this file because …" takes no heading.
-    expect(said.mock.calls).toEqual([[line.startsWith('Nebula couldn’t ') ? line : `${LOAD} ${line}`]]);
+    expect(said.mock.calls).toEqual([[line.startsWith('Nebula couldn’t ') ? line : underLoad(line)]]);
     expect(said.mock.calls[0][0]).not.toContain(body.detail);
     // The log keeps the engine's exact reason.
     expect(errors).toHaveBeenCalledWith('[nebula] graph load', body.detail);
@@ -109,14 +110,14 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
   ])('%s (%s): the line under the load heading', async (code, status, detail, fields, line) => {
     const { result, said, errors } = await loadBundleAnswering(answer(status, { detail, code, ...fields }));
     expect(result).toBeNull();
-    expect(said.mock.calls).toEqual([[`${LOAD} ${line}`]]);
+    expect(said.mock.calls).toEqual([[underLoad(line)]]);
     expect(errors).toHaveBeenCalledWith('[nebula] graph load', detail);
   });
 
   it('a 500 with no code reads as it did', async () => {
     const { said } = await loadBundleAnswering(answer(500, { detail: 'Restored bundle returned an invalid URL mapping' }));
     expect(said.mock.calls).toHaveLength(1);
-    expect(said.mock.calls[0][0]).toMatch(/^Nebula couldn’t load the canvas\. /);
+    expect(said.mock.calls[0][0]).toMatch(/^Nebula couldn’t load the canvas because /);
     expect(said.mock.calls[0][0]).not.toContain('Its files couldn’t be copied.');
   });
 
@@ -136,13 +137,13 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
     ['an upload size with no limit', 413, { detail: 'Zip bundle exceeds the compressed upload limit', code: 'bundle_upload_too_large' }],
   ])('%s: the damaged-file line, never the backend’s words', async (_case, status, body) => {
     const { said, errors } = await loadBundleAnswering(answer(status, body));
-    expect(said.mock.calls).toEqual([[`${LOAD} This file is damaged or isn’t a Nebula canvas.`]]);
+    expect(said.mock.calls).toEqual([[underLoad('This file is damaged or isn’t a Nebula canvas.')]]);
     expect(errors).toHaveBeenCalledWith('[nebula] graph load', body.detail);
   });
 
   it('an empty refusal reads as a damaged file under the load heading', async () => {
     const { said } = await loadBundleAnswering(new Response('', { status: 400 }));
-    expect(said.mock.calls).toEqual([[`${LOAD} This file is damaged or isn’t a Nebula canvas.`]]);
+    expect(said.mock.calls).toEqual([[underLoad('This file is damaged or isn’t a Nebula canvas.')]]);
   });
 });
 

@@ -22,7 +22,9 @@ import { fetchWorldSplatBytes } from '../../src/lib/worldSplat';
  */
 
 const LOST = CONNECTION_LOST_COPY;
+const LOST_CLAUSE = 'because the server isn’t answering. Check that Nebula is running, then try again.';
 const GENERAL = REFUSED_FALLBACK_COPY;
+const SAVE_GENERAL = `Nebula couldn’t save because the server didn’t accept it. ${GENERAL}`;
 
 function thrown(run: () => unknown): unknown {
   try {
@@ -48,12 +50,13 @@ describe('copyForError: only a classified no-answer is the connection line', () 
     ['JSON.stringify of a cycle', cycle],
     ['a property of undefined', ofUndefined],
     ['a bad argument to a DOM API (new URL)', badUrl],
-  ])('%s is a TypeError that says GM\'s general line', (_name, make) => {
+  ])('%s is a TypeError that says the general line', (_name, make) => {
     const error = make();
     expect(error).toBeInstanceOf(TypeError);
     expect(copyForError(error)).toBe(GENERAL);
-    expect(failureCopy(error, { heading: "Couldn't save." })).toEqual({ heading: "Couldn't save.", reason: GENERAL });
-    expect(failureMessage(error, "Couldn't save.")).toBe(`Couldn't save. ${GENERAL}`);
+    expect(failureCopy(error, { heading: "Couldn’t save." })).toEqual({ heading: '', reason: SAVE_GENERAL,
+      button: 'Nebula couldn’t save because the server didn’t accept it. Try again.', cause: GENERAL, what: 'save' });
+    expect(failureMessage(error, "Couldn’t save.")).toBe(SAVE_GENERAL);
     expect(isNoAnswer(error)).toBe(false);
   });
 
@@ -65,8 +68,8 @@ describe('copyForError: only a classified no-answer is the connection line', () 
     const lost = new ConnectionLostError(new TypeError('Failed to fetch'));
     expect(copyForError(lost)).toBe(LOST);
     expect(isNoAnswer(lost)).toBe(true);
-    expect(failureMessage(lost, "Couldn't save.")).toBe(`Couldn't save. ${LOST}`);
-    expect(failureMessage(lost.withHeading("Couldn't load."), "Couldn't save.")).toBe(`Couldn't load. ${LOST}`);
+    expect(failureMessage(lost, "Couldn’t save.")).toBe(`Nebula couldn’t save ${LOST_CLAUSE}`);
+    expect(failureMessage(lost.withHeading("Couldn’t load."), "Couldn’t save.")).toBe(`Nebula couldn’t load ${LOST_CLAUSE}`);
   });
 
   it('an AbortError the caller didn\'t ask for is still no answer; the caller\'s own abort is not', () => {
@@ -90,10 +93,10 @@ describe('fetchUrl: fetch for a URL apiFetch does not make', () => {
   it('turns fetch\'s no-answer into a ConnectionLostError under the heading, keeping the cause', async () => {
     const raw = new TypeError('Failed to fetch');
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(raw));
-    const error = await fetchUrl('/api/outputs/a.png', {}, "Couldn't load it.").catch((e: unknown) => e);
+    const error = await fetchUrl('/api/outputs/a.png', {}, "Couldn’t load it.").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ConnectionLostError);
     expect((error as ConnectionLostError).cause).toBe(raw);
-    expect((error as Error).message).toBe(`Couldn't load it. ${LOST}`);
+    expect((error as Error).message).toBe(`Nebula couldn’t load it ${LOST_CLAUSE}`);
   });
 
   it('passes the caller\'s own abort through as fetch threw it', async () => {
@@ -142,31 +145,33 @@ describe('each raw-fetch site: no answer is the connection line, a browser TypeE
   }];
 
   it('canvasSelection download (SelectionToolbar reads it with failureMessage)', async () => {
-    const heading = "Couldn't download the outputs.";
+    const heading = "Couldn’t download the outputs.";
+    const what = 'download the outputs';
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const lost = await downloadSelectedOutputs(selection()).catch((e: unknown) => e);
-    expect(failureMessage(lost, heading)).toBe(`${heading} ${LOST}`);
+    expect(failureMessage(lost, heading)).toBe(`Nebula couldn’t ${what} ${LOST_CLAUSE}`);
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/png' } })));
     restore = brokenObjectUrl();
     const broken = await downloadSelectedOutputs(selection()).catch((e: unknown) => e);
     expect(broken).toBeInstanceOf(TypeError);
     expect(broken).not.toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(broken, heading)).toBe(`${heading} ${GENERAL}`);
+    expect(failureMessage(broken, heading)).toBe(`Nebula couldn’t ${what} because the server didn’t accept it. ${GENERAL}`);
   });
 
   it('worldDownload (ModelNode, WorldPreview and MeshPreview read it with failureMessage)', async () => {
-    const heading = "Couldn't download the world.";
+    const heading = "Couldn’t download the world.";
+    const what = 'download the world';
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     const lost = await downloadWorldAsset('/api/outputs/world.spz', 'world.spz').catch((e: unknown) => e);
     expect(lost).toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(lost, heading)).toBe(`${heading} ${LOST}`);
+    expect(failureMessage(lost, heading)).toBe(`Nebula couldn’t ${what} ${LOST_CLAUSE}`);
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([1, 2, 3]))));
     restore = brokenObjectUrl();
     const broken = await downloadWorldAsset('/api/outputs/world.spz', 'world.spz').catch((e: unknown) => e);
     expect(broken).toBeInstanceOf(TypeError);
-    expect(failureMessage(broken, heading)).toBe(`${heading} ${GENERAL}`);
+    expect(failureMessage(broken, heading)).toBe(`Nebula couldn’t ${what} because the server didn’t accept it. ${GENERAL}`);
   });
 
   it('worldSplat: no answer is a ConnectionLostError (the viewer shows its own line)', async () => {

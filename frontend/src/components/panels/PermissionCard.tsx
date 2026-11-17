@@ -24,7 +24,7 @@ const OUTCOME_TEXT: Record<Exclude<PermissionStatus, 'pending' | 'sent'>, string
   allowed: 'Allowed once',
   denied: 'Denied',
   timed_out: 'Denied: no answer in time',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
 };
 
 function formatInput(input: unknown): string {

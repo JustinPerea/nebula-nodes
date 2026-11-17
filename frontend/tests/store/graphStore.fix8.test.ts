@@ -405,14 +405,14 @@ describe('M2 (GM r11 answer 4): Keep mine on a shot Codex removed', () => {
 });
 
 describe('the lines and the lows', () => {
-  it('another window: the removal and reorder lines in their no-agent shapes, with Use theirs', async () => {
+  it('another tab: the removal and reorder lines in their no-agent shapes, with Use theirs', async () => {
     const h = backend();
     h.failNext(1);
     typeIn('s2', 'mine');
     await sleep(15);
     h.other((shots) => shots.filter((s) => s.id !== 's2'), 'window');
     await sleep(30);
-    expect(clash()).toMatchObject({ line: '“Shot 2” was removed in another window while you were editing it.', agent: null });
+    expect(clash()).toMatchObject({ line: '“Shot 2” was removed in another tab while you were editing it.', agent: null });
   });
 
   it('L1: the prompt names the change it clashes with, not the latest changer', async () => {
@@ -422,10 +422,10 @@ describe('the lines and the lows', () => {
     await sleep(15);
     h.other((shots) => setPrompt(shots, 's1', "window's s1"), 'window');
     await sleep(15);
-    expect(clash()?.line).toBe('“Opening” was changed in another window while you were editing it.');
+    expect(clash()?.line).toBe('“Opening” was changed in another tab while you were editing it.');
     h.other((shots) => setPrompt(shots, 's3', "codex's s3"));
     await sleep(15);
-    expect(clash()).toMatchObject({ line: '“Opening” was changed in another window while you were editing it.', agent: null });
+    expect(clash()).toMatchObject({ line: '“Opening” was changed in another tab while you were editing it.', agent: null });
   });
 
   it('L2: after 8 retries a sync sends nothing; the next change does; [Try again] does', async () => {

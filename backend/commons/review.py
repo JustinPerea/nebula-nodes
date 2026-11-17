@@ -140,7 +140,7 @@ def accept(store, position, revision, labels):
         if row is None or row['status'] != 'ready':
             raise ev.EvaluationError('Wait for the agent to grade this reference before you review it.')
         if type(revision) is not int or revision != row['revision']:
-            raise ev.EvaluationError('This review changed in another window. Reload before saving.')
+            raise ev.EvaluationError('This review changed in another tab. Reload before saving.')
         ev.validate_labels(labels, json.loads(item['palette']), vocabulary=json.loads(batch['manifest'])['vocabulary_terms'], complete=True)
         conn.execute("UPDATE assisted_reviews SET reviewed_labels=?,reviewer='human:justin',reviewed_at=?,revision=revision+1 WHERE position=?",
                      (ev.canonical(labels), now_iso(), position))

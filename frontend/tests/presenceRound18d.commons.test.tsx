@@ -360,8 +360,9 @@ describe('a settings write that landed, whose read-back failed (GM r32 3, review
     await tick(1000);
     const lines = commonsLines();
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^Couldn’t link the folder\./);
-    expect(document.querySelector('[data-commons-line]')!.hasAttribute('data-line-neutral')).toBe(false);
+    expect(lines[0]).toMatch(/^Nebula couldn’t link the folder because /);
+    // The action's line is a because line now, so it takes the one neutral look (CommonsErrorLine's isBecauseFailure).
+    expect(document.querySelector('[data-commons-line]')!.hasAttribute('data-line-neutral')).toBe(true);
   });
 });
 

@@ -630,7 +630,7 @@ describe('graphStore', () => {
     // error-copy round 2 (GM): a 5xx says Nebula didn't respond, whatever its
     // body said; the backend's text stays in the console.
     expect(alertMock).toHaveBeenCalledWith(
-      "Couldn't add “World Labs Environment”. Nebula didn't respond. Try again.",
+      "Nebula couldn’t add “World Labs Environment” because the server didn’t respond. Try again.",
     );
   });
 
@@ -696,7 +696,7 @@ describe('graphStore', () => {
     expect(nodeId).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    expect(alertMock).toHaveBeenCalledWith("Couldn't add “Text Input”. Nebula isn't connected yet. Try again once it is.");
+    expect(alertMock).toHaveBeenCalledWith("Couldn’t add “Text Input”. Nebula isn’t connected yet. Try again once it is.");
     expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
   });
 
@@ -783,7 +783,7 @@ describe('graphStore', () => {
     // Round 14 (GM dropped round 13's offline add line): the add heading,
     // as round 12 had it; the reason goes to the Agent log. Before round 12:
     // "Couldn't add Text Input. Nebula lost contact with its backend, ...".
-    expect(alertMock).toHaveBeenCalledWith("Couldn't add \u201cText Input\u201d.");
+    expect(alertMock).toHaveBeenCalledWith('Nebula couldn’t add \u201cText Input\u201d.');
   });
 
   it('removes a node and cleans up connected edges', async () => {

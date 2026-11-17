@@ -53,7 +53,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let blocked = 0;
 subscribeBlockedEdits(() => { blocked += 1; });
 
-const STOP_LINE = "Couldn't stop the run. Nebula isn't answering, so it may still be going.";
+const STOP_LINE = "Couldn’t stop the run. Nebula isn’t answering, so it may still be going.";
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -348,7 +348,7 @@ describe('the 507 run line (GM, locked)', () => {
     });
     await useGraphStore.getState().executeNode('n1');
     expect(notices).toEqual([
-      "Couldn't run “Brief”. Nebula couldn't save its run safeguards, so nothing was started. Restart Nebula, then try again.",
+      "Nebula couldn’t run “Brief” because it couldn’t save its run safeguards, so nothing was started. Restart Nebula, then try again.",
     ]);
     expect(useGraphStore.getState().isExecuting).toBe(false);
   });
@@ -358,7 +358,7 @@ describe('held-delete reason lines (GM, round 16)', () => {
   it('the node being deleted holds the ID: "It", and the button in curly quotes', async () => {
     const { heldDeleteText } = await import('../../src/lib/worldLabsWaiting');
     expect(heldDeleteText(1, false, 1, '“Lighthouse world”')).toBe(
-      "Couldn't delete “Lighthouse world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
+      "Nebula couldn’t delete “Lighthouse world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });
 
   it("the backend's own refusal of a node is that node's: \"It\"", async () => {
@@ -366,7 +366,7 @@ describe('held-delete reason lines (GM, round 16)', () => {
     expect(deleteRefusalText("Couldn't delete the node.", 1,
       ['“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.'],
       '“Lighthouse world”')).toBe(
-      "Couldn't delete “Lighthouse world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
+      "Nebula couldn’t delete “Lighthouse world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });
 });
 

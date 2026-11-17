@@ -83,12 +83,12 @@ describe('extractPaletteFromImage', () => {
 });
 
 describe('paletteNotice', () => {
-  it('puts the reason under the heading for the two known cases', () => {
-    expect(paletteNotice('a.png', 'decode')).toBe("Couldn't find colors in “a.png”.\nNebula can't read this image. Try a PNG or JPEG.");
-    expect(paletteNotice('a.png', 'transparent')).toBe("Couldn't find colors in “a.png”.\nThis image is too transparent to pull colors from.");
+  it('puts the reason after “because” for the two known cases', () => {
+    expect(paletteNotice('a.png', 'decode')).toBe('Nebula couldn’t find colors in “a.png” because the image isn’t in a format Nebula reads. Try a PNG or JPEG.');
+    expect(paletteNotice('a.png', 'transparent')).toBe('Nebula couldn’t find colors in “a.png” because it’s too transparent to pull colors from.');
   });
 
   it('gives the heading alone otherwise', () => {
-    expect(paletteNotice('a.png', 'other')).toBe("Couldn't find colors in “a.png”.");
+    expect(paletteNotice('a.png', 'other')).toBe("Nebula couldn’t find colors in “a.png”.");
   });
 });

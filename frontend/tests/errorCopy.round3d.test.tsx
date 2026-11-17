@@ -35,13 +35,14 @@ import { RUNTIME_FIELDS } from '../src/lib/canvasUndo';
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => resetDeletedSceneEditsForTests());
 
-const HEADING = "Couldn't run the node.";
 const BUSY = 'Meshy is busy. Wait a moment, then run the node again.';
+const BUSY_LINE = 'Nebula couldn’t run the node because Meshy is busy. Wait a moment, then run the node again.';
 const RAW = 'Meshy submit failed (429): {"message":"Too many requests","request_id":"req_429"}';
 const OWN = 'Meshy is taking longer than usual. The job may still finish there and be billed, so check Meshy before you run the node again.';
 
+const OWN_LINE = 'Nebula couldn’t run the node because Meshy is taking longer than usual. The job may still finish there and be billed, so check Meshy before you run the node again.';
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message')?.textContent ?? null;
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUi = { ...useUIStore.getState() };
@@ -54,10 +55,10 @@ afterEach(() => {
 describe("a line for a provider's answer", () => {
   it("keeps the provider's words behind a closed Details", () => {
     expect(nodeErrorCopy({ raw: RAW, category: 'rate_limit', person: BUSY, providerText: true }))
-      .toEqual({ heading: HEADING, reason: BUSY, details: RAW });
+      .toEqual({ heading: '', reason: BUSY_LINE, details: RAW });
     const { container } = render(<NodeError raw={RAW} category="rate_limit" person={BUSY} providerText />);
-    expect(heading(container)).toBe(HEADING);
-    expect(reason(container)).toBe(BUSY);
+    expect(heading(container)).toBeNull();
+    expect(reason(container)).toBe(BUSY_LINE);
     const details = container.querySelector('details')!;
     expect(details).not.toBeNull();
     expect(details.open).toBe(false);
@@ -66,14 +67,14 @@ describe("a line for a provider's answer", () => {
 
   it("a line in Nebula's own words still shows none", () => {
     expect(nodeErrorCopy({ raw: 'Meshy task timed out after 300 polls', category: 'timeout', person: OWN }))
-      .toEqual({ heading: HEADING, reason: OWN, details: null });
+      .toEqual({ heading: '', reason: OWN_LINE, details: null });
   });
 
   it('the Batch card reads it the same way', () => {
     const data: NodeData = { definitionId: 'batch', label: 'Batch', params: { items_text: 'a' }, state: 'error',
       outputs: {}, error: RAW, errorCategory: 'rate_limit', errorPerson: BUSY, errorProviderText: true };
     const { container } = render(<BatchNode {...({ id: 'b1', data, selected: false } as unknown as NodeProps)} />);
-    expect(reason(container)).toBe(BUSY);
+    expect(reason(container)).toBe(BUSY_LINE);
     expect(container.querySelector('details')!.textContent).toContain('req_429');
   });
 
@@ -87,7 +88,7 @@ describe("a line for a provider's answer", () => {
     useUIStore.setState({ viewMode: 'cinema-editor', cinemaEditorNodeId: 'n1' });
     const { container } = render(<CinemaShotPanel cinemaNodeId="n1" scene={spec} shot={spec.shots[0]} onChangeShot={vi.fn()} />);
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(reason(error)).toBe(BUSY);
+    expect(reason(error)).toBe(BUSY_LINE.replace('run the node because', 'generate the shot because'));
     expect(error.querySelector('details')!.textContent).toContain('req_429');
   });
 });

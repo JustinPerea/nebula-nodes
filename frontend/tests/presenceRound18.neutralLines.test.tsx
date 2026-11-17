@@ -62,11 +62,11 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
       ['load this image', 404, 'not found', 'Nebula couldn’t load this image because the file isn’t there anymore.'],
       ['load this video', 404, 'not found', 'Nebula couldn’t load this video because the file isn’t there anymore.'],
       ['load Commons settings', 401, 'invalid UI session token',
-        'Nebula couldn’t load Commons settings because this window’s session ended. Reload to sign in again.'],
+        'Nebula couldn’t load Commons settings because this tab’s session ended. Reload to sign in again.'],
       ['load Commons settings', 401, 'no UI session: open Nebula from the desktop app or use the dev link',
-        'Nebula couldn’t load Commons settings because this window’s session ended. Reload to sign in again.'],
+        'Nebula couldn’t load Commons settings because this tab’s session ended. Reload to sign in again.'],
       ['load Commons settings', 403, 'only the human UI session can do this',
-        'Nebula couldn’t load Commons settings because this window isn’t signed in as you. Reload to sign in again.'],
+        'Nebula couldn’t load Commons settings because this tab isn’t signed in as you. Reload to sign in again.'],
       ['load Commons settings', 403, undefined,
         'Nebula couldn’t load Commons settings because you don’t have access to this anymore. Reload to sign in again.'],
       ['load the references', 422, undefined, 'Nebula couldn’t load the references because the server didn’t accept it. Try again.'],
@@ -188,16 +188,17 @@ describe('the reasons mapped here are the backend\'s own words (round 18c)', () 
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const backend = ['routes/commons.py', 'commons/actors.py', 'commons/evaluation.py', 'commons/person_copy.py', 'services/refusal_copy.py']
-      .map((file) => readFileSync(join(__dirname, '../../backend', file), 'utf8')).join('\n');
+      // The backend writes curly apostrophes; the keys match with apostrophes folded (errorCopy's foldApostrophes).
+      .map((file) => readFileSync(join(__dirname, '../../backend', file), 'utf8').replace(/’/g, "'")).join('\n');
     const { COMMONS_OFF_DETAIL } = await import('../src/lib/errorCopy');
-    expect(backend).toContain(`detail="${COMMONS_OFF_DETAIL}"`);
+    expect(backend).toContain(`detail="${COMMONS_OFF_DETAIL.replace(/’/g, "'")}"`);
     // Round 18d (review 14 LOW-4): the blob route's own 404, not a longer "… not found".
     expect(backend).toContain('detail="not found"');
     for (const detail of LOAD_BECAUSE.keys()) {
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).
       if (detail === 'not found') continue;
       if (detail.startsWith('That reference isn\'t there anymore')) { expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}."); continue; }
-      expect(backend, detail).toContain(detail);
+      expect(backend, detail).toContain(detail.replace(/’/g, "'"));
     }
   });
 });

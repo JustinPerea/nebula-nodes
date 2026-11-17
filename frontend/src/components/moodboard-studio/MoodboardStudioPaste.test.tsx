@@ -3072,7 +3072,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.board?.images.map((img) => img.url)).toEqual([river]);
   });
 
-  it('a queued send whose owned name landed from another window before it was refused: the record keeps no field, and the resend PUTs none (review 9 R23, R24)', async () => {
+  it('a queued send whose owned name landed from another tab before it was refused: the record keeps no field, and the resend PUTs none (review 9 R23, R24)', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);

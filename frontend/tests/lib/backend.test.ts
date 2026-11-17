@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { getBackendBaseUrl, backendAssetUrlSync, rewriteExecutionAssetUrls } from '../../src/lib/backend';
 
-const LOST_CONNECTION = "Nebula's server isn't answering. Make sure it's running, then try again.";
+const LOST_CONNECTION = "Nebula’s server isn’t answering. Make sure it’s running, then try again.";
 
 // In test mode discovery resolves to http://localhost:8000 and caches it, so
 // backendAssetUrlSync can rewrite server-relative asset paths to an absolute
@@ -551,7 +551,7 @@ describe('browser/Vite mode unchanged when bridge absent (VAL-TRANSPORT-010)', (
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const backend = await import('../../src/lib/backend');
     const error = await backend.getBackendBaseUrl().catch((e: unknown) => e) as Error & { detail?: unknown; status?: number };
-    expect(error.message).toBe("Nebula's backend isn't running. Start it, then reload.");
+    expect(error.message).toBe("Nebula’s backend isn’t running. Start it, then reload.");
     expect(error.status).toBe(0);
     expect(String(error.detail)).toMatch(/Nebula backend not found on localhost ports 8000/);
   });

@@ -130,7 +130,7 @@ describe('a project opened elsewhere while the Commons holds unsaved labels', ()
     otherTabOpensBeta();
     await flush();
     expect(useProjectStore.getState()).toMatchObject({ screen: 'workspace', initialized: false,
-      error: expect.stringMatching(/^The active project changed in another window/) });
+      error: expect.stringMatching(/^The active project changed in another tab/) });
     expect(useUIStore.getState().viewMode).toBe('commons');
 
     setCommonsUnsaved(false);

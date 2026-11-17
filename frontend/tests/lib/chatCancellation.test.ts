@@ -22,15 +22,15 @@ describe('chat cancellation truth state', () => {
     });
   });
 
-  it('does not label a request as cancelled before confirmation', () => {
+  it('does not label a request as canceled before confirmation', () => {
     expect(chatCancellationNotice('requested')).toEqual({
       text: 'Cancellation requested…',
     });
-    expect(chatCancellationNotice('requested').text).not.toBe('Cancelled.');
-    expect(chatCancellationNotice('confirmed')).toEqual({ text: 'Cancelled.' });
+    expect(chatCancellationNotice('requested').text).not.toBe('Canceled.');
+    expect(chatCancellationNotice('confirmed')).toEqual({ text: 'Canceled.' });
   });
 
-  it('represents failed cancellation without calling it cancelled', () => {
+  it('represents failed cancellation without calling it canceled', () => {
     expect(transitionChatCancellation('requested', { type: 'failed', active: true })).toEqual({
       state: 'failed',
       busy: true,
@@ -50,7 +50,7 @@ describe('chat cancellation truth state', () => {
     // never "failed:".
     expect(chatCancellationDisconnectNotice('requested')).toEqual({
       // GM, round 3, verbatim: "People need to know it might still be spending."
-      text: "Couldn’t stop the reply. The connection dropped before Nebula confirmed the stop. The reply may still be running.",
+      text: "Nebula couldn’t stop the reply because the connection dropped before Nebula confirmed the stop. The reply may still be running.",
       tone: 'error',
     });
     expect(chatCancellationDisconnectNotice('idle')).toBeNull();
@@ -58,10 +58,10 @@ describe('chat cancellation truth state', () => {
 
   it('a failed stop names the action and a written reason (error-copy round 2)', () => {
     expect(chatCancellationNotice('failed', "Nebula's server isn't answering. Make sure it's running, then try again.")).toEqual({
-      text: "Couldn’t stop the reply. Nebula's server isn't answering. Make sure it's running, then try again.",
+      text: "Nebula couldn’t stop the reply because the server isn’t answering. Check that Nebula is running, then try again.",
       tone: 'error',
     });
     expect(chatCancellationNotice('failed').text)
-      .toBe("Couldn’t stop the reply. Try again, or reload if it keeps happening.");
+      .toBe("Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 });

@@ -6,7 +6,7 @@
  * Round 4 (GM - Design, replying to #180's "For GM"): "LATE LINES: drop the
  * node word, which fixes the mismatch for good. "After the restore, 1
  * proposal couldn't be reopened." / "…{n} proposals couldn't be reopened."
- * "After the restore, 1 pin couldn't be re-attached." / "…{n} pins couldn't
+ * "After the restore, Nebula couldn’t reattach 1 pin." / "…{n} pins couldn't
  * be re-attached." "After the restore, {p} pin(s) and {q} proposal(s)
  * couldn't be restored." (each noun by its own count). Keep the × Dismiss.
  * With two notices showing, put the late line above the newer one, so the
@@ -72,7 +72,7 @@ const LAZY = { timeout: 10_000 };
 const SLOW = 20_000;
 const CLAUDE = { kind: 'agent', id: 'claude-code', name: 'Claude Code', color: '#d97757' };
 const initialGraph = { ...useGraphStore.getState() };
-const ONE_LATE = "After the restore, 1 proposal couldn't be reopened.";
+const ONE_LATE = "After the restore, Nebula couldn’t reopen 1 proposal.";
 
 function textNode(id: string): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 0 },
@@ -130,19 +130,19 @@ describe("GM's lines for a late count", () => {
 
   it('proposals, verbatim (no node word), singular and plural by the proposal count', () => {
     expect(lateText?.(1, 0)).toBe(ONE_LATE);
-    expect(lateText?.(2, 0)).toBe("After the restore, 2 proposals couldn't be reopened.");
-    expect(lateText?.(7, 0)).toBe("After the restore, 7 proposals couldn't be reopened.");
+    expect(lateText?.(2, 0)).toBe("After the restore, Nebula couldn’t reopen 2 proposals.");
+    expect(lateText?.(7, 0)).toBe("After the restore, Nebula couldn’t reopen 7 proposals.");
   });
 
   it("pins on another model, GM's round 4 lines verbatim", () => {
-    expect(lateText?.(0, 1)).toBe("After the restore, 1 pin couldn't be re-attached.");
-    expect(lateText?.(0, 3)).toBe("After the restore, 3 pins couldn't be re-attached.");
+    expect(lateText?.(0, 1)).toBe("After the restore, Nebula couldn’t reattach 1 pin.");
+    expect(lateText?.(0, 3)).toBe("After the restore, Nebula couldn’t reattach 3 pins.");
   });
 
   it("both counts on GM's one line when both apply, each noun following its count", () => {
-    expect(lateText?.(2, 1)).toBe("After the restore, 1 pin and 2 proposals couldn't be restored.");
-    expect(lateText?.(1, 2)).toBe("After the restore, 2 pins and 1 proposal couldn't be restored.");
-    expect(lateText?.(1, 1)).toBe("After the restore, 1 pin and 1 proposal couldn't be restored.");
+    expect(lateText?.(2, 1)).toBe("After the restore, Nebula couldn’t restore 1 pin and 2 proposals.");
+    expect(lateText?.(1, 2)).toBe("After the restore, Nebula couldn’t restore 2 pins and 1 proposal.");
+    expect(lateText?.(1, 1)).toBe("After the restore, Nebula couldn’t restore 1 pin and 1 proposal.");
   });
 
   it('nothing missed, no line', () => {
@@ -179,7 +179,7 @@ describe('a late restore count', () => {
     await restoreWithAnswerHeld({ pinsLeft: [{ id: 'pin_1', code: 'another-model', reason: 'The node is another model now.' }] });
     useGraphStore.getState().beginUndoStep();
     await release();
-    expect(late()).toMatchObject({ text: "After the restore, 1 pin couldn't be re-attached." });
+    expect(late()).toMatchObject({ text: "After the restore, Nebula couldn’t reattach 1 pin." });
   });
 
   it('nothing missed: no line', async () => {
@@ -218,7 +218,7 @@ describe('a late restore count', () => {
     useGraphStore.getState().beginUndoStep();
     await release();
     await release();
-    expect(late()).toMatchObject({ text: "After the restore, 2 proposals couldn't be reopened." });
+    expect(late()).toMatchObject({ text: "After the restore, Nebula couldn’t reopen 2 proposals." });
   });
 
   it("an agent's undo: the count shows on its own line once its notice is gone", async () => {
@@ -238,7 +238,7 @@ describe('a late restore count', () => {
   it('with no newer step, nothing changes: "Restored the node. 1 proposal couldn\'t be reopened." with Redo, and no late line', async () => {
     await restoreWithAnswerHeld();
     await release();
-    expect(notice()).toMatchObject({ text: "Restored the node. 1 proposal couldn't be reopened.", offer: 'redo' });
+    expect(notice()).toMatchObject({ text: "Restored the node. Nebula couldn’t reopen 1 proposal.", offer: 'redo' });
     expect(notice()?.entry).toBe(top('redoStack'));
     expect(late()).toBeNull();
   });

@@ -41,8 +41,8 @@ describe('the lines that name several nodes use it', () => {
   });
   it('the multi-delete toasts', () => {
     expect(deleteNoAnswerLine(['Text', 'Text'])).toBe(
-      "Couldn't delete 2 “Text” nodes. Nebula isn't answering. Make sure it's running, then try again.");
+      "Nebula couldn’t delete 2 “Text” nodes because the server isn’t answering. Check that Nebula is running, then try again.");
     expect(deleteServerErrorLine(['Brief', 'Text', 'Text'])).toBe(
-      "Couldn't delete “Brief” and 2 “Text” nodes. Nebula ran into an error, so they're back on the canvas. Try again, and if it keeps happening, restart Nebula.");
+      "Nebula couldn’t delete “Brief” and 2 “Text” nodes because the server hit an error, so they’re back on the canvas. Try again, and if it keeps happening, restart Nebula.");
   });
 });

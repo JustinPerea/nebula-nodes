@@ -11,7 +11,7 @@ import { ConnectionLostError } from '../../src/lib/errorCopy';
  * back exactly as fetch threw it.
  */
 
-const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
+const LOST = "Nebula’s server isn’t answering. Make sure it’s running, then try again.";
 
 beforeAll(async () => { await getBackendBaseUrl(); });
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -51,7 +51,7 @@ describe('round 2: apiRequest names its action', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     const error = await backend.apiRequest("Couldn't load your API keys.", '/api/settings').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ConnectionLostError);
-    expect((error as Error).message).toBe(`Couldn't load your API keys. ${LOST}`);
+    expect((error as Error).message).toBe('Nebula couldn’t load your API keys because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('a 503: heading + GM\'s line, the status kept; an allowed status comes back as it is', async () => {
@@ -59,7 +59,7 @@ describe('round 2: apiRequest names its action', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 503 })));
     const error = await backend.apiRequest("Couldn't load your API keys.", '/api/settings').catch((e: unknown) => e);
-    expect((error as Error).message).toBe("Couldn't load your API keys. Nebula didn't respond. Try again.");
+    expect((error as Error).message).toBe("Nebula couldn’t load your API keys because the server didn’t respond. Try again.");
     expect((error as { status: number }).status).toBe(503);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })));
     expect((await backend.apiRequest("Couldn't load the board.", '/api/moodboards/x', undefined, { allow: [404] })).status).toBe(404);

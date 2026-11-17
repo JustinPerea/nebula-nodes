@@ -569,7 +569,7 @@ describe('round 19 (review 18)', () => {
     it('W5b: a refused undo of typing while the person typed into another field: nothing is undone, here or in Nebula', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'n1', note: 'x' } }]);
       type('n1', 'A'); await tick(1100);
-      refuse((path) => path === '/api/graph/restore', 409, 'Nope.');
+      refuse((path) => path === '/api/graph/restore', 409, 'That step is no longer there.');
       nebula().holdAnswers = true;
       await undo();
       store().updateNodeData('n1', { params: { ...nodeOf('n1')!.data.params, note: 'y' } });
@@ -579,7 +579,7 @@ describe('round 19 (review 18)', () => {
       await tick(6000);
       expect(nebula().nodes.get('n1')?.params).toEqual({ value: 'A', note: 'y' });
       expect(nodeOf('n1')?.data.params).toEqual({ value: 'A', note: 'y' });
-      expect(lines()).toContain("Couldn’t undo that. Nope.");
+      expect(lines()).toContain('Nebula couldn’t undo that because that step is no longer there.');
     });
   });
 

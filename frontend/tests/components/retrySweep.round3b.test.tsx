@@ -77,7 +77,9 @@ describe('Undo in the delete toast', () => {
     expect(result.current.lastDeleted?.id).toBe('a');
     // The toast (Undo restores A) says nothing about B; the Studio's notice does.
     expect(result.current.undoError).toBeNull();
-    expect(result.current.deleteError).toEqual({ heading: "Couldn't delete the moodboard.", reason: "Nebula didn't respond. Try again." });
+    const line = 'Nebula couldn’t delete the moodboard because the server didn’t respond. Try again.';
+    expect(result.current.deleteError).toEqual({ heading: '', reason: line, button: line, cause: 'Nebula didn’t respond. Try again.',
+      what: 'delete the moodboard', status: 503 });
   });
 
   it('Undo\'s own failure shows in the toast in the because form, ending in Try again, because Undo redoes it', async () => {

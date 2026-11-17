@@ -77,18 +77,18 @@ describe('Krea connection contract', () => {
     // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason;
     // never "Could not", and still never the error's own text (it can hold
     // credential-bearing URLs).
-    const GENERAL = "Try again, or reload if it keeps happening.";
-    const HEADING = "Couldn't update the Krea connection.";
+    const GENERAL = 'because the server didn’t accept it. Try again, or reload if it keeps happening.';
+    const HEADING = 'Nebula couldn’t update the Krea connection';
     apiFetchMock.mockRejectedValueOnce(new Error('https://private.test/?token=fixture-secret'));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);
     // No answer, as apiFetch throws it: the connection line (typeerror, 2026-10-24).
     apiFetchMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch https://private.test/?token=fixture-secret')));
-    await expect(connectKrea()).rejects.toThrow(`${HEADING} Nebula's server isn't answering. Make sure it's running, then try again.`);
+    await expect(connectKrea()).rejects.toThrow(`${HEADING} because the server isn’t answering. Check that Nebula is running, then try again.`);
     // A TypeError that isn't fetch's no-answer (a bug in the browser) is GM's general line, not "isn't answering".
     apiFetchMock.mockRejectedValueOnce(new TypeError('Do not know how to serialize a BigInt https://private.test/?token=fixture-secret'));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);
     apiFetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: vi.fn() });
-    await expect(checkKreaConnection()).rejects.toThrow(`${HEADING} Nebula didn't respond. Try again.`);
+    await expect(checkKreaConnection()).rejects.toThrow(`${HEADING} because the server didn’t respond. Try again.`);
     apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => { throw new Error('token=fixture'); } });
     const error = await getKreaConnection().catch((e: Error) => e);
     expect(error.message).toBe(`${HEADING} ${GENERAL}`);
@@ -97,10 +97,10 @@ describe('Krea connection contract', () => {
 
   it("names the plans and the trial by their action, never 'Could not'", async () => {
     apiFetchMock.mockResolvedValueOnce({ ok: false, status: 400, json: vi.fn() });
-    await expect(getKreaPlans()).rejects.toThrow(/^Couldn't load the Krea plans\. /);
+    await expect(getKreaPlans()).rejects.toThrow(/^Nebula couldn’t load the Krea plans because /);
     apiFetchMock.mockRejectedValueOnce(new Error('https://private.test/?token=fixture-secret'));
     const trial = await startKreaTrial().catch((e: Error) => e);
-    expect(trial.message).toMatch(/^Couldn't start the Krea trial\. /);
+    expect(trial.message).toMatch(/^Nebula couldn’t start the Krea trial because /);
     expect(trial.message).not.toMatch(/token|Could not/);
   });
 
@@ -117,7 +117,7 @@ describe('Krea connection contract', () => {
     await expect(startKreaTrial()).resolves.toBe('https://checkout.stripe.com/c/pay/cs_1');
     expect(apiFetchMock.mock.calls).toEqual([['/api/krea/plans'], ['/api/krea/trial', { method: 'POST' }]]);
     apiFetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://stripe.evil.test/pay' }) });
-    await expect(startKreaTrial()).rejects.toThrow('unexpected trial link');
+    await expect(startKreaTrial()).rejects.toThrow('Nebula couldn’t start the Krea trial because Krea sent back a trial link Nebula didn’t expect.');
   });
 
   it('accepts billing links only on Krea, or Stripe checkout for the trial', () => {

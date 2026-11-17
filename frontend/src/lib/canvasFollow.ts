@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { becauseLine } from './errorCopy';
 
 /**
  * Round 20 of PR #195 (review 19, M1; GM - Design's follow-up of 2026-10-27).
@@ -122,14 +123,14 @@ export function runWhileFollowingLine(node: string | null, agent: string | null,
   byNebula = false): string {
   const what = count !== undefined && count >= 2 ? `${count} nodes` : node === null ? 'the canvas' : `“${node}”`;
   if (byNebula) return `You can run ${what} when “${project}” opens.`;
-  return `Nebula couldn’t run ${what}. ${followingReason({ agent, projectName: project })}`;
+  return becauseLine({ heading: `Couldn’t run ${what}.`, reason: followingReason({ agent, projectName: project }) });
 }
 
 /** Create's line while following (G1), in its normal error style: its own
  * heading (graphStore's GENERATE_HEADING) over followingReason. */
 export const CREATE_WHILE_FOLLOWING_HEADING = 'Nebula couldn’t start the generation.';
 export function createWhileFollowingLine(switching: FollowingSwitch | null): string {
-  return `${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`;
+  return becauseLine({ heading: CREATE_WHILE_FOLLOWING_HEADING, reason: followingReason(switching) });
 }
 
 /** Tests share one module: each starts from here. */

@@ -17,6 +17,7 @@ import { noticeSpy } from './helpers/noticeSpy';
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 const FORGET = "Couldn't forget the recovery safeguard.";
+const FORGET_ONE_LINE = "Nebula couldn’t forget the recovery safeguard";
 const GENERAL = "Try again, or reload if it keeps happening.";
 const checkpoint = { runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'operation-saved', existingWorldId: null, durable: true };
 
@@ -40,7 +41,7 @@ describe('Forget ID never shows a raw message', () => {
     useGraphStore.setState({ providerRecoveries: [checkpoint],
       deleteProviderRecovery: vi.fn().mockRejectedValue(new Error('Backend still has an active provider task.')) });
     forget();
-    await waitFor(() => expect(alert).toHaveBeenCalledWith(`${FORGET} ${GENERAL}`));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(`${FORGET_ONE_LINE} because the server didn’t accept it. ${GENERAL}`));
   });
 
   it('a request\'s failure says its own line', async () => {
@@ -49,16 +50,16 @@ describe('Forget ID never shows a raw message', () => {
     useGraphStore.setState({ providerRecoveries: [checkpoint],
       deleteProviderRecovery: vi.fn().mockRejectedValue(new RequestFailedError(FORGET, 409, { detail: line })) });
     forget();
-    await waitFor(() => expect(alert).toHaveBeenCalledWith(`${FORGET} ${line}`));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(`${FORGET_ONE_LINE} because a World Labs run is still starting. Try again in a moment.`));
   });
 
   it('the store\'s own refusals (no request made) are written lines, not developer text', async () => {
     useGraphStore.setState({ providerRecoveries: [checkpoint], isExecuting: true });
     await expect(useGraphStore.getState().deleteProviderRecovery('paid-run', 'world-node'))
-      .rejects.toThrow(`${FORGET} You can forget the recovery safeguard when the run finishes.`);
+      .rejects.toThrow('You can forget the recovery safeguard when the run finishes.');
     useGraphStore.setState({ providerRecoveries: [], isExecuting: false });
     await expect(useGraphStore.getState().deleteProviderRecovery('paid-run', 'world-node'))
-      .rejects.toThrow(`${FORGET} That recovery safeguard isn't there anymore. Reload to get the latest run history.`);
+      .rejects.toThrow(`${FORGET_ONE_LINE} because it isn’t there anymore. Reload to get the latest run history.`);
   });
 
   it('a checkpoint with two IDs (a broken state; nothing is sent) alerts GM\'s general line', async () => {
@@ -66,7 +67,7 @@ describe('Forget ID never shows a raw message', () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     useGraphStore.setState({ providerRecoveries: [{ ...checkpoint, existingWorldId: 'world-1' }] });
     forget();
-    await waitFor(() => expect(alert).toHaveBeenCalledWith(`${FORGET} ${GENERAL}`));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(`${FORGET_ONE_LINE} because the server didn’t accept it. ${GENERAL}`));
     expect(fetch).not.toHaveBeenCalled();
   });
 });
@@ -79,7 +80,7 @@ describe('I’ve checked Marble never shows a raw message', () => {
     });
     render(<ProviderRecoveryStatus />);
     fireEvent.click(screen.getByRole('button', { name: /^I’ve checked Marble\. Unlock / }));
-    await waitFor(() => expect(screen.getByText(`Couldn't unlock the node. ${GENERAL}`)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(`Nebula couldn’t unlock the node because the server didn’t accept it. ${GENERAL}`)).toBeTruthy());
     expect(screen.queryByText(/lifecycle fd/)).toBeNull();
   });
 });

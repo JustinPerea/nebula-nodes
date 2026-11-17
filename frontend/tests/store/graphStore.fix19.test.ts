@@ -460,7 +460,7 @@ describe('review 17 LOW-3 (GM r28 answer 1, r29 call 3): Undo saves first; still
     expect(said.slice(saidBefore.length).filter((line) => /save/i.test(line))).toEqual([]);
   });
 
-  it('it comes back matching Nebula (another window restored it with the person’s value): no stop, no line, no mark', async () => {
+  it('it comes back matching Nebula (another tab restored it with the person’s value): no stop, no line, no mark', async () => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 400);
     useGraphStore.getState().deleteNode('n1');

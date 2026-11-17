@@ -21,7 +21,6 @@ import type { SavedProject, TrashedProject } from '../src/lib/projects';
 import * as execution from '../src/lib/api';
 import { ConnectionLostError } from '../src/lib/errorCopy';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
-import { WORLD_LABS_NEEDS_CHECK } from '../src/lib/worldLabsWaiting';
 
 vi.mock('../src/lib/personSession', async (original) => ({
   ...await original<typeof import('../src/lib/personSession')>(),
@@ -51,6 +50,10 @@ const unavailable = (heading: string) => new projects.ProjectRequestError("Nebul
 const refused = (heading: string, reason: string, status = 409) => new projects.ProjectRequestError(reason, status, { heading });
 // The backend's refusal of an open over an unconfirmed World Labs run (GM, round 13 of PR #114).
 const WORLD_LABS_OPEN = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
+// A heading as the one line's action ("Couldn't open the project." -> "Nebula couldn’t open the project"), then its because clause.
+const nebula = (heading: string) => heading.replace(/^Couldn't /, 'Nebula couldn’t ').replace(/\.$/, '');
+const WORLD_LABS_OPEN_CLAUSE = 'because a World Labs run needs your check first. Use the notice at the top of the screen.';
+const STILL_GOING_CLAUSE = 'because a run is still going. Let it finish or stop it.';
 
 function listing(overrides: Partial<projects.ProjectList> = {}): projects.ProjectList {
   return { projects: [summary('alpha'), summary('beta')], trash: [], activeProjectId: 'alpha',
@@ -91,7 +94,7 @@ describe('Projects: Try again redoes the failed action', () => {
     resetProjectStoreForTests();
     vi.mocked(projects.listProjects).mockRejectedValueOnce(unavailable("Couldn't load your projects."));
     await useProjectStore.getState().initialize();
-    expect(useProjectStore.getState().error).toBe("Couldn't load your projects. Nebula didn't respond. Try again.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t load your projects because the server didn’t respond. Try again.");
     expect(offer()).toBe('redo');
     await useProjectStore.getState().retry();
     expect(useProjectStore.getState()).toMatchObject({ error: null, initialized: true });
@@ -101,7 +104,7 @@ describe('Projects: Try again redoes the failed action', () => {
     vi.mocked(projects.openProject).mockRejectedValueOnce(unavailable("Couldn't open the project."));
     await useProjectStore.getState().open('beta');
     expect(useProjectStore.getState().screen).toBe('home');
-    expect(useProjectStore.getState().error).toBe("Couldn't open the project. Nebula didn't respond. Try again.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t open the project because the server didn’t respond. Try again.");
     expect(offer()).toBe('redo');
     await useProjectStore.getState().retry();
     // It read the saved projects first (the first open may have landed), then opened beta.
@@ -126,7 +129,7 @@ describe('Projects: Try again redoes the failed action', () => {
   it('an open the backend refused (World Labs state, a 404) shows the full line and no Try again', async () => {
     vi.mocked(projects.openProject).mockRejectedValueOnce(refused("Couldn't open the project.", WORLD_LABS_OPEN));
     await useProjectStore.getState().open('beta');
-    expect(useProjectStore.getState().error).toBe(`Couldn't open the project. ${WORLD_LABS_OPEN}`);
+    expect(useProjectStore.getState().error).toBe(`Nebula couldn’t open the project ${WORLD_LABS_OPEN_CLAUSE}`);
     expect(offer()).toBe('none');
     vi.mocked(projects.openProject).mockRejectedValueOnce(refused("Couldn't open the project.",
       "That project isn't there anymore. Reload to get the latest projects.", 404));
@@ -138,7 +141,7 @@ describe('Projects: Try again redoes the failed action', () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(unavailable("Couldn't create the project."));
     await useProjectStore.getState().createProject('Fresh');
     // Round 3c (GM): "Couldn't confirm…" with the same object, then the mapped reason line.
-    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Nebula didn't respond. Try again checks your saved projects; it won't make the change twice.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t confirm the project change because the server didn’t respond. “Try again” checks your saved projects and won’t make the change twice.");
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
     expect(projects.createProject).toHaveBeenCalledTimes(1);
@@ -200,7 +203,7 @@ describe('Projects: Try again redoes the failed action', () => {
   it('deleting the open project with no reply: Try again reloads the saved projects (the full line), never a second delete', async () => {
     vi.mocked(projects.deleteProject).mockRejectedValueOnce(unavailable("Couldn't delete the project."));
     await useProjectStore.getState().remove('alpha');
-    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project was deleted. Nebula didn't respond. Try again checks your saved projects; it won't make the change twice.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t confirm the project was deleted because the server didn’t respond. “Try again” checks your saved projects and won’t make the change twice.");
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
     expect(projects.deleteProject).toHaveBeenCalledTimes(1);
@@ -276,7 +279,7 @@ describe('Projects: Try again redoes the failed action', () => {
     await useProjectStore.getState().flush().catch(() => {});
     vi.mocked(projects.pinProjectCover).mockRejectedValueOnce(unavailable("Couldn't set the cover."));
     await useProjectStore.getState().pinCover('beta', null);
-    expect(useProjectStore.getState()).toMatchObject({ saveStatus: 'error', saveError: "Couldn't save the project. Nebula didn't respond. Try again." });
+    expect(useProjectStore.getState()).toMatchObject({ saveStatus: 'error', saveError: "Nebula couldn’t save the project because the server didn’t respond. Try again." });
     await useProjectStore.getState().retrySave();
     expect(projects.pinProjectCover).toHaveBeenCalledTimes(1);
     expect(useProjectStore.getState().saveStatus).toBe('saved');
@@ -299,10 +302,10 @@ describe('Projects: Try again redoes the failed action', () => {
 describe('Projects: review fixes', () => {
   const ambiguity = { runId: 'run-wl', nodeId: 'n-wl', kind: 'worldlabs-environment' as const,
     message: 'held', durable: true };
-  const holdLine = (heading: string) => `${heading} ${WORLD_LABS_NEEDS_CHECK}`;
+  const holdLine = (heading: string) => `${nebula(heading)} ${WORLD_LABS_OPEN_CLAUSE}`;
   it("the Projects screen's own check says GM's round 13 line, word for word", () => {
     expect(holdLine("Couldn't open the project.")).toBe(
-      "Couldn't open the project. A World Labs run needs your check first. Use the notice at the top of the screen.");
+      "Nebula couldn’t open the project because a World Labs run needs your check first. Use the notice at the top of the screen.");
   });
 
   it('a startup load refused for good (the active project went away): Try again reloads, with the whole line, and recovers', async () => {
@@ -312,7 +315,7 @@ describe('Projects: review fixes', () => {
       "That project isn't there anymore. Reload to get the latest projects.", 404));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState()).toMatchObject({ initialized: false,
-      error: "Couldn't load the project. That project isn't there anymore. Reload to get the latest projects." });
+      error: "Nebula couldn’t load the project because it isn’t there anymore. Reload to get the latest projects." });
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
     expect(projects.listProjects).toHaveBeenCalledTimes(3);
@@ -349,7 +352,7 @@ describe('Projects: review fixes', () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().open('beta');
     // Round 3c (GM): "A run is still going. Let it finish or stop it, then try again."
-    expect(useProjectStore.getState().error).toBe("Couldn't open the project. A run is still going. Let it finish or stop it.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t open the project because a run is still going. Let it finish or stop it.");
     expect(offer()).toBe('redo');
     useGraphStore.setState({ isExecuting: false });
     await useProjectStore.getState().retry();
@@ -362,20 +365,19 @@ describe('Projects: review fixes', () => {
 // mapped reason line." and ""Finish or stop the current run…" → "A run is
 // still going. Let it finish or stop it, then try again."" Every variant.
 describe('round 3c: the older Projects lines', () => {
-  const STILL_GOING = 'A run is still going. Let it finish or stop it.';
 
   it('a lost create reply with no connection: the connection line after the heading', async () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'),
       { heading: "Couldn't create the project." }));
     await useProjectStore.getState().createProject('Fresh');
-    expect(useProjectStore.getState().error).toBe("Couldn't confirm the project change. Nebula's server isn't answering. Make sure it's running. Try again checks your saved projects; it won't make the change twice.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t confirm the project change because the server isn’t answering. “Try again” checks your saved projects and won’t make the change twice.");
     expect(offer()).toBe('reload');
   });
 
   it('New project while a run is going', async () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().createProject('New');
-    expect(useProjectStore.getState().error).toBe(`Couldn't create the project. ${STILL_GOING}`);
+    expect(useProjectStore.getState().error).toBe(`Nebula couldn’t create the project ${STILL_GOING_CLAUSE}`);
     expect(offer()).toBe('redo');
     expect(projects.createProject).not.toHaveBeenCalled();
   });
@@ -383,7 +385,7 @@ describe('round 3c: the older Projects lines', () => {
   it('deleting the open project while a run is going', async () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().remove('alpha');
-    expect(useProjectStore.getState().error).toBe(`Couldn't delete the project. ${STILL_GOING}`);
+    expect(useProjectStore.getState().error).toBe(`Nebula couldn’t delete the project ${STILL_GOING_CLAUSE}`);
     expect(offer()).toBe('redo');
     expect(projects.deleteProject).not.toHaveBeenCalled();
   });
@@ -393,13 +395,13 @@ describe('round 3c: the older Projects lines', () => {
     useGraphStore.setState({ reserveGraphImport: () => false });
     try {
       await useProjectStore.getState().open('beta');
-      expect(useProjectStore.getState().error).toBe(`Couldn't open the project. ${STILL_GOING}`);
+      expect(useProjectStore.getState().error).toBe(`Nebula couldn’t open the project ${STILL_GOING_CLAUSE}`);
     } finally { useGraphStore.setState({ reserveGraphImport: original }); }
     const load = useGraphStore.getState().loadProjectGraph;
     useGraphStore.setState({ loadProjectGraph: () => false });
     try {
       await useProjectStore.getState().open('beta');
-      expect(useProjectStore.getState().error).toBe(`Couldn't open the project. ${STILL_GOING}`);
+      expect(useProjectStore.getState().error).toBe(`Nebula couldn’t open the project ${STILL_GOING_CLAUSE}`);
     } finally { useGraphStore.setState({ loadProjectGraph: load }); }
   });
 
@@ -418,7 +420,7 @@ describe('round 3c-2: the startup load never shows an error\'s own message', () 
     vi.mocked(projects.getProject).mockRejectedValueOnce(new Error('internal: snapshot.nodes is not iterable'));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Couldn't load your projects. Try again, or reload the page if it keeps happening.");
+      .toBe("Nebula couldn’t load your projects because the server didn’t accept it. Try again, or reload if it keeps happening.");
     expect(offer()).not.toBe('none');
   });
 
@@ -427,13 +429,13 @@ describe('round 3c-2: the startup load never shows an error\'s own message', () 
       workspaceRevision: 'rev-other' });
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Couldn't load your projects. The active project changed while loading.");
+      .toBe("Nebula couldn’t load your projects because the active project changed while loading.");
   });
 
   it("a request's own written line still reads as it did", async () => {
     vi.mocked(projects.getProject).mockRejectedValueOnce(unavailable("Couldn't load the project."));
     await useProjectStore.getState().initialize();
-    expect(useProjectStore.getState().error).toBe("Couldn't load the project. Nebula didn't respond. Try again.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t load the project because the server didn’t respond. Try again.");
   });
 });
 
@@ -474,7 +476,7 @@ describe("round 3e: every Projects action reads a plain Error through GM's mappi
   ])('%s: the heading and the general line, Try again kept', async (action, heading, run) => {
     await run();
     const state = useProjectStore.getState();
-    expect(state.error).toBe(`${heading} ${GENERAL}`);
+    expect(state.error).toBe(`${nebula(heading)} because the server didn’t accept it. ${GENERAL}`);
     expect(state.error).not.toContain('iterable');
     // An open that may have landed keeps 3b's Try again: read the list, then open it.
     expect(state.errorRetry).toMatchObject(action === 'open' ? { action: 'load', reopen: 'beta' } : { action });
@@ -487,8 +489,8 @@ describe("round 3e: every Projects action reads a plain Error through GM's mappi
       data: { definitionId: 'text-input', label: 'Text', params: { value: 'changed' }, state: 'idle', outputs: {} } }] });
     await useProjectStore.getState().flush().catch(() => {});
     const state = useProjectStore.getState();
-    expect(state.saveError).toBe(`Couldn't save the project. ${GENERAL}`);
-    expect(state.error).toBe(`Couldn't save the project. ${GENERAL}`);
+    expect(state.saveError).toBe(`Nebula couldn’t save the project because the server didn’t accept it. ${GENERAL}`);
+    expect(state.error).toBe(`Nebula couldn’t save the project because the server didn’t accept it. ${GENERAL}`);
     expect(state.errorRetry?.action).toBe('save');
   });
 

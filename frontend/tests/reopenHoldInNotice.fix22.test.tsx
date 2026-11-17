@@ -120,7 +120,7 @@ describe('GM r33, 2: the failure headings this PR adds say who, with the curly a
       headers: { 'Content-Type': 'application/json' } }));
     for (const call of [() => projects.dismissCatalogRestore('r1'), () => projects.dismissCanvasHeldUnreadable('2026-10-31')]) {
       const error = await call().then(() => null, (e: unknown) => e);
-      expect(failureMessage(error, 'fallback').startsWith('Nebula couldn’t close the notice.')).toBe(true);
+      expect(failureMessage(error, 'fallback').startsWith('Nebula couldn’t close the notice because ')).toBe(true);
     }
   });
 

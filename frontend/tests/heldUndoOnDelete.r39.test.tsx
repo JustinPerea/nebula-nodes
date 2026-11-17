@@ -145,7 +145,7 @@ describe('an Undo held on a Delete (GM r39 item 3, r40 items 1 and 2)', () => {
     expect(ids()).toEqual(['n1', 'n2']);
     // The Delete's own line, alone: no "Nothing was undone", no skipped count beside it.
     expect(lines()).toHaveLength(1);
-    expect(lines()[0]).toMatch(/^Couldn.t delete/);
+    expect(lines()[0]).toMatch(/^Nebula couldn.t delete/);
     expect(lines().join(' ')).not.toMatch(/Nothing was undone|skipped|bring back/);
     // The press went to nothing: the edit below stays, nothing was restored.
     expect(store().nodes.find((n) => n.id === 'n1')?.data.params.value).toBe('Edited');
@@ -192,7 +192,7 @@ describe('an Undo held on a Delete (GM r39 item 3, r40 items 1 and 2)', () => {
     await answer('n2');
     expect(restores()).toHaveLength(1);
     expect(store().undoNotice?.text).toBe(bringBack('“Brief”'));
-    expect(lines().join(' ')).not.toMatch(/Couldn.t undo that/);
+    expect(lines().join(' ')).not.toMatch(/Nebula couldn.t undo that/);
     expect(ids()).toEqual(['n1']);
     // The delete's step is back, so Undo can be tried again.
     expect(stacks()).toEqual({ undo: 1, redo: 0 });

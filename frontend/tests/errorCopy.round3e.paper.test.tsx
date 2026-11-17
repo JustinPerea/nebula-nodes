@@ -25,6 +25,7 @@ import { PaperSourceNode } from '../src/components/nodes/PaperSourceNode';
 import { useGraphStore } from '../src/store/graphStore';
 
 const RAW = 'Paper CLI unavailable; open Paper Desktop or configure NEBULA_PAPER_CLI';
+const LINE_CLAUSE = 'Paper isn’t answering. Open Paper Desktop, then try again.';
 const LINE = "Paper isn't answering. Open Paper Desktop, then try again.";
 const identity = { fileId: 'file-a', pageId: 'page-a', objectId: 'logo-a', fileName: 'Logo file', pageName: 'Page 1',
   objectName: 'Editable A', openUrl: 'https://app.paper.design/file-a', navigation: 'file' as const };
@@ -57,7 +58,7 @@ describe("a Paper route's refusal", () => {
     vi.mocked(apiFetch).mockResolvedValue(answer(503, { detail: { message: RAW, person: LINE, source: kept } }));
     const error = await refreshPaperSource('source-a').catch((e: unknown) => e) as PaperSourceError;
     expect(error).toBeInstanceOf(PaperSourceError);
-    expect(error.message).toBe(`Couldn't refresh the source. ${LINE}`);
+    expect(error.message).toBe(`Nebula couldn’t refresh the source because ${LINE_CLAUSE}`);
     expect(error.source).toMatchObject({ lastError: RAW });
     expect(JSON.stringify(error.detail)).toContain('NEBULA_PAPER_CLI');
   });
@@ -65,13 +66,13 @@ describe("a Paper route's refusal", () => {
   it("an answer with no line reads GM's line for its status, never its body", async () => {
     vi.mocked(apiFetch).mockResolvedValue(answer(400, { detail: 'Paper tool failed' }));
     const error = await refreshPaperSource('source-a').catch((e: unknown) => e) as Error;
-    expect(error.message).toBe("Couldn't refresh the source. Try again, or reload if it keeps happening.");
+    expect(error.message).toBe("Nebula couldn’t refresh the source because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 
   it('an answer the browser cannot read names the action', async () => {
     vi.mocked(apiFetch).mockResolvedValue(new Response('<html>', { status: 200 }));
     const error = await refreshPaperSource('source-a').catch((e: unknown) => e) as Error;
-    expect(error.message).toMatch(/^Couldn't refresh the source\. /);
+    expect(error.message).toMatch(/^Nebula couldn’t refresh the source because /);
     expect(error.message).not.toMatch(/JSON|token|Unexpected/);
   });
 });
@@ -83,7 +84,7 @@ describe('the Paper source card', () => {
     vi.mocked(apiFetch).mockResolvedValue(answer(503, { detail: { message: RAW, person: LINE, source: kept } }));
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'Refresh source' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(`Couldn't refresh the source. ${LINE}`));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(`Nebula couldn’t refresh the source because ${LINE_CLAUSE}`));
     expect(document.body.textContent).not.toContain('NEBULA_PAPER_CLI');
     // Agents still read the specific text on the record.
     expect((useGraphStore.getState().nodes[0].data.params._paperSource as PaperSourceRecord).lastError).toBe(RAW);
@@ -92,7 +93,7 @@ describe('the Paper source card', () => {
   it("after a reload reads the record's line", () => {
     seed({ ...source, state: 'unavailable', lastError: RAW, lastErrorPerson: LINE });
     render(<Harness />);
-    expect(screen.getByRole('alert')).toHaveTextContent(`Couldn't refresh the source. ${LINE}`);
+    expect(screen.getByRole('alert')).toHaveTextContent(`Nebula couldn’t refresh the source because ${LINE_CLAUSE}`);
     expect(document.body.textContent).not.toContain('NEBULA_PAPER_CLI');
   });
 
@@ -100,7 +101,7 @@ describe('the Paper source card', () => {
     seed({ ...source, state: 'unavailable', lastError: RAW });
     render(<Harness />);
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent("Couldn't refresh the source. Try again, or reload if it keeps happening.");
+    expect(alert).toHaveTextContent("Nebula couldn’t refresh the source because the server didn’t accept it. Try again, or reload if it keeps happening.");
     const details = document.querySelector('details') as HTMLDetailsElement;
     expect(details.open).toBe(false);
     expect(details.textContent).toContain('NEBULA_PAPER_CLI');
@@ -112,7 +113,7 @@ describe('the Paper source card', () => {
     vi.mocked(openExternalUrl).mockRejectedValue(new Error('No protocol handler'));
     render(<Harness />);
     fireEvent.click(screen.getByRole('link', { name: 'Open in Paper' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't open Paper Desktop. Use Open source link."));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Nebula couldn’t open the source because Paper Desktop didn’t open it. Use “Open source link”."));
     expect(document.body.textContent).not.toMatch(/Could not|protocol handler/);
   });
 });

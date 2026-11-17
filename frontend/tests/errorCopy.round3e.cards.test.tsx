@@ -37,11 +37,10 @@ import { useUIStore } from '../src/store/uiStore';
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => resetDeletedSceneEditsForTests());
 
-const HEADING = "Couldn't run the node.";
 // Round 3f (GM): a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
-const GENERAL = "Run the node again. If it keeps failing, open Details.";
+const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 const PERSON = 'Add a fal.ai API key in Settings to run this node.';
 const TABLE_LINE = 'fal.ai is having trouble right now. Try again in a few minutes.';
@@ -63,8 +62,7 @@ const CASES: Record<string, Pick<NodeData, 'definitionId'> & Partial<NodeData>> 
   batchNode: { definitionId: 'batch' },
 };
 
-const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message')?.textContent ?? null;
 
 function seed(type: string, patch: Partial<NodeData>) {
   const node: Node<NodeData> = { id: 'n1', type, position: { x: 0, y: 0 },
@@ -104,7 +102,7 @@ describe('every card on the canvas shows its run error', () => {
       it("shows GM's general line over a closed Details for raw provider text", () => {
         seed(type, { state: 'error', error: RAW, errorCategory: 'unknown', errorFriendly: RAW.slice(0, 140) });
         const { container } = render(<Card type={type} />);
-        expect(heading(container)).toBe(HEADING);
+        expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
         expect(reason(container)).toBe(GENERAL);
         const details = container.querySelector('details.error-details') as HTMLDetailsElement | null;
         expect(details).not.toBeNull();
@@ -118,8 +116,8 @@ describe('every card on the canvas shows its run error', () => {
       it("keeps the provider's words behind Details under a status-table line", () => {
         seed(type, { state: 'error', error: RAW, errorCategory: 'unknown', errorPerson: TABLE_LINE, errorProviderText: true });
         const { container } = render(<Card type={type} />);
-        expect(heading(container)).toBe(HEADING);
-        expect(reason(container)).toBe(TABLE_LINE);
+        expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
+        expect(reason(container)).toBe(`Nebula couldn’t run the node because ${TABLE_LINE}`);
         const details = container.querySelector('details.error-details') as HTMLDetailsElement | null;
         expect(details).not.toBeNull();
         expect(details!.open).toBe(false);
@@ -129,8 +127,8 @@ describe('every card on the canvas shows its run error', () => {
       it("shows the person's line with no Details", () => {
         seed(type, { state: 'error', error: 'FAL_KEY is required', errorCategory: 'invalid_input', errorPerson: PERSON });
         const { container } = render(<Card type={type} />);
-        expect(heading(container)).toBe(HEADING);
-        expect(reason(container)).toBe(PERSON);
+        expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
+        expect(reason(container)).toBe(`Nebula couldn’t run the node. ${PERSON}`);
         expect(container.querySelector('details.error-details')).toBeNull();
         expect(container.textContent).not.toContain('FAL_KEY');
       });
@@ -138,9 +136,9 @@ describe('every card on the canvas shows its run error', () => {
       it('clears when the node runs again', () => {
         seed(type, { state: 'error', error: RAW, errorCategory: 'unknown' });
         const { container } = render(<Card type={type} />);
-        expect(heading(container)).toBe(HEADING);
+        expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
         act(() => useGraphStore.getState().handleExecutionEvent({ type: 'executing', nodeId: 'n1' } as ExecutionEvent));
-        expect(heading(container)).toBeNull();
+        expect(reason(container)).toBeNull();
         expect(container.querySelector('details.error-details')).toBeNull();
       });
     });
@@ -180,15 +178,15 @@ describe('a linked Paper source keeps its run error through a graph sync', () =>
       seed('paperSourceNode', { params: { _paperSource: linked(withSnapshot) }, state: withSnapshot ? 'complete' : 'idle',
         outputs: withSnapshot ? { image: { type: 'Image', value: snapshot.filePath } } : {} });
       const { container } = render(<Card type="paperSourceNode" />);
-      expect(heading(container)).toBeNull();
+      expect(reason(container)).toBeNull();
       await receive({ nodes: [synced(withSnapshot, { state: 'error', error: RAW, errorCategory: 'unknown',
         errorFriendly: RAW.slice(0, 140) })] });
       expect(useGraphStore.getState().nodes[0].data.state).toBe('error');
-      expect(heading(container)).toBe(HEADING);
+      expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
       expect(reason(container)).toBe(GENERAL);
       // A later sync that still carries the error (any agent edit) keeps it too.
       await receive({ nodes: [synced(withSnapshot, { state: 'error', error: RAW, errorCategory: 'unknown' })] });
-      expect(heading(container)).toBe(HEADING);
+      expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
     });
   }
 

@@ -1200,6 +1200,9 @@ export function withArticle(name: string): string {
   return `${/^[aeiou]/i.test(name) || /^x[A-Z]/.test(name) ? 'an' : 'a'} ${name}`;
 }
 
+/** The most providers a missing-key line names. */
+export const MAX_KEY_NAMES = 3;
+
 /** "Add a Replicate token in Settings to run this node.": the one line that
  * says which key to add, a sentence with its period (GM, PR #203 r26 item 5
  * and r28 item 3; copy sweep item 12): the provider switcher rows take it
@@ -1209,7 +1212,10 @@ export function withArticle(name: string): string {
  * key Settings stores. */
 export function addKeyLine(keys: readonly string[]): string | null {
   const phrase = keyPhrase(keys);
-  return phrase ? `Add ${withArticle(phrase)} in Settings to run this node.` : null;
+  if (!phrase) return null;
+  // A list of names stops at three (design's names rule); four or more are the providers the card lists above.
+  if (keys.length > MAX_KEY_NAMES) return "Add a key for one of the providers above in Settings to run this node.";
+  return `Add ${withArticle(phrase)} in Settings to run this node.`;
 }
 
 /** A missing key as a pre-run line (person_line.missing_key_line). */

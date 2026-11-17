@@ -23,7 +23,6 @@ const alertMock = noticeSpy();
 
 const { useGraphStore } = await import('../../src/store/graphStore');
 
-const NO_ANSWER = "Nebula didn't respond. Try again.";
 const REFUSED = "Try again, or reload if it keeps happening.";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json' } });
@@ -49,7 +48,7 @@ describe('adding a node', () => {
     useGraphStore.setState({ nodes: [textNode('n7')] as never });
     fetchMock.mockResolvedValueOnce(new Response('', { status: 400 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe(`Couldn't add “Text Input”. ${REFUSED}`);
+    expect(alerted()).toBe(`Nebula couldn’t add “Text Input” because the server didn’t accept it. ${REFUSED}`);
     expect(alerted()).not.toMatch(/HTTP|400/);
     // The status stays in the console.
     expect(warn.mock.calls.flat().join(' ')).toMatch(/HTTP 400/);
@@ -59,7 +58,7 @@ describe('adding a node', () => {
     useGraphStore.setState({ nodes: [textNode('n7')] as never });
     fetchMock.mockResolvedValueOnce(json({ detail: 'Paid-start safety journal unavailable' }, 503));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe(`Couldn't add “Text Input”. ${NO_ANSWER}`);
+    expect(alerted()).toBe('Nebula couldn’t add “Text Input” because the server didn’t respond. Try again.');
   });
 
   // Round 12 of PR #114 (GM approved): the first add on an empty tab no
@@ -73,13 +72,13 @@ describe('adding a node', () => {
   it('an export answer Nebula can\'t read: GM\'s line, nothing more', async () => {
     fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 200 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe('Couldn\'t add \u201cText Input\u201d.');
+    expect(alerted()).toBe('Nebula couldn’t add \u201cText Input\u201d.');
   });
 
   it('a refused graph export with no reason: GM\'s line, without the status', async () => {
     fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe('Couldn\'t add \u201cText Input\u201d.');
+    expect(alerted()).toBe('Nebula couldn’t add \u201cText Input\u201d.');
     expect(alerted()).not.toMatch(/HTTP|404/);
   });
 });
@@ -90,7 +89,7 @@ describe("a person-only refusal (code person_required, GM Q116 a)", () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'krea-2-generate: propose the change instead with propose_change',
       code: 'person_required' }, 403));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toBe("Couldn't add “Text Input”. This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.");
+    expect(alerted()).toBe("Nebula couldn’t add “Text Input” because this tab isn’t connected as you. Open the link Nebula printed when it started.");
   });
 });
 
@@ -100,7 +99,7 @@ describe('deleting a node', () => {
     fetchMock.mockResolvedValueOnce(new Response('', { status: 409 }));
     useGraphStore.getState().onNodesChange([{ type: 'remove', id: 'n1' }]);
     await vi.waitFor(() => expect(alertMock).toHaveBeenCalled());
-    expect(alerted()).toBe(`Couldn't delete the node. ${REFUSED}`);
+    expect(alerted()).toBe(`Nebula couldn’t delete the node because the server didn’t accept it. ${REFUSED}`);
     expect(useGraphStore.getState().nodes).toHaveLength(1);
   });
 
@@ -109,7 +108,7 @@ describe('deleting a node', () => {
     fetchMock.mockImplementation(async () => json({ detail: 'A run is going.' }, 409));
     useGraphStore.getState().onNodesChange([{ type: 'remove', id: 'n1' }, { type: 'remove', id: 'n2' }]);
     await vi.waitFor(() => expect(alertMock).toHaveBeenCalled());
-    expect(alerted()).toBe("Couldn't delete 2 nodes. A run is going.");
+    expect(alerted()).toBe("Nebula couldn’t delete 2 nodes because a run is going.");
   });
 
   // Review: a node another window already removed answers 404 ("Node 'n1'

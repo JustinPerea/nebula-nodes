@@ -131,7 +131,7 @@ describe('the surfaces', () => {
     useProjectStore.setState({ error: null, errorRetry: null, errorDetails: null, projects: [] } as never);
     projectsApi.pinProjectCover.mockRejectedValue(refused("Couldn't change the cover."));
     await useProjectStore.getState().pinCover('p1', '/api/outputs/a.png');
-    expect(useProjectStore.getState().error).toContain(PERSON_REQUIRED_COPY);
+    expect(useProjectStore.getState().error).toBe('Nebula couldn’t change the cover because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     notePersonPromoted();
     expect(useProjectStore.getState()).toMatchObject({ error: null, errorRetry: null, errorDetails: null });
   });

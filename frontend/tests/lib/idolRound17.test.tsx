@@ -13,7 +13,7 @@ import { NodeRunError } from '../../src/components/nodes/NodeError';
 import { ProviderSwitcher } from '../../src/components/nodes/ProviderSwitcher';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { routeAction, routeSwitch, routeUnavailable } from '../../src/lib/directRoute';
-import { RUN_NODE_HEADING, RUN_NOT_STARTED_HEADING } from '../../src/lib/nodeErrorCopy';
+import { RUN_NOT_STARTED_HEADING } from '../../src/lib/nodeErrorCopy';
 import type { PricingTable } from '../../src/lib/pricing';
 import { providerSwitchState } from '../../src/lib/providerSwitch';
 import { validationReadings } from '../../src/lib/validationCopy';
@@ -222,10 +222,10 @@ describe('one heading over a refused run: "Nebula couldn’t start the run." (GM
   it('the card: the heading over the line; a run that started keeps its own', () => {
     const data = { state: 'error', error: 'route unavailable', errorPerson: line } as const;
     const refused = render(<NodeRunError data={{ ...data, errorNotStarted: true }} className="x" />);
-    expect(refused.container).toHaveTextContent(`${RUN_NOT_STARTED_HEADING} ${line}`);
+    expect(refused.container).toHaveTextContent(`Nebula couldn’t start the run because ${line}`);
     refused.unmount();
     const failed = render(<NodeRunError data={data} className="x" />);
-    expect(failed.container).toHaveTextContent(`${RUN_NODE_HEADING} ${line}`);
+    expect(failed.container).toHaveTextContent(`Nebula couldn’t run the node because ${line}`);
     expect(RUN_NOT_STARTED_HEADING).toBe('Nebula couldn’t start the run.');
   });
 

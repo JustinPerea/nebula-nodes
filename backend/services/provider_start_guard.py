@@ -329,7 +329,7 @@ class ProviderStartGuard:
     def _assert_run_admissible_locked(self, run_id: str) -> None:
         if run_id in self._cancelled_runs or self._cancel_filter_contains(run_id):
             raise ProviderStartCancelledError(
-                f"run {run_id} was cancelled before it started"
+                f"run {run_id} was canceled before it started"
             )
         if len(self._cancelled_runs) >= self._max_records:
             raise ProviderStartCancellationCapacityError(

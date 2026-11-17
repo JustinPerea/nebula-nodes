@@ -758,11 +758,7 @@ export function updateSummary(project: SavedProject): void {
   }));
 }
 
-/** GM, round 3f: "Projects startup: drop "That didn't work." → "Couldn’t load
- * your projects. Try again, or reload if it keeps happening." A full
- * disk is the one cause a person can fix, so give it its own line". */
-const LOAD_GENERAL = 'Try again, or reload if it keeps happening.';
-
+/** A full disk is the one cause a person can fix, so it has its own line (design, round 3f). */
 const LOAD_DISK_FULL = 'Your disk is full. Free up some space, then try again.';
 
 
@@ -2373,8 +2369,8 @@ export function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
   // The person changed the active project in another tab. Keep our local
   // canvas available but stop saves and require a fresh, explicit choice from Home.
   preserveWorkspaceConflict(unsaved
-    ? 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.'
-    : 'The active project changed in another window. Reload projects to continue.', undefined, snapshot);
+    ? 'The active project changed in another tab. Try again to save your unsaved edits as a recovered project.'
+    : 'The active project changed in another tab. Reload projects to continue.', undefined, snapshot);
 }
 
 export const actions = {
@@ -2779,11 +2775,10 @@ export const actions = {
         // GM r7 (2): refused only because this tab isn't connected as the person.
         if (showNotConnectedLoad(error, saving ? 'save your unsaved edits' : 'load your work')) return;
         const copy = failureCopy(error, { heading: LOAD_HEADING });
-        const general = copy.reason === REFUSED_FALLBACK_COPY;
-        const reason = error instanceof RequestFailedError && error.storageFull ? LOAD_DISK_FULL
-          : general ? LOAD_GENERAL : copy.reason;
-        const line = oneLine({ heading: copy.heading, reason });
-        const shown = core.pendingRecovery && general ? LOAD_HEADING : line;
+        const general = copy.cause === REFUSED_FALLBACK_COPY;
+        const line = error instanceof RequestFailedError && error.storageFull
+          ? oneLine({ heading: LOAD_HEADING, reason: LOAD_DISK_FULL }) : copy.reason;
+        const shown = core.pendingRecovery && general ? `Nebula couldn’t ${failedWhat(LOAD_HEADING)}.` : line;
         set({ error: shown, errorDetails: detailsFor(shown, error),
           errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
       }

@@ -41,6 +41,8 @@ import { acceptProposal } from '../src/lib/canvasProposals';
 import { enhancePrompt } from '../src/lib/enhancePrompt';
 
 const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
+// Each as the one because line a heading's action makes of it (the reason itself stays GM_LINE/APP_LINE).
+const because = (what: string, tab: boolean) => `Nebula couldn’t ${what} because ${tab ? 'this tab isn’t connected as you. Open the link Nebula printed when it started.' : 'this window isn’t connected as you. Quit Nebula and open it again.'}`;
 const APP_LINE = "This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.";
 // GM, round 4 (2026-10-23), verbatim: the banners stay up, so each fits one line.
 const APP_BANNER = "This window isn’t connected as you. Quit Nebula and open it again.";
@@ -62,8 +64,8 @@ describe("GM's line for a person-only refusal", () => {
   it('is the reason of any request refused with code person_required; the agents\' text stays on the error', async () => {
     const error = await requestError("Couldn't recover the project.", personRequired());
     expect(error.reason).toBe(GM_LINE);
-    expect(error.message).toBe(`Couldn't recover the project. ${GM_LINE}`);
-    expect(failureCopy(error)).toEqual({ heading: "Couldn't recover the project.", reason: GM_LINE });
+    expect(error.message).toBe(because('recover the project', true));
+    expect(failureCopy(error)).toEqual({ heading: '', reason: because('recover the project', true), button: because('recover the project', true), cause: GM_LINE, what: 'recover the project', status: 403 });
     expect(error.detail).toBe(BILLING);
     expect(error.code).toBe('person_required');
     expect(details(error)).toBe(BILLING);
@@ -106,14 +108,14 @@ describe("GM's line for a person-only refusal", () => {
 
   it('Krea connection: the person gate\'s refusal says it, other refusals keep their line', async () => {
     apiFetch.mockResolvedValueOnce(personRequired());
-    await expect(connectKrea()).rejects.toThrow(`Couldn't update the Krea connection. ${GM_LINE}`);
+    await expect(connectKrea()).rejects.toThrow(because('update the Krea connection', true));
     apiFetch.mockResolvedValueOnce(json({ detail: 'Krea connection origin is not allowed' }, 403));
-    await expect(connectKrea()).rejects.toThrow(`Couldn't update the Krea connection. ${ACCESS_LOST_COPY}`);
+    await expect(connectKrea()).rejects.toThrow('Nebula couldn’t update the Krea connection because you don’t have access to this anymore. Reload to sign in again.');
   });
 
   it('Enhance prompt says it too', async () => {
     apiFetch.mockResolvedValue(json({ detail: 'Only the person can do this', code: 'person_required' }, 403));
-    await expect(enhancePrompt('x')).rejects.toThrow(GM_LINE);
+    await expect(enhancePrompt('x')).rejects.toThrow(because('enhance the prompt', true));
   });
 
   it('a reason for an answer read by hand classifies by code as well', () => {
@@ -123,7 +125,7 @@ describe("GM's line for a person-only refusal", () => {
     expect(typeof copyForAnswer).toBe('function');
     expect(copyForAnswer!(403, BILLING, 'person_required')).toBe(GM_LINE);
     expect(copyForAnswer!(403, BILLING, null)).toBe(BILLING);
-    expect(copyForAnswer!(503, BILLING, 'person_required')).toBe("Nebula didn't respond. Try again.");
+    expect(copyForAnswer!(503, BILLING, 'person_required')).toBe("Nebula didn’t respond. Try again.");
   });
 });
 
@@ -158,7 +160,7 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
     inTheApp();
     const error = await requestError("Couldn't recover the project.", personRequired());
     expect(error.reason).toBe(APP_LINE);
-    expect(error.message).toBe(`Couldn't recover the project. ${APP_LINE}`);
+    expect(error.message).toBe(because('recover the project', false));
     expect(details(error)).toBe(BILLING);
     const written = new RequestFailedError("Couldn't start the run.", 403,
       { detail: BILLING, reason: BILLING, code: 'person_required' });
@@ -171,8 +173,8 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
     const refused = await executeNode([], [], 'n1').catch((error: unknown) => error);
     expect((refused as ExecutionStartRejectedError).reason).toBe(APP_LINE);
     expect(details(refused)).toBe(BILLING);
-    await expect(connectKrea()).rejects.toThrow(`Couldn't update the Krea connection. ${APP_LINE}`);
-    await expect(enhancePrompt('x')).rejects.toThrow(APP_LINE);
+    await expect(connectKrea()).rejects.toThrow(because('update the Krea connection', false));
+    await expect(enhancePrompt('x')).rejects.toThrow(because('enhance the prompt', false));
     expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(APP_LINE);
     // Not a person-only refusal: unchanged in the app too.
     expect(errorCopy.copyForAnswer(403, BILLING, null)).toBe(BILLING);

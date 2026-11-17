@@ -307,13 +307,22 @@ def _add_need(key: str) -> str:
     return "sign in to Krea" if key == KREA_SIGN_IN_NEED else f"add {key}"
 
 
+# The most providers a missing-key line names (design's names rule); the frontend's MAX_KEY_NAMES.
+MAX_KEY_NAMES = 3
+
+
 def key_line(keys: Iterable[str]) -> str | None:
     """The line for a run that stopped at its own key check (GM, copy sweep
     item 12): "Add an OpenAI API key in Settings to run this node." The
     article goes by the first name; a provider whose own term is "token"
     keeps it."""
+    keys = list(keys)
     phrase = key_phrase(keys)
-    return f"Add {with_article(phrase)} in Settings to run this node." if phrase else None
+    if not phrase:
+        return None
+    if len(keys) > MAX_KEY_NAMES:  # four or more: the providers the card lists above
+        return "Add a key for one of the providers above in Settings to run this node."
+    return f"Add {with_article(phrase)} in Settings to run this node."
 
 
 def key_name(key: str) -> tuple[str, str] | None:

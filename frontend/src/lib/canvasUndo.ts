@@ -633,7 +633,7 @@ export function acceptUndoLine(
   const names = (settings: (string | null)[]) => andList(settings.map((setting) => quote(setting ?? '')));
   const agent = source.kind === 'agent' ? source.name ?? 'An agent' : null;
   const agentInner = source.kind === 'agent' ? source.name ?? 'an agent' : null;
-  const where = source.kind === 'you' ? ' in another window' : '';
+  const where = source.kind === 'you' ? ' in another tab' : '';
   const lead = agent ?? 'You';
   const orders = kept.filter((item) => item.order);
   if (orders.length > 0) {
@@ -646,7 +646,7 @@ export function acceptUndoLine(
       // so its "You" line names the list.
       const who = (pointsBack: boolean) => (source.kind === 'agent' ? `${agent} reordered the ${order} after you accepted.`
         : source.kind === 'you'
-          ? `You reordered ${pointsBack ? 'them' : `the ${order}`} in another window after you accepted.`
+          ? `You reordered ${pointsBack ? 'them' : `the ${order}`} in another tab after you accepted.`
           : `The ${order} were reordered after you accepted.`);
       if (nothingUndone) return `Nothing was undone. ${who(false)}`;
       return `Undid the proposal except the ${order === 'shots' ? 'shot' : 'clip'} order in ${quote(node)}. ${who(true)}`;
@@ -726,7 +726,7 @@ export function acceptUndoLine(
  * renamed it: an agent, the person in another window, or unknown. */
 export function droppedRenameLine(source: ChangeSource, newName: string, draft: string): string {
   if (source.kind === 'you') {
-    return `You renamed this node \u201c${newName}\u201d in another window while Nebula was offline, so your rename to \u201c${draft}\u201d here wasn\u2019t saved.`;
+    return `You renamed this node \u201c${newName}\u201d in another tab while Nebula was offline, so your rename to \u201c${draft}\u201d here wasn\u2019t saved.`;
   }
   if (source.kind === 'unknown') {
     return `This node was renamed \u201c${newName}\u201d while Nebula was offline, so your rename to \u201c${draft}\u201d wasn\u2019t saved.`;
@@ -784,7 +784,7 @@ export function editArrivedText(edit: ForeignEdit): string | null {
 export function undoNoticeText(action: 'undo' | 'redo', edit: ForeignEdit): string {
   const verb = action === 'undo' ? 'Undid' : 'Redid';
   if (edit.source === 'agent' && edit.agentName) return `${verb} ${agentNameInSentence(edit.agentName)}’s edit.`;
-  if (edit.source === 'window') return `${verb} an edit from another window.`;
+  if (edit.source === 'window') return `${verb} an edit from another tab.`;
   return `${verb} an edit made outside Nebula.`;
 }
 

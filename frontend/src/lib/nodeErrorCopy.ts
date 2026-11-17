@@ -1,4 +1,4 @@
-import { becauseLine, failedWhat } from './errorCopy';
+import { becauseLine, curlApostrophes, failedWhat } from './errorCopy';
 
 
 /**
@@ -149,7 +149,14 @@ export function nodeErrorCopy({ raw, category, friendly, person, providerText, p
   const named = category !== 'unknown' ? (friendly?.trim() || text) : '';
   if (named) {
     const details = text && text !== named ? text : null;
-    return waiting ? failure(named, details) : { heading: '', reason: runLine(heading, named, category, provider), details };
+    // The category's clause stands in for the classifier's own generic line; a specific text (a capability
+    // guardrail, whose line is the raw text itself) keeps its words.
+    const classified = Boolean(friendly?.trim()) && friendly!.trim() !== text;
+    if (waiting) return failure(named, details);
+    // Such a text is the provider's or the check's own words, not a clause: it follows the action as its own sentence.
+    const what = failedWhat(heading);
+    if (!classified && what !== null) return { heading: '', reason: `Nebula couldn’t ${what}. ${curlApostrophes(named)}`, details };
+    return { heading: '', reason: runLine(heading, named, classified ? category : undefined, provider), details };
   }
   return failure(cardGeneralLine(provider, Boolean(text), surface), text || null);
 }

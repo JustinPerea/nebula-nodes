@@ -43,7 +43,7 @@ const {
 } = await import('../src/lib/worldLabsWaiting');
 const { frames } = await import('./helpers/frames');
 
-const DELTA_FORGET = "Couldn't delete “Delta world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.";
+const DELTA_FORGET = "Nebula couldn’t delete “Delta world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.";
 
 const world = (id: string, params: Record<string, unknown> = {}) => ({
   id, type: 'model-node', position: { x: 0, y: 0 },

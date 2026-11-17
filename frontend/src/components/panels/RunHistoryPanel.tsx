@@ -33,7 +33,7 @@ const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
   complete: 'Complete',
   failed: 'Failed',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
 };
 
 /**

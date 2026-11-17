@@ -36,18 +36,18 @@ import { ConnectionLostError } from '../src/lib/errorCopy';
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => resetDeletedSceneEditsForTests());
 
-const HEADING = "Couldn't run the node.";
 // Round 3f (GM): "The Cinema shot panel heading: yes, "Couldn't generate the shot."".
-const SHOT_HEADING = "Couldn't generate the shot.";
 // Round 3f (GM): a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
-const GENERAL = "Run the node again. If it keeps failing, open Details.";
+const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
 const MASK = 'No mask painted yet — open the Mask Painter node and paint one';
+const MASK_RUN = `Nebula couldn’t run the node. ${MASK}`;
+const MASK_SHOT = `Nebula couldn’t generate the shot. ${MASK}`;
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message')?.textContent ?? null;
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUi = { ...useUIStore.getState() };
@@ -71,8 +71,8 @@ describe('the Batch card reads its run error like every node card', () => {
   it("shows Nebula's own line under the heading, with no Details", () => {
     const { container } = render(<BatchNode {...batch({ error: MASK, errorCategory: 'unknown',
       errorFriendly: MASK, errorPerson: MASK })} />);
-    expect(heading(container)).toBe(HEADING);
-    expect(reason(container)).toBe(MASK);
+    expect(heading(container)).toBeNull(); // one line, no separate heading
+    expect(reason(container)).toBe(MASK_RUN);
     expect(container.querySelector('details')).toBeNull();
     expect(screen.getByRole('alert')).toHaveTextContent(MASK);
   });
@@ -80,7 +80,7 @@ describe('the Batch card reads its run error like every node card', () => {
   it("shows GM's general line over a closed Details for raw provider text", () => {
     const { container } = render(<BatchNode {...batch({ error: RAW, errorCategory: 'unknown',
       errorFriendly: RAW.slice(0, 140) })} />);
-    expect(heading(container)).toBe(HEADING);
+    expect(heading(container)).toBeNull(); // one line, no separate heading
     expect(reason(container)).toBe(GENERAL);
     const details = container.querySelector('details')!;
     expect(details).not.toBeNull();
@@ -114,8 +114,8 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
   it("shows the handler's line under the heading, with no Details", () => {
     const { container } = shotPanel({ status: 'error', error: MASK, errorCategory: 'unknown', errorPerson: MASK });
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(heading(error)).toBe(SHOT_HEADING);
-    expect(reason(error)).toBe(MASK);
+    expect(heading(error)).toBeNull(); // one line, no separate heading
+    expect(reason(error)).toBe(MASK_SHOT);
     expect(error.querySelector('details')).toBeNull();
   });
 
@@ -123,9 +123,9 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
     const { container } = shotPanel({ status: 'error', error: RAW.slice(0, 40), errorCategory: 'unknown',
       errorFriendly: RAW.slice(0, 40), errorRaw: RAW });
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(heading(error)).toBe(SHOT_HEADING);
+    expect(heading(error)).toBeNull(); // one line, no separate heading
     // Round 3g (GM): the shot panel's own wording.
-    expect(reason(error)).toBe('Generate the shot again. If it keeps failing, open Details.');
+    expect(reason(error)).toBe('Nebula couldn’t generate the shot. Generate it again. If it keeps failing, open “Details”.');
     const details = error.querySelector('details')!;
     expect(details.open).toBe(false);
     expect(details.textContent).toContain('req_123');
@@ -136,7 +136,7 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
     const { container } = shotPanel({ status: 'error', error: line, errorCategory: 'rate_limit', errorFriendly: line,
       errorRaw: 'HTTP 429 Too Many Requests' });
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(reason(error)).toBe(line);
+    expect(reason(error)).toBe('Nebula couldn’t generate the shot because the provider is limiting requests. Wait a moment, then run it again.');
     expect(error.querySelector('details')!.textContent).toContain('HTTP 429');
   });
 
@@ -148,7 +148,7 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
   });
 });
 
-// -- "Couldn't confirm …" beside Retry connection ----------------------------------
+// -- "Couldn't confirm …" beside Try again ----------------------------------
 
 describe('the motion handoff says "Couldn\'t …" and leaves the retry to its button', () => {
   beforeEach(() => {
@@ -167,24 +167,24 @@ describe('the motion handoff says "Couldn\'t …" and leaves the retry to its bu
 
   it('an unconfirmed reply', async () => {
     const alert = await send(async () => ({ ok: true, json: async () => null }));
-    expect(alert.textContent).toBe("Couldn't confirm the video connection.");
-    expect(screen.getByRole('button', { name: 'Retry connection' })).toBeEnabled();
+    expect(alert.textContent).toBe("Nebula couldn’t confirm the video connection.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
   });
 
   it('a request with no answer', async () => {
     // As apiFetch throws it (typeerror, 2026-10-24: a bare TypeError is not no-answer).
     const alert = await send(async () => { throw new ConnectionLostError(new TypeError('Failed to fetch')); });
     // Round 3f (GM): "don't stack two "Couldn't"s, and Nebula is local".
-    expect(alert.textContent).toBe("Couldn't confirm the video connection. Nebula didn't respond.");
+    expect(alert.textContent).toBe("Nebula couldn’t confirm the video connection because the server isn’t answering. Try again.");
   });
 
   it('typeerror (2026-10-24): a browser TypeError after the answer is unconfirmed, not "didn\'t respond"', async () => {
     const alert = await send(async () => ({ ok: true, json: async () => JSON.parse(JSON.stringify({ a: 1n })) }));
-    expect(alert.textContent).toBe("Couldn't confirm the video connection.");
+    expect(alert.textContent).toBe("Nebula couldn’t confirm the video connection.");
   });
 
   it('a refused request', async () => {
     const alert = await send(async () => ({ ok: false, status: 503, json: async () => ({}) }));
-    expect(alert.textContent).toBe("Couldn’t connect the video node. Nebula didn't respond.");
+    expect(alert.textContent).toBe("Nebula couldn’t connect the video node because the server didn’t respond. Try again.");
   });
 });

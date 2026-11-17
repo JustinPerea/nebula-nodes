@@ -28,7 +28,7 @@ import { OutputRenderer } from '../src/components/create-studio/OutputRenderer';
 import { RUNTIME_FIELDS } from '../src/lib/canvasUndo';
 
 const REFUSED = 'Nebula couldn’t start the run.';
-const STARTED = "Couldn't run the node.";
+const STARTED = 'Nebula couldn’t run the node.';
 const KEY = 'Missing API key: OPENAI_API_KEY';
 const KEY_LINE = 'Add an OpenAI API key in Settings to run this node.';
 
@@ -36,8 +36,8 @@ const node = (id: string, definitionId = 'gpt-image-1-generate', extra: Partial<
   id, type: 'model-node', position: { x: 0, y: 0 },
   data: { label: id, definitionId, params: {}, state: 'idle', outputs: {}, ...extra },
 });
-const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+// A failure is one line, "{action} {the person's line}"; the action is the heading's job.
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message, .failure-lines__reason')?.textContent ?? null;
 const props = (id: string, data: NodeData) => ({ id, selected: false, data }) as unknown as NodeProps;
 
 beforeEach(() => {
@@ -57,29 +57,28 @@ describe('every card that shows a run error', () => {
 
   it.each([[true, REFUSED], [false, STARTED]])('the model card (refused before it started: %s)', (notStarted, expected) => {
     const { container } = render(<ModelNode {...props('n1', { ...node('n1').data, ...(notStarted ? refused : failed) })} />);
-    expect(heading(container)).toBe(expected);
-    expect(reason(container)).toBe(KEY_LINE);
+    expect(reason(container)).toBe(`${expected} ${KEY_LINE}`);
   });
 
   it('a universal model’s card', () => {
     const data = { ...node('d1', 'fal-universal').data, ...refused };
     const { container } = render(<DynamicNode {...props('d1', data)} />);
-    expect(heading(container)).toBe(REFUSED);
+    expect(reason(container)).toBe(`${REFUSED} ${KEY_LINE}`);
   });
 
   it('the Batch card', () => {
     const data = { label: 'Batch', definitionId: 'batch', params: { items_text: 'one' }, state: 'error', outputs: {},
       error: KEY, errorPerson: KEY_LINE, errorNotStarted: true } as unknown as NodeData;
     const { container } = render(<BatchNode {...props('b1', data)} />);
-    expect(heading(container)).toBe(REFUSED);
+    expect(reason(container)).toBe(`${REFUSED} ${KEY_LINE}`);
   });
 
   it('Create Studio’s result', () => {
     const { container } = render(<OutputRenderer outputs={{}} state="error" error={KEY} errorPerson={KEY_LINE} errorNotStarted />);
-    expect(heading(container)).toBe(REFUSED);
+    expect(reason(container)).toBe(`${REFUSED} ${KEY_LINE}`);
     cleanup();
     const started = render(<OutputRenderer outputs={{}} state="error" error={KEY} errorPerson={KEY_LINE} />);
-    expect(heading(started.container)).toBe(STARTED);
+    expect(reason(started.container)).toBe(`${STARTED} ${KEY_LINE}`);
   });
 });
 
@@ -104,7 +103,7 @@ describe("the person's own Run", () => {
     expect(data.state).toBe('error');
     expect(data.errorNotStarted).toBeUndefined();
     const { container } = render(<ModelNode {...props('n1', data)} />);
-    expect(heading(container)).not.toBe(REFUSED);
+    expect(reason(container)).not.toMatch(/^Nebula couldn’t start the run/);
   });
 });
 

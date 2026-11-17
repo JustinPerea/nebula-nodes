@@ -514,8 +514,8 @@ describe('review 14 of PR #199, kept-hold: the rest', () => {
     await useProjectStore.getState().discardKeptEdits();
     expect(isCanvasKept()).toBe(true);
     const line = useProjectStore.getState().keptEdits?.error ?? '';
-    expect(line).not.toBe("Couldn't discard the kept edits.");
-    expect(line).toContain('The disk is full.');
+    expect(line).not.toBe('Nebula couldn’t discard the kept edits.');
+    expect(line).toBe('Nebula couldn’t discard the kept edits because the disk is full.');
     expect(useProjectStore.getState().keptEdits?.discarding).toBe(false);
   });
 

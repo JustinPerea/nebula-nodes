@@ -127,8 +127,8 @@ describe('the pattern rows and the sentence rule', () => {
       'Nebula couldn’t start the run because it couldn’t save its run safeguards. Restart Nebula, then try again.'],
     ["Couldn't load the models.", 'The server is out of date. Restart Nebula, then try again.',
       'Nebula couldn’t load the models because the server is out of date. Restart Nebula, then try again.'],
-    ["Couldn't save the character.", 'It changed in another window. Reload to get the latest version.',
-      'Nebula couldn’t save the character because it changed in another window. Reload to get the latest version.'],
+    ["Couldn't save the character.", 'It changed in another tab. Reload to get the latest version.',
+      'Nebula couldn’t save the character because it changed in another tab. Reload to get the latest version.'],
     ['Nebula couldn’t start the run.', 'Krea’s style images and their strength have no BytePlus equivalent. Remove the style images, or run this on Krea.',
       'Nebula couldn’t start the run because Krea’s style images and their strength have no BytePlus equivalent. Remove the style images, or run this on Krea.'],
     ['Nebula couldn’t start the run.', 'A World Labs node can’t run once for each item of a Batch. Give each its own node.',
@@ -147,7 +147,7 @@ describe('the pattern rows and the sentence rule', () => {
       .toBe('Nebula couldn’t start the run. Pick one of the node’s output formats, then run the node again.');
     expect(clauseFor('Pick another size.')).toBeNull();
     expect(clauseFor('')).toBeNull();
-    expect(becauseLine({ heading: "Couldn't load your projects.", reason: '' })).toBe("Couldn't load your projects.");
+    expect(becauseLine({ heading: "Couldn't load your projects.", reason: '' })).toBe('Nebula couldn’t load your projects.');
   });
 
   it('puts a reason that names its own failure in the heading’s place', () => {

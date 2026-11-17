@@ -151,10 +151,12 @@ describe('the lines left alone, on the pattern', () => {
     useGraphStore.setState({ isImportingGraph: true });
     const generation = await useGraphStore.getState().authorGenerationCluster({ definitionId: 'flux-2-pro' } as never)
       .catch((caught: unknown) => caught);
-    expect(failureCopy(generation)).toEqual({ heading: '', reason: 'You can start the generation when the import finishes.' });
+    expect(failureCopy(generation)).toEqual({ heading: '', reason: 'You can start the generation when the import finishes.',
+      button: 'You can start the generation when the import finishes.', cause: 'You can start the generation when the import finishes.', what: '' });
     useGraphStore.setState({ isImportingGraph: false, isExecuting: true });
     const recovery = await useGraphStore.getState().deleteProviderRecovery('r1', 'n1').catch((caught: unknown) => caught);
-    expect(failureCopy(recovery)).toEqual({ heading: '', reason: 'You can forget the recovery safeguard when the run finishes.' });
+    expect(failureCopy(recovery)).toEqual({ heading: '', reason: 'You can forget the recovery safeguard when the run finishes.',
+      button: 'You can forget the recovery safeguard when the run finishes.', cause: 'You can forget the recovery safeguard when the run finishes.', what: '' });
   });
 
   it('no code says the old lines', () => {

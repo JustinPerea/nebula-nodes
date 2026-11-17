@@ -166,7 +166,7 @@ describe('PR #205 round 3: the give-up line', () => {
     nebula().releaseAnswer(0); await settle();
     expect(ids()).toEqual(['n1', 'n2']);
     expect(store().messageNotice?.text).toBe(bringBack('“Note”'));
-    expect(store().undoNotice?.text).toMatch(/^Couldn.t delete/);
+    expect(store().undoNotice?.text).toMatch(/^Nebula couldn.t delete/);
   });
 
   it('M14: a new canvas takes the give-up line off (it named the old graph\'s node)', async () => {

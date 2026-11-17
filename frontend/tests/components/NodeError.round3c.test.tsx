@@ -36,26 +36,28 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   Handle: ({ id, type }: { id?: string; type: string }) => <span data-testid={`handle-${type}-${id}`} />,
 }));
 
-const HEADING = "Couldn't run the node.";
 // Round 3f (GM): a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
-const GENERAL = "Run the node again. If it keeps failing, open Details.";
+const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
 const SPECIFIC = 'World Labs generation/recovery was already accepted or is being recovered (operationId=op-77), '
   + 'but Nebula could not finish locally. Recover with resume_operation_id=op-77; cause: boom';
-const PERSON = 'World Labs accepted this run, and it may be billed, but Nebula couldn\'t finish it here. Check the job '
+const PERSON_TEXT = 'World Labs accepted this run, and it may be billed, but Nebula couldn\'t finish it here. Check the job '
   + 'in Marble. “Resume Operation ID” keeps the job, so running the node again picks it up without paying twice.';
+// The person's line as a card shows it: one sentence in the because form, every fact kept.
+const PERSON = 'Nebula couldn’t run the node because World Labs accepted this run, and it may be billed, but Nebula couldn’t finish it here. '
+  + 'Check the job in Marble. “Resume Operation ID” keeps the job, so running the node again picks it up without paying twice.';
 const RAW = 'fal.ai: {"detail":[{"msg":"image too small","type":"value_error"}]} request_id=req_123';
 
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message')?.textContent ?? null;
 
 describe('NodeError', () => {
   afterEach(cleanup);
 
   it("shows the person's line under the heading, and never the specific text", () => {
-    const { container } = render(<NodeError raw={SPECIFIC} person={PERSON} category="unknown" friendly={SPECIFIC.slice(0, 140)} />);
-    expect(heading(container)).toBe(HEADING);
+    const { container } = render(<NodeError raw={SPECIFIC} person={PERSON_TEXT} category="unknown" friendly={SPECIFIC.slice(0, 140)} />);
+    expect(heading(container)).toBeNull(); // a failure is one line now, not a heading over a reason
     expect(reason(container)).toBe(PERSON);
     expect(container.textContent).not.toContain('op-77');
     expect(container.textContent).not.toContain('resume_operation_id');
@@ -64,7 +66,7 @@ describe('NodeError', () => {
 
   it("with no written line: GM's general line, and the raw text only behind a closed Details", () => {
     const { container } = render(<NodeError raw={RAW} category="unknown" friendly={RAW.slice(0, 140)} />);
-    expect(heading(container)).toBe(HEADING);
+    expect(heading(container)).toBeNull(); // a failure is one line now, not a heading over a reason
     expect(reason(container)).toBe(GENERAL);
     const details = container.querySelector('details')!;
     expect(details).not.toBeNull();
@@ -82,16 +84,17 @@ describe('NodeError', () => {
   it("a classified failure keeps its line (the fact the person needs) under the heading, the raw text behind Details", () => {
     const friendly = "This request was blocked by the provider's safety filter. Try rephrasing your prompt or removing flagged content.";
     const { container } = render(<NodeError raw="400 moderation_blocked: prompt flagged" category="blocked" friendly={friendly} />);
-    expect(heading(container)).toBe(HEADING);
-    expect(reason(container)).toBe(friendly);
+    expect(heading(container)).toBeNull(); // a failure is one line now, not a heading over a reason
+    expect(reason(container)).toBe('Nebula couldn’t run the node because the provider’s safety filter blocked the request. Try rephrasing your prompt or removing flagged content.');
     expect(container.querySelector('details')?.open).toBe(false);
     expect(container.querySelector('details')?.textContent).toContain('400 moderation_blocked: prompt flagged');
   });
 
   it("a line Nebula wrote itself (a refused start, a pre-run check) shows as it is", () => {
     const line = "Couldn't start the run. Nebula didn't respond. Try again.";
+    const shown = 'Nebula couldn’t start the run because the server didn’t respond. Try again.';
     const { container } = render(<NodeError raw={line} />);
-    expect(container.textContent).toBe(line);
+    expect(container.textContent).toBe(shown);
     expect(container.querySelector('details')).toBeNull();
   });
 
@@ -133,9 +136,9 @@ describe('the canvas card', () => {
   }
 
   it("a World node's card shows the person's line, never the ids its error keeps for agents", () => {
-    const { container } = card({ error: SPECIFIC, errorPerson: PERSON, errorCategory: 'unknown' });
+    const { container } = card({ error: SPECIFIC, errorPerson: PERSON_TEXT, errorCategory: 'unknown' });
     const shown = container.querySelector('.model-node__error')!;
-    expect(heading(shown)).toBe(HEADING);
+    expect(heading(shown)).toBeNull(); // a failure is one line now, not a heading over a reason
     expect(reason(shown)).toBe(PERSON);
     expect(container.textContent).not.toContain('operationId=op-77');
     expect(screen.queryByText(/resume_operation_id/)).toBeNull();
@@ -145,7 +148,7 @@ describe('the canvas card', () => {
     const { container } = card({ definitionId: 'gpt-image-1-generate', error: RAW, errorCategory: 'unknown',
       errorFriendly: RAW.slice(0, 140) });
     const shown = container.querySelector('.model-node__error')!;
-    expect(heading(shown)).toBe(HEADING);
+    expect(heading(shown)).toBeNull(); // a failure is one line now, not a heading over a reason
     expect(reason(shown)).toBe(GENERAL);
     expect(shown.querySelector('details')?.open).toBe(false);
   });
@@ -156,8 +159,8 @@ describe('Create Studio results (the same node data)', () => {
 
   it('says the same lines as the card', () => {
     const { container, rerender } = render(<OutputRenderer state="error" outputs={{}} error={SPECIFIC}
-      errorPerson={PERSON} errorCategory="unknown" />);
-    expect(heading(container)).toBe(HEADING);
+      errorPerson={PERSON_TEXT} errorCategory="unknown" />);
+    expect(heading(container)).toBeNull(); // a failure is one line now, not a heading over a reason
     expect(reason(container)).toBe(PERSON);
     expect(container.textContent).not.toContain('op-77');
     rerender(<OutputRenderer state="error" outputs={{}} error={RAW} errorCategory="unknown" errorFriendly={RAW} />);
@@ -209,14 +212,16 @@ describe('review: the Details toggle on the canvas, and a named failure after a 
     const live = nodeErrorCopy({ raw, category: 'invalid_input', friendly: raw });
     // Reload: node_errors dropped the hint that equalled the error, so graphSync has no friendly line.
     const reloaded = nodeErrorCopy({ raw, category: 'invalid_input', friendly: undefined });
-    expect(live).toEqual({ heading: HEADING, reason: raw, details: null });
+    // The line is the raw text itself, so no category clause replaces it: the guardrail's fix is kept.
+    const guardrail = `Nebula couldn’t run the node. ${raw}`;
+    expect(live).toEqual({ heading: '', reason: guardrail, details: null });
     expect(reloaded).toEqual(live);
     const { container } = render(<NodeError raw={raw} category="invalid_input" />);
-    expect(reason(container)).toBe(raw);
+    expect(reason(container)).toBe(guardrail);
     expect(container.querySelector('details')).toBeNull();
   });
 
   it('an unknown failure with no stored line still falls back to the general line', () => {
-    expect(nodeErrorCopy({ raw: RAW, category: 'unknown' })).toEqual({ heading: HEADING, reason: GENERAL, details: RAW });
+    expect(nodeErrorCopy({ raw: RAW, category: 'unknown' })).toEqual({ heading: '', reason: GENERAL, details: RAW });
   });
 });

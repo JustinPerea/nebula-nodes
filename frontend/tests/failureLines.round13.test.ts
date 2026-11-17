@@ -55,10 +55,10 @@ function writer(id: string, definitionId: string, params: Record<string, unknown
 
 describe("GM's failure lines (round 13), verbatim", () => {
   it('reads as GM wrote them', () => {
-    expect(CLEAR_REFUSED_TEXT).toBe("Couldn't clear the canvas. Nothing was removed.");
-    expect(CLEAR_FAILED_TEXT).toBe("Couldn't clear the canvas.");
-    expect(modelSettingsFailedText('Writer')).toBe("Couldn't load the model settings for “Writer”.");
-    expect(modelSetupFailedText('Writer')).toBe("Couldn't set up “Writer”.");
+    expect(CLEAR_REFUSED_TEXT).toBe("Nebula couldn’t clear the canvas because the server didn’t accept it. Nothing was removed.");
+    expect(CLEAR_FAILED_TEXT).toBe("Nebula couldn’t clear the canvas.");
+    expect(modelSettingsFailedText('Writer')).toBe("Nebula couldn’t load the model settings for “Writer”.");
+    expect(modelSetupFailedText('Writer')).toBe("Nebula couldn’t set up “Writer”.");
   });
 });
 
@@ -161,7 +161,7 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         await settle();
         // Round 21 (the #114 merge): #114's GM line for a failed model change
         // (channel round 14) where neither of #195's two lines applies.
-        expect(shown().join('\n')).toContain("Couldn't change the model for “Writer”.");
+        expect(shown().join('\n')).toContain("Couldn’t change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });
 
@@ -175,7 +175,7 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         await settle();
         // Round 21 (the #114 merge): #114's GM line for a failed model change
         // (channel round 14) where neither of #195's two lines applies.
-        expect(shown().join('\n')).toContain("Couldn't change the model for “Writer”.");
+        expect(shown().join('\n')).toContain("Couldn’t change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });
     }

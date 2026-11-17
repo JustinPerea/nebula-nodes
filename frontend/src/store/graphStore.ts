@@ -862,7 +862,7 @@ function noteStorageRefusal(runId: string, reason: string): void {
   const state = useGraphStore.getState();
   const target = state.runHistory.find((record) => record.id === runId)?.targetNodeId;
   const label = target ? cardTitle(state.nodes, target) : null;
-  state.notify(`${label ? `Couldn’t run \u201c${label}\u201d.` : "Couldn’t start the run."} ${reason}`);
+  state.notify(becauseLine({ heading: label ? `Couldn’t run \u201c${label}\u201d.` : 'Couldn’t start the run.', reason }));
 }
 
 /** Run records that never ran: refused starts and, with `includePending`,
@@ -8663,7 +8663,7 @@ async function bringBackendGraphIntoEmptyTab(
  * console; the person reads the heading and GM's line. */
 function notStartedMessage(heading: string, status: string | undefined): string {
   console.warn(`[nebula] ${heading} start status: ${status || 'unknown'}`);
-  return `${heading} ${REFUSED_FALLBACK_COPY}`;
+  return becauseLine({ heading, reason: REFUSED_FALLBACK_COPY });
 }
 
 /** The reason line for a refused canvas request (error-copy round 2, GM):
@@ -8758,7 +8758,7 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
       window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
         detail: { source: 'system', message: `${heading} ${err.raw}` } }));
     }
-    useGraphStore.getState().notify(heading);
+    useGraphStore.getState().notify(becauseLine({ heading, reason: '' }));
     return null;
   }
   // Its own error with it (review 5 LOW-4): a refusal clears by its own stamp.
@@ -11244,7 +11244,7 @@ function graphNotForThisTab(event: { workspaceRevision?: unknown; paramsVersion?
   }
   if (backendParamsVersion(event.paramsVersion) !== GRAPH_PARAMS_VERSION) {
     return "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
-      + "Reload the tab; your saved work is kept. If this keeps happening after a reload, this window's "
+      + "Reload the tab; your saved work is kept. If this keeps happening after a reload, this tab's "
       + "frontend build doesn't match the backend: rebuild the frontend, or restart the backend.";
   }
   return null;

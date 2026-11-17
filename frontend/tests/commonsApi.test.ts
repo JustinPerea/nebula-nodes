@@ -81,10 +81,10 @@ describe('commonsApi', () => {
   // The Commons' leave popover offers a save again only when it could work:
   // the error carries the answer's status (none for a lost connection).
   it('throws a CommonsRequestError carrying the status of a refused request', async () => {
-    apiFetch.mockResolvedValueOnce(json({ detail: 'Labels changed in another window. Reload before saving.' }, 409));
+    apiFetch.mockResolvedValueOnce(json({ detail: 'Labels changed in another tab. Reload before saving.' }, 409));
     const conflict = await commonsApi.status().catch((error: unknown) => error);
     expect(conflict).toBeInstanceOf(CommonsRequestError);
-    expect(conflict).toMatchObject({ status: 409, reason: 'Labels changed in another window. Reload before saving.' });
+    expect(conflict).toMatchObject({ status: 409, reason: 'Labels changed in another tab. Reload before saving.' });
     apiFetch.mockResolvedValueOnce(json({ detail: 'database is locked' }, 503));
     expect(await commonsApi.status().catch((error: unknown) => error)).toMatchObject({ status: 503 });
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));

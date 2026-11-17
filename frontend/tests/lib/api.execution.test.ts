@@ -108,7 +108,7 @@ describe('execution API run correlation', () => {
     await expect(rejection).rejects.toBeInstanceOf(ExecutionStartRejectedError);
     // error-copy round 2 (GM): the heading names the action, then the reason.
     await expect(rejection).rejects.toMatchObject({
-      message: "Couldn't start the run. A paid start is already active.",
+      message: 'Nebula couldn’t start the run because a paid start is already active.',
       reason: 'A paid start is already active.',
       status: 409,
     });
@@ -126,8 +126,9 @@ describe('execution API run correlation', () => {
 
       const rejection = executeGraph(nodes, edges, `run-ambiguous-${status}`);
 
-      // GM: a 408/5xx says Nebula didn't respond, whatever its body said.
-      await expect(rejection).rejects.toThrow("Couldn't start the run. Nebula didn't respond. Try again.");
+      // GM: a 408 or a gateway answer says the server didn't respond, a 500 that it hit an error, whatever the body said.
+      const clause = status === 500 ? 'the server hit an error.' : 'the server didn’t respond.';
+      await expect(rejection).rejects.toThrow(`Nebula couldn’t start the run because ${clause} Try again.`);
       await expect(rejection).rejects.not.toBeInstanceOf(ExecutionStartRejectedError);
     },
   );

@@ -60,27 +60,27 @@ describe('the Projects startup line', () => {
     fetch.mockResolvedValueOnce(json(507, FULL));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Couldn't load your projects. Your disk is full. Free up some space, then try again.");
+      .toBe("Nebula couldn’t load your projects because your disk is full. Free up some space, then try again.");
   });
 
   it('a storage refusal that isn\'t a full disk keeps the status line', async () => {
     fetch.mockResolvedValueOnce(json(507, { detail: 'Project storage could not be written: [Errno 13] Permission denied' }));
     await useProjectStore.getState().initialize();
-    expect(useProjectStore.getState().error).toBe("Couldn't load your projects. Nebula didn't respond. Try again.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t load your projects because the server hit an error. Try again.");
   });
 
   it('anything else drops "That didn\'t work." and says "reload the page"', async () => {
     fetch.mockRejectedValueOnce(new Error('internal: snapshot.nodes is not iterable'));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Couldn't load your projects. Try again, or reload the page if it keeps happening.");
+      .toBe("Nebula couldn’t load your projects because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 
   it('no answer: the server on this computer', async () => {
     fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Couldn't load your projects. Nebula's server isn't answering. Make sure it's running, then try again.");
+      .toBe("Nebula couldn’t load your projects because the server isn’t answering. Check that Nebula is running, then try again.");
   });
 });
 
@@ -89,13 +89,13 @@ describe('the provider-readiness line', () => {
     fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState().error)
-      .toBe("Couldn't check the connections. Nebula's server isn't answering. Make sure it's running, then try again.");
+      .toBe("Nebula couldn’t check the connections because the server isn’t answering. Check that Nebula is running, then try again.");
   });
 
   it('an answered failure is not "isn\'t answering"', async () => {
     fetch.mockResolvedValueOnce(json(503, {}));
     await useProviderReadinessStore.getState().checkConnections();
     // Round 3g (GM): ""Nebula didn't respond" is wrong when something did answer."
-    expect(useProviderReadinessStore.getState().error).toBe("Couldn't check the connections. Try again, or reload if it keeps happening.");
+    expect(useProviderReadinessStore.getState().error).toBe("Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 });

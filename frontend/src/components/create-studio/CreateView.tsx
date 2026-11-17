@@ -386,15 +386,15 @@ export function CreateView() {
         {createLaunchingIds.map((genId) => {
           const cancelling = createCancelledLaunchIds.includes(genId);
           return <button key={genId} type="button" className="create-view__back" disabled={cancelling}
-            aria-label={cancelling ? 'Cancelling preparation' : 'Stop preparing generation'} onClick={() => cancelCreateGeneration(genId)}>
-            {cancelling ? 'Cancelling…' : 'Stop preparing'}
+            aria-label={cancelling ? 'Canceling preparation' : 'Stop preparing generation'} onClick={() => cancelCreateGeneration(genId)}>
+            {cancelling ? 'Canceling…' : 'Stop preparing'}
           </button>;
         })}
         {activeCreateRuns.map((run, index) => {
           const cancelling = activeRuns.some((active) => active.id === run.id && active.status === 'cancelling');
           return <button key={run.id} type="button" className="create-view__back" disabled={cancelling}
-            aria-label={`${cancelling ? 'Cancelling' : 'Stop'} generation ${index + 1}`} onClick={() => void cancelRun(run.id)}>
-            {cancelling ? 'Cancelling…' : `Stop ${index + 1}`}
+            aria-label={`${cancelling ? 'Canceling' : 'Stop'} generation ${index + 1}`} onClick={() => void cancelRun(run.id)}>
+            {cancelling ? 'Canceling…' : `Stop ${index + 1}`}
           </button>;
         })}
         <button type="button" className="create-view__back" onClick={() => { exitCreateView(); setLeftDock('history'); }}>History</button>

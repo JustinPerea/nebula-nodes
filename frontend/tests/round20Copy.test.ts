@@ -82,24 +82,24 @@ describe('GM follow-ups 1 and 3: following an agent\'s switch', () => {
     expect(waitToOpenTooltip('beta')).toBe('Wait for “beta” to open.');
   });
   it('a press that gets through', () => {
-    expect(runWhileFollowingLine('Hero prompt', 'Claude Code', 'beta')).toBe("Nebula couldn’t run “Hero prompt”. Claude Code is opening “beta”.");
-    expect(runWhileFollowingLine('Hero prompt', null, 'beta')).toBe("Nebula couldn’t run “Hero prompt”. An agent is opening “beta”.");
+    expect(runWhileFollowingLine('Hero prompt', 'Claude Code', 'beta')).toBe("Nebula couldn’t run “Hero prompt” because Claude Code is opening “beta”.");
+    expect(runWhileFollowingLine('Hero prompt', null, 'beta')).toBe("Nebula couldn’t run “Hero prompt” because an agent is opening “beta”.");
   });
 });
 
 describe('GM 1: a failed delete with no answer', () => {
-  const tail = "Nebula isn't answering. Make sure it's running, then try again.";
+  const tail = 'because the server isn’t answering. Check that Nebula is running, then try again.';
   it('one node', () => {
-    expect(deleteNoAnswerLine(['Nano Banana'])).toBe(`Couldn't delete “Nano Banana”. ${tail}`);
+    expect(deleteNoAnswerLine(['Nano Banana'])).toBe(`Nebula couldn’t delete “Nano Banana” ${tail}`);
   });
   it('two nodes', () => {
-    expect(deleteNoAnswerLine(['A', 'B'])).toBe(`Couldn't delete “A” and “B”. ${tail}`);
+    expect(deleteNoAnswerLine(['A', 'B'])).toBe(`Nebula couldn’t delete “A” and “B” ${tail}`);
   });
   it('three nodes', () => {
-    expect(deleteNoAnswerLine(['A', 'B', 'C'])).toBe(`Couldn't delete “A”, “B” and “C”. ${tail}`);
+    expect(deleteNoAnswerLine(['A', 'B', 'C'])).toBe(`Nebula couldn’t delete “A”, “B” and “C” ${tail}`);
   });
   it('four nodes and up', () => {
-    expect(deleteNoAnswerLine(['A', 'B', 'C', 'D'])).toBe(`Couldn't delete 4 nodes. ${tail}`);
-    expect(deleteNoAnswerLine(['A', 'B', 'C', 'D', 'E'])).toBe(`Couldn't delete 5 nodes. ${tail}`);
+    expect(deleteNoAnswerLine(['A', 'B', 'C', 'D'])).toBe(`Nebula couldn’t delete 4 nodes ${tail}`);
+    expect(deleteNoAnswerLine(['A', 'B', 'C', 'D', 'E'])).toBe(`Nebula couldn’t delete 5 nodes ${tail}`);
   });
 });

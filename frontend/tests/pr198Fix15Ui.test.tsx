@@ -21,7 +21,7 @@ import { editsSavedAsProjectLine } from '../src/store/projectFlows';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-const BANNER = 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.';
+const BANNER = 'The active project changed in another tab. Try again to save your unsaved edits as a recovered project.';
 const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => ({
   projects: [], loading: false, busy: false, error: null,
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(), ...overrides,

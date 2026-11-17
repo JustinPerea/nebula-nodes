@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { apiFetch } from '../lib/backend';
-import { REFUSED_FALLBACK_COPY, RequestFailedError, failureMessage, isNoAnswer } from '../lib/errorCopy';
+import { REFUSED_FALLBACK_COPY, RequestFailedError, becauseLine, failureMessage, isNoAnswer } from '../lib/errorCopy';
 import {
   PROVIDER_HEALTH_TTL_MS, PROVIDER_KEY_LABELS, type ProviderHealthEntry, type ProviderHealthState, type ProviderHealthStatus,
 } from '../lib/providerReadiness';
@@ -86,7 +86,7 @@ export const useProviderReadinessStore = create<ProviderReadinessState>((set, ge
       if (request !== requestVersion || get().revision !== revision) return;
       // Never the error's own text (it may carry a URL): the request's line.
       set({ providers: {}, checkedAt: null, loading: false, error: isNoAnswer(error)
-        ? failureMessage(error, CHECK_HEADING) : `${CHECK_HEADING} ${REFUSED_FALLBACK_COPY}` });
+        ? failureMessage(error, CHECK_HEADING) : becauseLine({ heading: CHECK_HEADING, reason: REFUSED_FALLBACK_COPY }) });
     }
   },
 }));

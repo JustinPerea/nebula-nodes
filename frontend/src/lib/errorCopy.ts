@@ -296,7 +296,7 @@ export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
   [backendText("These labels are sealed as blind ground truth, so there's nothing to close."),
     'its labels were already sealed as blind ground truth. Reload to see them.'],
   // The batch changed somewhere else (a stale revision).
-  [backendText('Labels changed in another window. Reload before saving.'),
+  [backendText('Labels changed in another tab. Reload before saving.'),
     'it changed somewhere else. Reload, then close the batch again.'],
   // The batch was cleared meanwhile.
   [backendText("There's no held-out set yet. Prepare a folder first."),
@@ -676,6 +676,7 @@ export function failedWhat(heading: string): string | null {
 
 /** The status rows: a reason Nebula words for an answer or for no answer at all. */
 function statusClause(reason: string, status: number | undefined, beside: 'alone' | 'button'): string | null {
+  reason = curlApostrophes(reason);
   const button = beside === 'button';
   if (reason === CONNECTION_LOST_COPY || reason === NEBULA_NOT_ANSWERING_COPY) return button ? NOT_ANSWERING_RETRY_CLAUSE : NOT_ANSWERING_CLAUSE;
   if (reason === BACKEND_NOT_RUNNING_COPY) return 'the server isn’t running. Start Nebula, then reload.';
@@ -708,15 +709,9 @@ function clauseFromTables(reason: string, status: number | undefined, beside: 'a
 }
 
 /** A reason that opens with an instruction or a bare status rather than saying why: it stands in for the reason. */
-const NOT_A_REASON = new RegExp('^(?:' + [
-  'Try', 'Reload', 'Restart', 'Check', 'Use', 'Wait', 'Stop', 'Run', 'Pick', 'Choose', 'Connect', 'Disconnect', 'Open', 'Close',
-  'Start', 'Install', 'Make', 'Fix', 'Remove', 'Download', 'Shorten', 'Give', 'Retry', 'Let', 'Click', 'Select', 'Add', 'Paste',
-  'Sign', 'Free', 'Update', 'Quit', 'Link', 'Refresh', 'Delete', 'Save', 'Keep', 'Send', 'Feed', 'Set', 'Turn', 'Describe',
-  'Downscale', 'Clear', 'Rebuild', 'Fill', 'Move', 'Review', 'Confirm', 'Generate', 'Upload', 'Enable', 'Disable', 'Create',
-  'Rename', 'Replace', 'Edit', 'Show', 'Allow', 'To', 'Please', 'Still', 'Nothing', 'Only', 'No', 'Not', 'Saved', 'Opened', 'Added', 'Done',
-].join('|') + ')\\b');
+const NOT_A_REASON = /^(?:Try|Reload|Restart|Check|Use|Wait|Stop|Run|Pick|Choose|Connect|Disconnect|Open|Close|Start|Install|Make|Fix|Remove|Download|Shorten|Give|Retry|Let|Click|Select|Add|Paste|Sign|Free|Update|Quit|Link|Refresh|Delete|Save|Keep|Send|Feed|Set|Turn|Describe|Downscale|Clear|Rebuild|Fill|Move|Review|Confirm|Generate|Upload|Enable|Disable|Create|Rename|Replace|Edit|Show|Allow|To|Please|Still|Nothing|Only|No|Not|Saved|Opened|Added|Done)\b/;
 /** The sentence rule's lead words that take a lower-case letter after "because". */
-const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An|They|Their|Part|Labels|Something)\b/;
+const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An|They|Their|Part|Labels|Something|One|Some|Each|Both|Two|Another)\b/;
 
 /** The sentence rule: a written sentence as the clause after "because". Its first word is lower-cased only when
  * it is one of the lead words above (a name, a quoted name and a {} slot stay); apostrophes are curled between
@@ -784,7 +779,10 @@ function personRequiredLine(what: string, reason: string): string | null {
 export function becauseLine(parts: { heading: string; reason: string; status?: number }, beside: 'alone' | 'button' = 'alone'): string {
   const heading = parts.heading.trim();
   const reason = parts.reason.trim();
-  if (!reason) return heading;
+  if (!reason) {
+    const alone = failedWhat(heading);
+    return alone === null ? heading : `Nebula couldn’t ${alone}.`;
+  }
   if (!heading) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : reason;
   const what = failedWhat(heading);
   if (what === null) return headedLine(heading, reason);
@@ -932,7 +930,8 @@ export class FailureNotice extends Error {
 
   constructor(heading: string, reason: string,
     options: { standalone?: boolean; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
-    super(oneLine({ heading, reason }));
+    // A standalone line reads on its own, with no heading in front of it (writtenLine), as failureCopy shows it.
+    super(options.standalone ? reason : oneLine({ heading, reason }));
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;

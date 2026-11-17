@@ -201,13 +201,13 @@ describe('following an agent’s project switch', () => {
     expect(switchMessage(useProjectStore.getState().switchNotice!)).toBe('Claude Code opened “Loop”.');
   });
 
-  it('still treats a switch the person made in another window as a conflict', () => {
+  it('still treats a switch the person made in another tab as a conflict', () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     expect(useProjectStore.getState()).toMatchObject({ initialized: false, switchNotice: null });
-    expect(useProjectStore.getState().error).toContain('another window');
+    expect(useProjectStore.getState().error).toContain('another tab');
   });
 
-  it('PR #198 fix round 12 (GM r20 answer 3): a scene save refused because another window switched project: only the outdated-workspace banner says it', async () => {
+  it('PR #198 fix round 12 (GM r20 answer 3): a scene save refused because another tab switched project: only the outdated-workspace banner says it', async () => {
     const notify = vi.fn();
     useGraphStore.setState({ notify, undoNotice: null, messageNotice: null, unsavedScenes: {}, nodes: [{
       id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
@@ -231,7 +231,7 @@ describe('following an agent’s project switch', () => {
       await vi.waitFor(() => expect(puts).toHaveLength(1));
       await new Promise((done) => setTimeout(done, 50));
       socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
-      expect(useProjectStore.getState().error).toContain('another window');
+      expect(useProjectStore.getState().error).toContain('another tab');
       // The scene adds nothing of its own: no toast, no line beside one, no mark.
       expect(notify).not.toHaveBeenCalled();
       expect(useGraphStore.getState().undoNotice).toBeNull();
@@ -243,7 +243,7 @@ describe('following an agent’s project switch', () => {
     }
   });
 
-  it('PR #198 fix round 13 (review 12, M-1): another window switches while a scene edit is unsaved, though the autosave already sent it: the edits are kept as a recovered copy', async () => {
+  it('PR #198 fix round 13 (review 12, M-1): another tab switches while a scene edit is unsaved, though the autosave already sent it: the edits are kept as a recovered copy', async () => {
     const notify = vi.fn();
     useGraphStore.setState({ notify, undoNotice: null, messageNotice: null, unsavedScenes: {}, nodes: [{
       id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
@@ -271,7 +271,7 @@ describe('following an agent’s project switch', () => {
       expect(JSON.stringify(sent)).toContain('typed before a switch elsewhere');
       socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
       expect(useProjectStore.getState().error)
-        .toBe('The active project changed in another window. Try again to save your unsaved edits as a recovered project.');
+        .toBe('The active project changed in another tab. Try again to save your unsaved edits as a recovered project.');
       expect(useProjectStore.getState().dirty).toBe(true);
       // Try again keeps them as a recovered copy, with the typed text.
       vi.mocked(api.recoverProject).mockClear();
@@ -289,7 +289,7 @@ describe('following an agent’s project switch', () => {
     setPrompt('typed before a switch elsewhere');
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     expect(useProjectStore.getState().error)
-      .toBe('The active project changed in another window. Try again to save your unsaved edits as a recovered project.');
+      .toBe('The active project changed in another tab. Try again to save your unsaved edits as a recovered project.');
     const copy = summary('p3', 'Loop (recovered)');
     vi.mocked(api.recoverProject).mockClear();
     vi.mocked(api.recoverProject).mockResolvedValueOnce(saved(copy) as never);
@@ -309,7 +309,7 @@ describe('following an agent’s project switch', () => {
 
   it('PR #198 fix round 14 (GM r22 Q2): with nothing unsaved, Try again only reloads: no saved-as notice', async () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
-    expect(useProjectStore.getState().error).toBe('The active project changed in another window. Reload projects to continue.');
+    expect(useProjectStore.getState().error).toBe('The active project changed in another tab. Reload projects to continue.');
     vi.mocked(api.recoverProject).mockClear();
     await useProjectStore.getState().retry();
     expect(api.recoverProject).not.toHaveBeenCalled();
@@ -473,7 +473,7 @@ describe('Projects follows projects other writers make, rename and delete', () =
     expect(api.listProjects).toHaveBeenCalledTimes(1);
   });
 
-  it('lets go of a saved project another window replaced instead of stopping Projects with a conflict', async () => {
+  it('lets go of a saved project another tab replaced instead of stopping Projects with a conflict', async () => {
     useProjectStore.setState({ screen: 'home' });
     listing([sketches], 'p2', 'r2');
     socket()({ type: 'graphSync', workspaceRevision: 'r2', activeProjectId: 'p2', graphReplaced: true,
@@ -489,6 +489,6 @@ describe('Projects follows projects other writers make, rename and delete', () =
     setPrompt('unsaved');
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     expect(useProjectStore.getState()).toMatchObject({ initialized: false });
-    expect(useProjectStore.getState().error).toContain('another window');
+    expect(useProjectStore.getState().error).toContain('another tab');
   });
 });

@@ -376,7 +376,7 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     expect(heldAfterNotice).toEqual([false]);
   });
 
-  it('a restore from another window after the person’s delete: asked again', async () => {
+  it('a restore from another tab after the person’s delete: asked again', async () => {
     const h = backend(S3);
     withRestore(h);
     await clashOnS1(h);

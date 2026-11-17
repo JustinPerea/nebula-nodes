@@ -1324,7 +1324,7 @@ export function ChatPanel() {
                 parts: [
                   ...msg.parts.map((p) =>
                     p.kind === 'tool' && p.result === undefined
-                      ? { ...p, result: '(cancelled before this tool returned)', isError: true }
+                      ? { ...p, result: '(canceled before this tool returned)', isError: true }
                       : p,
                   ),
                   { kind: 'system', ...notice },
@@ -1785,7 +1785,7 @@ export function ChatPanel() {
 
   const status = useMemo(() => {
     if (!connected) return 'disconnected';
-    if (cancelState === 'requested') return 'cancelling…';
+    if (cancelState === 'requested') return 'canceling…';
     if (cancelState === 'failed') return 'cancel failed';
     if (busy) return 'thinking…';
     return 'ready';

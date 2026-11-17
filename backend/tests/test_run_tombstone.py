@@ -95,7 +95,7 @@ async def test_execute_refuses_a_start_stopped_while_it_was_being_admitted(monke
     error, execute_graph, returned = await _stop_during_admission(
         monkeypatch, lambda: main_module.execute(ExecuteRequest(nodes=[_text()], edges=[], runId="late-run")))
     assert error is not None and error.status_code == 409
-    assert "cancelled before it started" in str(error.detail)
+    assert "canceled before it started" in str(error.detail)
     assert execute_graph.await_count == 0
     assert main_module.execution_runs.get("late-run") is None
     assert "late-run" in returned  # its spend hold goes back: nothing billed

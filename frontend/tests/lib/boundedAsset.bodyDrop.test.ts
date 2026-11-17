@@ -35,7 +35,7 @@ describe('readBoundedAssetResponse body drops', () => {
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ConnectionLostError);
     expect((error as ConnectionLostError).heading).toBe("Couldn't load it.");
-    expect(failureMessage(error, 'Other heading.')).toBe(`Couldn't load it. ${CONNECTION_LOST_COPY}`);
+    expect(failureMessage(error, 'Other heading.')).toBe('Nebula couldn’t load it because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('without a heading, the catch supplies its own', async () => {
@@ -78,14 +78,14 @@ describe('asset sites keep the connection line for a body drop', () => {
       heading: "Couldn't download the 3D model.",
     }).catch((e: unknown) => e);
     expect(failureMessage(error, "Couldn't download the 3D model."))
-      .toBe(`Couldn't download the 3D model. ${CONNECTION_LOST_COPY}`);
+      .toBe('Nebula couldn’t download the 3D model because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('fetchWorldSplatBytes', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => droppingBody()));
     const error = await fetchWorldSplatBytes('/api/outputs/world.spz').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(error, 'X.')).toBe(`Couldn't load the world. ${CONNECTION_LOST_COPY}`);
+    expect(failureMessage(error, 'X.')).toBe('Nebula couldn’t load the world because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('downloadSelectedOutputs says the connection line, not "too large"', async () => {
@@ -99,6 +99,6 @@ describe('asset sites keep the connection line for a body drop', () => {
     }] as unknown as Node<NodeData>[];
     const error = await downloadSelectedOutputs(selection).catch((e: unknown) => e);
     expect(failureMessage(error, "Couldn't download the outputs."))
-      .toBe(`Couldn't download the outputs. ${CONNECTION_LOST_COPY}`);
+      .toBe('Nebula couldn’t download the outputs because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 });

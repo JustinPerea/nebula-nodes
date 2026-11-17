@@ -717,7 +717,7 @@ export async function saveToFile(
     return null;
   }
   if (blob.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
-    showNotice(`${SAVE_GRAPH} ${graphSizeLine(blob.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES)}`);
+    showNotice(oneLine({ heading: SAVE_GRAPH, reason: graphSizeLine(blob.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES) }));
     return null;
   }
   // Named after the open project, as "Download a copy" is, so Load graph

@@ -88,7 +88,6 @@ const refuse = (match: (path: string, init?: RequestInit) => boolean, status: nu
 let clock = Date.now();
 
 
-const NO_ANSWER = "Nebula isn't answering. Make sure it's running, then try again.";
 const project = (name = 'Glass campaign') => { store().setCanvasProjectName?.(() => name); };
 
 describe('round 20 (review 19)', () => {
@@ -413,7 +412,7 @@ describe('round 20 (review 19)', () => {
       await del('n1');
       await tick(200);
       expect(nodeOf('n1')).toBeTruthy();
-      expect(lines()).toContain(`Couldn't delete “Nano Banana”. ${NO_ANSWER}`);
+      expect(lines()).toContain("Nebula couldn’t delete “Nano Banana” because the server isn’t answering. Check that Nebula is running, then try again.");
     });
 
     it('three nodes', async () => {
@@ -423,7 +422,7 @@ describe('round 20 (review 19)', () => {
       store().onNodesChange(['n1', 'n2', 'n3'].map((id) => ({ id, type: 'remove' as const })));
       await settle();
       await tick(200);
-      expect(lines()).toContain(`Couldn't delete “A”, “B” and “C”. ${NO_ANSWER}`);
+      expect(lines()).toContain("Nebula couldn’t delete “A”, “B” and “C” because the server isn’t answering. Check that Nebula is running, then try again.");
     });
 
     it('four nodes', async () => {
@@ -433,7 +432,7 @@ describe('round 20 (review 19)', () => {
       store().onNodesChange(['n1', 'n2', 'n3', 'n4'].map((id) => ({ id, type: 'remove' as const })));
       await settle();
       await tick(200);
-      expect(lines()).toContain(`Couldn't delete 4 nodes. ${NO_ANSWER}`);
+      expect(lines()).toContain("Nebula couldn’t delete 4 nodes because the server isn’t answering. Check that Nebula is running, then try again.");
     });
 
     it('another cause keeps its reason', async () => {
@@ -442,7 +441,7 @@ describe('round 20 (review 19)', () => {
       refuse((path, init) => path === '/api/graph/node/n1' && init?.method === 'DELETE', 409, 'It is still running.');
       await del('n1');
       await tick(200);
-      expect(lines()).toContain("Couldn't delete the node. It is still running.");
+      expect(lines()).toContain("Nebula couldn’t delete the node because it is still running.");
     });
   });
 

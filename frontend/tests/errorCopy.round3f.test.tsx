@@ -50,16 +50,14 @@ import { saveToFolder } from '../src/lib/createFiles';
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => resetDeletedSceneEditsForTests());
 
-const RUN_HEADING = "Couldn't run the node.";
-const SHOT_HEADING = "Couldn't generate the shot.";
-const CARD_PROVIDER = 'Run the node again. If it keeps failing, Details shows what fal.ai said.';
-const CARD_PLAIN = 'Run the node again. If it keeps failing, open Details.';
+const CARD_PROVIDER = 'Nebula couldn’t run the node. Run it again. If it keeps failing, “Details” shows what fal.ai said.';
+const CARD_PLAIN = 'Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.';
 const ELSEWHERE = 'Try again, or reload if it keeps happening.';
-const SERVER = "Nebula's server isn't answering. Make sure it's running, then try again.";
+const SERVER = "Nebula’s server isn’t answering. Make sure it’s running, then try again.";
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message')?.textContent ?? null;
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUi = { ...useUIStore.getState() };
@@ -82,22 +80,25 @@ describe('GM\'s general line under any other heading', () => {
     expect(errorCopy.copyForError(new errorCopy.ConnectionLostError(new TypeError('Failed to fetch')))).toBe(SERVER);
     // typeerror (2026-10-24): a TypeError nothing classified is a browser-side failure, not no answer.
     expect(errorCopy.copyForError(new TypeError('Failed to fetch'))).toBe(ELSEWHERE);
-    // GM's WRAP rule: beside a Try again button, the line drops its "try again".
-    expect(errorCopy.shortReason(SERVER)).toBe("Nebula's server isn't answering. Make sure it's running.");
-    expect(errorCopy.shortLine(`Couldn't load the moodboard. ${SERVER}`))
-      .toBe("Couldn't load the moodboard. Nebula's server isn't answering. Make sure it's running.");
+    // Beside a Try again button, the line ends in the button's own words.
+    const alone = 'Nebula couldn’t load the moodboard because the server isn’t answering. Check that Nebula is running, then try again.';
+    expect(errorCopy.becauseLine({ heading: 'Couldn’t load the moodboard.', reason: SERVER })).toBe(alone);
+    expect(errorCopy.besideButton(alone))
+      .toBe('Nebula couldn’t load the moodboard because the server isn’t answering. Try again.');
+    expect(errorCopy.becauseLine({ heading: 'Couldn’t load the moodboard.', reason: SERVER }, 'button'))
+      .toBe('Nebula couldn’t load the moodboard because the server isn’t answering. Try again.');
   });
 });
 
 describe('the node card\'s general line', () => {
   it('names the provider the run called, from the run', () => {
     expect(nodeErrorCopy({ raw: RAW, category: 'unknown', friendly: RAW.slice(0, 40), provider: 'fal.ai' }))
-      .toEqual({ heading: RUN_HEADING, reason: CARD_PROVIDER, details: RAW });
+      .toEqual({ heading: '', reason: CARD_PROVIDER, details: RAW });
   });
 
   it('says "open Details" when the run named no provider', () => {
     expect(nodeErrorCopy({ raw: RAW, category: 'unknown' }))
-      .toEqual({ heading: RUN_HEADING, reason: CARD_PLAIN, details: RAW });
+      .toEqual({ heading: '', reason: CARD_PLAIN, details: RAW });
   });
 
   it('never reads the provider from the error\'s text', () => {
@@ -106,14 +107,16 @@ describe('the node card\'s general line', () => {
 
   it('keeps a line the person can act on', () => {
     const person = 'Add a fal.ai API key in Settings to run this node.';
-    expect(nodeErrorCopy({ raw: RAW, category: 'auth', person, provider: 'fal.ai' }).reason).toBe(person);
+    expect(nodeErrorCopy({ raw: RAW, category: 'auth', person, provider: 'fal.ai' }).reason).toBe(`Nebula couldn’t run the node. ${person}`);
     const friendly = 'fal.ai is having trouble right now. Try again in a few minutes.';
-    expect(nodeErrorCopy({ raw: RAW, category: 'network', friendly, provider: 'fal.ai' }).reason).toBe(friendly);
+    // A classified failure takes the category's clause with the provider named (design D18), not the backend's words.
+    expect(nodeErrorCopy({ raw: RAW, category: 'network', friendly, provider: 'fal.ai' }).reason)
+      .toBe('Nebula couldn’t run the node because fal.ai isn’t answering. Check your connection, then try again.');
   });
 
   it('renders on the card with the provider\'s words behind a closed Details', () => {
     const { container } = render(<NodeError raw={RAW} category="unknown" provider="fal.ai" />);
-    expect(heading(container)).toBe(RUN_HEADING);
+    expect(heading(container)).toBeNull();
     expect(reason(container)).toBe(CARD_PROVIDER);
     const details = container.querySelector('details')!;
     expect(details.open).toBe(false);
@@ -183,9 +186,9 @@ describe('the Cinema shot panel', () => {
     const { container } = shotPanel({ status: 'error', error: RAW.slice(0, 40), errorCategory: 'unknown',
       errorRaw: RAW, errorProvider: 'BytePlus' });
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(heading(error)).toBe(SHOT_HEADING);
+    expect(heading(error)).toBeNull();
     // Round 3g (GM): the shot panel's own wording.
-    expect(reason(error)).toBe('Generate the shot again. If it keeps failing, Details shows what BytePlus said.');
+    expect(reason(error)).toBe('Nebula couldn’t generate the shot. Generate it again. If it keeps failing, “Details” shows what BytePlus said.');
     expect(error.querySelector('details')!.textContent).toContain('req_123');
   });
 
@@ -193,8 +196,8 @@ describe('the Cinema shot panel', () => {
     const line = 'Connect a prompt to this node, then run it again.';
     const { container } = shotPanel({ status: 'error', error: 'prompt is required', errorCategory: 'unknown', errorPerson: line });
     const error = container.querySelector('.cinema-shot-panel__error')!;
-    expect(heading(error)).toBe(SHOT_HEADING);
-    expect(reason(error)).toBe(line);
+    expect(heading(error)).toBeNull();
+    expect(reason(error)).toBe(`Nebula couldn’t generate the shot. ${line}`);
   });
 
   it('the motion handoff with no answer says Nebula didn\'t respond, without a second "Couldn\'t"', async () => {
@@ -203,7 +206,7 @@ describe('the Cinema shot panel', () => {
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, data: { ...node.data,
       state: 'complete', outputs: { shot_a: { type: 'Image', value: '/api/outputs/a.png' } } } })) }));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send to motion' })); });
-    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't confirm the video connection. Nebula didn't respond.");
+    expect((await screen.findByRole('alert')).textContent).toBe("Nebula couldn’t confirm the video connection because the server isn’t answering. Try again.");
   });
 });
 
@@ -228,7 +231,9 @@ describe('the shared lines GM rewrote', () => {
     // apiFetch says "no answer" as a ConnectionLostError (lib/backend.ts).
     mocks.fetch.mockImplementationOnce(async () => { throw new errorCopy.ConnectionLostError(new TypeError('Failed to fetch')); });
     const error = await saveToFolder('/api/outputs/a.png').catch((caught: unknown) => caught);
-    expect(errorCopy.failureCopy(error)).toEqual({ heading: "Couldn't save the output.", reason: SERVER });
+    const line = 'Nebula couldn’t save the output because the server isn’t answering.';
+    expect(errorCopy.failureCopy(error)).toEqual({ heading: '', reason: `${line} Check that Nebula is running, then try again.`,
+      button: `${line} Try again.`, cause: SERVER, what: 'save the output', status: 0 });
   });
 
   it('Create Studio can\'t start a generation during a graph import', async () => {
@@ -236,8 +241,8 @@ describe('the shared lines GM rewrote', () => {
     const error = await useGraphStore.getState().authorGenerationCluster({ definitionId: 'flux-2-pro' } as never)
       .catch((caught: unknown) => caught);
     // GM, PR #205 r1: the refused action's lock line, standing alone.
-    expect(errorCopy.failureCopy(error)).toEqual({ heading: '',
-      reason: 'You can start the generation when the import finishes.' });
+    const lock = 'You can start the generation when the import finishes.';
+    expect(errorCopy.failureCopy(error)).toEqual({ heading: '', reason: lock, button: lock, cause: lock, what: '' });
   });
 });
 

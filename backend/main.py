@@ -2167,7 +2167,7 @@ _PARAMS_GATE_EXEMPT = frozenset({"/api/projects/recover"})
 # Shown verbatim by main's bundle (its project and run errors print `detail`).
 PARAMS_OUTDATED_DETAIL = (
     "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
-    "Reload the tab; your saved work is kept. If this keeps happening after a reload, this window's "
+    "Reload the tab; your saved work is kept. If this keeps happening after a reload, this tab's "
     "frontend build doesn't match the backend: rebuild the frontend, or restart the backend."
 )
 
@@ -14243,7 +14243,7 @@ def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
 RUN_ID_STOPPED = "run {id} was already stopped, so this id can’t start again. Start a new run with a new id."
 RUN_ID_RAN = "run {id} already ran, so this id can’t start again. Start a new run with a new id."
 RUN_ID_STOP_RECORDED = "run {id} was stopped, so this id can’t start again. Start a new run with a new id."
-RUN_ID_STOPPED_BEFORE_START = "run {id} was cancelled before it started"
+RUN_ID_STOPPED_BEFORE_START = "run {id} was canceled before it started"
 
 
 def _stopped_id_refusal(run_id: str) -> str:

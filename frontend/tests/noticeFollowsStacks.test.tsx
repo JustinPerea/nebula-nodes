@@ -177,7 +177,7 @@ describe('a notice whose button no longer applies', () => {
     await settle();
     for (const release of net.heldRestores.splice(0)) release();
     await settle();
-    expect(notice()).toMatchObject({ text: "Restored the node. 1 proposal couldn't be reopened.", offer: 'redo' });
+    expect(notice()).toMatchObject({ text: 'Restored the node. Nebula couldn’t reopen 1 proposal.', offer: 'redo' });
     expect(notice()?.entry).toBe(top('redoStack'));
   });
 

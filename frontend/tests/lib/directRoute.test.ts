@@ -3,9 +3,9 @@ import shared from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
-  blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, mergeVisibleWhen,
+  addKeyLine, blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, mergeVisibleWhen,
   paramDefinitionsForRun, paramShown, routeParamDefinitions, routeSentKeys, routeUnavailable, selectRoute, shownRouteId, usesRoutePlan, WIRED,
-  withWiredBlockers,
+  missingKeyLine, withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 import type { ModelNodeDefinition } from '../../src/types';
@@ -274,5 +274,21 @@ describe('paramVisibleWhen (the Python twins in test_node_route.py)', () => {
     expect(paramShown(sharpen, { mode: 'fast' })).toBe(false);
     expect(paramShown(sharpen, { mode: 'fast' }, ['sharpen'])).toBe(true);
     expect(paramShown(sharpen, {})).toBe(true);
+  });
+});
+
+describe('addKeyLine names at most three providers', () => {
+  const FOUR = ['BFL_API_KEY', 'FAL_KEY', 'REPLICATE_API_TOKEN', 'OPENROUTER_API_KEY'];
+  it('names one, two or three providers as it always did', () => {
+    expect(addKeyLine(FOUR.slice(0, 1))).toBe('Add a Black Forest Labs API key in Settings to run this node.');
+    expect(addKeyLine(FOUR.slice(0, 2))).toBe('Add a Black Forest Labs or fal.ai API key in Settings to run this node.');
+    expect(addKeyLine(FOUR.slice(0, 3))).toBe('Add a Black Forest Labs API key, fal.ai API key or Replicate token in Settings to run this node.');
+  });
+  it('sends four to the providers listed above', () => {
+    expect(addKeyLine(FOUR)).toBe('Add a key for one of the providers above in Settings to run this node.');
+    expect(missingKeyLine(FOUR)).toBe('Add a key for one of the providers above in Settings to run this node.');
+  });
+  it('still returns null for a key Settings does not store', () => {
+    expect(addKeyLine(['NOT_A_KEY'])).toBeNull();
   });
 });

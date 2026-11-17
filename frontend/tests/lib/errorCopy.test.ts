@@ -12,11 +12,11 @@ import {
  * table is GM's suggestion: error kind -> the line the person reads.
  */
 
-const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
-const NO_ANSWER = "Nebula didn't respond. Try again.";
+const LOST = "Nebula’s server isn’t answering. Make sure it’s running, then try again.";
+const NO_ANSWER = "Nebula didn’t respond. Try again.";
 const REFUSED = "Try again, or reload if it keeps happening.";
-const ACCESS = "You don't have access to this anymore. Reload to sign in again.";
-const TOO_LARGE = "That's too large to save.";
+const ACCESS = "You don’t have access to this anymore. Reload to sign in again.";
+const TOO_LARGE = "That’s too large to save.";
 
 describe('the lines are GM\'s, verbatim', () => {
   it('lost connection and no response', () => {
@@ -61,7 +61,7 @@ describe('error kind -> line', () => {
     [502, undefined, NO_ANSWER],
     [503, 'Commons request failed (503)', NO_ANSWER],
     [504, undefined, NO_ANSWER],
-    [409, 'Labels changed in another window. Reload before saving.', 'Labels changed in another window. Reload before saving.'],
+    [409, 'Labels changed in another tab. Reload before saving.', 'Labels changed in another tab. Reload before saving.'],
     [404, 'This batch is closed.', 'This batch is closed.'],
     [403, 'only the human UI session can do this', 'only the human UI session can do this'],
     [400, undefined, REFUSED],
@@ -114,66 +114,72 @@ describe('ConnectionLostError keeps the original for debugging', () => {
  */
 describe('round 2: heading + reason + kind', async () => {
   const copy = await import('../../src/lib/errorCopy');
-  const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
-  const NO_ANSWER_SHORT = "Nebula didn't respond.";
-  const HEADING = "Couldn't save the moodboard.";
+  const HEADING = "Couldn’t save the moodboard.";
+  const WHAT = 'save the moodboard';
+  const line = (clause: string) => `Nebula couldn’t ${WHAT} because ${clause}`;
 
-  it('GM\'s short lines and the other round 2 lines, verbatim', () => {
-    expect(copy.CONNECTION_LOST_SHORT_COPY).toBe(LOST_SHORT);
-    expect(copy.NO_RESPONSE_SHORT_COPY).toBe(NO_ANSWER_SHORT);
-    expect(copy.BACKEND_NOT_RUNNING_COPY).toBe("Nebula's backend isn't running. Start it, then reload.");
+  it('the other round 2 lines, verbatim', () => {
+    expect(copy.BACKEND_NOT_RUNNING_COPY).toBe("Nebula’s backend isn’t running. Start it, then reload.");
   });
 
-  // [status, detail, reason, short reason, kind]
-  const table: Array<[number, unknown, string, string, string]> = [
-    [0, undefined, LOST, LOST_SHORT, 'connection'],
-    [408, 'Request timed out', NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
-    [429, undefined, NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
-    [500, 'Internal Server Error', NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
-    [503, undefined, NO_ANSWER, NO_ANSWER_SHORT, 'no-response'],
-    [409, 'This moodboard changed in another window.', 'This moodboard changed in another window.', 'This moodboard changed in another window.', 'refused'],
-    // GM's 4xx fallback keeps its "Try again" on a retry surface too (listed for GM).
-    [400, undefined, REFUSED, REFUSED, 'refused'],
-    [422, [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }], REFUSED, REFUSED, 'refused'],
-    [403, undefined, ACCESS, ACCESS, 'refused'],
-    [413, undefined, TOO_LARGE, TOO_LARGE, 'refused'],
+  // [status, detail, bare reason, the line on its own, the line beside a Try again button, kind]
+  const table: Array<[number, unknown, string, string, string, string]> = [
+    [0, undefined, LOST, line('the server isn’t answering. Check that Nebula is running, then try again.'),
+      line('the server isn’t answering. Try again.'), 'connection'],
+    [408, 'Request timed out', NO_ANSWER, line('the server didn’t respond. Try again.'), line('the server didn’t respond. Try again.'), 'no-response'],
+    [429, undefined, NO_ANSWER, line('the server is busy. Try again in a moment.'), line('the server is busy. Try again.'), 'no-response'],
+    [500, 'Internal Server Error', NO_ANSWER, line('the server hit an error. Try again.'), line('the server hit an error. Try again.'), 'no-response'],
+    [503, undefined, NO_ANSWER, line('the server didn’t respond. Try again.'), line('the server didn’t respond. Try again.'), 'no-response'],
+    [409, 'This moodboard changed in another tab.', 'This moodboard changed in another tab.',
+      line('this moodboard changed in another tab.'), line('this moodboard changed in another tab.'), 'refused'],
+    // The 4xx fallback keeps its "Try again, or reload" on its own and ends in the button's "Try again." beside one.
+    [400, undefined, REFUSED, line('the server didn’t accept it. Try again, or reload if it keeps happening.'),
+      line('the server didn’t accept it. Try again.'), 'refused'],
+    [422, [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }], REFUSED,
+      line('the server didn’t accept it. Try again, or reload if it keeps happening.'), line('the server didn’t accept it. Try again.'), 'refused'],
+    [403, undefined, ACCESS, line('you don’t have access to this anymore. Reload to sign in again.'),
+      line('you don’t have access to this anymore. Reload to sign in again.'), 'refused'],
+    [413, undefined, TOO_LARGE, line('it’s too large.'), line('it’s too large.'), 'refused'],
   ];
-  it.each(table)('HTTP %i (detail %j): heading, reason, short reason, kind', (status, detail, reason, short, kind) => {
+  it.each(table)('HTTP %i (detail %j): heading, reason, the line alone and beside a button, kind', (status, detail, reason, alone, button, kind) => {
     const error = new copy.RequestFailedError(HEADING, status, { detail });
     expect(error.heading).toBe(HEADING);
     expect(error.reason).toBe(reason);
     expect(error.kind).toBe(kind);
     expect(error.status).toBe(status);
     expect(error.detail).toEqual(detail);
-    expect(error.message).toBe(`${HEADING} ${reason}`);
-    expect(copy.failureCopy(error)).toEqual({ heading: HEADING, reason });
-    expect(copy.failureCopy(error, { short: true })).toEqual({ heading: HEADING, reason: short });
+    expect(error.message).toBe(alone);
+    expect(copy.failureCopy(error)).toEqual({ heading: '', reason: alone, button, cause: reason, what: WHAT, status });
+    expect(copy.failureCopy(error, { short: true })).toEqual({ heading: '', reason: button, button, cause: reason, what: WHAT, status });
   });
 
   it('a lost connection named by its action keeps the browser\'s error and stays a TypeError', () => {
     const original = new TypeError('Failed to fetch');
-    const error = new copy.ConnectionLostError(original).withHeading("Couldn't load your API keys.");
+    const error = new copy.ConnectionLostError(original).withHeading("Couldn’t load your API keys.");
     expect(error).toBeInstanceOf(TypeError);
     expect(error).toBeInstanceOf(copy.ConnectionLostError);
     expect(error.cause).toBe(original);
     expect(error.status).toBe(0);
-    expect(error.message).toBe(`Couldn't load your API keys. ${LOST}`);
-    expect(copy.failureCopy(error, { short: true })).toEqual({ heading: "Couldn't load your API keys.", reason: LOST_SHORT });
+    expect(error.message).toBe('Nebula couldn’t load your API keys because the server isn’t answering. Check that Nebula is running, then try again.');
+    expect(copy.failureCopy(error, { short: true }).reason)
+      .toBe('Nebula couldn’t load your API keys because the server isn’t answering. Try again.');
   });
 
   it('withHeading names a lost connection, and leaves anything else (the caller\'s abort) as it was', () => {
-    const lost = copy.withHeading(new copy.ConnectionLostError(new TypeError('x')), "Couldn't cancel the run.");
-    expect((lost as Error).message).toBe(`Couldn't cancel the run. ${LOST}`);
+    const lost = copy.withHeading(new copy.ConnectionLostError(new TypeError('x')), "Couldn’t cancel the run.");
+    expect((lost as Error).message).toBe('Nebula couldn’t cancel the run because the server isn’t answering. Check that Nebula is running, then try again.');
     const abort = new DOMException('aborted', 'AbortError');
-    expect(copy.withHeading(abort, "Couldn't cancel the run.")).toBe(abort);
+    expect(copy.withHeading(abort, "Couldn’t cancel the run.")).toBe(abort);
   });
 
-  it('a failure that isn\'t a request\'s says GM\'s general line under the heading the screen gives it', () => {
-    expect(copy.failureCopy(new Error('Unexpected token <'), { heading: HEADING })).toEqual({ heading: HEADING, reason: REFUSED });
-    expect(copy.failureCopy(new copy.ConnectionLostError(new TypeError('Failed to fetch')), { heading: HEADING, short: true }))
-      .toEqual({ heading: HEADING, reason: LOST_SHORT });
-    expect(copy.failureMessage(new Error('boom'), HEADING)).toBe(`${HEADING} ${REFUSED}`);
-    expect(copy.failureMessage(new copy.RequestFailedError(HEADING, 503), "Couldn't do it.")).toBe(`${HEADING} ${NO_ANSWER}`);
+  it('a failure that isn\'t a request\'s says the general line under the heading the screen gives it', () => {
+    const general = line('the server didn’t accept it. Try again, or reload if it keeps happening.');
+    expect(copy.failureCopy(new Error('Unexpected token <'), { heading: HEADING })).toEqual({ heading: '', reason: general,
+      button: line('the server didn’t accept it. Try again.'), cause: REFUSED, what: WHAT });
+    expect(copy.failureCopy(new copy.ConnectionLostError(new TypeError('Failed to fetch')), { heading: HEADING, short: true }).reason)
+      .toBe(line('the server isn’t answering. Try again.'));
+    expect(copy.failureMessage(new Error('boom'), HEADING)).toBe(general);
+    expect(copy.failureMessage(new copy.RequestFailedError(HEADING, 503), "Couldn’t do it.")).toBe(line('the server didn’t respond. Try again.'));
   });
 
   it('a reason with no heading stands alone', () => {
@@ -190,11 +196,11 @@ describe('round 2: requestError reads the answer and keeps the status in the con
     const list = [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }];
     const error = await copy.requestError("Couldn't save the moodboard.",
       new Response(JSON.stringify({ detail: list }), { status: 422, headers: { 'Content-Type': 'application/json' } }));
-    expect(error.message).toBe(`Couldn't save the moodboard. ${REFUSED}`);
+    expect(error.message).toBe('Nebula couldn’t save the moodboard because the server didn’t accept it. Try again, or reload if it keeps happening.');
     expect(error.detail).toEqual(list);
     const reasoned = await copy.requestError("Couldn't move the moodboard.",
       new Response(JSON.stringify({ detail: 'That project is gone.' }), { status: 404 }));
-    expect(reasoned.message).toBe("Couldn't move the moodboard. That project is gone.");
+    expect(reasoned.message).toBe('Nebula couldn’t move the moodboard because that project is gone.');
   });
 
   it('warns once with the status and raw detail, not on every identical failure, and again after a success', async () => {
@@ -210,16 +216,20 @@ describe('round 2: requestError reads the answer and keeps the status in the con
   });
 });
 
-describe('round 2: shortLine, the WRAP rule for a one-line string beside a retry button', () => {
-  it('swaps a trailing "try again" line for its short form, and leaves anything else', async () => {
-    const { shortLine } = await import('../../src/lib/errorCopy');
-    expect(shortLine("Couldn't load your projects. Nebula didn't respond. Try again."))
-      .toBe("Couldn't load your projects. Nebula didn't respond.");
-    expect(shortLine("Couldn't load your projects. Nebula's server isn't answering. Make sure it's running, then try again."))
-      .toBe("Couldn't load your projects. Nebula's server isn't answering. Make sure it's running.");
-    // GM's 4xx fallback keeps its "Try again" (listed for GM).
-    const refused = "Couldn't open the project. Try again, or reload if it keeps happening.";
-    expect(shortLine(refused)).toBe(refused);
-    expect(shortLine('Projects could not be loaded.')).toBe('Projects could not be loaded.');
+// shortLine is gone: a line beside a Try again button is built as becauseLine(parts, 'button'), and besideButton
+// swaps the ending of a line that is already in the because form.
+describe('round 2: the ending beside a retry button', () => {
+  it('swaps the closing step for the button\'s own, and leaves anything else', async () => {
+    const { becauseLine, besideButton } = await import('../../src/lib/errorCopy');
+    expect(becauseLine({ heading: "Couldn’t load your projects.", reason: NO_ANSWER }, 'button'))
+      .toBe('Nebula couldn’t load your projects because the server didn’t respond. Try again.');
+    expect(becauseLine({ heading: "Couldn’t load your projects.", reason: LOST }, 'button'))
+      .toBe('Nebula couldn’t load your projects because the server isn’t answering. Try again.');
+    expect(besideButton('Nebula couldn’t load your projects because the server isn’t answering. Check that Nebula is running, then try again.'))
+      .toBe('Nebula couldn’t load your projects because the server isn’t answering. Try again.');
+    // The 4xx fallback ends in the button's "Try again." too; a line with another ending is as it was.
+    expect(besideButton('Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.'))
+      .toBe('Nebula couldn’t open the project because the server didn’t accept it. Try again.');
+    expect(besideButton('Projects could not be loaded.')).toBe('Projects could not be loaded.');
   });
 });

@@ -7,7 +7,7 @@ import {
   selectedNodeIds,
 } from '../../src/lib/canvasSelection';
 import { GRAPH_BUNDLE_MAX_ASSET_BYTES } from '../../src/lib/graphFile';
-import { CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY } from '../../src/lib/errorCopy';
+import { ConnectionLostError } from '../../src/lib/errorCopy';
 
 const bounded = vi.hoisted(() => ({ fake: null as null | number }));
 vi.mock('../../src/lib/boundedAsset', async (original) => {
@@ -161,17 +161,17 @@ describe('canvas selection context', () => {
     };
 
     it.each([
-      ['no answer (fetch TypeError)', () => Promise.reject(new TypeError('Failed to fetch')), CONNECTION_LOST_COPY],
-      ['503', () => Promise.resolve(new Response('upstream down', { status: 503 })), NO_RESPONSE_COPY],
-      ['429', () => Promise.resolve(new Response('', { status: 429 })), NO_RESPONSE_COPY],
-      ['404', () => Promise.resolve(new Response('', { status: 404 })), "Try again, or reload if it keeps happening."],
-      ['403', () => Promise.resolve(new Response('', { status: 403 })), "You don't have access to this anymore. Reload to sign in again."],
+      ['no answer (fetch TypeError)', () => Promise.reject(new TypeError('Failed to fetch')), 'because the server isn’t answering. Check that Nebula is running, then try again.'],
+      ['503', () => Promise.resolve(new Response('upstream down', { status: 503 })), 'because the server didn’t respond. Try again.'],
+      ['429', () => Promise.resolve(new Response('', { status: 429 })), 'because the server is busy. Try again in a moment.'],
+      ['404', () => Promise.resolve(new Response('', { status: 404 })), 'because the server didn’t accept it. Try again, or reload if it keeps happening.'],
+      ['403', () => Promise.resolve(new Response('', { status: 403 })), 'because you don’t have access to this anymore. Reload to sign in again.'],
     ])('%s reads as copy', async (_kind, answer, line) => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.stubGlobal('fetch', vi.fn(answer));
       const error = await failure();
-      // Round 2: the Download button's title is one line, "Couldn't {verb} {object}. {reason}".
-      expect(error.message).toBe(`Couldn't download the outputs. ${line}`);
+      // Round 2: the Download button's title is one line in the because form.
+      expect(error.message).toBe(`Nebula couldn’t download the outputs ${line}`);
       expect(error.message).not.toMatch(/Failed to fetch|n1|image|\d{3}/);
     });
 

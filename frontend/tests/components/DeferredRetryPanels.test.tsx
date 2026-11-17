@@ -125,7 +125,7 @@ describe('a deferred panel whose chunk failed once', () => {
     render(<MaskPainterModal {...props} />);
     await flush();
     expect(chunks.loads.get('mask')).toBe(2);
-    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load the mask painter/i);
+    expect(screen.getByRole('alert')).toHaveTextContent('Nebula couldn’t load the mask painter because the server isn’t answering. Try again.');
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('dialog', { name: 'Real mask painter' })).toBeInTheDocument();

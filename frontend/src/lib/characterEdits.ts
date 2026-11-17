@@ -9,7 +9,7 @@ export class CharacterVersionConflict extends RequestFailedError {
   /** After three in a row the Studio's notice says this, as the board's does
    * (GM, error-copy round 2); the version stays in `detail`. */
   constructor(character: Character) {
-    super("Couldn’t save the character.", 409, { reason: 'This character changed in another window. Reload to get the latest version.',
+    super("Couldn’t save the character.", 409, { reason: 'This character changed in another tab. Reload to get the latest version.',
       detail: { code: 'version_conflict', version: character.version } });
     this.name = 'CharacterVersionConflict';
     this.character = character;

@@ -46,7 +46,7 @@ it('does not reveal palette until the server accepts accent observations', async
 
 it('preserves unsaved labels when a stale revision is rejected', async () => {
   const value = batch(); value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
-  api.get.mockResolvedValue(value); api.labels.mockRejectedValue(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
+  api.get.mockResolvedValue(value); api.labels.mockRejectedValue(new CommonsRequestError('Labels changed in another tab. Reload before saving.', 409));
   render(<CommonsEvaluation />);
   await screen.findByText('Set neutral');
   fireEvent.click(screen.getByText('Set neutral'));
@@ -114,8 +114,8 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   expect(screen.queryByText(/Unsaved changes ·/)).toBeNull();
   await waitFor(() => expect(work?.unsaved).toBe(true));
 
-  api.labels.mockRejectedValueOnce(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because Labels changed in another window. Reload before saving.', retry: false });
+  api.labels.mockRejectedValueOnce(new CommonsRequestError('Labels changed in another tab. Reload before saving.', 409));
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because labels changed in another tab. Reload before saving.', retry: false });
   // The API's error carries the copy (lib/commonsApi, error-copy); round 2:
   // the leave popover's line is the one because line, the same as the panel's banner.
   api.labels.mockRejectedValueOnce(new CommonsRequestError('Nebula didn’t respond. Try again.', 503));

@@ -26,7 +26,7 @@ FIELDS = dict(type_style=TYPE_STYLES, spacing_density=SPACING, layout=LAYOUTS, m
 
 class EvaluationError(ValueError):
     """A refused labeling step. Most messages are written for the person
-    (GM approved "Labels changed in another window. Reload before saving.")
+    (GM approved "Labels changed in another tab. Reload before saving.")
     and are what the UI shows. A technical one (an OSError's text, a path)
     also carries `person`, the line the UI shows instead; the message is
     logged (GM - Design, error-copy round 2)."""
@@ -252,7 +252,7 @@ def _batch(conn, revision=None, *, mutable=False):
     if mutable and row['closed']:
         raise EvaluationError("This held-out set was closed as assisted review, so its blind labels can’t change.")
     if revision is not None and (type(revision) is not int or revision != row['revision']):
-        raise EvaluationError('Labels changed in another window. Reload before saving.')
+        raise EvaluationError('Labels changed in another tab. Reload before saving.')
     return row
 
 

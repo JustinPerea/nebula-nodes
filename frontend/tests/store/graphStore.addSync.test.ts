@@ -57,7 +57,9 @@ const paths = () => fetchMock.mock.calls.map(([url, init]) =>
 const alerted = () => alertMock.mock.calls.map(([text]) => text);
 const logged = () => useAgentLogStore.getState().entries.map((entry) => entry.message);
 const label = (definitionId: string) => NODE_DEFINITIONS[definitionId].displayName;
-const couldntAdd = (definitionId: string) => `Couldn’t add “${label(definitionId)}”.`;
+const couldntAdd = (definitionId: string) => `Nebula couldn’t add “${label(definitionId)}”.`;
+// The Agent log and the console keep the action's heading with the raw reason after it.
+const addHeading = (definitionId: string) => `Couldn’t add “${label(definitionId)}”.`;
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -132,7 +134,7 @@ describe('a sync that fails: nothing is added, the person reads GM’s line, the
       expect(paths().filter((path) => !path.startsWith('GET'))).toEqual([]);
       expect(alerted()).toEqual([couldntAdd(definitionId)]);
       expect(logged()).toHaveLength(1);
-      expect(logged()[0].startsWith(`${couldntAdd(definitionId)} `)).toBe(true);
+      expect(logged()[0].startsWith(`${addHeading(definitionId)} `)).toBe(true);
       expect(logged()[0]).toMatch(reason);
     });
   }

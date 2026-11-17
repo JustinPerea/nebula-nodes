@@ -89,7 +89,7 @@ function backendGraph(s2: Shot = { id: 's2', prompt: 'b' }) {
   };
 }
 
-describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', () => {
+describe('H1-new: a shot removal another tab\'s run refuses (review 4, R3)', () => {
   function setUp(status = 409, detail = REMOVE_LINE) {
     const graph = backendGraph();
     useGraphStore.setState({ nodes: graph.nodes, edges: graph.edges } as never);

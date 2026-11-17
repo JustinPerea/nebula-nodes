@@ -221,11 +221,11 @@ describe('Create lifecycle across view visits', () => {
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
     fireEvent.click(view.getByRole('button', { name: 'Stop preparing generation' }));
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(1);
-    expect(view.getByRole('button', { name: 'Cancelling preparation' })).toBeDisabled();
+    expect(view.getByRole('button', { name: 'Canceling preparation' })).toBeDisabled();
     view.unmount();
     const reopened = render(<CreateView />);
     expect(reopened.getByRole('button', { name: 'Generate' })).toBeDisabled();
-    expect(reopened.getByRole('button', { name: 'Cancelling preparation' })).toBeDisabled();
+    expect(reopened.getByRole('button', { name: 'Canceling preparation' })).toBeDisabled();
     await act(async () => { finish({ modelNodeIds: ['model'], allNodeIds: ['model'] }); });
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.store!.getState().createLaunchingIds).toHaveLength(0);
@@ -239,7 +239,7 @@ describe('Create lifecycle across view visits', () => {
     fireEvent.click(view.getByRole('button', { name: 'Stop generation 1' }));
     expect(mocks.cancel).toHaveBeenCalledWith('run-one');
     act(() => mocks.store!.setState({ activeRuns: [{ id: 'run-one', status: 'cancelling' }] }));
-    expect(view.getByRole('button', { name: 'Cancelling generation 1' })).toBeDisabled();
+    expect(view.getByRole('button', { name: 'Canceling generation 1' })).toBeDisabled();
     fireEvent.click(view.getByRole('button', { name: 'History' }));
     expect(mocks.exit).toHaveBeenCalled();
     expect(mocks.dock).toHaveBeenCalledWith('history');
