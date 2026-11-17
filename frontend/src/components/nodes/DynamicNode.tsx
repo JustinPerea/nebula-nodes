@@ -30,6 +30,7 @@ import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { StructuredOutputs } from './DeferredOutputViews';
 import { canvasTitle } from '../../lib/directRoute';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -174,7 +175,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         <NodeLabel nodeId={id} label={nodeData.label} displayName={definition?.displayName}
           defaultTitle={definition ? canvasTitle(definition) : undefined} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
-        {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="API Key Missing">&#x26A0;</span>}
+        {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning" title="Needs an API key">&#x26A0;</span>}
         <NodeWaitSwap nodeId={id} wait={nodeWait} />
       </div>
 
@@ -285,6 +286,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           providerText={nodeData.errorProviderText}
           provider={nodeData.errorProvider}
           notStarted={nodeData.errorNotStarted}
+          missingKey={drawsAsMissingKey(nodeData)}
           raw={nodeData.error}
         />
       )}

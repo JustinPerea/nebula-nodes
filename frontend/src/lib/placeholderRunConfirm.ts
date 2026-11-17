@@ -9,6 +9,7 @@ import { cleanPending, type PendingAgent } from './pendingNodes';
 import { formatUsdRange } from './pricing';
 import { runCostNotes, runNodeName, type RunCost, type RunScopeSummary } from './runScope';
 import { nodeNameList } from './errorCopy';
+import { agentNameInSentence } from './personalAgentName';
 
 /**
  * Q133 (Justin, 2026-10-25, option b): the person's direct run still runs the
@@ -771,7 +772,7 @@ export function placeholderRunConfirm(
   // under the still-setting-up heading. Verbatim.
   const leftAgents = agentNames(left);
   // Round 11, item 6: "the agents" ("nodes agents" read like a stumble).
-  const leftWho = leftAgents.length === 1 ? leftAgents[0] : 'the agents';
+  const leftWho = leftAgents.length === 1 ? agentNameInSentence(leftAgents[0]) : 'the agents';
   const leftLine = left.length === 0 ? null : left.length === 1
     ? `1 node ${leftWho} was setting up is no longer in this run.`
     : `${left.length} nodes ${leftWho} ${leftAgents.length === 1 ? 'was' : 'were'} setting up are no longer in this run.`;
@@ -793,7 +794,7 @@ export function placeholderRunConfirm(
   if (count > 0) {
     const agents = agentNames(placeholders.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;
-    heading = `Run ${count} ${count === 1 ? 'node' : 'nodes'} ${one ? `${one} is` : 'the agents are'} still setting up?`;
+    heading = `Run ${count} ${count === 1 ? 'node' : 'nodes'} ${one ? `${agentNameInSentence(one)} is` : 'the agents are'} still setting up?`;
     intro = one
       ? `${one} hasn't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`
       : `Agents haven't finished ${count === 1 ? 'this, so its settings' : 'these, so their settings'} may not be final.`;
@@ -810,7 +811,7 @@ export function placeholderRunConfirm(
     const agents = agentNames(finished.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;
     const these = finished.length === 1 ? 'this node' : 'these nodes';
-    heading = one ? `Run with ${one}'s changes?` : "Run with the agents' changes?";
+    heading = one ? `Run with ${agentNameInSentence(one)}'s changes?` : "Run with the agents' changes?";
     intro = one ? `${one} finished setting up ${these}.` : `The agents finished setting up ${these}.`;
   } else {
     // Every placeholder the dialog showed left the run, none finished
@@ -818,8 +819,8 @@ export function placeholderRunConfirm(
     const agents = agentNames(left);
     const one = agents.length === 1 ? agents[0] : null;
     heading = left.length === 1 && one
-      ? `Run without the node ${one} was setting up?`
-      : one ? `Run without the nodes ${one} was setting up?` : 'Run without the nodes the agents were setting up?';
+      ? `Run without the node ${agentNameInSentence(one)} was setting up?`
+      : one ? `Run without the nodes ${agentNameInSentence(one)} was setting up?` : 'Run without the nodes the agents were setting up?';
     intro = left.length === 1 ? "It's no longer in this run." : "They're no longer in this run.";
   }
   const totalLine = totalLineFor(cost, anyMissing);

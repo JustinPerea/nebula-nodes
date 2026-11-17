@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { type ProposalNotReady } from '../../src/lib/canvasProposals';
 import { mergedNotReadyLine, notReadyShown } from '../../src/lib/canvasProposalsBar';
-import { addKeyLine, keyPhrase, KEY_NAMES } from '../../src/lib/directRoute';
+import { addKeyLine, keyPhrase, KEY_NAMES, withArticle } from '../../src/lib/directRoute';
 import { keychainKeptLine } from '../../src/lib/settingsWrites';
 import { modelKeyMissingText } from '../../src/lib/failureLines';
 import { NOT_READY_REASONS, reasonFor } from '../helpers/notReadyReasons';
@@ -86,10 +86,10 @@ describe('every reason the registry gives, for one node and for several (review 
 
 describe('the one add-key line (GM r28 item 3)', () => {
   it('says each key from the noun source, a sentence with its period', () => {
-    expect(addKeyLine(['REPLICATE_API_TOKEN'])).toBe('Add your Replicate token in Settings.');
-    expect(addKeyLine(['GOOGLE_VERTEX_CREDENTIALS'])).toBe('Add your Vertex AI service account key in Settings.');
-    for (const key of Object.keys(KEY_NAMES)) expect(addKeyLine([key])).toBe(`Add your ${keyPhrase([key])} in Settings.`);
-    expect(modelKeyMissingText('X', ['REPLICATE_API_TOKEN'])).toBe("Couldn't set up “X”. Add your Replicate token in Settings.");
+    expect(addKeyLine(['REPLICATE_API_TOKEN'])).toBe('Add a Replicate token in Settings to run this node.');
+    expect(addKeyLine(['GOOGLE_VERTEX_CREDENTIALS'])).toBe('Add a Vertex AI service account key in Settings to run this node.');
+    for (const key of Object.keys(KEY_NAMES)) expect(addKeyLine([key])).toBe(`Add ${withArticle(keyPhrase([key])!)} in Settings to run this node.`);
+    expect(modelKeyMissingText('X', ['REPLICATE_API_TOKEN'])).toBe('Nebula couldn’t set up “X” because it needs a Replicate token. Add one in Settings.');
   });
 
   it('never puts "Google ·" in front of Vertex outside the Settings row', () => {

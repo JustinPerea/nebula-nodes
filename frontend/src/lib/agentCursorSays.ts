@@ -246,16 +246,16 @@ export const DEFAULT_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: s
 /** Every surface line, with its case, for GM's review and the docs (Phase 3,
  *  r4 item 4; Characters and Styles). */
 export const SURFACE_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: string; line: string }[] = ([
-  ['look', 'a board', { board: 'Desert light', hasImage: false }],
+  ['look', 'a moodboard', { board: 'Desert light', hasImage: false }],
   ['look', 'an image', { board: 'Desert light', image: 12, hasImage: true }],
-  ['look', 'a board\u2019s colors (Analyze)', { board: 'Desert light', hasImage: false, part: 'colors' }],
-  ['type', 'a board\u2019s Direction', { board: 'Desert light', hasImage: false, part: 'direction' }],
-  ['type', 'a board\u2019s Avoid list', { board: 'Desert light', hasImage: false, part: 'avoid' }],
-  ['type', 'a board\u2019s name', { board: 'Desert light', hasImage: false, part: 'name' }],
-  ['click', 'a board\u2019s pinned colors', { board: 'Desert light', hasImage: false, part: 'colors' }],
+  ['look', 'a moodboard\u2019s colors (Analyze)', { board: 'Desert light', hasImage: false, part: 'colors' }],
+  ['type', 'a moodboard\u2019s Direction', { board: 'Desert light', hasImage: false, part: 'direction' }],
+  ['type', 'a moodboard\u2019s Avoid list', { board: 'Desert light', hasImage: false, part: 'avoid' }],
+  ['type', 'a moodboard\u2019s name', { board: 'Desert light', hasImage: false, part: 'name' }],
+  ['click', 'a moodboard\u2019s pinned colors', { board: 'Desert light', hasImage: false, part: 'colors' }],
   ['type', 'an image\u2019s note', { board: 'Desert light', image: 12, hasImage: true, part: 'note' }],
   ['click', 'an image\u2019s weight', { board: 'Desert light', image: 12, hasImage: true, part: 'weight' }],
-  ['type', 'a board, no control known', { board: 'Desert light', hasImage: false }],
+  ['type', 'a moodboard, no control known', { board: 'Desert light', hasImage: false }],
 ] as const).map(([action, when, context]) => ({ action, when, line: surfaceSay(action, context) ?? '' }));
 
 /** The Character and Style lines, with their cases (the common contract's

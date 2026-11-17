@@ -791,7 +791,7 @@ export function AgentLog() {
           type="button"
           className="agent-log-hidden-notice__action"
           onClick={handleShowAgain}
-          title="Also in Settings > Preferences > Agent log"
+          title="Also in Settings"
         >
           Show again
         </button>
@@ -887,7 +887,7 @@ export function AgentLog() {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={handleHide}
           aria-label="Hide agent log"
-          title="Hide agent log (Settings > Preferences brings it back)"
+          title="Hide agent log (Settings brings it back)"
         >
           <EyeOff size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </button>

@@ -308,8 +308,8 @@ _TAILS = [
     r"",
     rf"\. The Direction also asks for {_QUOTE}, so it may clash\.",
     rf"\. This color is more saturated than that, though the Direction also asks for {_QUOTE}\.",
-    r"\. The board's colors lean that way overall\.",
-    r"\. The board leans that way, and this color adds to it\.",
+    r"\. The moodboard’s colors lean that way overall\.",
+    r"\. The moodboard leans that way, and this color adds to it\.",
     r"\. It may tint the image toward the cast you avoid\.",
 ]
 

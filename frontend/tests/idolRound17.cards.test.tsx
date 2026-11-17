@@ -30,7 +30,7 @@ import { RUNTIME_FIELDS } from '../src/lib/canvasUndo';
 const REFUSED = 'Nebula couldn’t start the run.';
 const STARTED = "Couldn't run the node.";
 const KEY = 'Missing API key: OPENAI_API_KEY';
-const KEY_LINE = 'Add your OpenAI API key in Settings, then run the node again.';
+const KEY_LINE = 'Add an OpenAI API key in Settings to run this node.';
 
 const node = (id: string, definitionId = 'gpt-image-1-generate', extra: Partial<NodeData> = {}): Node<NodeData> => ({
   id, type: 'model-node', position: { x: 0, y: 0 },

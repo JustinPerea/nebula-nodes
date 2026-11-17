@@ -42,6 +42,7 @@ from typing import Any, Callable, Iterable, Mapping
 from services import agent_words
 from services.agent_params import internal_refusal
 from services.agent_presence import AgentIdentity
+from services.personal_agents import in_sentence
 from services.canvas_pins import PinError, clean_text
 from services.selection_context import _SECRET_KEY_RE
 from services.selection_context import _safe_value as safe_value
@@ -1031,7 +1032,7 @@ def plan_line(view: Mapping[str, Any]) -> str:
         # Design, round 4), counting the placeholders themselves (review 4, M2).
         count = int(pending.get("placeholders") or pending.get("count") or 0)
         agents = [str(agent) for agent in pending.get("agents") or []]
-        who = f"{agents[0]} finishes" if len(agents) == 1 and agents[0] else "agents finish"
+        who = f"{in_sentence(agents[0])} finishes" if len(agents) == 1 and agents[0] else "agents finish"
         segments.append(f"runs nothing until {who} {_plural(count, 'node')}")
     else:
         # Runs by cost class (GM, PR #203 r11 item 2, r19 item 1): paid ones,
@@ -1808,7 +1809,7 @@ def update_outcome(proposal: Proposal) -> str:
     deleted, the canvas was cleared or replaced, or what it changes was
     edited since)."""
     if proposal.status == "withdrawn":
-        return f"Withdrawn by {proposal.agent.name}"
+        return f"Withdrawn by {in_sentence(proposal.agent.name)}"
     return _OUTCOMES.get(proposal.status, "No longer fits")
 
 

@@ -272,7 +272,7 @@ describe('Moodboard Studio sends image edits as checked edits', () => {
 describe('Moodboard Studio after the races reviewers found', () => {
   it('a field the server cleaned still takes the next outside edit', async () => {
     await openStudio();
-    const direction = screen.getByRole('textbox', { name: 'What the board is for' });
+    const direction = screen.getByRole('textbox', { name: 'What the moodboard is for' });
     fireEvent.change(direction, { target: { value: 'warm dusk ' } });
     fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Moodboard ' } });
     await waitFor(() => expect(server.board.direction).toBe('warm dusk'), { timeout: 3000 });
@@ -303,13 +303,13 @@ describe('Moodboard Studio after the races reviewers found', () => {
       return answer;
     });
     await openStudio();
-    const direction = screen.getByRole('textbox', { name: 'What the board is for' });
+    const direction = screen.getByRole('textbox', { name: 'What the moodboard is for' });
     fireEvent.change(direction, { target: { value: 'warm dusk' } });
     await waitFor(() => expect(server.board.direction).toBe('warm dusk'), { timeout: 3000 });
     fireEvent.change(direction, { target: { value: '' } });
     await act(async () => { land(); });
     await waitFor(() => expect(server.board.direction).toBe(''), { timeout: 3000 });
-    expect((screen.getByRole('textbox', { name: 'What the board is for' }) as HTMLTextAreaElement).value).toBe('');
+    expect((screen.getByRole('textbox', { name: 'What the moodboard is for' }) as HTMLTextAreaElement).value).toBe('');
   });
 
   it('a pending edit on an image someone removed is dropped, and the rest still saves', async () => {

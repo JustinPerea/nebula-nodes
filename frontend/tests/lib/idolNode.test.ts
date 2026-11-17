@@ -30,7 +30,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(IDOL.inputPorts.map((port) => [port.id, port.dataType, port.required])).toEqual([['image', 'Image', true]]);
     // GM r12 item 4, word for word.
     expect(IDOL.description).toBe('Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs '
-      + 'free on Hugging Face. Add your Hugging Face token to use your own allowance.');
+      + 'free on Hugging Face. Add a Hugging Face token to use your own allowance.');
   });
 
   it('routes like the backend: anonymous without a token, on the token with one, never locked', () => {
@@ -58,7 +58,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
     expect(anonymous).toEqual({ label: 'Free', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face',
-      detail: 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add your Hugging Face token in Settings '
+      detail: 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add a Hugging Face token in Settings '
         + 'to use your own allowance.' });
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
     expect(signedIn).toEqual({ label: 'Saved', tone: 'neutral',

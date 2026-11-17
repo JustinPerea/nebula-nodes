@@ -387,8 +387,8 @@ def test_an_idol_run_without_a_token_is_tagged_by_its_route():
 
 def test_person_lines_name_the_krea_key_as_its_row_does():
     assert key_phrase(["KREA_API_TOKEN"]) == "Krea API key"
-    assert key_line(["KREA_API_TOKEN"]) == "Add your Krea API key in Settings, then run the node again."
-    assert key_line(["FAL_KEY", "KREA_API_TOKEN"]) == "Add your fal.ai or Krea API key in Settings, then run the node again."
+    assert key_line(["KREA_API_TOKEN"]) == "Add a Krea API key in Settings to run this node."
+    assert key_line(["FAL_KEY", "KREA_API_TOKEN"]) == "Add a fal.ai or Krea API key in Settings to run this node."
     fixtures = json.loads((BACKEND / "tests" / "fixtures" / "route_tables.json").read_text(encoding="utf-8"))
     assert fixtures["keyNames"]["KREA_API_TOKEN"] == ["Krea", "API key"]
 

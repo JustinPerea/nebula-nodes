@@ -52,8 +52,8 @@ APPROVED_EXECUTION_PATTERN_CHANGES = {
 # than exempting entire definitions or accepting an arbitrary new baseline.
 APPROVED_INPUT_PORT_ADDITIONS = {
     "cinema-scene": [
-        {"id": "camera_rig", "label": "Camera Rig", "dataType": "CameraRig", "required": False},
-        {"id": "reference_set", "label": "Reference Set", "dataType": "ReferenceSet", "required": False},
+        {"id": "camera_rig", "label": "Camera rig", "dataType": "CameraRig", "required": False},
+        {"id": "reference_set", "label": "Reference set", "dataType": "ReferenceSet", "required": False},
     ],
     "seedream-4-5": [
         {"id": "images", "label": "References", "dataType": "Image", "required": False,
@@ -61,7 +61,7 @@ APPROVED_INPUT_PORT_ADDITIONS = {
     ],
 }
 APPROVED_CAPABILITY_NOTE_ADDITIONS = {
-    "cinema-scene": "Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.",
+    "cinema-scene": "Camera rig adds prompt guidance. Reference set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.",
     "identity-edit": "Identity guidance uses Character reference images and traits. This model has no identity-strength or mask control.",
 }
 APPROVED_PARAM_FIELD_ADDITIONS = {
@@ -86,7 +86,40 @@ APPROVED_PARAM_LABEL_CHANGES = {
 }
 APPROVED_PORT_LABEL_CHANGES = {
     "identity-edit": {"mask": ("Mask", "Mask (unavailable)")},
+    # Sentence case for the names a card shows (GM, 2026-11 copy sweep items 13 and 15).
+    "cinema-scene": {"character_refs": ("Character Refs", "Character refs")},
 }
+# Output ports renamed in the same sweep: {node: {port id: (baseline label, current label)}}.
+APPROVED_OUTPUT_PORT_LABEL_CHANGES = {
+    "camera-rig": {"camera_rig": ("Camera Rig", "Camera rig")},
+    "reference-set": {"reference_set": ("Reference Set", "Reference set")},
+}
+# Card type names in sentence case (GM, 2026-11 copy sweep item 13): {node: (baseline, current)}.
+APPROVED_DISPLAY_NAME_CHANGES = {
+    "cinema-scene": ("Cinema Scene", "Cinema scene"),
+    "camera-rig": ("Camera Rig", "Camera rig"),
+    "reference-set": ("Reference Set", "Reference set"),
+    "remotion-node": ("Remotion Composition", "Remotion composition"),
+    "video-edit": ("Video Edit", "Video edit"),
+    "paper-source": ("Paper Source", "Paper source"),
+}
+# The `_provider` options' labels (GM, 2026-11 copy sweep item 18): every option's label was its value
+# in lower case; values never change. {value: current label}.
+APPROVED_PROVIDER_LABELS = {
+    "auto": "Auto", "bfl": "Black Forest Labs", "fal": "fal.ai", "replicate": "Replicate",
+    "openrouter": "OpenRouter", "krea": "Krea",
+}
+
+
+def _restore_provider_labels(node_id: str, params: list[dict[str, Any]]) -> None:
+    for param in params:
+        if param.get("key") != "_provider":
+            continue
+        for option in param.get("options") or []:
+            current = APPROVED_PROVIDER_LABELS.get(option["value"])
+            assert current is not None and option["label"] == current, (
+                f"unapproved provider label: {node_id}.{option['value']}")
+            option["label"] = option["value"]
 # Moodboard adapters (plan PR13, 2026-10-20): Krea 2's `moodboard` port became
 # a board port (Any to Moodboard) so the adapter contract sees it. Saved
 # wires that were valid under Any stay (services/port_contracts.py
@@ -382,7 +415,8 @@ APPROVED_ROUTE_TABLE_CONVERSIONS = {
                                  "[klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
                   "routes": _FLUX2_ROUTES,
                   "params": [{"key": "_provider", "label": "Provider", "type": "enum", "required": False,
-                              "default": "auto", "options": [{"label": v, "value": v} for v in ("auto", "bfl", "fal")],
+                              "default": "auto", "options": [{"label": {"auto": "Auto", "bfl": "Black Forest Labs", "fal": "fal.ai"}[v], "value": v}
+                                          for v in ("auto", "bfl", "fal")],
                               "hidden": True}]},
         "addedShared": [
             {"key": "num_inference_steps", "label": "Steps (Flex)", "type": "integer", "required": False, "min": 1,
@@ -646,6 +680,10 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["character"] = {"description": "A saved chara
 APPROVED_TOP_LEVEL_FIELD_ADDITIONS["nebula-moodboard"] = {"description": "A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards."}
 APPROVED_LEADING_PARAM_ADDITIONS["character"] = {"key": "character", "label": "Character", "type": "character",
                                                  "required": True}
+# The model picker's loading placeholder takes the ellipsis character (GM, 2026-11 copy sweep item 16).
+APPROVED_PARAM_FIELD_CHANGES["openrouter-universal"] = {
+    "model": {"placeholder": ("Loading models...", "Loading models…")},
+}
 APPROVED_PARAM_FIELD_CHANGES["nebula-moodboard"] = {
     "moodboard": {"type": ("string", "moodboard"), "required": (False, True), "hidden": (True, None)},
 }
@@ -668,8 +706,8 @@ for _node_id in (
 # Moodboard node gains `send_notes` after `moodboard` ("board" follows the
 # board's own switch); nothing else about the node changes.
 APPROVED_INSERTED_PARAMS["nebula-moodboard"] = [("moodboard", {
-    "key": "send_notes", "label": "Board notes to generators", "type": "enum", "required": False,
-    "default": "board", "options": [{"label": "As the board says", "value": "board"},
+    "key": "send_notes", "label": "Moodboard notes to generators", "type": "enum", "required": False,
+    "default": "board", "options": [{"label": "As the moodboard says", "value": "board"},
                                     {"label": "Send", "value": "yes"}, {"label": "Don't send", "value": "no"}],
 })]
 
@@ -796,6 +834,15 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
             {key: value for key, value in port.items() if key not in {"role", "weight"}}
             for port in normalized.get(section, [])
         ]
+    for port_id, (baseline_label, current_label) in APPROVED_OUTPUT_PORT_LABEL_CHANGES.get(node_id, {}).items():
+        port = _sole_entry(normalized["outputPorts"], "id", port_id)
+        assert port["label"] == current_label, f"unapproved label: {node_id}.{port_id}"
+        port["label"] = baseline_label
+    name_change = APPROVED_DISPLAY_NAME_CHANGES.get(node_id)
+    if name_change is not None:
+        assert normalized["displayName"] == name_change[1], f"unapproved displayName: {node_id}"
+        normalized["displayName"] = name_change[0]
+    _restore_provider_labels(node_id, normalized["params"])
     _unspace_size_labels(node_id, normalized)
     approved = APPROVED_EXECUTION_PATTERN_CHANGES.get(node_id)
     if approved is not None:
@@ -976,7 +1023,7 @@ def test_approved_art_direction_normalization_preserves_fixture_and_other_fields
     # These five nodes are still fully fingerprinted. An unrelated field change
     # must not disappear along with their specifically approved repairs.
     changed = deepcopy(original)
-    changed["displayName"] += " unauthorized change"
+    changed["category"] += " unauthorized change"
     assert _node_fingerprint(node_id, changed) != _baseline_fingerprints()[node_id]
 
 

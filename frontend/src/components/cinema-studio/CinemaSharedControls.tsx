@@ -3,7 +3,6 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { cinemaLookLabel, defaultCinemaLook, defaultCinemaPalette } from '../../lib/cinemaArtDirection';
 import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../lib/cinemaUploads';
 import { uploadOffersTryAgain, uploadReasonRole, useCinemaUploadStore } from '../../store/cinemaUploadStore';
-import { shortLine } from '../../lib/errorCopy';
 import { normalizeCinemaScene } from '../../lib/cinemaScene';
 import type { CinemaSceneSpec } from '../../types';
 import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionControls';
@@ -158,11 +157,9 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
             <div key={upload.id} className="cinema-reference-upload" aria-busy={upload.status === 'uploading'}>
               <span className="cinema-reference-upload__name">{upload.name}</span>
               <span className="cinema-reference-upload__status" role={uploadReasonRole(upload)}>
-                {/* GM's WRAP rule: with Try again shown, the reason drops its own "try again"
-                  (GM PR #205 r13 item 3: the button reads "Try again", named with the file). */}
+                {/* The line ends as its buttons do: a retryable failure ends in "Try again." (lib/cinemaUploads uploadFailure). */}
                 {upload.status === 'uploading' ? 'Uploading…'
-                  : upload.canRetry ? <LineText text={shortLine(upload.error ?? "Couldn't upload this image.")} />
-                    : <LineText text={upload.error ?? "Couldn't upload this image."} />}
+                  : <LineText text={upload.error ?? "Couldn’t upload this image."} />}
               </span>
               <div className="cinema-reference-upload__actions">
                 {uploadOffersTryAgain(upload) && (

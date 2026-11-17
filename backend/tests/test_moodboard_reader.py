@@ -789,3 +789,19 @@ def test_usage_is_added_up_and_priced_at_today_s_row():
 def test_a_missing_key_is_refused_before_any_request():
     with pytest.raises(reader.NoReaderKeyError):
         MoodboardRead(board(1), ARGON, api_keys={}, targets=targets_of(board(1)))
+
+
+def test_a_missing_key_says_add_it_in_settings_without_a_path():
+    with pytest.raises(reader.NoReaderKeyError) as caught:
+        reader.check_key({"name": "Gemini 4 Argon", "keyName": "GOOGLE_API_KEY"}, {})
+    assert str(caught.value).endswith("Add a Gemini API key in Settings. Nothing was sent and nothing was charged.")
+    assert "Providers" not in str(caught.value) and ";" not in str(caught.value)
+    assert "API keys" not in str(caught.value)
+    with pytest.raises(reader.NoReaderKeyError) as other:
+        reader.check_key({"name": "Other", "keyName": "OTHER_KEY"}, {})
+    assert "Add OTHER_KEY in Settings. Nothing was sent" in str(other.value)
+
+
+def test_the_clear_image_lines_start_with_image_and_the_number():
+    assert reader.CLEAR_LINE.format(number=3) == "Image 3 is too transparent to add colors."
+    assert reader.CLEAR_RESULT_LINE.format(number=3) == "Image 3 is unsorted because it’s too transparent."

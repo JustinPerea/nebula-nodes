@@ -129,13 +129,13 @@ describe('ChatModelPicker', () => {
     expect(dialog).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('status')).toHaveTextContent('Loading models…');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Retry model discovery' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again to load models' })).not.toBeInTheDocument();
     expect(state.onRetry).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['not_installed', 'Claude Code is not installed.'],
-    ['not_authenticated', 'Sign in to Claude Code, then retry.'],
+    ['not_installed', 'Claude Code isn’t installed. Install it, then try again.'],
+    ['not_authenticated', 'Sign in to Claude Code, then try again.'],
     ['unavailable', 'Model catalog is unavailable.'],
   ] as const)('offers explicit retry for %s without fabricated models', (status, message) => {
     const state = props({ catalog: { ...catalog, status } });
@@ -143,7 +143,7 @@ describe('ChatModelPicker', () => {
     open();
     expect(screen.getByRole('status')).toHaveTextContent(message);
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry model discovery' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again to load models' }));
     expect(state.onRetry).toHaveBeenCalledOnce();
     expect(state.onModelChange).not.toHaveBeenCalled();
   });
@@ -155,14 +155,17 @@ describe('ChatModelPicker', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Local model discovery timed out');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     view.rerender(<ChatModelPicker {...state} error={null} catalog={{ ...catalog, models: [] }} />);
-    expect(screen.getByRole('status')).toHaveTextContent('No models are available from this CLI');
+    // A retry can list them again, so the line ends in "Try again." with the button beside it (design r160 answer 5).
+    expect(screen.getByRole('status').textContent).toBe('Nebula couldn’t find any models in Claude Code. Try again.');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again to load models' }));
+    expect(state.onRetry).toHaveBeenCalledOnce();
   });
 
-  it('error-copy round 2 (GM\'s WRAP rule): beside its Retry the reason drops its own "try again"', () => {
+  it('error-copy round 2: beside its Retry the line is in the because form and ends in "Try again."', () => {
     render(<ChatModelPicker {...props({ error: "Couldn't load the models. Nebula didn't respond. Try again." })} />);
     open();
-    expect(screen.getByRole('status').textContent).toBe("Couldn't load the models. Nebula didn't respond.");
+    expect(screen.getByRole('status').textContent).toBe('Nebula couldn’t load the models because the server didn’t respond. Try again.');
   });
 
   it('requires explicit replacement of a removed saved model or unsupported saved effort', () => {

@@ -5,6 +5,7 @@ import { apiRequest } from './apiRequest';
 import { PERSON_REQUIRED_CODE, RequestFailedError, personLockLine, personRequiredCopy } from './errorCopy';
 import type { Pin } from './wsClient';
 import type { ProjectContext } from './projectContext';
+import { agentNameInSentence } from './personalAgentName';
 
 export type { Pin } from './wsClient';
 
@@ -56,7 +57,7 @@ export const NOTE_KEPT_COPY = 'Copy note';
 export function noteKeptLine(following: { agent: string | null; projectName: string } | null, forProject?: string | null): string {
   const note = forProject ? `Your note for “${forProject}”` : 'Your note';
   if (!following || !following.projectName) return `${note} wasn’t sent because the canvas changed first.`;
-  return `${note} wasn’t sent because ${following.agent || 'an agent'} started opening “${following.projectName}”.`;
+  return `${note} wasn’t sent because ${following.agent ? agentNameInSentence(following.agent) : 'an agent'} started opening “${following.projectName}”.`;
 }
 
 /** A note kept because its canvas went before it was sent (one per

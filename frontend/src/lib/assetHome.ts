@@ -14,7 +14,7 @@ export type AssetHome =
 export type RailAssetKind = 'moodboard' | 'character';
 
 const NOUN: Record<RailAssetKind, { one: string; many: string }> = {
-  moodboard: { one: 'board', many: 'moodboards' },
+  moodboard: { one: 'moodboard', many: 'moodboards' },
   character: { one: 'Character', many: 'Characters' },
 };
 

@@ -3,6 +3,7 @@ import { ErrorDetails } from '../failure/ErrorDetails';
 import { WAITING_CATEGORY, nodeErrorCopy, type NodeErrorSurface } from '../../lib/nodeErrorCopy';
 import type { NodeData } from '../../types';
 import { LineText } from '../LineText';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 interface NodeErrorProps {
   category?: string;
@@ -22,6 +23,16 @@ interface NodeErrorProps {
   /** Nebula refused the run before it started (node data `errorNotStarted`):
    * "Nebula couldn’t start the run." (GM, PR #203 r32). */
   notStarted?: boolean;
+  /** The error itself is a missing-key one (node data `errorMissingKey`, which the
+   * backend sets where it builds the missing-key line): something to do, not a
+   * failure, so it draws in the neutral look of a waiting stop, with the error's
+   * own heading (copy sweep item 12). Colour only. The flag is the only input for most node
+   * kinds. For four kinds (worldlabs-environment, style-reference, speridlabs-idol, veo-3) the
+   * card's `keyStatus === 'missing'` also stands in, through `drawsAsMissingKey`
+   * (lib/missingKeyTone.ts), until the follow-up pull request; so on those four another
+   * failing check on a node whose key is missing draws neutral too.
+   */
+  missingKey?: boolean;
   raw?: string;
   /** Classes for the outer block (Create Studio's result card has its own). */
   className?: string;
@@ -37,11 +48,11 @@ interface NodeErrorProps {
  * no category and shows as it is. Safety/moderation blocks keep their calmer
  * treatment.
  */
-export function NodeError({ category, friendly, person, providerText, provider, surface, heading, notStarted, raw, className = 'model-node__error' }: NodeErrorProps) {
+export function NodeError({ category, friendly, person, providerText, provider, surface, heading, notStarted, missingKey, raw, className = 'model-node__error' }: NodeErrorProps) {
   const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface, heading, notStarted });
   const blocked = category === 'blocked' && !person;
   // A stop that waits for the person is a notice, not an error (GM, PR #203 r39 item 1).
-  const tone = category === WAITING_CATEGORY ? 'waiting' : blocked ? 'blocked' : null;
+  const tone = category === WAITING_CATEGORY ? 'waiting' : missingKey ? 'key' : blocked ? 'blocked' : null;
   const modifier = `${className.split(' ').at(-1)}--${tone}`;
   return (
     <div className={tone ? `${className} ${modifier}` : className} data-line-box="">
@@ -62,13 +73,13 @@ export function NodeError({ category, friendly, person, providerText, provider, 
  * model-node__error, kept last so a block gets its calmer modifier.
  */
 export function NodeRunError({ data, className }: {
-  data: Pick<NodeData, 'state' | 'error' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;
+  data: Pick<NodeData, 'state' | 'definitionId' | 'keyStatus' | 'error' | 'errorMissingKey' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;
   className: string;
 }) {
   if (data.state !== 'error' || !data.error) return null;
   return (
     <NodeError className={`${className} model-node__error`} raw={data.error} category={data.errorCategory}
       friendly={data.errorFriendly} person={data.errorPerson} providerText={data.errorProviderText}
-      provider={data.errorProvider} notStarted={data.errorNotStarted} />
+      provider={data.errorProvider} notStarted={data.errorNotStarted} missingKey={drawsAsMissingKey(data)} />
   );
 }

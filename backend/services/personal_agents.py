@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from services import agent_binaries, agent_token_file, antigravity_agent, gemini_cli_setup
+from services.agent_name_in_sentence import in_sentence  # noqa: F401 (re-exported: the name inside a sentence)
 from services.agent_presence import clean_agent_name
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 
@@ -96,18 +97,18 @@ class Preset:
 
 PRESETS: dict[str, Preset] = {
     "claude": Preset(
-        "claude", "Claude (your setup)", "#D97757", "npx",
+        "claude", "Your Claude", "#D97757", "npx",
         ("-y", "@agentclientprotocol/claude-agent-acp@0.84.0"),
         note="Loads your ~/.claude settings, hooks and MCP servers.", min_node=22, npx=True),
     "codex": Preset(
-        "codex", "Codex (your setup)", "#10A37F", "npx",
+        "codex", "Your Codex", "#10A37F", "npx",
         ("-y", "@agentclientprotocol/codex-acp@2.0.0"), env=(("NO_BROWSER", "1"),),
         note="Uses your Codex login and ~/.codex config.", npx=True),
     "gemini": Preset(
-        "gemini", "Gemini (your setup)", "#4285F4", "gemini", ("--acp",),
+        "gemini", "Your Gemini", "#4285F4", "gemini", ("--acp",),
         note="Uses the gemini CLI you installed and its login.", kind="gemini", key_option="GOOGLE_API_KEY"),
     "antigravity": Preset(
-        "antigravity", "Antigravity (your setup)", "#34A853", antigravity_agent.COMMAND, (),
+        "antigravity", "Your Antigravity", "#34A853", antigravity_agent.COMMAND, (),
         env=(("BROWSER", antigravity_agent.NO_BROWSER),),
         note="Google's Antigravity ACP server, on your Google AI plan.", kind="download",
         sign_in=antigravity_agent.AUTH_METHOD, terms_note=antigravity_agent.TERMS_NOTE),
@@ -303,8 +304,8 @@ def _nebula_key(name: str) -> str | None:
 
 
 def _not_installed(preset: Preset) -> str:
-    what = "npx (Node.js)" if preset.npx else f"`{preset.command}`"
-    return f"Install {what} first; Nebula doesn't install it."
+    first = "Node.js first to get npx" if preset.npx else f"`{preset.command}` first"
+    return f"Install {first}. Nebula doesn\u2019t install it."
 
 
 def _command_status(preset: Preset, enabled: bool, home: Path | None) -> tuple[str, Path | None, str]:
@@ -538,7 +539,7 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
             key = _nebula_key(preset.key_option)
             if not key:
                 raise PersonalAgentError("personal_agent_needs_setup",
-                                         f"{view.displayName}: save a Gemini API key in Settings > API keys first.")
+                                         f"Add a Gemini API key in Settings to use {in_sentence(view.displayName)}.")
             env["GEMINI_API_KEY"] = key
             # Read before the overlay replaces the system settings path: the
             # CLI looks for system-defaults.json next to that file.

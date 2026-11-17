@@ -46,6 +46,12 @@ body.app-slava-restraint .batch-node__warning {
   font-size: 11px;
   line-height: 1.4;
 }
+/* A missing key is something to do, not a failure: neutral, as on the node card
+   (NodeError `missingKey`, copy sweep item 12). */
+body.app-slava-restraint .batch-node__warning--key {
+  border-left-color: var(--sr-edge-strong);
+  color: var(--sr-ink-light);
+}
 body.app-slava-restraint .batch-node__output { position: relative; text-align: right; margin-top: 8px; }
 body.app-slava-restraint .batch-node__output .model-node__handle { right: -15px; }
 body.app-slava-restraint .batch-carousel {

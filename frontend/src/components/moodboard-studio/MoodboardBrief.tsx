@@ -59,7 +59,7 @@ export function BriefPanel({
       </div>
       {stale && (
         <div className="moodboard-brief__stale" role="status">
-          <span>{byAgent ? 'Board changed since an agent wrote this.' : 'Board changed since you edited this.'}</span>
+          <span>{byAgent ? 'Moodboard changed since an agent wrote this.' : 'Moodboard changed since you edited this.'}</span>
           <button type="button" onClick={onKeep} disabled={busy}>Keep</button>
           <button type="button" onClick={onRegenerate} disabled={busy}>Regenerate</button>
         </div>
@@ -132,7 +132,7 @@ function BriefClashes({
 }) {
   if (!brief.leftOut) return null;
   if (brief.clashMode === 'keep-all') {
-    return <p className="moodboard-clashes__off">Clash check is off for this board.</p>;
+    return <p className="moodboard-clashes__off">Clash check is off for this moodboard.</p>;
   }
   const flagMode = brief.clashMode === 'flag';
   const mayClash = (brief.mayClash ?? []).filter((item) => item.hex);
@@ -271,7 +271,7 @@ export function BriefFields({
       </div>
       <div className="moodboard-analysis__body">
         <label className="moodboard-field" data-agent-anchor={agentAnchor(board, null, 'direction')}>
-          <span>What the board is for</span>
+          <span>What the moodboard is for</span>
           <textarea
             rows={2}
             value={direction}

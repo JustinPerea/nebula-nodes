@@ -36,7 +36,7 @@ describe('RemotionNode card', () => {
         <RemotionNode {...mkEmptyProps()} />
       </ReactFlowProvider>,
     );
-    expect(screen.getByText(/Remotion Composition/i)).toBeInTheDocument();
+    expect(screen.getByText(/Remotion composition/i)).toBeInTheDocument();
     expect(screen.getByText(/no layers yet/i)).toBeInTheDocument();
   });
 
@@ -52,7 +52,7 @@ describe('RemotionNode card', () => {
     expect(screen.getByText(/1 layer · 60f/i)).toBeInTheDocument();
   });
 
-  it('shows Open Editor button when selected', () => {
+  it('shows Open editor button when selected', () => {
     render(
       <ReactFlowProvider>
         <RemotionNode {...mkEmptyProps({ selected: true })} />

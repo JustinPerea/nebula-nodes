@@ -235,6 +235,75 @@ def test_the_inverse_round_trips(client, root):
     assert _layout(redone["board"]) == _layout(done["board"])
 
 
+def test_an_add_then_an_undo_with_nothing_else_changed_undoes_cleanly(client, root):
+    """Copy sweep r5: the Studio adds with a client-made image id and a drop point; an Undo straight after
+    takes it off, with no "changed since" (the add's own record is what the undo expects)."""
+    write_board(root, fixture_board())
+    new_url = _image_url("studio-add.png", (24, 24), (10, 10, 200))
+    added = _ok(_edit(client, [{"op": "add", "images": [{"id": "img-studio", "url": new_url}], "at": {"x": 300, "y": 80}}],
+                      headers=PERSON))
+    assert [image["id"] for image in added["board"]["images"]][-1] == "img-studio"
+    undone = _ok(_edit(client, added["undo"]["ops"], headers=PERSON))
+    assert [image["id"] for image in undone["board"]["images"]] == ["img-a", "img-b"]
+    assert undone["applied"][0]["skipped"] == []
+    # An image changed after the add is what makes the undo refuse, and it refuses by naming that image.
+    again = _ok(_edit(client, [{"op": "add", "images": [{"id": "img-two", "url": new_url}]}], headers=PERSON))
+    _ok(_edit(client, [{"op": "weight", "image": 3, "value": 0.4}], headers=PERSON))
+    refused = _ok(_edit(client, again["undo"]["ops"], headers=PERSON))
+    assert [image["id"] for image in refused["board"]["images"]][-1] == "img-two"
+    assert refused["undo"] == {"ops": []}
+    assert refused["applied"][0]["skipped"][0]["number"] == 3
+    assert refused["applied"][0]["skipped"][0]["reason"] == "changed since"
+
+
+def _stamp_stored_image(root: Path, image_id: str, stamp: list[int]) -> None:
+    """Give a stored image the stat stamp Nebula writes (19-digit nanosecond integers)."""
+    path = root / "_global" / f"{BOARD_ID}.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    next(img for img in raw["images"] if img["id"] == image_id)["alphaFileStat"] = stamp
+    path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _rounded_like_a_browser(stamp: list[int]) -> list[int]:
+    return [int(float(n)) for n in stamp]
+
+
+def test_an_add_then_an_undo_whose_expect_lost_the_stat_stamp_digits_undoes_cleanly(client, root):
+    """An image's alphaFileStat holds nanosecond integers above 2**53. A browser's JSON.parse rounds them, so
+    the undo's expect differs from the stored image in that key alone; that is not a change."""
+    write_board(root, fixture_board())
+    new_url = _image_url("stamped.png", (24, 24), (10, 10, 200))
+    added = _ok(_edit(client, [{"op": "add", "images": [{"id": "img-stamped", "url": new_url}]}], headers=PERSON))
+    stamp = [1763329000123456789, 359, 1199241684, 1763329000123456999]
+    _stamp_stored_image(root, "img-stamped", stamp)
+    rounded = _rounded_like_a_browser(stamp)
+    assert rounded != stamp and rounded[0] == 1763329000123456768
+    ops = copy.deepcopy(added["undo"]["ops"])
+    for item in ops[0]["slices"]:
+        if item.get("part") == "image":
+            item["expect"]["alphaFileStat"] = rounded
+    undone = _ok(_edit(client, ops, headers=PERSON))
+    assert [image["id"] for image in undone["board"]["images"]] == ["img-a", "img-b"]
+    assert undone["applied"][0]["skipped"] == []
+
+
+def test_the_same_undo_after_the_note_changed_is_still_kept_back(client, root):
+    write_board(root, fixture_board())
+    new_url = _image_url("stamped-note.png", (24, 24), (10, 10, 200))
+    added = _ok(_edit(client, [{"op": "add", "images": [{"id": "img-stamped", "url": new_url}]}], headers=PERSON))
+    stamp = [1763329000123456789, 359, 1199241684, 1763329000123456999]
+    _stamp_stored_image(root, "img-stamped", stamp)
+    _ok(_edit(client, [{"op": "note", "image": 3, "notes": "kept by the person"}], headers=PERSON))
+    ops = copy.deepcopy(added["undo"]["ops"])
+    for item in ops[0]["slices"]:
+        if item.get("part") == "image":
+            item["expect"]["alphaFileStat"] = _rounded_like_a_browser(stamp)
+    refused = _ok(_edit(client, ops, headers=PERSON))
+    assert [image["id"] for image in refused["board"]["images"]][-1] == "img-stamped"
+    skipped = refused["applied"][0]["skipped"]
+    assert skipped and skipped[0]["number"] == 3 and skipped[0]["reason"] == "changed since"
+
+
 def test_frame_ops_round_trip_and_keep_their_cards(client, root, person):
     write_board(root, fixture_board())
     original = _layout(client.get(f"/api/moodboards/{BOARD_ID}").json())
@@ -295,7 +364,7 @@ def test_a_partial_restore_skips_what_changed_since(client, root):
     assert cards == {"pl-a": (0, 0), "pl-b": (1500, 500)}
     skipped = undone["applied"][0]["skipped"]
     assert len(skipped) == 1 and skipped[0]["image"] == "img-b" and skipped[0]["number"] == 2
-    assert skipped[0]["message"] == "#2 changed since, left as is"
+    assert skipped[0]["message"] == "Image 2 changed since, left as is"
 
 
 def test_a_move_keeps_the_analysis_and_a_resize_sets_weight_from_area(client, root):
@@ -1039,7 +1108,7 @@ def test_undoing_a_set_skips_an_image_setting_changed_since(app, client, root):
     board, _removed, _redo, skipped = _undo(app, previous)
     a, b = board["images"]
     assert a["weight"] == 0.3 and b["notes"] == ""
-    assert skipped == ["#1's weight changed since, left as is"]
+    assert skipped == ["Image 1\u2019s weight changed since, left as is"]
 
 
 def test_an_untouched_undo_of_a_set_puts_everything_back(app, client, root):

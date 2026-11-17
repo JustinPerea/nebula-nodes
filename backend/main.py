@@ -4248,7 +4248,7 @@ def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: 
     if changed:
         names = sorted(changed, key=_node_order)
         raise HTTPException(status_code=409, detail=(
-            f"{_listed(names, 4)} changed since you accepted {approval.agent_name}'s proposal, so nothing ran. "
+            f"{_listed(names, 4)} changed since you accepted {personal_agents.in_sentence(approval.agent_name)}’s proposal, so nothing ran. "
             "Look over the nodes, then click Run on them yourself."))
     return approval
 
@@ -4266,7 +4266,7 @@ def _refuse_agent_change_to_approved_runs(candidate: CLIGraph) -> None:
         if changed:
             raise CodedRefusal(409, (
                 f"{_listed(changed, 4)} {'is' if len(changed) == 1 else 'are'} in a run the person approved "
-                f"from {approval.agent_name}'s proposal {approval.proposal_id}, and it hasn't started yet. "
+                f"from {personal_agents.in_sentence(approval.agent_name)}’s proposal {approval.proposal_id}, and it hasn't started yet. "
                 "Leave it until that run starts, or propose the change instead."), {"code": "approved_run"})
 
 
@@ -6021,6 +6021,9 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
                     "message": e.get("message", ""),
                     # The card's line (error copy round 3e); None: GM's general line.
                     "person": e.get("person"),
+                    # Only when true, as _validation_response has it: a missing
+                    # key draws neutral, so a socket client sees it too.
+                    **({"missingKey": True} if e.get("missing_key") else {}),
                 }
                 for e in value
             ]
@@ -6043,6 +6046,7 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
                 "portId": error.port_id,
                 "message": error.message,
                 "person": error.person,
+                **({"missingKey": True} if error.missing_key else {}),
             }
             for error in errors
         ],
@@ -8176,7 +8180,7 @@ def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current
     shot_id = shots[0]
     run_id = run_ids[0]
     numbers = [order.index(shot) + 1 for shot in shots]
-    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema scene"))
     specific = (
         f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
         f"so it can’t be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
@@ -8218,7 +8222,7 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     numbers = [order.index(shot) + 1 for shot in shots]
     what, several = _shot_names(numbers)
     verb = "are" if several else "is"
-    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema Scene"))
+    name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(str(node.get("label") or "Cinema scene"))
     runs = f"run {run_ids[0]}" if len(run_ids) == 1 else "runs " + ", ".join(run_ids[:-1]) + " and " + run_ids[-1]
     specific = f"Couldn’t delete {name}, node {node_id}. {what} {verb} still running, {runs}."
     if action in RESTORE_ACTIONS:
@@ -10299,7 +10303,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
                 "proposal.reopened",
                 node_id=next(iter(sorted(proposal.references, key=_node_order)), None),
                 data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note},
-                summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the node it needs",
+                summary=f"reopened {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id}: the undo put back the node it needs",
                 project_id=proposal.project_id,
             )
             _note_reopen_in_link()
@@ -10356,7 +10360,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
             _journal(
                 "proposal.reopened",
                 data=_asset_journal_data(proposal),
-                summary=f"reopened {proposal.agent.name}'s proposal {proposal.id}: the undo put back the image it needs",
+                summary=f"reopened {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id}: the undo put back the image it needs",
             )
             _note_reopen_in_link()
         else:
@@ -10844,7 +10848,7 @@ def _journal_closed_proposals(proposals: list[Proposal], *, actor: dict[str, Any
             node_id=next(iter(sorted(proposal.references)), None),
             data={"proposalId": proposal.id, "agentId": proposal.agent.id,
                   "note": proposal.spec.note, "reason": proposal.reason},
-            summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
+            summary=f"{proposal.status} {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id}{reason}",
             actor=actor,
             project_id=proposal.project_id,
         )
@@ -12071,7 +12075,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     if too_complex is not None:
         # The limit comes with the measure that found it, never from its words.
         _status, why, limit = too_complex
-        detail = (f"The person's Accept of {proposal.agent.name}'s proposal {proposal.id} was refused: "
+        detail = (f"The person’s Accept of {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id} was refused: "
                   f"{why} The proposal is still open.")
         _journal(
             "proposal.accept_refused",
@@ -12115,11 +12119,11 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         node_id=next(iter(id_map.values()), None) or next(iter(sorted(proposal.references)), None),
         data={"proposalId": proposal.id, "agentId": proposal.agent.id, "note": proposal.spec.note,
               "idMap": id_map, "runNodeIds": run_ids},
-        summary=f"accepted {proposal.agent.name}'s proposal {proposal.id}"
+        summary=f"accepted {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id}"
         + (f"; will run {_listed(run_ids)}" if run_ids else ""),
         actor=person,
     )
-    note = f" (accepted from {proposal.agent.name})"
+    note = f" (accepted from {personal_agents.in_sentence(proposal.agent.name)})"
     # Each names the proposal in data: nebula-mcp --channel leaves these out
     # of the person's edits by that field, never by the summary's note.
     _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note, proposal_id=proposal.id)
@@ -12145,7 +12149,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     ]
     created = _rf_created(list(id_map.values()), edge_ids)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Accepted {proposal.agent.name}'s proposal ({counted(len(id_map), 'node')})")
+    publish_action(f"Accepted {personal_agents.in_sentence(proposal.agent.name)}’s proposal ({counted(len(id_map), 'node')})")
     try:
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
@@ -12245,8 +12249,8 @@ def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None
     noun = "question" if count == 1 else "questions"
     summaries = {
         "asked": f"asked the person {count} {noun} ({question_set.id})",
-        "answered": f"answered {question_set.agent.name}'s {noun} ({question_set.id})",
-        "dismissed": f"dismissed {question_set.agent.name}'s {noun} ({question_set.id})",
+        "answered": f"answered {personal_agents.in_sentence(question_set.agent.name)}’s {noun} ({question_set.id})",
+        "dismissed": f"dismissed {personal_agents.in_sentence(question_set.agent.name)}’s {noun} ({question_set.id})",
         "withdrawn": f"withdrew its {noun} ({question_set.id})",
     }
     _journal(f"question.{kind}", node_id=next(iter(question_set.spec.node_ids), None),
@@ -12559,7 +12563,7 @@ async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
         _journal(
             f"proposal.{proposal.status}",
             data={**_asset_journal_data(proposal), "reason": proposal.reason if proposal.kind != "commons" else None},
-            summary=f"{proposal.status} {proposal.agent.name}'s proposal {proposal.id}{reason}",
+            summary=f"{proposal.status} {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id}{reason}",
             actor=actor,
         )
     for proposal in proposals:
@@ -12734,7 +12738,7 @@ async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, An
     except ValueError:
         board = None
     if board is None:
-        return "the board was deleted"
+        return "the moodboard was deleted"
     if board.get("sendNotes") is True:
         return "Send notes to generators is already on"
     return None
@@ -13292,7 +13296,7 @@ async def _decidable_asset_proposal(proposal_id: str) -> AssetProposal:
 
 async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
     """Make the change as the person, through the route their own click uses."""
-    note = f" (accepted from {proposal.agent.name})"
+    note = f" (accepted from {personal_agents.in_sentence(proposal.agent.name)})"
     if proposal.kind == "commons":
         return await _apply_commons_proposal(proposal)
     if proposal.kind == "project":
@@ -13311,7 +13315,15 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
             detail = str(json.loads(bytes(answer.body)).get("detail") or "")
         except Exception:  # noqa: BLE001
             pass
-        raise HTTPException(status_code=409, detail=detail or "the board can't take it now")
+        # A refusal with a readable detail keeps it. One with none says what is known and what to do (design
+        # r161): the moodboard declined and it may have changed somewhere else. The proposal is not kept open:
+        # accept_asset_proposal closes it as invalidated when this raises, so the line says Nebula closed it.
+        shown = clean_name(proposal.target_name, 60, ellipsis=True)
+        named = f"\u201c{shown}\u201d" if shown else "the moodboard"
+        agent = personal_agents.in_sentence(clean_name(proposal.agent.name, 60, fallback="the agent"))
+        raise HTTPException(status_code=409, detail=detail or (
+            f"Nebula couldn\u2019t accept this because {named} didn\u2019t take the change, and the proposal is closed. "
+            f"{named[0].upper() + named[1:]} may have changed somewhere else. Ask {agent} to propose it again."))
     return {"applied": {"sendNotes": True}, "board": answer}
 
 
@@ -13335,7 +13347,9 @@ async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
         if proposal.is_open:
             asset_proposals.close(proposal.id, "invalidated", reason=detail[:200])
             await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
-        raise HTTPException(status_code=409, detail=f"This proposal no longer fits: {detail}") from exc
+        # A detail that is already a whole sentence of Nebula's (the moodboard fallback above) is the line itself.
+        raise HTTPException(status_code=409, detail=detail if detail.startswith("Nebula couldn\u2019t ")
+                            else f"This proposal no longer fits: {detail}") from exc
     except BaseException:
         _asset_deciding.discard(proposal.id)
         raise
@@ -13346,14 +13360,14 @@ async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
         pass  # unreachable while it is in _asset_deciding; the change is made either way
     _asset_deciding.discard(proposal.id)
     _journal("proposal.accepted", data={**_asset_journal_data(proposal), "applied": proposal.applied},
-             summary=f"accepted {proposal.agent.name}'s proposal {proposal.id} ({asset_proposal_summary(proposal)})",
+             summary=f"accepted {personal_agents.in_sentence(proposal.agent.name)}’s proposal {proposal.id} ({asset_proposal_summary(proposal)})",
              actor=dict(_PERSON_ACTOR))
     try:
         await manager.broadcast_raw(_asset_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
         pass
     await _follow_asset_updates([proposal])
-    publish_action(f"Accepted {proposal.agent.name}'s proposal to {asset_proposal_summary(proposal)}")
+    publish_action(f"Accepted {personal_agents.in_sentence(proposal.agent.name)}’s proposal to {asset_proposal_summary(proposal)}")
     return {"status": "accepted", "proposalId": proposal.id, "kind": proposal.kind,
             "targetId": proposal.target_id, **outcome}
 
@@ -13503,7 +13517,7 @@ def _journal_commons_curation(kind: str, data: dict[str, Any], actor: Any) -> No
         return
     who = dict(_PERSON_ACTOR) if getattr(actor, "is_human", False) else actor_for_headers(current_request_headers())
     origin = commons_proposals.accepted_from.get()
-    note = f" (accepted from {origin})" if origin else ""
+    note = f" (accepted from {personal_agents.in_sentence(origin)})" if origin else ""
     _journal(event, data=dict(data), summary=_commons_curation_summary(kind, data) + note, actor=who)
     if origin or not asset_proposals.for_target("commons", str(data.get("assetId") or "")):
         return
@@ -14615,7 +14629,7 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
         if name and name not in owners:
             owners.append(name)
     # GM - Design, round 12, item 1: "the agents" ("nodes agents" read like a stumble).
-    who = f"{owners[0]} is" if len(owners) == 1 else "the agents are"
+    who = f"{personal_agents.in_sentence(owners[0])} is" if len(owners) == 1 else "the agents are"
     one = len(paid) == 1
     again = ("Generate again to review it." if shot
              else f"Click “Run” again to review {'it' if one else 'them'}.")
@@ -19886,7 +19900,7 @@ def _undo_owner_text(of: Mapping[str, Any] | None, *, by: Mapping[str, Any]) -> 
         return "an edit Nebula no longer knows"
     if of.get("kind") == "agent" and of.get("id") and of.get("id") == by.get("id"):
         return "its own edit"
-    return f"{actor_label(of)}'s edit"
+    return f"{personal_agents.in_sentence(actor_label(of))}’s edit"
 
 
 def _restore_edit_link(body: dict[str, Any]) -> dict[str, Any] | None:
@@ -20016,7 +20030,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if record.state == "undone":
         by = record.undone_by or {}
         who = "you" if by.get("kind") == "agent" and record.undo_id else (
-            "the person, on the canvas" if by.get("kind") == "person" else actor_label(by))
+            "the person, on the canvas" if by.get("kind") == "person" else personal_agents.in_sentence(actor_label(by)))
         return {"status": "already-undone", "editId": record.edit_id, "undoId": record.undo_id,
                 "undoneBy": by, "skipped": record.last_skipped,
                 "message": f"This edit was already undone by {who}; nothing changed."}
@@ -25781,7 +25795,8 @@ def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[l
         if data.get("error"):
             node_errors.record(node_id, str(data["error"]), friendly=data.get("errorFriendly"),
                                category=data.get("errorCategory"), person=data.get("errorPerson"),
-                               provider_text=bool(data.get("errorProviderText")), provider=data.get("errorProvider"))
+                               provider_text=bool(data.get("errorProviderText")), provider=data.get("errorProvider"),
+                               missing_key=bool(data.get("errorMissingKey")))
         else:
             node_errors.forget(node_id)
         changed = True
@@ -28416,7 +28431,7 @@ async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: 
     if not estimate["count"]:
         raise HTTPException(status_code=422, detail=(
             "Nothing to read: none of these references is a file on this computer."
-            if targets else "Nothing to read: the board has no references."))
+            if targets else "Nothing to read: the moodboard has no references."))
     settings = load_settings()
     hold = _reader_spend_hold(source, estimate, settings, str(board.get("id")))
     requested_by = actor_record(actor_for_headers(current_request_headers()))

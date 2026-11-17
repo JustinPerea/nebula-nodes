@@ -36,6 +36,7 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn(), send: vi.fn() } }));
 
 import { useGraphStore } from '../src/store/graphStore';
+import { withArticle } from '../src/lib/directRoute';
 import {
   MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER,
   modelKeyMissingText, modelSettingsFailedText,
@@ -80,7 +81,7 @@ describe('the model picker names the failure (L-5)', () => {
           : json(200, {});
         await configure(id);
         await settle();
-        expect(shown()).toContain(`Couldn't set up “Writer”. Add your ${phrase} in Settings.`);
+        expect(shown()).toContain(`Nebula couldn’t set up “Writer” because it needs ${withArticle(phrase)}. Add one in Settings.`);
         expect(shown()).not.toContain(modelSettingsFailedText('Writer'));
         expect(store().nodes[0].data.params).toEqual(params);
       });
@@ -106,7 +107,7 @@ describe('the model picker names the failure (L-5)', () => {
     }
   }
   it('the key line', () => {
-    expect(modelKeyMissingText('Writer', ['OPENROUTER_API_KEY'])).toBe("Couldn't set up “Writer”. Add your OpenRouter API key in Settings.");
+    expect(modelKeyMissingText('Writer', ['OPENROUTER_API_KEY'])).toBe('Nebula couldn’t set up “Writer” because it needs an OpenRouter API key. Add one in Settings.');
     expect(MISSING_KEY_FAILURE).toBe('missing-key');
   });
 });

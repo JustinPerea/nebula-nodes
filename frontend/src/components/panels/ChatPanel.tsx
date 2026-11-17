@@ -40,7 +40,7 @@ import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
 import { clearRefusedOnPromote, clearSetterOnPromote, clearsOnPromote } from '../../lib/clearsOnPromote';
-import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRefusalSentAt, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRefusalSentAt, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine, actionFailedLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
@@ -50,6 +50,7 @@ import {
 } from '../../lib/chatClear';
 import { onPersonConnected, personPromotions, personUnconfirmed, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
+import { agentNameInSentence } from '../../lib/personalAgentName';
 import {
   chatCancellationDisconnectNotice,
   chatCancellationNotice,
@@ -604,7 +605,7 @@ export function ChatPanel() {
         .catch((error: unknown) => {
           if (!cancelled) {
             setModelCatalog(null);
-            setCatalogError(failureMessage(error, "Couldn't load the models."));
+            setCatalogError(actionFailedLine('load the models', error, failureMessage(error, "Couldn't load the models.")).line);
           }
         })
         .finally(() => { if (!cancelled) setCatalogLoading(false); });
@@ -862,7 +863,7 @@ export function ChatPanel() {
       setSelection((current) => ({ ...current, agent: next }));
       setSessionId(null);
       const nextName = next === 'claude' ? 'Claude Code' : next === 'codex' ? 'Codex'
-        : personalAgents?.agents.find((item) => `personal:${item.id}` === next)?.displayName ?? 'your agent';
+        : agentNameInSentence(personalAgents?.agents.find((item) => `personal:${item.id}` === next)?.displayName ?? 'your agent');
       setNotice(`Next message starts a new ${nextName} conversation. Earlier messages stay here.`);
     },
     [agent, busy, personal, sessionId, personalAgents],
@@ -2036,7 +2037,7 @@ export function ChatPanel() {
               {personalOptions.map((option) => (
                 <select key={option.id} className="chat-panel__personal-option" value={option.current ?? ''}
                   aria-label={`${option.name} for this conversation`} disabled={busy || offline} {...offlineMark(offline)}
-                  title={`${option.name}: ${agentDisplayName} offers these for this conversation`}
+                  title={`${option.name}: ${agentNameInSentence(agentDisplayName)} offers these for this conversation`}
                   onChange={(event) => choosePersonalOption(option.id, event.target.value)}>
                   {option.current === null && <option value="" disabled>{option.name}</option>}
                   {option.options.map((item) => <option key={item.value} value={item.value}>{item.name}</option>)}

@@ -1,0 +1,222 @@
+{
+  "_about": "One table of missing-key lines, read by backend/tests/test_missing_key_line.py (execution/person_line.missing_key_line) and frontend/tests/lib/missingKeyLine.parity.test.ts (lib/directRoute missingKeyLine), so both sides give the same line for the same keys (copy sweep item 12). The article follows the first name by sound.",
+  "articles": [
+    [
+      "OpenAI",
+      "an OpenAI"
+    ],
+    [
+      "xAI",
+      "an xAI"
+    ],
+    [
+      "Anthropic",
+      "an Anthropic"
+    ],
+    [
+      "ElevenLabs",
+      "an ElevenLabs"
+    ],
+    [
+      "Ideogram",
+      "an Ideogram"
+    ],
+    [
+      "fal.ai",
+      "a fal.ai"
+    ],
+    [
+      "Gemini",
+      "a Gemini"
+    ],
+    [
+      "Hugging Face",
+      "a Hugging Face"
+    ],
+    [
+      "MiniMax",
+      "a MiniMax"
+    ],
+    [
+      "BytePlus",
+      "a BytePlus"
+    ],
+    [
+      "Vertex AI service account key or Gemini API key",
+      "a Vertex AI service account key or Gemini API key"
+    ]
+  ],
+  "cases": [
+    {
+      "keys": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "line": "Add an Anthropic API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "BFL_API_KEY"
+      ],
+      "line": "Add a Black Forest Labs API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "BYTEPLUS_API_KEY"
+      ],
+      "line": "Add a BytePlus API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "ELEVENLABS_API_KEY"
+      ],
+      "line": "Add an ElevenLabs API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "FAL_KEY"
+      ],
+      "line": "Add a fal.ai API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "GOOGLE_API_KEY"
+      ],
+      "line": "Add a Gemini API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "GOOGLE_VERTEX_CREDENTIALS"
+      ],
+      "line": "Add a Vertex AI service account key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "HF_TOKEN"
+      ],
+      "line": "Add a Hugging Face token in Settings to run this node."
+    },
+    {
+      "keys": [
+        "HIGGSFIELD_API_KEY"
+      ],
+      "line": "Add a Higgsfield API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "IDEOGRAM_API_KEY"
+      ],
+      "line": "Add an Ideogram API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "KREA_API_TOKEN"
+      ],
+      "line": "Add a Krea API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "KREA_USAGE_KEY"
+      ],
+      "line": "Add a Krea usage key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "MESHY_API_KEY"
+      ],
+      "line": "Add a Meshy API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "MINIMAX_API_KEY"
+      ],
+      "line": "Add a MiniMax API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "OPENAI_API_KEY"
+      ],
+      "line": "Add an OpenAI API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "OPENROUTER_API_KEY"
+      ],
+      "line": "Add an OpenRouter API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "QUIVER_API_KEY"
+      ],
+      "line": "Add a QuiverAI API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "REPLICATE_API_TOKEN"
+      ],
+      "line": "Add a Replicate token in Settings to run this node."
+    },
+    {
+      "keys": [
+        "RUNWAY_API_KEY"
+      ],
+      "line": "Add a Runway API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "TYPESAFE_API_KEY"
+      ],
+      "line": "Add a TypeSafe API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "WORLDLABS_API_KEY"
+      ],
+      "line": "Add a World Labs API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "XAI_API_KEY"
+      ],
+      "line": "Add an xAI API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "ELEVENLABS_API_KEY",
+        "RUNWAY_API_KEY"
+      ],
+      "line": "Add an ElevenLabs or Runway API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GOOGLE_API_KEY"
+      ],
+      "line": "Add an Anthropic, OpenAI or Gemini API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "GOOGLE_VERTEX_CREDENTIALS",
+        "GOOGLE_API_KEY"
+      ],
+      "line": "Add a Vertex AI service account key or Gemini API key in Settings to run this node."
+    },
+    {
+      "keys": [
+        "BFL_API_KEY",
+        "REPLICATE_API_TOKEN"
+      ],
+      "line": "Add a Black Forest Labs API key or Replicate token in Settings to run this node."
+    },
+    {
+      "keys": [
+        "NOT_A_SETTINGS_KEY"
+      ],
+      "line": "Add an API key in Settings to run this node."
+    },
+    {
+      "keys": [],
+      "line": "Add an API key in Settings to run this node."
+    }
+  ]
+}

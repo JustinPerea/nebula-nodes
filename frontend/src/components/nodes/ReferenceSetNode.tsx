@@ -104,7 +104,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
     <div className={`reference-set-node ${selected ? 'reference-set-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}>
       <div className="reference-set-node__title">{fixedCardTitle('referenceSetNode')}</div>
       <p className="reference-set-node__guidance">
-        Connect to Cinema Scene. Reference priority sets image order; 0 excludes.
+        Connect to Cinema scene. Reference priority sets image order; 0 excludes.
       </p>
 
       <div className="reference-set-node__slots">

@@ -1,4 +1,4 @@
-import { addKeyLine } from './directRoute';
+import { keyPhrase, withArticle } from './directRoute';
 
 /**
  * Failure lines for steps whose request failed (review 12, L-4; GM - Design,
@@ -37,15 +37,15 @@ export function modelSetupFailedText(name: string): string {
 }
 
 /** The model pickers, the provider's key isn't set (review 13, L-5; GM -
- * Design, round 15, item 1): GM's "Couldn't set up “X”." and the key to
- * add, by its provider's name (no env names: directRoute.keyPhrase). The
- * node keeps its settings. */
+ * Design, round 15, item 1; copy sweep item 12): what failed, because the
+ * key is missing, and the fix. "Nebula couldn’t set up “X” because it needs
+ * an OpenAI API key. Add one in Settings." The key is named by its
+ * provider (no env names: directRoute.keyPhrase), in the provider's own
+ * noun ("a Replicate token"), "an API key" when the name isn't one
+ * Settings stores. The node keeps its settings. */
 export function modelKeyMissingText(name: string, keys: readonly string[]): string {
-  // Each provider's own noun, as every run-failure line and its Settings
-  // row say it: "Add your Replicate token in Settings." (GM, PR #203 r26
-  // item 5; no picker-only wording).
-  const line = addKeyLine(keys);
-  return line ? `${modelSetupFailedText(name)} ${line}` : modelSetupFailedText(name);
+  const phrase = keyPhrase(keys);
+  return `Nebula couldn’t set up “${name}” because it needs ${phrase ? withArticle(phrase) : 'an API key'}. Add one in Settings.`;
 }
 
 /** backend main.MODEL_SETTINGS_FAILURE_HEADER and its values: reading the

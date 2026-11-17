@@ -113,7 +113,7 @@ def test_the_reason_comes_first_then_the_nodes_other_stop(monkeypatch):
     monkeypatch.setattr(main, "_node_label", lambda node_id, graph=None: "Writer")
     errors = [
         ValidationErrorDetail(node_id="n1", port_id="", message="Missing API key: OPENAI_API_KEY",
-                              person="Add your OpenAI API key in Settings, then run the node again.").marked("reason"),
+                              person="Add an OpenAI API key in Settings to run this node.").marked("reason"),
         ValidationErrorDetail(node_id="n1", port_id="", message="batch", person="Give it its own run."),
     ]
     assert main._refused_run_log_line(errors) == (
@@ -125,9 +125,9 @@ def test_a_reason_stop_with_no_reason_found_says_its_card_line(monkeypatch):
     monkeypatch.setattr(main, "_node_not_ready_reason", lambda node_id: None)
     monkeypatch.setattr(main, "_node_label", lambda node_id, graph=None: "Writer")
     errors = [ValidationErrorDetail(node_id="n1", port_id="", message="Missing API key: X",
-                                    person="Add your X key in Settings, then run the node again.").marked("reason")]
+                                    person="Add a X key in Settings to run this node.").marked("reason")]
     assert main._refused_run_log_line(errors) == (
-        f"{HEADING} “Writer” can’t run. Add your X key in Settings, then run the node again.")
+        f"{HEADING} “Writer” can’t run. Add a X key in Settings to run this node.")
 
 
 # -- the table: one pattern for every input kind ------------------------------------------

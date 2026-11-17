@@ -154,8 +154,8 @@ describe('buttons: edit actions first, then Show, two at most', () => {
   it('names the image on a board when there is one, "on board" for more', () => {
     const one = note({ refs: ['img37'] });
     expect(showLabel(one, { surface: 'board', numberFor: () => 37 })).toBe('Show #37');
-    expect(showLabel(note({ refs: ['a', 'b'] }), { surface: 'board', numberFor: () => 1 })).toBe('Show on board');
-    expect(showLabel(one, { surface: 'board', numberFor: () => null })).toBe('Show on board');
+    expect(showLabel(note({ refs: ['a', 'b'] }), { surface: 'board', numberFor: () => 1 })).toBe('Show on moodboard');
+    expect(showLabel(one, { surface: 'board', numberFor: () => null })).toBe('Show on moodboard');
   });
 
   it('puts edit actions first, and Show takes the second slot only when one is left', () => {

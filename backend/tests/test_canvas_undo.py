@@ -482,7 +482,7 @@ def test_the_persons_cmd_z_of_an_agent_edit_is_linked_and_the_agent_sees_it(api)
     for event in seen:
         assert event["actor"] == {"kind": "person"}
         assert event["edit"]["undoes"] == edit_id and event["edit"]["of"]["id"] == me
-    assert seen[-1]["summary"] == "undid Claude Code's edit (Cmd+Z on the canvas)"
+    assert seen[-1]["summary"] == "undid Claude Code’s edit (Cmd+Z on the canvas)"
     # Its token now says the person undid it, and changes nothing.
     again = _undone(api, applied["undo"]["token"])
     assert again["status"] == "already-undone" and again["undoneBy"] == {"kind": "person", "name": "You"}
@@ -512,7 +512,7 @@ def test_cmd_z_of_an_agents_undo_puts_its_edit_back_in_reach(api):
     summary = _events(api, cursor)[-1]
     assert summary["kind"] == "edit.undone" and summary["data"]["editId"] == undo_id
     assert summary["data"]["undid"] == applied["undo"]["editId"]
-    assert summary["summary"] == "undid Claude Code's undo (Cmd+Z on the canvas)"
+    assert summary["summary"] == "undid Claude Code’s undo (Cmd+Z on the canvas)"
     assert _undone(api, applied["undo"]["token"])["status"] == "undone"
     assert api.graph.nodes[prompt]["params"]["value"] == "a lighthouse"
 

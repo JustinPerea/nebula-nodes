@@ -175,8 +175,8 @@ def test_replicate_model_schema_ports_and_params_are_the_functions(nebula, model
 def test_replicate_model_schema_ports_literally(nebula):
     kontext = mcp_server.model_schema("replicate", "black-forest-labs/flux-kontext-pro")
     assert kontext["ports"]["inputs"] == [
-        {"id": "input_image", "label": "Input Image", "dataType": "Image", "required": True},
-        {"id": "style_ref", "label": "Style Ref", "dataType": "Image", "required": False}]
+        {"id": "input_image", "label": "Input image", "dataType": "Image", "required": True},
+        {"id": "style_ref", "label": "Style ref", "dataType": "Image", "required": False}]
     assert kontext["ports"]["outputs"] == [{"id": "image", "label": "Output", "dataType": "Image", "required": False}]
     params = {param["key"]: param for param in kontext["params"]}
     assert set(params) == {"prompt", "aspect_ratio", "seed"}

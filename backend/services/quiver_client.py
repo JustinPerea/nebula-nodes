@@ -282,7 +282,7 @@ class QuiverClient:
         if not api_key:
             raise with_person_line(
                 QuiverAuthError("QUIVER_API_KEY is required"),
-                "Add your QuiverAI API key in Settings, then run the node again.")
+                "Add a QuiverAI API key in Settings to run this node.")
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout

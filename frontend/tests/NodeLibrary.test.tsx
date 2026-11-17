@@ -50,7 +50,7 @@ describe('NodeLibrary accessible authoring', () => {
     expect(screen.queryByRole('combobox', { name: 'Node provider' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'GPT Image 2', hidden: true })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Text Input', hidden: true })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Paper Source', hidden: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Paper source', hidden: true })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Connection settings for GPT Image 2', hidden: true }))
       .not.toBeInTheDocument();
   });
@@ -237,7 +237,7 @@ describe('NodeLibrary accessible authoring', () => {
     expect(screen.getByRole('button', { name: 'GPT Image 2' })).toHaveAttribute('tabindex', '0');
     expect(screen.getByRole('button', { name: /^Image Generation/ })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.queryByRole('button', { name: 'Kling 3.0 (Krea)' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Paper Source' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Paper source' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Text Input' })).not.toBeInTheDocument();
     expect(addNode).not.toHaveBeenCalled();
     expect(executeGraph).not.toHaveBeenCalled();
@@ -259,14 +259,14 @@ describe('NodeLibrary accessible authoring', () => {
     renderLibrary();
     browseType('Import');
 
-    for (const name of ['Paper Source', 'Image Input', 'Video Input', 'Audio Input', 'Document Input', 'Style Reference']) {
+    for (const name of ['Paper source', 'Image Input', 'Video Input', 'Audio Input', 'Document Input', 'Style Reference']) {
       expect(screen.getByRole('button', { name })).toBeEnabled();
     }
     expect(screen.queryByRole('button', { name: 'Text Input' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'GPT Image 2' })).not.toBeInTheDocument();
     expect(addNode).not.toHaveBeenCalled();
     expect(executeGraph).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Paper Source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Paper source' }));
     expect(addNode).toHaveBeenCalledWith('paper-source', expect.any(Object));
     expect(executeGraph).not.toHaveBeenCalled();
   });
@@ -274,7 +274,7 @@ describe('NodeLibrary accessible authoring', () => {
   it.each([
     ['3D', ['Meshy 6 Text-to-3D', 'World Labs Environment', 'World Labs Export']],
     ['Workflow', ['Batch', 'Router', 'Reroute', 'Array Builder']],
-    ['Tools', ['FAL', 'Character', 'Moodboard', 'Camera Rig', 'Preview']],
+    ['Tools', ['FAL', 'Character', 'Moodboard', 'Camera rig', 'Preview']],
   ] as const)('keeps %s nodes directly reachable from the compact menu', (type, names) => {
     const addNode = vi.fn();
     const executeGraph = vi.fn();
@@ -284,7 +284,7 @@ describe('NodeLibrary accessible authoring', () => {
     for (const name of names) {
       expect(screen.getByRole('button', { name })).toBeEnabled();
     }
-    expect(screen.queryByRole('button', { name: 'Paper Source' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Paper source' })).not.toBeInTheDocument();
     expect(addNode).not.toHaveBeenCalled();
     expect(executeGraph).not.toHaveBeenCalled();
   });
@@ -297,7 +297,7 @@ describe('NodeLibrary accessible authoring', () => {
     const search = screen.getByRole('textbox', { name: 'Search nodes' });
 
     fireEvent.change(search, { target: { value: 'Paper' } });
-    expect(screen.getByRole('button', { name: 'Paper Source' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Paper source' })).toBeEnabled();
     expect(screen.getByRole('combobox', { name: 'Node provider' })).toBeInTheDocument();
     fireEvent.change(search, { target: { value: 'GPT Image 2' } });
     expect(screen.getByRole('button', { name: 'GPT Image 2' })).toBeEnabled();
@@ -423,7 +423,7 @@ describe('NodeLibrary accessible authoring', () => {
 
     expect(search).toHaveValue('');
     expect(provider).toHaveValue('');
-    expect(screen.getByRole('button', { name: 'Paper Source' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Paper source' })).toBeEnabled();
     const images = screen.getByRole('button', { name: /^Image Generation/ });
     expect(useUIStore.getState().libraryCollapsed).not.toHaveProperty('image-gen');
     expect(images).toHaveAttribute('aria-expanded', 'false');

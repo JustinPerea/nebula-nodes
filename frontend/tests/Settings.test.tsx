@@ -343,7 +343,7 @@ describe('Settings — providers list and search', () => {
     expect(toAdd.indexOf('Krea · API key')).toBeLessThan(toAdd.indexOf('fal.ai'));
     expect(toAdd.indexOf('fal.ai')).toBeLessThan(toAdd.indexOf('Ideogram'));
     expect(toAdd.indexOf('Ideogram')).toBeLessThan(toAdd.indexOf('Anthropic'));
-    expect(within(row('fal.ai')).getByText(/^\d+ nodes: Kling V3, FLUX\.2,/)).toBeInTheDocument();
+    expect(within(row('fal.ai')).getByText(/^\d+ nodes, including Kling V3$/)).toBeInTheDocument();
     expect(within(row('Ideogram')).getByText(/Ideogram 4/)).toBeInTheDocument();
   });
 
@@ -536,15 +536,17 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
       expect(screen.getByLabelText('Hugging Face token')).toHaveValue(bad);
     });
 
-  it('wraps the Hugging Face helper instead of cutting it, and keeps a name list on one line (GM, PR #203 r14 item 1)', async () => {
+  it('wraps the Hugging Face helper and a long name list instead of cutting them (GM, PR #203 r14 item 1; design, copy sweep)', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const summary = row('Hugging Face').querySelector('.settings-row__summary');
     expect(summary).toHaveTextContent('Optional. Gives Idol your own Hugging Face allowance.');
     expect(summary).toHaveClass('settings-row__summary--wrap');
     expect(summary?.textContent).not.toMatch(/…$/);
-    // A list of node names is no sentence: it stays one line.
-    expect(row('OpenAI').querySelector('.settings-row__summary')).not.toHaveClass('settings-row__summary--wrap');
+    // A list of node names wraps too when it is wider than the column (design, copy sweep): no summary is cut with "…".
     const css = (await import('node:fs')).readFileSync(`${process.cwd()}/src/styles/settings.css`, 'utf8');
+    const base = css.match(/\.settings-row__summary\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(base).toMatch(/white-space:\s*normal/);
+    expect(base).not.toMatch(/text-overflow:\s*ellipsis|white-space:\s*nowrap|overflow:\s*hidden/);
     const rule = css.match(/\.settings-row__summary--wrap\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toMatch(/white-space:\s*normal/);
     expect(rule).toMatch(/text-overflow:\s*clip/);
@@ -1721,7 +1723,7 @@ describe('Settings — preferences', () => {
   it('limits what agents spend per chat session and per model', async () => {
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: null, models: {} } });
     openTab('Preferences');
-    expect(screen.getByText(/The per-run limit above \(\$1\) applies to agents too/)).toBeInTheDocument();
+    expect(screen.getByText(/The \$1 per-run limit above applies to agents too/)).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Per chat session' }), { target: { value: '10' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
 
@@ -1743,8 +1745,8 @@ describe('Settings — preferences', () => {
       outside: { spentUsd: 4.5, kreaPlanRuns: 3 },
       apps: [],
       personal: [
-        { id: 'claude', name: 'Claude (your setup)', spentUsd: 1.25, kreaPlanRuns: 0 },
-        { id: 'codex', name: 'Codex (your setup)', spentUsd: 0, kreaPlanRuns: 0 },
+        { id: 'claude', name: 'Your Claude', spentUsd: 1.25, kreaPlanRuns: 0 },
+        { id: 'codex', name: 'Your Codex', spentUsd: 0, kreaPlanRuns: 0 },
         { id: 'fake', name: 'Fake Agent', spentUsd: 0, kreaPlanRuns: 2 },
       ],
     });
@@ -1752,17 +1754,17 @@ describe('Settings — preferences', () => {
     openTab('Preferences');
     const rows = await screen.findAllByTestId('settings-personal-spend-row');
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent('Claude (your setup)');
+    expect(rows[0]).toHaveTextContent('Your Claude');
     expect(rows[0]).toHaveTextContent('$1.25 in the last 24 hours, inside the budget above');
     expect(rows[1]).toHaveTextContent('$0.00 in the last 24 hours, 2 Krea plan runs, inside the budget above');
-    expect(screen.queryByText(/Codex \(your setup\)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your Codex/)).not.toBeInTheDocument();
   });
   it('limits the outside agents over 24 hours and Krea plan runs, and shows what they spent', async () => {
     getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 3.4, kreaPlanRuns: 2 }, apps: [] });
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
     openTab('Preferences');
     // findBy: the Preferences tab loads lazily, so this works run alone too.
-    expect(await screen.findByText(/Shared by every agent that isn.t a Nebula chat: Claude Desktop, terminal tools, scripts/))
+    expect(await screen.findByText(/Shared by every agent that isn.t a Nebula chat, such as Claude Desktop, terminal tools and scripts/))
       .toBeInTheDocument();
     expect(screen.getByText(/restarting Nebula doesn.t reset it/)).toBeInTheDocument();
     expect(await screen.findByTestId('settings-agent-outside-spent')).toHaveTextContent('$3.40 in the last 24 hours, 2 Krea plan runs.');
@@ -1782,7 +1784,7 @@ describe('Settings — preferences', () => {
       agentSpend: { sessionUsd: 10, models: {} },
     }));
 
-    expect(screen.getByText(/Only you can move a node between your API balance and your Krea plan; agents/)).toBeInTheDocument();
+    expect(screen.getByText(/Only you can move a node between your API balance and your Krea plan\. Agents/)).toBeInTheDocument();
     // Unset, plan runs are held to the default, never to no limit.
     const planRuns = screen.getByRole('combobox', { name: 'Krea plan runs' });
     expect(planRuns).toHaveValue('default');

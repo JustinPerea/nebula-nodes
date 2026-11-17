@@ -155,3 +155,9 @@ def test_an_older_analysis_is_checked_against_its_own_hash() -> None:
     assert analysis_is_current(board, old)
     assert not analysis_is_current({**board, "name": "Renamed"}, old)
     assert not analysis_is_current(board, {**old, "version": "two"})
+
+
+def test_the_outside_link_warning_starts_with_image_and_the_number():
+    from services.moodboard_analysis import OUTSIDE_IMAGE_WARNING
+
+    assert OUTSIDE_IMAGE_WARNING.format(number=2).startswith("Image 2 is an image link from outside Nebula, ")

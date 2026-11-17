@@ -96,7 +96,7 @@ describe('ProviderSwitcher rows', () => {
     expect(within(bfl).getByText('Key set')).toBeVisible();
     expect(within(bfl).getByText('$0.03')).toBeVisible();
     expect(setupIn(/^fal\.ai/, 'Add key')).toHaveTextContent('Add key →');
-    expect(setupIn(/^fal\.ai/, 'Add key')).toHaveAccessibleDescription('Add your fal.ai API key in Settings.');
+    expect(setupIn(/^fal\.ai/, 'Add key')).toHaveAccessibleDescription('Add a fal.ai API key in Settings to run this node.');
     expect(setupIn(/^Krea · plan/, 'Sign in')).toHaveTextContent('Sign in');
     expect(setupIn(/^Krea · plan/, 'Sign in')).toHaveAccessibleDescription('Sign in to Krea in Settings.');
     // fal can't take 9:21: a block note, and no price.

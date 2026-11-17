@@ -43,7 +43,7 @@ const HEADING = "Couldn't run the node.";
 // names one (tests/errorCopy.round3f.test.tsx).
 const GENERAL = "Run the node again. If it keeps failing, open Details.";
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
-const PERSON = 'Add your fal.ai API key in Settings, then run the node again.';
+const PERSON = 'Add a fal.ai API key in Settings to run this node.';
 const TABLE_LINE = 'fal.ai is having trouble right now. Try again in a few minutes.';
 
 /** One node per card type, as the canvas makes them (graphStore's nodeTypes map). */

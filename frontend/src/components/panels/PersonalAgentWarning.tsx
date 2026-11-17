@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import '../../styles/personal-agents.css';
 import { failureMessage } from '../../lib/errorCopy';
+import { agentNameInSentence } from '../../lib/personalAgentName';
 import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import { ModalPortal } from '../ModalPortal';
 import { LineText } from '../LineText';
@@ -57,7 +58,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
         }
       }}>
       <div className="personal-warning__card" ref={card}>
-        <h2 id="personal-warning-title" className="personal-warning__title">Before you start {agentName}</h2>
+        <h2 id="personal-warning-title" className="personal-warning__title">Before you start {agentNameInSentence(agentName)}</h2>
         <p className="personal-warning__lead">
           This is your own agent, running with your own setup. Nebula starts it and shows it here, but it isn&rsquo;t
           sandboxed.
@@ -66,7 +67,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
           <li>It keeps its own shell, network and file access, its memory, and its own model keys and billing.</li>
           <li>
             Nebula only limits what it does through Nebula&rsquo;s tools. Those runs count against the shared budget
-            for agents outside Nebula&rsquo;s chats, set in Settings &gt; Preferences.
+            for agents outside Nebula&rsquo;s chats, set in Settings.
           </li>
           <li>Approval cards appear only for what the agent chooses to ask about. Nebula can&rsquo;t ask for it.</li>
           <li>

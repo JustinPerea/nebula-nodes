@@ -11,6 +11,7 @@ import { pendingAttr } from '../../lib/pendingNodes';
 import '../../styles/batch-node.css';
 import { batchName } from '../../lib/cardTitles';
 import { LineText } from '../LineText';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 function BatchNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as NodeData;
@@ -64,7 +65,8 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
       {nodeData.state === 'error' && nodeData.error && <div role="alert">
         <NodeError className="batch-node__warning" raw={nodeData.error} category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly} person={nodeData.errorPerson}
-          providerText={nodeData.errorProviderText} provider={nodeData.errorProvider} notStarted={nodeData.errorNotStarted} />
+          providerText={nodeData.errorProviderText} provider={nodeData.errorProvider} notStarted={nodeData.errorNotStarted}
+          missingKey={drawsAsMissingKey(nodeData)} />
       </div>}
       <div className="batch-node__output">
         <span>Items</span>

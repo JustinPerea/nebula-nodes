@@ -74,7 +74,7 @@ class NodeErrors:
                 continue
             kept = {
                 str(node_id): {key: _clip(value) for key, value in entry.items()
-                               if key in {"error", "hint", "category", "person", "providerText", "provider", "notStarted"}
+                               if key in {"error", "hint", "category", "person", "providerText", "provider", "notStarted", "missingKey"}
                                and value}
                 for node_id, entry in nodes.items()
                 if isinstance(entry, dict) and entry.get("error")
@@ -161,7 +161,7 @@ class NodeErrors:
 
     def record(self, node_id: str, message: str, *, friendly: str | None = None,
                category: str | None = None, person: str | None = None, provider_text: bool = False,
-               provider: str | None = None, not_started: bool = False) -> None:
+               provider: str | None = None, not_started: bool = False, missing_key: bool = False) -> None:
         if not node_id or not message:
             return
         entry = {"error": _clip(message)}
@@ -170,6 +170,11 @@ class NodeErrors:
         # the Agent log's. Card-only, like the person line.
         if not_started:
             entry["notStarted"] = "1"
+        # The error is a missing key (a handler's MissingCredentialError, a pre-call
+        # check's missing_key): the card draws it neutral, as something to do.
+        # Card-only, kept so a reload and a project switch draw it the same.
+        if missing_key:
+            entry["missingKey"] = "1"
         # The person's line (error copy round 3c): the card shows it, agents
         # never get it from here (get() is the specific text, word for word).
         if person:
@@ -207,8 +212,14 @@ class NodeErrors:
 
         by_node: dict[str, list[str]] = {}
         lines: dict[str, list[str | None]] = {}
+        # A node draws neutral only when every one of its checks is a missing key:
+        # a second failing check on the same node is a failure and draws as one.
+        missing: set[str] = set()
+        other: set[str] = set()
         for error in errors:
             node_id = str(getattr(error, "node_id", "") or "")
+            if node_id:
+                (missing if getattr(error, "missing_key", False) else other).add(node_id)
             message = str(getattr(error, "message", "") or "")
             if node_id and message and message not in by_node.setdefault(node_id, []):
                 by_node[node_id].append(message)
@@ -216,14 +227,15 @@ class NodeErrors:
         for node_id, messages in by_node.items():
             person = joined_lines(lines.get(node_id, []))
             self.record(node_id, "; ".join(messages), person=person, category=None if person else "unknown",
-                        not_started=True)
+                        not_started=True, missing_key=node_id in missing and node_id not in other)
 
     def observe(self, event: Any) -> None:
         """Follow one execution event the way the canvas card does."""
         if isinstance(event, ErrorEvent):
             self.record(event.node_id, event.error, friendly=event.friendly, category=event.category,
                         person=event.person, provider_text=event.provider_text,
-                        provider=getattr(event, "provider", None))
+                        provider=getattr(event, "provider", None),
+                        missing_key=bool(getattr(event, "missing_credential", False)))
         elif isinstance(event, (ExecutingEvent, ExecutedEvent, SkippedEvent)):
             self.forget(event.node_id)
 
@@ -264,7 +276,8 @@ class NodeErrors:
                 **({"errorProvider": entry["provider"]} if entry.get("provider") else {}),
                 **({"errorPerson": entry["person"]} if entry.get("person") else {}),
                 **({"errorProviderText": True} if entry.get("person") and entry.get("providerText") else {}),
-                **({"errorNotStarted": True} if entry.get("notStarted") else {})}
+                **({"errorNotStarted": True} if entry.get("notStarted") else {}),
+                **({"errorMissingKey": True} if entry.get("missingKey") else {})}
 
     def forget_canvas(self) -> None:
         """The open project's canvas was replaced or cleared: node ids restart.

@@ -30,7 +30,7 @@ export interface BoardSaveLine {
   retry: 'save' | 'reload';
 }
 
-const NOT_SAVED_OPENING = 'Nebula couldn’t save the board because ';
+const NOT_SAVED_OPENING = 'Nebula couldn’t save the moodboard because ';
 
 /** GM r16's lines, each its cause and the step that works. */
 const SAVE_LINES = {
@@ -97,7 +97,7 @@ export function boardSaveFailure(error: unknown, name = ''): FailureCopy {
 /** The clause after "because" for a board's save that failed. */
 export function boardSaveCause(error: unknown): string {
   const gone = boardGoneKind(error);
-  if (gone) return gone === 'trashed' ? 'the board was deleted' : 'the board was deleted somewhere else';
+  if (gone) return gone === 'trashed' ? 'the moodboard was deleted' : 'the moodboard was deleted somewhere else';
   return SAVE_LINES[saveLineKind(error)].cause;
 }
 
@@ -142,7 +142,7 @@ const MOST_NAMED = 3;
 export function lostAddLine(names: readonly string[]): FailureCopy {
   const what = names.length === 0 ? 'the image'
     : names.length <= MOST_NAMED ? joinWithAnd(names.map((name) => `“${name}”`)) : `${names.length} images`;
-  return { heading: '', reason: `${LOST_ADD_OPENING}${what} because the board hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}` };
+  return { heading: '', reason: `${LOST_ADD_OPENING}${what} because the moodboard hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}` };
 }
 
 const LOST_ADD_OPENING = 'Nebula couldn’t add ';
@@ -166,7 +166,7 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
  * names, each clipped past KEPT_NAME_MAX, joined with "and", then a count;
  * the title holds every full name.
  * - In Recently deleted (neutral, with Restore): "Nebula couldn’t save your
- *   change to “Rivers” because the board was deleted. Restore it to keep
+ *   change to “Rivers” because the moodboard was deleted. Restore it to keep
  *   the change."; for several, "Nebula couldn’t save your changes to “A”
  *   and “B” because they were deleted. Restore them to keep the changes."
  * - Gone for good (red, no Retry): "Nebula couldn’t save your change to
@@ -177,9 +177,9 @@ export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'p
   const { one, what, title } = namedBoards(names);
   // Each form spelled out whole, as GM wrote it (and so no sentence is pieced from parts).
   const text = gone === 'trashed'
-    ? (one ? `Nebula couldn’t save your change to ${what} because the board was deleted. Restore it to keep the change.`
+    ? (one ? `Nebula couldn’t save your change to ${what} because the moodboard was deleted. Restore it to keep the change.`
       : `Nebula couldn’t save your changes to ${what} because they were deleted. Restore them to keep the changes.`)
-    : (one ? `Nebula couldn’t save your change to ${what} because the board was deleted somewhere else.`
+    : (one ? `Nebula couldn’t save your change to ${what} because the moodboard was deleted somewhere else.`
       : `Nebula couldn’t save your changes to ${what} because they were deleted somewhere else.`);
   return { text, title };
 }
@@ -272,31 +272,33 @@ export function projectGoneLine(project: string, boards: readonly string[]): { t
  * replay because the image changed after it (round 6p, GM r90.5): the
  * image stays on the board, and the line says who changed it, by the
  * agent's own label (clipped as a board name is). Numbers follow the names
- * rule ("#3", "#3 and #5"); from four, or across several boards, the count
- * counts them all, and across several boards they're "still on their boards"
+ * rule ("image 3", "images 3 and 5"); from four, or across several moodboards, the count
+ * counts them all, and across several moodboards they're "still on their moodboards"
  * (round 6q, GM r95.2). With no single known changer, the image is the
  * subject. `by` is the agent's label as the Agent log shows it
  * (keptChangeLabel, round 6q, GM r95.3).
- * - "Claude Code changed #3 after you removed it, so it’s still on the board."
- * - "Claude Code changed #3 and #5 after you removed them, so they’re still on the board."
- * - "Claude Code changed 4 images after you removed them, so they’re still on the board."
- * - "Claude Code changed 2 images after you removed them, so they’re still on their boards." (across boards)
- * - "#3 changed after you removed it, so it’s still on the board."
+ * - "Claude Code changed image 3 after you removed it, so it’s still on the moodboard."
+ * - "Claude Code changed images 3 and 5 after you removed them, so they’re still on the moodboard."
+ * - "Claude Code changed 4 images after you removed them, so they’re still on the moodboard."
+ * - "Claude Code changed 2 images after you removed them, so they’re still on their moodboards." (across boards)
+ * - "Image 3 changed after you removed it, so it’s still on the moodboard."
  */
 export function changedAfterRemoveLine(numbers: readonly number[], by: string | null, acrossBoards = false): string {
   if (!numbers.length) return '';
   const one = numbers.length === 1 && !acrossBoards;
-  const what = one || (!acrossBoards && numbers.length <= MOST_NAMED) ? joinWithAnd(numbers.map((n) => `#${n}`)) : `${numbers.length} images`;
+  const named = one || (!acrossBoards && numbers.length <= MOST_NAMED);
+  const what = named ? `${numbers.length === 1 ? 'image' : 'images'} ${joinWithAnd(numbers.map(String))}` : `${numbers.length} images`;
   const who = by?.trim() ? clipGraphemes(by.trim(), KEPT_NAME_MAX) : '';
   // Each form spelled out whole.
   if (who) {
-    if (acrossBoards) return `${who} changed ${what} after you removed them, so they’re still on their boards.`;
-    return one ? `${who} changed ${what} after you removed it, so it’s still on the board.`
-      : `${who} changed ${what} after you removed them, so they’re still on the board.`;
+    if (acrossBoards) return `${who} changed ${what} after you removed them, so they’re still on their moodboards.`;
+    return one ? `${who} changed ${what} after you removed it, so it’s still on the moodboard.`
+      : `${who} changed ${what} after you removed them, so they’re still on the moodboard.`;
   }
-  if (acrossBoards) return `${what} changed after you removed them, so they’re still on their boards.`;
-  return one ? `${what} changed after you removed it, so it’s still on the board.`
-    : `${what} changed after you removed them, so they’re still on the board.`;
+  const subject = what.charAt(0).toUpperCase() + what.slice(1);
+  if (acrossBoards) return `${subject} changed after you removed them, so they’re still on their moodboards.`;
+  return one ? `${subject} changed after you removed it, so it’s still on the moodboard.`
+    : `${subject} changed after you removed them, so they’re still on the moodboard.`;
 }
 
 /**
@@ -317,7 +319,7 @@ export function projectRestoredLine(project: string, saved: readonly string[], s
   if (!saved.length) return { text: `Restored ${what}.${tail}`, title };
   const kept = namedBoards(saved);
   // Each form spelled out whole; a kept remove that didn't replay adds changedAfterRemoveLine's sentence (GM r90.5):
-  // "Restored “Coast”. Your change to “Rivers” is saved. Claude changed #3 after you removed it, so it’s still on the board."
+  // "Restored “Coast”. Your change to “Rivers” is saved. Claude changed image 3 after you removed it, so it’s still on the moodboard."
   const text = kept.one ? `Restored ${what}. Your change to ${kept.what} is saved.`
     : `Restored ${what}. Your changes to ${kept.what} are saved.`;
   return { text: `${text}${tail}`, title: `${kept.title} in ${title}` };
@@ -364,7 +366,7 @@ export function projectRestoreFailedLine(project: string, failure: ProjectRestor
 }
 
 /** A kept Undo that was dropped because the board changed after it (round 6l, GM r21 Q1): neutral, no button. */
-export const UNDO_DROPPED_LINE = 'Nebula couldn’t apply your Undo because the board changed after it.';
+export const UNDO_DROPPED_LINE = 'Nebula couldn’t apply your Undo because the moodboard changed after it.';
 
 /**
  * The sentence a Delete forever or Empty confirm gains when boards in it
@@ -401,35 +403,35 @@ export type KeptImage = { n: number };
  * edit (a repeated create, round 6g; a kept edit replayed after a reload,
  * round 6i), or null when nothing was dropped. One field: only the name
  * shows the value that won, clipped past KEPT_NAME_MAX with the full name in
- * the title ("Kept the name “Rivers” from the board."); every other field,
+ * the title ("Kept the name “Rivers” from the moodboard."); every other field,
  * free text included, never shows a value ("Kept the notes from the
- * board."). Several fields go without values, joined with "and" ("Kept the
- * name and notes from the board."), and from four a count ("Kept 4 changes
- * from the board."). GM r16, r17.
+ * moodboard."). Several fields go without values, joined with "and" ("Kept the
+ * name and notes from the moodboard."), and from four a count ("Kept 4 changes
+ * from the moodboard."). GM r16, r17.
  *
  * Round 6l (GM r21 Q1): a kept image change the board changed later is named
  * per image, one item each. Round 6m (GM r53): by the label the person sees,
- * "the changes to Reference #3", never the private note, so no clip and no
+ * "the changes to image 3", never the private note, so no clip and no
  * title for it. With images, each item takes its own "the" ("Kept the name
- * “Tide” and the changes to Reference #3 from the board."); the cover is a
+ * “Tide” and the changes to image 3 from the moodboard."); the cover is a
  * board field ("the cover"). From four items, the count.
  */
 export function keptFromBoardLine(fields: readonly string[], board: { name?: string } = {}, images: readonly KeptImage[] = []): StudioNotice | null {
   const count = fields.length + images.length;
   if (!count) return null;
-  if (count > MOST_NAMED) return `Kept ${count} changes from the board.`;
+  if (count > MOST_NAMED) return `Kept ${count} changes from the moodboard.`;
   const name = (board.name ?? '').trim();
   const showName = fields.length === 1 && fields[0] === 'name' && Boolean(name);
   const clip = (text: string) => clipGraphemes(text, KEPT_NAME_MAX);
   if (!images.length) {
-    if (showName) return { text: `Kept the name “${clip(name)}” from the board.`, title: name };
-    return `Kept the ${joinWithAnd(fields.map((field) => KEPT_FIELD_NAMES[field] ?? field))} from the board.`;
+    if (showName) return { text: `Kept the name “${clip(name)}” from the moodboard.`, title: name };
+    return `Kept the ${joinWithAnd(fields.map((field) => KEPT_FIELD_NAMES[field] ?? field))} from the moodboard.`;
   }
   const items = [
     ...(showName ? [`the name “${clip(name)}”`] : fields.map((field) => `the ${KEPT_FIELD_NAMES[field] ?? field}`)),
-    ...images.map((image) => `the changes to Reference #${image.n}`),
+    ...images.map((image) => `the changes to image ${image.n}`),
   ];
-  const text = `Kept ${joinWithAnd(items)} from the board.`;
+  const text = `Kept ${joinWithAnd(items)} from the moodboard.`;
   // The name keeps its title (it may be clipped); an image's label never needs one.
   return showName ? { text, title: name } : text;
 }

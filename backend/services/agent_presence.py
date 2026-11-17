@@ -389,6 +389,24 @@ def _sub_text(ref: Any, label: str, key: str, what: str) -> str:
     return text
 
 
+def _out_of_range(noun: str, text: str, where: str, count: int) -> str:
+    """The refusal for a numbered image or view that is not there, in the
+    because form. ``text`` is the reference as given: a number (``5`` or
+    ``#5``) is said as ``view 5``, anything else (an id, a word) is quoted.
+    ``where`` is the item's quoted name."""
+    digits = text[1:] if text.startswith("#") else text
+    target = str(int(digits)) if digits.isascii() and digits.isdigit() else _quoted(text)
+    head = f"Nebula couldn\u2019t point at {noun} {target} because {where} has"
+    if count == 0:
+        return f"{head} no {noun}s."
+    # An image is also found by its id; a view has no id an agent can send (_find_view), so its
+    # forms name the number alone.
+    by_id = ", or the image\u2019s id" if noun == "image" else ""
+    if count == 1:
+        return f"{head} 1 {noun}. Use {noun} 1{by_id}."
+    return f"{head} {count} {noun}s. Use a number from 1 to {count}{by_id}."
+
+
 def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, int]:
     """An image of ``board`` by id, else by its number (``12`` or ``#12``,
     1-based, as the Studio numbers them): its id and its number."""
@@ -403,9 +421,7 @@ def _find_image(ref: Any, board: Mapping[str, Any], label: str) -> tuple[str, in
         number = int(digits)
         return str(images[number - 1].get("id")), number
     where = _quoted_name(board.get("name"), board.get("id"))
-    if not images:
-        raise PresenceError(f"Board {where} has no images, so there is no image {_quoted(text)}.")
-    raise PresenceError(f"Board {where} has no image {_quoted(text)}. Use its number (1-{len(images)}) or its id.")
+    raise PresenceError(_out_of_range("image", text, where, len(images)))
 
 
 def _find_view(ref: Any, character: Mapping[str, Any], label: str) -> tuple[str, int]:
@@ -417,9 +433,7 @@ def _find_view(ref: Any, character: Mapping[str, Any], label: str) -> tuple[str,
     if digits.isascii() and digits.isdigit() and 1 <= int(digits) <= len(views):
         return str(int(digits)), int(digits)
     where = _quoted_name(character.get("name"), character.get("id"))
-    if not views:
-        raise PresenceError(f"Character {where} has no reference views, so there is no view {_quoted(text)}.")
-    raise PresenceError(f"Character {where} has no view {_quoted(text)}. Use its number (1-{len(views)}).")
+    raise PresenceError(_out_of_range("view", text, where, len(views)))
 
 
 def parse_surface_target(raw: Any, boards: Collection[Mapping[str, Any]] | None,

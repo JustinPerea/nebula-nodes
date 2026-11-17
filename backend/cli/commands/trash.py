@@ -19,6 +19,7 @@ import sys
 from typing import Any, TextIO
 
 import project_client
+from services.agent_name_in_sentence import in_sentence
 from services.text_cut import clean_name
 
 from ..client import NebulaClient
@@ -43,7 +44,7 @@ def _who(item: dict[str, Any]) -> str:
     if kind == "person":
         return "you"
     if kind == "agent":
-        return f"{by.get('name') or 'Agent'} (agent)"
+        return f"{in_sentence(str(by['name'])) if by.get('name') else 'Agent'} (agent)"
     if kind == "system":
         return "Nebula"
     return "an unnamed client"

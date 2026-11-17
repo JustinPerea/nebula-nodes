@@ -57,6 +57,22 @@ from uuid import uuid4
 from services import moodboard_layout as layout
 from services.text_cut import clean_name
 
+# Image keys Nebula derives for itself (the file's stat stamp and the alpha facts read
+# with it, moodboard_analysis.ALPHA_KEYS) and a client cannot send or round-trip: the
+# stamp holds 19-digit nanosecond integers, which a browser's JSON.parse rounds, so the
+# ``expect`` copy an undo sends back differs from the stored image in that key alone.
+# A restore leaves them out of its "did this image change" check. The person's own
+# fields (note, weight, set aside, name, url, cover, cards) still count.
+SERVER_DERIVED_IMAGE_KEYS = frozenset({"hasTransparency", "hasClearPixels", "alphaFileStat"})
+
+
+def _same_image(a: Any, b: Any) -> bool:
+    """Whether two image records agree on everything but the server-derived keys."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        strip = lambda img: {k: v for k, v in img.items() if k not in SERVER_DERIVED_IMAGE_KEYS}
+        return strip(a) == strip(b)
+    return a == b
+
 MAX_OPS = 500
 # Over this many ops the broadcast leaves ``undo`` out (the Studio refetches,
 # and only the tab that made the batch can undo it from its answer).
@@ -85,7 +101,7 @@ FIELD_KEYS = ("name", "notes", "mode", "strength", "direction", "avoid", "pinned
 # What the board's mode, strength and notes are to the whole-board analysis.
 STEERING_FIELDS = ("mode", "strength", "notes")
 FIELD_LABELS = {
-    "name": "The name", "notes": "The board's notes", "mode": "Mode", "strength": "Strength",
+    "name": "The name", "notes": "The moodboard\u2019s notes", "mode": "Mode", "strength": "Strength",
     "direction": "Direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
     "clashMode": "The clash mode", "colorChoices": "The colour choices",
     "sendNotes": "Send notes to generators", "coverImageId": "The cover",
@@ -807,7 +823,7 @@ class _Batch:
         if stale:
             report = self._skip_report(item)
             words = " and ".join(SETTING_LABELS[key] for key in stale)
-            report.update({"settings": stale, "message": f"#{report['number']}'s {words} changed since, left as is"
+            report.update({"settings": stale, "message": f"Image {report['number']}\u2019s {words} changed since, left as is"
                            if "number" in report else f"An image's {words} changed since, left as is"})
             skipped.append(report)
         if not back:
@@ -881,7 +897,7 @@ class _Batch:
                 # Gone before this batch (an undo of its removal): the number
                 # it had, which the slice keeps as its place.
                 report["number"] = item["index"] + 1
-            label = f"#{report['number']}" if "number" in report else "An image"
+            label = f"Image {report['number']}" if "number" in report else "An image"
         else:
             report["frame"] = item.get("frame")
             label = self.frame_label(item.get("frame"))
@@ -930,9 +946,9 @@ class _Batch:
             return "applied"
         if part == "image":
             current = self.find(str(item["image"]))
-            if current == before:
+            if _same_image(current, before):
                 return "unchanged"
-            if current != expect:
+            if not _same_image(current, expect):
                 return "skipped"
             if before is None:
                 self.board["images"] = [img for img in self.images if img is not current]
@@ -1290,7 +1306,7 @@ def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] |
                  and (shown := clean_name(item["name"], MAX_BOARD_NAME_CHARS, ellipsis=True))), None)
     if name is None:
         name = next((clean_name(item["id"], MAX_BOARD_NAME_CHARS, ellipsis=True) for item in boards if item.get("id")),
-                    "Untitled board")
+                    "Untitled moodboard")
     return quoted(name)
 
 
@@ -1384,7 +1400,7 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
 # ways. Send notes is the Studio's full label (GM, slice 3b): "turned off
 # “Send notes to generators”".
 SENTENCE_LABELS = {
-    "name": "Name", "notes": "Board notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
+    "name": "Name", "notes": "Moodboard notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
     "avoid": "Avoid", "pinnedColors": "Pinned colors", "clashMode": "Clash mode", "colorChoices": "Color choices",
     "sendNotes": "Send notes to generators", "coverImageId": "Cover", "briefOverride": "Your brief",
 }
@@ -1393,6 +1409,36 @@ SENTENCE_LABELS = {
 def field_label(key: str) -> str:
     """A board field as a sentence names it: a quoted label, "“Direction”"."""
     return quoted(SENTENCE_LABELS.get(key, key))
+
+
+# A board field after "changed its", unquoted and lower case: "renamed “Desert
+# light” to “Dusk” and changed its direction and avoid list".
+PLAIN_LABELS = {
+    "notes": "notes", "mode": "mode", "strength": "strength", "direction": "direction", "avoid": "avoid list",
+    "pinnedColors": "pinned colors", "clashMode": "clash mode", "colorChoices": "color choices",
+    "sendNotes": "send notes setting", "briefOverride": "brief",
+}
+
+
+def plain_label(key: str) -> str:
+    return PLAIN_LABELS.get(key, key)
+
+
+def rename_pair(before: Mapping[str, Any] | None, after: Mapping[str, Any] | None) -> tuple[str, str] | None:
+    """The board's old and new names, cleaned the way ``board_where`` cleans
+    them, or None when it is not a rename the line can say: the old name is
+    unknown or empty, the new one is empty, or the two are the same once
+    whitespace is folded (those keep the “Changed “Name” on ...” form)."""
+    old = clean_name((before or {}).get("name"), MAX_BOARD_NAME_CHARS, ellipsis=True) if before else ""
+    new = clean_name((after or {}).get("name"), MAX_BOARD_NAME_CHARS, ellipsis=True) if after else ""
+    return (old, new) if old and new and old != new else None
+
+
+def rename_words(pair: tuple[str, str], others: list[str]) -> str:
+    """"renamed “Desert light” to “Dusk”", then " and changed its direction"
+    for the other fields, named by ``others`` (plain labels)."""
+    said = f"renamed {quoted(pair[0])} to {quoted(pair[1])}"
+    return f"{said} and changed its {listed_words(others)}" if others else said
 
 
 def listed_words(words: list[str]) -> str:
@@ -1414,11 +1460,14 @@ def fields_entry(changes: Mapping[str, Any], before: Mapping[str, Any],
     fields = [key for key in JOURNAL_FIELDS if key in (changes.get("fields") or ())]
     if not fields:
         return None
-    words = [field_label(key) for key in fields]
+    pair = rename_pair(before, after) if "name" in fields else None
+    shown = [key for key in fields if not (pair and key == "name")]
+    words = [plain_label(key) if pair else field_label(key) for key in shown]
     if len(words) > MAX_SUMMARY_FIELDS:
         words = [*words[:MAX_SUMMARY_FIELDS - 1], f"{len(words) - MAX_SUMMARY_FIELDS + 1} more fields"]
-    return {"kind": "board.fields", "fields": fields,
-            "summary": f"changed {listed_words(words)} on {board_where(dict(after), dict(before))}"}
+    summary = (rename_words(pair, words) if pair
+               else f"changed {listed_words(words)} on {board_where(dict(after), dict(before))}")
+    return {"kind": "board.fields", "fields": fields, "summary": summary}
 
 
 def journal_entries(changes: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1439,7 +1488,7 @@ def cover_words(after: dict[str, Any], where: str = "") -> str:
     if index is not None:
         return f"made image {index + 1} the cover of {where}" if where else f"made image {index + 1} the cover"
     if not where:
-        return "the cover is image 1 again" if after.get("images") else "the board has no cover now"
+        return "the cover is image 1 again" if after.get("images") else "the moodboard has no cover now"
     return f"set the cover of {where} back to image 1" if after.get("images") else f"cleared the cover of {where}"
 
 
@@ -1512,4 +1561,4 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
 __all__ = ["EditError", "EditResult", "FIELD_KEYS", "JOURNAL_FIELDS", "MAX_OPS", "OPS", "UNDO_BROADCAST_LIMIT",
            "apply_edits", "board_where", "clean_say", "cover_words", "diff", "field_label", "field_value",
            "fields_entry", "fields_slice", "holds_private_note", "image_count_words", "image_words",
-           "journal_entries", "journal_entry", "listed_words", "parse_ops", "quoted", "steering", "SENTENCE_LABELS"]
+           "journal_entries", "journal_entry", "listed_words", "parse_ops", "plain_label", "rename_pair", "rename_words", "quoted", "steering", "SENTENCE_LABELS"]

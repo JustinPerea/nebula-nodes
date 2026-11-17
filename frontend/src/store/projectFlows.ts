@@ -19,7 +19,7 @@ import { refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
 import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, waitUntilOnline } from '../lib/backendConnection';
-import { RequestFailedError, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, shortReason, oneLine } from '../lib/errorCopy';
+import { RequestFailedError, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, shortReason, oneLine } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
@@ -788,6 +788,19 @@ export const RETRY_HEADINGS: Record<ProjectRetry['action'], string> = {
   reloadForUpdate: LOAD_HEADING, openFollowed: "Nebula couldn’t open the project.", part: "Nebula couldn’t open the project.",
 };
 
+/** A request's failure beside a Try again button, whatever its reason: "Nebula couldn’t open the
+ * project because ‹reason›. Try again.", or the fix with no "Try again." where retrying cannot help
+ * (copy sweep, the three Try again outliers). Null for anything else (a plain Error, a refusal
+ * the same request would get again, which keeps its own words and has no Try again, a refusal this tab's person lock owns, a failure that says nothing), which keeps the heading-and-reason line. */
+function retryActionLine(heading: string, error: unknown): string | null {
+  if (error instanceof RequestFailedError) {
+    // A refusal the same request would get again (refusedForGood) keeps its own words and has no Try again.
+    if (error.code === PERSON_REQUIRED_CODE || !canTryAgain(error.status)) return null;
+  } else if (!isNoAnswer(error)) return null;
+  const what = heading.replace(/^(?:Nebula )?[Cc]ouldn['’]t /, '').replace(/\.$/, '');
+  return actionFailedLine(what, error).line || null;
+}
+
 /** Show `error` with what Try again does for it: `retry`, unless the backend
  * refused for good (then no Try again). The line is GM's mapping (error copy
  * round 3e): a written failure keeps its heading and reason, anything else
@@ -797,7 +810,8 @@ export function showError(error: unknown, retry: ProjectRetry | null = null, wri
   // the banner pulsed.
   if (isOfflineRefusal(error)) return;
   // `written`: a line the caller worded (GM r6's "because" form for what retries on the promote).
-  const line = written ?? failureMessage(error, RETRY_HEADINGS[retry?.action ?? 'save']);
+  const heading = RETRY_HEADINGS[retry?.action ?? 'save'];
+  const line = written ?? (retry ? retryActionLine(heading, error) : null) ?? failureMessage(error, heading);
   useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
     errorRetry: refusedForGood(error) ? null : retry });
   // GM, #204 r3: refused only because this tab isn't connected as the person

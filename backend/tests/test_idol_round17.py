@@ -94,7 +94,7 @@ def test_every_card_route_line_in_the_fixtures_quotes_its_node():
 
 def _refusal(node_id: str = "n1") -> ValidationErrorDetail:
     return ValidationErrorDetail(node_id=node_id, port_id="", message="Missing API key: OPENAI_API_KEY",
-                                 person="Add your OpenAI API key in Settings, then run the node again.")
+                                 person="Add an OpenAI API key in Settings to run this node.")
 
 
 def test_a_refused_run_is_marked_on_the_card_and_survives_a_reload(tmp_path):
@@ -108,7 +108,7 @@ def test_a_refused_run_is_marked_on_the_card_and_survives_a_reload(tmp_path):
     restarted = NodeErrors(path)
     restarted.use_project("p1")
     assert restarted.card("n1") == {"state": "error", "error": "Missing API key: OPENAI_API_KEY",
-                                    "errorPerson": "Add your OpenAI API key in Settings, then run the node again.",
+                                    "errorPerson": "Add an OpenAI API key in Settings to run this node.",
                                     "errorNotStarted": True}
 
 

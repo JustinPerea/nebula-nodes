@@ -504,7 +504,7 @@ describe("round 3e: every Projects action reads a plain Error through GM's mappi
   it("a request's own written line still reads as it did", async () => {
     vi.mocked(projects.renameProject).mockRejectedValueOnce(unavailable("Couldn't rename the project."));
     await useProjectStore.getState().rename('alpha', 'New name');
-    expect(useProjectStore.getState().error).toBe("Couldn't rename the project. Nebula didn't respond. Try again.");
+    expect(useProjectStore.getState().error).toBe('Nebula couldn’t rename the project because the server didn’t respond. Try again.');
   });
 });
 

@@ -77,7 +77,7 @@ export function StructuredValuePreview({ output, label, variant = 'card', stored
   }
 
   const title = view.kind === 'record' ? view.title : null;
-  // "CameraRig" reads as "Camera Rig".
+  // "CameraRig" reads as "Camera rig".
   const typeName = String(type).replace(/([a-z])([A-Z])/g, '$1 $2');
   const meta = [title ? typeName : null, countFor(view)].filter(Boolean).join(' · ');
   return (

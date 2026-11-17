@@ -15,6 +15,7 @@ from typing import Any
 import moodboard_client as boards
 from nebula_api import NebulaAPIError
 from services.moodboard_brief import board_is_off
+from services.moodboard_reader_keys import add_key_sentence
 
 from ..client import NebulaClient, connect_failure
 
@@ -396,7 +397,7 @@ def _price_text(est: dict[str, Any]) -> str:
 
 
 # A reference the read leaves out because no pixel of it is seen (GM r5 on #208).
-TRANSPARENT_ESTIMATE_LINE = "#{number} wasn’t read because it’s too transparent."
+TRANSPARENT_ESTIMATE_LINE = "Image {number} wasn’t read because it’s too transparent."
 
 
 def _print_estimate(est: dict[str, Any]) -> None:
@@ -420,7 +421,7 @@ def _print_estimate(est: dict[str, Any]) -> None:
             print(f"  The high end uses the rates from {high.get('from')} (${float(high['inputPerMTok']):.2f} in / "
                   f"${float(high['outputPerMTok']):.2f} out), in case the read runs past midnight.")
     if est.get("available") is False:
-        print("  Its key isn't set, so a read would be refused: add it in Settings > API keys.")
+        print(f"  Its key isn’t set, so a read would be refused. {add_key_sentence(reader.get('keyName'))}")
     sys.stdout.flush()
 
 

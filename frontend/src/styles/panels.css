@@ -551,6 +551,23 @@ body:not(.app-slava-restraint) .inspector__notice {
   line-height: 1.4;
 }
 
+/* A missing key is something to do, not a failure: the notice in neutral
+   grey, not the warning amber (copy sweep item 12). The Slava skin's notice
+   is already neutral. */
+body:not(.app-slava-restraint) .inspector__notice--key {
+  border-color: #34343a;
+  background: rgba(255, 255, 255, 0.04);
+  color: #a9a9b0;
+}
+
+/* The same on a node card: the run error for a missing key draws as the
+   neutral notice (NodeError `missingKey`), not the error red. The Slava
+   skin's rule is `.model-node__error--key` in slava-restraint.css. */
+body:not(.app-slava-restraint) .model-node__error.model-node__error--key {
+  color: #a3a3a3;
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .inspector__model-error {
   margin-top: 4px;
   line-height: 1.4;

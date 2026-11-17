@@ -11,7 +11,7 @@ const deadlines = new WeakMap<BoardToast, number>();
 
 export interface BoardToast {
   id: number;
-  /** What happened: "Removed #1", "Undid: Moved #3". */
+  /** What happened: "Removed #1", "Undid “Moved #3”". */
   text: string;
   /** Slices an undo left as they are: "#12 changed since, left as is". */
   skipped?: string[];
@@ -69,7 +69,7 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
         className="moodboard-board-toast"
         role="status"
         aria-live="polite"
-        aria-label="Board undo"
+        aria-label="Moodboard undo"
         {...leave}
         onPointerEnter={() => setHeld(true)}
         onPointerLeave={() => setHeld(false)}

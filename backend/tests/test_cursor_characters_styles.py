@@ -115,12 +115,12 @@ def test_consistency_is_dropped_and_the_target_is_the_character():
     ({"character": "Twin"}, "“Twin” names 2 characters. Use an id: c3, c4."),
     ({}, "A character target needs `character`: a character's id or its exact name."),
     ({"character": 4}, "A character target needs `character`: a character's id or its exact name."),
-    ({"character": "c1", "view": 0}, "Character “Mara” has no view “0”. Use its number (1-4)."),
-    ({"character": "c1", "view": 5}, "Character “Mara” has no view “5”. Use its number (1-4)."),
-    ({"character": "c1", "view": "#5"}, "Character “Mara” has no view “#5”. Use its number (1-4)."),
-    ({"character": "c1", "view": -1}, "Character “Mara” has no view “-1”. Use its number (1-4)."),
-    ({"character": "c1", "view": "two"}, "Character “Mara” has no view “two”. Use its number (1-4)."),
-    ({"character": "c2", "view": 1}, "Character “Odd” has no reference views, so there is no view “1”."),
+    ({"character": "c1", "view": 0}, "Nebula couldn’t point at view 0 because “Mara” has 4 views. Use a number from 1 to 4."),
+    ({"character": "c1", "view": 5}, "Nebula couldn’t point at view 5 because “Mara” has 4 views. Use a number from 1 to 4."),
+    ({"character": "c1", "view": "#5"}, "Nebula couldn’t point at view 5 because “Mara” has 4 views. Use a number from 1 to 4."),
+    ({"character": "c1", "view": -1}, "Nebula couldn’t point at view “-1” because “Mara” has 4 views. Use a number from 1 to 4."),
+    ({"character": "c1", "view": "two"}, "Nebula couldn’t point at view “two” because “Mara” has 4 views. Use a number from 1 to 4."),
+    ({"character": "c2", "view": 1}, "Nebula couldn’t point at view 1 because “Odd” has no views."),
     ({"character": "c1", "view": True}, "target.view must be a view's number"),
     ({"character": "c1", "view": 2, "part": "seed"},
      "Nebula couldn’t point at view 2 because a view has no parts. Leave out the part."),
@@ -387,7 +387,7 @@ def test_the_route_refuses_in_the_house_voice_and_sends_nothing(api):
                         listed.json()["detail"]), listed.text
     cases = [
         ({"surface": "style", "style": "Nobody"}, "No style “Nobody” here. The styles here: “Dusk grain”."),
-        ({"surface": "character", "character": "Mara", "view": 9}, "Character “Mara” has no view “9”. Use its number (1-4)."),
+        ({"surface": "character", "character": "Mara", "view": 9}, "Nebula couldn’t point at view 9 because “Mara” has 4 views. Use a number from 1 to 4."),
         ({"surface": "characters", "character": "Mara"},
          "“characters” isn’t a surface Nebula knows. Use moodboard, character or style."),
     ]
@@ -857,7 +857,7 @@ def test_the_mcp_point_goes_through_the_route(api, monkeypatch):
     assert answer["target"] == {"surface": "character", "itemId": f"{character['id']}/3"}
     with pytest.raises(ValueError) as refused:
         mcp_server.point_at(character="Mara", view=9)
-    assert "has no view “9”" in str(refused.value)
+    assert "couldn’t point at view 9 because" in str(refused.value)
 
 
 # -- the character read tools -------------------------------------------------------------------------
@@ -1106,7 +1106,7 @@ def test_a_view_cut_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
                                 lambda main: main._char_store().update(character["id"], referenceViews=[_url(), _url(), _url()]))
     refused = _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A)
     assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"] == "Character “Mara” has no view “5”. Use its number (1-3)."
+    assert refused.json()["detail"] == "Nebula couldn’t point at view 5 because “Mara” has 3 views. Use a number from 1 to 3."
     assert _cursors(sent) == [] and _told(heard) == []
     assert [live["anchorNames"] for live in presence.active()] == [{"character": "Other"}]
     assert [cursor["anchorNames"] for cursor in presence.replay()] == [{"character": "Other"}]
@@ -1246,7 +1246,7 @@ def test_a_cut_of_views_under_a_point_moves_the_earlier_cursor_and_refuses_the_p
     looks = _at_look(monkeypatch, 1, after=cut)
     refused = _point(client, {"surface": "character", "character": character["id"], "view": 3}, LANE_A, action="look")
     assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"] == "Character “Mara” has no view “3”. Use its number (1-2)."
+    assert refused.json()["detail"] == "Nebula couldn’t point at view 3 because “Mara” has 2 views. Use a number from 1 to 2."
     assert [live["target"] for live in presence.active()] == [on_character]
     assert [cursor["target"] for cursor in presence.replay()] == [on_character]
     assert _cursors(sent) == [] and len(looks) == 2

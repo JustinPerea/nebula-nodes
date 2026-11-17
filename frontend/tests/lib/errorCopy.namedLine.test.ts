@@ -114,7 +114,7 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`Nebula couldn’t save your change to ${what} because ${line.cause}. ${line.step}`',
     why: "GM r113 2's exact line: the board's quoted name over one of GM r16's fixed cause and step pairs (SAVE_LINES), never a server line" },
   { file: 'components/moodboard-studio/boardSaveLine.ts',
-    text: "`${LOST_ADD_OPENING}${what} because the board hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}`",
+    text: "`${LOST_ADD_OPENING}${what} because the moodboard hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}`",
     why: "GM r16 7a's lost add line: the names are quoted file names, the tail one of two fixed steps" },
   // Seen once constant openings were read (round 6l): two older lines, each a fixed heading over a fixed tail.
   { file: 'lib/cinemaMotion.ts', text: '`${UNCONFIRMED} ${NO_RESPONSE_SHORT_COPY}`',
@@ -200,11 +200,11 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     expect(handBuilt('const a = `Couldn\'t ${action} that. ${reason}`;')).toHaveLength(1);
     expect(handBuilt('const a = `${heading} ${why}`;')).toHaveLength(1);
     expect(handBuilt('const a = `${addHeading(name)} ${why}`;')).toHaveLength(1);
-    expect(handBuilt("const a = \"Couldn’t save the board. \" + reason;")).toHaveLength(1);
-    expect(handBuilt("const a = [\"Couldn’t save the board.\", reason].join(' ');")).toHaveLength(1);
+    expect(handBuilt("const a = \"Couldn’t save the moodboard. \" + reason;")).toHaveLength(1);
+    expect(handBuilt("const a = [\"Couldn’t save the moodboard.\", reason].join(' ');")).toHaveLength(1);
     expect(handBuilt('const a = `Nebula can\'t read ${name}. ${tail}`;')).toHaveLength(1);
     // A constant opening (review 10 NIT-5): seen as its text.
-    expect(handBuilt('const OPENING = \'Nebula couldn’t save the board because \';\nconst a = `${OPENING}${cause}. ${step}`;')).toHaveLength(1);
+    expect(handBuilt('const OPENING = \'Nebula couldn’t save the moodboard because \';\nconst a = `${OPENING}${cause}. ${step}`;')).toHaveLength(1);
     expect(handBuilt('const OPENING = \'Nebula couldn’t add \';\nconst a = `${OPENING}${what} because it failed. ${tail}`;')).toHaveLength(1);
     expect(handBuilt('const OPENING = \'Kept \';\nconst a = `${OPENING}${what}. ${tail}`;')).toHaveLength(0);
     // Not a heading-plus-reason: an interpolation inside the one sentence.
@@ -362,7 +362,7 @@ const COLON_NAMES = new Set(['title', 'aria-label', 'ariaLabel']);
 const COLON_REVIEWED: { file: string; text: string; why: string }[] = [
   { file: 'MoodboardBrief.tsx', text: ': pick', why: 'the color field\'s picker, "<label>: pick" (round 6, before GM r74); for GM to reword' },
   { file: 'MoodboardBrief.tsx', text: ': hex', why: 'the color field\'s hex input, "<label>: hex" (round 6, before GM r74); for GM to reword' },
-  { file: 'MoodboardListView.tsx', text: 'Open the board on this image. Nothing moves: no image changes number.',
+  { file: 'MoodboardListView.tsx', text: 'Open the moodboard on this image. Nothing moves: no image changes number.',
     why: "GM's cover button title (before GM r74); for GM to reword" },
 ];
 
@@ -515,8 +515,6 @@ describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM
  *   new one fails, and a listed one that's gone fails too (drop it).
  */
 const BOARDS_REVIEWED: { file: string; text: string; why: string }[] = [
-  { file: 'components/asset-trash/AssetTrash.tsx', text: 'boards',
-    why: 'NOUNS.moodboard.many: "Recently deleted boards" and "Deleted boards stay here …" (GM\'s words), no count; the count reads `counted`' },
   { file: 'components/moodboard-studio/MoodboardStudioView.tsx', text: 'boards', why: 'a Restore confirmation\'s slot key, not copy' },
 ];
 
@@ -571,7 +569,7 @@ describe('ratchet: a person line counts "moodboards", never "boards" (#210 round
     expect(countedBoards('const a = `Restored ${what}. Your changes to ${n} moodboards are saved.`;')).toEqual([]);
     expect(countedBoards("const a = 'Deleted boards stay here until you delete them for good.';")).toEqual([]);
     expect(countedBoards('const a = <p>Deleted {noun} stay here</p>;')).toEqual([]);
-    expect(countedBoards('const a = `${who} changed ${what} after you removed them, so they’re still on their boards.`;')).toEqual([]);
+    expect(countedBoards('const a = `${who} changed ${what} after you removed them, so they’re still on their moodboards.`;')).toEqual([]);
     expect(countedBoards('// "4 boards"\n/* 4 boards */ const a = 1;')).toEqual([]);
     expect(countedBoards("const a = new RegExp('4 boards');")).toEqual([]);
     expect(countedBoards("import x from './4 boards';")).toEqual([]);

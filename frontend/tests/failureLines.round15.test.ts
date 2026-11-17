@@ -10,10 +10,10 @@ import { modelKeyMissingText, modelSettingsFailedText } from '../src/lib/failure
 describe("GM round 15, item 1: the model pickers' lines", () => {
   const keysOf = (id: string) => envKeyNames(NODE_DEFINITIONS[id]);
   it('OpenRouter', () => {
-    expect(modelKeyMissingText('X', keysOf('openrouter-universal'))).toBe("Couldn't set up “X”. Add your OpenRouter API key in Settings.");
+    expect(modelKeyMissingText('X', keysOf('openrouter-universal'))).toBe('Nebula couldn’t set up “X” because it needs an OpenRouter API key. Add one in Settings.');
   });
   it('Replicate', () => {
-    expect(modelKeyMissingText('X', keysOf('replicate-universal'))).toBe("Couldn't set up “X”. Add your Replicate token in Settings.");
+    expect(modelKeyMissingText('X', keysOf('replicate-universal'))).toBe('Nebula couldn’t set up “X” because it needs a Replicate token. Add one in Settings.');
   });
   it('the key there, the read failed', () => {
     expect(modelSettingsFailedText('X')).toBe("Couldn't load the model settings for “X”.");

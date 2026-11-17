@@ -10,7 +10,7 @@
      "required": false
     }
    ],
-   "why": "A Replicate model that returns a list of plain strings (a streaming text model) gives a run a `text` output (handlers/replicate_universal.py), so the picker's Image `image` port never received anything; model_schema names `text` too. A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1).",
+   "why": "A Replicate model that returns a list of plain strings (a streaming text model) gives a run a `text` output (handlers/replicate_universal.py), so the picker's Image `image` port never received anything; model_schema names `text` too. A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. A Replicate file input's port label is sentence case too (\"Input image\"; GM, 2026-11 copy sweep item 17). Written out here as a fixed table (PR #198 review 2, N1).",
    "dynamicParams": [
     {
      "key": "prompt",
@@ -48,7 +48,7 @@
      "typeUnconfirmed": true
     }
    ],
-   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21). A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1).",
+   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21). A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. A Replicate file input's port label is sentence case too (\"Input image\"; GM, 2026-11 copy sweep item 17). Written out here as a fixed table (PR #198 review 2, N1).",
    "dynamicParams": [
     {
      "key": "prompt",
@@ -108,6 +108,14 @@
      "default": false,
      "placeholder": "Automatic prompt improvement"
     }
+   ],
+   "dynamicInputPorts": [
+    {
+     "id": "input_image",
+     "label": "Input image",
+     "dataType": "Image",
+     "required": false
+    }
    ]
   },
   "replicate list of file urls": {
@@ -120,7 +128,7 @@
      "typeUnconfirmed": true
     }
    ],
-   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21). A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1).",
+   "why": "A Replicate file output is typed from the model's own data (its output schema's content hints, else its `default_example` run's file, which the schema route keeps as `default_example_output`), and the run fills that port (handlers/replicate_universal.py). This case's schema has neither, so the output stays Image `image`, marked `typeUnconfirmed` so agents know it is a guess (2026-10-21). A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. A Replicate file input's port label is sentence case too (\"Input image\"; GM, 2026-11 copy sweep item 17). Written out here as a fixed table (PR #198 review 2, N1).",
    "dynamicParams": [
     {
      "key": "width",
@@ -229,7 +237,7 @@
      "min": 0.5
     }
    ],
-   "why": "A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. Ports keep Title Case. Written out here as a fixed table (PR #198 review 2, N1)."
+   "why": "A Replicate model's settings are labeled by their key in sentence case (\"Guidance scale\"; GM, PR #198 r1 item 7), where the old picker wrote Title Case. A Replicate file input's port label is sentence case too (\"Input image\"; GM, 2026-11 copy sweep item 17). Written out here as a fixed table (PR #198 review 2, N1)."
   }
  },
  "cases": [

@@ -22,11 +22,20 @@ const CLOSE_ROWS: [where: string, line: string][] = [
 ];
 import { SERVER_FAILED_LINE } from '../src/lib/personThreadBox';
 import { projectRestoreFailedLine } from '../src/components/moodboard-studio/boardSaveLine';
+import { uploadFailure } from '../src/lib/cinemaUploads';
+import { CONNECTION_LOST_COPY, ConnectionLostError, actionFailedLine, NO_RESPONSE_COPY, RequestFailedError, retryBecauseLine } from '../src/lib/errorCopy';
+import { showError } from '../src/store/projectFlows';
+import { useProjectStore } from '../src/store/projectStore';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 
 // GM r23 on #208: a line shown with a [Try again] button ends in "Try
 // again." (tests/helpers/tryAgainLine.ts, the shared assert). One row per
 // line; a new line shown beside Try again adds its row here.
+/** What Project home's error holds after showError for a request that failed with `error`. */
+const projectLine = (action: 'open' | 'save' | 'rename', error: unknown): string => {
+  showError(error, { action } as never);
+  return useProjectStore.getState().error ?? '';
+};
 const ROWS: [where: string, line: string][] = [
   ["the Inspector palette's can't-run line (#208)", PALETTE_CANT_RUN],
   ...CLOSE_ROWS,
@@ -34,6 +43,25 @@ const ROWS: [where: string, line: string][] = [
   // #210 round 6m (GM r53 Q1): Restore project's neutral failures, each beside its Try again.
   ["Restore project, the server isn't answering (#210)", projectRestoreFailedLine('Shore', 'noAnswer').text],
   ["Restore project, the server didn't accept it (#210)", projectRestoreFailedLine('Shore', 'refused').text],
+  // GM 2026-11 copy sweep item 20: the Cinema upload row's retryable reasons, each beside its Try again.
+  ["the Cinema upload row, the server isn't answering", uploadFailure('photo.png', new ConnectionLostError(new TypeError('Failed to fetch'))).line],
+  ['the Cinema upload row, the server is busy', uploadFailure('photo.png', new RequestFailedError('', 429)).line],
+  ['the Cinema upload row, the server returned an error', uploadFailure('photo.png', new RequestFailedError('', 500)).line],
+  ["the Cinema upload row, the server timed out", uploadFailure('photo.png', new RequestFailedError('', 408)).line],
+  ['the Cinema upload row, a gateway that did not respond', uploadFailure('photo.png', new RequestFailedError('', 503)).line],
+  // GM 2026-11 copy sweep: Project home, the asset trash and the chat model picker, each beside its own retry.
+  ['Project home, an open that the server did not answer', retryBecauseLine(`Couldn't open the project. ${CONNECTION_LOST_COPY}`)],
+  ['Project home, a save that got no response', retryBecauseLine(`Couldn't save the project. ${NO_RESPONSE_COPY}`)],
+  ['the workspace Save failed tooltip, no answer', retryBecauseLine(`Couldn't save the project. ${CONNECTION_LOST_COPY}`)],
+  ['the asset trash toast beside Undo, no response', retryBecauseLine(`Couldn't restore “Shore”. ${NO_RESPONSE_COPY}`)],
+  ['Project home, an open that the server answered with an error', projectLine('open', new RequestFailedError("Couldn't open the project.", 500))],
+  ['Project home, a rename the server found busy', projectLine('rename', new RequestFailedError("Couldn't rename the project.", 429))],
+  ['Project home, a save with no answer', projectLine('save', new ConnectionLostError(new TypeError('Failed to fetch')))],
+  ['the asset trash toast beside Undo, a server error', actionFailedLine('restore the moodboard', new RequestFailedError('', 500)).line],
+  ['the asset trash toast beside Undo, busy', actionFailedLine('restore the moodboard', new RequestFailedError('', 429)).line],
+  ['the chat model picker, a server error', actionFailedLine('load the models', new RequestFailedError('', 500)).line],
+  ['the chat model picker, busy', actionFailedLine('load the models', new RequestFailedError('', 429)).line],
+  ['the chat model picker, no answer', retryBecauseLine(`Couldn't load the models. ${CONNECTION_LOST_COPY}`)],
 ];
 
 describe('every line shown with Try again ends in "Try again."', () => {

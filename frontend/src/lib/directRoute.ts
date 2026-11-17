@@ -3,6 +3,8 @@ import type {
   RouteSpec,
 } from '../types';
 import { usesKreaAccount } from './kreaConnection';
+import { universalSettingLabel } from './universalSettingLabel';
+import { isFormerDefaultTitle } from './formerDefaultTitles';
 
 /**
  * Which route one run of a node takes, and so which provider it bills.
@@ -684,7 +686,7 @@ function optionLabelOf(param: ParamDefinition | undefined, value: unknown): stri
  * "Grounding off", "Draft (fast preview)" (a switch that is on), or just the
  * label for text (node_route._setting_text). */
 export function settingText(param: ParamDefinition | undefined, key: string, value: unknown): string {
-  const label = param?.label || key;
+  const label = param?.label || universalSettingLabel(key);
   if (Array.isArray(param?.options) && param.options.length) return `${label} ${optionLabelOf(param, value)}`;
   if (typeof value === 'boolean') return value ? label : `${label} off`;
   if (typeof value === 'number') return `${label} ${matchValue(value)}`;
@@ -1005,7 +1007,7 @@ export function isDefaultTitle(definition: (RoutedDefinition & Pick<ModelNodeDef
   label: string | null | undefined): boolean {
   if (!label) return true;
   if (!definition) return false;
-  return label === definition.displayName || label === canvasTitle(definition);
+  return label === definition.displayName || label === canvasTitle(definition) || isFormerDefaultTitle(definition.id, label);
 }
 
 /** A node's title as its card shows it: the person's name for it, else its
@@ -1057,7 +1059,7 @@ function paramDef(definition: RoutedDefinition, key: string): ParamDefinition | 
 
 /** “Draft (fast preview)” on, “Safety” set to 5, “Resolution” set to 1.5K. */
 function personSetting(param: ParamDefinition | undefined, key: string, value: unknown): string {
-  const label = `“${param?.label || key}”`;
+  const label = `“${param?.label || universalSettingLabel(key)}”`;
   if (Array.isArray(param?.options) && param.options.length && hasValue(value)) {
     return `${label} set to ${plain(optionLabelOf(param, value))}`;
   }
@@ -1190,20 +1192,29 @@ export function keyPhrase(keys: readonly string[]): string | null {
   return orList(known.map(([provider, kind]) => `${provider} ${kind}`));
 }
 
-/** "Add your Replicate token in Settings.": the one line that says which
- * key to add, a sentence with its period (GM, PR #203 r26 item 5 and r28
- * item 3): the model pickers and every provider switcher row take it from
- * here. Null when a name isn't a key Settings stores. */
+/** "an OpenAI", "a fal.ai", "an xAI": a name with its article, chosen by
+ * sound (review 10 of PR #203: "Add a Anthropic …"). A name read letter by
+ * letter from an x ("xAI") takes "an". person_line.with_article is the twin;
+ * both are held to one table of cases. */
+export function withArticle(name: string): string {
+  return `${/^[aeiou]/i.test(name) || /^x[A-Z]/.test(name) ? 'an' : 'a'} ${name}`;
+}
+
+/** "Add a Replicate token in Settings to run this node.": the one line that
+ * says which key to add, a sentence with its period (GM, PR #203 r26 item 5
+ * and r28 item 3; copy sweep item 12): the provider switcher rows take it
+ * from here, and the model pickers say it as the fix after their own
+ * reason. The article goes by the first name, and the provider's own noun
+ * stays ("token" for Replicate and Hugging Face). Null when a name isn't a
+ * key Settings stores. */
 export function addKeyLine(keys: readonly string[]): string | null {
   const phrase = keyPhrase(keys);
-  return phrase ? `Add your ${phrase} in Settings.` : null;
+  return phrase ? `Add ${withArticle(phrase)} in Settings to run this node.` : null;
 }
 
 /** A missing key as a pre-run line (person_line.missing_key_line). */
 export function missingKeyLine(keys: readonly string[]): string {
-  const phrase = keyPhrase(keys);
-  return phrase ? `Add your ${phrase} in Settings, then run the node again.`
-    : "Add this node's API key in Settings, then run the node again.";
+  return addKeyLine(keys) ?? 'Add an API key in Settings to run this node.';
 }
 
 function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {

@@ -11,6 +11,8 @@ import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { failureMessage } from '../../lib/errorCopy';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { LineText } from '../LineText';
+import { isFormerDefaultTitle } from '../../lib/formerDefaultTitles';
+import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 
 function firstMediaUrl(outputs: Record<string, PortValue>): string | null {
   for (const t of ['Image', 'Video', 'Audio', 'Mesh', 'SVG'] as const) {
@@ -146,6 +148,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
           errorProviderText={node.data.errorProviderText}
           errorProvider={node.data.errorProvider}
           errorNotStarted={node.data.errorNotStarted}
+          errorMissingKey={drawsAsMissingKey(node.data)}
         />
         {canZoom && (
           <button
@@ -169,7 +172,8 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
         )}
       </div>
       <div className="result-card__details">
-        {(!context || node.data.label !== NODE_DEFINITIONS[node.data.definitionId]?.displayName) &&
+        {(!context || (node.data.label !== NODE_DEFINITIONS[node.data.definitionId]?.displayName
+          && !isFormerDefaultTitle(node.data.definitionId, node.data.label))) &&
           <div className="result-card__caption" title={node.data.label}>{node.data.label}</div>}
         {context && <ResultMetadata context={context} />}
         {(context ? context.prompt : prompt) && <p className="result-card__prompt" title={context ? context.prompt : prompt}>{context ? context.prompt : prompt}</p>}

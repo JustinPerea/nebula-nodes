@@ -138,7 +138,7 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
 
   const readiness = keyReadiness(spec.key, cache, health);
   const state = configured ? keyStatus(spec.key, health) : { tone: 'idle' as const, status: undefined, statusTone: undefined };
-  const summary = unlockSummary(spec, configured ? 'connected' : 'add');
+  const summary = unlockSummary(spec);
   const bodyId = `settings-row-${spec.key}`;
 
   const action = configured && open !== 'edit' ? (

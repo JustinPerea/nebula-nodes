@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefinition, PortDataType, PortValue, CinemaSceneSpec, CinemaShot, ModelNodeDefinition, GenerationRequest, CreateOriginTag, NodeState } from '../types';
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { withCurrentDefaultLabels } from '../lib/formerDefaultTitles';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { isCanvasSelectionDragging, onCanvasSelectionDragEnd } from '../lib/canvasSelectionDrag';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
@@ -419,6 +420,7 @@ function markNodesErrored(
         errorProviderText: hidden ? true : undefined,
         errorProvider: undefined,
         errorNotStarted: undefined,
+        errorMissingKey: undefined,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -455,6 +457,7 @@ function markNodesWithValidationErrors(
         errorProviderText: undefined,
         errorProvider: undefined,
         errorNotStarted: reading.errorNotStarted,
+        errorMissingKey: reading.errorMissingKey,
         progress: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
@@ -1972,9 +1975,9 @@ function paramLabel(node: Node<NodeData>, key: string): string | null {
   return dynamic ? universalSettingLabel(key) : null;
 }
 
-/** A param as the Agent log names it: its label, else its raw key. */
+/** A param as the Agent log names it: its label, else its key in sentence case. */
 function paramLogName(node: Node<NodeData> | undefined, key: string): string {
-  return (node ? paramLabel(node, key) : null) ?? key;
+  return (node ? paramLabel(node, key) : null) ?? universalSettingLabel(key);
 }
 
 /** GM round 22 (4a): the Agent log's line for a delete Nebula answered
@@ -6105,7 +6108,8 @@ const nodeWrites = new Map<string, WireWrite>();
 /** GM, #204 r3: a toast for a person-gate refusal goes on the promote (lib/clearsOnPromote). */
 /** What markNodesErrored writes over: a refused start's clear puts these back. */
 const REFUSED_START_FIELDS = ['state', 'error', 'errorCategory', 'errorFriendly', 'errorPerson', 'errorProviderText',
-  'errorProvider', 'progress', 'streamingText', 'streamingPartials', 'streamingSvg'] as const;
+  'errorProvider', 'errorNotStarted', 'errorMissingKey', 'progress', 'streamingText', 'streamingPartials',
+  'streamingSvg'] as const;
 
 /** Each node as it last settled before a start queued it (review 3 NIT-2): what a refused start
  * puts back, since by the refusal the node reads 'queued'. Review 4 LOW-4 (round 6): only a
@@ -8303,6 +8307,11 @@ function deselectedNodes(nodes: Node<NodeData>[]): Node<NodeData>[] {
  * with the same id, nor overwrites the ID that node holds. `owner` is the
  * run history that says whose a record is (the store's, or the one being
  * loaded with these nodes). */
+/** A definition's current default name, for a loaded node's former default label. */
+function currentDefaultName(definitionId: string): string | undefined {
+  return NODE_DEFINITIONS[definitionId]?.displayName;
+}
+
 function nodesWithProviderRecoveries(
   nodes: Node<NodeData>[],
   checkpoints: readonly ProviderRecoveryCheckpoint[],
@@ -11181,6 +11190,7 @@ function mergeSyncedNode(incoming: Node<NodeData>, existing: Node<NodeData> | un
           errorFriendly: cliNode.data.errorFriendly, errorCategory: cliNode.data.errorCategory,
           errorPerson: cliNode.data.errorPerson, errorProviderText: cliNode.data.errorProviderText,
           errorProvider: cliNode.data.errorProvider, errorNotStarted: cliNode.data.errorNotStarted,
+          errorMissingKey: cliNode.data.errorMissingKey,
         } : {}),
         keyStatus,
         ...(changedOutput ? clearBatchPreview() : {}),
@@ -14912,7 +14922,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       position: { x: sourceNode.position.x + 280, y: sourceNode.position.y },
       data: {
         definitionId: 'video-edit',
-        label: 'Video Edit',
+        label: 'Video edit',
         state: 'idle' as const,
         inputs: {},
         outputs: {},
@@ -15167,7 +15177,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     // Hydration/import must never release a paid-run owner. Only terminal
     // execution events or status reconciliation may unlock the Run control.
     set({
-      nodes: nodesWithProviderRecoveries(nodes, get().providerRecoveries),
+      nodes: withCurrentDefaultLabels(nodesWithProviderRecoveries(nodes, get().providerRecoveries), currentDefaultName),
       edges,
       undoStack: [],
       redoStack: [],
@@ -15355,7 +15365,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       return node.data.keyStatus === keyStatus ? node : { ...node, data: { ...node.data, keyStatus } };
     });
     set({
-      nodes: withKeyStatus, edges, runHistory: persistedRunHistory(restoredHistory),
+      nodes: withCurrentDefaultLabels(withKeyStatus, currentDefaultName), edges, runHistory: persistedRunHistory(restoredHistory),
       ...ownershipState(), createLaunchingIds: [], createCancelledLaunchIds: [],
       // The clipboard stays, so nodes copy across projects; the bumped load
       // makes it paste with its copy-time params (see CanvasClipboard).
@@ -15819,6 +15829,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           errorProviderText: event.providerText || undefined,
           errorProvider: event.provider || undefined,
           errorNotStarted: undefined,
+          errorMissingKey: event.missingCredential || undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,
@@ -15836,7 +15847,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
             get().updateNodeData(nodeId, {
               state: 'error', error: reading.error, errorCategory: reading.errorCategory, errorFriendly: undefined,
               errorPerson: reading.errorPerson, errorProviderText: undefined, errorProvider: undefined,
-              errorNotStarted: reading.errorNotStarted,
+              errorNotStarted: reading.errorNotStarted, errorMissingKey: reading.errorMissingKey,
             });
           }
         }

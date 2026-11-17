@@ -77,6 +77,7 @@ import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { boardCover } from '../../lib/moodboardCover';
 import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './fieldSteps';
+import { keptUndoLine, undoneLine } from './undoLines';
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
@@ -1084,10 +1085,10 @@ const STEERING_FIELDS = ['mode', 'strength', 'notes'] as const;
 
 /** A step's name for the undo toast: what changed on which reference. */
 function imagePatchLabel(patch: Partial<MoodboardImage>, number: number): string {
-  if ('excluded' in patch) return patch.excluded ? `Set aside #${number}` : `Used #${number} again`;
-  if ('weight' in patch) return `Weight of #${number}`;
-  if ('privateNote' in patch) return `Private note on #${number}`;
-  return `Note on #${number}`;
+  if ('excluded' in patch) return patch.excluded ? `Set aside image ${number}` : `Used image ${number} again`;
+  if ('weight' in patch) return `Changed the weight of image ${number}`;
+  if ('privateNote' in patch) return `Changed the private note on image ${number}`;
+  return `Changed the note on image ${number}`;
 }
 
 /** What an undo left as it was, in the server's words (contract 07, 1.12),
@@ -1096,7 +1097,7 @@ function skippedLines(edited: MoodboardEditResult): string[] {
   return [...new Set(edited.applied.flatMap((entry) => {
     const skipped = Array.isArray(entry.skipped) ? entry.skipped as Array<{ message?: unknown; number?: unknown }> : [];
     return skipped.map((slice) => (typeof slice.message === 'string' && slice.message ? slice.message
-      : typeof slice.number === 'number' ? `#${slice.number} changed since, left as is` : 'Part of it changed since, left as is'));
+      : typeof slice.number === 'number' ? `Image ${slice.number} changed since, left as is` : 'Part of it changed since, left as is'));
   }))];
 }
 
@@ -1288,7 +1289,7 @@ export function MoodboardStudioView() {
             // In Recently deleted with a kept edit: the kept edit's line says it, with its Restore (GM r19), so not this one too.
             const kept = keptEditsWaiting().some((it) => it.board === moodboardEditorId);
             initialize(fresh, null, '', stored?.status === 'trashed'
-              ? (kept ? null : 'This board is in Recently deleted. Restore it from the list on the left.')
+              ? (kept ? null : 'This moodboard is in Recently deleted. Restore it from the list on the left.')
               : NOT_FOUND_LINE);
           });
           return;
@@ -1319,7 +1320,7 @@ export function MoodboardStudioView() {
           setRestoring((batch) => batch && batch.map((board) => (board.id === found.id ? { ...board, sent: sends } : board)));
         }
       }).catch((err) => {
-        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the board." }) });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the moodboard." }) });
       });
     }
     return () => { cancelled = true; };
@@ -1797,7 +1798,7 @@ export function MoodboardStudioView() {
         if (target) ops.forEach((op, index) => addViews.set(op, { view: target.view, seen: target.seen, band: Boolean(target.band),
           size: [placed[index].holder.width, placed[index].holder.height] }));
         const count = images.length;
-        const label = placed.length === 1 ? `Added #${count + 1}` : `Added ${placed.length} references`;
+        const label = placed.length === 1 ? `Added image ${count + 1}` : `Added ${placed.length} references`;
         // On the Board the new cards are sized from their aspect at once; a List add leaves that to the server, as it always has.
         const aspectsOf: Record<string, number> = target ? Object.fromEntries(placed.map((item) => [item.url, item.aspect])) : {};
         // Each uploaded image takes its spot: its placeholder stays under it
@@ -1932,7 +1933,7 @@ export function MoodboardStudioView() {
   const removeImages = (ids: string[]) => {
     if (ids.length === 0) return;
     const images = draftNow()?.images ?? draft.images;
-    const label = ids.length === 1 ? `Removed #${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
+    const label = ids.length === 1 ? `Removed image ${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
     const stepId = commitOps([{ op: 'remove', images: ids }], label, { now: true });
     if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } }, undoOf: stepId });
   };
@@ -1943,7 +1944,7 @@ export function MoodboardStudioView() {
     if (moves.length === 0) return;
     const images = draftNow()?.images ?? draft.images;
     const owner = images.findIndex((image) => image.placements?.some((card) => card.id === moves[0].placement));
-    const label = moves.length === 1 ? `Moved #${owner + 1}` : `Moved ${moves.length} references`;
+    const label = moves.length === 1 ? `Moved image ${owner + 1}` : `Moved ${moves.length} references`;
     commitOps(moves.map(({ placement, x, y }) => ({ op: 'place', placement, x, y })), label, { now: true });
   };
 
@@ -2012,7 +2013,7 @@ export function MoodboardStudioView() {
         });
         fieldSteps.release(top.id);
         undoStore.forget(key, top.id);
-        showUndone({ text: `Undid: ${top.label}` }, top.id);
+        showUndone({ text: undoneLine('undo', top.label) }, top.id);
         return;
       }
     }
@@ -2039,8 +2040,13 @@ export function MoodboardStudioView() {
       else undoStore.reapplied(key, step.id, next);
       store.finishSave(key, attempt.id, attempt.revision, savedId, edited.board.thumbnail ?? attempt.entry.thumbnail);
       if (!isCurrent()) return;
-      const line = { text: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${step.label}`, skipped: skippedLines(edited),
-        action: direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined };
+      // An undo that put nothing back because an image changed after the step is not an "Undid": it says so,
+      // draws as every other undo toast does (neutral), and offers no Redo.
+      const kept = direction === 'undo' && !next.length
+        ? keptUndoLine(step.label, edited.applied.flatMap((entry) => (Array.isArray(entry.skipped) ? entry.skipped : []))) : null;
+      const line = kept ? { text: kept }
+        : { text: undoneLine(direction, step.label), skipped: skippedLines(edited),
+          action: direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined };
       if (direction === 'undo') showUndone(line, step.id);
       else showToast(line);
     } catch (err) {
@@ -2234,7 +2240,7 @@ export function MoodboardStudioView() {
    *  change: its batch's `undo` restores the cover field. Picks made before
    *  the step is sent join it, so one undo goes back to the cover before them. */
   const setCover = (id: string | null) => {
-    const label = id ? `Made #${numberOf(draftNow()?.images ?? draft.images, id)} the cover` : 'Cover back to #1';
+    const label = id ? `Made image ${numberOf(draftNow()?.images ?? draft.images, id)} the cover` : 'Put the cover back on image 1';
     commitOps([{ op: 'cover', image: id }], label, { joinKey: 'cover' });
   };
 
@@ -2275,7 +2281,7 @@ export function MoodboardStudioView() {
         thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
       if (ownsAnalysis()) {
-        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the board." }), saveState: 'error',
+        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the moodboard." }), saveState: 'error',
           retry: 'analyze', retryStep: null });
       }
     } finally {
@@ -2669,7 +2675,7 @@ export function MoodboardStudioView() {
         } else recheckGone();
         return;
       }
-      setRestoreError(failureCopy(err, { heading: "Couldn't restore the board." }));
+      setRestoreError(failureCopy(err, { heading: "Couldn't restore the moodboard." }));
       return;
     }
     if (!mounted.current) return;
@@ -2938,7 +2944,7 @@ export function MoodboardStudioView() {
         </button>
       )}
       {savedId && !isDraftId && loaded && (
-        <AssetMoveMenu noun="board" buttonClassName="moodboard-studio-toolbar__button"
+        <AssetMoveMenu noun="moodboard" buttonClassName="moodboard-studio-toolbar__button"
           choices={moveChoices(draft.projectId, openProject)} onChoose={moveBoard} busy={moving.busy}
           disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
       )}
@@ -3005,7 +3011,7 @@ export function MoodboardStudioView() {
       {/* Retry loading reloads the board, so it shows (with GM's short line)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading Moodboard...'}
+      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading moodboard…'}
       {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
         onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
     </div>
@@ -3170,8 +3176,8 @@ export function MoodboardStudioView() {
           {/* Q21 b: Krea 2's board references share out this strength.
               Q36 a: at 0 no node gets the board, text included. */}
           <span>Strength {draft.strength.toFixed(2)} · {draft.strength <= 0
-            ? 'board off: connected nodes get none of it'
-            : <>the total the board&apos;s images share on Krea 2</>}</span>
+            ? 'moodboard off: connected nodes get none of it'
+            : <>the total the moodboard&apos;s images share on Krea 2</>}</span>
           <input
             type="range"
             min={0}
@@ -3197,7 +3203,7 @@ export function MoodboardStudioView() {
           value={draft.notes}
           onChange={(event) => { const notes = event.target.value; beginField('notes'); setDraft((current) => ({ ...current, analysis: null, notes })); }}
           onBlur={() => endField('notes')}
-          placeholder="Anything about the board, in your words."
+          placeholder="Anything about the moodboard, in your words."
         />
       </label>
       <NotesSwitch on={draft.sendNotes === true}
@@ -3333,7 +3339,7 @@ export function MoodboardStudioView() {
                 </div>
                 {cover && (
                   <p className="moodboard-def__cover-caption" aria-live="polite">
-                    {cover.chosen ? `Cover: #${cover.number}` : 'Cover: #1, the first image'}
+                    {cover.chosen ? `Image ${cover.number} is the cover.` : 'Image 1 is the cover until you choose another.'}
                   </p>
                 )}
               </div>
@@ -3370,7 +3376,7 @@ function ViewSwitch({ view, onChange }: { view: MoodboardView; onChange: (view: 
         <button key={option.id} ref={(node) => { refs.current[option.id] = node; }} type="button" role="radio"
           aria-checked={view === option.id} tabIndex={view === option.id ? 0 : -1}
           className="moodboard-view-switch__option"
-          title={option.id === 'board' ? 'The board as a canvas (preview)' : 'The board as a list'}
+          title={option.id === 'board' ? 'The moodboard as a canvas, in preview' : 'The moodboard as a list'}
           onClick={() => onChange(option.id)}
           onKeyDown={(event) => {
             if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
@@ -3469,7 +3475,7 @@ function MoodboardRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(failureMessage(err, "Couldn't load the boards."));
+          setError(failureMessage(err, "Couldn't load the moodboards."));
           setListing({ for: listKey, items: [] });
         }
       })
@@ -3523,7 +3529,7 @@ function MoodboardRail({
         title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New Moodboard</button>
       <div className="moodboard-rail__list" ref={rows}>
         {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status"><LineText text={notice} /></div>}
-        {busy && <div className="moodboard-rail__empty">Loading...</div>}
+        {busy && <div className="moodboard-rail__empty">Loading…</div>}
         {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error"><LineText text={failed} /></div>}
         {!busy && !failed && shown.length === 0 && (
           <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>

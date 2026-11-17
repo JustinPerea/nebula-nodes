@@ -22,7 +22,8 @@ DIGITS = ["\u00b2", "#\u00b2", "\u2460", "\u0663", "#\u0663", "\uff11"]  # super
 def test_a_unicode_digit_is_not_an_image_number(ref):
     with pytest.raises(PresenceError) as refused:
         _parse({"surface": "moodboard", "board": "b1", "image": ref})
-    assert "has no image" in str(refused.value) and "Use its number (1-12) or its id." in str(refused.value)
+    assert "because “Desert light” has 12 images." in str(refused.value) and "Use a number from 1 to 12, or the image’s id." in str(refused.value)
+    assert str(refused.value).startswith("Nebula couldn’t point at image ")
 
 
 @pytest.mark.parametrize("ref", DIGITS)
@@ -33,7 +34,7 @@ def test_the_route_refuses_a_unicode_digit_in_plain_words(api, ref):
     refused = client.post("/api/canvas/cursor", headers=AGENT,
                           json={"target": {"surface": "moodboard", "board": board["id"], "image": ref}})
     assert refused.status_code == 422, refused.text
-    assert "has no image" in refused.json()["detail"]
+    assert "Nebula couldn’t point at image " in refused.json()["detail"] and "has 3 images" in refused.json()["detail"]
     assert [event for event, _ in sent if event.get("type") == "agentPresence"] == []
 
 

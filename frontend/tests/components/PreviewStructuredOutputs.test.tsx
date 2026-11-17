@@ -167,8 +167,8 @@ describe('Preview card with a Moodboard bundle', () => {
     renderPreview({ type: 'Moodboard', value: {
       kind: 'nebula_moodboard', name: 42, palette: 'nope', accents: [1, '#abc'], images: 'x', styleBrief: '',
     } });
-    const card = screen.getByRole('group', { name: 'Moodboard Untitled board' });
-    expect(within(card).getByText('Analyze the board to build its brief')).toBeInTheDocument();
+    const card = screen.getByRole('group', { name: 'Moodboard Untitled moodboard' });
+    expect(within(card).getByText('Analyze the moodboard to build its brief')).toBeInTheDocument();
     expect(within(card).queryByRole('list', { name: 'Palette' })).toBeNull();
     expect(within(within(card).getByRole('list', { name: 'Accents' })).getAllByRole('listitem')).toHaveLength(1);
   });

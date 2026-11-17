@@ -320,7 +320,7 @@ def test_node_definition_shape() -> None:
     ndef = defs["reference-set"]
 
     assert ndef["id"] == "reference-set"
-    assert ndef["displayName"] == "Reference Set"
+    assert ndef["displayName"] == "Reference set"
     assert ndef["category"] == "utility"
     # Local execution — no external provider, no API key required.
     assert ndef["apiProvider"] == "utility"

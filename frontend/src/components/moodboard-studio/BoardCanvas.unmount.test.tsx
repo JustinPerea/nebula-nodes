@@ -162,7 +162,7 @@ describe('a press held during a Fit spring, with 1 px of jitter (GM r5)', () => 
     scrollPan();
     await act(async () => { await sleep(250); });
     expect(flowCamera()).not.toEqual(fit);
-    click('Fit the board');
+    click('Fit the moodboard');
     await act(async () => { await sleep(40); }); // a couple of spring frames
     const mid = flowCamera();
     const pane = document.querySelector('.react-flow__pane')!;
@@ -219,7 +219,7 @@ describe('closing mid-gesture, more cases (review 2)', () => {
     const fit = flowCamera();
     scrollPan();
     await act(async () => { await sleep(250); });
-    click('Fit the board');
+    click('Fit the moodboard');
     await act(async () => { await sleep(50); });
     expect(flowCamera()).not.toEqual(fit);
     view.unmount();
@@ -231,7 +231,7 @@ describe('closing mid-gesture, more cases (review 2)', () => {
     const view = await open('re');
     const fit = flowCamera();
     scrollPan();
-    click('Fit the board');
+    click('Fit the moodboard');
     view.unmount();
     await act(async () => { await sleep(300); });
     expect(kept('re')).toEqual({ viewport: fit, fitted: true });

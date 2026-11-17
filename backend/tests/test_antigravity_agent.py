@@ -230,7 +230,7 @@ async def test_a_sign_in_that_fails_stays_signed_out(tmp_path, installed):
     flips: list[bool] = []
     job = ag.start_sign_in(state, flips.append)
     await job.task
-    assert job.state == "failed" and "didn't finish" in job.message and flips == []
+    assert job.state == "failed" and "didn\u2019t finish" in job.message and flips == []
 
 
 @pytest.mark.asyncio

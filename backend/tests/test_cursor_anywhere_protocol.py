@@ -88,11 +88,11 @@ def test_parse_target_takes_the_surface_form_beside_the_other_two():
      "“Twin”, “Twin”."),
     ({"surface": "moodboard", "board": "Twin"}, "“Twin” names 2 moodboards. Use an id: b3, b4."),
     ({"surface": "moodboard", "board": "b2", "image": 1},
-     "Board “Dusk” has no images, so there is no image “1”."),
+     "Nebula couldn’t point at image 1 because “Dusk” has no images."),
     ({"surface": "moodboard", "board": "b1", "image": 13},
-     "Board “Desert light” has no image “13”. Use its number (1-12) or its id."),
+     "Nebula couldn’t point at image 13 because “Desert light” has 12 images. Use a number from 1 to 12, or the image’s id."),
     ({"surface": "moodboard", "board": "b1", "image": 0},
-     "Board “Desert light” has no image “0”. Use its number (1-12) or its id."),
+     "Nebula couldn’t point at image 0 because “Desert light” has 12 images. Use a number from 1 to 12, or the image’s id."),
     ({"surface": "moodboard", "board": "b1", "image": True}, "target.image must be an image's number or id"),
     ({"surface": "moodboard", "board": "b1", "part": "tint"},
      "“tint” isn’t a part of a board. Use name, direction, avoid, colors or colors-out."),
@@ -663,3 +663,14 @@ def test_renaming_one_board_leaves_the_cursors_on_another_alone():
     assert presence.rename_board("b1", "Desert dawn") == 0  # nothing to change the second time
     names = {cursor["name"]: cursor["anchorNames"] for cursor in presence.active()}
     assert names == {"Claude Code": {"board": "Desert dawn", "image": 3, "part": "Note"}, "Codex": {"board": "Dusk"}}
+
+
+def test_out_of_range_forms_name_the_id_only_where_an_id_is_accepted():
+    """GM, copy sweep last round: an image is found by number or id, a view only by number."""
+    from services.agent_presence import _out_of_range
+
+    assert _out_of_range("image", "3", "“Dusk”", 1) == (
+        "Nebula couldn’t point at image 3 because “Dusk” has 1 image. Use image 1, or the image’s id.")
+    assert _out_of_range("view", "3", "“Mara”", 1) == (
+        "Nebula couldn’t point at view 3 because “Mara” has 1 view. Use view 1.")
+    assert _out_of_range("view", "9", "“Mara”", 4).endswith("Use a number from 1 to 4.")

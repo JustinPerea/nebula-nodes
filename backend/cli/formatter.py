@@ -6,6 +6,7 @@ from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
+from services.agent_name_in_sentence import in_sentence
 from services.agent_params import ASSET_PARAM_TYPES
 from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
 from services.canvas_undo import UNDONE_VERBS, nothing_went_back
@@ -949,7 +950,8 @@ def format_pin(pin: dict[str, Any], now: float | None = None) -> str:
     head = f"{pin.get('id', '?')} {where}"
     reply = pin.get("reply") or {}
     if pin.get("status") == "resolved" and reply:
-        agent = (reply.get("agent") or {}).get("name") or "an agent"
+        name = (reply.get("agent") or {}).get("name")
+        agent = in_sentence(str(name)) if name else "an agent"
         answer = json.dumps(agent_text(reply.get("text"), multiline=False), ensure_ascii=False)
         return pin_line(head, pin.get("text"), after=f" — resolved by {agent}: {answer}")
     ago = _ago(pin.get("createdAt"), now)
@@ -1225,7 +1227,8 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     if created:
         head = f"Proposal {proposal_id} is {where or 'on the canvas'} for the person (expires in {_minutes(left)})."
     else:
-        agent = (view.get("agent") or {}).get("name") or "an agent"
+        name = (view.get("agent") or {}).get("name")
+        agent = in_sentence(str(name)) if name else "an agent"
         when = f", expires in {_minutes(left)}" if status == "open" else ""
         reason = f" — {view['reason']}" if view.get("reason") and status != "open" else ""
         note = json.dumps(str(view.get("note") or ""), ensure_ascii=False)
@@ -1440,7 +1443,7 @@ def format_proposal_outcome(view: dict[str, Any]) -> str:
             return ("Accepted by the person: the cover is automatic again." if applied["cover"] is None
                     else f"Accepted by the person: the cover is now {applied['cover']}.")
         if applied.get("sendNotes"):
-            return "Accepted by the person: the board's notes now go to generators."
+            return "Accepted by the person: the moodboard’s notes now go to generators."
         if isinstance(applied.get("edits"), list):
             count = len(applied["edits"])
             return f"Accepted by the person: {count} change{'' if count == 1 else 's'} made to the reference."

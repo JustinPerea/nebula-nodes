@@ -27,6 +27,7 @@ import { backendText } from './backendText';
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
 import { inDesktopShell, isBeforePromote, personGateHeld, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
+import { agentNameInSentence } from './personalAgentName';
 
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
@@ -187,6 +188,10 @@ const ACCESS_LOST_CLAUSE = 'you don’t have access to this anymore. Reload to s
 const SERVER_ERROR_CLAUSE = 'the server hit an error. Try again.';
 /** GM r30: no answer at all (GM r31's wording). */
 const NOT_ANSWERING_CLAUSE = 'the server isn’t answering. Check that Nebula is running, then try again.';
+/** The same two reasons beside a button of their own (an action's line): the standing rule is
+ * that a failure line shown with Try again ends in "Try again." (GM r23 on #208). */
+export const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try again.';
+const SERVER_BUSY_RETRY_CLAUSE = 'the server is busy. Try again.';
 /** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
 export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
@@ -204,18 +209,58 @@ export function loadFailedLine(what: string, error: unknown): string {
   return clause === COMMONS_OFF_COPY ? COMMONS_OFF_COPY : `Nebula couldn’t ${what} because ${clause}`;
 }
 
+/**
+ * An action's failure line, for a surface with a button that tries it again (copy sweep item 20,
+ * GM: a failure line shown with a Try again button ends in "Try again.", in the because form, and
+ * has no "Try again." when retrying cannot help). `what` is what Nebula was doing ("upload
+ * “photo.png”"). The reasons are the shared ones (a load's: LOAD_BECAUSE, the 4xx line, the
+ * server's own answers), with the two page endings ("Check that Nebula is running, then try
+ * again.", "Try again in a moment.") said as the button's own, "Try again.". A reason that names
+ * another step (reload, sign in again) keeps it and has no "Try again.", so `retryable` is false
+ * and the surface shows no button for it. A line that says nothing (a request refused offline)
+ * is not an action's failure: the caller's own reason stands in for it (`silent`), default none.
+ */
+export function actionFailedLine(what: string, error: unknown, silent = ''): { line: string; retryable: boolean } {
+  const clause = loadFailedClause(what, error, LOAD_BECAUSE, 'button');
+  const line = clause === null ? silent
+    : clause === COMMONS_OFF_COPY ? COMMONS_OFF_COPY : `Nebula couldn’t ${what} because ${clause}`;
+  return { line, retryable: /(?:^|\.\s)Try again\.$/.test(line) };
+}
+
+/**
+ * A one-line failure that a surface shows beside its own retry, said in the because form (the
+ * standing rule: "Nebula couldn’t ‹do the thing› because ‹reason›. Try again."). `line` is
+ * `<heading> <reason>` as failureMessage makes it; when the reason is GM's connection line or
+ * its no-response line, the heading ("Couldn't open the project.") becomes the action and the
+ * reason the server's: "Nebula couldn’t open the project because the server isn’t answering. Try
+ * again." Any other line (a refusal's own words, a heading of another shape) goes through
+ * shortLine as before.
+ */
+export function retryBecauseLine(line: string): string {
+  const endings: [string, string][] = [[CONNECTION_LOST_COPY, NOT_ANSWERING_RETRY_CLAUSE], [NO_RESPONSE_COPY, NO_RESPONSE_CLAUSE]];
+  for (const [long, clause] of endings) {
+    if (!line.endsWith(long)) continue;
+    const heading = line.slice(0, line.length - long.length).trim();
+    const lead = /^(?:Nebula )?[Cc]ouldn['’]t /.exec(heading);
+    if (!lead || !heading.endsWith('.')) break;
+    return `Nebula couldn’t ${heading.slice(lead[0].length, -1)} because ${clause}`;
+  }
+  return shortLine(line);
+}
+
 /** The clause after "because" for a load's failure (loadFailedLine), COMMONS_OFF_COPY for the
  * Commons turned off, or null when the failure says nothing (a request refused offline). */
-function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<string, string> = LOAD_BECAUSE): string | null {
+function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<string, string> = LOAD_BECAUSE,
+  beside: 'page' | 'button' = 'page'): string | null {
   const { reason } = failureCopy(error);
   if (!reason) return null;
   const status = error instanceof RequestFailedError ? error.status : null;
-  if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return NOT_ANSWERING_CLAUSE;
+  if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return beside === 'button' ? NOT_ANSWERING_RETRY_CLAUSE : NOT_ANSWERING_CLAUSE;
   const detail = error instanceof RequestFailedError ? detailText(error.detail) : '';
   if (isCommonsOff(error)) return COMMONS_OFF_COPY;
   if (status !== null && failureKind(status) === 'no-response') {
     // GM r31: 429 is busy; 408 and a gateway's 502-504 didn't respond; the server's own 5xx is an error.
-    if (status === 429) return SERVER_BUSY_CLAUSE;
+    if (status === 429) return beside === 'button' ? SERVER_BUSY_RETRY_CLAUSE : SERVER_BUSY_CLAUSE;
     return status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE;
   }
   const clause = because.get(detail) ?? (reason === ACCESS_LOST_COPY ? ACCESS_LOST_CLAUSE : undefined);
@@ -1067,7 +1112,7 @@ export function nodeNameList(names: string[]): string {
 export function agentNameList(names: string[]): string {
   const agents = [...new Set(names)];
   if (countsInstead(agents.length)) return `${agents.length} agents`;
-  return joinedList(agents);
+  return joinedList(agents.map((name, at) => (at === 0 ? name : agentNameInSentence(name))));
 }
 
 /** "A", "A and B", "A, B and C": the lists' shared join (also the kept

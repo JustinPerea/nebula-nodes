@@ -224,9 +224,9 @@ describe('the Board / List switch', () => {
 
   it('with nothing selected the side panel holds the board: its fields, Direction and the brief', async () => {
     await openStudio({ view: 'board' });
-    const panel = screen.getByRole('complementary', { name: 'Board' });
+    const panel = screen.getByRole('complementary', { name: 'Moodboard' });
     expect(within(panel).getByDisplayValue('Global board')).toBeTruthy();
-    expect(within(panel).getByRole('textbox', { name: 'What the board is for' })).toBeTruthy();
+    expect(within(panel).getByRole('textbox', { name: 'What the moodboard is for' })).toBeTruthy();
     expect(within(panel).getByRole('button', { name: 'Analyze' })).toBeTruthy();
   });
 });
@@ -266,7 +266,7 @@ describe('a drag on the board', () => {
     await openStudio({ view: 'board' });
     act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
     await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
-    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the moodboard.", 503));
     press('z', { metaKey: true });
     expect(parts(await undoNotice())).toEqual(["Couldn't undo the change.", "Nebula didn't respond."]);
     const restores = () => api.editMoodboard.mock.calls.filter(([, ops]) => (ops as MoodboardOp[])[0]?.op === 'restore');
@@ -287,7 +287,7 @@ describe('a drag on the board', () => {
     await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits).toHaveLength(2));
-    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the moodboard.", 503));
     press('z', { metaKey: true, shiftKey: true });
     expect(parts(await undoNotice())).toEqual(["Couldn't redo the change.", "Nebula didn't respond."]);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -299,7 +299,7 @@ describe('a drag on the board', () => {
     await openStudio({ view: 'board' });
     act(() => board.props!.onMove([{ placement: 'c-i1', x: 300, y: 40 }]));
     await waitFor(() => expect(server.edits).toHaveLength(1), { timeout: 400 });
-    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the board.", 503));
+    api.editMoodboard.mockRejectedValueOnce(new RequestFailedError("Couldn't save the moodboard.", 503));
     press('z', { metaKey: true });
     await undoNotice();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
@@ -344,20 +344,20 @@ describe('the cover (#123) in undo', () => {
   it('a pick is one undo step: Cmd+Z opens the board on #1 again, Shift+Cmd+Z brings the pick back', async () => {
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
-    expect(screen.getByText('Cover: #2')).toBeTruthy();
+    expect(screen.getByText('Image 2 is the cover.')).toBeTruthy();
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
     // A pick keeps the analysis.
     expect(server.board.analysis).not.toBeNull();
 
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
-    expect(await screen.findByText('Cover: #1, the first image')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover until you choose another.')).toBeTruthy();
     expect(server.board.coverImageId).toBeNull();
-    expect(await screen.findByText(/Undid: Made #2 the cover/)).toBeTruthy();
+    expect(await screen.findByText(/Undid “Made image 2 the cover”/)).toBeTruthy();
 
     press('z', { metaKey: true, shiftKey: true });
     await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
-    expect(await screen.findByText('Cover: #2')).toBeTruthy();
+    expect(await screen.findByText('Image 2 is the cover.')).toBeTruthy();
   });
 
   it('picks made before the step is sent join it: one batch, and one undo goes back to before them', async () => {
@@ -370,21 +370,21 @@ describe('the cover (#123) in undo', () => {
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits).toHaveLength(2));
     expect(server.board.coverImageId).toBeNull();
-    expect(await screen.findByText('Cover: #1, the first image')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover until you choose another.')).toBeTruthy();
   });
 
   it('a pick, then that image removed before the pick is sent: two batches, and Undo brings the image back as the cover', async () => {
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
     fireEvent.click(document.querySelectorAll<HTMLButtonElement>('.moodboard-tile__remove')[1]);
-    expect(await screen.findByText('Cover: #1, the first image')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover until you choose another.')).toBeTruthy();
     // Never one batch: the server refuses a batch that picks an image and takes it off.
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }], [{ op: 'remove', images: ['i2'] }]]));
     expect(server.board.images.map((img) => img.id)).toEqual(['i1']);
 
     press('z', { metaKey: true });
     await waitFor(() => expect(server.edits[2]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u2' }] }]));
-    expect(await screen.findByText('Cover: #2')).toBeTruthy();
+    expect(await screen.findByText('Image 2 is the cover.')).toBeTruthy();
     expect(server.board.coverImageId).toBe('i2');
   });
 
@@ -393,7 +393,7 @@ describe('the cover (#123) in undo', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
     outsideWrite((current) => ({ ...current, coverImageId: 'i1' }));
-    expect(await screen.findByText('Cover: #1')).toBeTruthy();
+    expect(await screen.findByText('Image 1 is the cover.')).toBeTruthy();
     // The server's restore finds the cover changed since: it puts nothing
     // back, and its answer has no `undo` (nothing to redo).
     api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
@@ -404,7 +404,7 @@ describe('the cover (#123) in undo', () => {
         undo: { ops: [] } };
     });
     press('z', { metaKey: true });
-    expect(await screen.findByText('The cover changed since, left as is')).toBeTruthy();
+    expect(await screen.findByText('Nebula couldn’t undo “Made image 2 the cover” because the cover changed again after that.')).toBeTruthy();
     expect(server.edits).toHaveLength(2);
 
     press('z', { metaKey: true, shiftKey: true });
@@ -412,6 +412,28 @@ describe('the cover (#123) in undo', () => {
     expect(server.edits).toHaveLength(2);
     expect(server.board.coverImageId).toBe('i1');
     expect(screen.queryByRole('button', { name: 'Redo' })).toBeNull();
+  });
+});
+
+describe('an undo kept because an image changed after the step (design r161)', () => {
+  it('says it could not undo, not "Undid", names the image, and offers no Redo', async () => {
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
+    await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 2000 });
+    // The server's restore finds image 2 changed since the step: it puts nothing back and offers no redo.
+    api.editMoodboard.mockImplementationOnce(async (_id: string, ops: MoodboardOp[]) => {
+      server.edits.push(ops);
+      return { board: clone(server.board), version: server.board.version,
+        applied: [{ index: 0, op: 'restore', status: 'unchanged', removed: [],
+          skipped: [{ part: 'image', image: 'i2', number: 2, reason: 'changed since', message: 'Image 2 changed since, left as is' }] }],
+        undo: { ops: [] } };
+    });
+    press('z', { metaKey: true });
+    const line = await screen.findByText('Nebula couldn’t undo “Made image 2 the cover” because image 2 changed after that.');
+    const toast = line.closest('[role="status"]') as HTMLElement;
+    expect(toast.textContent).not.toMatch(/Undid/);
+    expect(toast.textContent).not.toContain('left as is');
+    expect(within(toast).queryByRole('button', { name: 'Redo' })).toBeNull();
   });
 });
 
@@ -566,8 +588,8 @@ describe("the Studio's keys", () => {
     press('Delete');
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'remove', images: ['i1'] }]]), { timeout: 400 });
     expect(screen.queryByText(/^card #\d at 0,0$/)).toBeNull();
-    const toast = await screen.findByRole('status', { name: 'Board undo' });
-    expect(toast.textContent).toContain('Removed #1');
+    const toast = await screen.findByRole('status', { name: 'Moodboard undo' });
+    expect(toast.textContent).toContain('Removed image 1');
     fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(server.edits[1]).toEqual([{ op: 'restore', slices: [{ part: 'tag', tag: 'u1' }] }]));
     expect(await screen.findByText('card #1 at 0,0')).toBeTruthy();
@@ -582,7 +604,7 @@ describe("the Studio's keys", () => {
     select('c-i1');
     press('Delete');
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'remove', images: ['i1'] }]]), { timeout: 400 });
-    const toast = await screen.findByRole('status', { name: 'Board undo' });
+    const toast = await screen.findByRole('status', { name: 'Moodboard undo' });
     expect(toast.closest('[data-notice-slot="board"]')).not.toBeNull();
     expect(toast.closest('.moodboard-studio-view')).toBeNull();
     const dismiss = within(toast).getByRole('button', { name: 'Dismiss' });

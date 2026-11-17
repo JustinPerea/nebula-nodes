@@ -305,7 +305,7 @@ describe('N5: what a run\'s render kept never names an agent', () => {
 
 // -- GM ask 3 ----------------------------------------------------------------------
 
-describe('GM ask 3: an unlabeled setting is "a setting on “<node>”"; the Agent log keeps its key', () => {
+describe('GM ask 3: an unlabeled setting is "a setting on “<node>”"; the Agent log names the key in words', () => {
   it('the undo line and the log', async () => {
     const fal = (scale: number, steps: number) => node('n1', { endpoint_id: 'fal-ai/flux', guidance_scale: scale, num_steps: steps },
       'Flux', 'fal-universal');
@@ -321,7 +321,7 @@ describe('GM ask 3: an unlabeled setting is "a setting on “<node>”"; the Age
     const { notice } = await step('undo');
     window.removeEventListener('nebula:agent-log-entry', listen);
     expect(notice).toBe('Undid the proposal except a setting on “Flux”. Codex changed it after you accepted.');
-    expect(logged).toContain('Undid the proposal except “guidance_scale” for “Flux”. Codex changed it after you accepted.');
+    expect(logged).toContain('Undid the proposal except “Guidance scale” for “Flux”. Codex changed it after you accepted.');
   });
 
   it('the line\'s forms', () => {

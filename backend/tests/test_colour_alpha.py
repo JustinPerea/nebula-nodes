@@ -346,15 +346,15 @@ def test_a_fully_transparent_image_says_so_and_invents_no_colour() -> None:
     clear_entry = analysis["images"][1]
     assert clear_entry["status"] == "analyzed" and clear_entry["transparent"] is True
     assert clear_entry["colors"] == [] and clear_entry["lightness"] is None
-    assert "#2 is too transparent to add colors." in analysis["summary"]
-    assert "#2 is too transparent to add colors." in analysis["warnings"]
+    assert "Image 2 is too transparent to add colors." in analysis["summary"]
+    assert "Image 2 is too transparent to add colors." in analysis["warnings"]
     # The clear image takes no part of the board: the sprite's green is all of it.
     assert [(c["hex"], c["share"]) for c in analysis["colors"]] == [(analysis["palette"][0], 1.0)]
 
     alone = analyze_moodboard(_board(_write(clear())))
     assert alone["palette"] == [] and alone["colors"] == []
     assert "no local palette extracted" in alone["summary"]
-    assert "#1 is too transparent to add colors." in alone["summary"]
+    assert "Image 1 is too transparent to add colors." in alone["summary"]
 
 
 def _saved_v5(board: dict) -> dict:
@@ -514,11 +514,11 @@ def test_a_clear_reference_is_never_sent_or_priced() -> None:
             for body in google.bodies for part in body["contents"][0]["parts"] if "inline_data" in part]
     assert paths[1].stem not in sent and {paths[0].stem, paths[2].stem} <= set(sent)
     skip = [line for line in result["trace"] if line["kind"] == "skip"]
-    assert [line["text"] for line in skip] == ["#2 is too transparent to add colors."]
+    assert [line["text"] for line in skip] == ["Image 2 is too transparent to add colors."]
     placement = next(r for r in result["results"] if r["id"] == "img2")
     assert placement["status"] == "couldntRead"
     assert placement["why"] == "It’s too transparent to add colors."  # GM r5: curly, no colon
-    assert "#2 is unsorted because it’s too transparent." in [line["text"] for line in result["trace"]]
+    assert "Image 2 is unsorted because it’s too transparent." in [line["text"] for line in result["trace"]]
     assert len([b for b in google.bodies if "readings" in json.dumps(b)]) >= 1
 
 
@@ -575,7 +575,7 @@ def test_the_lines_read_as_gm_wrote_them() -> None:
 
     assert ALPHA_OUTDATED == OUTDATED_LINE
     assert ALPHA_RERUN_WARNING == RERUN_LINE
-    assert TRANSPARENT_IMAGE_LINE.format(number=4) == "#4 is too transparent to add colors."
+    assert TRANSPARENT_IMAGE_LINE.format(number=4) == "Image 4 is too transparent to add colors."
 
 
 @pytest.mark.asyncio
@@ -591,7 +591,7 @@ async def test_the_node_says_why_it_analyzed_a_pre_alpha_board_again(tmp_path, m
     result = await handle_moodboard_node(
         GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": made["id"]}), {}, {})
     # The run's own warning first, then the per-image lines (review 2 surfaces L3).
-    assert result["moodboard"]["value"]["analysis"]["warnings"] == [RERUN_LINE, "#2 is too transparent to add colors."]
+    assert result["moodboard"]["value"]["analysis"]["warnings"] == [RERUN_LINE, "Image 2 is too transparent to add colors."]
 
 
 @pytest.mark.asyncio
@@ -608,7 +608,7 @@ async def test_the_nodes_bundle_says_which_image_is_clear(tmp_path, monkeypatch)
         GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": made["id"]}), {}, {})
     summary = result["moodboard"]["value"]["analysis"]["summary"]
     assert summary.startswith("2 reference images analyzed as look.")
-    assert "#2 is too transparent to add colors." in summary
+    assert "Image 2 is too transparent to add colors." in summary
 
 
 def test_the_summary_counts_in_a_real_plural() -> None:
@@ -624,8 +624,21 @@ def test_the_cli_estimate_names_clear_references(capsys) -> None:
     moodboard_cmd._print_estimate({"reader": {"name": "Argon"}, "thinkingLevel": "low", "count": 2, "batches": 1,
                                    "low": 0.01, "high": 0.02, "transparent": [2]})
     out = capsys.readouterr().out
-    assert "  #2 wasn’t read because it’s too transparent.\n" in out  # GM r5
+    assert "  Image 2 wasn’t read because it’s too transparent.\n" in out  # GM r5
     assert "Too transparent, so not read" not in out
+
+
+def test_the_cli_estimate_follows_the_readers_person_line_for_a_missing_key(capsys) -> None:
+    from cli.commands import moodboard as moodboard_cmd
+
+    def said(key_name):
+        moodboard_cmd._print_estimate({"reader": {"name": "Argon", "keyName": key_name}, "thinkingLevel": "low",
+                                       "count": 2, "batches": 1, "low": 0.01, "high": 0.02, "available": False})
+        return capsys.readouterr().out
+
+    assert "so a read would be refused. Add a Gemini API key in Settings.\n" in said("GOOGLE_API_KEY")
+    assert "so a read would be refused. Add OTHER_KEY in Settings.\n" in said("OTHER_KEY")
+    assert "Providers" not in said("GOOGLE_API_KEY")
 
 
 # -- round 2, review 1 (affb9b25): each fails there ------------------------------------------
@@ -718,7 +731,7 @@ def test_faint_and_clear_images_both_read_too_transparent() -> None:
         assert is_clear(image) and visible_pixels(image)[0].shape == (0, 3)
     analysis = analyze_moodboard(_board(_write(sprite_49()), _write(faint)))
     assert analysis["images"][1]["transparent"] is True
-    assert "#2 is too transparent to add colors." in analysis["summary"]
+    assert "Image 2 is too transparent to add colors." in analysis["summary"]
     assert not is_clear(one_pixel(16, 2048))
 
 

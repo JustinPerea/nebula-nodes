@@ -14,10 +14,10 @@
   {
    "kind": "key",
    "node": "cinema-scene",
-   "name": "Cinema Scene",
+   "name": "Cinema scene",
    "one": "needs your BytePlus or fal.ai API key. Add one in Settings.",
    "many": "need your BytePlus or fal.ai API key. Add one in Settings.",
-   "line": "“Cinema Scene” needs your BytePlus or fal.ai API key. Add one in Settings.",
+   "line": "“Cinema scene” needs your BytePlus or fal.ai API key. Add one in Settings.",
    "logOne": "needs your BytePlus or fal.ai API key. Add one in Settings, then run the node again.",
    "logMany": "need your BytePlus or fal.ai API key. Add one in Settings, then run the nodes again."
   },

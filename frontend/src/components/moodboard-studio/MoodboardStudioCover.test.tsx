@@ -136,10 +136,18 @@ describe('choosing the cover in Moodboard Studio', () => {
   it('opens on #1 and says so until a cover is chosen', async () => {
     await openStudio();
     expect(preview()).toBe('/api/outputs/i1.png');
-    expect(caption()).toBe('Cover: #1, the first image');
+    expect(caption()).toBe('Image 1 is the cover until you choose another.');
     expect(coverMarks()).toEqual(['Cover', null, null]);
     expect(within(tiles()[0]).queryByRole('button', { name: /as cover/ })).toBeNull();
     expect(within(tiles()[1]).getByRole('button', { name: 'Use #2 as cover' })).toBeTruthy();
+  });
+
+  it('says only "Image 1 is the cover." once the person chose image 1 themselves', async () => {
+    await openStudio();
+    fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
+    expect(caption()).toBe('Image 2 is the cover.');
+    fireEvent.click(screen.getByRole('button', { name: 'Use #1 as cover' }));
+    expect(caption()).toBe('Image 1 is the cover.');
   });
 
   it('"Use as cover" sends one cover op and moves nothing', async () => {
@@ -148,7 +156,7 @@ describe('choosing the cover in Moodboard Studio', () => {
     // At once, before the save: the preview, the mark and the caption.
     expect(preview()).toBe('/api/outputs/i2.png');
     expect(coverMarks()).toEqual([null, 'Cover', null]);
-    expect(caption()).toContain('Cover: #2');
+    expect(caption()).toContain('Image 2 is the cover.');
 
     await waitFor(() => expect(server.edits).toEqual([[{ op: 'cover', image: 'i2' }]]), { timeout: 3000 });
     expect(api.editMoodboard.mock.calls[0][2]).toBe(1);
@@ -184,7 +192,7 @@ describe('choosing the cover in Moodboard Studio', () => {
     await openStudio();
     fireEvent.click(within(tiles()[1]).getByRole('button', { name: 'x' }));
     expect(preview()).toBe('/api/outputs/i1.png');
-    expect(caption()).toBe('Cover: #1, the first image');
+    expect(caption()).toBe('Image 1 is the cover until you choose another.');
     await waitFor(() => expect(server.board.images.map((img) => img.id)).toEqual(['i1', 'i3']), { timeout: 3000 });
     expect(server.board.coverImageId).toBeNull();
   });
@@ -318,13 +326,13 @@ describe('a cover picked on a board not saved yet', () => {
     // While the create is out: pick #2, then take #2 off.
     fireEvent.click(await screen.findByRole('button', { name: 'Use #2 as cover' }));
     fireEvent.click(document.querySelectorAll<HTMLButtonElement>('.moodboard-tile__remove')[1]);
-    expect(caption()).toBe('Cover: #1, the first image');
+    expect(caption()).toBe('Image 1 is the cover until you choose another.');
     await act(async () => { made(clone(server.board)); });
 
     await waitFor(() => expect(server.board.images.map((img) => img.id)).toEqual(['n1']), { timeout: 3000 });
     expect(refused).toEqual([]);
     expect(server.board.coverImageId).toBeNull();
-    expect(caption()).toBe('Cover: #1, the first image');
+    expect(caption()).toBe('Image 1 is the cover until you choose another.');
     expect(document.querySelector('.moodboard-studio__notice--error')).toBeNull();
   });
 });

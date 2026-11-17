@@ -21,6 +21,7 @@ import { KEEP_ATTR, SHRINK_ATTR, SHRINK_BODY_ATTR, SHRINK_FOOT_ATTR, SHRINK_HEAD
 import { useGraphStore } from '../../store/graphStore';
 import { canvasFocusTarget } from '../../lib/noticeFocus';
 import { sayPolitely } from '../../lib/noticeSay';
+import { agentNameInSentence } from '../../lib/personalAgentName';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -407,7 +408,7 @@ export function ProposalBar() {
         className="proposal-bar"
         tabIndex={-1}
         role="region"
-        aria-label={`Proposal from ${current.view.agent.name}`}
+        aria-label={`Proposal from ${agentNameInSentence(current.view.agent.name)}`}
         style={{ ['--agent-color' as string]: current.view.agent.color }}
         {...{ [SHRINK_ATTR]: '' }}
         {...leave.props}

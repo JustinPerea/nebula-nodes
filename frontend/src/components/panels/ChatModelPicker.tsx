@@ -7,7 +7,7 @@ import {
 } from '../../lib/api';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
-import { shortLine } from '../../lib/errorCopy';
+import { retryBecauseLine } from '../../lib/errorCopy';
 import '../../styles/chat-model-picker.css';
 import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
@@ -99,9 +99,11 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
   const effortLabel = effort ? offeredEffort?.label ?? 'Unavailable effort'
     : defaultEffort ? `${defaultEffort.label} · default` : 'CLI default';
   const unavailable = error ?? current?.error?.message ?? (
-    current?.status === 'not_installed' ? `${provider.label} is not installed.`
-      : current?.status === 'not_authenticated' ? `Sign in to ${provider.label}, then retry.`
-        : ready && !models.length ? 'No models are available from this CLI.' : 'Model catalog is unavailable.'
+    current?.status === 'not_installed' ? `${provider.label} isn’t installed. Install it, then try again.`
+      : current?.status === 'not_authenticated' ? `Sign in to ${provider.label}, then try again.`
+        : // A retry can help when the CLI listed nothing for a moment (a cold start), so the line sits beside
+        // the Try again button and ends in it (design r160 answer 5).
+        ready && !models.length ? `Nebula couldn’t find any models in ${provider.label}. Try again.` : 'Model catalog is unavailable.'
   );
   const connection = current?.auth.mode === 'chatgpt' ? 'Connected to ChatGPT'
     : chatAuthUsesProviderBilling(current?.auth.mode ?? null)
@@ -198,9 +200,9 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
           offers a choice, it shows under its name once the conversation starts; otherwise change those in the
           agent&rsquo;s own settings.
         </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
-          {/* GM's WRAP rule: Retry is the retry, so the reason drops its own. */}
-          <p role="status"><LineText text={shortLine(unavailable)} /></p>
-          <button type="button" className="chat-model-picker__retry" onClick={onRetry}>Retry model discovery</button>
+          {/* The line ends in "Try again." beside the retry button (retryBecauseLine). */}
+          <p role="status"><LineText text={retryBecauseLine(unavailable)} /></p>
+          <button type="button" className="chat-model-picker__retry" aria-label="Try again to load models" onClick={onRetry}>Try again</button>
         </div> : <>
           {model && !selected && <p role="status">Saved model is unavailable. Choose a model from this CLI.</p>}
           <fieldset className="chat-model-picker__options"><legend>Chat model</legend>

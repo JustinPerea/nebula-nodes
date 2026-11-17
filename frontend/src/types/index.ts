@@ -842,6 +842,9 @@ export interface NodeData {
    *  card's heading is "Nebula couldn’t start the run." (GM, PR #203 r32),
    *  the Agent log's. Card-only (node_errors.card), like errorPerson. */
   errorNotStarted?: boolean;
+  /** The error is a missing-key one (ErrorEvent `missing_credential`, a pre-call check's
+   *  `missing_key`; node_errors.card): the card draws it neutral. */
+  errorMissingKey?: boolean;
   /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;

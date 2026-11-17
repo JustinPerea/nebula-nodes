@@ -2,9 +2,10 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import {
-  directBlock, directKeyNames, fallbackKeyNames, isKeylessRoute, KEY_PROVIDERS, routeById, selectRoute,
+  directBlock, directKeyNames, withArticle, fallbackKeyNames, isKeylessRoute, KEY_PROVIDERS, routeById, selectRoute,
   type DirectBlock, type NodeRoute,
 } from './directRoute';
+import { credentialNounFor } from './credentialNoun';
 import { modelChoice, paramCallsProvider, paramRoute, paramValue } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -54,51 +55,50 @@ export function providerCheckIsCurrent(entry: ProviderHealthEntry | undefined, c
     && now - Math.min(checkedAt, completedAt) < PROVIDER_HEALTH_TTL_MS;
 }
 
-/** Verification concerns the selected credential, never model entitlement or a paid run. */
+/** Verification concerns the selected credential, never model entitlement or a paid run.
+ * What a person adds in Settings is a key (a token for Replicate and Hugging Face); a
+ * sign-in (Nous) keeps "credential". */
 function checkedReadiness(provider: string, target: ProviderSetupTarget, health: ProviderHealthState): ModelReadiness | undefined {
   const entry = health.providers[provider];
   if (!providerCheckIsCurrent(entry, health.checkedAt)) return undefined;
   const base = { setupTarget: target };
+  const word = target.kind === 'api-key' ? credentialNounFor(target.key) : 'credential';
+  const Word = word.charAt(0).toUpperCase() + word.slice(1);
   switch (entry.status) {
-    case 'valid': return entry.configured ? { ...base, label: 'Verified credential', tone: 'success',
-      detail: `${provider} accepted the credential check. Model access, available credits and generation are checked separately.` } : undefined;
+    case 'valid': return entry.configured ? { ...base, label: `Verified ${word}`, tone: 'success',
+      detail: `${provider} accepted the ${word} check. Model access, available credits and generation are checked separately.` } : undefined;
     case 'configured_unverified': return { ...base, label: 'Configured · not checked', tone: 'neutral',
-      detail: `${provider} is configured. No safe credential check is available; generation was not used to test it.` };
+      detail: `${provider} is configured. No safe ${word} check is available; generation was not used to test it.` };
     case 'not_configured': return { ...base, label: 'Setup required', tone: 'warning',
       detail: `${provider} is not configured. Open setup to connect it.` };
-    case 'invalid': return { ...base, label: 'Credential rejected', tone: 'warning',
-      detail: `${provider} rejected the saved credential. Update it in setup before running.` };
+    case 'invalid': return { ...base, label: `${Word} rejected`, tone: 'warning',
+      detail: `${provider} rejected the saved ${word}. Update it in setup before running.` };
     case 'unauthorized': return { ...base, label: 'Authorization required', tone: 'warning',
-      detail: `${provider} denied access to the credential check. Review the account's API access in setup.` };
+      detail: `${provider} denied access to the ${word} check. Review the account's API access in setup.` };
     case 'insufficient_credits': return { ...base, label: 'Credits required', tone: 'warning',
       detail: `${provider} reported insufficient credits during the check. Review the provider account before running.` };
     case 'rate_limited': return { ...base, label: 'Check rate limited', tone: 'warning',
-      detail: `${provider} limited the credential check. Try Check connections again later.` };
+      detail: `${provider} limited the ${word} check. Try Check connections again later.` };
     case 'error': return { ...base, label: 'Check unavailable', tone: 'warning',
       detail: `Couldn't check ${provider}. The saved connection is unchanged. Use Check connections to try again.` };
   }
 }
 
-/** "an OpenAI", "a fal.ai", "an xAI": a name with its article, for a line
- * that puts one before a provider (review 10 of PR #203: "Add a Anthropic
- * …"). A name read letter by letter from an x ("xAI") takes "an". */
-export function withArticle(name: string): string {
-  return `${/^[aeiou]/i.test(name) || /^x[A-Z]/.test(name) ? 'an' : 'a'} ${name}`;
-}
+export { withArticle };
 
 export function keyReadiness(key: string, cache: CredentialReadiness, health: ProviderHealthState): ModelReadiness {
   const target: ProviderSetupTarget = { kind: 'api-key', key };
   const provider = PROVIDER_KEY_LABELS[key] ?? key;
   if (!cache.loaded) return { label: 'Connection not loaded', detail: 'Saved connection settings have not loaded yet.', tone: 'neutral', setupTarget: target };
   if (!cache.apiKeys[key]?.trim()) return { label: 'Setup required',
-    detail: `Add your ${provider} API credential in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
+    detail: `Add ${withArticle(`${provider} ${credentialNounFor(key) === 'token' ? 'token' : 'API key'}`)} in Settings. You can browse and add models before connecting.`, tone: 'warning', setupTarget: target };
   if (health.loading) return { label: 'Checking connection', tone: 'neutral', setupTarget: target,
-    detail: `${provider} saved credential is being checked without generating.` };
+    detail: `${provider} saved ${credentialNounFor(key)} is being checked without generating.` };
   const checked = checkedReadiness(provider, target, health);
   if (checked) return checked;
   return { label: health.error ? 'Check unavailable' : 'Configured · not checked', tone: health.error ? 'warning' : 'neutral',
     detail: health.error ? `${provider} is configured, but Nebula couldn't check the connections. Use Check connections to try again.`
-      : `${provider} API credential is saved. Use Check connections to verify it without generating.`, setupTarget: target };
+      : `${provider} ${credentialNounFor(key) === 'token' ? 'token' : 'API key'} is saved. Use Check connections to verify it without generating.`, setupTarget: target };
 }
 
 export function modelReadiness(def: ModelNodeDefinition, params: Record<string, unknown>, cache: CredentialReadiness, health: ProviderHealthState): ModelReadiness {
@@ -217,7 +217,7 @@ function spaceReadiness(
     // says what is needed, the status only that it is.
     return {
       label: 'Needed', tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
-      detail: `Add your ${name} token in Settings to run ${def.displayName}.`,
+      detail: `Add ${withArticle(`${name} token`)} in Settings to run ${def.displayName}.`,
     };
   }
   // GM, PR #203 r12 item 1: no allowance numbers, and no "your allowance"
@@ -227,7 +227,7 @@ function spaceReadiness(
     ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const } : {}),
     ...(name ? { connectionLabel: name } : {}),
     detail: name
-      ? `${def.displayName} runs free on ${name}’s shared GPUs, which can be busy. Add your ${name} token in Settings to use your own allowance.`
+      ? `${def.displayName} runs free on ${name}’s shared GPUs, which can be busy. Add ${withArticle(`${name} token`)} in Settings to use your own allowance.`
       : `${def.displayName} runs free on shared GPUs, which can be busy.`,
   };
 }

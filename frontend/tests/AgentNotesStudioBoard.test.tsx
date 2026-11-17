@@ -159,8 +159,8 @@ describe('Moodboard Studio shows the open board\'s Updates beside the project\'s
     await settle();
     const dialog = openList();
     const sections = within(dialog).getAllByRole('region');
-    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual(['This board', 'This project']);
-    expect(within(sections[0]).getByText('kept with this board')).toBeTruthy();
+    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual(['This moodboard', 'This project']);
+    expect(within(sections[0]).getByText('kept with this moodboard')).toBeTruthy();
     expect(within(sections[1]).getByText('kept with Harbor')).toBeTruthy();
     expect(within(sections[0]).getByText('board an_b1 about #2')).toBeTruthy();
     expect(within(sections[1]).getByText('update an_p1')).toBeTruthy();
@@ -183,7 +183,7 @@ describe('Moodboard Studio shows the open board\'s Updates beside the project\'s
     await settle();
     const dialog = openList();
     expect(within(dialog).queryAllByRole('region')).toHaveLength(0);
-    expect(within(dialog).queryByText('This board')).toBeNull();
+    expect(within(dialog).queryByText('This moodboard')).toBeNull();
     expect(dialog.querySelector('.agent-notes-panel__kept')!.textContent).toBe('kept with Harbor');
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(1);
   });
@@ -222,7 +222,7 @@ describe('Moodboard Studio shows the open board\'s Updates beside the project\'s
     await vi.waitFor(() => expect(document.querySelector('.agent-note-card')?.textContent).toContain('board an_live about #2'));
     const dialog = openList();
     const [board] = within(dialog).getAllByRole('region');
-    expect(board.getAttribute('aria-label')).toBe('This board');
+    expect(board.getAttribute('aria-label')).toBe('This moodboard');
     expect(within(board).getByText('board an_live about #2')).toBeTruthy();
   });
 
@@ -318,7 +318,7 @@ describe('where board Updates show, and where they don\'t', () => {
     syncProject([note('an_p1')]);
     await settle();
     const sections = within(openList()).getAllByRole('region');
-    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual(['This board', 'This project']);
+    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual(['This moodboard', 'This project']);
   });
 
   it('with no project open, a board with Updates still shows its own list (and only that)', async () => {
@@ -333,7 +333,7 @@ describe('where board Updates show, and where they don\'t', () => {
     await settle();
     const dialog = openList();
     expect(within(dialog).queryAllByRole('region')).toHaveLength(0);
-    expect(dialog.querySelector('.agent-notes-panel__kept')!.textContent).toBe('kept with this board');
+    expect(dialog.querySelector('.agent-notes-panel__kept')!.textContent).toBe('kept with this moodboard');
     expect(within(dialog).getByText('board an_b1 about #2')).toBeTruthy();
   });
 

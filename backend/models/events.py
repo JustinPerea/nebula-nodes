@@ -148,6 +148,12 @@ class ValidationErrorDetail(BaseModel):
     # only an agent or a damaged saved graph reaches; the card shows GM's
     # general line with `message` behind "Details".
     person: str | None = None
+    # This check is a missing key (or a Krea sign-in): the stop is something for
+    # the person to do, not a failure, so the card draws its line neutral. Set
+    # where the check is made (``keyed``); the frontend reads it as `missingKey`
+    # (ValidationErrorEvent and the canvas's REST validation answer; an agent's
+    # refused run keeps `message` alone). Additive, False for every other check.
+    missing_key: bool = False
     # What kind of stop this is, for the Agent log's merged line
     # (main._refused_run_log_line), set where the check is made, never sent:
     # "reason" for a stop the node's not-ready reason says (a key, a route,
@@ -169,6 +175,7 @@ class ValidationErrorDetail(BaseModel):
     def keyed(self, key: str | None) -> "ValidationErrorDetail":
         """This check, a stop for its missing key only (``_key``)."""
         self._key = key
+        self.missing_key = bool(key)
         return self
 
 

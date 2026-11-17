@@ -148,7 +148,7 @@ const step = (t: number) => act(() => { frames.splice(0).forEach((cb) => cb(t));
  *  so the band is BOARD_BAR_BAND_PX). */
 const fitViewport = (width: number, height: number, boardWidth = 2000) =>
   getViewportForBounds({ x: 0, y: 0, width: boardWidth, height: 1000 }, width, height - BOARD_BAR_BAND_PX, 0.02, 1, 0.12);
-const fitButton = () => document.querySelector<HTMLButtonElement>('[aria-label="Fit the board"]')!;
+const fitButton = () => document.querySelector<HTMLButtonElement>('[aria-label="Fit the moodboard"]')!;
 const press = (label: string) => act(() => { document.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click(); });
 const wheel = () => new WheelEvent('wheel', { deltaY: 100 });
 const camera = () => ({ ...flow.camera });

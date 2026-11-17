@@ -130,14 +130,14 @@ describe('RecentlyDeletedAssets', () => {
     expect(container.textContent).toBe('');
   });
 
-  it('lists deleted boards with who deleted them, and restores one', async () => {
+  it('lists deleted moodboards with who deleted them, and restores one', async () => {
     trash.fetchTrash.mockResolvedValueOnce([board()]).mockResolvedValue([]);
     const onRestored = vi.fn();
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" onRestored={onRestored} />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     expect(screen.getByText('Warm editorial')).toBeTruthy();
     expect(screen.getByText(/by GM - Design \(agent\)/)).toBeTruthy();
-    expect(screen.getByText('Deleted boards stay here until you delete them for good.')).toBeTruthy();
+    expect(screen.getByText('Deleted moodboards stay here until you delete them for good.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(onRestored).toHaveBeenCalledWith(board()));
     expect(trash.restoreTrashed).toHaveBeenCalledWith('moodboard', 'b1');
@@ -179,7 +179,7 @@ describe('RecentlyDeletedAssets', () => {
     trash.fetchTrash.mockResolvedValue([board({ deletedBy: { kind: 'person', name: 'You' } })]);
     // What lib/trash's purgeTrashed throws (apiRequest): a request's own line. Round 3b: the list
     // shows a request's line and never another error's message.
-    trash.purgeTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't delete the board for good.", 403,
+    trash.purgeTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't delete the moodboard for good.", 403,
       { detail: 'Only the person can do this from the Nebula canvas.' }));
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
@@ -189,19 +189,19 @@ describe('RecentlyDeletedAssets', () => {
     expect(screen.getByRole('group', { name: 'This can’t be undone.' })).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete forever' }).at(-1)!);
     await waitFor(() => expect(trash.purgeTrashed).toHaveBeenCalledWith('moodboard', 'b1'));
-    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't delete the board for good. Only the person can do this from the Nebula canvas.");
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't delete the moodboard for good. Only the person can do this from the Nebula canvas.");
   });
 
   it('keeps a refusal after the list reads itself again (round 6k: the reload used to wipe it at once)', async () => {
     trash.fetchTrash.mockResolvedValue([board()]);
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     const calls = trash.fetchTrash.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(trash.fetchTrash.mock.calls.length).toBeGreaterThan(calls));
     await new Promise((done) => setTimeout(done, 50));
-    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the board.");
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the moodboard.");
     // The next action starts clean.
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
@@ -286,7 +286,7 @@ describe('RecentlyDeletedAssets, round 6l', () => {
 
   it('a refusal goes with a scope or project switch (review 10 NIT-2)', async () => {
     trash.fetchTrash.mockResolvedValue([board()]);
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     const view = render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
@@ -295,7 +295,7 @@ describe('RecentlyDeletedAssets, round 6l', () => {
     await screen.findByRole('button', { name: /Recently deleted/ });
     expect(screen.queryByRole('alert')).toBeNull();
     // A project switch too.
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Restore Warm editorial' }));
     await screen.findByRole('alert');
     act(() => { publishOpenProject({ id: 'p2', name: 'Other project' }); });
@@ -304,13 +304,13 @@ describe('RecentlyDeletedAssets, round 6l', () => {
 
   it('an action\'s refusal shows over a later failed load (V16)', async () => {
     trash.fetchTrash.mockResolvedValueOnce([board()]).mockRejectedValue(new RequestFailedError("Couldn't load Recently deleted.", 500, { detail: 'x' }));
-    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the board.", 500, { detail: 'boom' }));
+    trash.restoreTrashed.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(2));
     await new Promise((done) => setTimeout(done, 30));
-    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the board.");
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't restore the moodboard.");
     expect(screen.getByRole('alert').textContent).not.toContain('load');
   });
 });

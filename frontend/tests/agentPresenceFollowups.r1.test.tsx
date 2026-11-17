@@ -20,7 +20,7 @@ import type { CinemaSceneSpec, NodeData } from '../src/types';
  * - GM answer 6 / review L-2, L-3: one disabled colour treatment.
  * - GM note: the selected shot card uses the shared selected style.
  * - GM answers 3/4 and review L-6: repeated names grouped, in canvas order.
- * - Review L-5: EditNode's Open Editor takes the lock.
+ * - Review L-5: EditNode's Open editor takes the lock.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
@@ -367,16 +367,16 @@ describe('GM answers 3 and 4, review L-6: repeated names grouped, in canvas orde
   });
 });
 
-// ── Review L-5: EditNode's Open Editor ──────────────────────────────────────
+// ── Review L-5: EditNode's Open editor ──────────────────────────────────────
 
 // Fix round 2 (review 2 L-6, GM 2026-10-28 answer 4): opening this node's
 // own editor writes nothing, so it stays available while following and
 // offline; the editor opens read-only (agentPresenceFollowups.r2).
-describe('review L-5 and review 2 L-6: EditNode\'s Open Editor', () => {
+describe('review L-5 and review 2 L-6: EditNode\'s Open editor', () => {
   it('following: still enabled, unmarked (it opens the editor read-only)', () => {
     const props = { id: 'e1', data: { params: { clips: [] } }, selected: true } as never;
     const root = at(<ReactFlowProvider><EditNode {...(props as object)} /></ReactFlowProvider>);
-    const open = button(root, 'Open Editor');
+    const open = button(root, 'Open editor');
     expect(open).toBeEnabled();
     act(() => setFollowingSwitch({ projectName: 'beta', agent: 'Codex' }));
     expect(open).toBeEnabled();

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import { PROVIDER_KEY_LABELS } from '../src/lib/providerReadiness';
-import { PROVIDER_KEYS, nodesForKey, providerMatches, unlockCount, unlockNames, unlockSummary } from '../src/lib/providerCatalog';
+import { PROVIDER_KEYS, nodesForKey, providerMatches, summarizeUnlocked, unlockCount, unlockNames, unlockSummary } from '../src/lib/providerCatalog';
 
 const keys = PROVIDER_KEYS.map((spec) => spec.key);
 
@@ -40,7 +40,7 @@ describe('provider catalog', () => {
     expect(nodesForKey('BFL_API_KEY').map((node) => node.id).sort()).toEqual([
       'flux-2-pro', 'flux-3-image', 'flux-3-image-klein', 'flux-3-video', 'flux-video-edit', 'flux-video-upscale',
     ]);
-    expect(unlockSummary(bfl, 'add')).toMatch(/^6 nodes: /);
+    expect(unlockSummary(bfl)).toMatch(/^6 nodes, including /);
     expect(PROVIDER_KEY_LABELS.BFL_API_KEY).toBe('Black Forest Labs');
   });
 
@@ -53,14 +53,27 @@ describe('provider catalog', () => {
 
   it('writes summaries people can read', () => {
     for (const spec of PROVIDER_KEYS) {
-      const summary = unlockSummary(spec, 'add');
+      const summary = unlockSummary(spec);
       expect(summary, spec.key).toBeTruthy();
       // A trimmed brand never leaves a bare version number ("Krea 2" stays "Krea 2").
       for (const name of unlockNames(spec)) expect(name, `${spec.key}: ${name}`).not.toMatch(/^\d/);
     }
     const fal = PROVIDER_KEYS.find((spec) => spec.key === 'FAL_KEY')!;
-    expect(unlockSummary(fal, 'add')).toMatch(new RegExp(`^${unlockCount(fal)} nodes: Kling V3, FLUX\\.2,`));
-    expect(unlockSummary(fal, 'connected')).toMatch(/^Kling V3, FLUX\.2, .* \+\d+$/);
+    expect(unlockSummary(fal)).toMatch(new RegExp(`^${unlockCount(fal)} nodes, including Kling V3$`));
+  });
+
+  it('lists the names alone up to three nodes, then the count and one name (design r164)', () => {
+    const names = ['Nano Banana', 'Veo 3.1', 'Lyria 3', 'Imagen 4', 'Gemini'];
+    expect(summarizeUnlocked(names.slice(0, 1))).toBe('Nano Banana');
+    expect(summarizeUnlocked(names.slice(0, 2))).toBe('Nano Banana and Veo 3.1');
+    expect(summarizeUnlocked(names.slice(0, 3))).toBe('Nano Banana, Veo 3.1 and Lyria 3');
+    expect(summarizeUnlocked(names.slice(0, 4))).toBe('4 nodes, including Nano Banana');
+    const fifteen = Array.from({ length: 15 }, (_, i) => (i < 3 ? names[i] : `Node ${i}`));
+    expect(summarizeUnlocked(fifteen)).toBe('15 nodes, including Nano Banana');
+    for (const count of [1, 2, 3, 4, 15]) {
+      const said = summarizeUnlocked(Array.from({ length: count }, (_, i) => `Name ${i}`));
+      expect(said).not.toMatch(/[:…]/);
+    }
   });
 
   it('finds providers by the models they run', () => {

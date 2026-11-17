@@ -16,7 +16,7 @@ import { notReadyShown } from '../src/lib/canvasProposalsBar';
 import { agentNameList, countsInstead, nodeNameList, quotedNames } from '../src/lib/errorCopy';
 import { credentialName, credentialNoun, LINK_NOUNS, PROVIDER_KEYS } from '../src/lib/providerCatalog';
 import { keyChangedLine, keyNoun } from '../src/lib/settingsWrites';
-import { keyPhrase, missingKeyLine } from '../src/lib/directRoute';
+import { keyPhrase, missingKeyLine, withArticle } from '../src/lib/directRoute';
 import { modelKeyMissingText } from '../src/lib/failureLines';
 import type { ProposalNotReady } from '../src/lib/wsClient';
 
@@ -84,17 +84,17 @@ describe('every provider says the word its link uses (GM r25 item 3)', () => {
     expect(credentialName(spec)).not.toMatch(/\b(\w+) \1\b|key key|token key|API API/i);
     // Round 14 (GM r26 item 5): the run-failure lines say the same noun,
     // the backend's person_line.KEY_NAMES included (route_tables.json pins
-    // it to KEY_NAMES here): "Add your Replicate token in Settings."
+    // it to KEY_NAMES here): "Add a Replicate token in Settings to run this node."
     // GM r28 item 1 (PR #203 round 15): Vertex too, no exception left.
     const phrase = keyPhrase([key])!;
     expect(phrase.endsWith(` ${linkWord}`), phrase).toBe(true);
-    expect(missingKeyLine([key])).toBe(`Add your ${phrase} in Settings, then run the node again.`);
-    expect(modelKeyMissingText('X', [key])).toBe(`Couldn't set up “X”. Add your ${phrase} in Settings.`);
+    expect(missingKeyLine([key])).toBe(`Add ${withArticle(phrase)} in Settings to run this node.`);
+    expect(modelKeyMissingText('X', [key])).toBe(`Nebula couldn’t set up “X” because it needs ${withArticle(phrase)}. Add one in Settings.`);
   });
 
-  it('says "Add your Replicate token in Settings." on a run failure and in the model picker (GM r26 item 5)', () => {
-    expect(missingKeyLine(['REPLICATE_API_TOKEN'])).toBe('Add your Replicate token in Settings, then run the node again.');
-    expect(modelKeyMissingText('X', ['REPLICATE_API_TOKEN'])).toBe("Couldn't set up “X”. Add your Replicate token in Settings.");
+  it('says "Add a Replicate token in Settings to run this node." on a run failure and in the model picker (GM r26 item 5)', () => {
+    expect(missingKeyLine(['REPLICATE_API_TOKEN'])).toBe('Add a Replicate token in Settings to run this node.');
+    expect(modelKeyMissingText('X', ['REPLICATE_API_TOKEN'])).toBe('Nebula couldn’t set up “X” because it needs a Replicate token. Add one in Settings.');
   });
 
   it('gives a link word one noun: tokens a token, keys and service accounts a key', () => {

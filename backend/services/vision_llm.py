@@ -223,7 +223,7 @@ async def call_vision_llm(
         raise with_person_line(NoVisionProviderError(
             "vision-llm mode requires ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY"
         ),
-            "Add an Anthropic, OpenAI or Gemini API key in Settings, then run the node again.")
+            "Add an Anthropic, OpenAI or Gemini API key in Settings to run this node.")
     provider = providers[0]
     url, headers, body = build_vision_request(
         provider,

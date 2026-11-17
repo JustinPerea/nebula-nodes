@@ -1,13 +1,13 @@
 # Camera and reference guidance in Cinema
 
-Camera Rig and Reference Set connect to the matching inputs on a Cinema Scene node. Cinema uses them when you explicitly run the scene or a shot.
+Camera rig and Reference set connect to the matching inputs on a Cinema scene node. Cinema uses them when you explicitly run the scene or a shot.
 
-1. Add **Camera Rig**, **Reference Set** and **Cinema Scene** to the canvas.
-2. Connect image nodes to Reference Set's labeled roles, such as Style, Lighting or Composition.
-3. Connect Camera Rig's output to Cinema's **Camera Rig** input, and Reference Set's output to **Reference Set**.
+1. Add **Camera rig**, **Reference set** and **Cinema scene** to the canvas.
+2. Connect image nodes to Reference set's labeled roles, such as Style, Lighting or Composition.
+3. Connect Camera rig's output to Cinema's **Camera rig** input, and Reference set's output to **Reference set**.
 4. Open Cinema Studio, select a supported base and run a shot. Camera values enter the prompt as camera guidance. Reference images are sent to the selected model, with a prompt legend identifying their roles by image number.
 
-Reference **priority** determines stable ordering within the set; **0 excludes** an image. It is not a numeric model-adherence weight. Existing Character and shot references come first. Duplicate image URLs are sent once when the Reference Set contains active images, and their role labels share the same image number.
+Reference **priority** determines stable ordering within the set; **0 excludes** an image. It is not a numeric model-adherence weight. Existing Character and shot references come first. Duplicate image URLs are sent once when the Reference set contains active images, and their role labels share the same image number.
 
 Editing a source, changing priority or disconnecting a wire does not start generation. Existing shot results, variations and earlier run artifacts stay available. Run again explicitly to use the edited graph; rerunning a saved recipe uses that recipe's original input snapshot.
 
@@ -21,9 +21,9 @@ Editing a source, changing priority or disconnecting a wire does not start gener
 | Original Google/FAL Nano Banana | 3, a conservative adapter limit based on Google's best-performance guidance |
 | Flux Kontext or Kontext Max | 1; its registered adapter accepts a single image |
 
-Cinema checks the combined Character, shot and Reference Set image list before submitting each shot. Overflow produces a clear error; images are never silently truncated. Unsupported model selectors also fail before submission.
+Cinema checks the combined Character, shot and Reference set image list before submitting each shot. Overflow produces a clear error; images are never silently truncated. Unsupported model selectors also fail before submission.
 
-Camera Rig provides prompt guidance, so the generated composition depends on the model's interpretation. Current reference adapters have no native identity-strength control. Character consistency/override and Identity Edit strength remain saved for compatibility, but their controls are unavailable. Identity Edit also retains its legacy Mask port for saved connections and rejects a connected mask before submission because its current endpoint has no mask input. Seedream 5.0 Lite does not support a seed; saved seed values are preserved but omitted from its request.
+Camera rig provides prompt guidance, so the generated composition depends on the model's interpretation. Current reference adapters have no native identity-strength control. Character consistency/override and Identity Edit strength remain saved for compatibility, but their controls are unavailable. Identity Edit also retains its legacy Mask port for saved connections and rejects a connected mask before submission because its current endpoint has no mask input. Seedream 5.0 Lite does not support a seed; saved seed values are preserved but omitted from its request.
 
 Cinema translates Seedream's aspect ratio into its actual `image_size` field. A valid explicit `scene.base.params.image_size` in a saved recipe takes precedence. With a BytePlus key (`BYTEPLUS_API_KEY`) saved, the Seedream base runs on BytePlus ModelArk instead of fal: the computed size is sent as `WxH` (2.39:1 is still 4096x1714), references go in ModelArk's `image` field, and a size outside ModelArk's 2560x1440 to 4096x4096 pixel range, or a saved seed, keeps the scene on fal (see `docs/api-guides/byteplus.md`).
 

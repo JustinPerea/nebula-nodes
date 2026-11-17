@@ -129,7 +129,7 @@ def test_accept_after_the_project_grew_to_and_past_the_size_limit(api, person, o
     body = accepted.json()
     limit = {"kind": "size", "max": MAX_PROJECT_BYTES}
     assert (body["code"], body["agent"], body["limit"]) == ("proposal_too_complex", "Codex", limit)
-    assert body["detail"].startswith(f"The person's Accept of Codex's proposal {proposal_id} was refused: "
+    assert body["detail"].startswith(f"The person’s Accept of Codex’s proposal {proposal_id} was refused: "
                                      f"This edit would leave the open project at {MAX_PROJECT_BYTES + 1:,} bytes")
     assert body["detail"].endswith("The proposal is still open.")
     assert api.graph.nodes[theirs]["params"]["value"] == ""

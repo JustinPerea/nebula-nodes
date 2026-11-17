@@ -53,7 +53,7 @@ export class MoodboardVersionConflict extends RequestFailedError {
   readonly board: Moodboard;
 
   constructor(board: Moodboard) {
-    super("Couldn't save the board.", 409, { reason: 'This board changed in another window. Reload to get the latest version.',
+    super("Couldn't save the moodboard.", 409, { reason: 'This moodboard changed in another window. Reload to get the latest version.',
       detail: { code: 'version_conflict', version: board.version } });
     this.name = 'MoodboardVersionConflict';
     this.board = board;

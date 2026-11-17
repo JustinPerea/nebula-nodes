@@ -72,6 +72,19 @@ describe('review 5 NIT-5: a refused start restores the scope it queued', () => {
     expect(useGraphStore.getState().nodes.map((n) => n.data.state)).toEqual(['complete', 'complete']);
   });
 
+  it('a missing-key error goes back neutral, with its not-started heading, after a refused start', async () => {
+    const keyLine = 'Add an OpenAI API key in Settings to run this node.';
+    fresh([text('n1', 'error', { error: 'Missing API key: OPENAI_API_KEY', errorPerson: keyLine, errorNotStarted: true, errorMissingKey: true })]);
+    vi.spyOn(api, 'executeGraph').mockImplementationOnce(() => Promise.reject(gateStart("Couldn't run the graph.")));
+    reportPersonRequired();
+    await useGraphStore.getState().executeGraph();
+    // Marked by the refusal: the key's kind is cleared while its line shows.
+    expect(useGraphStore.getState().nodes[0].data.errorMissingKey).toBeUndefined();
+    notePersonPromoted();
+    expect(useGraphStore.getState().nodes[0].data).toMatchObject({
+      state: 'error', errorPerson: keyLine, errorNotStarted: true, errorMissingKey: true });
+  });
+
   it('a start Nebula took leaves no kept state behind', async () => {
     fresh([text('n1', 'complete')]);
     vi.spyOn(api, 'executeNode').mockResolvedValueOnce({ status: 'started' } as never);

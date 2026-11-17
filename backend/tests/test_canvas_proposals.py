@@ -747,7 +747,7 @@ def test_a_run_that_changed_since_accept_is_refused(api, runs):
     api.graph.update_params(new_img, DEAR)
     refused = _canvas_run(api, new_img, result["approvalId"])
     assert refused.status_code == 409
-    assert f"{new_img} changed since you accepted Claude Code's proposal" in refused.json()["detail"]
+    assert f"{new_img} changed since you accepted Claude Code’s proposal" in refused.json()["detail"]
     assert runs == []
     # The approval is used up: no retry with it, and the locks are gone.
     again = _canvas_run(api, new_img, result["approvalId"])
@@ -1605,3 +1605,26 @@ def test_cli_propose_as_a_named_agent_names_withdraw_with_as(api, monkeypatch):
                                      out=out) == 0
     answer = json.loads(out.getvalue())
     assert answer["withdrawWith"] == f"nebula proposal withdraw {answer['proposal']['id']} --as Codex"
+
+
+# -- a personal agent's name inside a sentence (GM, copy sweep 2026-11-14) -----------
+
+@pytest.mark.parametrize("name,said", [
+    ("Your Claude", "your Claude"),        # lower-cased inside a sentence
+    ("Claude Code", "Claude Code"),        # an outside agent keeps its name
+    ("Claude (your setup)", "Claude (your setup)"),  # a stored older name keeps it too
+])
+def test_the_accept_lines_lower_case_a_personal_agents_name_inside_the_sentence(api, name, said):
+    headers = {"X-Nebula-Agent": name}
+    body = {"note": "Add a prompt", "nodes": [{"ref": "+t", "definitionId": "text-input", "params": {"value": "x"}}]}
+    made = _propose(api, body, headers=headers)
+    assert made.status_code in {200, 201}, made.text
+    proposal_id = made.json()["proposal"]["id"]
+    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert response.status_code == 200, response.text
+    events = api.journal.read(after=0, limit=100)["events"]
+    accepted = [e for e in events if e["kind"] == "proposal.accepted"][0]
+    assert accepted["summary"].startswith(f"accepted {said}’s proposal ")
+    added = [e for e in events if e["kind"] == "node.added"]
+    assert added and all(e["summary"].endswith(f"(accepted from {said})") for e in added)

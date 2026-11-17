@@ -70,28 +70,27 @@ describe('a Studio with no project open', () => {
 
 describe('Undo in the delete toast', () => {
   it('a later delete that failed is not shown beside the Undo for the earlier one', async () => {
-    api.deleteMoodboard.mockResolvedValueOnce(undefined).mockRejectedValueOnce(unavailable("Couldn't delete the board."));
+    api.deleteMoodboard.mockResolvedValueOnce(undefined).mockRejectedValueOnce(unavailable("Couldn't delete the moodboard."));
     const { result } = renderHook(() => useAssetDelete('moodboard'));
     await act(async () => { await result.current.remove({ id: 'a', name: 'A', scope: 'global' }); });
     await act(async () => { await result.current.remove({ id: 'b', name: 'B', scope: 'global' }); });
     expect(result.current.lastDeleted?.id).toBe('a');
     // The toast (Undo restores A) says nothing about B; the Studio's notice does.
     expect(result.current.undoError).toBeNull();
-    expect(result.current.deleteError).toEqual({ heading: "Couldn't delete the board.", reason: "Nebula didn't respond. Try again." });
+    expect(result.current.deleteError).toEqual({ heading: "Couldn't delete the moodboard.", reason: "Nebula didn't respond. Try again." });
   });
 
-  it('Undo\'s own failure shows in the toast, short, because Undo redoes it', async () => {
+  it('Undo\'s own failure shows in the toast in the because form, ending in Try again, because Undo redoes it', async () => {
     api.deleteMoodboard.mockResolvedValueOnce(undefined);
-    trash.restoreTrashed.mockRejectedValueOnce(unavailable("Couldn't restore the board."));
+    trash.restoreTrashed.mockRejectedValueOnce(unavailable("Couldn't restore the moodboard."));
     const { result } = renderHook(() => useAssetDelete('moodboard'));
     await act(async () => { await result.current.remove({ id: 'a', name: 'A', scope: 'global' }); });
     await act(async () => { await result.current.undo(); });
-    expect(result.current.undoError).toEqual({ heading: "Couldn't restore the board.", reason: "Nebula didn't respond. Try again." });
+    expect(result.current.undoError).toBe('Nebula couldn’t restore the moodboard because the server didn’t respond. Try again.');
     expect(result.current.deleteError).toBeNull();
     const onUndo = vi.fn();
     render(<UndoDeleteToast name="A" error={result.current.undoError} onUndo={onUndo} onDismiss={() => {}} />);
-    expect(screen.getByRole('status').textContent).toContain("Couldn't restore the board. Nebula didn't respond.");
-    expect(screen.getByRole('status').textContent).not.toContain('Try again.');
+    expect(screen.getByRole('status').textContent).toContain('Nebula couldn’t restore the moodboard because the server didn’t respond. Try again.');
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(onUndo).toHaveBeenCalledTimes(1);
   });

@@ -105,7 +105,7 @@ export function adapterLine(entry: AdapterEntry | null, definition: ModelNodeDef
   const slot = entry.slots?.[0];
   if (entry.default === 'images' && slot) {
     const label = definition.inputPorts.find((port) => port.id === slot.port)?.label ?? slot.port;
-    return `Board images: on · up to ${slot.max} to ${label}`;
+    return `Moodboard images: on · up to ${slot.max} to ${label}`;
   }
-  return 'Board images: off · the brief goes as text';
+  return 'Moodboard images: off · the brief goes as text';
 }

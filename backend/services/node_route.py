@@ -26,7 +26,8 @@ Precedence for nodes without ``routes``, the same everywhere:
 3. otherwise the first other key that is set (``FAL_KEY``, ``KREA_API_TOKEN``,
    or ``RUNWAY_API_KEY`` for the ElevenLabs models Runway resells): the copy.
 
-Stdlib only, so the engine and the scripts can import it cheaply.
+Stdlib and the leaf module services/setting_labels.py only, so the engine and
+the scripts can import it cheaply.
 """
 from __future__ import annotations
 
@@ -34,6 +35,8 @@ import math
 import re
 from datetime import date
 from typing import Any, Iterable, Mapping, NamedTuple, TypedDict
+
+from services.setting_labels import setting_label
 
 # Which provider bills a run that uses this key. Vertex bills Veo at the same
 # listed amounts as the Gemini API.
@@ -1225,7 +1228,9 @@ def _option_label(param: Mapping[str, Any] | None, value: Any) -> str:
 
 
 def _param_label(param: Mapping[str, Any] | None, key: str) -> str:
-    return str((param or {}).get("label") or key)
+    """The setting's label, else its key in words (setting_labels.setting_label;
+    directRoute.ts falls back to universalSettingLabel the same way)."""
+    return str((param or {}).get("label") or setting_label(key))
 
 
 def _setting_text(param: Mapping[str, Any] | None, key: str, value: Any) -> str:
@@ -1577,10 +1582,38 @@ def canvas_title(definition: Mapping[str, Any]) -> str:
     return str(definition.get("displayName") or "")
 
 
+# The Title Case default labels of six nodes before the copy sweep renamed them
+# to sentence case (definition id -> label). A node saved earlier carries the
+# old label, which no longer equals the definition's name; it is still the
+# default title, not a name the person chose. A node saved with its former
+# default is shown under the definition's current name from the load on
+# (cli_graph._current_default_label here, withCurrentDefaultLabels on the
+# canvas), and the next ordinary save stores that name. Renaming one of these
+# nodes to its former default is treated as unnamed: is_default_title is true,
+# so no custom label is kept.
+# frontend/src/lib/formerDefaultTitles.ts holds the same table;
+# contracts/fixtures/former-default-titles.json pins both.
+FORMER_DEFAULT_TITLES: dict[str, str] = {
+    "camera-rig": "Camera Rig",
+    "cinema-scene": "Cinema Scene",
+    "paper-source": "Paper Source",
+    "reference-set": "Reference Set",
+    "remotion-node": "Remotion Composition",
+    "video-edit": "Video Edit",
+}
+
+
 def is_default_title(definition: Mapping[str, Any], label: Any) -> bool:
-    """A label that is either form of the definition's default title (its
-    display name or :func:`canvas_title`): the node is unnamed."""
-    return isinstance(label, str) and label in {str(definition.get("displayName") or ""), canvas_title(definition)}
+    """A label that is any form of the definition's default title (its
+    display name, :func:`canvas_title`, or the Title Case name it had before
+    the copy sweep, FORMER_DEFAULT_TITLES): the node is unnamed."""
+    if not isinstance(label, str):
+        return False
+    names = {str(definition.get("displayName") or ""), canvas_title(definition)}
+    former = FORMER_DEFAULT_TITLES.get(str(definition.get("id") or ""))
+    if former:
+        names.add(former)
+    return label in names
 
 
 def node_name(definition: Mapping[str, Any] | None, label: Any, fallback: str = "") -> str:
@@ -1886,8 +1919,9 @@ def route_unavailable_line(
     every card line). The message itself stays the agents' text. None when
     the run can start. ``title`` names the node as the line's reader sees it
     (the proposal bar's “Name”, node_readiness.instance_missing_line); the
-    card names it by its type, in quotes (card_subject), and on Auto with no key set keeps its run
-    line, ", then run the node again" (GM, PR #203 r29 item 1). ``name``:
+    card names it by its type, in quotes (card_subject), and on Auto with no key set says
+    the missing-key line, "Add an OpenAI API key in Settings to run this node." (GM, PR #203 r29 item 1;
+    copy sweep item 12). ``name``:
     the node's own name when the person renamed it, quoted in place of its
     type's (GM, PR #203 r39 item 8: the card and the bubble agree)."""
     from execution.person_line import missing_key_line

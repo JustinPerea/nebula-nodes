@@ -39,7 +39,7 @@ describe('ProjectWorkspaceControls', () => {
     render(<ProjectWorkspaceControls />);
     const button = screen.getByRole('button', { name: 'Save failed · Retry' });
     // Its tooltip is the save's own failure, short (the button is the retry).
-    expect(button.getAttribute('title')).toBe("Couldn't save the project. Nebula didn't respond.");
+    expect(button.getAttribute('title')).toBe('Nebula couldn’t save the project because the server didn’t respond. Try again.');
     fireEvent.click(button);
     expect(retrySave).toHaveBeenCalledTimes(1);
     expect(retry).not.toHaveBeenCalled();

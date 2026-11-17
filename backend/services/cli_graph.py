@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import json
 import copy
 import math
@@ -126,8 +127,12 @@ class CLIGraph:
     """In-memory graph state for CLI operations.
 
     Nodes use short sequential IDs (n1, n2, ...) for easy terminal reference.
-    The graph has no dependency on the node registry — it is pure data and
-    stores definition IDs, params, and edges. It can export to the format
+    The graph is pure data: it stores definition IDs, params, and edges, and
+    reads no node definitions. The one exception is `load`, which asks the node
+    registry for the current display name of a node still carrying its former
+    default label (`_current_default_labels`). That import is lazy because
+    node_route imports a lot, and the lookup is cached for the process, so the
+    registry file is read once. It can export to the format
     expected by the existing execution engine via to_execute_format().
 
     Optional persistence: pass *persist_path* to persist state to disk on every
@@ -522,7 +527,7 @@ class CLIGraph:
         # Build everything first and assign together, so a file that fails
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
-        nodes = {n["id"]: _normalized_scene(_migrate_retired(n)) for n in migrated}
+        nodes = {n["id"]: _current_default_label(_normalized_scene(_migrate_retired(n))) for n in migrated}
         # A node with an id that isn't Nebula's (PR #199 round 17, review 15
         # HIGH-1): a state.json saved before the live graph refused them (an
         # open loaded a duplicated or pasted node's tab-local id). Its typing
@@ -579,6 +584,40 @@ def _normalized_scene(node: dict[str, Any]) -> dict[str, Any]:
     normalized = normalize_scene_params(str(node.get("definitionId", "")), params, strict=False,
                                         reserved=shot_port_ids(node.get("outputs")))
     return node if normalized is params else {**node, "params": normalized}
+
+
+def _current_default_label(node: dict[str, Any]) -> dict[str, Any]:
+    """A node whose saved label is exactly the Title Case default its own
+    definition had before the copy sweep ("Remotion Composition") gets the
+    definition's current name. A label the person changed, and another
+    definition's former default, stay. The file is not rewritten here: the
+    next ordinary save stores the new label. (frontend/src/lib/formerDefaultTitles.ts
+    does the same on the canvas.)"""
+    label = node.get("label")
+    definition_id = str(node.get("definitionId", ""))
+    if not isinstance(label, str) or label != _former_default_titles().get(definition_id):
+        return node
+    current = _current_default_labels().get(definition_id)
+    return {**node, "label": current} if current and current != label else node
+
+
+def _former_default_titles() -> dict[str, str]:
+    from services.node_route import FORMER_DEFAULT_TITLES
+
+    return FORMER_DEFAULT_TITLES
+
+
+@functools.lru_cache(maxsize=1)
+def _current_default_labels() -> dict[str, str]:
+    """{definition id: current displayName} for the ids in FORMER_DEFAULT_TITLES
+    only. Cached: the registry parses a 1.1 MB definitions file, so it is read
+    once per process, not once per node."""
+    from services.node_registry import NodeRegistry
+
+    definitions = NodeRegistry().get_all()
+    return {definition_id: str(definition["displayName"])
+            for definition_id in _former_default_titles()
+            if (definition := definitions.get(definition_id)) and definition.get("displayName")}
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

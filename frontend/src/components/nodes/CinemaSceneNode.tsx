@@ -53,12 +53,11 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   // Uploaded character refs (those wired in on the canvas already show as the
   // edge into character_refs). Surfacing the count keeps the card in sync with
   // refs added inside the Studio.
-  const summary = [
-    shotCount === 0 ? 'no shots yet' : `${shotCount} shot${shotCount === 1 ? '' : 's'}`,
-    refCount > 0 ? `${refCount} ref${refCount === 1 ? '' : 's'}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const refsText = refCount > 0 ? `${refCount} ref${refCount === 1 ? '' : 's'}` : null;
+  // "No shots yet." is a sentence, so a ref count after it is its own sentence, not a "·" part.
+  const summary = shotCount === 0
+    ? ['No shots yet.', refsText ? `${refsText}.` : null].filter(Boolean).join(' ')
+    : [`${shotCount} shot${shotCount === 1 ? '' : 's'}`, refsText].filter(Boolean).join(' · ');
 
   return (
     // GM r7 item 2: one selection style. The card carries its category's

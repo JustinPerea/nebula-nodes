@@ -33,7 +33,7 @@ describe('local nodes that call a provider', () => {
     expect(nodeKeyStatus(cinema, { scene: 'text' }, keys({ FAL_KEY: '***f' }))).toBe('missing');
     expect(nodeKeyStatus(cinema, scene('world-labs'), keys({ FAL_KEY: '***f' }))).toBe('missing');
     // Seedream also runs on BytePlus with BYTEPLUS_API_KEY (2026-10-14).
-    expect(missingKeyTitle(cinema, scene('seedream-4-5'))).toBe('Needs BYTEPLUS_API_KEY or FAL_KEY for base seedream-4-5');
+    expect(missingKeyTitle(cinema, scene('seedream-4-5'))).toBe('Needs a BytePlus or fal.ai API key for base seedream-4-5');
     expect(nodeKeyStatus(cinema, scene('seedream-4-5'), keys({ BYTEPLUS_API_KEY: '***b' }))).toBeUndefined();
   });
 
@@ -43,7 +43,7 @@ describe('local nodes that call a provider', () => {
     expect(nodeKeyStatus(qc, { mode: 'vision-llm' }, keys({}))).toBe('missing');
     expect(nodeKeyStatus(qc, { mode: 'vision-llm' }, keys({ OPENAI_API_KEY: '***o' }))).toBeUndefined();
     expect(missingKeyTitle(qc, { mode: 'vision-llm' }))
-      .toBe('Needs ANTHROPIC_API_KEY or OPENAI_API_KEY or GOOGLE_API_KEY for mode vision-llm');
+      .toBe('Needs an Anthropic, OpenAI or Gemini API key for mode vision-llm');
     expect(nodeKeyStatus(qc, { mode: 'vision-llm' }, { loaded: false, apiKeys: {} })).toBeUndefined();
   });
 
@@ -52,7 +52,7 @@ describe('local nodes that call a provider', () => {
     expect(nodeKeyStatus(qc, { mode: 'jev' }, keys({ OPENAI_API_KEY: '***o' }))).toBe('missing');
     expect(nodeKeyStatus(qc, { mode: 'jev' }, keys({ TYPESAFE_API_KEY: '***t' }))).toBeUndefined();
     expect(nodeKeyStatus(qc, { mode: 'vision-llm' }, keys({ TYPESAFE_API_KEY: '***t' }))).toBe('missing');
-    expect(missingKeyTitle(qc, { mode: 'jev' })).toBe('Needs TYPESAFE_API_KEY for mode jev');
+    expect(missingKeyTitle(qc, { mode: 'jev' })).toBe('Needs a TypeSafe API key for mode jev');
   });
 
   it('reads the QC mode exactly like the handler: only heuristic and opencv run locally', () => {

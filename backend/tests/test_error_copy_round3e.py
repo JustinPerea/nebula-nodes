@@ -35,7 +35,7 @@ from services.port_contracts import ContractEdge, ContractNode, validate_edge_co
 
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 
-KEY_LINE = "Add your OpenAI API key in Settings, then run the node again."
+KEY_LINE = "Add an OpenAI API key in Settings to run this node."
 PROMPT_LINE = "Connect a prompt to this node, then run it again."
 # A prompt and a key on one node: one line, ending once (GM, PR #203 r38 item 1).
 BOTH_LINE = "Connect the prompt and add your OpenAI API key in Settings, then run it again."
@@ -96,7 +96,7 @@ def test_a_node_that_takes_either_of_two_keys_names_both():
     nodes = [_node("t", "text-input", {"value": "hello"}), _node("n1", "runway-tts")]
     [error] = _for(validate_graph(nodes, [_edge("t", "text", "n1", "text")], {}), "n1")
     assert error.message == "Missing API key: ELEVENLABS_API_KEY or RUNWAY_API_KEY"
-    assert _clean(error.person) == "Add your ElevenLabs or Runway API key in Settings, then run the node again."
+    assert _clean(error.person) == "Add an ElevenLabs or Runway API key in Settings to run this node."
 
 
 def test_an_unconfigured_universal_node_with_no_key_names_its_provider():
@@ -200,8 +200,8 @@ def test_a_route_table_node_with_no_key_names_providers_not_env_vars(monkeypatch
     auto = [_node("t", "text-input", {"value": "a cat"}), _node("n1", ROUTES["id"], {})]
     [error] = _for(validate_graph(auto, [_edge("t", "text", "n1", "prompt")], {}), "n1")
     assert "Settings > Providers" in error.message
-    assert _clean(error.person).startswith("Add your Black Forest Labs API key, fal.ai API key")
-    assert error.person.endswith("in Settings, then run the node again.")
+    assert _clean(error.person).startswith("Add a Black Forest Labs API key, fal.ai API key")
+    assert error.person.endswith("in Settings to run this node.")
 
 
 def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch):
@@ -373,6 +373,20 @@ def test_a_validation_event_serializes_its_person_line():
     camel = main._event_to_camel(event)
     assert camel["errors"][0]["person"] == KEY_LINE
     assert camel["errors"][1].get("person") is None
+
+
+def test_a_validation_event_carries_missing_key_only_when_it_is_one():
+    import main
+
+    event = ValidationErrorEvent(run_id="r1", errors=[
+        ValidationErrorDetail(node_id="n1", port_id="", message="Missing API key: OPENAI_API_KEY",
+                              person=KEY_LINE).keyed("OPENAI_API_KEY"),
+        ValidationErrorDetail(node_id="n2", port_id="prompt", message="Required input port prompt is not connected",
+                              person=PROMPT_LINE),
+    ])
+    camel = main._event_to_camel(event)
+    assert camel["errors"][0]["missingKey"] is True
+    assert "missingKey" not in camel["errors"][1]
 
 
 # -- node_errors: the card after a reload, agents unchanged -----------------

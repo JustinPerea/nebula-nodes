@@ -33,7 +33,7 @@ describe('StoredAssetPicker with a board in Recently deleted', () => {
       kind: 'moodboard', id: 'b1', name: 'Warm editorial', deletedAt: '2026-10-18T12:00:00Z' } });
     render(<StoredAssetPicker kind="moodboard" label="Moodboard" value="b1" onChange={() => {}} />);
 
-    expect(await screen.findByText('This board is in Recently deleted. Restore it to use it again.')).toBeTruthy();
+    expect(await screen.findByText('This moodboard is in Recently deleted. Restore it to use it again.')).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Warm editorial (in Recently deleted)' })).toBeTruthy();
     expect(screen.queryByText(/never existed/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Open Moodboard/ })).toBeNull();

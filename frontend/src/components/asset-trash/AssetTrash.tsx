@@ -9,7 +9,7 @@ import {
 } from '../../lib/trash';
 import type { AssetScope } from '../../store/uiStore';
 import { wsClient } from '../../lib/wsClient';
-import { failureMessage, oneLine, shortReason, type FailureCopy } from '../../lib/errorCopy';
+import { failureMessage, oneLine, retryBecauseLine, type FailureCopy } from '../../lib/errorCopy';
 import { clearSetterOnPromote } from '../../lib/clearsOnPromote';
 import '../../styles/asset-trash.css';
 import { useCurrentProjectId } from '../../lib/currentProject';
@@ -31,11 +31,11 @@ import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 type AssetKind = 'moodboard' | 'character' | 'style';
 
-/** `counted` is the noun after a number: a count of boards says "moodboards" in every person line (#210 round 6q,
- *  GM r95.5; PR #228's word), "Delete all 4 moodboards for good?". `many` stays for the lines that don't count
- *  ("Recently deleted boards", "Deleted boards stay here …", GM's own words). */
+/** The thing is a "moodboard" in every person line, counted or not (GM, copy sweep item 21, which overrides the
+ *  earlier "boards" for the lines that don't count): "Recently deleted moodboards", "Delete this moodboard for
+ *  good?", "Delete all 4 moodboards for good?". `counted` is the noun after a number (#210 round 6q). */
 const NOUNS: Record<AssetKind, { one: string; many: string; counted: string }> = {
-  moodboard: { one: 'board', many: 'boards', counted: 'moodboards' },
+  moodboard: { one: 'moodboard', many: 'moodboards', counted: 'moodboards' },
   character: { one: 'character', many: 'characters', counted: 'characters' },
   style: { one: 'style', many: 'styles', counted: 'styles' },
 };
@@ -297,7 +297,7 @@ export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDi
       <div className="asset-trash__toast" role="status" aria-live="polite" {...leave}
         onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-        <span className="asset-trash__toast-text">{error ? (typeof error === 'string' ? <LineText text={error} /> : <LineText text={oneLine({ ...error, reason: shortReason(error.reason) })} />) : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
+        <span className="asset-trash__toast-text">{error ? <LineText text={retryBecauseLine(typeof error === 'string' ? error : oneLine(error))} /> : `Moved “${name || 'Untitled'}” to Recently deleted`}</span>
         <button type="button" className="asset-trash__toast-undo" disabled={busy} onClick={onUndo}>Undo</button>
         <button type="button" className="asset-trash__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </div>

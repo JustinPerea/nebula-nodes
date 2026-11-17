@@ -69,16 +69,24 @@ describe('provider readiness without generation', () => {
     expect(ready.detail).toContain('without generating');
   });
 
+  it('says key, or token for Replicate and Hugging Face, where a person adds one in Settings', () => {
+    const key = keyReadiness('GOOGLE_API_KEY', credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN } }), health());
+    expect(key.detail).toBe('Google API key is saved. Use Check connections to verify it without generating.');
+    const token = keyReadiness('REPLICATE_API_TOKEN', credentials({ apiKeys: { REPLICATE_API_TOKEN: TOKEN } }), health());
+    expect(token.detail).toMatch(/ token is saved\. /);
+    expect(`${key.detail}${token.detail}`).not.toMatch(/credential/);
+  });
+
   it.each([
-    ['valid', 'Verified credential', 'success'],
+    ['valid', 'Verified key', 'success'],
     ['configured_unverified', 'Configured · not checked', 'neutral'],
     ['not_configured', 'Setup required', 'warning'],
-    ['invalid', 'Credential rejected', 'warning'],
+    ['invalid', 'Key rejected', 'warning'],
     ['unauthorized', 'Authorization required', 'warning'],
     ['insufficient_credits', 'Credits required', 'warning'],
     ['rate_limited', 'Check rate limited', 'warning'],
     ['error', 'Check unavailable', 'warning'],
-  ] as const)('presents safe %s credential-check feedback', (status, label, tone) => {
+  ] as const)('presents safe %s key-check feedback', (status, label, tone) => {
     const ready = keyReadiness('FAL_KEY', credentials({ apiKeys: { FAL_KEY: TOKEN } }), health({ FAL: entry(status) }));
     expect(ready).toMatchObject({ label, tone, setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
     if (status === 'valid') {
@@ -90,7 +98,7 @@ describe('provider readiness without generation', () => {
     const cache = credentials({ apiKeys: { FAL_KEY: TOKEN } });
     const fresh = health({ FAL: entry('valid') });
     vi.setSystemTime(NOW + PROVIDER_HEALTH_TTL_MS - 1);
-    expect(keyReadiness('FAL_KEY', cache, fresh).label).toBe('Verified credential');
+    expect(keyReadiness('FAL_KEY', cache, fresh).label).toBe('Verified key');
     vi.setSystemTime(NOW + PROVIDER_HEALTH_TTL_MS);
     expect(keyReadiness('FAL_KEY', cache, fresh).label).toBe('Configured · not checked');
     vi.setSystemTime(NOW);
@@ -130,10 +138,10 @@ describe('provider readiness without generation', () => {
   it('uses FAL only when the direct credential is absent and prefers direct when both are configured', () => {
     const bothValid = health({ Google: entry('valid'), FAL: entry('valid') });
     expect(modelReadiness(dualRoute, {}, credentials({ apiKeys: { FAL_KEY: TOKEN } }), bothValid)).toMatchObject({
-      label: 'Verified credential', connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' },
+      label: 'Verified key', connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' },
     });
     expect(modelReadiness(dualRoute, {}, credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } }), bothValid)).toMatchObject({
-      label: 'Verified credential', connectionLabel: 'Google API', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' },
+      label: 'Verified key', connectionLabel: 'Google API', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' },
     });
     // With nothing set, setup points at Vertex: the Gemini API previews retire on 2026-10-22.
     expect(modelReadiness(dualRoute, {}, credentials(), bothValid)).toMatchObject({
@@ -296,7 +304,7 @@ describe('provider readiness without generation', () => {
   it('never masks a rejected direct credential with a verified FAL fallback', () => {
     const ready = modelReadiness(dualRoute, {}, credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } }),
       health({ Google: entry('invalid'), FAL: entry('valid') }));
-    expect(ready).toMatchObject({ label: 'Credential rejected', connectionLabel: 'Google API', tone: 'warning',
+    expect(ready).toMatchObject({ label: 'Key rejected', connectionLabel: 'Google API', tone: 'warning',
       setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' } });
     expect(ready.detail).not.toContain('Verified');
   });
@@ -306,11 +314,11 @@ describe('provider readiness without generation', () => {
     const cache = credentials({ apiKeys: { IDEOGRAM_API_KEY: TOKEN, FAL_KEY: TOKEN } });
     const checked = health({ Ideogram: entry('invalid'), FAL: entry('valid') });
     const saved = freeze({ image_size: 'square_hd' });
-    expect(modelReadiness(definition, saved, cache, checked)).toMatchObject({ label: 'Verified credential',
+    expect(modelReadiness(definition, saved, cache, checked)).toMatchObject({ label: 'Verified key',
       connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
     const resolution = definition.directParams?.find((param) => param.key === 'resolution')?.default;
     expect(resolution).toBeTruthy();
-    expect(modelReadiness(definition, freeze({ resolution }), cache, checked)).toMatchObject({ label: 'Credential rejected',
+    expect(modelReadiness(definition, freeze({ resolution }), cache, checked)).toMatchObject({ label: 'Key rejected',
       connectionLabel: 'Ideogram API', setupTarget: { kind: 'api-key', key: 'IDEOGRAM_API_KEY' } });
     expect(modelReadiness(definition, saved, credentials({ apiKeys: { IDEOGRAM_API_KEY: TOKEN } }), checked)).toMatchObject({
       label: 'Setup required', setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
@@ -322,7 +330,7 @@ describe('provider readiness without generation', () => {
       label: 'Setup required', connectionLabel: 'Krea API key', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' },
     });
     const configured = modelReadiness(definition, {}, credentials({ ...cache, apiKeys: { KREA_API_TOKEN: TOKEN } }), health({ Krea: entry('valid') }));
-    expect(configured.label).toBe('Verified credential');
+    expect(configured.label).toBe('Verified key');
     expect(configured.detail).toContain('API balance');
   });
 

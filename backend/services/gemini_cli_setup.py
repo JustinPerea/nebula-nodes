@@ -1,6 +1,6 @@
 """What Nebula checks about the person's own Gemini CLI before it starts it over ACP.
 
-The "Gemini (your setup)" preset runs the ``gemini`` the person installed.
+The "Your Gemini" preset runs the ``gemini`` the person installed.
 Two things changed under it, so Nebula looks before it starts it:
 
 - **The ACP flag.** Gemini CLI started ACP with ``--experimental-acp``; newer
@@ -23,8 +23,8 @@ files.
 
 **Nebula's own Gemini API key, by choice.** The person can turn on "Use my
 Gemini API key from Nebula" for this agent. Then, and only then, Nebula
-starts the CLI with ``GEMINI_API_KEY`` set to the key saved in Settings > API
-keys (``GOOGLE_API_KEY``), and points ``GEMINI_CLI_SYSTEM_SETTINGS_PATH`` at
+starts the CLI with ``GEMINI_API_KEY`` set to the key saved in Settings >
+Providers > Google · Gemini API (``GOOGLE_API_KEY``), and points ``GEMINI_CLI_SYSTEM_SETTINGS_PATH`` at
 a file of Nebula's that selects API-key login for that process. That file is
 the CLI's real system settings (if any) plus ``security.auth.selectedType =
 gemini-api-key``; system settings outrank user settings, so the person's own
@@ -67,7 +67,7 @@ AUTH_GATEWAY = "gateway"
 _VERSION_RE = re.compile(r"\b(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\b")
 _ENV_NAME_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\S?)")
 
-KEY_BILLING = ("Nebula gives the CLI your Gemini API key from Settings > API keys (Google). Google bills that key "
+KEY_BILLING = ("Nebula gives the CLI the Gemini API key saved on the Providers tab. Google bills that key "
                "for every turn this agent runs, at Gemini API prices. Off until you turn it on.")
 
 
@@ -348,10 +348,10 @@ def readiness(binary: Path, home: Path, *, use_nebula_key: bool, nebula_key_save
         environ.pop(name, None)
     info = probe(binary)
     if info.checking:
-        return Readiness(False, "Nebula is still checking your Gemini CLI (`gemini --version` and `--help`), which "
+        return Readiness(False, "Nebula is still checking your Gemini CLI with `gemini --version` and `gemini --help`, which "
                          "can take a while on its first start. Open Settings again in a moment.", None, None, None)
     if not info.ran and info.timed_out:
-        return Readiness(False, f"Gemini CLI took too long to answer (over {PROBE_TIMEOUT_S:g} seconds), which can "
+        return Readiness(False, f"Gemini CLI took more than {PROBE_TIMEOUT_S:g} seconds to answer, which can "
                          "happen on its first start or on a busy machine. Open Settings again to check again.",
                          None, None, None)
     if not info.ran:
@@ -360,7 +360,7 @@ def readiness(binary: Path, home: Path, *, use_nebula_key: bool, nebula_key_save
                          None, None, None)
     version = info.version or "unknown version"
     if info.acp_flag is None:
-        return Readiness(False, f"Gemini CLI {version} has no ACP mode (`--acp`). Update it, then check again.",
+        return Readiness(False, f"Gemini CLI {version} has no ACP mode, the `--acp` flag. Update it, then check again.",
                          None, info.version, None)
     selected, enforced = selected_auth(home, environ)
     key_blocked = None
@@ -371,36 +371,36 @@ def readiness(binary: Path, home: Path, *, use_nebula_key: bool, nebula_key_save
         if key_blocked:
             return Readiness(False, key_blocked, info.acp_flag, info.version, selected, key_blocked)
         if not nebula_key_saved:
-            return Readiness(False, "Save a Gemini API key in Settings > API keys (Google) first, or turn off "
-                             "\"Use my Gemini API key from Nebula\".", info.acp_flag, info.version, selected)
-        return Readiness(True, f"{flag_note} Uses your Gemini API key from Nebula; Google bills that key.",
+            return Readiness(False, "Add a Gemini API key on the Providers tab first, or turn off "
+                             "\u201cUse my Gemini API key from Nebula\u201d.", info.acp_flag, info.version, selected)
+        return Readiness(True, f"{flag_note} Uses your Gemini API key from Nebula, and Google bills that key.",
                          info.acp_flag, info.version, AUTH_API_KEY)
     if enforced and selected and enforced != selected:
         return Readiness(False, f"Your Gemini CLI settings require the `{enforced}` login but select `{selected}`. "
-                         "Fix that in a terminal (`gemini`, then /auth).", info.acp_flag, info.version, selected,
+                         "Fix that in a terminal by running `gemini`, then /auth.", info.acp_flag, info.version, selected,
                          key_blocked)
     names = set() if folder_trust_enabled(home, environ) else env_file_names(env_file(home, start_dir))
-    switch = ("Turn on \"Use my Gemini API key from Nebula\" below (Google bills that key), or switch the CLI to a "
-              "Gemini API key: run `gemini` in a terminal, then /auth.")
+    switch = ("Turn on \u201cUse my Gemini API key from Nebula\u201d below, and Google bills that key. Or switch the CLI to a "
+              "Gemini API key by running `gemini` in a terminal, then /auth.")
     if selected is None:
-        return Readiness(False, f"{flag_note} It isn't signed in yet. {switch}", info.acp_flag, info.version, None,
+        return Readiness(False, f"{flag_note} It isn\u2019t signed in yet. {switch}", info.acp_flag, info.version, None,
                          key_blocked)
     if selected == AUTH_GOOGLE:
         if _defined("GOOGLE_CLOUD_PROJECT", environ, names) or _defined("GOOGLE_CLOUD_PROJECT_ID", environ, names):
-            return Readiness(True, f"{flag_note} Signs in with your Google account on your Google Cloud project; "
+            return Readiness(True, f"{flag_note} Signs in with your Google account on your Google Cloud project. "
                              "Google serves that only with a Gemini Code Assist Standard or Enterprise license.",
                              info.acp_flag, info.version, selected, key_blocked)
         return Readiness(False, f"{flag_note} It signs in with a Google account. Since {SERVICE_CHANGE_DATE} Google "
                          "serves Gemini CLI only with a paid Gemini API key or a Gemini Code Assist Standard or "
-                         "Enterprise license; a free or Google AI Pro/Ultra login no longer works. " + switch,
+                         "Enterprise license. A free or Google AI Pro/Ultra login no longer works. " + switch,
                          info.acp_flag, info.version, selected, key_blocked)
     if selected == AUTH_API_KEY:
         if _defined("GEMINI_API_KEY", environ, names):
-            return Readiness(True, f"{flag_note} Uses the Gemini API key in your Gemini CLI setup; Google bills it.",
+            return Readiness(True, f"{flag_note} Uses the Gemini API key in your Gemini CLI setup, and Google bills it.",
                              info.acp_flag, info.version, selected, key_blocked)
-        return Readiness(False, f"{flag_note} It's set to a Gemini API key, but none reaches it from Nebula: put "
-                         "GEMINI_API_KEY in ~/.gemini/.env, or turn on \"Use my Gemini API key from Nebula\" below. "
-                         "Nebula doesn't pass on a key your shell exported.",
+        return Readiness(False, f"{flag_note} It\u2019s set to a Gemini API key, but none reaches it from Nebula. Put "
+                         "GEMINI_API_KEY in ~/.gemini/.env, or turn on \u201cUse my Gemini API key from Nebula\u201d below. "
+                         "Nebula doesn\u2019t pass on a key your shell exported.",
                          info.acp_flag, info.version, selected, key_blocked)
     if selected == AUTH_VERTEX:
         return Readiness(True, f"{flag_note} Uses Vertex AI, billed to your Google Cloud project.",

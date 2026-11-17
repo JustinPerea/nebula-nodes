@@ -10,6 +10,7 @@ import { usePersonLock } from '../../hooks/usePersonLock';
 import { askedOrder, heldProposalLine, useHeldProposals, type HeldProposal } from '../../store/heldAssetProposals';
 import '../../styles/asset-proposals.css';
 import { LineText } from '../LineText';
+import { universalSettingLabel } from '../../lib/universalSettingLabel';
 import { useCanvasLock } from '../../lib/canvasLock';
 
 /** How often the strip rechecks expiry while one is showing. */
@@ -116,7 +117,8 @@ function CommonsEditRow({ edit, was, names }: { edit: CommonsEdit; was: Record<s
   if ('correction' in edit) {
     const { field_path: path, op, value, reason } = edit.correction;
     const key = path.replace(/\.value$/, '');
-    const label = FIELD_LABELS[key] ?? key;
+    // A field with no label of its own reads as its key in words ("composition_notes" gives "Composition notes"), never raw.
+    const label = FIELD_LABELS[key] ?? universalSettingLabel(key.replace(/\./g, ' '));
     return (
       <li className="asset-proposal__edit">
         <span className="asset-proposal__edit-label">{label}</span>

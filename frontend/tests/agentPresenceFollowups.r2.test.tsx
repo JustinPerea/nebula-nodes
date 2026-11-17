@@ -17,7 +17,7 @@ import type { ModelNodeDefinition } from '../src/types';
  *   they and the checked Settings switch take the shared disabled look.
  * - L-5: the provider switcher's rows, the mask painter's Save and Run
  *   History's Forget take the canvas lock.
- * - L-6: EditNode's Open Editor opens the existing trim editor read-only
+ * - L-6: EditNode's Open editor opens the existing trim editor read-only
  *   while following or offline (finding the node, writing nothing).
  * - Nits: the bar's cut name stays whole graphemes and isolates its
  *   direction (<bdi>); the canvas pill grows to the left while it follows, so
@@ -266,9 +266,9 @@ describe('review N-7: Run History\'s disabled Rerun and Retry give the reason', 
   });
 });
 
-// ── L-6: EditNode's Open Editor ─────────────────────────────────────────────
+// ── L-6: EditNode's Open editor ─────────────────────────────────────────────
 
-describe('L-6: EditNode\'s Open Editor opens the existing trim editor read-only while following or offline', () => {
+describe('L-6: EditNode\'s Open editor opens the existing trim editor read-only while following or offline', () => {
   const props = { id: 'e1', data: { definitionId: 'video-edit', params: { clips: [] } }, selected: true } as never;
   beforeEach(() => {
     useGraphStore.setState({
@@ -285,7 +285,7 @@ describe('L-6: EditNode\'s Open Editor opens the existing trim editor read-only 
       const make = vi.spyOn(useGraphStore.getState(), 'getOrCreateEditNodeDownstream');
       const root = at(<ReactFlowProvider><EditNode {...(props as object)} /></ReactFlowProvider>);
       enter();
-      const open = button(root, 'Open Editor');
+      const open = button(root, 'Open editor');
       expect(open).toBeEnabled();
       expect(open).not.toHaveAttribute('data-following-disabled');
       expect(open).not.toHaveAttribute('data-offline-disabled');

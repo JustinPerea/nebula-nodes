@@ -7420,7 +7420,7 @@ No settings.
 
 ---
 
-### Cinema Scene
+### Cinema scene
 
 | | |
 |---|---|
@@ -7428,7 +7428,7 @@ No settings.
 | **Provider** | Utility |
 | **API Key** | — |
 | **Execution** | async-poll |
-| **Inputs** | Character Refs (Image ×n), Character (Character), Camera Rig (CameraRig), Reference Set (ReferenceSet) |
+| **Inputs** | Character refs (Image ×n), Character (Character), Camera rig (CameraRig), Reference set (ReferenceSet) |
 | **Outputs** | — |
 | **Audited** | — |
 
@@ -7598,7 +7598,7 @@ No settings.
 
 ---
 
-### Camera Rig
+### Camera rig
 
 | | |
 |---|---|
@@ -7607,7 +7607,7 @@ No settings.
 | **API Key** | — |
 | **Execution** | sync |
 | **Inputs** | — |
-| **Outputs** | Camera Rig (CameraRig) |
+| **Outputs** | Camera rig (CameraRig) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
@@ -7824,7 +7824,7 @@ No settings.
 
 ---
 
-### Paper Source
+### Paper source
 
 | | |
 |---|---|
@@ -7852,7 +7852,7 @@ No settings.
 
 ---
 
-### Reference Set
+### Reference set
 
 | | |
 |---|---|
@@ -7861,7 +7861,7 @@ No settings.
 | **API Key** | — |
 | **Execution** | sync |
 | **Inputs** | Style (Image), Identity (Image), Composition (Image), Pose (Image), Lighting (Image), Subject (Image), Background (Image) |
-| **Outputs** | Reference Set (ReferenceSet) |
+| **Outputs** | Reference set (ReferenceSet) |
 | **Audited** | — |
 
 | Parameter | Type | Default | Options/Range |
@@ -7876,7 +7876,7 @@ No settings.
 
 ---
 
-### Remotion Composition
+### Remotion composition
 
 | | |
 |---|---|
@@ -8038,7 +8038,7 @@ No settings.
 
 ---
 
-### Video Edit
+### Video edit
 
 | | |
 |---|---|

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { waitFor } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { CinemaSceneSpec, NodeData } from '../../src/types';
@@ -7,9 +9,10 @@ const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof import('../../src/lib/backend')>(),
   apiFetch: (...args: unknown[]) => fetchMock(...args), backendAssetUrlSync: (url: string) => `http://localhost:8000${url}` }));
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
-import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload } from '../../src/lib/cinemaUploads';
+import { attachCinemaReferences, removeCinemaReferenceUpload, retryCinemaReferenceUpload, uploadFailure } from '../../src/lib/cinemaUploads';
+import { ConnectionLostError, FailureNotice, RequestFailedError, actionFailedLine } from '../../src/lib/errorCopy';
 import { createCinemaUploadStore, getCinemaUploadIssue, useCinemaUploadStore,
-  CINEMA_UPLOAD_STORAGE_KEY, INTERRUPTED_CINEMA_UPLOAD_MESSAGE, uploadReasonRole } from '../../src/store/cinemaUploadStore';
+  CINEMA_UPLOAD_STORAGE_KEY, INTERRUPTED_CINEMA_UPLOAD_MESSAGE, uploadOffersTryAgain, uploadReasonRole } from '../../src/store/cinemaUploadStore';
 import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
 import * as api from '../../src/lib/api';
 
@@ -105,9 +108,9 @@ describe('Cinema reference ownership', () => {
     expect(api.generateCinemaShot).not.toHaveBeenCalled();
   });
   it('keeps per-file HTTP errors actionable, retains successful references and retries explicitly', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) }).mockResolvedValueOnce(response());
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'Unavailable' }) }).mockResolvedValueOnce(response());
     attachCinemaReferences(nodeId, 'a', [image('bad.png'), image('good.png')]); await waitFor(() => expect(uploads()).toHaveLength(1));
-    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: "Couldn't upload bad.png. Invalid image bytes", canRetry: true }); // error-copy round 2 (GM)
+    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: 'Nebula couldn’t upload “bad.png” because the server didn’t respond. Try again.', canRetry: true }); // GM 2026-11 copy sweep: the because form, ending as its Try again does
     expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you try “bad.png” again or remove it.');
     fetchMock.mockResolvedValueOnce(response()); retryCinemaReferenceUpload(uploads()[0].id); expect(uploads()[0].status).toBe('uploading');
     await waitFor(() => expect(uploads()).toEqual([])); expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']);
@@ -128,9 +131,9 @@ describe('Cinema reference ownership', () => {
     expect(useGraphStore.getState().reserveGraphImport()).toBe(true);
     expect(uploadReasonRole(uploads()[0])).toBe('status');
     pending.resolve(response('old.png')); await drain(); useGraphStore.getState().releaseGraphImport();
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 415, json: async () => ({ detail: 'Invalid image bytes' }) });
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'Unavailable' }) });
     retryCinemaReferenceUpload(id);
-    await waitFor(() => expect(uploads()[0]).toMatchObject({ status: 'error', error: expect.stringContaining('Invalid image bytes') }));
+    await waitFor(() => expect(uploads()[0]).toMatchObject({ status: 'error', error: 'Nebula couldn’t upload “reference.png” because the server didn’t respond. Try again.' }));
     expect(uploadReasonRole(uploads()[0])).toBe('alert');
   });
   it('keeps restored interruption metadata through persisted-owner terminal settlement before graph hydration', async () => {
@@ -161,6 +164,27 @@ describe('Cinema reference ownership', () => {
       restoredUploads.getState().clear();
       vi.resetModules();
     }
+  });
+  it('a failed row restored after a reload offers Remove, not a Try again it has no button for', () => {
+    const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() }, store = createCinemaUploadStore(storage);
+    const failure = uploadFailure('photo.png', new RequestFailedError("Couldn't upload photo.png.", 503, { detail: 'Unavailable' }));
+    expect(failure.line).toBe('Nebula couldn’t upload “photo.png” because the server didn’t respond. Try again.');
+    store.getState().setUploads(() => [{ id: 'f', attempt: 'a', nodeId, shotId: 'a', name: 'photo.png', status: 'error', canRetry: true, error: failure.line }]);
+    storage.getItem.mockReturnValue(storage.setItem.mock.calls[0][1]);
+    const [restored] = createCinemaUploadStore(storage).getState().uploads;
+    expect(restored).toMatchObject({ status: 'error', canRetry: false,
+      error: 'Nebula couldn’t upload “photo.png” because the server didn’t respond. Remove it, then attach “photo.png” again.' });
+    expect(uploadOffersTryAgain(restored)).toBe(false);
+  });
+  it('a restored row for a content-hash file name says “the file”, never the hash or “attach “Uploaded file” again”', () => {
+    const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() }, store = createCinemaUploadStore(storage);
+    const hashed = `${'3f9a'.repeat(8)}.png`;
+    const failure = uploadFailure(hashed, new RequestFailedError("Couldn't upload.", 503, { detail: 'Unavailable' }));
+    expect(failure.line).toBe('Nebula couldn’t upload “Uploaded file” because the server didn’t respond. Try again.');
+    store.getState().setUploads(() => [{ id: 'h', attempt: 'a', nodeId, shotId: 'a', name: hashed, status: 'error', canRetry: true, error: failure.line }]);
+    storage.getItem.mockReturnValue(storage.setItem.mock.calls[0][1]);
+    const [restored] = createCinemaUploadStore(storage).getState().uploads;
+    expect(restored.error).toBe('Nebula couldn’t upload “Uploaded file” because the server didn’t respond. Remove it, then attach the file again.');
   });
   it('reloads interrupted metadata without automatic requests, File objects or graph recipe changes', () => {
     const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() }, store = createCinemaUploadStore(storage);
@@ -208,5 +232,48 @@ describe('Cinema current-recipe admission', () => {
     await useGraphStore.getState().rerunHistoryRecord('saved'); expect(api.generateCinemaShot).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.generateCinemaShot).mock.calls[0][0]).toEqual(snapshot.nodes);
     expect(useGraphStore.getState().runHistory.find((record) => record.id === 'saved')).toBe(saved);
+  });
+});
+
+describe('GM 2026-11 copy sweep item 20: the upload row\'s failure lines, in the because form', () => {
+  const failed = (status: number, detail?: string) => new RequestFailedError("Couldn't upload photo.png.", status, { detail });
+  it.each([
+    ['the server is not answering', new ConnectionLostError(new TypeError('Failed to fetch')),
+      'Nebula couldn’t upload “photo.png” because the server isn’t answering. Try again.', true],
+    ['a 503 from a gateway', failed(503), 'Nebula couldn’t upload “photo.png” because the server didn’t respond. Try again.', true],
+    ['a 500', failed(500), 'Nebula couldn’t upload “photo.png” because the server hit an error. Try again.', true],
+    ['a 408 timeout', failed(408), 'Nebula couldn’t upload “photo.png” because the server didn’t respond. Try again.', true],
+    ['a 400 about the file', failed(400, 'Invalid image bytes'),
+      'Nebula couldn’t upload “photo.png” because the server couldn’t read it as an image. Choose another image.', false],
+    ['a 415 about the file', failed(415), 'Nebula couldn’t upload “photo.png” because the server couldn’t read it as an image. Choose another image.', false],
+    ['a 422 about the file', failed(422), 'Nebula couldn’t upload “photo.png” because the server couldn’t read it as an image. Choose another image.', false],
+    ['a 429', failed(429), 'Nebula couldn’t upload “photo.png” because the server is busy. Try again.', true],
+    ['a refusal with no listed reason', failed(409), 'Nebula couldn’t upload “photo.png” because the server didn’t accept it.', false],
+    ['a 404', failed(404, 'Not found'), 'Nebula couldn’t upload “photo.png” because the server didn’t accept it.', false],
+    ['a reply with no image', new FailureNotice("Couldn't upload photo.png.", 'The upload sent back no image.'),
+      'Nebula couldn’t upload “photo.png” because the server sent back no image. Try again.', true],
+    ['a file over the size limit', new FailureNotice("Couldn't upload photo.png.", 'Image exceeds the 20 MB limit.'),
+      'Nebula couldn’t upload “photo.png” because it’s over the 20 MB limit. Choose a smaller image.', false],
+    ['a 413', failed(413), 'Nebula couldn’t upload “photo.png” because it’s over the 20 MB limit. Choose a smaller image.', false],
+    ['a wrong file type', new FailureNotice("Couldn't upload photo.png.", 'Use a PNG, JPEG, GIF or WebP image.'),
+      'Nebula couldn’t upload “photo.png” because it isn’t a PNG, JPEG, GIF or WebP image. Choose one of those.', false],
+    ['a refusal because you are signed out', failed(401), 'Nebula couldn’t upload “photo.png” because you don’t have access to this anymore. Reload to sign in again.', false],
+  ])('%s', (_why, error, line, retryable) => {
+    expect(uploadFailure('photo.png', error)).toEqual({ line, retryable });
+    // The rule: a line beside Try again ends in "Try again."; one without it names the fix.
+    expect(line.endsWith('Try again.')).toBe(retryable);
+  });
+
+  // Design r160 answer 4: the status reasons are errorCopy's, not a table of the row's own.
+  it.each([0, 408, 429, 500, 502, 503, 504, 401, 403])('a status %s reads as errorCopy’s own action line does', (status) => {
+    const error = status === 0 ? new ConnectionLostError(new TypeError('Failed to fetch')) : failed(status);
+    expect(uploadFailure('photo.png', error)).toEqual(actionFailedLine('upload “photo.png”', error));
+  });
+});
+
+describe('the Cinema upload row keeps no clause of its own for the statuses errorCopy words', () => {
+  it('names no “isn’t answering”, “is busy” or “hit an error” clause in its source', () => {
+    const source = readFileSync(resolve(__dirname, '../../src/lib/cinemaUploads.ts'), 'utf8');
+    for (const clause of ['isn’t answering. Try again', 'is busy. Try again', 'hit an error']) expect(source).not.toContain(clause);
   });
 });

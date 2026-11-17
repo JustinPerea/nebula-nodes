@@ -28,7 +28,7 @@ def test_post_note_says_where_a_boards_update_shows():
 
     doc = _flat(mcp_server.post_note.__doc__)
     assert OLD not in doc
-    assert "Moodboard Studio" in doc and '"This board"' in doc
+    assert "Moodboard Studio" in doc and '"This moodboard"' in doc
     assert "has that board open" in doc
     # Elsewhere the corner shows only the project's list: say how to reach them anywhere.
     assert "without `board`" in doc
@@ -39,7 +39,7 @@ def test_list_notes_says_where_a_boards_update_shows():
 
     doc = _flat(mcp_server.list_notes.__doc__)
     assert OLD not in doc
-    assert "Moodboard Studio" in doc and '"This board"' in doc
+    assert "Moodboard Studio" in doc and '"This moodboard"' in doc
 
 
 def test_mcp_setup_skill_and_cli_say_the_same():
@@ -48,9 +48,9 @@ def test_mcp_setup_skill_and_cli_say_the_same():
     cli = _flat((REPO / "backend/cli/__main__.py").read_text(encoding="utf-8"))
     for name, text in (("MCP-SETUP", setup), ("SKILL", skill), ("cli", cli)):
         assert OLD not in text, name
-        assert "Moodboard Studio" in text and "This board" in text, name
+        assert "Moodboard Studio" in text and "This moodboard" in text, name
     # The tool list and the Updates section both say it.
-    assert setup.count('under "This board"') >= 2
+    assert setup.count('under "This moodboard"') >= 2
 
 
 def test_the_first_turn_instructions_are_unchanged_and_under_the_cap():
@@ -86,7 +86,7 @@ def test_nebula_note_with_a_board_says_where_the_person_reads_it():
                               agent_name="Codex", json=False)
     assert notes_cmd.run_note(Client(), args, out=out) == 0
     printed = out.getvalue()
-    assert "Moodboard Studio" in printed and "This board" in printed, printed
+    assert "Moodboard Studio" in printed and "This moodboard" in printed, printed
     out = io.StringIO()
     canvas = argparse.Namespace(text="Two seeds", board=None, refs=[], nodes=[], since_last_turn=False,
                                 agent_name="Codex", json=False)

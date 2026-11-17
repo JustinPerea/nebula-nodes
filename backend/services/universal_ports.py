@@ -33,6 +33,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from services.setting_labels import setting_label  # noqa: F401 - callers import it from here too
 from services.media_types import MEDIA_PORT_IDS, media_named_in_text, media_of_extension, media_of_mime, media_of_value
 
 MODEL_PARAM: dict[str, str] = {
@@ -113,18 +114,9 @@ def modality_ports(row: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[d
 
 
 def _title(key: str) -> str:
-    """A Replicate file input's port label, in the Title Case every other
-    port label uses ("input_image" → "Input Image")."""
-    return re.sub(r"\b\w", lambda match: match.group(0).upper(), key.replace("_", " "), flags=re.ASCII)
-
-
-def setting_label(key: str) -> str:
-    """A universal node's provider setting as the Inspector and an agent's
-    cursor name it (GM, PR #198 r1 item 7): the key in sentence case,
-    "guidance_scale" → "Guidance scale". The frontend's twin is
-    lib/universalSettingLabel.ts."""
-    words = key.replace("_", " ")
-    return words[:1].upper() + words[1:]
+    """A Replicate file input's port label, in sentence case like every
+    other label ("input_image" gives "Input image")."""
+    return setting_label(key)
 
 
 def replicate_inputs(schema: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -290,7 +282,7 @@ def configure(definition_id: str, params: Mapping[str, Any], model: str, data: M
     """The node's params and ports for ``model``, from the provider's data for
     it (an OpenRouter/Nous catalog row, a Replicate schema), as the picker set
     them: over ``params``, the model and its canvas-owned params (Replicate:
-    the schema's defaults too, over the old values, as "Fetch Schema" did)."""
+    the schema's defaults too, over the old values, as "Fetch schema" did)."""
     base = dict(params)
     if definition_id == "replicate-universal":
         inputs, dynamic_params = replicate_inputs(data)
