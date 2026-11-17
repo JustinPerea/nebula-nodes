@@ -134,11 +134,12 @@ describe('a line on the board has a solid surface (GM r105 3)', () => {
     }
   });
 
-  it('in the List (not over the canvas) the line keeps its tint as before', () => {
+  it('in the List (not over the canvas) the line is a fill: neutral for a neutral line, the warning tint for a warning one', () => {
     const style = resolvedStyle(lineIn('moodboard-studio__notice moodboard-studio__notice--neutral', true, false));
     expect(resolve(style['|background'], style)).toBe(resolve('var(--sr-surface-control)', style));
     document.body.innerHTML = '';
     const error = resolvedStyle(lineIn('moodboard-studio__notice moodboard-studio__notice--error', true, false));
-    expect(resolve(error['|background'], error)).toBe('rgba(255, 255, 255, 0.035)');
+    // Design: a warning line takes the warning tint, a neutral one the neutral fill.
+    expect(resolve(error['|background'], error)).toBe(resolve('var(--sr-warning-soft)', error));
   });
 });

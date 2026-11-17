@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 vi.mock('../../lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() },
@@ -51,6 +53,18 @@ describe('ProjectWorkspaceControls', () => {
     fireEvent.click(button);
     expect(retrySave).toHaveBeenCalledTimes(1);
     expect(retry).not.toHaveBeenCalled();
+  });
+
+  it('design: the failed save\'s Try again is a button, the quiet one the canvas notices use, not plain pink text', () => {
+    useProjectStore.setState({ saveStatus: 'error', saveError: null, retrySave: vi.fn(async () => {}) } as never);
+    render(<ProjectWorkspaceControls />);
+    const button = screen.getByRole('button', { name: 'Try again' });
+    expect(button.classList.contains('canvas-undo-notice__action')).toBe(true);
+    expect(button.classList.contains('canvas-undo-notice__action--quiet')).toBe(true);
+    // The header's plain-text rule is the paused state's alone, so it can't flatten the button.
+    const css = readFileSync(resolve(__dirname, 'ProjectWorkspaceControls.css'), 'utf8');
+    expect(css).not.toMatch(/__retry\s*\{/);
+    expect(css).toMatch(/__paused\s*\{[^}]*background:\s*transparent/);
   });
 
   it('with no save line kept, the title still says what failed and ends in Try again', () => {

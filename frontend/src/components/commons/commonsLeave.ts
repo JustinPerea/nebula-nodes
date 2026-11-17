@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { createContext, useEffect, useState, type RefObject } from 'react';
 import { setCommonsLeaveAsk, whenCommonsClean } from '../../lib/commonsUnsaved';
 import { CommonsRequestError } from '../../lib/commonsRequestError';
 import { canTryAgain, failureCopy, oneLine } from '../../lib/errorCopy';
@@ -36,6 +36,14 @@ export function saveFailure(error: unknown): SaveFailure {
   const message = oneLine(failureCopy(error, { heading: "Couldn’t save your labels." }));
   return { ok: false, reason: message, message, retry };
 }
+
+/**
+ * The failure the leave popover is showing, for the panels behind it (null when it shows none).
+ * The popover is where the person acted, so it says the failure once: a panel's own notice with
+ * the same words stands down while the popover is open (CommonsErrorLine), and reads again if
+ * the person chooses Stay and the failure still stands.
+ */
+export const CommonsLeaveFailure = createContext<string | null>(null);
 
 /**
  * The panel contract: what Blind labeling and Agent review tell the Commons

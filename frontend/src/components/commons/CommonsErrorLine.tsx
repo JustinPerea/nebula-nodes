@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, type Ref } from 'react';
+import { useContext, useLayoutEffect, useRef, type Ref } from 'react';
 import { isBecauseLine } from '../../lib/notConnectedLine';
 import { isBecauseFailure, isLoadLine, retryStem } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
+import { CommonsLeaveFailure } from './commonsLeave';
 import { FOCUS_LINE_ATTR } from '../../lib/lineAttrs';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useBackendOffline } from '../../lib/useBackendOffline';
@@ -60,7 +61,12 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
 }) {
   const line = useOfflineFirstBecause(given);
   const offline = useBackendOffline();
+  // The leave popover is showing this very failure where the person acted (Save and leave): the
+  // panel behind it stands down, so the sentence shows once, and it reads here again if the
+  // person chooses Stay and the failure still stands (commonsLeave CommonsLeaveFailure).
+  const inPopover = useContext(CommonsLeaveFailure);
   if (!line) return null;
+  if (inPopover && (given === inPopover || line === inPopover)) return null;
   // Round 18d (review 14 live LOW-1, GM r23 3: offline comes first): a load's line hides beside
   // "Nebula is offline", which says what is wrong, as the page row's do; it shows again online.
   if (offline && isLoadLine(line)) return null;

@@ -205,7 +205,9 @@
 .personal-agents__terms {
   margin-top: 4px;
   padding: 4px 8px;
-  border-left: 2px solid var(--sr-accent-border, #8a7a3a);
+  /* Design: a note is a fill, never a bar down its edge. */
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-accent-soft);
 }
 
 .personal-agents__actions { display: flex; flex-wrap: wrap; gap: 6px; }

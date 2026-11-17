@@ -267,8 +267,6 @@ body.app-slava-restraint {
   --sr-node-mesh-grid-color: rgba(201, 202, 200, 0.20);
   --sr-node-mesh-grid-soft: rgba(201, 202, 200, 0.10);
   --sr-node-mesh-line: rgba(255, 255, 255, 0.24);
-  --sr-node-error-bg: rgba(0, 0, 0, 0.40);
-  --sr-node-error-border-width: 2px;
   --sr-node-error-padding: 6px 10px;
   --sr-node-error-margin: 0 14px 8px;
   --sr-node-error-radius: 4px;
@@ -4295,9 +4293,10 @@ body.app-slava-restraint .model-node--image-surface .react-flow__handle {
 
 body.app-slava-restraint .model-node__error {
   color: var(--sr-warning);
-  background: var(--sr-node-error-bg);
+  /* Design: a notice is a fill, never a bar down its edge. A run failure takes the warning
+     tint; a because line, the waiting and key lines below take the neutral notice fill. */
+  background: var(--sr-warning-soft);
   border: none;
-  border-left: var(--sr-node-error-border-width) solid var(--sr-accent);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-label);
   padding: var(--sr-node-error-padding);
@@ -4305,10 +4304,9 @@ body.app-slava-restraint .model-node__error {
   border-radius: var(--sr-node-error-radius);
 }
 
-/* Safety/moderation block: a muted left-rail (warning, not the accent used for
+/* Safety/moderation block: slightly muted (warning tint, not the accent used for
    real failures) so a declined request reads as informational, not broken. */
 body.app-slava-restraint .model-node__error--blocked {
-  border-left-color: var(--sr-warning);
   opacity: 0.92;
 }
 body.app-slava-restraint .model-node__error-details summary {
@@ -4317,16 +4315,16 @@ body.app-slava-restraint .model-node__error-details summary {
 
 /* An agent's run stopped at a node only the person may run: a stop by
    design, not a failure (GM, PR #203 r39 item 1). The notice style: the
-   card's muted text on a neutral rail, never the error or warning colour. */
+   card's muted text on the neutral notice fill, never the error or warning colour. */
 body.app-slava-restraint .model-node__error--waiting {
   color: var(--sr-ink-light);
-  border-left-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control);
 }
 /* A missing key reads the same way: something to do, not a failure (copy
    sweep item 12; NodeError `missingKey`). */
 body.app-slava-restraint .model-node__error--key {
   color: var(--sr-ink-light);
-  border-left-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control);
 }
 body.app-slava-restraint .model-node__error--key .failure-lines__heading {
   color: var(--sr-ink);

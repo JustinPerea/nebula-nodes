@@ -185,7 +185,6 @@ body.app-slava-restraint .moodboard-analysis__empty {
 body.app-slava-restraint .moodboard-studio__notice {
   --mb-notice-fill: rgba(255, 255, 255, 0.035);
   text-wrap: pretty;
-  border-left: 2px solid currentColor;
   padding: 8px 10px;
   background: var(--mb-notice-fill);
   font-size: 12px;
@@ -193,6 +192,10 @@ body.app-slava-restraint .moodboard-studio__notice {
 
 body.app-slava-restraint .moodboard-studio-view__board-notices > .moodboard-studio__notice {
   background: linear-gradient(var(--mb-notice-fill), var(--mb-notice-fill)), var(--mb-board-bg);
+}
+
+body.app-slava-restraint :is(.moodboard-studio__notice--warn, .moodboard-studio__notice--error) {
+  --mb-notice-fill: var(--line-warning-soft, var(--sr-warning-soft));
 }
 
 body.app-slava-restraint .moodboard-studio__notice--warn {
@@ -206,7 +209,6 @@ body.app-slava-restraint .moodboard-studio__notice--warn {
 body.app-slava-restraint .moodboard-studio__notice--neutral {
   --mb-notice-fill: var(--sr-surface-control);
   color: var(--sr-ink-light);
-  border-left-color: var(--sr-edge-strong);
 }
 
 /* Round 6j (GM r18): a line with its own action (Restore for a deleted

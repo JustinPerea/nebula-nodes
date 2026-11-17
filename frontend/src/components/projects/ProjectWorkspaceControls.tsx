@@ -144,7 +144,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         // the button's title and its accessible description: a title is not read by every screen reader or shown on touch.
         ? <span className="project-workspace-controls__failed" role="group" aria-label="Save status">
             <span className="project-workspace-controls__not-saved">Not saved</span>
-            <button type="button" className="project-workspace-controls__retry" title={failedLine} aria-describedby={failedLineId}
+            <button type="button" className="canvas-undo-notice__action canvas-undo-notice__action--quiet project-workspace-controls__retry" title={failedLine} aria-describedby={failedLineId}
               onClick={() => void useProjectStore.getState().retrySave()}>Try again</button>
             <span id={failedLineId} hidden>{failedLine}</span>
           </span>

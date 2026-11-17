@@ -1,6 +1,6 @@
 /**
  * PR #204 round 18 (GM r28 1): a Commons line's look as the app's stylesheets give it
- * (tests/helpers/cssCascade): its ink, and the colour of its left rule.
+ * (tests/helpers/cssCascade): its ink, and that it draws no left bar.
  */
 import { cascaded } from './cssCascade';
 
@@ -10,14 +10,18 @@ function resolve(won: Map<string, { value: string }>, value: string): string {
   const own = /^var\((--[\w-]+)\)$/.exec(value.trim());
   return own && won.get(`|${own[1]}`) ? won.get(`|${own[1]}`)!.value : value;
 }
-/** The line box's ink and the colour of its left rule, as the cascade gives them. */
+/** The line box's ink, as the cascade gives it. Design: a line has no rule down its left edge (leftBar). */
 export function lineLook(box: Element) {
   const won = cascaded(box);
-  const color = resolve(won, won.get('|color')?.value ?? '');
+  return { color: resolve(won, won.get('|color')?.value ?? '') };
+}
+/** Whether a left border thicker than 1px (a bar down the edge) wins on the box. Design: it never does. */
+export function leftBar(box: Element): boolean {
+  const won = cascaded(box);
   const shorthand = won.get('|border-left')?.value ?? '';
-  const ruleColor = won.get('|border-color')?.important ? won.get('|border-color')!.value
-    : /currentColor/i.test(shorthand) ? color : resolve(won, shorthand.split(/\s+/).at(-1) ?? '');
-  return { color, rule: resolve(won, ruleColor) };
+  const width = won.get('|border-left-width')?.value ?? shorthand.split(/\s+/)[0] ?? '';
+  const px = /^(\d*\.?\d+)px$/.exec(width.trim());
+  return px ? Number(px[1]) > 1 : /^var\(/.test(width.trim());
 }
 /** Round 18c (GM r30 1): the box's fill, the winner of `background` and `background-color`. */
 export function lineFill(box: Element): string {
@@ -30,4 +34,4 @@ export function lineFill(box: Element): string {
   for (let i = 0; i < Math.max(ra.length, rb.length); i++) { if ((ra[i] ?? -1) !== (rb[i] ?? -1)) { first = (ra[i] ?? -1) > (rb[i] ?? -1) ? a : b; break; } }
   return resolve(won, (first ?? a ?? b)?.value.replace(/\s*!important/, '').trim() ?? '');
 }
-export const NEUTRAL = { color: 'var(--sr-ink-light)', rule: 'var(--sr-ink-light)' };
+export const NEUTRAL = { color: 'var(--sr-ink-light)' };

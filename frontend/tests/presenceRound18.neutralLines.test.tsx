@@ -8,7 +8,7 @@
  */
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { lineFill, lineLook, NEUTRAL } from './helpers/lineLook';
+import { leftBar, lineFill, lineLook, NEUTRAL } from './helpers/lineLook';
 
 const { CommonsErrorLine } = await import('../src/components/commons/CommonsErrorLine');
 const { COMMONS_OFF_COPY, isLoadLine, LOAD_BECAUSE, loadFailedLine, noResponseBecause, notConnectedBecause } = await import('../src/lib/errorCopy');
@@ -99,7 +99,8 @@ describe('every "Nebula couldn’t load …" line resolves to the neutral tokens
       expect(box.hasAttribute('data-line-neutral')).toBe(true);
       const look = lineLook(box);
       expect(look).toEqual(NEUTRAL);
-      expect(`${look.color} ${look.rule}`).not.toMatch(ERROR_TOKENS);
+      expect(look.color).not.toMatch(ERROR_TOKENS);
+      expect(leftBar(box)).toBe(false);
     });
   }
 
@@ -125,7 +126,7 @@ describe('every "Nebula couldn’t load …" line resolves to the neutral tokens
     const box = view.container.querySelector('[data-commons-line]')!;
     expect(box.hasAttribute('data-line-neutral')).toBe(false);
     expect(lineLook(box).color).toBe('var(--sr-error)');
-    expect(lineLook(box).rule).toBe('var(--sr-error)');
+    expect(leftBar(box)).toBe(false);
   });
 });
 
@@ -140,21 +141,22 @@ describe('one look for every neutral Commons line, wherever it sits (GM r30 1)',
     ['the reference detail', (line) => <aside className="commons-detail">{line}</aside>],
   ];
   const LINES = [...Object.values(LOAD_LINES), notConnectedBecause('load Commons', false), COMMONS_OFF_COPY];
-  it('the same component, the bare rail: neutral ink and rule, no fill, in every place', () => {
+  it('the same component, a fill and no bar (design): neutral ink and the neutral notice fill, in every place', () => {
     const looks = new Set<string>();
     for (const [place, wrap] of PLACES) for (const line of LINES) {
       const view = render(wrap(<CommonsErrorLine line={line} />));
       const box = view.container.querySelector('[data-commons-line]')!;
       expect(box.className, `${place}: ${line}`).toBe('commons-notice commons-notice--error');
-      expect(lineFill(box), `${place}: ${line}`).toBe('transparent');
+      expect(lineFill(box), `${place}: ${line}`).toBe('var(--sr-surface-control)');
+      expect(leftBar(box), `${place}: ${line}`).toBe(false);
       looks.add(JSON.stringify({ ...lineLook(box), fill: lineFill(box) }));
       view.unmount();
     }
-    expect([...looks]).toEqual([JSON.stringify({ ...NEUTRAL, fill: 'transparent' })]);
+    expect([...looks]).toEqual([JSON.stringify({ ...NEUTRAL, fill: 'var(--sr-surface-control)' })]);
   });
-  it('an action\'s failure keeps its filled box', () => {
+  it('an action\'s failure keeps the warning tint', () => {
     const view = render(<CommonsErrorLine line="Couldn’t save the settings. That setting isn’t available. Reload to get the latest settings." />);
-    expect(lineFill(view.container.querySelector('[data-commons-line]')!)).not.toBe('transparent');
+    expect(lineFill(view.container.querySelector('[data-commons-line]')!)).toBe('var(--sr-error-soft)');
   });
 });
 
