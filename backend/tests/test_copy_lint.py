@@ -144,6 +144,7 @@ CURLY_SPAN_RE = re.compile("“[^”]*”")
 TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 RATIO_RE = re.compile(r"\b\d+(?::\d+)+\b")
 WORD_RE = re.compile(r"[A-Za-z]")
+NAME_MARK = "ZNAMEZ"
 
 
 def _has_lower_run(t: str) -> bool:
@@ -180,8 +181,9 @@ def _title_case_breaks(text: str, ctx: Context) -> bool:
     if re.match(r"e\.g\.", text, re.IGNORECASE):
         return False
     rest = text
+    # A stripped name leaves a marker word, so the word after it is not read as the start of the label.
     for phrase in ctx.phrases:
-        rest = rest.replace(phrase, " ")
+        rest = rest.replace(phrase, f" {NAME_MARK} ")
     rest = URL_RE.sub(" ", CODE_RE.sub(" ", CURLY_SPAN_RE.sub(" ", rest)))
     tokens = rest.split()
     bares = [re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", t).lower() for t in tokens if re.search(r"[A-Za-z]", t) and not re.search(r"[/~]", t)]
@@ -199,6 +201,10 @@ def _title_case_breaks(text: str, ctx: Context) -> bool:
             continue
         letter_words += 1
         bare = re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", token)
+        if bare == NAME_MARK:
+            pending = False
+            prev.append(NAME_MARK.lower())
+            continue
         if not pending:
             plus = (i > 0 and tokens[i - 1] == "+") or (i + 1 < len(tokens) and tokens[i + 1] == "+")
             paren = bool(re.search(r"^\(|\)$", token))
@@ -247,7 +253,20 @@ def _key_shape(t: str) -> bool:
 
 
 def check(text: str, kind: str, ctx: Context) -> list[str]:
-    """The rules `text` breaks, in order. kind is "label" for a param or field label, else "text"."""
+    """The rules `text` breaks, in order. A string of several lines is several lines of copy, each checked on its own."""
+    lines = [ln for ln in re.split(r"\r?\n", text) if ln.strip()]
+    if len(lines) <= 1:
+        return _check_line(text, kind, ctx)
+    hits: list[str] = []
+    for line in lines:
+        for h in _check_line(line, kind, ctx):
+            if h not in hits:
+                hits.append(h)
+    return hits
+
+
+def _check_line(text: str, kind: str, ctx: Context) -> list[str]:
+    """kind is "label" for a param or field label, else "text"."""
     hits: list[str] = []
     t = re.sub(r"\s+", " ", text).strip()
     if not t or not WORD_RE.search(t) or _code_like(t):
@@ -425,7 +444,7 @@ def extract_strings(source: str, rel: str, rules: dict[str, Any],
             return
         pushed.add((id(node), text))
         seen.add(id(node))
-        found.append({"text": re.sub(r"\s+", " ", text).strip(), "kind": "text", "line": node.lineno, "source": origin})
+        found.append({"text": re.sub(r"\s+", " ", text).strip(), "raw": text, "kind": "text", "line": node.lineno, "source": origin})
 
     def mark(node: ast.AST) -> None:
         for sub in ast.walk(node):
@@ -533,7 +552,7 @@ def scan(backend: Path = BACKEND, repo: Path = REPO, rules: dict[str, Any] | Non
         for s in strings:
             if s["line"] in exempt:
                 continue
-            for rule in check(s["text"], s["kind"], ctx):
+            for rule in check(s.get("raw", s["text"]), s["kind"], ctx):
                 violations.append({"file": f"backend/{rel}", "line": s["line"], "rule": rule, "text": s["text"]})
     return violations, markers_seen
 

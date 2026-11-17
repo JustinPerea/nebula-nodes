@@ -7,12 +7,6 @@
       "text": "What Accept writes"
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/CanvasTabs.tsx",
-      "rule": "title-case",
-      "text": "Creator Studio"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/character-studio/CharacterDefinitionPanel.tsx",
       "rule": "sentence-punctuation",
@@ -170,21 +164,9 @@
     },
     {
       "family": "title-case-labels",
-      "file": "frontend/src/components/commons/CommonsView.tsx",
-      "rule": "title-case",
-      "text": "More Commons sections"
-    },
-    {
-      "family": "title-case-labels",
       "file": "frontend/src/components/ContextMenu.tsx",
       "rule": "title-case",
       "text": "Run This Node"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/create-studio/CreateView.tsx",
-      "rule": "title-case",
-      "text": "Creator Studio"
     },
     {
       "family": "retry-buttons",
@@ -685,12 +667,6 @@
       "file": "frontend/src/components/ProviderRecoveryStatus.tsx",
       "rule": "straight-quote",
       "text": "Nebula couldn't save the hold, so keep Nebula running until this run finishes."
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/video-editor/components/TextRenderer.tsx",
-      "rule": "title-case",
-      "text": "Hello World"
     },
     {
       "family": "em-dashes",
@@ -2423,12 +2399,6 @@
       "family": "title-case-labels-node-definitions",
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "title-case",
-      "text": "Off brief Partly on brief On brief"
-    },
-    {
-      "family": "title-case-labels-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "title-case",
       "text": "On Fail"
     },
     {
@@ -2611,12 +2581,6 @@
       "family": "title-case-labels-node-definitions",
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "title-case",
-      "text": "Product photo Lifestyle shot Illustration"
-    },
-    {
-      "family": "title-case-labels-node-definitions",
-      "file": "frontend/src/constants/nodeDefinitions.ts",
-      "rule": "title-case",
       "text": "Prompt (Redefine only)"
     },
     {
@@ -2725,6 +2689,13 @@
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "title-case",
       "text": "Reference to Video"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "Remove Background Noise",
+      "count": 2
     },
     {
       "family": "title-case-labels-node-definitions",
@@ -3406,6 +3377,18 @@
       "family": "title-case-labels-node-definitions",
       "file": "frontend/src/constants/nodeDefinitions.ts",
       "rule": "title-case",
+      "text": "x4 v3 (General)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
+      "text": "x4 WDN v3 (Denoise)"
+    },
+    {
+      "family": "title-case-labels-node-definitions",
+      "file": "frontend/src/constants/nodeDefinitions.ts",
+      "rule": "title-case",
       "text": "x4plus (General)"
     },
     {
@@ -3491,12 +3474,6 @@
       "file": "frontend/src/lib/cinemaArtDirection.ts",
       "rule": "title-case",
       "text": "Teal & Orange"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/lib/commandPalette.ts",
-      "rule": "title-case",
-      "text": "Open Creator Studio"
     },
     {
       "family": "straight-quotes",
@@ -3767,12 +3744,6 @@
       "file": "frontend/src/lib/validationCopy.ts",
       "rule": "straight-quote",
       "text": "Nothing ran. Check the scene's inputs and API keys, then generate the shot again."
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/lib/workspaceLabel.ts",
-      "rule": "title-case",
-      "text": "Creator Studio"
     },
     {
       "family": "straight-quotes",

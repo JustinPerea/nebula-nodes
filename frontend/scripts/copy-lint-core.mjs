@@ -105,6 +105,7 @@ const CURLY_SPAN_RE = /“[^”]*”/g;
 const TIME_RE = /\b\d{1,2}:\d{2}(?::\d{2})?\b/g;
 const RATIO_RE = /\b\d+(?::\d+)+\b/g;
 const WORD_RE = /[A-Za-z]/;
+const NAME_MARK = 'ZNAMEZ';
 
 /** Two lower-case words in a row: the shape of a sentence, never of a Title Case label. */
 function hasLowerRun(t) {
@@ -135,7 +136,8 @@ function namedHere(low, prev, keyRef, plus, keycaps, paren, nextLower, ctx) {
 function titleCaseBreaks(text, ctx) {
   if (/^e\.g\./i.test(text)) return false;
   let rest = text;
-  for (const phrase of ctx.phrases) rest = rest.split(phrase).join(' ');
+  // A stripped name leaves a marker word, so the word after it is not read as the start of the label.
+  for (const phrase of ctx.phrases) rest = rest.split(phrase).join(` ${NAME_MARK} `);
   rest = rest.replace(CURLY_SPAN_RE, ' ').replace(CODE_RE, ' ').replace(URL_RE, ' ');
   const tokens = rest.split(/\s+/).filter(Boolean);
   const stripEdges = (t) => t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
@@ -154,6 +156,11 @@ function titleCaseBreaks(text, ctx) {
     }
     letterWords += 1;
     const bare = stripEdges(token);
+    if (bare === NAME_MARK) {
+      pending = false;
+      prev.push(NAME_MARK.toLowerCase());
+      return;
+    }
     if (!pending) {
       const plus = (i > 0 && tokens[i - 1] === '+') || (i + 1 < tokens.length && tokens[i + 1] === '+');
       const paren = /^\(|\)$/.test(token);
@@ -195,7 +202,16 @@ function keyShape(t) {
   return /[_-]$/.test(m[1]) || (!/[a-z]{5,}/.test(m[1]) && /[a-z][A-Z]|[A-Z]{2}[a-z]/.test(m[1]));
 }
 
+/** A string of several lines is several lines of copy: each is checked on its own. */
 export function check(text, kind, ctx) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length <= 1) return checkLine(text, kind, ctx);
+  const hits = [];
+  for (const line of lines) for (const h of checkLine(line, kind, ctx)) if (!hits.includes(h)) hits.push(h);
+  return hits;
+}
+
+function checkLine(text, kind, ctx) {
   const hits = [];
   const { rules } = ctx;
   const t = text.replace(/\s+/g, ' ').trim();
@@ -398,7 +414,7 @@ export function extractStrings(source, relPath, rules) {
     seen.add(item.node.pos);
     // A bare placeholder or key, a number or a symbol is not copy.
     if (!WORD_RE.test(item.text)) return;
-    found.push({ text: item.text.replace(/\s+/g, ' ').trim(), kind, line: lineOf(item.node), source: source2 });
+    found.push({ text: item.text.replace(/\s+/g, ' ').trim(), raw: item.text, kind, line: lineOf(item.node), source: source2 });
   };
   const mark = (e) => {
     // Every literal inside e is accounted for, so the generic copy-module pass skips it.
@@ -488,7 +504,7 @@ export function scan({ frontend = FRONTEND, repo = REPO, rules = loadRules(), ct
     for (const m of markers) if (!m.block || m.reason !== 'end') markerReport.push({ file: rel, ...m });
     for (const s of extractStrings(source, rel, rules)) {
       if (exempt.has(s.line)) continue;
-      for (const rule of check(s.text, s.kind, ctx)) violations.push({ file: `frontend/${rel}`, line: s.line, rule, text: s.text });
+      for (const rule of check(s.raw ?? s.text, s.kind, ctx)) violations.push({ file: `frontend/${rel}`, line: s.line, rule, text: s.text });
     }
   }
   return { violations, markers: markerReport };

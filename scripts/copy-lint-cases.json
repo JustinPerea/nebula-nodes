@@ -505,6 +505,55 @@
    "rules": [
     "sentence-punctuation"
    ]
+  },
+  {
+   "text": "More Commons sections",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Creator Studio",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Product photo\nLifestyle shot\nIllustration",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Black Forest Labs Key",
+   "kind": "label",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Black Forest Labs key",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "World Labs",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "World Labs Environment",
+   "kind": "label",
+   "rules": []
+  },
+  {
+   "text": "Black Forest Labs Foo",
+   "kind": "label",
+   "rules": [
+    "title-case"
+   ]
+  },
+  {
+   "text": "Gemini 2.5 Flash Image",
+   "kind": "label",
+   "rules": []
   }
  ]
 }

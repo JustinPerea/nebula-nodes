@@ -107,6 +107,7 @@
     "OK"
   ],
   "properNames": [
+    "Gemini 2.5 Flash Image",
     "Nano Banana",
     "Veo",
     "Kling",
@@ -177,6 +178,8 @@
     "Cinema Studio",
     "Character Studio",
     "Moodboard Studio",
+    "Creator Studio",
+    "Commons",
     "Agent Log",
     "ChatGPT",
     "Lottie",
@@ -449,7 +452,6 @@
       "names": [
         "Settings",
         "Canvas",
-        "Commons",
         "Updates",
         "Global",
         "Studio"
