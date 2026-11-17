@@ -13,7 +13,7 @@ const WIRED = /\b(wired|wiring|unwired)\b/i;
 describe('node descriptions say connected', () => {
   it('names the Jev gates’ ports in quotes', () => {
     expect(NODE_DEFINITIONS['jev-decide'].description).toContain(
-      'Also a gate: whatever is connected to “Through” comes out of “On Pass” or “On Fail”',
+      'Whatever is connected to “Through” comes out of “On pass” or “On fail”',
     );
     expect(NODE_DEFINITIONS['jev-box'].description).toContain(
       'no crop, and the nodes connected to “Crop”, “Mask” or “Annotated” are skipped.',

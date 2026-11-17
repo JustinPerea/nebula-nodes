@@ -111,7 +111,7 @@ route the configured key selects).
 - **Mask polarity: BLACK = edit.** Identical on both routes ("Black regions in
   the mask should match up with the regions of the image that you would like to
   edit"). The Mask Painter utility node handles this via its "Painted Area
-  Means" setting — paint the region to change, pick *Black = edit (Ideogram)*.
+  Means" setting — paint the region to change, pick *Black = edit · Ideogram*.
 - **Mask dimensions must EXACTLY match the base image** or the API rejects the
   request. Mask Painter exports at the source image's natural size
   automatically.

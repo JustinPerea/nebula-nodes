@@ -267,11 +267,11 @@ No params. Only input is the audio file; output is always MP3.
 
 | Label | API ID | Notes |
 |---|---|---|
-| v3 (Highest Quality) | `eleven_v3` | Best quality |
+| v3 · highest quality | `eleven_v3` | Best quality |
 | Multilingual v2 | `eleven_multilingual_v2` | Default; best balance |
-| Turbo v2.5 (deprecated: use Flash v2.5) | `eleven_turbo_v2_5` | ADDED; ElevenLabs lists it under "Deprecated models" (models page, 2026-10-16). Label says so; value kept for saved graphs |
-| Flash v2.5 (Fastest) | `eleven_flash_v2_5` | Fastest generation |
-| Turbo v2 (deprecated: use Flash v2) | `eleven_turbo_v2` | ADDED; deprecated, as above |
+| Turbo v2.5 · deprecated, use Flash v2.5 | `eleven_turbo_v2_5` | ADDED; ElevenLabs lists it under "Deprecated models" (models page, 2026-10-16). Label says so; value kept for saved graphs |
+| Flash v2.5 · fastest | `eleven_flash_v2_5` | Fastest generation |
+| Turbo v2 · deprecated, use Flash v2 | `eleven_turbo_v2` | ADDED; deprecated, as above |
 | Flash v2 | `eleven_flash_v2` | ADDED |
 
 Eleven v4 isn't on this list: ElevenLabs offers it through Text to Dialogue only ("Eleven v4 is available via the Text to Dialogue API", models page), so it is on `elevenlabs-dialogue`.

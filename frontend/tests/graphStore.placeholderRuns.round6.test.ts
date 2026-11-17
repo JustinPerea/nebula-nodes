@@ -265,7 +265,7 @@ describe("review 5: the person's direct run once the placeholder dialog has show
       const model = askMock.mock.calls[0][0] as PlaceholderRunConfirm;
       expect(model.heading).toBe('Run 1 node Codex is still setting up?');
       expect(model.rows.map((row) => [row.name, row.model, row.price, row.agent?.name ?? null])).toEqual([
-        ['“Hero still”', 'Nano Banana 2 (3.1 Flash)', '$1.20', 'Codex'],
+        ['“Hero still”', 'Nano Banana 2 · 3.1 Flash', '$1.20', 'Codex'],
         ['“Shot 1”', 'Nano Banana', '$1.20', null],
       ]);
       expect(model.runLabel).toBe('Generate for $2.40');

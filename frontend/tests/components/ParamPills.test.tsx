@@ -49,10 +49,10 @@ describe('Create parameter values', () => {
     const onChange = vi.fn();
     render(<ControlledPills def={NODE_DEFINITIONS['identity-edit']}
       initial={{ identity_strength: 0.37 }} onChange={onChange} />);
-    const strength = screen.getByRole('spinbutton', { name: 'Identity Strength' });
+    const strength = screen.getByRole('spinbutton', { name: 'Identity strength' });
     expect(strength).toBeDisabled();
     expect(strength).toHaveValue(0.37);
-    expect(screen.getByText('Identity Strength · unavailable')).toBeVisible();
+    expect(screen.getByText('Identity strength · unavailable')).toBeVisible();
     expect(strength).toHaveAttribute('aria-description', expect.stringContaining('without an identity-strength control'));
     fireEvent.change(strength, { target: { value: '0.9' } });
     expect(onChange).not.toHaveBeenCalled();
@@ -172,24 +172,24 @@ describe('Create parameter values', () => {
 });
 
 describe('Create pills per-model Max Tokens', () => {
-  it('moves Max Tokens with the model and notes it', () => {
+  it('moves Max tokens with the model and notes it', () => {
     const onChange = vi.fn();
     render(<ControlledPills def={NODE_DEFINITIONS['gpt-4o-chat']}
       initial={{ model: 'gpt-5.4', max_completion_tokens: 4096, reasoning_effort: 'medium' }} onChange={onChange} />);
     fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'gpt-6-sol' } });
     expect(onChange).toHaveBeenLastCalledWith({ model: 'gpt-6-sol', max_completion_tokens: 25000, reasoning_effort: 'medium' });
-    expect(screen.getByRole('spinbutton', { name: 'Max Tokens' })).toHaveValue(25000);
-    expect(screen.getByRole('note')).toHaveTextContent('Max Tokens moved to 25,000, the GPT-6 Sol default.');
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Max Tokens' }), { target: { value: '9000' } });
+    expect(screen.getByRole('spinbutton', { name: 'Max tokens' })).toHaveValue(25000);
+    expect(screen.getByRole('note')).toHaveTextContent('Max tokens moved to 25,000, the GPT-6 Sol default.');
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Max tokens' }), { target: { value: '9000' } });
     expect(screen.queryByRole('note')).toBeNull();
     fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'gpt-5.4' } });
     expect(onChange).toHaveBeenLastCalledWith({ model: 'gpt-5.4', max_completion_tokens: 9000, reasoning_effort: 'medium' });
-    expect(screen.getByRole('note')).toHaveTextContent('Max Tokens stays at 9,000, the value you set. The GPT-5.4 default is 4,096.');
+    expect(screen.getByRole('note')).toHaveTextContent('Max tokens stays at 9,000, the value you set. The GPT-5.4 default is 4,096.');
   });
 
-  it('shows the model\'s default when the draft stores no Max Tokens', () => {
+  it('shows the model\'s default when the draft stores no Max tokens', () => {
     render(<ParamPills def={NODE_DEFINITIONS['gpt-4o-chat']} params={{ model: 'gpt-5.4' }} onChange={vi.fn()} />);
-    expect(screen.getByRole('spinbutton', { name: 'Max Tokens' })).toHaveValue(4096);
+    expect(screen.getByRole('spinbutton', { name: 'Max tokens' })).toHaveValue(4096);
   });
 
   it('drops the note when another node or a preset replaces the values', () => {
@@ -200,7 +200,7 @@ describe('Create pills per-model Max Tokens', () => {
     const moved = onChange.mock.lastCall![0] as Record<string, unknown>;
     // The parent stores a copy, as the Create draft does; the note stays.
     rerender(<ParamPills def={NODE_DEFINITIONS['gpt-4o-chat']} params={{ ...moved }} onChange={onChange} />);
-    expect(screen.getByRole('note')).toHaveTextContent('Max Tokens moved to 25,000, the GPT-6 Sol default.');
+    expect(screen.getByRole('note')).toHaveTextContent('Max tokens moved to 25,000, the GPT-6 Sol default.');
     // A preset on the same node swaps the values: the note goes.
     rerender(<ParamPills def={NODE_DEFINITIONS['gpt-4o-chat']}
       params={{ model: 'gpt-6-sol', max_completion_tokens: 3000, reasoning_effort: 'high' }} onChange={onChange} />);
@@ -208,7 +208,7 @@ describe('Create pills per-model Max Tokens', () => {
     // A new note, then switching to another node: the note goes.
     fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'gpt-5.4' } });
     rerender(<ParamPills def={NODE_DEFINITIONS['gpt-4o-chat']} params={onChange.mock.lastCall![0]} onChange={onChange} />);
-    expect(screen.getByRole('note')).toHaveTextContent('Max Tokens stays at 3,000, the value you set.');
+    expect(screen.getByRole('note')).toHaveTextContent('Max tokens stays at 3,000, the value you set.');
     rerender(<ParamPills def={NODE_DEFINITIONS['gemini-chat']} params={{ model: 'gemini-3.6-flash', max_tokens: 8192 }} onChange={onChange} />);
     expect(screen.queryByRole('note')).toBeNull();
   });

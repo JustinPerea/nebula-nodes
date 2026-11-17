@@ -190,11 +190,11 @@ describe('snapForRoute (a person switching provider)', () => {
   it("turns off another route's setting the new route refuses and shows no control for (FLUX 3 Video's Draft)", () => {
     const video = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['flux-3-video'];
     expect(snapForRoute(video, { _provider: 'openrouter', draft: true }, 'openrouter')).toEqual({
-      params: { _provider: 'openrouter', draft: false }, notes: ["Draft (fast preview) isn't on OpenRouter: turned off"],
+      params: { _provider: 'openrouter', draft: false }, notes: ["Draft isn't on OpenRouter: turned off"],
     });
     // Before the click the rows name the setting, not its value.
     const before = providerSwitchState(video, { _provider: 'bfl', draft: true }, context({ BFL_API_KEY: KEY }));
-    expect(before.rows.find((row) => row.id === 'krea')?.block).toBe("Doesn’t take “Draft (fast preview)”.");
+    expect(before.rows.find((row) => row.id === 'krea')?.block).toBe("Doesn’t take “Draft”.");
     // A route that offers the param keeps it, and an unset one is left alone.
     expect(snapForRoute(video, { draft: true }, 'fal')).toEqual({ params: { draft: true }, notes: [] });
     expect(snapForRoute(video, {}, 'krea')).toEqual({ params: {}, notes: [] });
@@ -298,7 +298,7 @@ describe('snapHidden (a person editing a setting that controls a hidden one)', (
     const auto = providerSwitchState(flux2, { model: 'klein-9b', safety_tolerance: '5' }, context({ FAL_KEY: KEY }));
     expect(auto.rows[0].label).toBe("Auto · fal.ai doesn’t take “Safety”");
     expect(fixLabel(flux2, { param: 'seed', value: null })).toBe('Clear Seed');
-    expect(fixLabel(flux2, { param: 'enable_safety_checker', value: true })).toBe('Turn Safety Checker on');
+    expect(fixLabel(flux2, { param: 'enable_safety_checker', value: true })).toBe('Turn Safety checker on');
     expect(applyFix({ seed: 4, model: 'pro' }, { param: 'seed', value: null })).toEqual({ model: 'pro' });
   });
 });

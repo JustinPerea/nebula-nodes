@@ -152,12 +152,6 @@
     },
     {
       "family": "straight-quotes",
-      "file": "backend/execution/maker_routes_google.py",
-      "rule": "straight-quote",
-      "text": "Identity Edit can't take a mask on the Nano Banana 2 endpoint. Disconnect “Mask (unavailable)”, then run the node again."
-    },
-    {
-      "family": "straight-quotes",
       "file": "backend/execution/maker_routes_ideogram_runway.py",
       "rule": "straight-quote",
       "text": "Ideogram's API takes one character reference image per request, and {} are connected. Disconnect all but one, then run the node again."

@@ -686,7 +686,7 @@ function optionLabelOf(param: ParamDefinition | undefined, value: unknown): stri
  * "Grounding off", "Draft (fast preview)" (a switch that is on), or just the
  * label for text (node_route._setting_text). */
 export function settingText(param: ParamDefinition | undefined, key: string, value: unknown): string {
-  const label = param?.label || universalSettingLabel(key);
+  const label = paramName(param, key, universalSettingLabel(key));
   if (Array.isArray(param?.options) && param.options.length) return `${label} ${optionLabelOf(param, value)}`;
   if (typeof value === 'boolean') return value ? label : `${label} off`;
   if (typeof value === 'number') return `${label} ${matchValue(value)}`;
@@ -1044,8 +1044,14 @@ function why(route: RouteSpec, block: DirectBlock): string {
 // less any note in parentheses, no parentheses, "seconds" for "s".
 // node_route._why_person and _fix_person are the same, word for word.
 
+/** A setting's label as a line names it: an aside after " · " left out
+ * (node_route._param_label). */
+export function paramName(spec: { label?: string } | undefined, key: string, fallback = key): string {
+  return String(spec?.label || fallback).split(' · ')[0].trim();
+}
+
 function plain(text: string): string {
-  return String(text).replace(/\s*\([^)]*\)/g, '').trim();
+  return String(text).split(' · ')[0].replace(/\s*\([^)]*\)/g, '').trim();
 }
 
 /** A rule's own label ("a video continuation longer than 15 s") in GM's rules. */
@@ -1059,7 +1065,7 @@ function paramDef(definition: RoutedDefinition, key: string): ParamDefinition | 
 
 /** “Draft (fast preview)” on, “Safety” set to 5, “Resolution” set to 1.5K. */
 function personSetting(param: ParamDefinition | undefined, key: string, value: unknown): string {
-  const label = `“${param?.label || universalSettingLabel(key)}”`;
+  const label = `“${paramName(param, key, universalSettingLabel(key))}”`;
   if (Array.isArray(param?.options) && param.options.length && hasValue(value)) {
     return `${label} set to ${plain(optionLabelOf(param, value))}`;
   }
@@ -1084,7 +1090,7 @@ export function blockedSetting(definition: RoutedDefinition, block: Partial<Dire
     const value = hasValue(params[param]) ? params[param] : block.detail.slice(param.length + 1);
     return personSetting(spec, param, value);
   }
-  return `“${spec?.label || param}”`;
+  return `“${paramName(spec, param)}”`;
 }
 
 /** How a `hidden` stop is fixed without a switch, as the action's first
@@ -1092,7 +1098,7 @@ export function blockedSetting(definition: RoutedDefinition, block: Partial<Dire
  * (node_route._hidden_fix_person). */
 function hiddenFixSentence(definition: ModelNodeDefinition, param: string): string {
   const spec = paramDef(definition, param);
-  const label = `“${spec?.label || param}”`;
+  const label = `“${paramName(spec, param)}”`;
   const fallback = spec?.default;
   if (fallback === undefined || fallback === null) return `Clear ${label}`;
   if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}`;
@@ -1104,7 +1110,7 @@ function hiddenFixSentence(definition: ModelNodeDefinition, param: string): stri
 function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Record<string, unknown>): string {
   const param = block.param ?? '';
   const spec = param ? paramDef(definition, param) : undefined;
-  const label = param ? `“${spec?.label || param}”` : '';
+  const label = param ? `“${paramName(spec, param)}”` : '';
   if (block.reason === 'hidden') {
     let setting = personSetting(spec, param, params[param]);
     const stop = hiddenStops(definition, route, params).find((candidate) => candidate.param === param);
@@ -1151,7 +1157,7 @@ function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   const one = (text: string): FixClause => ({ text, options: 1 });
   if (block.reason === 'hidden') return one(hiddenFixSentence(definition, param));
   const values = acceptedValues(route, block);
-  const label = `“${spec?.label || param}”`;
+  const label = `“${paramName(spec, param)}”`;
   if (spec?.type === 'boolean' && (block.reason === 'unsupported' || block.reason === 'blocked')) {
     const on = ['true', WIRED].includes(matchValue(params[param]));
     return one(`Turn ${label} ${on || block.reason === 'blocked' ? 'off' : 'on'}`);

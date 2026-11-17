@@ -905,11 +905,11 @@
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
-   "many": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
-   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai.",
-   "logOne": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai. Then run the node again.",
-   "logMany": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to fal.ai. Then run the nodes again."
+   "one": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to fal.ai.",
+   "many": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to fal.ai.",
+   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to fal.ai.",
+   "logOne": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1015,11 +1015,11 @@
    "kind": "route_block",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
-   "many": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
-   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai.",
-   "logOne": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai. Then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, or switch to fal.ai. Then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai.",
+   "many": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai.",
+   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai.",
+   "logOne": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai. Then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, or switch to fal.ai. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1105,11 +1105,11 @@
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
-   "many": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
-   "line": "“FLUX 3 Video” can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
-   "logOne": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the node again.",
-   "logMany": "can’t run on Krea with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the nodes again."
+   "one": "can’t run on Krea with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "many": "can’t run on Krea with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "line": "“FLUX 3 Video” can’t run on Krea with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "logOne": "can’t run on Krea with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the node again.",
+   "logMany": "can’t run on Krea with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1125,21 +1125,21 @@
    "kind": "route_block",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
-   "many": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
-   "line": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate.",
-   "logOne": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate. Then run the node again.",
-   "logMany": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, or switch to Black Forest Labs or Replicate. Then run the nodes again."
+   "one": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, or switch to Black Forest Labs or Replicate.",
+   "many": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, or switch to Black Forest Labs or Replicate.",
+   "line": "“FLUX 3 Image” can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, or switch to Black Forest Labs or Replicate.",
+   "logOne": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, or switch to Black Forest Labs or Replicate. Then run the node again.",
+   "logMany": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, or switch to Black Forest Labs or Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
    "node": "flux-3-video",
    "name": "FLUX 3 Video",
-   "one": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
-   "many": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
-   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate.",
-   "logOne": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the node again.",
-   "logMany": "can’t run on OpenRouter with “Draft (fast preview)” on. Turn “Draft (fast preview)” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the nodes again."
+   "one": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "many": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "line": "“FLUX 3 Video” can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate.",
+   "logOne": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the node again.",
+   "logMany": "can’t run on OpenRouter with “Draft” on. Turn “Draft” off, or switch to Black Forest Labs, fal.ai or Replicate. Then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1155,11 +1155,11 @@
    "kind": "route_block",
    "node": "flux-2-pro",
    "name": "FLUX.2",
-   "one": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on.",
-   "many": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on.",
-   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on.",
-   "logOne": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, then run the node again.",
-   "logMany": "can’t run on Black Forest Labs with “Safety Checker” off. Turn “Safety Checker” on, then run the nodes again."
+   "one": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on.",
+   "many": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on.",
+   "line": "“FLUX.2” can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on.",
+   "logOne": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, then run the node again.",
+   "logMany": "can’t run on Black Forest Labs with “Safety checker” off. Turn “Safety checker” on, then run the nodes again."
   },
   {
    "kind": "route_block",
@@ -1175,11 +1175,11 @@
    "kind": "route_block",
    "node": "flux-3-image",
    "name": "FLUX 3 Image",
-   "one": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on.",
-   "many": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on.",
-   "line": "“FLUX 3 Image” can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on.",
-   "logOne": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, then run the node again.",
-   "logMany": "can’t run on fal.ai with “Grounding (web + image search)” off. Turn “Grounding (web + image search)” on, then run the nodes again."
+   "one": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on.",
+   "many": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on.",
+   "line": "“FLUX 3 Image” can’t run on fal.ai with “Grounding” off. Turn “Grounding” on.",
+   "logOne": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, then run the node again.",
+   "logMany": "can’t run on fal.ai with “Grounding” off. Turn “Grounding” on, then run the nodes again."
   },
   {
    "kind": "route_block",

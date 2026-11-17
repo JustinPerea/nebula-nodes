@@ -58,7 +58,7 @@ describe('moodboard adapter entries', () => {
     expect(line('fast-sdxl')).toBe('This model takes the brief as text.');
     expect(line('gpt-image-2-edit')).toBe('Moodboard images: off · the brief goes as text');
     expect(line('nano-banana')).toBe('Moodboard images: off · the brief goes as text');
-    expect(line('krea-2-generate')).toBe('Moodboard images: on · up to 10 to Image Style Refs');
+    expect(line('krea-2-generate')).toBe('Moodboard images: on · up to 10 to Image style refs');
     expect(adapterLine(null, NODE_DEFINITIONS['flux-2-pro'])).toBe('This model takes the brief as text.');
   });
 });
