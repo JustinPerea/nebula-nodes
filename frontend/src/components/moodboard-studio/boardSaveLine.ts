@@ -157,7 +157,7 @@ export function isLostAddLine(failure: FailureCopy | string | null | undefined):
 const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
   name: 'name', notes: 'notes', mode: 'mode', strength: 'strength', direction: 'direction', avoid: 'avoid list',
   pinnedColors: 'pinned colors', briefOverride: 'brief', clashMode: 'clash setting', colorChoices: 'color choices',
-  sendNotes: 'notes setting', analysis: 'analysis', cover: 'cover',
+  sendNotes: '“Moodboard notes to generators” setting', analysis: 'analysis', cover: 'cover',
 };
 
 /**
@@ -170,7 +170,7 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
  *   the change."; for several, "Nebula couldn’t save your changes to “A”
  *   and “B” because they were deleted. Restore them to keep the changes."
  * - Gone for good (red, no Retry): "Nebula couldn’t save your change to
- *   “Rivers” because the board was deleted somewhere else."; for several,
+ *   “Rivers” because the moodboard was deleted somewhere else."; for several,
  *   "…your changes to 4 moodboards because they were deleted somewhere else."
  */
 export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'purged'): { text: string; title: string } {

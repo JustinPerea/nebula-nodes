@@ -11,13 +11,13 @@ once in ``services/moodboard_edits`` (GM - Design, PR #233): a board or a
 project is its curly name ("Added image 3 to “Dusk”", never "board Dusk"), an
 image is "image 3" in a sentence ("#3" is for badges and chips), clauses join
 with "and", a field is a quoted label ("Changed “Direction” on “Dusk” and
-turned off “Send notes to generators”"), and an undo is "Undid a change to “Dusk”". A say
+turned off “Moodboard notes to generators”"), and an undo is "Undid a change to “Dusk”". A say
 has no period. The journal's summary is the same phrase, lower-case, since
 the actor's name leads it.
 
 A change to a board (an edit batch or a ``PUT``) is said in ``journal_entry``'s
 summary, so the Agent log and the journal never describe one change two
-ways. Only Send notes says which way it went here ("turned off"), since the
+ways. Only the notes setting says which way it went here ("turned off"), since the
 journal names fields, never values. The lines for writes the journal has no
 event for (make, Analyze, Keep, move, delete, restore) name the board through
 the same ``board_where``.

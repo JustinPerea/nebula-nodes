@@ -106,7 +106,7 @@ def test_the_persons_undo_or_redo_carries_the_shots_too(api, rendering, person, 
         "remove": [], "wire": [], "unwire": []})
     assert reply.status_code == 409
     body = reply.json()
-    assert body["detail"] == f"Couldn’t {action}. It would remove “Shot 2”, which is still running. Stop the run first."
+    assert body["detail"] == f"Nebula couldn’t {action} because it would remove “Shot 2”, which is still running. Stop the run first."
     assert body["code"] == "rendering_shots"
     assert body["rendering"] == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
 

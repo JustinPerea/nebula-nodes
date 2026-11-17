@@ -16,10 +16,10 @@ export const WORLD_LABS_STARTING = "A World Labs run is still starting. Try agai
  * bar's "I’ve checked Marble". The Projects screen's own check says it too
  * (projectStore worldLabsHold). */
 export const WORLD_LABS_NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the top of the screen.";
-/** A saved recovery ID: "“<node>”" and then this (Run History's "Forget ID"). */
-export const RECOVERY_ID_SAVED_TAIL = " has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.";
+/** A saved recovery ID: "“<node>”" and then this (Run history's "Forget ID"). */
+export const RECOVERY_ID_SAVED_TAIL = " has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.";
 
-/** The status bar's button and Run History's (GM, round 13 of PR #114; the
+/** The status bar's button and Run history's (GM, round 13 of PR #114; the
  * curly apostrophe, GM r33 on PR #199). Every line that names the button
  * (its accessible names, the held reopen's line) quotes this constant. */
 export const UNLOCK_LABEL = 'I’ve checked Marble';
@@ -41,7 +41,7 @@ export function recordNodeName(nodes: readonly { id: string; data?: { label?: un
 }
 
 /** A record whose node isn't this project's (or can't be known to be),
- * named in Run History, Forget ID and the unlock (GM r34 A1 and its
+ * named in Run history, Forget ID and the unlock (GM r34 A1 and its
  * addendum on PR #199): never the open canvas's node with the same id. Its
  * type when the record knows it (GM r36 item 1): otherWorldLabsNode. */
 export const OTHER_PROJECT_WORLD_LABS_NODE = 'A World Labs node from another project';
@@ -135,11 +135,11 @@ export const UNLOCK_RUN_ARIA = `${UNLOCK_LABEL}. Unlock this World Labs run.`;
 export function forgetHeading(name: string): string {
   return `Forget the recovery ID for ${name}?`;
 }
-/** Run History's "Forget ID" button's accessible name (GM, round 14); the row stays its description. */
+/** Run history's "Forget ID" button's accessible name (GM, round 14); the row stays its description. */
 export function forgetAriaLabel(name: string): string {
   return `Forget the recovery ID for ${name}`;
 }
-/** A Run History safeguard row: "“<node>” · Operation ID" or "· World ID", then the ID in mono (GM, round 14). */
+/** A Run history safeguard row: "“<node>” · Operation ID" or "· World ID", then the ID in mono (GM, round 14). */
 export function recoveryIdLabel(existingWorldId: string | null): string {
   return existingWorldId ? 'World ID' : 'Operation ID';
 }
@@ -169,7 +169,7 @@ export const RECOVERY_ID_FORGET_CLAUSE = 'it has a saved World Labs recovery ID.
  * - forget (GM, round 16: "It" when the node holding the ID is the one
  *   being deleted, its name when it's another; curly quotes on the button):
  *   "Couldn’t delete “<node>”. It has a saved World Labs recovery ID. Check
- *   the run in Marble, then use “Forget ID” in Run History."
+ *   the run in Marble, then use “Forget ID” in Run history."
  * With no name known it reads "Couldn’t delete the node." and "It has a
  * saved …".
  *
@@ -184,10 +184,10 @@ export const RECOVERY_ID_FORGET_CLAUSE = 'it has a saved World Labs recovery ID.
  * - the forget forms with some held end "Check Marble, then use Run
  *   History."
  * - every one held, forget (GM, 2026-10-24): "Couldn’t delete them. They're
- *   waiting on World Labs. Check Marble and Run History."
+ *   waiting on World Labs. Check Marble and Run history."
  *
  * `unlock`: a held node has an unconfirmed start (the status bar's "I've
- * checked Marble"); else a recovery record (Run History's "Forget ID"). `held`
+ * checked Marble"); else a recovery record (Run history's "Forget ID"). `held`
  * is how many of the `count` nodes hold World Labs state; `name` the one
  * node's card title in quotes (recordNodeName).
  */

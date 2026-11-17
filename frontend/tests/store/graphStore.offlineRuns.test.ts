@@ -60,7 +60,7 @@ beforeEach(() => {
 type Attempt = [string, () => unknown];
 const RUNS: Attempt[] = [
   ['executeGraph (bottom Run, Cmd+Enter)', () => useGraphStore.getState().executeGraph()],
-  ['executeNode (Run This Node)', () => useGraphStore.getState().executeNode('n1')],
+  ['executeNode (Run this node)', () => useGraphStore.getState().executeNode('n1')],
   ['executeCluster (selection Run)', () => useGraphStore.getState().executeCluster(['n1'])],
   ['executeClusterConcurrent (Create)', () => useGraphStore.getState().executeClusterConcurrent(['n1'])],
   ['executeShot', () => useGraphStore.getState().executeShot('n1', 's1')],

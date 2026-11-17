@@ -36,7 +36,7 @@ from services.provider_start_guard import ProviderStartGuard, ProviderStartPersi
 pytestmark = pytest.mark.usefixtures("spending_limits_off")
 
 NO_RECORD = ("Nebula has no record of run {id}. If it started before Nebula restarted, "
-             "check Run History for what it did.")
+             "check Run history for what it did.")
 
 
 @pytest.fixture(autouse=True)

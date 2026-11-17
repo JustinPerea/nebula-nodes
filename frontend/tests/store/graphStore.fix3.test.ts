@@ -99,7 +99,7 @@ describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refus
     useGraphStore.getState().undo();
     await sleep(30);
     expect(restoresSent()).toBe(0);
-    expect(notice()).toBe("Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.");
+    expect(notice()).toBe("Nebula couldn’t undo because it would remove “Shot 2”, which is still running. Stop the run first.");
     expect(shotsOf().map((shot) => shot.id)).toEqual(['s1', added]);
     expect((shotsOf()[1].output as { status: string }).status).toBe('running');
     expect(useGraphStore.getState().undoStack).toHaveLength(stacks.undo);
@@ -112,7 +112,7 @@ describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refus
     useGraphStore.getState().undo();
     await sleep(30);
     expect(restoresSent()).toBe(0);
-    expect(notice()).toBe("Couldn’t undo. It would remove “Shot 2”, which is still running. Wait for it to finish.");
+    expect(notice()).toBe("Nebula couldn’t undo because it would remove “Shot 2”, which is still running. Wait for it to finish.");
   });
 
   it('Redo of a remove-shot step after the shot is regenerated: "Couldn’t redo. …"', async () => {
@@ -127,15 +127,15 @@ describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refus
     useGraphStore.getState().redo();
     await sleep(30);
     expect(restoresSent()).toBe(0);
-    expect(notice()).toBe("Couldn’t redo. It would remove “Shot 2”, which is still running. Stop the run first.");
+    expect(notice()).toBe("Nebula couldn’t redo because it would remove “Shot 2”, which is still running. Stop the run first.");
     expect(shotsOf().map((shot) => shot.id)).toEqual(['s1', 's2']);
   });
 
   it('several shots: named up to three, counted from four', () => {
     expect(renderingRemovalLine('undo', { numbers: [2, 3], stoppable: true }))
-      .toBe("Couldn’t undo. It would remove “Shot 2” and “Shot 3”, which are still running. Stop the run first.");
+      .toBe("Nebula couldn’t undo because it would remove “Shot 2” and “Shot 3”, which are still running. Stop the run first.");
     expect(renderingRemovalLine('redo', { numbers: [1, 2, 3, 4], stoppable: false }))
-      .toBe("Couldn’t redo. It would remove 4 shots that are still running. Wait for it to finish.");
+      .toBe("Nebula couldn’t redo because it would remove 4 shots that are still running. Wait for it to finish.");
   });
 
   it('an undo that takes nothing rendering away is still sent', async () => {

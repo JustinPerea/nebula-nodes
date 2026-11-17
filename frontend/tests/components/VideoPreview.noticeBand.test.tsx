@@ -7,7 +7,7 @@
  *
  * - the timecode readout (`.editor-preview__hud`, "00:00:01:12 / 00:00:05:00"
  *   and the "Rendered" tag) sits on the preview's top edge instead;
- * - after Render Preview, the rendered video shows its own native controls on
+ * - after Render preview, the rendered video shows its own native controls on
  *   its bottom edge. The preview then stops the picture above the notice
  *   region's reserved band, the way floating panels do (GM, round 2:
  *   "Floating panels stop above a reserved notice band, whether or not a

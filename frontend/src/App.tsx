@@ -143,7 +143,7 @@ export default function App() {
   // List prices for the Run estimate and the cost confirm, fetched once.
   useEffect(() => { void usePricingStore.getState().load(); }, []);
 
-  // Run History, the tour, the chat, the Inspector, the palette, the mask
+  // Run history, the tour, the chat, the Inspector, the palette, the mask
   // painter, the node mesh / world viewers and more live outside the startup
   // entry (lib/deferredChunks.ts). Fetch them once the first paint is done so
   // a later first open never waits on the network.

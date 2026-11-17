@@ -72,11 +72,11 @@ const surfaces: Surface[] = [
     useUIStore.getState().selectNode('n1');
     render(<Inspector embedded />);
   } },
-  { where: 'the context menu', line: KEYED_LINE, name: 'Run This Node', keptLine: keptLockTitle('run'), mount: () => {
+  { where: 'the context menu', line: KEYED_LINE, name: 'Run this node', keptLine: keptLockTitle('run'), mount: () => {
     useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n1', null);
     render(<ContextMenu />);
   } },
-  { where: 'Run History', line: KEYED_LINE, name: 'Rerun Full canvas', keptLine: keptLockTitle('rerun'), mount: () => {
+  { where: 'Run history', line: KEYED_LINE, name: 'Rerun Full canvas', keptLine: keptLockTitle('rerun'), mount: () => {
     render(<RunHistoryPanel />);
   } },
   { where: "the toolbar's Run", line: CANVAS_LINE, name: /^Run/, keptLine: keptLockTitle('run-nodes'), mount: () => {

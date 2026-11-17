@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunRecord } from '../src/lib/runHistory';
 import { keyIdolInEachTest } from './helpers/keyedSpace';
 
-// PR #203 round 6 review, NIT-5: the Run History lock map is read again only
+// PR #203 round 6 review, NIT-5: the Run history lock map is read again only
 // when a record, the keys or the canvas's placeholders change, never on a
 // drag. Its deps were pinned only as a function (placeholderKey); this pins
 // the wiring at the panel.
@@ -33,7 +33,7 @@ const idolNode = (x: number, pending = false) => ({
   data: { definitionId: 'speridlabs-idol', label: 'Idol', params: {}, state: 'idle', outputs: {}, ...(pending ? { pending: PENDING } : {}) },
 });
 
-describe('Run History lock map memo (review r6 NIT-5)', () => {
+describe('Run history lock map memo (review r6 NIT-5)', () => {
   keyIdolInEachTest();
 
   beforeEach(() => {

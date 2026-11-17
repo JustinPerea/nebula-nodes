@@ -8,7 +8,7 @@ import type { NodeData } from '../src/types';
  * GM, PR #203 r11 item 3, and the round 6 review's LOW-2: one lock order on
  * every Run surface. A missing key comes first (it is the one thing the
  * person has to do), then canvasLock's order: the run, following an agent's
- * switch, offline; then the control's own state. Run History pins it in
+ * switch, offline; then the control's own state. Run history pins it in
  * tests/RunHistoryPanel.test.tsx and Accept in tests/ProposalBar.test.tsx;
  * this pins the rest behaviourally, each surface in each state, with the key
  * missing and with it set. The key-missing rows also pin that a key-locked
@@ -86,7 +86,7 @@ const surfaces: Surface[] = [
   { where: 'the context menu', line: KEYED_LINE, running: executing, mount: () => {
     useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n1', null);
     render(<ContextMenu />);
-  }, name: 'Run This Node' },
+  }, name: 'Run this node' },
   { where: 'the deferred-run notice', line: KEYED_LINE, running: executing, mount: () => {
     useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds: ['n1'] }, runDeferred: sends.runDeferred } as never);
     render(<DeferredRunNotice />);

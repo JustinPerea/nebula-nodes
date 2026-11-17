@@ -64,7 +64,7 @@ export function askedOrder(left: { at: number; id: string }, right: { at: number
  * name in the text could spoof a count. A cover says which kind (GM, PR #200
  * follow-up 2); a ref without it keeps GM r34's "proposes a new cover". */
 function headerFor(kind: AssetProposalKind, ref: AgentNoteProposal | null | undefined): string {
-  if (kind === 'moodboard') return 'asks to send these notes to generators';
+  if (kind === 'moodboard') return 'asks to turn on “Moodboard notes to generators”';
   if (kind === 'commons') {
     const count = changesOf(ref);
     return count === 1 ? 'proposes a change to this reference' : `proposes ${count} changes to this reference`;

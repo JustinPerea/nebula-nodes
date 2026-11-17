@@ -400,7 +400,7 @@ def test_the_persons_undo_that_removes_a_rendering_shot_reads_gms_line(api, rend
             "remove": [], "wire": [], "unwire": []})
         assert response.status_code == 409, response.text
         assert response.json()["detail"] == (
-            f"Couldn’t {verb}. It would remove “Shot 2”, which is still running. Stop the run first.")
+            f"Nebula couldn’t {verb} because it would remove “Shot 2”, which is still running. Stop the run first.")
     # An agent's restore keeps the specific detail, run id and all.
     response = client.post("/api/graph/restore", headers=AGENT, json={"action": "undo", "nodes": [
         {"id": node, "definitionId": "cinema-scene", "params": {"scene": _scene("s1")}}],
@@ -449,7 +449,7 @@ def test_deleting_a_scene_while_its_shot_renders_is_refused(api, rendering, pers
                                                                   "remove": [node], "wire": [], "unwire": []})
     assert undo.status_code == 409
     assert undo.json()["detail"] == (
-        "Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.")
+        "Nebula couldn’t undo because it would remove “Shot 2”, which is still running. Stop the run first.")
     assert node in graph.nodes
     rendering.discard("run-x")
     assert client.delete(f"/api/graph/node/{node}", headers=AGENT).status_code == 200

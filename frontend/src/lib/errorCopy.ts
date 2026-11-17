@@ -694,8 +694,9 @@ function statusClause(reason: string, status: number | undefined, beside: 'alone
   return null;
 }
 
-/** The pattern rows: refusal_copy.gone and the Recently deleted line, whatever the thing is called. */
+/** The pattern rows: refusal_copy.gone, the Recently deleted line, and the upload limit's 413 ("File exceeds 500 MB limit"), whatever the thing is called. */
 const GONE_LINE = /^That .+? isn['’]t there anymore\. (Reload to get the latest .+\.)$/;
+const FILE_OVER_LIMIT_LINE = /^File exceeds (\d+(?:\.\d+)?) MB limit\.?$/;
 const GONE_FROM_TRASH_LINE = /^That .+? isn['’]t in Recently deleted anymore\. (Reload to get the latest list\.)$/;
 
 /** A clause from the status rows, the table or the pattern rows; null when the reason is none of them. */
@@ -707,6 +708,8 @@ function clauseFromTables(reason: string, status: number | undefined, beside: 'a
   if (row) return beside === 'button' ? row.button ?? row.alone : row.alone;
   const gone = GONE_LINE.exec(said);
   if (gone) return `it isn’t there anymore. ${gone[1]}`;
+  const over = FILE_OVER_LIMIT_LINE.exec(said);
+  if (over) return `it’s over the ${over[1].replace(/\.0+$/, '')} MB limit.`;
   const trashed = GONE_FROM_TRASH_LINE.exec(said);
   return trashed ? `it isn’t in Recently deleted anymore. ${trashed[1]}` : null;
 }

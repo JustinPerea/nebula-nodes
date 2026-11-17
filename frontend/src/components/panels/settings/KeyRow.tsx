@@ -156,7 +156,7 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
   return (
     <div onKeyDownCapture={onKeyDownCapture}>
       <ProviderRow id={spec.key} moved={moved} tone={state.tone} name={spec.label} status={state.status} statusTone={state.statusTone}
-        summary={summary} wrapSummary={summary === spec.note} title={configured ? readiness.detail : undefined}
+        summary={summary} wrapSummary={summary === spec.note} title={[spec.noteTitle, configured ? readiness.detail : undefined].filter(Boolean).join(' ') || undefined}
         action={action}>
         {open === 'manage' && (
           <div id={bodyId} className="settings-row__manage">

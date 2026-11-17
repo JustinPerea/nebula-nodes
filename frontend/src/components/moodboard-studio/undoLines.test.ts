@@ -24,20 +24,22 @@ describe('the undo and redo toasts’ words (design r160 and r161)', () => {
 
   it('says a field step changed again, naming the field from its key (every step label and its sentence)', () => {
     const sentences: Record<string, [string, string]> = {
-      name: ['Name', 'the name'], notes: ['Moodboard notes', 'the moodboard notes'], mode: ['Mode', 'the mode'],
-      strength: ['Strength', 'the strength'], direction: ['Direction', 'the direction'], avoid: ['Avoid', 'the avoid list'],
-      pinnedColors: ['Pinned colors', 'the pinned colors'], clashMode: ['Clash mode', 'the clash mode'],
-      colorChoices: ['Color choices', 'the color choices'], sendNotes: ['Send notes to generators', '“Moodboard notes to generators”'],
-      briefOverride: ['Your brief', 'the brief'], coverImageId: ['Made image 2 the cover', 'the cover'],
+      name: ['Changed the name', 'the name'], notes: ['Changed the moodboard notes', 'the moodboard notes'],
+      mode: ['Changed the mode', 'the mode'], strength: ['Changed the strength', 'the strength'],
+      direction: ['Changed the direction', 'the direction'], avoid: ['Changed the avoid list', 'the avoid list'],
+      pinnedColors: ['Changed the pinned colors', 'the pinned colors'], clashMode: ['Changed the clash mode', 'the clash mode'],
+      colorChoices: ['Changed the color choices', 'the color choices'],
+      sendNotes: ['Turned on “Moodboard notes to generators”', '“Moodboard notes to generators”'],
+      briefOverride: ['Changed the brief', 'the brief'], coverImageId: ['Made image 2 the cover', 'the cover'],
     };
     for (const [field, [label, said]] of Object.entries(sentences)) {
       expect(keptUndoLine(label, [{ part: 'fields', field, reason: 'changed since' }]), field)
-        .toBe(`Nebula couldn’t undo “${label}” because ${said} changed again after that.`);
+        .toBe(`Nebula couldn’t undo “${label.replace(/“/g, '‘').replace(/”/g, '’')}” because ${said} changed again after that.`);
     }
-    expect(keptUndoLine('Pinned colors', [{ part: 'fields', field: 'pinnedColors', reason: 'changed since' },
+    expect(keptUndoLine('Changed the pinned colors', [{ part: 'fields', field: 'pinnedColors', reason: 'changed since' },
       { part: 'fields', field: 'colorChoices', reason: 'changed since' }]))
-      .toBe('Nebula couldn’t undo “Pinned colors” because the pinned colors and the color choices changed again after that.');
-    expect(keptUndoLine('Direction', [{ part: 'fields', reason: 'changed since' }])).toBeNull();
+      .toBe('Nebula couldn’t undo “Changed the pinned colors” because the pinned colors and the color choices changed again after that.');
+    expect(keptUndoLine('Changed the direction', [{ part: 'fields', reason: 'changed since' }])).toBeNull();
   });
 
   it('says an image was removed since', () => {
@@ -49,11 +51,32 @@ describe('the undo and redo toasts’ words (design r160 and r161)', () => {
       .toBe('Nebula couldn’t undo “x” because image 1 changed and image 2 was removed after that.');
   });
 
+  it('says why a step can\u2019t go back, in the because form (design)', () => {
+    expect(keptUndoLine('Changed the direction', [{ part: 'fields', field: 'direction', reason: 'is the person’s to change' }]))
+      .toBe('Nebula couldn’t undo “Changed the direction” because only you can change the direction.');
+    expect(keptUndoLine('Turned on “Moodboard notes to generators”', [{ part: 'fields', field: 'sendNotes', reason: 'is the person’s to turn on' }]))
+      .toBe('Nebula couldn’t undo “Turned on ‘Moodboard notes to generators’” because only you can turn it on.');
+    expect(keptUndoLine('Changed the pinned colors', [{ part: 'fields', field: 'pinnedColors', reason: 'can’t go back' }]))
+      .toBe('Nebula couldn’t undo “Changed the pinned colors” because a pinned color that step used was removed after that.');
+    expect(keptUndoLine('Changed the pinned colors', [{ part: 'fields', field: 'pinnedColors', reason: 'would undo a colour choice made since' }]))
+      .toBe('Nebula couldn’t undo “Changed the pinned colors” because a color was chosen after that.');
+    expect(keptUndoLine('Moved image 3', [{ part: 'cards', reason: 'can’t go back there', number: 3 }]))
+      .toBe('Nebula couldn’t undo “Moved image 3” because its place on the moodboard was taken or removed after that.');
+    expect(keptUndoLine('Added image 5', [{ part: 'image', reason: 'isn’t one of Nebula’s own files', number: 5 }]))
+      .toBe('Nebula couldn’t undo “Added image 5” because image 5 isn’t one of Nebula’s own files.');
+    expect(keptUndoLine('Changed the note on image 5', [{ part: 'settings', reason: 'changed since', number: 5, settings: ['notes'] }]))
+      .toBe('Nebula couldn’t undo “Changed the note on image 5” because image 5’s note changed after that.');
+  });
+
+  it('names the undone and redone step with single quotes inside its double ones', () => {
+    expect(undoneLine('undo', 'Turned on “Moodboard notes to generators”')).toBe('Undid “Turned on ‘Moodboard notes to generators’”');
+    expect(undoneLine('redo', 'Changed the direction')).toBe('Redid “Changed the direction”');
+  });
+
   it('is not a kept case for an empty list, an unnumbered image slice or another reason', () => {
     expect(keptUndoLine('Changed the direction', [])).toBeNull();
     expect(keptUndoLine('Changed the direction', [{ reason: 'changed since' }])).toBeNull();
-    expect(keptUndoLine('Send notes to generators', [{ part: 'fields', reason: 'is the person’s to turn on' }])).toBeNull();
-    expect(keptUndoLine('Direction', [{ part: 'fields', reason: 'can’t go back' }])).toBeNull();
-    expect(keptUndoLine('x', [{ reason: 'can’t go back there', number: 1 }])).toBeNull();
+    expect(keptUndoLine('Changed the direction', [{ part: 'fields', field: 'direction', reason: 'something else' }])).toBeNull();
+    expect(keptUndoLine('x', [{ reason: 'is an image link from outside Nebula', number: 1 }])).toBeNull();
   });
 });

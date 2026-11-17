@@ -1824,7 +1824,7 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     projectId, projectName, count, fields, detail, note}, `state` one of
     active, ambiguity, recovery, params, bootstrap or run, and `note` says
     which node and project hold and what clears it (the person's Forget ID
-    in Run History for recovery, their "I’ve checked Marble" for ambiguity).
+    in Run history for recovery, their "I’ve checked Marble" for ambiguity).
     It covers Nebula's own holds only: while the person's tab keeps edits
     of its own, an open is refused with code canvas_kept_in_tab, which
     `openHold` doesn't show. A recovered copy's row has `sourceName` (null
@@ -2088,7 +2088,7 @@ def run_no_record_next(run_id: Any) -> str:
     """A run id Nebula has no record of (round 17 of PR #114, review 16 L1):
     it may have run before Nebula restarted, so nothing is said about spend."""
     return (f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
-            "check Run History for what it did.")
+            "check Run history for what it did.")
 
 
 def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
@@ -3457,7 +3457,7 @@ def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     which outputs exist, connections in, state, position, and the last `error`),
     with the connections, `cover` (as list_projects has it), `open`, and
     `runHistory`: the newest 20 of `runHistoryCount` runs from the canvas's
-    Run History, each with what it ran (`nodeIds`), its status and timing,
+    Run history, each with what it ran (`nodeIds`), its status and timing,
     and which outputs it made, never their values. view_output shows an
     output once the project is open. A recovered copy has `sourceName` (null
     when unknown or deleted for good) and `sourceProjectId` (while that

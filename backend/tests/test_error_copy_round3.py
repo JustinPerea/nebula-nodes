@@ -49,7 +49,7 @@ NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the to
 
 
 def RECOVERY(node: str) -> str:
-    return f"“{node}” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History."
+    return f"“{node}” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history."
 
 
 def PARAMS(node: str, fields: str) -> str:
@@ -223,7 +223,7 @@ GRAPH_PAID_STATE_PERSON = {
 
 def _ran_in_the_open_project(run_id: str) -> None:
     """The open project's stored run history has ``run_id`` (the tab's
-    autosave of its Run History): a held record of that run is the open
+    autosave of its Run history): a held record of that run is the open
     project's, so the person's line names the live node by its card title.
     PR #199 round 22 (GM r34 A1): a record no project can be placed for no
     longer borrows the live canvas's node of the same id."""
@@ -333,7 +333,7 @@ def test_a_start_settling_inside_the_lifecycle_fence_says_the_same_line(canvas, 
 
 
 def test_forgetting_a_recovery_while_its_start_runs_says_to_let_it_finish(canvas, monkeypatch):
-    """Run History's "Forget ID" refuses for a start still in flight; its
+    """Run history's "Forget ID" refuses for a start still in flight; its
     line said "settling" too."""
     node = _node(canvas)
     monkeypatch.setattr(canvas.guard, "has_active_node", lambda node_id: node_id == node)

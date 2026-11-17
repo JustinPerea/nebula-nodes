@@ -22,7 +22,7 @@ describe('a reason that opens with a known name follows "because"', () => {
   });
 
   it('still treats a plain capitalised word as a sentence of its own', () => {
-    expect(becauseLine({ heading: 'Couldn’t upload “a.png”.', reason: 'File exceeds 500 MB limit' }))
-      .toBe('Nebula couldn’t upload “a.png”. File exceeds 500 MB limit.');
+    expect(becauseLine({ heading: 'Couldn’t upload “a.png”.', reason: 'File is too small to be a valid media file' }))
+      .toBe('Nebula couldn’t upload “a.png”. File is too small to be a valid media file.');
   });
 });

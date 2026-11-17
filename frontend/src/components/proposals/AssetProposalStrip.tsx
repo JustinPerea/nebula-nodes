@@ -26,7 +26,7 @@ function editCount(view: AssetProposalView): number {
 }
 
 function headline(view: AssetProposalView): string {
-  if (view.kind === 'moodboard') return 'asks to send these notes to generators';
+  if (view.kind === 'moodboard') return 'asks to turn on “Moodboard notes to generators”';
   if (view.kind === 'commons') {
     const count = editCount(view);
     return count === 1 ? 'proposes a change to this reference' : `proposes ${count} changes to this reference`;

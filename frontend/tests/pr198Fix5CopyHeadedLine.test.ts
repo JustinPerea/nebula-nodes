@@ -43,7 +43,7 @@ const TABLE: [heading: string, reason: string, shown: 'alone' | 'both', why: str
   ["Couldn't delete the node.", AGENT_SCENE, 'alone', 'deletionHeading(1), same verb'],
   ["Couldn't delete 2 nodes.", AGENT_SCENE, 'alone', 'deletionHeading(2), same verb'],
   ["Couldn't delete “Agent scene”.", AGENT_SCENE, 'alone', 'the reason repeats the heading'],
-  ["Couldn't undo.", "Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.", 'alone',
+  ["Couldn't undo.", "Nebula couldn’t undo because it would remove “Shot 2”, which is still running. Stop the run first.", 'alone',
     'runLockedLine("undo"): the reason repeats the heading'],
   ["Couldn't save the scene.", SHOT_RUNNING, 'alone', 'a generic save; the reason names the part it refused'],
   ["Couldn't save a setting on “Opening”.", SHOT_RUNNING, 'alone', 'paramSaveFailedLine with no label'],
@@ -89,7 +89,7 @@ describe('N5: isNamedLine knows every form a backend person line takes', () => {
   // Real backend person lines (backend/, 2026-10-27).
   it.each([
     "Couldn't delete “Agent scene”. “Shot 2” is still running. Stop the run first.",
-    "Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.",
+    "Nebula couldn’t undo because it would remove “Shot 2”, which is still running. Stop the run first.",
     "Couldn’t download the result from Replicate. Its download link may have expired. Run the node again.",
     "Nebula couldn’t get the image because that address isn’t public. Use a public image URL.",
     "Nebula can’t read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.",

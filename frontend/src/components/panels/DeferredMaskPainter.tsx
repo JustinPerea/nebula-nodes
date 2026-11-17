@@ -32,7 +32,7 @@ function MaskPainterShell({ children, onClose, busy = false }: { children: React
     <div {...dialog} className="mask-painter__overlay" role="dialog" aria-modal="true" aria-label="Mask painter" aria-busy={busy || undefined}>
       <div className="mask-painter__panel">
         <div className="mask-painter__header">
-          <span className="mask-painter__title">Paint Mask</span>
+          <span className="mask-painter__title">Paint mask</span>
           <button type="button" className="mask-painter__icon-btn" onClick={onClose} aria-label="Close">
             <X size={16} />
           </button>

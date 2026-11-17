@@ -3,7 +3,7 @@ import type { PaperSourceRecord } from './paperSource';
 import { getProjectContext } from './projectContext';
 import { GRAPH_PARAMS_VERSION, RUN_BEHAVIOUR_VERSION, upgradeRunSnapshot } from './savedParamsUpgrades';
 
-/** Persistent run-history records for the Run History panel. Records contain the
+/** Persistent run-history records for the Run history panel. Records contain the
  * exact JSON graph sent to the backend so a later replay never reads mutable
  * canvas state. Storage helpers are exception-safe because history must never
  * prevent the canvas from loading or executing. */

@@ -398,7 +398,7 @@ describe('the corner on the canvas', () => {
 describe('an asset proposal\'s Update (Q92 a)', () => {
 
   function ask(target: 'project' | 'moodboard' | 'commons', targetId: string, overrides: Partial<AgentNote> = {}) {
-    const text = { project: 'Claude asks to change the cover of Dusk', moodboard: 'Claude asks to send Dusk board\'s notes to generators',
+    const text = { project: 'Claude asks to change the cover of Dusk', moodboard: 'Claude asks to turn on “Moodboard notes to generators” for Dusk board',
       commons: 'Claude asks to change a reference in the Commons' }[target];
     return note(`an_${target}`, {
       source: 'nebula', about: 'proposal', text, parts: [{ text }], refs: [],

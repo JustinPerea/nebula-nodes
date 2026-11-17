@@ -164,7 +164,7 @@ describe('the one type rule (GM r36 item 1)', () => {
   const rows = () => within(screen.getByRole('region', { name: 'World Labs recovery safeguards' }))
     .getAllByRole('listitem').map((item) => item.querySelector('span')?.textContent);
 
-  it('Run History’s placeholder: Export by its stored type, Environment by its World ID, else a World Labs node', () => {
+  it('Run history’s placeholder: Export by its stored type, Environment by its World ID, else a World Labs node', () => {
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
     useProjectStore.setState({ openHold: null, activeProject: { id: 'delta', name: 'Delta' } as never });
     set({ nodes: [], providerRecoveries: [record('run-a', 'n1', 'op-a'), record('run-b', 'n2', 'world-b', true),

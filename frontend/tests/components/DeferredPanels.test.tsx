@@ -44,15 +44,15 @@ describe('lazyWithPreload', () => {
   });
 });
 
-describe('deferred Run History', () => {
+describe('deferred Run history', () => {
   it('stays unmounted while closed and opens on the first toggle', async () => {
     const preload = vi.spyOn(DeferredRunHistoryPanel, 'preload');
     render(<RunHistoryPanel />);
-    expect(screen.queryByText('Run History')).toBeNull();
+    expect(screen.queryByText('Run history')).toBeNull();
     expect(preload).not.toHaveBeenCalled();
 
     act(() => useUIStore.getState().togglePanel('history'));
-    expect(await screen.findByText('Run History')).toBeInTheDocument();
+    expect(await screen.findByText('Run history')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close run history panel' })).toBeInTheDocument();
     preload.mockRestore();
   });

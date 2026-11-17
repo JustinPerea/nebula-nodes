@@ -12,7 +12,7 @@ export const KEEP_THEM = 'Keep them';
 
 /**
  * The confirm before the kept edits are discarded (GM r20 on PR #199), in
- * the app's own dialog, as Run History's Forget ID confirm: focus starts on
+ * the app's own dialog, as Run history's Forget ID confirm: focus starts on
  * [Keep them], Escape is Keep them, Tab stays inside, and focus goes back
  * where it was when it closes. The app's order: the safe button on the
  * left, the destructive one on the right in the destructive style.

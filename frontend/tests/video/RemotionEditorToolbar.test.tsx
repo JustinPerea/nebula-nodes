@@ -113,7 +113,7 @@ describe('RemotionEditorToolbar', () => {
     expect(addMock).toHaveBeenCalledWith('r1', expect.objectContaining({ componentType: 'ImageAssetNode' }));
   });
 
-  it('+ Iso Block dispatches addTrackItemWithCanvasMirror with IsometricBlock', () => {
+  it('+ Iso block dispatches addTrackItemWithCanvasMirror with IsometricBlock', () => {
     render(<RemotionEditorToolbar remotionNodeId="r1" />);
     fireEvent.click(screen.getByRole('button', { name: /\+ iso block/i }));
     expect(addMock).toHaveBeenCalledWith('r1', expect.objectContaining({ componentType: 'IsometricBlock' }));

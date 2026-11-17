@@ -91,7 +91,7 @@ def test_a_moodboard_ask_and_its_withdrawal(api):
     view = _propose_asset(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
     assert api.client.delete(f"/api/canvas/proposals/{view['id']}", headers=ASSET_CLAUDE).status_code == 200
     lines = [words for _, words in _log(api.sent[start:])]
-    what = f"send the notes of “{board['name']}” to generators"
+    what = f"turn on “Moodboard notes to generators” for “{board['name']}”"
     assert f"Asks to {what} (decide in Moodboard Studio)" in lines
     assert f"Withdrew its request to {what}" in lines
 
@@ -108,7 +108,7 @@ def test_the_helper_words_each_kind_once():
     assert asset_proposals.summary(proposal("project", {"cover": "/api/outputs/c.png"}, "Dusk")) == \
         "make another image the cover of “Dusk”"
     assert asset_proposals.summary(proposal("moodboard", {"sendNotes": True}, "Dusk board")) == \
-        "send the notes of “Dusk board” to generators"
+        "turn on “Moodboard notes to generators” for “Dusk board”"
     assert asset_proposals.summary(proposal("commons", {"edits": [{"membership": {"id": "mem_1", "role": "attract"}}]})) == \
         f"set {REF} to attract"
     assert commons_proposals.summary("ast_0123456789abcdef", {"edits": [{"region": {"label": "x", "box": [0, 0, 1, 1]}}]}) == \

@@ -137,7 +137,7 @@ def parse_change(body: Any) -> AssetChange:
         if not isinstance(value, bool):
             raise ProposalError(422, "sendNotes must be true (sending the board's notes to generators)")
         if value is False:
-            raise ProposalError(422, ("turning Send notes off needs no proposal: set it directly "
+            raise ProposalError(422, ("turning “Moodboard notes to generators” off needs no proposal: set it directly "
                                       "(moodboard_update(send_notes=false))"))
         change = {"sendNotes": True}
     return AssetChange(kind=kind, target_id=target_id.strip(), change=change, note=note)
@@ -223,7 +223,7 @@ def summary(proposal: AssetProposal) -> str:
         to = proposal.change.get("cover")
         return (f"set the cover of “{name}” back to automatic" if to is None
                 else f"make another image the cover of “{name}”")
-    return f"send the notes of “{name}” to generators"
+    return f"turn on “Moodboard notes to generators” for “{name}”"
 
 
 def update_text(proposal: AssetProposal) -> str:
@@ -235,8 +235,7 @@ def update_text(proposal: AssetProposal) -> str:
     if proposal.kind == "project":
         return f"{agent} asks to change the cover of {name or 'a project'}"
     if proposal.kind == "moodboard":
-        whose = name + "'s" if name else "a board's"
-        return f"{agent} asks to send {whose} notes to generators"
+        return f"{agent} asks to turn on “Moodboard notes to generators” for {name or 'a moodboard'}"
     edits = proposal.change.get("edits") or []
     if len(edits) > 1:
         return f"{agent} asks to make {len(edits)} changes to a reference in the Commons"

@@ -244,7 +244,7 @@ describe('GM answer 1: offline, Cinema is locked and every control says when it 
       // GM, PR #200 r2 item 4 (the merge with #198): "send it to motion".
       [button(panel, 'Send to motion'), 'You can send it to motion when Nebula reconnects.'],
       [button(rail, '+ Add shot'), 'You can add shots when Nebula reconnects.'],
-      [rail.querySelector('[aria-label="Move Shot 2 earlier"]') as HTMLElement, 'You can reorder shots when Nebula reconnects.'],
+      [rail.querySelector('[aria-label="Move shot 2 earlier"]') as HTMLElement, 'You can reorder shots when Nebula reconnects.'],
       [button(toolbar, 'Generate all'), 'You can generate when Nebula reconnects.'],
     ];
     for (const [control, title] of locked) {

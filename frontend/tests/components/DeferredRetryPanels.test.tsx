@@ -6,7 +6,7 @@ import { MeshPreview, WorldPreview } from '../../src/components/nodes/DeferredVi
 import { useUIStore } from '../../src/store/uiStore';
 
 // Each deferred piece, wired as the app wires it, recovers from a chunk that
-// failed once: on the next open (Run History, the tour, a wire drop, Paint
+// failed once: on the next open (Run history, the tour, a wire drop, Paint
 // Mask), from the mask painter's Try again, and for node viewers when the
 // window comes back online or regains focus. The real chunks are replaced by
 // stubs behind a loader that fails a set number of times. Each test uses its
@@ -32,7 +32,7 @@ vi.mock('../../src/lib/deferredChunks', async (importOriginal) => {
   return {
     ...actual,
     DeferredRunHistoryPanel: lazyWithPreload(
-      flaky('history', { RunHistoryPanel: () => <p>Run History stub</p> }), (m) => m.RunHistoryPanel),
+      flaky('history', { RunHistoryPanel: () => <p>Run history stub</p> }), (m) => m.RunHistoryPanel),
     DeferredOnboardingOverlay: lazyWithPreload(
       flaky('tour', { OnboardingOverlay: () => <p>Tour stub</p> }), (m) => m.OnboardingOverlay),
     DeferredConnectionPopup: lazyWithPreload(
@@ -68,17 +68,17 @@ afterEach(() => {
 });
 
 describe('a deferred panel whose chunk failed once', () => {
-  it('Run History opens on the next toggle', async () => {
+  it('Run history opens on the next toggle', async () => {
     chunks.failures.set('history', 1);
     render(<RunHistoryPanel />);
     act(() => useUIStore.getState().togglePanel('history'));
     await flush();
-    expect(screen.queryByText('Run History stub')).toBeNull();
+    expect(screen.queryByText('Run history stub')).toBeNull();
     // The failed open does not leave the dock marked open with nothing in it.
     expect(useUIStore.getState().panels.history.visible).toBe(false);
 
     act(() => useUIStore.getState().togglePanel('history'));
-    expect(await screen.findByText('Run History stub')).toBeInTheDocument();
+    expect(await screen.findByText('Run history stub')).toBeInTheDocument();
     expect(useUIStore.getState().panels.history.visible).toBe(true);
     expect(chunks.loads.get('history')).toBe(2);
   });
@@ -110,7 +110,7 @@ describe('a deferred panel whose chunk failed once', () => {
     expect(chunks.loads.get('popup')).toBe(2);
   });
 
-  it('the mask painter loads on the next Paint Mask, and offers Try again next to Close', async () => {
+  it('the mask painter loads on the next Paint mask, and offers Try again next to Close', async () => {
     chunks.failures.set('mask', 2);
     const onClose = vi.fn();
     const props = { imageUrl: '/api/outputs/a.png', initialMask: null, onSave: () => {}, onClose };
@@ -121,7 +121,7 @@ describe('a deferred panel whose chunk failed once', () => {
     expect(screen.getByRole('alert').textContent).toBe('Nebula couldn’t load the mask painter because the server isn’t answering. Try again.');
     first.unmount();
 
-    // Paint Mask again mounts it again, which fetches again (and fails, the second time).
+    // Paint mask again mounts it again, which fetches again (and fails, the second time).
     render(<MaskPainterModal {...props} />);
     await flush();
     expect(chunks.loads.get('mask')).toBe(2);

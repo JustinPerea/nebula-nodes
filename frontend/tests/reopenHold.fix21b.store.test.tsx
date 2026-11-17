@@ -203,9 +203,9 @@ const RECOVERY_ALPHA = hold('recovery', { nodeId: 'n1', nodeName: 'World', proje
 const RECOVERY_OTHER = hold('recovery', { nodeId: 'n4', nodeName: 'World', projectId: 'beta', projectName: 'Alpha' });
 const PARAMS = hold('params', { nodeId: 'n1', nodeName: 'World', projectId: 'alpha', projectName: P, fields: ['Resume Operation ID'] });
 const LINES = {
-  recovery: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run History.`,
-  recoveryOther: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” from “Alpha” in Run History.`,
-  recovery2: `You can reopen “${P}” after you forget 2 World Labs recovery IDs in Run History.`,
+  recovery: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run history.`,
+  recoveryOther: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” from “Alpha” in Run history.`,
+  recovery2: `You can reopen “${P}” after you forget 2 World Labs recovery IDs in Run history.`,
   params: `You can reopen “${P}” after you check the World Labs run for “World” in Marble and clear its “Resume Operation ID”.`,
   active: `You can reopen “${P}” when World Labs confirms the new run.`,
   bootstrap: `Nebula couldn’t save its World Labs safeguards. You can reopen “${P}” after you restart Nebula.`,
@@ -234,7 +234,7 @@ describe('review 19 item 1 and GM r32, 1: one table of lines, keyed by Nebula’
 
   it('a project Nebula can’t name: the node only, never “its”', () => {
     expect(reopenHoldLine(P, 'alpha', hold('recovery', { nodeName: 'World' }) as never))
-      .toBe(`You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run History.`);
+      .toBe(`You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run history.`);
     expect(reopenHoldLine(P, 'alpha', hold('ambiguity', { nodeName: 'World' }) as never))
       .toBe(`You can reopen “${P}” after you check the World Labs run for “World” in Marble and press “I’ve checked Marble”.`);
   });
@@ -256,7 +256,7 @@ describe('review 19 item 1 and GM r32, 1: one table of lines, keyed by Nebula’
 });
 
 describe('review 19 item 1: each state locks before the press, says its line on the card and the canvas, sends nothing, and clears with its own action', () => {
-  it('recovery: by Run History; Forget ID clears it', async () => {
+  it('recovery: by Run history; Forget ID clears it', async () => {
     duplicateN1();
     useGraphStore.setState({ providerRecoveries: [{ runId: 'r1', nodeId: 'n1', resumeOperationId: 'op-1', existingWorldId: null }] as never });
     await verdict(RECOVERY_ALPHA);
@@ -364,10 +364,10 @@ describe('review 19 item 2: Nebula’s own 409 after the press says the hold’s
     expect(noticeNow()).not.toContain('Cannot switch');
   });
 
-  it('a recovery ID Nebula took between the press and the request: its line by Run History', async () => {
+  it('a recovery ID Nebula took between the press and the request: its line by Run history', async () => {
     duplicateN1();
     vi.mocked(projects.openProject).mockRejectedValue(new projects.ProjectRequestError(
-      '“World” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.', 409, { heading: "Couldn't open the project." }));
+      '“World” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.', 409, { heading: "Couldn't open the project." }));
     vi.mocked(projects.getOpenHold).mockResolvedValue({ hold: RECOVERY_ALPHA });
     await askToReopen();
     expect(held()).toEqual({ id: 'alpha', line: LINES.recovery, place: 'runHistory' });
@@ -438,7 +438,7 @@ describe('review 19 item 10 and GM r32, 2: the line sits by what clears it', () 
     expect(shown[0].textContent).toContain(LINES.recovery);
   });
 
-  it('the Run History form is in the rail beside the Run History button; the Marble forms in the World Labs notice', () => {
+  it('the Run history form is in the rail beside the Run history button; the Marble forms in the World Labs notice', () => {
     const rail = readFileSync(resolve(__dirname, '../src/components/WorkspaceRail.tsx'), 'utf8');
     const anchor = rail.slice(rail.indexOf('workspace-rail__anchor'), rail.indexOf('</div>', rail.indexOf('workspace-rail__anchor')));
     expect(anchor).toContain('label="Open run history"');
@@ -565,7 +565,7 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
     const kept = { ...project('alpha'), snapshot: { ...project('alpha').snapshot, nodes: [...project('alpha').snapshot.nodes,
       { id: 'n2', type: 'model-node', position: { x: 10, y: 400 }, data: { definitionId: 'text-input', label: 'Kept copy', params: { value: 'v' }, state: 'idle', outputs: {} } }] } };
     vi.mocked(projects.saveProject).mockImplementation(async (id, snapshot) => ({ ...project(id), snapshot,
-      deletesHeld: ['“Kept copy” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.'] }) as never);
+      deletesHeld: ['“Kept copy” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.'] }) as never);
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ workspaceRevision: 'rev-a2' }));
     vi.mocked(projects.getProject).mockResolvedValue(kept as never);
     bootSwitch({ workspaceRevision: 'rev-a2', projectSwitch: { projectId: 'alpha', projectName: P, previousRevision: 'rev-a',

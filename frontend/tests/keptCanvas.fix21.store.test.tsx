@@ -172,7 +172,7 @@ const WL = 'You can reopen “Glass campaign” after you check its World Labs r
 const RUN = 'You can reopen “Glass campaign” when the run finishes.';
 const ambiguity = { runId: 'wl-run', nodeId: 'n1', kind: 'worldlabs-environment', message: 'Staged.', durable: true };
 const card = () => reopenHoldNow()?.line ?? null;
-/** The canvas line wherever it sits: by Stop, or by the World Labs notice or Run History (GM r32, 2). */
+/** The canvas line wherever it sits: by Stop, or by the World Labs notice or Run history (GM r32, 2). */
 const shownNow = () => noticeNow() ?? useProjectStore.getState().heldReopenLine?.line ?? null;
 /** Nebula's verdict, read as the tab reads it. */
 const verdict = async (hold: Record<string, unknown> | null) => {

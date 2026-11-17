@@ -127,7 +127,7 @@ def test_a_recovery_record_for_the_node_names_forget_in_run_history(isolated_pai
     person = _claim_refusal(PERSON, [_world()])
     # Not on the open canvas: the run's own node, by its type's name.
     assert person.detail == ("“World Labs Environment” has a saved World Labs recovery ID. "
-                             "Check the run in Marble, then forget the ID in Run History.")
+                             "Check the run in Marble, then forget the ID in Run history.")
     agent = _claim_refusal(CLI, [_world()])
     assert agent.detail == ("Fresh World Labs start blocked because Nebula already has a recovery checkpoint for "
                             "node(s): world-node. Restore or explicitly delete the checkpoint before starting new "
@@ -141,7 +141,7 @@ def test_a_full_recovery_journal_says_the_limit_and_what_to_clear(monkeypatch, t
     person = _claim_refusal(PERSON, [_world()])
     assert person.detail == (
         "Nebula is already waiting on 1 World Labs job, the most it can track. "
-        "Check it in Marble and clear it in Run History, then try again.")
+        "Check it in Marble and clear it in Run history, then try again.")
     agent = _claim_refusal(AGENT, [_world()])
     assert agent.detail == ("provider recovery journal is at capacity; resolve an existing checkpoint before "
                             "starting more paid work")
@@ -155,7 +155,7 @@ def test_a_full_start_journal_says_the_limit_too(monkeypatch, tmp_path):
     person = _claim_refusal(PERSON, [_world()])
     assert person.detail == (
         "Nebula is already waiting on 2 World Labs jobs, the most it can track. "
-        "Check them in Marble and clear some in Run History, then try again.")
+        "Check them in Marble and clear some in Run history, then try again.")
     agent = _claim_refusal(AGENT, [_world()])
     assert agent.detail == ("World Labs paid-start safety journal is at capacity; resolve an existing recovery "
                             "or ambiguity before starting more paid work")
@@ -228,7 +228,7 @@ async def test_forget_of_a_record_that_changed_says_to_reload_and_check_the_newe
     recoveries.set(run_id="r1", node_id="world-node", resume_operation_id="op-new", existing_world_id=None)
     for headers, detail in (
         (PERSON, "This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then "
-                 f"use {FORGET} in Run History."),
+                 f"use {FORGET} in Run history."),
         (AGENT, "World Labs recovery checkpoint changed; refresh before deleting the newer checkpoint"),
     ):
         with reading(headers), pytest.raises(HTTPException) as refused:
@@ -252,7 +252,7 @@ def test_a_canvas_edit_at_journal_capacity_or_racing_a_change(monkeypatch):
     for fake, person, agent in (
         (full,
          "Nebula is already waiting on 256 World Labs jobs, the most it can track. "
-         "Check them in Marble and clear some in Run History, then try again.",
+         "Check them in Marble and clear some in Run history, then try again.",
          "provider recovery journal is at capacity; resolve an existing checkpoint before importing more paid state"),
         (changed,
          "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again.",

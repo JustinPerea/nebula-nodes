@@ -10,23 +10,24 @@
  * and so does an undo that put some parts back.
  */
 
-import { FIELD_STEP_LABELS } from './fieldSteps';
+import { FIELD_NOUNS } from './fieldSteps';
 
-/** How a kept field reads in "because ‹the field› changed again after that": "the" and the field step's own label
- * in lower case, except where design gave the noun (r164): the avoid field is "the avoid list" (the journal's
- * word), and the switch is named as the control is, in quotes, with no "the". "Your brief" reads "the brief". The
- * cover has no field step of its own (it is an image step), so it is named here. */
-const FIELD_IN_SENTENCE: Record<string, string> = {
-  ...Object.fromEntries(Object.entries(FIELD_STEP_LABELS).map(([key, label]) => [key, `the ${label.toLowerCase()}`])),
-  avoid: 'the avoid list', briefOverride: 'the brief', sendNotes: '“Moodboard notes to generators”', coverImageId: 'the cover',
-};
+/** How a kept field reads in "because ‹the field› changed again after that" (design): the field's noun, as the step's
+ * own label says it. The cover has no field step of its own (it is an image step), so it is named here. */
+const FIELD_IN_SENTENCE: Record<string, string> = { ...FIELD_NOUNS, coverImageId: 'the cover' };
+
+/** A step's label inside a line's own quotes: its inner double quotes turn single ("Turned on ‘Moodboard notes to
+ * generators’"), so the line never nests the same mark. */
+function inQuotes(label: string): string {
+  return `“${label.replace(/“/g, '‘').replace(/”/g, '’')}”`;
+}
 
 /** "Undid “Made image 3 the cover”" or "Redid “…”". */
 export function undoneLine(direction: 'undo' | 'redo', label: string): string {
-  return `${direction === 'undo' ? 'Undid' : 'Redid'} “${label}”`;
+  return `${direction === 'undo' ? 'Undid' : 'Redid'} ${inQuotes(label)}`;
 }
 
-interface SkippedSlice { part?: unknown; field?: unknown; reason?: unknown; number?: unknown }
+interface SkippedSlice { part?: unknown; field?: unknown; reason?: unknown; number?: unknown; settings?: unknown }
 
 /** "image 5", "images 5 and 6", "images 3, 5 and 6". */
 function imageNumbers(numbers: readonly number[]): string {
@@ -36,37 +37,66 @@ function imageNumbers(numbers: readonly number[]): string {
 
 const were = (numbers: readonly number[]) => (numbers.length === 1 ? 'was' : 'were');
 
+/** The setting words of an image slice ("note", "private note"), from the server's keys. */
+const SETTING_WORDS: Record<string, string> = { weight: 'weight', excluded: 'set-aside switch', notes: 'note', privateNote: 'private note' };
+
+const joined = (words: readonly string[]) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`);
+
 /**
- * The kept undo's sentence, for an undo that put nothing back:
+ * The kept undo's sentence, for an undo that put nothing back, in the because form (design):
  * "Nebula couldn’t undo “Added image 5” because image 5 changed after that.",
- * "... because image 5 was removed after that." or, for a field step,
- * "Nebula couldn’t undo “Direction” because the direction changed again after that."
- * (the field's name, from its key). Null for anything else.
+ * "... because image 5 was removed after that.", "... “Changed the direction” because the direction changed again
+ * after that." and the reasons a step can't go back (only the person can change a field, a pinned color that the step
+ * used was removed, a color was chosen after the step, the card's place was taken, a file isn't Nebula's own).
+ * Keyed on each slice's `reason`, `part`, `field` and `number`, never on the server's sentence. Null when any slice has
+ * a reason this doesn't say, so the toast keeps the server's line under "Undid".
  */
 export function keptUndoLine(label: string, skipped: readonly SkippedSlice[]): string | null {
   if (skipped.length === 0) return null;
-  if (skipped.every((slice) => slice.part === 'fields' && slice.reason === 'changed since')) {
-    const fields: string[] = [];
-    for (const slice of skipped) {
-      const name = typeof slice.field === 'string' ? FIELD_IN_SENTENCE[slice.field] : undefined;
-      if (!name) return null;
-      if (!fields.includes(name)) fields.push(name);
-    }
-    return `Nebula couldn’t undo “${label}” because ${fields.join(' and ')} changed again after that.`;
-  }
+  const fieldsChanged: string[] = [];
+  const onlyYou: string[] = [];
+  const clauses = new Set<string>();
   const changed: number[] = [];
   const removed: number[] = [];
+  const settingsChanged: string[] = [];
+  const notNebulas: number[] = [];
+  const push = <T,>(into: T[], value: T) => { if (!into.includes(value)) into.push(value); };
   for (const slice of skipped) {
+    if (slice.part === 'fields') {
+      const name = typeof slice.field === 'string' ? FIELD_IN_SENTENCE[slice.field] : undefined;
+      if (!name) return null;
+      if (slice.reason === 'changed since') push(fieldsChanged, name);
+      else if (slice.reason === 'is the person’s to change') push(onlyYou, `change ${name}`);
+      else if (slice.reason === 'is the person’s to turn on') push(onlyYou, 'turn it on');
+      else if (slice.reason === 'can’t go back') clauses.add(slice.field === 'coverImageId' ? 'that image was removed after that' : 'a pinned color that step used was removed after that');
+      else if (slice.reason === 'would undo a colour choice made since') clauses.add('a color was chosen after that');
+      else return null;
+      continue;
+    }
     if (typeof slice.number !== 'number') return null;
-    const into = slice.reason === 'changed since' ? changed : slice.reason === 'removed since' ? removed : null;
-    if (!into) return null;
-    if (!into.includes(slice.number)) into.push(slice.number);
+    const number = slice.number;
+    if (slice.reason === 'changed since') {
+      const words = Array.isArray(slice.settings) ? slice.settings.map((key) => SETTING_WORDS[String(key)]) : [];
+      if (words.length && words.every(Boolean)) push(settingsChanged, `image ${number}’s ${joined(words)} changed after that`);
+      else push(changed, number);
+    } else if (slice.reason === 'removed since') push(removed, number);
+    else if (slice.reason === 'can’t go back there') clauses.add('its place on the moodboard was taken or removed after that');
+    else if (slice.reason === 'isn’t one of Nebula’s own files') push(notNebulas, number);
+    else return null;
   }
   changed.sort((a, b) => a - b);
   removed.sort((a, b) => a - b);
+  notNebulas.sort((a, b) => a - b);
   const parts = [
-    ...(changed.length ? [`${imageNumbers(changed)} changed`] : []),
-    ...(removed.length ? [`${imageNumbers(removed)} ${were(removed)} removed`] : []),
+    ...(fieldsChanged.length ? [`${joined(fieldsChanged)} changed again after that`] : []),
+    ...(onlyYou.length ? [`only you can ${joined(onlyYou)}`] : []),
+    ...(changed.length || removed.length ? [`${[
+      ...(changed.length ? [`${imageNumbers(changed)} changed`] : []),
+      ...(removed.length ? [`${imageNumbers(removed)} ${were(removed)} removed`] : []),
+    ].join(' and ')} after that`] : []),
+    ...settingsChanged,
+    ...clauses,
+    ...(notNebulas.length ? [`${imageNumbers(notNebulas)} ${notNebulas.length === 1 ? 'isn’t' : 'aren’t'} one of Nebula’s own files`] : []),
   ];
-  return `Nebula couldn’t undo “${label}” because ${parts.join(' and ')} after that.`;
+  return `Nebula couldn’t undo ${inQuotes(label)} because ${joined(parts)}.`;
 }

@@ -20,12 +20,20 @@ import type { BoardFieldKey } from '../../lib/moodboardEdits';
 export type FieldStep = 'name' | 'notes' | 'mode' | 'strength' | 'direction' | 'avoid' | 'pinnedColors'
   | 'clashMode' | 'colorChoices' | 'sendNotes' | 'briefOverride';
 
-/** What the undo toast calls each field: "Undid “Direction”". */
-export const FIELD_STEP_LABELS: Record<FieldStep, string> = {
-  name: 'Name', notes: 'Moodboard notes', mode: 'Mode', strength: 'Strength', direction: 'Direction', avoid: 'Avoid',
-  pinnedColors: 'Pinned colors', clashMode: 'Clash mode', colorChoices: 'Color choices',
-  sendNotes: 'Send notes to generators', briefOverride: 'Your brief',
+/** How a sentence names each field (design): "the direction", "the avoid list" (the journal's word), and the
+ * switch by the control's own name, in quotes, with no "the". */
+export const FIELD_NOUNS: Record<FieldStep, string> = {
+  name: 'the name', notes: 'the moodboard notes', mode: 'the mode', strength: 'the strength', direction: 'the direction',
+  avoid: 'the avoid list', pinnedColors: 'the pinned colors', clashMode: 'the clash mode', colorChoices: 'the color choices',
+  sendNotes: '“Moodboard notes to generators”', briefOverride: 'the brief',
 };
+
+/** What the undo toast calls a field's step, in the verb form every step takes: "Changed the direction", "Turned on
+ * “Moodboard notes to generators”". `before` is the field's value before the change (the switch says which way it went). */
+export function fieldStepLabel(field: FieldStep, before?: unknown): string {
+  if (field === 'sendNotes') return `${before === true ? 'Turned off' : 'Turned on'} ${FIELD_NOUNS.sendNotes}`;
+  return `Changed ${FIELD_NOUNS[field]}`;
+}
 
 /** The board fields a step's change sets: a pin can take a colour off Keep anyway. */
 export function fieldStepKeys(field: FieldStep): BoardFieldKey[] {
@@ -64,7 +72,7 @@ export class FieldStepTracker {
   begin(field: FieldStep, values: unknown[]): void {
     if (this.sessions.has(field)) return;
     const keys = fieldStepKeys(field);
-    const stepId = this.deps.record(FIELD_STEP_LABELS[field], keys);
+    const stepId = this.deps.record(fieldStepLabel(field, values[0]), keys);
     if (!stepId) return;
     this.steps.add(stepId);
     for (const key of keys) this.owners.set(key, stepId);

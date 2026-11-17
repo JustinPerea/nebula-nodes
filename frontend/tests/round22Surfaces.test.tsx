@@ -147,7 +147,7 @@ describe('A: every action surface, while following', () => {
       useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n4', null);
       render(<ContextMenu />);
       enter();
-      for (const name of ['Run This Node', 'Leave a note for agents…', /^Duplicate/, /^Delete/]) {
+      for (const name of ['Run this node', 'Leave a note for agents…', /^Duplicate/, /^Delete/]) {
         expectWaiting(screen.getByRole('button', { name }), String(name));
       }
     });

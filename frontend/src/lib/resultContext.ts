@@ -153,18 +153,18 @@ function savedInputs(run: RunRecord, model: RunSnapshotNode, definition?: ModelN
     }
     if (port.id === textPort?.id) {
       if (input?.type === 'Text' && typeof input.value === 'string') prompt = input.value;
-      else unavailable ??= "Nebula couldn't recover the saved prompt input. Open the saved run in Run History.";
+      else unavailable ??= "Nebula couldn't recover the saved prompt input. Open the saved run in Run history.";
     } else {
       if (images) reusableRefs = port.multiple ? [...reusableRefs, ...images] : images;
-      else unavailable ??= "Nebula couldn't recover a saved image input. Open the saved run in Run History.";
+      else unavailable ??= "Nebula couldn't recover a saved image input. Open the saved run in Run history.";
     }
   }
   if (imagePort && !imagePort.multiple && reusableRefs.length > 1) {
-    unavailable ??= 'This saved input has multiple images on one Canvas port. Reuse it from Run History.';
+    unavailable ??= 'This saved input has multiple images on one Canvas port. Reuse it from Run history.';
   }
-  if (textPort?.required && !prompt.trim()) unavailable ??= 'The saved prompt is unavailable. Open the saved run in Run History.';
-  if (imagePort?.required && reusableRefs.length === 0) unavailable ??= 'The saved image input is unavailable. Open the saved run in Run History.';
-  if (ancestryHasBatch(run, model.id)) unavailable ??= 'This is a batch result. Reuse its iterator recipe from Run History.';
+  if (textPort?.required && !prompt.trim()) unavailable ??= 'The saved prompt is unavailable. Open the saved run in Run history.';
+  if (imagePort?.required && reusableRefs.length === 0) unavailable ??= 'The saved image input is unavailable. Open the saved run in Run history.';
+  if (ancestryHasBatch(run, model.id)) unavailable ??= 'This is a batch result. Reuse its iterator recipe from Run history.';
   return { prompt, refs, reusableRefs, inputs, unavailable };
 }
 
@@ -200,7 +200,7 @@ export function resultContextForNode(node: Node<NodeData>, history: readonly Run
   context.refs = [...inputs.refs];
   context.inputs = frozenCopy(inputs.inputs);
   context.reuseUnavailableReason = !definition ? 'This model is no longer available.'
-    : !isCreateModel(definition) ? 'This model needs Canvas controls. Reuse its saved recipe from Run History.'
+    : !isCreateModel(definition) ? 'This model needs Canvas controls. Reuse its saved recipe from Run history.'
       : inputs.unavailable;
   if (!context.reuseUnavailableReason) {
     // The details above show what the run sent; a reused draft starts from

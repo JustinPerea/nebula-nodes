@@ -86,7 +86,7 @@ def _named(name: str) -> None:
 
 def _with_run(client, project_id: str, run_id: str) -> None:
     """The open project's stored run history gets a record of ``run_id``
-    (the tab's autosave of its Run History)."""
+    (the tab's autosave of its Run history)."""
     snapshot = _stored(client, project_id)
     snapshot["runHistory"] = [_record(run_id, "n1", {}, started=time.time() * 1000)]
     _save(client, project_id, snapshot)
@@ -143,7 +143,7 @@ def test_a_recovery_of_the_open_projects_node(app, recoveries):
     person = _refused_hold(client, delta, PERSON)
     assert person["hold"] == expected
     assert person["detail"] == ("“Delta World” has a saved World Labs recovery ID. "
-                                "Check the run in Marble, then forget the ID in Run History.")
+                                "Check the run in Marble, then forget the ID in Run history.")
 
 
 def test_a_recovery_of_another_projects_node_names_that_project(app, recoveries):
@@ -415,7 +415,7 @@ def test_a_agents_read_the_hold_in_list_projects_and_nebula_projects(app, recove
     listed = project_client.list_projects(NebulaAPI("http://testserver", client=client), headers=CODEX)
     # Round 22 (review 20 agents-docs LOW-5): the note says the state, the node, its project and what clears it.
     note = ("Opening or switching projects is held (recovery): \u201cDelta World\u201d (n1) in the open project "
-            "\u201cDelta\u201d has a saved World Labs recovery ID; the person forgets it in Run History.")
+            "\u201cDelta\u201d has a saved World Labs recovery ID; the person forgets it in Run history.")
     assert listed["openHold"]["state"] == "recovery" and listed["openHold"]["note"] == note
     cli = NebulaClient("http://testserver")
     cli._client = client

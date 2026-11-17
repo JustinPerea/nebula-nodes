@@ -132,7 +132,8 @@ export function ResultsGallery({
             aria-pressed={showSelectedOnly}
             onClick={() => setShowSelectedOnly((v) => !v)}
           >
-            {showSelectedOnly ? `Selected (${selectedIds.size}) · Show all` : 'Show selected'}
+            {/* copy-lint-ignore: "Show all" is a separate control after the dot, so it keeps its capital (design) */}
+            {showSelectedOnly ? `${selectedIds.size} selected · Show all` : 'Show selected'}
           </button>
         )}
 

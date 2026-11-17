@@ -51,7 +51,7 @@ function view(target: Target, targetId: string, id: string, agent: Who, createdA
   }
   if (target === 'moodboard') {
     return coverProposal({ id, agent: by, createdAt, kind: 'moodboard', target: { kind: 'moodboard', id: targetId, name: 'Dusk board' },
-      change: { sendNotes: true } as never, summary: 'send the notes of “Dusk board” to generators', decideIn: 'moodboard' } as never);
+      change: { sendNotes: true } as never, summary: 'turn on “Moodboard notes to generators” for “Dusk board”', decideIn: 'moodboard' } as never);
   }
   return coverProposal({ id, agent: by, createdAt });
 }

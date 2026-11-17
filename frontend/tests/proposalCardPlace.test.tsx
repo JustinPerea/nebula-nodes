@@ -1971,7 +1971,7 @@ describe('the rules', () => {
     const body = rule(CARD_CSS, '.proposal-bar__body');
     expect(body['overflow-y']).toBe('auto');
     expect(body['min-height']).toBe('0');
-    // "What Accept writes" scrolls with the body, not on its own.
+    // "What “Accept” saves" scrolls with the body, not on its own.
     const details = rule(CARD_CSS, '.proposal-bar__details');
     expect(details['max-height']).toBeUndefined();
     expect(details.overflow).toBeUndefined();

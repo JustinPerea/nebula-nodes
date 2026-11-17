@@ -96,7 +96,7 @@ def open_hold_note(hold: dict[str, Any], open_id: Any = None) -> str:
     more = f" ({count - 1} more {'record' if count == 2 else 'records'} after it)" if count > 1 else ""
     if state == "recovery":
         why = (f"{_held_node(hold, open_id)} has a saved World Labs recovery ID{more}; "
-               "the person forgets it in Run History.")
+               "the person forgets it in Run history.")
     elif state == "ambiguity":
         why = (f"a World Labs start on {_held_node(hold, open_id)} needs the person\u2019s check{more}; "
                "they check it in Marble and press \u201cI\u2019ve checked Marble\u201d in the World Labs notice.")

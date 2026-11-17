@@ -517,7 +517,7 @@ def test_l1_the_persons_open_of_another_project_still_ends_every_handoff(app):
 
 def test_l2_a_world_labs_checkpoint_and_hold_follow_the_boot_renumber(app, tmp_path, monkeypatch):
     """Recover after the renumber finds the checkpoint by the node's new id:
-    Run History's list, the node's guard, and Forget ID."""
+    Run history's list, the node's guard, and Forget ID."""
     client, store, _graph, state = app
     recoveries = ProviderRecoveryStore(tmp_path / "provider-recoveries.json")
     monkeypatch.setattr(main_module, "provider_recovery_store", recoveries)

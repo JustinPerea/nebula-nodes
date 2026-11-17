@@ -44,11 +44,52 @@ describe('provider catalog', () => {
     expect(PROVIDER_KEY_LABELS.BFL_API_KEY).toBe('Black Forest Labs');
   });
 
-  it('highlights only real nodes that use the row\'s own key', () => {
+  it('leads each row with a real node of the row\'s own key, by its full card name (design)', () => {
+    const cards = new Set(Object.values(NODE_DEFINITIONS).map((node) => node.displayName));
     for (const spec of PROVIDER_KEYS) {
+      if (!spec.lead) continue;
       const ids = new Set(nodesForKey(spec.key).map((node) => node.id));
-      for (const id of spec.highlights ?? []) expect(ids.has(id), `${spec.key} highlights ${id}`).toBe(true);
+      expect(ids.has(spec.lead), `${spec.key} leads with ${spec.lead}`).toBe(true);
+      expect(spec.countOnly, `${spec.key} has a lead and says the count alone`).toBeFalsy();
+      expect(cards.has(NODE_DEFINITIONS[spec.lead].displayName)).toBe(true);
     }
+  });
+
+  it('fails when a row names a card that does not exist', () => {
+    const cards = new Set(Object.values(NODE_DEFINITIONS).map((node) => node.displayName));
+    for (const spec of PROVIDER_KEYS) {
+      const said = /^\d+ nodes, including (.+)$/.exec(unlockSummary(spec))?.[1];
+      if (said) expect(cards.has(said), `${spec.key} says "${said}", which is no card`).toBe(true);
+    }
+  });
+
+  it('says each row as design ruled it', () => {
+    const said = Object.fromEntries(PROVIDER_KEYS.map((spec) => [spec.key, unlockSummary(spec)]));
+    expect(said).toMatchObject({
+      OPENAI_API_KEY: expect.stringMatching(/^\d+ nodes, including GPT Image 2\.5$/),
+      ANTHROPIC_API_KEY: 'Claude',
+      GOOGLE_API_KEY: expect.stringMatching(/^\d+ nodes, including Nano Banana$/),
+      GOOGLE_VERTEX_CREDENTIALS: '4 nodes, including Veo 3.1',
+      OPENROUTER_API_KEY: '4 nodes',
+      REPLICATE_API_TOKEN: '6 nodes',
+      FAL_KEY: expect.stringMatching(/^\d+ nodes, including Kling V3$/),
+      MESHY_API_KEY: expect.stringMatching(/^\d+ nodes, including Meshy 6 Text-to-3D$/),
+      RUNWAY_API_KEY: expect.stringMatching(/^\d+ nodes, including Runway Video$/),
+      ELEVENLABS_API_KEY: expect.stringMatching(/^\d+ nodes, including ElevenLabs TTS$/),
+      MINIMAX_API_KEY: '7 nodes',
+      XAI_API_KEY: expect.stringMatching(/^\d+ nodes, including Grok Imagine Video$/),
+      HIGGSFIELD_API_KEY: 'Image-to-video with DoP, Kling 2.1 and Seedance',
+      QUIVER_API_KEY: 'Arrow Generate and Arrow Vectorize',
+      KREA_API_TOKEN: expect.stringMatching(/^\d+ nodes, including Krea 2$/),
+      KREA_USAGE_KEY: 'Workspace spend reporting on enterprise plans',
+      IDEOGRAM_API_KEY: expect.stringMatching(/^\d+ nodes, including Ideogram 4$/),
+      TYPESAFE_API_KEY: 'Typed decisions with Jev',
+      WORLDLABS_API_KEY: 'Environment and Export',
+      BFL_API_KEY: '6 nodes, including FLUX 3 Image',
+      HF_TOKEN: 'Optional. Lets Idol use your own allowance.',
+      BYTEPLUS_API_KEY: expect.stringMatching(/^\d+ nodes, including Seedream 4\.5$/),
+    });
+    expect(PROVIDER_KEYS.find((spec) => spec.key === 'TYPESAFE_API_KEY')?.noteTitle).toBe('Typed judge, classify and pick-best decisions');
   });
 
   it('writes summaries people can read', () => {
@@ -67,9 +108,10 @@ describe('provider catalog', () => {
     expect(summarizeUnlocked(names.slice(0, 1))).toBe('Nano Banana');
     expect(summarizeUnlocked(names.slice(0, 2))).toBe('Nano Banana and Veo 3.1');
     expect(summarizeUnlocked(names.slice(0, 3))).toBe('Nano Banana, Veo 3.1 and Lyria 3');
-    expect(summarizeUnlocked(names.slice(0, 4))).toBe('4 nodes, including Nano Banana');
+    expect(summarizeUnlocked(names.slice(0, 4), names[0])).toBe('4 nodes, including Nano Banana');
+    expect(summarizeUnlocked(names.slice(0, 4))).toBe('4 nodes');
     const fifteen = Array.from({ length: 15 }, (_, i) => (i < 3 ? names[i] : `Node ${i}`));
-    expect(summarizeUnlocked(fifteen)).toBe('15 nodes, including Nano Banana');
+    expect(summarizeUnlocked(fifteen, names[0])).toBe('15 nodes, including Nano Banana');
     for (const count of [1, 2, 3, 4, 15]) {
       const said = summarizeUnlocked(Array.from({ length: count }, (_, i) => `Name ${i}`));
       expect(said).not.toMatch(/[:…]/);

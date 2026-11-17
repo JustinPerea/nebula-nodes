@@ -2,7 +2,7 @@
  * The canvas notice when a delete keeps nodes that hold World Labs state
  * (GM - Design, rounds 4 and 4b, and the copy round of 2026-10-24: every node
  * in a several-node delete held, forget form, reads "Couldn't delete them.
- * They're waiting on World Labs. Check Marble and Run History.").
+ * They're waiting on World Labs. Check Marble and Run history.").
  */
 import { describe, expect, it } from 'vitest';
 import { RECOVERY_ID_SAVED_TAIL, WORLD_LABS_NEEDS_CHECK, deleteRefusalText, heldDeleteText } from './worldLabsWaiting';
@@ -56,7 +56,7 @@ describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
     expect(wl.WORLD_LABS_STARTING).toBe('A World Labs run is still starting. Try again in a moment.');
     expect(wl.WORLD_LABS_NEEDS_CHECK).toBe('A World Labs run needs your check first. Use the notice at the top of the screen.');
     expect(`“Harbor world”${wl.RECOVERY_ID_SAVED_TAIL}`).toBe(
-      '“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.');
+      '“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.');
     expect(wl.UNLOCK_LABEL).toBe("I’ve checked Marble");
     // Round 14: the name comes quoted from recordNodeName.
     const nodes = [{ id: 'n2', data: { label: 'Harbor world' } }];

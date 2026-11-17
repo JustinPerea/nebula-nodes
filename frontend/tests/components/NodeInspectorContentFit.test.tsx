@@ -42,7 +42,7 @@ const mock = vi.hoisted(() => ({ image: false }));
 vi.mock('../../src/components/panels/Inspector', () => ({
   Inspector: () => (
     <div className="test-inspector-content">
-      <button type="button" className="test-file-row">Choose File</button>
+      <button type="button" className="test-file-row">Choose file</button>
       {mock.image ? <img className="inspector__file-preview" alt="Preview" src="/api/outputs/chat-uploads/x.png" /> : null}
     </div>
   ),

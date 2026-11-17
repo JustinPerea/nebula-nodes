@@ -311,7 +311,7 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
         {...lock.act({ disabled: isRendering || clips.length === 0, offline: true, kept: 'edit-video' })}
       >
         <RotateCw className="editor-transport__icon" aria-hidden="true" focusable="false" />
-        <span>{isRendering ? 'Rendering…' : hasRendered ? 'Re-render' : 'Render Preview'}</span>
+        <span>{isRendering ? 'Rendering…' : hasRendered ? 'Re-render' : 'Render preview'}</span>
       </button>
       <div className="final-export">
         <button

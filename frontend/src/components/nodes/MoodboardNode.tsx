@@ -40,7 +40,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
   const name = moodboardName(boardId, entry);
   const meta = board
     ? `${moodboardImagesLabel(board.imageCount ?? 0, board.setAsideCount)} · ${board.mode ?? 'look'}`
-    : status === 'empty' ? 'Choose one in the Inspector'
+    : status === 'empty' ? 'Choose one in the inspector'
       : status === 'missing' ? `#${boardId} was deleted for good or never existed`
         : status === 'error' ? 'Nebula couldn’t load this moodboard.' : 'Loading…';
   // A board in Recently deleted keeps its name and picture here, with Restore.
@@ -82,7 +82,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
           className="moodboard-node__open nodrag"
           onClick={() => enterMoodboardEditor(boardId)}
         >
-          Open Moodboard
+          Open moodboard
         </button>
       )}
       <NodeRunError data={data as unknown as NodeData} className="moodboard-node__run-error" />

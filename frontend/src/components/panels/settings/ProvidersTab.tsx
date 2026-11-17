@@ -81,7 +81,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
     { id: NOUS_ROW, connected: rows[NOUS_ROW], reach: NOUS_NODES.length, order: PROVIDER_KEYS.length + 1,
       matches: (q: string) => 'nous portal hermes'.includes(q.trim().toLowerCase())
         || NOUS_NODES.some((node) => matchesModelSearch(node, q)),
-      render: () => <NousRow key={NOUS_ROW} summary={NOUS_NODES.map((node) => node.displayName).join(', ')} /> },
+      render: () => <NousRow key={NOUS_ROW} summary="Chat models through your Hermes sign-in" /> },
   ];
 
   // GM, PR #203 r19 item 6: a change made elsewhere updates the panel in

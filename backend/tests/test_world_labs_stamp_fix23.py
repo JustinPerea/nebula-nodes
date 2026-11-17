@@ -39,11 +39,11 @@ from tests.test_project_catalog_restore_fix21 import (  # noqa: E402,F401
     ENVIRONMENT, _alpha_then_delta, _named, _with_run, recoveries)
 
 EXPORT = "worldlabs-world-export"
-OWN_LINE = "“Delta brief” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History."
+OWN_LINE = "“Delta brief” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history."
 SHARED = ("Nebula couldn’t delete “Delta brief” because it shares the ID n1 with a World Labs run from a project "
-          "Nebula can’t identify. Check that run in Marble before you forget its ID in Run History, then try again.")
+          "Nebula can’t identify. Check that run in Marble before you forget its ID in Run history, then try again.")
 UNPLACED = ("Nebula couldn’t delete “Delta brief” because it has a saved World Labs recovery ID. "
-            "Check the run in Marble, then forget that ID in Run History.")
+            "Check the run in Marble, then forget that ID in Run history.")
 AGENT_DETAIL = ("Cannot delete n1: it has unresolved World Labs paid state. "
                 "Check Marble, then resolve its exact recovery/ambiguity record first.")
 

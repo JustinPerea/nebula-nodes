@@ -171,7 +171,7 @@ describe('L-1: every edit is gated, following and offline', () => {
     for (const name of ['deleteCanvasElements', 'clearBackendNodes', 'adoptAcceptedProposal']) expect(gated.has(name)).toBe(true);
   });
 
-  it("Run History's record matcher is listed as a read, and calling it changes nothing", () => {
+  it("Run history's record matcher is listed as a read, and calling it changes nothing", () => {
     expect(graphStoreModule.NOT_GRAPH_EDITS.has('providerRecoveryOnCanvas')).toBe(true);
     expect(graphStoreModule.gatedGraphActions()).not.toContain('providerRecoveryOnCanvas');
     useGraphStore.setState({

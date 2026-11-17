@@ -971,7 +971,7 @@ BOARD_WRITE_TRIES = 3
 _FIELD_LABELS = {
     "name": "The name", "notes": "Notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
     "avoid": "The Avoid list", "pinnedColors": "The pinned colours", "clashMode": "The clash mode",
-    "colorChoices": "The colour choices", "sendNotes": "Send notes to generators",
+    "colorChoices": "The colour choices", "sendNotes": "“Moodboard notes to generators”",
     "briefOverride": "The hand-written brief",
 }
 
@@ -1517,8 +1517,8 @@ _OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
 # is theirs to turn on (moodboard_store.NotesOptInProtected).
 _PERSON_NOTES = ("Only the person can send this board's notes to generators: the notes are their words about "
                  "the board, for them, their team and agents. Nothing was changed: leave send_notes "
-                 "(--send-notes) out to make the other changes, or ask the person to turn on \"Send these notes "
-                 "to generators\" in Moodboard Studio: propose it with propose_asset_change(kind=\"moodboard\", "
+                 "(--send-notes) out to make the other changes, or ask the person to turn on “Moodboard notes "
+                 "to generators” in Moodboard Studio: propose it with propose_asset_change(kind=\"moodboard\", "
                  "id=<board id>, change={\"sendNotes\": true}, note=...) over MCP, or POST /api/asset-proposals, "
                  "and they accept it there.")
 
