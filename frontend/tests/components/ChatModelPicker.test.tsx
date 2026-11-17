@@ -163,7 +163,7 @@ describe('ChatModelPicker', () => {
   });
 
   it('error-copy round 2: beside its Retry the line is in the because form and ends in "Try again."', () => {
-    render(<ChatModelPicker {...props({ error: "Couldn't load the models. Nebula didn't respond. Try again." })} />);
+    render(<ChatModelPicker {...props({ error: 'Nebula couldn’t load the models because the server didn’t respond. Try again.' })} />);
     open();
     expect(screen.getByRole('status').textContent).toBe('Nebula couldn’t load the models because the server didn’t respond. Try again.');
   });

@@ -136,20 +136,20 @@ function expectNothingSaved(before: string) {
 describe('a refused load starts no save (GM PR #205 r11)', () => {
   it('a plain file too complex to open', async () => {
     const { before } = await refusedLoad(plainFile(graphText('['.repeat(80) + ']'.repeat(80))));
-    expect(said).toEqual([`${LOAD} This file is too complex to open.`]);
+    expect(said).toEqual([`${LOAD.slice(0, -1)} because this file is too complex to open.`]);
     expectNothingSaved(before);
   });
 
   it('a plain file with a value Nebula can’t read', async () => {
     const { before } = await refusedLoad(plainFile(graphText('1e999')));
-    expect(said).toEqual([`${LOAD} Part of this file holds a value Nebula can’t read.`]);
+    expect(said).toEqual([`${LOAD.slice(0, -1)} because part of this file holds a value Nebula can’t read.`]);
     expectNothingSaved(before);
   });
 
   it('a bundle the restore refuses as too complex', async () => {
     const { before } = await refusedLoad(bundleFile(), () => new Response(JSON.stringify(
       { detail: 'graph.json is nested too deeply', code: 'graph_too_complex' }), { status: 400 }));
-    expect(said).toEqual([`${LOAD} This file is too complex to open.`]);
+    expect(said).toEqual([`${LOAD.slice(0, -1)} because this file is too complex to open.`]);
     expect(requests).toContain('POST /api/outputs/restore');
     expectNothingSaved(before);
   });
@@ -157,7 +157,7 @@ describe('a refused load starts no save (GM PR #205 r11)', () => {
   it('a bundle the restore refuses for a value it can’t read', async () => {
     const { before } = await refusedLoad(bundleFile(), () => new Response(JSON.stringify(
       { detail: 'graph.json contains a non-finite number', code: 'graph_unreadable_value' }), { status: 400 }));
-    expect(said).toEqual([`${LOAD} Part of this file holds a value Nebula can’t read.`]);
+    expect(said).toEqual([`${LOAD.slice(0, -1)} because part of this file holds a value Nebula can’t read.`]);
     expectNothingSaved(before);
   });
 

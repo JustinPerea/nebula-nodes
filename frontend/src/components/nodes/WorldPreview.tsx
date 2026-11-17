@@ -155,7 +155,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
       if (downloadControllerRef.current === controller) setDownloadState(null);
     } catch (error) {
       if (controller.signal.aborted) return;
-      const message = failureMessage(error, "Couldn't download the world.");
+      const message = failureMessage(error, "Couldn’t download the world.");
       if (downloadControllerRef.current === controller) {
         setDownloadState({ key, status: 'error', message });
       }

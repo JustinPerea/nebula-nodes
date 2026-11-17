@@ -232,7 +232,7 @@ describe('GM r24 answer 2: "Undid Codex’s edit." with its period', () => {
     const agent = { kind: 'foreign', source: 'agent', agentName: 'Codex' } as never;
     expect(undoNoticeText('undo', agent)).toBe('Undid Codex’s edit.');
     expect(undoNoticeText('redo', agent)).toBe('Redid Codex’s edit.');
-    expect(undoNoticeText('undo', { kind: 'foreign', source: 'window', agentName: null } as never)).toBe('Undid an edit from another window.');
+    expect(undoNoticeText('undo', { kind: 'foreign', source: 'window', agentName: null } as never)).toBe('Undid an edit from another tab.');
     expect(undoNoticeText('undo', { kind: 'foreign', source: 'unknown', agentName: null } as never)).toBe('Undid an edit made outside Nebula.');
   });
 

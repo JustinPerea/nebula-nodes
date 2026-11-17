@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Home } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useGraphStore } from '../../store/graphStore';
-import { retryBecauseLine } from '../../lib/errorCopy';
+import { besideButton } from '../../lib/errorCopy';
 import { HEADER_TOOLTIP, headerLine } from '../../lib/savePausedCopy';
 import { followingSwitch, openingLine, openingName, subscribeFollowingSwitch, subscribeFollowPulse, useFollowingSwitch } from '../../lib/canvasFollow';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
@@ -25,9 +25,11 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const scenesUnsaved = useGraphStore((state) => Object.keys(state.unsavedScenes).length > 0);
   const settled = status === 'saved' && !scenesUnsaved;
   const settledDelay = useSettleDelay(settled);
-  // GM, round 14 of PR #114: while offline "Save failed · Retry" hides (the
-  // banner says it); a retry couldn't reach Nebula anyway.
+  // Design, round 14 of PR #114: while offline "Not saved" and Try again hide (the
+  // banner says it); a retry couldn’t reach Nebula anyway.
   const offline = useBackendOffline();
+  const failedLineId = useId();
+  const failedLine = saveError ? besideButton(saveError) : 'Nebula couldn’t save the project. Try again.';
   const [draft, setDraft] = useState<string | null>(null);
   // Round 20 (GM follow-up 1): while the tab follows an agent's switch the
   // bar says "Opening “<project>”…" where the save state is. It never gets
@@ -137,10 +139,15 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
             onClick={() => useProjectStore.getState().openSizePanel()}>{headerLine(pausedBytes)}</button>
         : status === 'error' && offline ? null
         : status === 'error'
-        // Round 3b: this Retry saves, so its tooltip is the save's own failure
-        // (in the because form, ending in "Try again."), never another action's.
-        ? <button type="button" className="project-workspace-controls__retry" title={saveError ? retryBecauseLine(saveError) : 'Retry saving'}
-            onClick={() => void useProjectStore.getState().retrySave()}>Save failed · Retry</button>
+        // This Try again saves, so the line it is described by is the save's own failure (in the because form,
+        // ending in "Try again."), never another action's. The header says "Not saved" and keeps the sentence in
+        // the button's title and its accessible description: a title is not read by every screen reader or shown on touch.
+        ? <span className="project-workspace-controls__failed" role="group" aria-label="Save status">
+            <span className="project-workspace-controls__not-saved">Not saved</span>
+            <button type="button" className="project-workspace-controls__retry" title={failedLine} aria-describedby={failedLineId}
+              onClick={() => void useProjectStore.getState().retrySave()}>Try again</button>
+            <span id={failedLineId} hidden>{failedLine}</span>
+          </span>
         : <span className={`project-workspace-controls__status${settled ? ' project-workspace-controls__status--settled' : ''}`}
             style={settledDelay ? { animationDelay: settledDelay } : undefined} role="status">{label}</span>}
       {/* While following, the save state and the count (the canvas that is going) give their room to the

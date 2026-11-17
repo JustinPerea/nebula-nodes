@@ -5,7 +5,7 @@ import '../styles/outside-image-note.css';
  *  Nebula: that image is never loaded (lib/storedImage.ts), and this says why. */
 export function OutsideImageNote() {
   return (
-    <span className="outside-image-note" title="This image is a link to another site, so Nebula doesn't load it. Replace it with an upload.">
+    <span className="outside-image-note" title="This image is a link to another site, so Nebula doesn’t load it. Replace it with an upload.">
       {OUTSIDE_IMAGE_NOTE}
     </span>
   );

@@ -120,7 +120,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     // Error copy round 3e: a plain Error's own words never show; the action's heading and GM's general line do.
-    expect(useProjectStore.getState().error).toBe("Couldn't open the project. Try again, or reload if it keeps happening.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
   it('creates a blank canvas without replaying a recipe or clearing the outgoing saved project', async () => {
     await useProjectStore.getState().initialize();
@@ -191,7 +191,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().trash).toEqual([]);
     expect(useProjectStore.getState().lastDeleted).toBeNull();
     // Round 3e: the action's heading leads a reason the request carried without one.
-    expect(useProjectStore.getState().error).toBe("Couldn't restore the project. That project is no longer in Recently deleted");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t restore the project because that project is no longer in Recently deleted.");
   });
   it('purges one trashed project or empties the trash', async () => {
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta'), trashed('gamma')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
@@ -216,13 +216,13 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
-    expect(useProjectStore.getState().error).toBe("Couldn't delete the project. This project view is out of date.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t delete the project because this project view is out of date.");
     vi.mocked(projects.deleteProject).mockClear();
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().remove('alpha');
     expect(projects.deleteProject).not.toHaveBeenCalled();
     // Error copy round 3c (GM): every "Finish or stop …" variant reads this way.
-    expect(useProjectStore.getState().error).toBe("Couldn't delete the project. A run is still going. Let it finish or stop it.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t delete the project because a run is still going. Let it finish or stop it.");
   });
   it('can return Home and resume the active canvas during a run, but rejects changing projects', async () => {
     await useProjectStore.getState().initialize();
@@ -293,7 +293,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('beta');
     expect(useProjectStore.getState().screen).toBe('home');
   });
-  it('rejects bootstrap data if another window changes identity during loading', async () => {
+  it('rejects bootstrap data if another tab changes identity during loading', async () => {
     vi.mocked(execution.fetchCLIGraph).mockResolvedValueOnce({ nodes: [], edges: [], empty: true, workspaceRevision: 'rev-b' });
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().initialized).toBe(false);
@@ -315,7 +315,7 @@ describe('saved project coordinator', () => {
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('Unsaved alpha edits');
     // Error copy round 3c-2: never the error's own message, and not GM's
     // general line either while these edits wait (it says "reload").
-    expect(useProjectStore.getState().error).toBe("Couldn't load your projects.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t load your projects.");
     const firstRecovery = vi.mocked(projects.recoverProject).mock.calls[0];
     vi.mocked(projects.recoverProject).mockResolvedValueOnce(project('recovered-alpha'));
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project('beta'), project('recovered-alpha')],

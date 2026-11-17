@@ -1177,7 +1177,7 @@ def test_a_fields_restore_is_checked_and_skips_what_only_the_person_may_turn_on(
     done = _ok(_edit(client, [stale], headers=AGENT))
     assert done["board"]["direction"] == "was" and done["board"]["sendNotes"] is False
     assert [s["message"] for s in done["applied"][0]["skipped"]] == [
-        "Send notes to generators is the person's to turn on, left as is"]
+        "Send notes to generators is the person’s to turn on, left as is"]
     # As the person, the same slice turns it on.
     write_board(root, {**fixture_board(), "sendNotes": False, "direction": "now"})
     assert _ok(_edit(client, [stale], headers=PERSON))["board"]["sendNotes"] is True

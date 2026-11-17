@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { failureMessage, isLoadLine, loadFailedLine, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
+import { failedWhat, failureMessage, isLoadLine, loadFailedLine, notConnectedBecause, RequestFailedError } from '../../lib/errorCopy';
 import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 
@@ -53,7 +53,7 @@ export function useCommonsLine<T extends string | null>(
     // review", "load this reference", "load the Commons settings"), whichever of its requests
     // failed, and no answer is the because form too: "Nebula couldn’t load Agent review because
     // the server didn’t respond. Try again." (GM r31 wording)
-    const what = /^Couldn['’]t (.+)\.$/.exec((options.reload ? heading : '') || requestHeading(error) || heading)?.[1];
+    const what = failedWhat((options.reload ? heading : '') || requestHeading(error) || heading);
     // Round 18b (GM r29 1): a load says every reason in the because form (loadFailedLine).
     const line = (isPersonRefusal(error) && what ? notConnectedBecause(what)
       : options.reload && what ? loadFailedLine(what, error) : failureMessage(error, heading)) as T;
@@ -164,7 +164,7 @@ export function useCommonsLoadLines<K extends string>(order: readonly K[], reloa
   const show = useCallback((load: K, error: unknown, heading: string) => {
     // A refusal says why in the because form, under the request's own words; the page line
     // under the page's (GM r22).
-    const what = /^Couldn['’]t (.+)\.$/.exec(requestHeading(error) || heading)?.[1];
+    const what = failedWhat(requestHeading(error) || heading);
     // Round 15 (GM r24 c): no answer's reason is the because form too, one sentence for one cause.
     // Round 18b (GM r29 1): and every other reason too (loadFailedLine).
     const line = isPersonRefusal(error) && what ? notConnectedBecause(what)

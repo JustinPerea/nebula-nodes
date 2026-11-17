@@ -40,7 +40,7 @@ export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLine
 
 const SAYS = /(?:error|refus|fail|notice|problem)/i;
 /** Helpers whose call is a sentence (a refusal, a failure, a not-connected line). */
-const SENTENCES = /^(?:notConnectedBecause|personRequiredCopy|personLockLine|connectAgentLockCopy|heldProposalLine|heldQuestionsLine|generateStartFailedCopy|personRequiredMessage|markReadRefusedCopy|generateRefusedCopy|commonsNotConnectedCopy|failureMessage|failureCopy|failureUnder|copyForAnswer|copyForStatus|oneLine|shortLine|retryBecauseLine|shortReason|noticeText)$/;
+const SENTENCES = /^(?:notConnectedBecause|personRequiredCopy|personLockLine|connectAgentLockCopy|heldProposalLine|heldQuestionsLine|generateStartFailedCopy|personRequiredMessage|markReadRefusedCopy|generateRefusedCopy|commonsNotConnectedCopy|failureMessage|failureCopy|failureUnder|copyForAnswer|copyForStatus|oneLine|shortLine|besideButton|shortReason|noticeText)$/;
 
 /** The parts of a child expression whose value lands as text: through `&&`, `||`, `??`, `? :` and parentheses. */
 function textLeaves(expression: ts.Expression): ts.Expression[] {
@@ -196,7 +196,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'canvas-proposals.accept': [{ file: 'components/canvas/ProposalBar.tsx', expr: 'errorLeave.shown' }],
   'canvas-proposals.reject': [{ file: 'components/canvas/ProposalBar.tsx', expr: 'errorLeave.shown' }],
   'project.error': [
-    { file: 'components/projects/ProjectHome.tsx', expr: 'retryBecauseLine(error!)' },
+    { file: 'components/projects/ProjectHome.tsx', expr: 'besideButton(error!)' },
     { file: 'components/projects/ProjectHome.tsx', expr: 'error' },
   ],
   'project.load-retry': { none: 'a retry: its line is project.error' },
@@ -228,6 +228,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
 const EXEMPT: Record<string, string> = {
   'components/projects/ProjectHome.tsx: notice.text': 'the catalog restore notice\'s own status line (PR #199): what Nebula did, never a refusal of a request, so it can\'t be a not-connected line',
   'components/moodboard-studio/MoodboardStudioView.tsx: notices': 'a block of elements, each line in it a FailureLines',
+  'components/projects/ProjectWorkspaceControls.tsx: failedLine': 'the failed-save description for the header\'s Try again: the header renders nothing for a failed save while Nebula is offline (status === \'error\' && offline), so the line never shows while not connected',
   'components/commons/CommonsDetail.tsx: analysisFailureReason(asset.last_error_kind)': 'a too-transparent reference\'s muted reason (#208): from the asset\'s own analysis, never a request\'s refusal',
 };
 

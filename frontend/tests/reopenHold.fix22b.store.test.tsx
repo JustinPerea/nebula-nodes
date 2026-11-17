@@ -393,7 +393,7 @@ describe('review 20 lines-ui LOW-2 and NIT-1: focus and the poll', () => {
   });
 });
 
-describe('review 20 LOW-3 (GM r34 A2): the person’s reopen of this project in another window keeps this window’s view', () => {
+describe('review 20 LOW-3 (GM r34 A2): the person’s reopen of this project in another tab keeps this window’s view', () => {
   const reopenBy = (actor: Record<string, unknown>) => bootSwitch({ workspaceRevision: 'rev-a2',
     projectSwitch: { projectId: 'alpha', projectName: P, previousRevision: 'rev-a',
       previousProjectId: 'alpha', previousProjectName: P, actor, created: false } });
@@ -661,7 +661,7 @@ describe('GM r33, 2: the headings this PR added lead their lines, whatever the r
       { heading: "Couldn't open the project." }));
     await askToReopen();
     const line = noticeNow() ?? '';
-    expect(line.startsWith('Nebula couldn’t reopen the project.')).toBe(true);
+    expect(line).toBe('Nebula couldn’t reopen the project because that project can’t open.');
     expect(line).not.toContain("Couldn't open the project.");
   });
 });

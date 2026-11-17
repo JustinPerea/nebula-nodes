@@ -1,7 +1,7 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
 import { clearLineOnPromote } from './clearsOnPromote';
 import { deleteSettingsApiKey, getSettings, updateCredential, updateSettings } from './api';
-import { RequestFailedError } from './errorCopy';
+import { RequestFailedError, becauseLine } from './errorCopy';
 import { keyPhrase, keyText } from './directRoute';
 import { changedKeys, SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from './settingsSignal';
 import { credentialNoun, PROVIDER_KEY_SPECS } from './providerCatalog';
@@ -440,7 +440,7 @@ export function saveField<F extends SettingsField>(field: F, value: SettingsDraf
       await updateSettings(body);
     } catch (error) {
       setPending(field, false);
-      fail(field, unreadableSettingsLine(error) ?? "Couldn't save. Try again.", error);
+      fail(field, unreadableSettingsLine(error) ?? becauseLine({ heading: 'Couldn’t save.', reason: 'Try again.' }), error);
       return false;
     }
     if (field === 'outputPath' || field === 'exportFolder') {
@@ -470,7 +470,7 @@ export function saveRunCostConfirm(value: number | null): Promise<boolean> {
     } catch (error) {
       if (useUIStore.getState().runCostConfirmUsd === chosen) useUIStore.getState().setRunCostConfirmUsd(previous);
       setPending(id, false);
-      fail(id, unreadableSettingsLine(error) ?? "Couldn't save. Try again.", error);
+      fail(id, unreadableSettingsLine(error) ?? becauseLine({ heading: 'Couldn’t save.', reason: 'Try again.' }), error);
       return false;
     }
     setPending(id, false);

@@ -73,7 +73,7 @@ const message = () => store().messageNotice?.text ?? null;
 /** A delete's failure line, wherever it shows (the notice, or the message beside it). */
 /** The dropped-press line, wherever it shows (the notice, or the message beside an error). */
 const dropped = () => [notice(), message()].includes(DROPPED_UNDO_TEXT);
-const failure = () => [notice(), message()].find((text) => text?.startsWith("Couldn't delete")) ?? null;
+const failure = () => [notice(), message()].find((text) => text?.startsWith("Nebula couldn’t delete")) ?? null;
 // delete-landed-wait: off, the fake holds each DELETE until the test answers it by hand (or answers at once when not
 // holding), so settle() (a fixed count of timer turns) never races a clock: no runner stall can move the answer.
 const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 5)); });
@@ -300,7 +300,7 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       type('n3', 'F');
       await answer('n2', 500); await answer('n1');
       // GM round 21 (LOCKED): a 500 names the node and says it's back.
-      expect(failure()).toBe("Couldn't delete “n2”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula.");
+      expect(failure()).toBe("Nebula couldn’t delete “n2” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula.");
       expect(ids()).toEqual(['n2', 'n3']);
       net.holdDeletes = false;
       await undo();
@@ -508,7 +508,7 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       act(() => { store().deleteNode('n1'); }); await settle();
       await answer('n1', 500);
       // GM round 21 (LOCKED): a 500 names the node and says it's back.
-      expect(failure()).toBe("Couldn't delete “n1”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula.");
+      expect(failure()).toBe("Nebula couldn’t delete “n1” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula.");
       expect(ids()).toEqual(['n1', 'n2']);
       expect(store().undoStack.length).toBe(0);
       sameAsBackend();

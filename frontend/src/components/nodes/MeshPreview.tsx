@@ -167,9 +167,9 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
         return;
       }
 
-      // GM, error-copy round 2: "Couldn't load the 3D preview." then the
+      // GM, error-copy round 2: "Couldn’t load the 3D preview." then the
       // reason; the status stays in the console.
-      const heading = "Couldn't load the 3D preview.";
+      const heading = "Couldn’t load the 3D preview.";
       const failed = (reason: string) => new FailureNotice(heading, reason);
       try {
         if (!isSafeWorldUrl(src)) throw failed('The mesh URL is not safe to preview.');
@@ -258,12 +258,12 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
     setDownloadError(null);
     try {
       await downloadWorldAsset(src, meshDownloadFilename(src), {
-        heading: "Couldn't download the 3D model.",
+        heading: "Couldn’t download the 3D model.",
         tooLargeMessage:
           'This mesh is too large for a safe in-browser download. Use the local Nebula output folder instead.',
       });
     } catch (error) {
-      setDownloadError(failureMessage(error, "Couldn't download the 3D model."));
+      setDownloadError(failureMessage(error, "Couldn’t download the 3D model."));
     }
   }, [src]);
 

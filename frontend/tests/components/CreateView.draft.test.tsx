@@ -170,7 +170,7 @@ describe('Create draft integration', () => {
     expect(mocks.author).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
     await act(async () => { finish({ ok: false, status: 413, json: async () => ({ detail: 'Image exceeds 20 MB limit' }) }); });
     // error-copy round 2 (GM): "Couldn't upload {filename}." then the reason.
-    expect(await view.findByText("Couldn't upload slow.png. Image exceeds 20 MB limit")).toBeInTheDocument();
+    expect(await view.findByText('Nebula couldn’t upload “slow.png”. Image exceeds 20 MB limit.')).toBeInTheDocument();
     expect(view.getByRole('button', { name: 'Generate' })).toBeDisabled();
     await act(async () => { await mocks.directGenerate!(); });
     expect(mocks.author).not.toHaveBeenCalled();
@@ -186,9 +186,9 @@ describe('Create draft integration', () => {
     const view = render(<CreateView />);
     fireEvent.change(view.getByLabelText('Attach reference'), { target: { files: [image('retry.png')] } });
     // A 503 says GM's line, short beside the chip's Retry (WRAP rule).
-    expect(await view.findByText("Couldn't upload retry.png. Nebula didn't respond.")).toBeInTheDocument();
+    expect(await view.findByText('Nebula couldn’t upload “retry.png” because the server didn’t respond. Try again.')).toBeInTheDocument();
     fireEvent.change(view.getByRole('textbox', { name: 'Create prompt' }), { target: { value: 'Newer draft while uploading' } });
-    fireEvent.click(view.getByRole('button', { name: 'Retry retry.png' }));
+    fireEvent.click(view.getByRole('button', { name: 'Try again to upload “retry.png”' }));
     expect(await view.findByAltText('Reference 1')).toBeInTheDocument();
     expect(view.getByRole('textbox', { name: 'Create prompt' })).toHaveValue('Newer draft while uploading');
     expect(mocks.execute).not.toHaveBeenCalled();

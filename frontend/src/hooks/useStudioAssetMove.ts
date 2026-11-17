@@ -59,7 +59,7 @@ export function useStudioAssetMove(kind: AssetStudioKind) {
       const source = resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key);
       const attempt = useAssetStudioDraftStore.getState().beginSave(source);
       if (!attempt) {
-        setError('Still saving. Try Move again in a moment.');
+        setError(`Nebula couldn’t move the ${kind} because it’s still saving. Try “Move” again in a moment.`);
         return false;
       }
       // Where the draft is now: the move's own storedAssetChanged can land
@@ -77,7 +77,7 @@ export function useStudioAssetMove(kind: AssetStudioKind) {
         result = await moveStoredAsset(kind, id, target);
       } catch (err) {
         release();
-        setError(failureCopy(err, { heading: kind === 'moodboard' ? "Couldn't move the moodboard." : "Couldn't move the character." }));
+        setError(failureCopy(err, { heading: kind === 'moodboard' ? 'Couldn’t move the moodboard.' : 'Couldn’t move the character.' }));
         return false;
       }
       const latest = useAssetStudioDraftStore.getState();

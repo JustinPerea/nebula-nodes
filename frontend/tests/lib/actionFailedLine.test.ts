@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY, RequestFailedError, actionFailedLine, retryBecauseLine, shortLine,
+  CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY, RequestFailedError, actionFailedLine, becauseLine,
 } from '../../src/lib/errorCopy';
 
 // GM 2026-11 copy sweep: a failure line shown with a Try again button ends in "Try again.", in the because form,
@@ -22,17 +22,19 @@ describe('actionFailedLine', () => {
   });
 });
 
-describe('retryBecauseLine', () => {
-  it('puts the action in the because form beside a retry', () => {
-    expect(retryBecauseLine(`Couldn't open the project. ${CONNECTION_LOST_COPY}`))
+// retryBecauseLine and shortLine are gone: becauseLine takes the line's parts and the button beside it.
+describe('becauseLine beside a retry button', () => {
+  it('puts the action in the because form, ending in the button\'s words', () => {
+    expect(becauseLine({ heading: 'Couldn’t open the project.', reason: CONNECTION_LOST_COPY }, 'button'))
       .toBe('Nebula couldn’t open the project because the server isn’t answering. Try again.');
-    expect(retryBecauseLine(`Nebula couldn’t restore “Shore”. ${NO_RESPONSE_COPY}`))
+    expect(becauseLine({ heading: 'Nebula couldn’t restore “Shore”.', reason: NO_RESPONSE_COPY }, 'button'))
       .toBe('Nebula couldn’t restore “Shore” because the server didn’t respond. Try again.');
   });
 
-  it('leaves any other line as shortLine does', () => {
-    const own = 'Couldn’t delete “Shore”. “Shot 2” is still running.';
-    expect(retryBecauseLine(own)).toBe(own);
-    expect(retryBecauseLine(`Cannot clear the canvas. ${CONNECTION_LOST_COPY}`)).toBe(shortLine(`Cannot clear the canvas. ${CONNECTION_LOST_COPY}`));
+  it('a reason that is a sentence becomes the clause (a quoted name stays); a heading that is not “Couldn’t …” keeps its own words', () => {
+    expect(becauseLine({ heading: 'Couldn’t delete “Shore”.', reason: '“Shot 2” is still running.' }, 'button'))
+      .toBe('Nebula couldn’t delete “Shore” because “Shot 2” is still running.');
+    expect(becauseLine({ heading: 'Cannot clear the canvas.', reason: CONNECTION_LOST_COPY }, 'button'))
+      .toBe('Cannot clear the canvas. Nebula’s server isn’t answering. Make sure it’s running, then try again.');
   });
 });

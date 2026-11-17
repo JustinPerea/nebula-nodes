@@ -65,7 +65,7 @@ describe('GM PR #205 r17 item 3: a size refusal with no size names the limit', (
   it.each([
     [{ code: 'bundle_upload_too_large', limitBytes: 528 * 1024 * 1024 }, 'This file is larger than 528 MB, the most Nebula opens.'],
     [{ code: 'bundle_member_too_large', limitBytes: 256 * 1024 * 1024 }, 'One of its files is larger than 256 MB, the most Nebula opens.'],
-    [{ code: 'bundle_upload_too_large', sizeBytes: 600 * 1024 * 1024, limitBytes: 528 * 1024 * 1024 }, 'This file is 600.0 MB. Nebula opens files up to 528 MB.'],
+    [{ code: 'bundle_upload_too_large', sizeBytes: 600 * 1024 * 1024, limitBytes: 528 * 1024 * 1024 }, 'This file is 600 MB. Nebula opens files up to 528 MB.'],
   ])('%j', (body, line) => {
     expect(bundleRefusalLine(body)).toBe(line);
   });

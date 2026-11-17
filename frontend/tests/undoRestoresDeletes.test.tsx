@@ -110,19 +110,19 @@ describe("GM's lines", () => {
     expect(deletedNoticeText(3)).toBe('Deleted 3 nodes.');
     expect(restoredNoticeText(1, 0)).toBe('Restored the node.');
     expect(restoredNoticeText(3, 0)).toBe('Restored 3 nodes.');
-    expect(restoredNoticeText(3, 1)).toBe("Restored 3 nodes. 1 proposal couldn't be reopened.");
-    expect(restoredNoticeText(1, 2)).toBe("Restored the node. 2 proposals couldn't be reopened.");
+    expect(restoredNoticeText(3, 1)).toBe("Restored 3 nodes. Nebula couldn’t reopen 1 proposal.");
+    expect(restoredNoticeText(1, 2)).toBe("Restored the node. Nebula couldn’t reopen 2 proposals.");
   });
 
   // GM, 2026-10-23: a pin whose node came back as another model is counted like proposals.
   it('counts pins that couldn\'t go back, alone and with proposals', () => {
-    expect(restoredNoticeText(1, 0, 1)).toBe("Restored the node. 1 pin couldn't be re-attached.");
-    expect(restoredNoticeText(2, 0, 2)).toBe("Restored 2 nodes. 2 pins couldn't be re-attached.");
-    expect(restoredNoticeText(3, 2, 1)).toBe("Restored 3 nodes. 1 pin and 2 proposals couldn't be restored.");
-    expect(restoredNoticeText(1, 1, 2)).toBe("Restored the node. 2 pins and 1 proposal couldn't be restored.");
+    expect(restoredNoticeText(1, 0, 1)).toBe("Restored the node. Nebula couldn’t reattach 1 pin.");
+    expect(restoredNoticeText(2, 0, 2)).toBe("Restored 2 nodes. Nebula couldn’t reattach 2 pins.");
+    expect(restoredNoticeText(3, 2, 1)).toBe("Restored 3 nodes. Nebula couldn’t restore 1 pin and 2 proposals.");
+    expect(restoredNoticeText(1, 1, 2)).toBe("Restored the node. Nebula couldn’t restore 2 pins and 1 proposal.");
     expect(notRestoredText(0, 0)).toBe('');
-    expect(notRestoredText(1, 0)).toBe("1 pin couldn't be re-attached.");
-    expect(notRestoredText(0, 1)).toBe("1 proposal couldn't be reopened.");
+    expect(notRestoredText(1, 0)).toBe("Nebula couldn’t reattach 1 pin.");
+    expect(notRestoredText(0, 1)).toBe("Nebula couldn’t reopen 1 proposal.");
   });
 });
 
@@ -174,7 +174,7 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     useGraphStore.getState().undo();
     await settle();
     expect(restores()[0].removals).toHaveLength(2);
-    expect(notice()?.text).toBe("Restored 2 nodes. 1 proposal couldn't be reopened.");
+    expect(notice()?.text).toBe("Restored 2 nodes. Nebula couldn’t reopen 1 proposal.");
   });
 
   it("counts a pin whose node came back as another model, and stays quiet about one deleted since", async () => {
@@ -187,7 +187,7 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     ] });
     useGraphStore.getState().undo();
     await settle();
-    expect(notice()?.text).toBe("Restored the node. 1 pin couldn't be re-attached.");
+    expect(notice()?.text).toBe("Restored the node. Nebula couldn’t reattach 1 pin.");
   });
 
   it('says pins and proposals together when both couldn\'t go back', async () => {
@@ -197,7 +197,7 @@ describe('every delete path: no confirm, a notice with Undo', () => {
       pinsLeft: [{ id: 'pin_n1', reason: 'its node came back as another model', code: 'another-model' }] });
     useGraphStore.getState().undo();
     await settle();
-    expect(notice()?.text).toBe("Restored the node. 1 pin and 2 proposals couldn't be restored.");
+    expect(notice()?.text).toBe("Restored the node. Nebula couldn’t restore 1 pin and 2 proposals.");
   });
 
   it('never counts by the reason text: a pin left without a code is quiet', async () => {
@@ -248,7 +248,7 @@ describe("an agent's delete, undone by the person", () => {
     useGraphStore.getState().undo();
     await settle();
     expect(restores()[0].removals).toEqual([removal]);
-    expect(notice()?.text).toBe("Undid Claude’s edit. 1 proposal couldn't be reopened.");
+    expect(notice()?.text).toBe("Undid Claude’s edit. Nebula couldn’t reopen 1 proposal.");
   });
 
   it('counts a pin that came back on another model there too', async () => {
@@ -258,7 +258,7 @@ describe("an agent's delete, undone by the person", () => {
       pinsLeft: [{ id: 'pin_n1', reason: 'its node came back as another model', code: 'another-model' }] });
     useGraphStore.getState().undo();
     await settle();
-    expect(notice()?.text).toBe("Undid Claude’s edit. 1 pin and 1 proposal couldn't be restored.");
+    expect(notice()?.text).toBe("Undid Claude’s edit. Nebula couldn’t restore 1 pin and 1 proposal.");
   });
 });
 

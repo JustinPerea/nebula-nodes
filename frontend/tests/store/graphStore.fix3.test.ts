@@ -155,7 +155,7 @@ describe('M2: a restore the backend refuses keeps the spinner and reads the back
     useGraphStore.setState({ nodes: [cinema('n1', [{ id: 's1', prompt: 'a' }])] } as never);
     const added = useGraphStore.getState().addShot('n1') as string;
     await sleep(20);
-    const line = "Couldn’t undo. It would remove “Shot 2”, which is still running. Stop the run first.";
+    const line = "Nebula couldn’t undo because it would remove “Shot 2”, which is still running. Stop the run first.";
     fetchMock.mockImplementation(async (url: string) => {
       if (String(url).includes('/api/graph/restore')) {
         // The shot's run starts in this tab before the answer comes.
@@ -181,7 +181,7 @@ describe('M2: a restore the backend refuses keeps the spinner and reads the back
       ? json({ detail: 'The project changed.' }, 409) : json({})));
     useGraphStore.getState().undo();
     await sleep(60);
-    expect(notice()).toMatch(/^Couldn’t undo that\. /);
+    expect(notice()).toMatch(/^Nebula couldn’t undo that because /);
   });
 });
 
@@ -269,24 +269,24 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     await sleep(20);
     expect(deletesSent()).toBe(0);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toContain('n4');
-    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.");
+    expect(notice()).toBe("Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.");
     // The same through React Flow's own removal.
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange([{ id: 'n4', type: 'remove' }]);
-    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.");
+    expect(notice()).toBe("Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.");
   });
 
   it('no Stop here: "…Wait for it to finish."', () => {
     renderingScene(false);
     useGraphStore.getState().deleteNode('n4');
-    expect(notice()).toBe("Couldn’t delete “Opening”. “Shot 2” is still running. Wait for it to finish.");
+    expect(notice()).toBe("Nebula couldn’t delete “Opening” because “Shot 2” is still running. Wait for it to finish.");
   });
 
   it('several shots: named, and counted from four', () => {
     expect(sceneDeleteRefusedLine('Opening', { numbers: [2, 3], stoppable: true }))
-      .toBe("Couldn’t delete “Opening”. “Shot 2” and “Shot 3” are still running. Stop the run first.");
+      .toBe("Nebula couldn’t delete “Opening” because “Shot 2” and “Shot 3” are still running. Stop the run first.");
     expect(sceneDeleteRefusedLine('Opening', { numbers: [1, 2, 3, 4], stoppable: false }))
-      .toBe("Couldn’t delete “Opening”. 4 shots are still running. Wait for it to finish.");
+      .toBe("Nebula couldn’t delete “Opening” because 4 shots are still running. Wait for it to finish.");
   });
 
   it('multi-select: the rest is deleted, the scene stays, and the line says why', async () => {
@@ -333,9 +333,9 @@ describe('GM r3 items 2, 5 and 7: the Accept undo lines', () => {
       .toBe('Nothing was undone. The shots were reordered after you accepted.');
   });
 
-  it('item 2: "You reordered them in another window after you accepted."', () => {
+  it('item 2: "You reordered them in another tab after you accepted."', () => {
     expect(acceptUndoLine([{ node: 'X', settings: [], order: 'shots' }], you, false))
-      .toBe('Undid the proposal except the shot order in “X”. You reordered them in another window after you accepted.');
+      .toBe('Undid the proposal except the shot order in “X”. You reordered them in another tab after you accepted.');
   });
 
   it('item 7: unnamed settings in "Nothing was undone"', () => {

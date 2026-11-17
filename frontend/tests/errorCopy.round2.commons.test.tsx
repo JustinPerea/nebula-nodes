@@ -74,14 +74,15 @@ describe('Commons upload, per file', () => {
     fireEvent.drop(grid, { dataTransfer: { files, types: ['Files'] } });
     const alert = await screen.findByRole('alert');
     await waitFor(() => expect(alert.querySelectorAll('.failure-lines')).toHaveLength(5));
+    // One sentence per refused file, in the because form, with every reason kept.
     const shown = [...alert.querySelectorAll('.failure-lines')].map((item) => [
-      item.querySelector('.failure-lines__heading')?.textContent, item.querySelector('.failure-lines__reason')?.textContent]);
+      item.querySelector('.failure-lines__heading')?.textContent ?? null, item.querySelector('.failure-lines__reason')?.textContent]);
     expect(shown).toEqual([
-      ["Couldn’t upload dusk.png.", "That's too large to save."],
-      ["Couldn’t upload notes.txt.", "Nebula can't read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV."],
-      ["Couldn’t upload broken.png.", "That file couldn't be read. It may be damaged."],
-      ["Couldn’t upload new.png.", 'Nebula is still checking that file.'],
-      ["Couldn’t upload odd.png.", "Try again, or reload if it keeps happening."],
+      [null, 'Nebula couldn’t upload “dusk.png” because it’s too large.'],
+      [null, 'Nebula couldn’t upload “notes.txt” because it isn’t a file type Nebula reads. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.'],
+      [null, 'Nebula couldn’t upload “broken.png” because the file couldn’t be read. It may be damaged.'],
+      [null, 'Nebula couldn’t upload “new.png” because Nebula is still checking that file.'],
+      [null, 'Nebula couldn’t upload “odd.png” because the server didn’t accept it. Try again, or reload if it keeps happening.'],
     ]);
     for (const raw of RAW) expect(alert).not.toHaveTextContent(raw);
     // On 1fc3d846 the refresh after an upload cleared the error at once (a

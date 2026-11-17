@@ -13,7 +13,7 @@ import {
 } from './splatPly';
 
 /** GM's heading for the world preview (error-copy round 2). */
-const LOAD_WORLD = "Couldn't load the world.";
+const LOAD_WORLD = "Couldn’t load the world.";
 
 // Spark expands compressed SPZ data into substantially larger GPU buffers.
 // Keep the source ceiling below the graph/download ceilings so an imported

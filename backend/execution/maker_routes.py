@@ -183,7 +183,7 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
         if client is None:
             name = definition.get("displayName") or node.definition_id
             raise as_person_line(MissingCredentialError(
-                f"{name} can't run on {node_route.provider_label(spec.get('provider'))} in this version of Nebula yet. "
+                f"{name} can’t run on {node_route.provider_label(spec.get('provider'))} in this version of Nebula yet. "
                 "Choose another provider."))
         extra = ({"_kreaAuth": "mcp" if route.kind == node_route.PLAN else "api-token"}
                  if spec.get("provider") == "krea" else None)

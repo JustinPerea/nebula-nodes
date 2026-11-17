@@ -437,3 +437,15 @@ def test_the_desktop_bridge_names_the_tab_that_wrote(sockets, monkeypatch):  # n
     answer = _person().post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": "hf_desktop_6666"}, headers=tab)
     assert answer.status_code == 200, answer.text
     assert broadcast.call_args.args[0] == {"type": "settingsChanged", "keys": ["HF_TOKEN"], "origin": tab["X-Nebula-Tab"]}
+
+
+def test_a_missing_key_line_names_at_most_three_providers():
+    keys = ["BFL_API_KEY", "FAL_KEY", "REPLICATE_API_TOKEN", "OPENROUTER_API_KEY"]
+    assert key_line(keys[:1]) == "Add a Black Forest Labs API key in Settings to run this node."
+    assert key_line(keys[:2]) == "Add a Black Forest Labs or fal.ai API key in Settings to run this node."
+    assert key_line(keys[:3]) == "Add a Black Forest Labs API key, fal.ai API key or Replicate token in Settings to run this node."
+    four = "Add a key for one of its providers in Settings to run this node."
+    assert key_line(keys) == four
+    from execution.person_line import missing_key_line
+    assert missing_key_line(keys) == four
+    assert key_line(["NOT_A_KEY"]) is None

@@ -11,7 +11,9 @@ import { resetProjectStoreForTests, useProjectStore } from '../src/store/project
 import { keepCanvasLocally, useGraphStore } from '../src/store/graphStore';
 import { isCanvasKept, resetKeptCanvasForTests } from '../src/lib/keptCanvas';
 import { setProjectContext } from '../src/lib/projectContext';
-import { KEPT_SOURCE_DELETE_LINE } from '../src/components/projects/restoreCopyCore';
+
+// The refusal's one line: the action, then the chooser row's sentence as the reason.
+const KEPT_SOURCE_DELETE_REFUSAL = 'Nebula couldn’t delete the project because your kept edits came from this project. You can delete it after you save them as a project or discard them.';
 import * as projects from '../src/lib/projects';
 
 const summary = (id: string, name: string) => ({ id, name, createdAt: '2026-10-09T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z',
@@ -40,7 +42,7 @@ describe('remove() while the canvas is kept', () => {
     expect(state.keptEdits?.sourceId).toBe('p');
     expect(state.activeProject?.id).toBe('p');
     expect(state.projects).toHaveLength(3);
-    expect(state.error).toBe(`Couldn’t delete the project. ${KEPT_SOURCE_DELETE_LINE}`);
+    expect(state.error).toBe(KEPT_SOURCE_DELETE_REFUSAL);
     expect(state.errorRetry).toBeNull();
     expect(state.busy).toBe(false);
   });
@@ -51,7 +53,7 @@ describe('remove() while the canvas is kept', () => {
     expect(projects.deleteProject).not.toHaveBeenCalled();
     expect(isCanvasKept()).toBe(true);
     expect(useProjectStore.getState().projects.map((project) => project.id)).toContain('s');
-    expect(useProjectStore.getState().error).toContain(KEPT_SOURCE_DELETE_LINE);
+    expect(useProjectStore.getState().error).toBe(KEPT_SOURCE_DELETE_REFUSAL);
   });
 
   it('still deletes any other project, and the kept canvas keeps its edits', async () => {

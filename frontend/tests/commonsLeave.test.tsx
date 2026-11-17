@@ -11,7 +11,7 @@ import type { LabelingWork, SaveResult } from '../src/components/commons/commons
  * enabled (moving between sections isn't leaving; the panels keep their
  * drafts), and the real exits (Back, Projects, the browser's Back, the
  * Updates corner) open a small popover anchored to what was clicked:
- * "Your labels aren't saved." with Save and leave / Discard and leave / Stay.
+ * "Your labels aren’t saved." with Save and leave / Discard and leave / Stay.
  * The panels are stand-ins that keep the panel contract (onWork).
  */
 
@@ -178,8 +178,8 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     await openLabeling();
     fireEvent.click(back());
     const dialog = popover();
-    expect(dialog).toHaveTextContent("Your labels aren't saved.");
-    expect(dialog).toHaveAccessibleName("Your labels aren't saved.");
+    expect(dialog).toHaveTextContent("Your labels aren’t saved.");
+    expect(dialog).toHaveAccessibleName("Your labels aren’t saved.");
     expect(popoverButtons()).toEqual(['Save and leave', 'Discard and leave', 'Stay']);
     expect(within(dialog).getByRole('button', { name: 'Save and leave' })).toHaveClass('commons-button--primary');
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Save and leave' })).toHaveFocus());
@@ -253,7 +253,7 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     render(<Shell />);
     await openLabeling();
     fireEvent.click(home());
-    expect(popover()).toHaveTextContent("Your labels aren't saved.");
+    expect(popover()).toHaveTextContent("Your labels aren’t saved.");
     expect(popover().dataset.anchor).toBe('home');
     expect(goHome).not.toHaveBeenCalled();
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
@@ -267,14 +267,14 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
   // where the person can reload. A failure worth retrying (no answer, a
   // server error) keeps Save and leave as the retry.
   it('a conflict leaves only Discard and leave / Stay, with focus on Stay', async () => {
-    panels.labeling.save.mockResolvedValue({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false });
+    panels.labeling.save.mockResolvedValue({ ok: false, reason: 'Nebula couldn’t save your labels because they changed somewhere else. Reload to get the latest version.', retry: false });
     render(<Shell />);
     await openLabeling();
     fireEvent.click(back());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
-    expect(popover()).toHaveTextContent('Labels changed in another window. Reload before saving.');
-    expect(popover()).not.toHaveTextContent("Your labels aren't saved.");
+    await waitFor(() => expect(popover()).toHaveTextContent("Nebula couldn’t save your labels because they changed somewhere else. Reload to get the latest version."));
+    expect(popover()).toHaveTextContent("Nebula couldn’t save your labels because they changed somewhere else. Reload to get the latest version.");
+    expect(popover()).not.toHaveTextContent("Your labels aren’t saved.");
     expect(popoverButtons()).toEqual(['Discard and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Stay' })).toHaveFocus());
     expect(useUIStore.getState().viewMode).toBe('commons');
@@ -285,13 +285,13 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
   });
 
   it('a failure worth retrying keeps Save and leave as the retry, with focus on it', async () => {
-    panels.labeling.save.mockResolvedValueOnce({ ok: false, reason: 'Commons request failed (503)', retry: true });
+    panels.labeling.save.mockResolvedValueOnce({ ok: false, reason: 'Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.', retry: true });
     render(<Shell />);
     await openLabeling();
     fireEvent.click(back());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
-    expect(popover()).toHaveTextContent('Commons request failed (503)');
+    await waitFor(() => expect(popover()).toHaveTextContent("Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again."));
+    expect(popover()).toHaveTextContent("Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.");
     expect(popoverButtons()).toEqual(['Save and leave', 'Discard and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Save and leave' })).toHaveFocus());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
@@ -302,17 +302,17 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
   // Review: the failure lands in place in an open popover, with focus still
   // on Save and leave, so it must be announced.
   it('announces a failed Save and leave: the reason is an alert, and a second failure is announced again', async () => {
-    panels.labeling.save.mockResolvedValue({ ok: false, reason: 'Commons request failed (503)', retry: true });
+    panels.labeling.save.mockResolvedValue({ ok: false, reason: 'Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.', retry: true });
     render(<Shell />);
     await openLabeling();
     fireEvent.click(back());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
     const alert = await within(popover()).findByRole('alert');
-    expect(alert).toHaveTextContent('Commons request failed (503)');
+    expect(alert).toHaveTextContent('Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.');
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
     await waitFor(() => expect(panels.labeling.save).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(within(popover()).getByRole('alert')).not.toBe(alert));
-    expect(within(popover()).getByRole('alert')).toHaveTextContent('Commons request failed (503)');
+    expect(within(popover()).getByRole('alert')).toHaveTextContent('Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   // Review: a press on the popover's own text moves focus where the browser
@@ -322,7 +322,7 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     await openLabeling();
     fireEvent.click(back());
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Save and leave' })).toHaveFocus());
-    const line = within(popover()).getByText("Your labels aren't saved.");
+    const line = within(popover()).getByText("Your labels aren’t saved.");
     fireEvent.pointerDown(line);
     fireEvent.mouseDown(line);
     const target = line.closest<HTMLElement>('[tabindex]');
@@ -370,9 +370,9 @@ describe('a save already in progress', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save labels' }));
     await waitFor(() => expect(panels.inFlight).not.toBeNull());
     fireEvent.click(home());
-    await act(async () => { panels.inFlight!({ ok: false, reason: 'Disk is read-only.', retry: true }); });
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
-    expect(popover()).toHaveTextContent('Disk is read-only.');
+    await act(async () => { panels.inFlight!({ ok: false, reason: 'Nebula couldn’t save your labels because the disk is read-only.', retry: true }); });
+    await waitFor(() => expect(popover()).toHaveTextContent("Nebula couldn’t save your labels because the disk is read-only."));
+    expect(popover()).toHaveTextContent("Nebula couldn’t save your labels because the disk is read-only.");
     expect(popoverButtons()).toEqual(['Save and leave', 'Discard and leave', 'Stay']);
     expect(popover().dataset.anchor).toBe('home');
     expect(home()).not.toHaveAttribute('aria-busy', 'true');
@@ -387,8 +387,8 @@ describe('a save already in progress that hits a conflict', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save labels' }));
     await waitFor(() => expect(panels.inFlight).not.toBeNull());
     fireEvent.click(back());
-    await act(async () => { panels.inFlight!({ ok: false, reason: 'Labels changed in another window. Reload before saving.', retry: false }); });
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
+    await act(async () => { panels.inFlight!({ ok: false, reason: 'Nebula couldn’t save your labels because they changed somewhere else. Reload to get the latest version.', retry: false }); });
+    await waitFor(() => expect(popover()).toHaveTextContent("Nebula couldn’t save your labels because they changed somewhere else. Reload to get the latest version."));
     expect(popoverButtons()).toEqual(['Discard and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Stay' })).toHaveFocus());
   });
@@ -404,7 +404,7 @@ describe('Agent review still grading', () => {
     await screen.findByText('review clean');
     fireEvent.click(back());
     expect(popover()).toHaveTextContent('Agent review is still running.');
-    expect(popover()).not.toHaveTextContent("Your labels aren't saved.");
+    expect(popover()).not.toHaveTextContent("Your labels aren’t saved.");
     expect(popoverButtons()).toEqual(['Stop and leave', 'Stay']);
     await waitFor(() => expect(within(popover()).getByRole('button', { name: 'Stop and leave' })).toHaveFocus());
     fireEvent.click(within(popover()).getByRole('button', { name: 'Stop and leave' }));

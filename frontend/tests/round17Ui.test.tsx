@@ -168,7 +168,7 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
     expect(api.labels.mock.calls[0][1]).toBe(5);
   });
 
-  it('a draft whose labels were saved in another window is dropped, with the line', async () => {
+  it('a draft whose labels were saved in another tab is dropped, with the line', async () => {
     api.get.mockResolvedValueOnce(batch(4));
     render(<CommonsEvaluation />);
     await screen.findByText('Set neutral');
@@ -183,7 +183,7 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
     expect(api.labels).not.toHaveBeenCalled();
   });
 
-  it('an accents draft whose accents were saved in another window is dropped, with the accents line', async () => {
+  it('an accents draft whose accents were saved in another tab is dropped, with the accents line', async () => {
     api.get.mockResolvedValueOnce(batch(4, false));
     render(<CommonsEvaluation />);
     const none = await screen.findByLabelText('I don’t see any accent colors');
@@ -197,9 +197,9 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
   });
 
   it('the lines, exactly', () => {
-    expect(LABELS_CHANGED_ELSEWHERE).toBe("You changed this reference's labels in another window while Nebula was offline, so your changes here weren't saved.");
+    expect(LABELS_CHANGED_ELSEWHERE).toBe("You changed this reference's labels in another tab while Nebula was offline, so your changes here weren't saved.");
     // GM r18: "changed", like the labels line.
-    expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You changed this reference’s accents in another window while Nebula was offline, so your changes here weren’t saved.");
+    expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You changed this reference’s accents in another tab while Nebula was offline, so your changes here weren’t saved.");
   });
 });
 
@@ -215,7 +215,7 @@ describe('a dropped rename names who renamed the node only when its source is kn
     ['an agent', { actor: { kind: 'agent', name: 'Codex', id: 'codex' } },
       'Codex renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
     ['the person\'s other window', { tab: 'other-tab', actor: { kind: 'person' } },
-      'You renamed this node “Hero shot” in another window while Nebula was offline, so your rename to “Brief draft” here wasn’t saved.'],
+      'You renamed this node “Hero shot” in another tab while Nebula was offline, so your rename to “Brief draft” here wasn’t saved.'],
     ['an unknown source', {},
       'This node was renamed “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
   ])('renamed by %s', async (_who, edit, line) => {

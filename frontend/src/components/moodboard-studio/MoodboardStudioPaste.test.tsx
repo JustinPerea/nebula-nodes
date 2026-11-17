@@ -439,7 +439,7 @@ describe('a paste in the List view', () => {
     await openStudio('list');
     refuse = { status: 413, body: { detail: 'File exceeds 20 MB limit' } };
     paste(clipboard({ files: [png('huge.png')] }));
-    expect(await screen.findByText("Couldn't upload huge.png.")).toBeTruthy();
+    expect(await screen.findByText(/^Nebula couldn’t upload “huge\.png”/)).toBeTruthy();
     expect(server.board.images).toHaveLength(2);
   });
 
@@ -451,7 +451,7 @@ describe('a paste in the List view', () => {
       code: 'person_required' } };
     await openStudio('list');
     paste(clipboard({ files: [png('p.png')] }));
-    const pasted = await screen.findByText("Couldn't upload p.png.");
+    const pasted = await screen.findByText(/^Nebula couldn’t upload “p\.png”/);
     const pastedLines = pasted.closest('.moodboard-studio__notice')!.textContent;
     cleanup();
     useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
@@ -461,7 +461,7 @@ describe('a paste in the List view', () => {
       Object.defineProperty(input, 'files', { value: [png('p.png')], configurable: true });
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    const dropped = await screen.findByText("Couldn't upload p.png.");
+    const dropped = await screen.findByText(/^Nebula couldn’t upload “p\.png”/);
     expect(dropped.closest('.moodboard-studio__notice')!.textContent).toBe(pastedLines);
     expect(server.edits).toHaveLength(0);
   });
@@ -985,7 +985,7 @@ describe('the backstop takes turns (review 2, the race)', () => {
     paste(clipboard({ files: [same()] }));
     await waitFor(() => expect(server.uploads).toHaveLength(0));
     await uploads.fail();
-    await screen.findByText("Couldn't upload same.png.");
+    await screen.findByText(/^Nebula couldn’t upload “same\.png”/);
     refuse = null;
     backend.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => uploadResponse(path, init));
     paste(clipboard({ files: [same()] }));
@@ -1499,7 +1499,7 @@ describe('review 3 test gaps', () => {
     // The refusal has come back; the shape read is still out.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     await act(async () => { open(); await Promise.resolve(); });
-    await screen.findByText("Couldn't upload early.png.");
+    await screen.findByText(/^Nebula couldn’t upload “early\.png”/);
     expect(board.placeholders).toEqual([]);
     expect(addOps()).toHaveLength(0);
   });
@@ -1581,7 +1581,7 @@ describe('review 3 test gaps', () => {
     await waitFor(() => expect(board.outside).not.toBeNull());
     const secondChip = board.outside!.id;
     await uploads.settle('first.png', false);
-    await screen.findByText("Couldn't upload first.png.");
+    await screen.findByText(/^Nebula couldn’t upload “first\.png”/);
     expect(board.outside?.id).toBe(secondChip);
     await uploads.settle('second.png', true);
     await waitFor(() => expect(addOps()).toHaveLength(1));
@@ -2070,7 +2070,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(store().entries[g1Key]).toMatchObject({ loaded: true, saveState: 'saved', retry: null });
     // The chip stays "Saved"; the red line carries the loss (GM r17).
     expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Saved');
-    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
   it('LOW-5: away, the spot check reads the board from the server, so a tile added meanwhile moves the add off it', async () => {
@@ -3072,7 +3072,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.board?.images.map((img) => img.url)).toEqual([river]);
   });
 
-  it('a queued send whose owned name landed from another window before it was refused: the record keeps no field, and the resend PUTs none (review 9 R23, R24)', async () => {
+  it('a queued send whose owned name landed from another tab before it was refused: the record keeps no field, and the resend PUTs none (review 9 R23, R24)', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3150,9 +3150,9 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(chip.textContent).toBe('Not saved');
     expect(chip.className).toContain('moodboard-studio-toolbar__state--not-saved');
     expect(chip.className).not.toContain('--error');
-    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
     made.fail = null;
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
     await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveError: null }));
     expect(screen.queryByText(/couldn’t save the moodboard/)).toBeNull();
@@ -4070,7 +4070,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error',
         saveError: { heading: '', reason: 'Nebula couldn’t save the moodboard because the server isn’t answering. Try again.' } }));
       // The person's Retry sends it again.
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]));
       expect(made.creates).toHaveLength(1);
       expect(api.createMoodboard.mock.calls.length).toBeGreaterThanOrEqual(2);
@@ -4147,7 +4147,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(urlsOf(newKey)).toEqual([river]));
       clickNew();
       await waitFor(() => expect(store().entries[newKey]?.saveState).toBe('error'));
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(api.createMoodboard.mock.calls.length).toBeGreaterThanOrEqual(2));
       await waitFor(() => expect(store().entries[newKey]?.saveState).toBe('error'));
       const before = requestIds();
@@ -4219,7 +4219,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       const epoch = store().entries[madeKey].epoch;
       busy = false;
       await toBoard('new');
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(api.createMoodboard.mock.calls.length).toBeGreaterThanOrEqual(3), { timeout: 4000 });
       await new Promise((done) => setTimeout(done, 1200));
       expect(made.board?.name).toBe('Rivers');
@@ -4257,7 +4257,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), notes: 'from the unsaved board' })); });
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error' }), { timeout: 4000 });
       busy = false;
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river, lake]), { timeout: 4000 });
       await waitFor(() => expect(made.board?.notes).toBe('from the unsaved board'), { timeout: 4000 });
       await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, pendingSaveId: null, saveError: null }));
@@ -4295,7 +4295,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(store().entries[madeKey].pendingSaveId).not.toBeNull(), { timeout: 4000 });
       busy = false;
       await toBoard('new');
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(api.createMoodboard.mock.calls.length).toBeGreaterThanOrEqual(3), { timeout: 4000 });
       await new Promise((done) => setTimeout(done, 300));
       // The repeat landed while the rename was out: made1's draft still has it.
@@ -4335,7 +4335,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error' }), { timeout: 4000 });
       made.board = { ...made.board!, name: 'Rivers', version: made.board!.version + 1, updatedAt: new Date(Date.now() + 60_000).toISOString() } as Moodboard;
       state.busy = false;
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ savedId: 'made1', pendingSaveId: null }), { timeout: 4000 });
       await new Promise((done) => setTimeout(done, 700));
       expect(made.board?.name).toBe('Rivers');
@@ -4358,7 +4358,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       made.board = { ...made.board!, name: 'Rivers', notes: 'board light', version: made.board!.version + 1,
         updatedAt: new Date(Date.now() + 60_000).toISOString() } as Moodboard;
       state.busy = false;
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ savedId: 'made1', pendingSaveId: null }), { timeout: 4000 });
       const line = await screen.findByText('Kept the name and notes from the moodboard.');
       expect(line.closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--neutral');
@@ -4372,7 +4372,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), name: 'Dusk' })); });
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error' }), { timeout: 4000 });
       state.busy = false;
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(made.board?.name).toBe('Dusk'), { timeout: 4000 });
       expect(made.puts).toEqual([expect.objectContaining({ name: 'Dusk' })]);
       expect(store().entries[madeKey].notice ?? null).toBeNull();
@@ -4385,7 +4385,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), name: 'Dusk' })); });
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error' }), { timeout: 4000 });
       state.busy = false;
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(made.board?.name).toBe('Dusk'), { timeout: 4000 });
       expect(store().entries[madeKey].notice ?? null).toBeNull();
     });
@@ -4400,7 +4400,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), notes: 'river dusk' })); });
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error' }), { timeout: 4000 });
       state.busy = false;
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(made.board?.notes).toBe('river dusk'), { timeout: 4000 });
       expect(store().entries[madeKey].notice ?? null).toBeNull();
     });
@@ -4414,7 +4414,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), name: 'Dusk' })); });
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error' }), { timeout: 4000 });
       state.busy = false;
-      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(made.board?.name).toBe('Dusk'), { timeout: 4000 });
       expect(made.board?.notes).toBe('from an agent');
       expect(store().entries[madeKey].notice ?? null).toBeNull();
@@ -4476,7 +4476,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
           && notice.hasAttribute('data-line-neutral') && notice.getAttribute('role') === 'status',
         chip: chip.textContent ?? '',
         notSaved: chip.className.includes('moodboard-studio-toolbar__state--not-saved') && !chip.className.includes('--error'),
-        retries: screen.queryAllByRole('button', { name: 'Retry' }).length,
+        retries: screen.queryAllByRole('button', { name: 'Try again' }).length,
         inLine: notice.querySelectorAll('button').length,
         error: store().entries[key].saveError,
       };
@@ -4495,7 +4495,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       if (retry === 'reload') return first;
       // Its Retry is the board's own save (persist's create): the same line again.
       const sends = api.createMoodboard.mock.calls.length;
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(api.createMoodboard.mock.calls.length).toBe(sends + 1));
       await waitFor(() => expect(store().entries[newKey]).toMatchObject({ saveState: 'error', retry: 'save', savedId: null }));
       expect(await lookOf(newKey, line)).toEqual(first);
@@ -4537,7 +4537,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     it.each([
       ['401', () => new RequestFailedError(SAVE, 401, { detail: 'Connect again' })],
       ['403', () => new RequestFailedError(SAVE, 403, { detail: 'Not yours', code: 'person_required' })],
-    ] as const)('%s: the create and the save say the signed-out line, neutral, with no Retry', async (_name, cause) => {
+    ] as const)('%s: the create and the save say the signed-out line, neutral, with no Try again', async (_name, cause) => {
       const line = 'Nebula couldn’t save the moodboard because you’re signed out. Open the link Nebula printed when it started.';
       const probe = probeAnswers('online');
       try {
@@ -4627,7 +4627,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(screen.getByText(line).closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--neutral');
       expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Not saved');
       refuse.on = false;
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ savedId: 'made1', saveError: null }));
       const again = api.createMoodboard.mock.calls.at(-1)![0] as { requestId?: string; attempt?: number };
       expect(again.requestId).toBe(first.requestId);
@@ -4657,7 +4657,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(chip.textContent).toBe('Not saved');
       expect(document.querySelector('.moodboard-studio__notice--neutral')!.textContent).not.toMatch(/creat|requestId/i);
       expect(api.createMoodboard).toHaveBeenCalledTimes(1);
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ savedId: 'made1', saveError: null }));
       expect(api.createMoodboard).toHaveBeenCalledTimes(2);
       const again = api.createMoodboard.mock.calls[1][0] as { requestId?: string; attempt?: number };
@@ -5142,7 +5142,7 @@ describe('a saved board\'s kept edit through a reload (round 6i, GM r17)', () =>
     await openStudio();
     rename('Global board', 'Dusk');
     await screen.findByText('Nebula couldn’t save the moodboard because it changed somewhere else. Reload to get the latest version.', {}, { timeout: 4000 });
-    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     server.board = theirs;
     api.updateMoodboard.mockImplementation(put);
     reloadTab();
@@ -5284,7 +5284,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(line.getAttribute('role')).toBe('status');
     expect(line.getAttribute('title')).toBe('“Rivers”');
     expect(line.querySelector('button')?.textContent).toBe('Restore');
-    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(stored()).toEqual(['t1']);
   });
 
@@ -5492,7 +5492,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(line.getAttribute('title')).toBe('“Rivers”');
     expect(Array.from(line.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))).toEqual(['Dismiss']);
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     await waitFor(() => expect(window.sessionStorage.getItem(EDITS)).toBeNull());
   });
 
@@ -6097,7 +6097,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       const line = (await screen.findByText(TRASHED('Global board'), {}, { timeout: 3000 })).closest('[data-gone]')!;
       expect(line.className).toContain('moodboard-studio__notice--neutral');
       expect(screen.queryByText(/didn’t accept/)).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
       expect(chip()).toBe('Not saved');
       api.updateMoodboard.mockImplementation(put);
       fireEvent.click(within(line as HTMLElement).getByRole('button', { name: 'Restore' }));
@@ -6136,7 +6136,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Dusk' } });
       const line = (await screen.findByText(PURGED('Global board'), {}, { timeout: 3000 })).closest('[data-gone]')!;
       expect(line.className).toContain('moodboard-studio__notice--error');
-      expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
       expect(chip()).toBe('Error');
     });

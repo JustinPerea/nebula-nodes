@@ -577,6 +577,16 @@ def test_a_refused_board_accept_with_a_readable_detail_keeps_that_detail(api, mo
         "This proposal no longer fits: Send notes to generators is already on for board \"Dusk board\".")
 
 
+def test_a_refused_board_accept_whose_detail_is_already_a_nebula_line_keeps_it_with_either_apostrophe(api, monkeypatch):
+    """A detail that opens "Nebula couldn't " (straight, as WORLD_LABS_BOOTSTRAP_PERSON is) is the line itself,
+    as the curly one is, with no "This proposal no longer fits:" in front of it."""
+    for opening in ("Nebula couldn\u2019t", "Nebula couldn't"):
+        detail = f"{opening} save its World Labs safeguards. Restart Nebula, then try again."
+        refused = _accept_refused(api, monkeypatch, {"detail": detail})
+        assert refused.status_code == 409
+        assert refused.json()["detail"] == detail
+
+
 def test_the_moodboard_stands_in_when_no_name_is_to_hand(api, monkeypatch):
     from fastapi.responses import JSONResponse
 

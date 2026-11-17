@@ -320,7 +320,7 @@ def _image_input_output(params: dict) -> dict:
             f"Image Input file not found: {file_path!r}. Set a valid path — "
             "downstream nodes would otherwise receive a reference no model can load."
         ),
-            "The node's file can't be found. Choose it again, then run the node again.")
+            "The node’s file can’t be found. Choose it again, then run the node again.")
     return {"image": {"type": "Image", "value": file_path}}
 
 
@@ -794,9 +794,8 @@ def _iterator_validation_errors(
                 message="Joining independent iterator batches is unsupported. "
                         "Use one iterator for the shared downstream workflow; "
                         "Nebula will not implicitly multiply generation requests.",
-                person="This node takes items from two separate Batch or iterator nodes. Nebula won't "
-                       "combine them, because that would multiply the paid runs. Feed it from one of "
-                       "them, then run it again.",
+                person="This node takes items from two separate Batch or iterator nodes, "
+                       "and combining them would multiply the paid runs. Feed it from one of them, then run it again.",
             ))
         policy = operation_policy(node_map[nid].definition_id)
         if upstream and policy is not None and policy.provider == "worldlabs":
@@ -804,7 +803,7 @@ def _iterator_validation_errors(
                 node_id=nid, port_id="",
                 message="World Labs recovery-aware operations cannot run inside an iterator. "
                         "Use separate tracked nodes so every operation retains its own recovery ID.",
-                person="A World Labs node can't run once for each item of a Batch or iterator. Give "
+                person="A World Labs node can’t run once for each item of a Batch or iterator. Give "
                        "each World Labs run its own node, then run them one at a time.",
             ))
         ancestors[nid] = upstream | ({nid} if node_map[nid].definition_id in _FANOUT_NODE_IDS else set())
@@ -1525,7 +1524,7 @@ async def _execute_graph(
                         )
                         node_outputs = {"image": {"type": "Image", "value": str(out_path)}}
                     except FileNotFoundError:
-                        raise with_person_line(ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor"), "Frame Extractor needs ffmpeg, which isn't installed on this computer. Install ffmpeg, then run the node again.")
+                        raise with_person_line(ValueError("ffmpeg not found — install ffmpeg to use Frame Extractor"), "Frame Extractor needs ffmpeg, which isn’t installed on this computer. Install ffmpeg, then run the node again.")
                 elif node.definition_id == "array-builder":
                     items = []
                     for port_id in ("item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8"):

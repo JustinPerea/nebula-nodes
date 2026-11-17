@@ -352,7 +352,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       .catch((err: unknown) => {
         if (cancelled) return;
         setModelLoadError(failureMessage(err, universalProvider === 'openrouter'
-          ? "Couldn't load the OpenRouter models." : "Couldn't load the Nous models."));
+          ? "Couldn’t load the OpenRouter models." : "Couldn’t load the Nous models."));
         setOpenRouterModels([]);
       })
       .finally(() => {
@@ -578,9 +578,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
     uploadNames.set(runKey, file.name);
     const formData = new FormData();
     formData.append('file', file);
-    // GM, error-copy round 2: "Couldn't upload {filename}." then the
+    // GM, error-copy round 2: "Couldn’t upload {filename}." then the
     // reason, in the canvas notice (as a canvas drop says it).
-    const heading = `Couldn't upload ${quoted(shownFileName(file.name))}.`;
+    const heading = `Couldn’t upload ${quoted(shownFileName(file.name))}.`;
     type Uploaded = { ok: true; filePath: string; url: string; previewSize?: unknown } | { ok: false; error: unknown };
     startPaletteExtract<Uploaded>(
       runKey,
@@ -770,7 +770,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             modelsLoading
               ? 'Loading models…'
               : modelLoadError
-                ? "Couldn't load the models."
+                ? "Couldn’t load the models."
                 : 'Search models…'
           }
           value={modelSearch}
@@ -1581,7 +1581,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               {maskData && <img src={maskData} alt="Painted mask" className="mask-painter__thumb" />}
               {editNeedsBaseImage && !editHasBaseImageWire && (
                 <p className="mask-painter__hint">
-                  Connect the source image to the edit node&apos;s Image port too — mask-painter only passes the mask.
+                  Connect the source image to the edit node’s Image port too. The mask painter only passes the mask.
                   Reconnect the mask, and Nebula connects the base image for you.
                 </p>
               )}

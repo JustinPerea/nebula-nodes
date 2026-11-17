@@ -5,7 +5,7 @@ import type { SaveState } from './CharacterStudioView';
 
 interface CharacterStudioToolbarProps {
   saveState: SaveState;
-  /** Retry redoes the failure: a save's own (round 3). Hidden for any other line. */
+  /** Try again redoes the failure: a save's own (round 3). Hidden for any other line. */
   canRetry?: boolean;
   saveError: string | null;
   onRetry: () => void;
@@ -27,7 +27,7 @@ const SAVE_LABEL: Record<SaveState, string> = {
 /** Top toolbar: breadcrumb back to the canvas + a live save-state indicator.
  *  Mirrors CinemaStudioToolbar's thin-band role. Persistence is autosave (the
  *  Studio debounces updateCharacter/createCharacter on every edit once valid),
- *  so there is no explicit Save button — only the state read-out and a Retry
+ *  so there is no explicit Save button — only the state read-out and a Try again
  *  affordance when a write fails. */
 export function CharacterStudioToolbar({
   saveState,
@@ -56,9 +56,9 @@ export function CharacterStudioToolbar({
           type="button"
           className="character-studio-toolbar__retry"
           onClick={onRetry}
-          title={saveError ?? 'Retry save'}
+          title={saveError ?? 'Try again to save the character'}
         >
-          Retry
+          Try again
         </button>
       )}
       {move}

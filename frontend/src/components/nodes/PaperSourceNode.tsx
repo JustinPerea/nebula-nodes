@@ -32,7 +32,7 @@ function refreshLabel(value?: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-const REFRESH_HEADING = "Couldn't refresh the source.";
+const REFRESH_HEADING = "Couldn’t refresh the source.";
 
 /** Explicit source lifecycle only: no timer, watcher or generation action. */
 export function PaperSourceNode({ id, data, selected }: NodeProps) {
@@ -76,7 +76,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       setObjectId(current.selection.length === 1 ? current.selection[0].id : '');
       setScale(source?.exportSettings.scale ?? '2x');
     } catch (value) {
-      reportError(value, "Couldn't read the Paper selection.");
+      reportError(value, "Couldn’t read the Paper selection.");
     } finally {
       setBusy(null);
     }
@@ -98,7 +98,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       setObjectId(result.selection[0].id);
       setScale(source?.exportSettings.scale ?? '2x');
     } catch (value) {
-      setError(failureMessage(value, "Couldn't find that Paper object."));
+      setError(failureMessage(value, "Couldn’t find that Paper object."));
     } finally {
       setBusy(null);
     }
@@ -119,8 +119,8 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       void openExternalUrl(sourceLinks[destination]).catch(() => {
         setNotice('');
         setError(destination === 'desktop'
-          ? "Couldn't open Paper Desktop. Use Open source link."
-          : "Couldn't open the source link. Copy its address and open it in your browser.");
+          ? "Nebula couldn’t open the source because Paper Desktop didn’t open it. Use “Open source link”."
+          : "Nebula couldn’t open the source link. Copy its address and open it in your browser.");
       });
     }
   }
@@ -139,7 +139,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       setManual(false);
       setNotice(source ? 'Object reconnected. Rerun the saved recipe explicitly.' : 'Artwork linked. Connect the image output to a recipe.');
     } catch (value) {
-      reportError(value, source ? "Couldn't reconnect the object." : "Couldn't link the artwork.");
+      reportError(value, source ? "Couldn’t reconnect the object." : "Couldn’t link the artwork.");
     } finally {
       setBusy(null);
     }

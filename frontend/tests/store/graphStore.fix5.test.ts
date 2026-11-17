@@ -564,7 +564,7 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
     expect(notice()).not.toMatch(/n\d/);
   });
 
-  it('another window\'s run: "Deleted “A” and “B”. “Ref scene” wasn’t deleted because “Shot 1” is still running."', async () => {
+  it('another tab\'s run: "Deleted “A” and “B”. “Ref scene” wasn’t deleted because “Shot 1” is still running."', async () => {
     useGraphStore.setState({ nodes: [cinema('n4', [{ id: 's1', prompt: 'a' }], 'Ref scene'), textNode('n5', 'A'), textNode('n6', 'B'),
       textNode('n7', 'Text'), textNode('n8', 'Text')] } as never);
     const sceneLine = "Couldn’t delete “Ref scene”. “Shot 1” is still running. Stop the run first.";

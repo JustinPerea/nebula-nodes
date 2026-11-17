@@ -14,7 +14,7 @@ import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } 
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
-import { failureMessage, retryBecauseLine } from '../../lib/errorCopy';
+import { failureMessage, besideButton } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
 import { editsSavedLine } from './unsavedEditsCopy';
@@ -205,7 +205,7 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
   useEffect(() => {
     let live = true;
     load(project.id).then((found) => { if (live) setChoices(found); })
-      .catch((error: unknown) => { if (live) setFailed(failureMessage(error, "Couldn't load the cover choices.")); });
+      .catch((error: unknown) => { if (live) setFailed(failureMessage(error, "Couldn’t load the cover choices.")); });
     return () => { live = false; };
   }, [load, project.id]);
   const pinned = choices?.pinned ?? null;
@@ -780,7 +780,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         {/* The notice stack (GM r14 item 1): the recovered copy's notice first,
             then the held edits or the line that says where they went, then
             the error. Where "Try again" redoes the failure the line is in the
-            because form and ends in "Try again." (retryBecauseLine, GM r23 on
+            because form and ends in "Try again." (besideButton, GM r23 on
             #208); where it only reloads, or can't help, the line stays whole. */}
         {(copyNotice || unsavedEdits || editsSavedAs || showError) && <div className="project-home__notices">
           {copyNotice && <div {...track('copy')}><CopyNotice notice={copyNotice} busy={locked}
@@ -800,9 +800,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
                 <button type="button" className="project-home__notice-restore" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
                   {retry === 'partLoad' ? 'Try again' : <>Open “{openFollowedName}”</>}</button></span></div></div>
           : showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
-            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={retryBecauseLine(error!)} /> : <LineText text={error} />}</span>
+            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
-              : <span>{retry === 'redo' ? <LineText text={retryBecauseLine(error!)} /> : <LineText text={error} />}</span>}
+              : <span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
             {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
               {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : 'Try again'}</button>}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
   createCharacter,
@@ -29,7 +29,7 @@ import { useOfflineHiddenNotice } from '../../hooks/useOfflineHiddenNotice';
 import { CharacterLibraryRail } from './CharacterLibraryRail';
 import { CharacterDefinitionPanel } from './CharacterDefinitionPanel';
 import { CharacterTestPanel } from './CharacterTestPanel';
-import { failureCopy, oneLine } from '../../lib/errorCopy';
+import { failureCopy, failureText } from '../../lib/errorCopy';
 import { FailureLines } from '../failure/FailureLines';
 import '../../styles/character-studio.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
@@ -109,6 +109,8 @@ const AUTOSAVE_DEBOUNCE_MS = 600;
  *  ≥3-view guard (spec §6): when referenceViews.length < 3 we never call
  *  create/update — we surface an inline message and stay in 'draft' state. */
 export function CharacterStudioView() {
+  // The load failure's line, which the Try again beside it is described by.
+  const loadLineId = useId();
   const characterEditorId = useUIStore((s) => s.characterEditorId);
   const characterEditorScope = useUIStore((s) => s.characterEditorScope);
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
@@ -252,7 +254,7 @@ export function CharacterStudioView() {
         readOnOpen.current = `${key}:${epoch}:${found.id}`;
         initialize(characterToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
-        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the character." }) });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn’t load the character." }) });
       });
     }
     return () => { cancelled = true; };
@@ -313,7 +315,7 @@ export function CharacterStudioView() {
         }
       }
     } catch (err) {
-      store.failSave(key, attempt.id, failureCopy(err, { heading: "Couldn't save the character." }));
+      store.failSave(key, attempt.id, failureCopy(err, { heading: "Couldn’t save the character." }));
     }
   }, [key, isCurrent, verifyProject, enterCharacterEditor, moveDraft, draftNow, follow]);
 
@@ -401,13 +403,13 @@ export function CharacterStudioView() {
   // whatever scope it was opened with (a node's Open button guesses, and a
   // draft kept from an earlier visit loads without a fetch). The rail opens
   // on that scope, and says so when it's another project's Character.
-  /** Retry is a save, so it shows only beside a save's own failure (GM,
-   * error-copy round 3: "A Retry that does something else is a defect."). */
+  /** Try again is a save, so it shows only beside a save's own failure (GM,
+   * error-copy round 3: "A Try again that does something else is a defect."). */
   const canRetry = Boolean(saveError) && retry === 'save';
   /** A failed save that another line (no project open) replaced is still
    * owed: Error, dirty, and autosave waits while it says Error. The toolbar
-   * keeps its Retry (a save) for it; the notice's line, which no save
-   * redoes, keeps its own words and no Retry (round 3 review). */
+   * keeps its Try again (a save) for it; the notice's line, which no save
+   * redoes, keeps its own words and no Try again (round 3 review). */
   const toolbarCanRetry = saveState === 'error' && (retry === 'save' || (retry == null && dirty));
 
   const characterProjectName = useProjectName(draft.projectId);
@@ -420,7 +422,7 @@ export function CharacterStudioView() {
       <CharacterStudioToolbar
           saveState={saveState}
           canRetry={toolbarCanRetry}
-          saveError={saveError === null ? null : typeof saveError === 'string' ? saveError : oneLine(saveError)}
+          saveError={saveError === null ? null : typeof saveError === 'string' ? saveError : failureText(saveError, true)}
           onRetry={() => void persist()}
           onDelete={savedId && !isDraftId ? () => { void deleteCharacterNow(); } : undefined}
           deleteDisabled={deleting.busy || Boolean(pendingSaveId)}
@@ -447,10 +449,10 @@ export function CharacterStudioView() {
       <main className="character-studio-view__main">
         {loading ? (
           <div className="character-studio-view__loading">
-            {/* As in the board's Studio (round 3b): no Retry loading with no project open. */}
-            {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Character…'}
+            {/* As in the board's Studio (round 3b): no Try again with no project open. */}
+            {shownLoadError ? <div id={loadLineId} role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Character…'}
             {shownLoadError && projectReady && <button type="button" className="character-studio-view__retry"
-              onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
+              aria-describedby={loadLineId} onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}
           </div>
         ) : (
           <>
@@ -501,14 +503,14 @@ export function CharacterStudioView() {
 
             {saveError && (
               <div className="character-studio-view__notice character-studio-view__notice--error">
-                {/* Its own Retry (a save) is the retry: GM's short line (WRAP rule). */}
+                {/* Its own Try again (a save) is the retry: the line ends “Try again.” */}
                 <FailureLines failure={saveError} retry={canRetry} />{canRetry && <>{' '}
                 <button
                   type="button"
                   className="character-studio-view__retry"
                   onClick={() => void persist()}
                 >
-                  Retry
+                  Try again
                 </button></>}
               </div>
             )}

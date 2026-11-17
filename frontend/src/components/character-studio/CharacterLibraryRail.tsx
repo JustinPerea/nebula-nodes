@@ -74,8 +74,8 @@ export function CharacterLibraryRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          // The request's error is already "Couldn't load the characters. <reason>".
-          setError(failureMessage(err, "Couldn't load the characters."));
+          // The request's error is already "Couldn’t load the characters. <reason>".
+          setError(failureMessage(err, "Couldn’t load the characters."));
           setListing({ for: listKey, items: [] });
         }
       })

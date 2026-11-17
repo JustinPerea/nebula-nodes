@@ -9426,7 +9426,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             value: 'failed',
           },
           {
-            label: 'Cancelled',
+            label: 'Canceled',
             value: 'cancelled',
           },
           {

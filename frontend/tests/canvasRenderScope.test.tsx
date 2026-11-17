@@ -453,7 +453,7 @@ describe('what a card shows from the rest of the canvas still updates', () => {
     act(() => useGraphStore.getState().handleExecutionEvent({ type: 'error', nodeId: 'image', error: 'Missing API key: OPENAI_API_KEY',
       friendly: 'Add an OpenAI key in Settings', category: 'auth' } as unknown as ExecutionEvent));
     expect(card('image').querySelector('.model-node--error')).not.toBeNull();
-    expect(card('image')).toHaveTextContent('Add an OpenAI key in Settings');
+    expect(card('image')).toHaveTextContent('the provider rejected the API key');
     act(() => useGraphStore.getState().updateNodeData('image', { state: 'complete', error: undefined,
       outputs: { image: { type: 'Image', value: '/api/outputs/done.png' } } }));
     expect(card('image').querySelector('img[alt="Generated output"]')).toHaveAttribute('src', expect.stringContaining('done.png'));

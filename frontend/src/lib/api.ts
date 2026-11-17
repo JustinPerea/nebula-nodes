@@ -67,18 +67,18 @@ export class ExecutionStartRejectedError extends RequestFailedError {
  * with 507 because a run-safety store (the paid-start fence, the recovery
  * journal, durable Stop state) couldn't be saved, before any provider call;
  * it lasts until Nebula restarts (review 15, extra check 3). The screen's
- * heading names the node ("Couldn't run “<node>”."). Only for that store's
+ * heading names the node ("Couldn’t run “<node>”."). Only for that store's
  * 507 (round 17, review 16 L5: the answer's `code`, backend
  * RUN_SAFETY_STORAGE_CODE); the project store's 507 has its own line
  * (PROJECT_LIST_REASON), since a restart doesn't clear it. */
-export const RUN_SAFEGUARDS_REASON = "Nebula couldn't save its run safeguards, so nothing was started. Restart Nebula, then try again.";
+export const RUN_SAFEGUARDS_REASON = 'It couldn’t save its run safeguards. Restart Nebula, then try again.';
 /** GM - Design, r18 of PR #114 (storage case): a run start Nebula refused
  * with 507 because it couldn't read or write its project list (the project
  * store's `code`), before any provider call. A restart doesn't clear it
  * (review 17 G1); a connected drive with space does. The heading names the
- * node ("Couldn't run “<node>”.") or the run ("Couldn't start the run."). A
+ * node ("Couldn’t run “<node>”.") or the run ("Couldn’t start the run."). A
  * corrupt catalog file is a separate gap (with Justin), not this line. */
-export const PROJECT_LIST_REASON = "Nebula can’t read its project list, so nothing was started. Check that the drive Nebula saves to is connected and has space, then try again.";
+export const PROJECT_LIST_REASON = 'It can’t read its project list. Check that the drive Nebula saves to is connected and has space, then try again.';
 /** The backend's codes for a 507 (main.py RUN_SAFETY_STORAGE_CODE, PROJECT_STORE_STORAGE_CODE). */
 export const RUN_SAFETY_STORAGE_CODE = 'run_safeguards';
 export const PROJECT_STORE_STORAGE_CODE = 'project_store';
@@ -112,14 +112,14 @@ async function executionStartResponseError(heading: string, response: Response):
  * written reason; else GM's line for the status. */
 
 export async function getExecutionStatus(runId: string): Promise<ExecutionStatusResult> {
-  const response = await apiRequest("Couldn't check the run.", `/api/executions/${encodeURIComponent(runId)}`, {
+  const response = await apiRequest("Couldn’t check the run.", `/api/executions/${encodeURIComponent(runId)}`, {
     cache: 'no-store',
   });
   return response.json();
 }
 
 export async function cancelExecution(runId: string, signal?: AbortSignal): Promise<ExecutionCancellationResult> {
-  const response = await apiRequest("Couldn't cancel the run.", `/api/executions/${encodeURIComponent(runId)}`, {
+  const response = await apiRequest("Couldn’t cancel the run.", `/api/executions/${encodeURIComponent(runId)}`, {
     method: 'DELETE', ...(signal ? { signal } : {}),
   });
   return response.json();
@@ -128,8 +128,8 @@ export async function cancelExecution(runId: string, signal?: AbortSignal): Prom
 /** The headings for the status bar's "I’ve checked Marble" and Run
  * History's "Forget ID" (round 3, GM: named after what the button does);
  * the store and the screens use these. */
-export const UNLOCK_NODE_HEADING = "Couldn't unlock the node.";
-export const FORGET_RECOVERY_HEADING = "Couldn't forget the recovery safeguard.";
+export const UNLOCK_NODE_HEADING = "Couldn’t unlock the node.";
+export const FORGET_RECOVERY_HEADING = "Couldn’t forget the recovery safeguard.";
 
 export async function acknowledgeProviderStartAmbiguity(
   kind: ProviderStartKind,
@@ -191,7 +191,7 @@ export async function executeGraph(
   preserveGraphParams = false,
   approvalId?: string,
 ): Promise<ExecutionStartResult> {
-  const response = await startRequest("Couldn't start the run.", '/api/execute', {
+  const response = await startRequest("Couldn’t start the run.", '/api/execute', {
     nodes, edges, runId, ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
   });
   return response.json();
@@ -211,7 +211,7 @@ export async function executeNode(
   /** The upper total (USD) that dialog showed: the backend refuses a run it prices higher. */
   confirmedCost?: number,
 ): Promise<ExecutionStartResult> {
-  const response = await startRequest("Couldn't run the node.", '/api/execute-node', {
+  const response = await startRequest("Couldn’t run the node.", '/api/execute-node', {
     nodes, edges, targetNodeId, runId,
     ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
     ...confirmedFields(confirmedPlaceholders, confirmedCost),
@@ -237,7 +237,7 @@ export async function generateCinemaShot(
   confirmedPlaceholders?: string[],
   confirmedCost?: number,
 ): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number; errors?: ExecutionValidationError[] }> {
-  const response = await startRequest("Couldn't start the shot.", '/api/cinema/generate-shot',
+  const response = await startRequest("Couldn’t start the shot.", '/api/cinema/generate-shot',
     { nodes, edges, nodeId, shotId, seed, variations, runId, ...confirmedFields(confirmedPlaceholders, confirmedCost) });
   return response.json();
 }
@@ -247,7 +247,7 @@ export async function promoteCinemaShotVariation(
   shotId: string,
   index: number,
 ): Promise<{ status: string; shotId: string; selectedVariation: number; imageUrl: string }> {
-  const response = await apiRequest("Couldn't use that variation.", '/api/cinema/promote-shot-variation', {
+  const response = await apiRequest("Couldn’t use that variation.", '/api/cinema/promote-shot-variation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodeId, shotId, index }),
@@ -261,7 +261,7 @@ export async function getSettings(): Promise<Record<string, unknown>> {
 }
 
 export async function updateSettings(settings: Record<string, unknown>): Promise<{ status: string }> {
-  const response = await apiRequest("Couldn't save your settings.", '/api/settings', {
+  const response = await apiRequest("Couldn’t save your settings.", '/api/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -320,7 +320,7 @@ export interface AgentSetup {
   warnings: string[];
 }
 
-/** `heading` names the call ("Couldn't revoke the app."); the backend's
+/** `heading` names the call ("Couldn’t revoke the app."); the backend's
  * written reason (Settings shows it) or GM's line comes after it. */
 async function agentAppsCall<T>(path: string, init: RequestInit | undefined, heading: string): Promise<T> {
   const response = await apiRequest(heading, path, init);
@@ -328,7 +328,7 @@ async function agentAppsCall<T>(path: string, init: RequestInit | undefined, hea
 }
 
 export function getOutsideSpend(): Promise<OutsideSpend> {
-  return agentAppsCall('/api/agent/spend/apps', undefined, "Couldn't load the connected apps.");
+  return agentAppsCall('/api/agent/spend/apps', undefined, "Couldn’t load the connected apps.");
 }
 
 /** The backend keeps a hash and writes the token to tokenFile (0600). The raw token is in this
@@ -341,28 +341,28 @@ export function createConnectedApp(
   return agentAppsCall('/api/agent/spend/apps', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, dailyUsd, ...options }),
-  }, "Couldn't create the app token.");
+  }, "Couldn’t create the app token.");
 }
 
 export function setConnectedAppColor(id: string, color: string | null): Promise<{ app: ConnectedApp }> {
   return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ color }),
-  }, "Couldn't save the app color.");
+  }, "Couldn’t save the app color.");
 }
 
 export function setConnectedAppLimit(id: string, dailyUsd: number | null): Promise<{ app: ConnectedApp }> {
   return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dailyUsd }),
-  }, "Couldn't save the app limit.");
+  }, "Couldn’t save the app limit.");
 }
 
 export function revokeConnectedApp(id: string): Promise<{ status: string }> {
-  return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, { method: 'DELETE' }, "Couldn't revoke the app.");
+  return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, { method: 'DELETE' }, "Couldn’t revoke the app.");
 }
 
 /** Remove one browser-managed provider key without resubmitting other settings. */
 export async function deleteSettingsApiKey(provider: string): Promise<{ status: string }> {
-  const response = await apiRequest("Couldn't remove the API key.", `/api/settings/api-keys/${encodeURIComponent(provider)}`, {
+  const response = await apiRequest("Couldn’t remove the API key.", `/api/settings/api-keys/${encodeURIComponent(provider)}`, {
     method: 'DELETE',
   });
   return response.json();
@@ -378,7 +378,7 @@ export async function deleteSettingsApiKey(provider: string): Promise<{ status: 
 /** Tell the backend about a key the desktop app stored. With `check`, it
  * only answers whether it would take it, and changes nothing. */
 export async function updateCredential(provider: string, key: string, options: { check?: boolean } = {}): Promise<{ status: string }> {
-  const response = await apiRequest("Couldn't save the API key.", '/api/credentials/update', {
+  const response = await apiRequest("Couldn’t save the API key.", '/api/credentials/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider, key, ...(options.check ? { check: true } : {}) }),
@@ -396,7 +396,7 @@ export interface OpenRouterModel {
 }
 
 export async function fetchOpenRouterModels(): Promise<{ models: OpenRouterModel[]; count: number }> {
-  const response = await apiRequest("Couldn't load the OpenRouter models.", '/api/openrouter/models');
+  const response = await apiRequest("Couldn’t load the OpenRouter models.", '/api/openrouter/models');
   return response.json();
 }
 
@@ -407,7 +407,7 @@ export type NousModel = OpenRouterModel;
 export async function fetchNousModels(): Promise<{ models: NousModel[]; count: number }> {
   // A refusal says the backend's auth message verbatim, usually how to run
   // `hermes model` and pick Nous Portal.
-  const response = await apiRequest("Couldn't load the Nous models.", '/api/nous/models');
+  const response = await apiRequest("Couldn’t load the Nous models.", '/api/nous/models');
   return response.json();
 }
 
@@ -491,11 +491,11 @@ export interface PersonalAgentList {
 }
 
 export function fetchPersonalAgents(): Promise<PersonalAgentList> {
-  return agentAppsCall('/api/personal-agents', undefined, "Couldn't load your agents.");
+  return agentAppsCall('/api/personal-agents', undefined, "Couldn’t load your agents.");
 }
 
 export function acknowledgePersonalAgentWarning(): Promise<{ warningAcknowledgedAt: string }> {
-  return agentAppsCall('/api/personal-agents/acknowledge-warning', { method: 'POST' }, "Couldn't save your answer.");
+  return agentAppsCall('/api/personal-agents/acknowledge-warning', { method: 'POST' }, "Couldn’t save your answer.");
 }
 
 export function updatePersonalAgent(
@@ -504,7 +504,7 @@ export function updatePersonalAgent(
 ): Promise<{ agent: PersonalAgent }> {
   return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes),
-  }, "Couldn't save the agent.");
+  }, "Couldn’t save the agent.");
 }
 
 export function createPersonalAgent(agent: {
@@ -512,11 +512,11 @@ export function createPersonalAgent(agent: {
 }): Promise<{ agent: PersonalAgent }> {
   return agentAppsCall('/api/personal-agents', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(agent),
-  }, "Couldn't add the agent.");
+  }, "Couldn’t add the agent.");
 }
 
 export function deletePersonalAgent(id: string): Promise<{ ok: boolean }> {
-  return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, { method: 'DELETE' }, "Couldn't remove the agent.");
+  return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, { method: 'DELETE' }, "Couldn’t remove the agent.");
 }
 
 /** Antigravity's download, sign-in and sign-out (backend services/antigravity_agent.py). */
@@ -524,11 +524,11 @@ export function antigravityAction(
   action: 'install' | 'remove' | 'sign-in' | 'cancel-sign-in' | 'sign-out',
 ): Promise<{ agent: PersonalAgent; message?: string }> {
   const [path, method, what] = {
-    install: ['install', 'POST', "Couldn't start the download."],
-    remove: ['install', 'DELETE', "Couldn't remove the download."],
-    'sign-in': ['sign-in', 'POST', "Couldn't start the sign-in."],
-    'cancel-sign-in': ['sign-in', 'DELETE', "Couldn't stop the sign-in."],
-    'sign-out': ['sign-out', 'POST', "Couldn't sign out."],
+    install: ['install', 'POST', "Couldn’t start the download."],
+    remove: ['install', 'DELETE', "Couldn’t remove the download."],
+    'sign-in': ['sign-in', 'POST', "Couldn’t start the sign-in."],
+    'cancel-sign-in': ['sign-in', 'DELETE', "Couldn’t stop the sign-in."],
+    'sign-out': ['sign-out', 'POST', "Couldn’t sign out."],
   }[action];
   return agentAppsCall(`/api/personal-agents/antigravity/${path}`, { method }, what);
 }
@@ -555,12 +555,12 @@ export interface ChatModelCatalog {
 }
 
 export async function fetchChatModels(agent: ChatProvider, refresh = false): Promise<ChatModelCatalog> {
-  const heading = "Couldn't load the models.";
+  const heading = "Couldn’t load the models.";
   const response = await apiRequest(heading, `/api/agents/${agent}/models${refresh ? '?refresh=true' : ''}`, undefined,
     { allow: [404] });
   // An older backend has no model discovery: say how to get it.
   if (response.status === 404) {
-    throw await requestError(heading, response, { reason: 'Model discovery needs the updated Nebula backend. Restart it, then retry.' });
+    throw await requestError(heading, response, { reason: 'The server is out of date. Restart Nebula, then try again.' });
   }
   return response.json();
 }
@@ -592,17 +592,17 @@ export interface ClaudeStatus {
 }
 
 export async function fetchClaudeStatus(): Promise<ClaudeStatus> {
-  const response = await apiRequest("Couldn't check Claude status.", '/api/agents/claude/status');
+  const response = await apiRequest("Couldn’t check Claude status.", '/api/agents/claude/status');
   return response.json();
 }
 
 export async function fetchCodexStatus(): Promise<CodexStatus> {
-  const response = await apiRequest("Couldn't check Codex status.", '/api/agents/codex/status');
+  const response = await apiRequest("Couldn’t check Codex status.", '/api/agents/codex/status');
   return response.json();
 }
 
 export async function startCodexChatGPTLogin(deviceAuth = false): Promise<CodexChatGPTLoginState> {
-  const response = await apiRequest("Couldn't start the ChatGPT sign-in.", '/api/agents/codex/login/chatgpt', {
+  const response = await apiRequest("Couldn’t start the ChatGPT sign-in.", '/api/agents/codex/login/chatgpt', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deviceAuth }),
@@ -611,7 +611,7 @@ export async function startCodexChatGPTLogin(deviceAuth = false): Promise<CodexC
 }
 
 export async function fetchCodexChatGPTLoginState(): Promise<CodexChatGPTLoginState> {
-  const response = await apiRequest("Couldn't check the ChatGPT sign-in.", '/api/agents/codex/login/chatgpt');
+  const response = await apiRequest("Couldn’t check the ChatGPT sign-in.", '/api/agents/codex/login/chatgpt');
   return response.json();
 }
 
@@ -628,7 +628,7 @@ export interface QuiverModel {
 export async function fetchQuiverModels(): Promise<{ models: QuiverModel[]; count: number }> {
   // 400 is the offline-fallback signal — frontend uses hardcoded
   // arrow-1 / arrow-1.1 / arrow-1.1-max if QUIVER_API_KEY is unset.
-  const response = await apiRequest("Couldn't load the Quiver models.", '/api/quiver/models');
+  const response = await apiRequest("Couldn’t load the Quiver models.", '/api/quiver/models');
   return response.json();
 }
 
@@ -661,7 +661,7 @@ export async function fetchCLIGraph(): Promise<{
 }
 
 export async function fetchReplicateSchema(owner: string, name: string): Promise<ReplicateSchema> {
-  const response = await apiRequest("Couldn't load the Replicate schema.",
+  const response = await apiRequest("Couldn’t load the Replicate schema.",
     `/api/replicate/schema/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`);
   return response.json();
 }
@@ -676,20 +676,20 @@ type CharacterUpdateInput = Partial<CharacterCreateInput>;
 export async function fetchCharacters(scope: 'project' | 'global', projectId?: string): Promise<Character[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
-  const response = await apiRequest("Couldn't load the characters.", `/api/characters?${params.toString()}`);
+  const response = await apiRequest("Couldn’t load the characters.", `/api/characters?${params.toString()}`);
   return response.json();
 }
 
 /** One Character by id, or null when there's none (deleted, or never existed). */
 export async function fetchCharacter(id: string): Promise<Character | null> {
-  const response = await apiRequest("Couldn't load the character.", `/api/characters/${encodeURIComponent(id)}`,
+  const response = await apiRequest("Couldn’t load the character.", `/api/characters/${encodeURIComponent(id)}`,
     undefined, { allow: [404] });
   if (response.status === 404) return null;
   return response.json();
 }
 
 export async function createCharacter(body: CharacterCreateInput): Promise<Character> {
-  const response = await apiRequest("Couldn't create the character.", '/api/characters', {
+  const response = await apiRequest("Couldn’t create the character.", '/api/characters', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -701,16 +701,15 @@ export async function createCharacter(body: CharacterCreateInput): Promise<Chara
  * moved the asset to Recently deleted while it was open: say so under the
  * save's heading, since restoring it and saving again keeps the edits
  * (backend main.py _asset_not_found). Null for a plain not-found. */
-async function trashedFailure(response: Response, kind: 'moodboard' | 'character', heading: string): Promise<Error | null> {
+async function trashedFailure(response: Response, heading: string): Promise<Error | null> {
   if (response.status !== 404) return null;
   try {
     const body = await response.clone().json() as { code?: unknown; trashed?: { deletedBy?: { kind?: string; name?: string } } };
     if (body?.code === 'in_trash') {
       const by = body.trashed?.deletedBy;
       const who = !by || by.kind === 'person' ? '' : ` by ${actorLabel(by)}`;
-      const noun = kind === 'moodboard' ? 'moodboard' : 'Character';
       return requestError(heading, response, { detail: body, reason:
-        `This ${noun} was moved to Recently deleted${who}. Restore it from the list on the left, then Retry to save your changes.` });
+        `It was moved to Recently deleted${who}. Restore it from the list on the left, then choose “Try again” to save your changes.` });
     }
   } catch { /* not JSON: plain not found */ }
   return null;
@@ -728,7 +727,7 @@ async function characterConflict(response: Response): Promise<CharacterVersionCo
   }
 }
 
-const SAVE_CHARACTER = "Couldn't save the character.";
+const SAVE_CHARACTER = "Couldn’t save the character.";
 
 /** With `baseVersion`, a Character saved elsewhere since is a
  *  CharacterVersionConflict, not an overwrite. */
@@ -739,7 +738,7 @@ export async function updateCharacter(id: string, body: CharacterUpdateInput & {
     body: JSON.stringify(body),
   }, { allow: [404, 409] });
   if (!response.ok) {
-    throw await characterConflict(response) ?? await trashedFailure(response, 'character', SAVE_CHARACTER)
+    throw await characterConflict(response) ?? await trashedFailure(response, SAVE_CHARACTER)
       ?? await requestError(SAVE_CHARACTER, response);
   }
   return response.json();
@@ -747,7 +746,7 @@ export async function updateCharacter(id: string, body: CharacterUpdateInput & {
 
 /** Moves the Character to Recently deleted; the result is its trash record. */
 export async function deleteCharacter(id: string): Promise<TrashedItem> {
-  const response = await apiRequest("Couldn't delete the character.", `/api/characters/${encodeURIComponent(id)}`,
+  const response = await apiRequest("Couldn’t delete the character.", `/api/characters/${encodeURIComponent(id)}`,
     { method: 'DELETE' });
   return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
@@ -762,31 +761,31 @@ type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'cr
   & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
-/* Board calls name their action (GM, error-copy round 2: "Couldn't save the
+/* Board calls name their action (GM, error-copy round 2: "Couldn’t save the
  * board. <reason>" replaces "Save failed: <reason>"), and apiRequest says
  * the reason: GM's lines for no answer, 408, 429 and 5xx; else the backend's
  * written reason; else GM's line for the status. A FastAPI field list
  * ("images.0.url: field required") is not a reason the person can read: it
  * says GM's fallback line, and the list stays in the error's `detail` and
  * the console. Never a status code. */
-export const SAVE_BOARD = "Couldn't save the moodboard.";
+export const SAVE_BOARD = "Couldn’t save the moodboard.";
 
 /** Why a write to a saved board failed: that it went to Recently deleted
  * meanwhile, else the reason for the answer. */
 async function moodboardWriteError(response: Response, heading: string): Promise<Error> {
-  return await trashedFailure(response, 'moodboard', heading) ?? requestError(heading, response);
+  return await trashedFailure(response, heading) ?? requestError(heading, response);
 }
 
 export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
-  const response = await apiRequest("Couldn't load the moodboards.", `/api/moodboards?${params.toString()}`);
+  const response = await apiRequest("Couldn’t load the moodboards.", `/api/moodboards?${params.toString()}`);
   return response.json();
 }
 
 /** One Moodboard by id, or null when there's none (deleted, or never existed). */
 export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
-  const response = await apiRequest("Couldn't load the moodboard.", `/api/moodboards/${encodeURIComponent(id)}`,
+  const response = await apiRequest("Couldn’t load the moodboard.", `/api/moodboards/${encodeURIComponent(id)}`,
     undefined, { allow: [404] });
   if (response.status === 404) return null;
   return response.json();
@@ -851,14 +850,14 @@ export async function editMoodboard(id: string, ops: MoodboardOp[], baseVersion?
 }
 
 export async function analyzeMoodboard(id: string): Promise<Moodboard> {
-  const response = await apiRequest("Couldn't analyze the moodboard.", `/api/moodboards/${id}/analyze`, { method: 'POST' });
+  const response = await apiRequest("Couldn’t analyze the moodboard.", `/api/moodboards/${id}/analyze`, { method: 'POST' });
   return response.json();
 }
 
 /** Keep a board's hand-written brief after the board changed: clears
  *  "board changed since you edited this" until the next change. */
 export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard> {
-  const heading = "Couldn't save your brief."; // GM, round 3
+  const heading = "Couldn’t save your brief."; // GM, round 3
   const response = await apiRequest(heading, `/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`,
     { method: 'POST' }, { allow: [404] });
   if (!response.ok) throw await moodboardWriteError(response, heading);
@@ -867,7 +866,7 @@ export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard>
 
 /** Moves the board to Recently deleted; the result is its trash record. */
 export async function deleteMoodboard(id: string): Promise<TrashedItem> {
-  const response = await apiRequest("Couldn't delete the moodboard.", `/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const response = await apiRequest("Couldn’t delete the moodboard.", `/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
   return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
 
@@ -889,7 +888,7 @@ export interface StoredAssetMove<T> {
 export async function moveStoredAsset<K extends 'moodboard' | 'character'>(
   kind: K, id: string, projectId: string | null,
 ): Promise<StoredAssetMove<K extends 'moodboard' ? Moodboard : Character>> {
-  const response = await apiRequest(kind === 'moodboard' ? "Couldn't move the moodboard." : "Couldn't move the character.",
+  const response = await apiRequest(kind === 'moodboard' ? "Couldn’t move the moodboard." : "Couldn’t move the character.",
     `/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -912,7 +911,7 @@ export type StoredAssetLookup<T> =
 export async function lookupStoredAsset<K extends 'moodboard' | 'character'>(
   kind: K, id: string,
 ): Promise<StoredAssetLookup<K extends 'moodboard' ? Moodboard : Character>> {
-  const response = await apiRequest(kind === 'moodboard' ? "Couldn't load the moodboard." : "Couldn't load the character.",
+  const response = await apiRequest(kind === 'moodboard' ? "Couldn’t load the moodboard." : "Couldn’t load the character.",
     `/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}`, undefined, { allow: [404] });
   if (response.status === 404) {
     try {

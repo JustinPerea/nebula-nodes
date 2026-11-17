@@ -14,9 +14,9 @@ const NODE_WAITING_FORGET = `“World Labs Environment”${RECOVERY_ID_SAVED_TAI
 describe('heldDeleteText', () => {
   it("every node held, forget: GM's 2026-10-24 line", () => {
     expect(heldDeleteText(2, false, 2))
-      .toBe("Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.");
+      .toBe("Nebula couldn’t delete these 2 nodes because they’re waiting on World Labs. Check Marble and run history.");
     expect(heldDeleteText(5, false, 5))
-      .toBe("Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.");
+      .toBe("Nebula couldn’t delete these 5 nodes because they’re waiting on World Labs. Check Marble and run history.");
   });
 
   // GM, round 15 of PR #114: the one-node lines get back what round 4's
@@ -24,29 +24,29 @@ describe('heldDeleteText', () => {
   // World Labs reason and the button named.
   it("one node: GM's round 15 line, named; 'the node' with no name", () => {
     expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
-      "Couldn't delete “Harbor world”. A World Labs run needs your check first. Use the notice at the top of the screen.");
+      "Nebula couldn’t delete “Harbor world” because a World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(heldDeleteText(1, false, 1, '“Harbor world”')).toBe(
-      "Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
+      "Nebula couldn’t delete “Harbor world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
     expect(heldDeleteText(1, true)).toBe(
-      "Couldn't delete the node. A World Labs run needs your check first. Use the notice at the top of the screen.");
+      "Nebula couldn’t delete the node because a World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(heldDeleteText(1, false)).toBe(
-      "Couldn't delete the node. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
+      "Nebula couldn’t delete the node because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });
 
   it('the several-node forms are unchanged', () => {
-    expect(heldDeleteText(2, true, 2)).toBe("Couldn't delete them. They're waiting on World Labs. Check Marble, then unlock them.");
-    expect(heldDeleteText(3, true, 2)).toBe("Couldn't delete them. 2 are waiting on World Labs. Check Marble, then unlock them.");
-    expect(heldDeleteText(3, true, 1)).toBe("Couldn't delete them. One is waiting on World Labs. Check Marble, then unlock it.");
-    expect(heldDeleteText(3, false, 2)).toBe("Couldn't delete them. 2 are waiting on World Labs. Check Marble, then use Run History.");
-    expect(heldDeleteText(3, false, 1)).toBe("Couldn't delete them. One is waiting on World Labs. Check Marble, then use Run History.");
+    expect(heldDeleteText(2, true, 2)).toBe("Nebula couldn’t delete these 2 nodes because they’re waiting on World Labs. Check Marble, then unlock them.");
+    expect(heldDeleteText(3, true, 2)).toBe("Nebula couldn’t delete these 3 nodes because 2 are waiting on World Labs. Check Marble, then unlock them.");
+    expect(heldDeleteText(3, true, 1)).toBe("Nebula couldn’t delete these 3 nodes because one is waiting on World Labs. Check Marble, then unlock it.");
+    expect(heldDeleteText(3, false, 2)).toBe("Nebula couldn’t delete these 3 nodes because 2 are waiting on World Labs. Check Marble, then use run history.");
+    expect(heldDeleteText(3, false, 1)).toBe("Nebula couldn’t delete these 3 nodes because one is waiting on World Labs. Check Marble, then use run history.");
   });
 
   it("the backend's refusal path reads the same line when every refused node is held (forget)", () => {
-    expect(deleteRefusalText("Couldn't delete 2 nodes.", 2, [NODE_WAITING_FORGET, NODE_WAITING_FORGET]))
-      .toBe("Couldn't delete them. They're waiting on World Labs. Check Marble and Run History.");
+    expect(deleteRefusalText("Couldn’t delete 2 nodes.", 2, [NODE_WAITING_FORGET, NODE_WAITING_FORGET]))
+      .toBe("Nebula couldn’t delete these 2 nodes because they’re waiting on World Labs. Check Marble and run history.");
     // An unconfirmed start among them is the unlock form, unchanged.
-    expect(deleteRefusalText("Couldn't delete 2 nodes.", 2, [NODE_WAITING_FORGET, NODE_WAITING_UNLOCK]))
-      .toBe("Couldn't delete them. They're waiting on World Labs. Check Marble, then unlock them.");
+    expect(deleteRefusalText("Couldn’t delete 2 nodes.", 2, [NODE_WAITING_FORGET, NODE_WAITING_UNLOCK]))
+      .toBe("Nebula couldn’t delete these 2 nodes because they’re waiting on World Labs. Check Marble, then unlock them.");
   });
 });
 
@@ -79,11 +79,11 @@ describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
     expect(wl.recoveryIdLabel('world-1')).toBe('World ID');
     forgetNodeLabelsForTests();
     expect(wl.FORGET_BODY).toBe(
-      "Only do this after you've checked the run in Marble. Without the ID, Nebula can't stop you from paying for the same run twice.");
+      "Only do this after you’ve checked the run in Marble. Without the ID, Nebula can’t stop you from paying for the same run twice.");
   });
 
   it('a renamed node still reads as a held delete refusal (its card title differs)', () => {
-    expect(deleteRefusalText("Couldn't delete the node.", 1, [`“Harbor world”${RECOVERY_ID_SAVED_TAIL}`]))
-      .toBe("Couldn't delete “Harbor world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.");
+    expect(deleteRefusalText("Couldn’t delete the node.", 1, [`“Harbor world”${RECOVERY_ID_SAVED_TAIL}`]))
+      .toBe("Nebula couldn’t delete “Harbor world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });
 });

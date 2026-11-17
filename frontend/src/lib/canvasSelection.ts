@@ -25,7 +25,7 @@ export async function publishCanvasSelection(nodeIds: string[], signal?: AbortSi
   if (isCanvasKept()) return;
   // Background sync, never shown; named like every request so the console
   // says what failed, once.
-  await apiRequest("Couldn't share the selection.", '/api/canvas/selection', {
+  await apiRequest("Couldn’t share the selection.", '/api/canvas/selection', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nodeIds }),
@@ -63,7 +63,7 @@ function outputName(output: DownloadableOutput): string {
 /** GM's lines, verbatim. */
 export const SELECTION_TOO_LARGE_COPY = 'Those outputs are too large for one ZIP. Download fewer at a time.';
 const outputTooLarge = (output: DownloadableOutput) => `${outputName(output)} is too large for the ZIP. Download it on its own.`;
-const DOWNLOAD_OUTPUTS = "Couldn't download the outputs.";
+const DOWNLOAD_OUTPUTS = "Couldn’t download the outputs.";
 
 function outputUrls(value: unknown): string[] {
   if (typeof value === 'string') {
@@ -145,7 +145,7 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
     // An asset URL, not an API path, so apiFetch can't make this request;
     // fetchUrl turns its no-answer into copy the same way (error-copy
     // review): the selection toolbar shows this error as the Download
-    // button's title, one line: "Couldn't download the outputs. <reason>".
+    // button's title, one line: "Couldn’t download the outputs. <reason>".
     const response = await fetchUrl(backendAssetUrlSync(output.url), { cache: 'no-store' }, DOWNLOAD_OUTPUTS);
     if (!response.ok) {
       // The ids stay for the console, not the title.

@@ -282,15 +282,15 @@ describe('the library while offline', () => {
 });
 
 describe('the project bar while offline', () => {
-  it('hides "Save failed · Retry" while offline and shows it again online', () => {
+  it('hides "Try again" while offline and shows it again online', () => {
     useProjectStore.setState({ activeProject: { id: 'A', name: 'Harbor' } as never, screen: 'workspace',
       saveStatus: 'error', saveError: null } as never);
     render(<ProjectWorkspaceControls />);
-    expect(screen.getByRole('button', { name: 'Save failed · Retry' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     act(() => noteBackendConnection('offline'));
-    expect(screen.queryByRole('button', { name: 'Save failed · Retry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
     act(() => noteBackendConnection('online'));
-    expect(screen.getByRole('button', { name: 'Save failed · Retry' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 });
 

@@ -15,9 +15,8 @@ import { canTryAgain, failureCopy, oneLine } from '../../lib/errorCopy';
  */
 
 /** `retry`: saving again could work (GM: only then is Save and leave offered
- * again). `reason` is the popover's line under its own heading, in its short
- * form (GM's WRAP rule: Save and leave is the retry); `message` is the
- * one-line form for the panel's banner ("Couldn’t save your labels. ..."). */
+ * again). `reason` is the popover's line and `message` the panel banner's: both the one
+ * line in the because form ("Nebula couldn’t save your labels because …"). */
 export type SaveResult = { ok: true } | { ok: false; reason: string; message: string; retry: boolean };
 type SaveFailure = Extract<SaveResult, { ok: false }>;
 
@@ -32,10 +31,10 @@ type SaveFailure = Extract<SaveResult, { ok: false }>;
  */
 export function saveFailure(error: unknown): SaveFailure {
   const retry = error instanceof CommonsRequestError ? canTryAgain(error.status) : true;
-  const copy = failureCopy(error, { heading: "Couldn’t save your labels." });
-  // The popover offers Save and leave whenever saving again could work, so
-  // its reason is the short form; a refusal's reason has no short form.
-  return { ok: false, reason: failureCopy(error, { short: retry }).reason, message: oneLine(copy), retry };
+  // One line in the because form, for the popover and the panel's banner alike: the popover's own
+  // Save and leave is the retry, and the line says the step that works in words.
+  const message = oneLine(failureCopy(error, { heading: "Couldn’t save your labels." }));
+  return { ok: false, reason: message, message, retry };
 }
 
 /**

@@ -15,9 +15,12 @@ import { getBackendBaseUrl } from '../../src/lib/backend';
  * 503" or "(503)". Only the browser's fetch is stubbed.
  */
 
-const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
-const NO_ANSWER = "Nebula didn't respond. Try again.";
-const REFUSED = "Try again, or reload if it keeps happening.";
+// A failure is one sentence in the because form: "Nebula couldn’t {what} because {clause}".
+const LOST = "the server isn’t answering. Check that Nebula is running, then try again.";
+const NO_ANSWER = "the server didn’t respond. Try again.";
+const REFUSED = "the server didn’t accept it. Try again, or reload if it keeps happening.";
+const what = (heading: string) => heading.replace(/^(?:Nebula )?[Cc]ouldn['’]t /, '').replace(/\.$/, '');
+const line = (heading: string, clause: string) => `Nebula couldn’t ${what(heading)} because ${clause}`;
 
 const api = await import('../../src/lib/api');
 const renderJobs = await import('../../src/lib/renderJobs');
@@ -100,7 +103,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't delete the style.", () => presets.deletePreset('s1')],
   ["Couldn't enhance the prompt.", () => enhance.enhancePrompt('a cat')],
   ["Couldn't convert the image.", () => transcode.downloadTranscoded('/api/outputs/a.png', 'jpg')],
-  ["Couldn't upload ref.png.", () => upload.uploadReference(png())],
+  ["Couldn't upload “ref.png”.", () => upload.uploadReference(png())],
 ];
 
 beforeAll(async () => { await getBackendBaseUrl(); });
@@ -117,21 +120,21 @@ describe('every request names its action and says the reason, never the status',
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'Internal Server Error' }), {
       status: 503, statusText: 'Service Unavailable', headers: { 'content-type': 'application/json' } })));
     const error = await reject(call);
-    expect(error.message).toBe(`${heading} ${NO_ANSWER}`);
+    expect(error.message).toBe(line(heading, NO_ANSWER));
     expect(error.status).toBe(503);
   });
 
   it.each(calls)('%s with no answer', async (heading, call) => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
-    expect((await reject(call)).message).toBe(`${heading} ${LOST}`);
+    expect((await reject(call)).message).toBe(line(heading, LOST));
   });
 
   it.each(calls)('%s refused with the backend\'s reason, and with none', async (heading, call) => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'That name is taken.' }), {
       status: 409, headers: { 'content-type': 'application/json' } })));
-    expect((await reject(call)).message).toBe(`${heading} That name is taken.`);
+    expect((await reject(call)).message).toBe(line(heading, 'that name is taken.'));
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 400 })));
-    expect((await reject(call)).message).toBe(`${heading} ${REFUSED}`);
+    expect((await reject(call)).message).toBe(line(heading, REFUSED));
   });
 });
 
@@ -139,19 +142,19 @@ describe('direct asset fetches (not apiFetch): GM\'s headings', () => {
   it('the world preview: "Couldn\'t load the world."', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })));
     expect((await reject(() => worldSplat.fetchWorldSplatBytes('/api/outputs/w.spz'))).message)
-      .toBe(`Couldn't load the world. ${NO_ANSWER}`);
+      .toBe(line("Couldn't load the world.", NO_ANSWER));
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     expect((await reject(() => worldSplat.fetchWorldSplatBytes('/api/outputs/w.spz'))).message)
-      .toBe(`Couldn't load the world. ${LOST}`);
+      .toBe(line("Couldn't load the world.", LOST));
   });
 
   it('the world download: "Couldn\'t download the world."', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
     expect((await reject(() => worldDownload.downloadWorldAsset('/api/outputs/w.spz', 'w.spz'))).message)
-      .toBe(`Couldn't download the world. ${REFUSED}`);
+      .toBe(line("Couldn't download the world.", REFUSED));
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     expect((await reject(() => worldDownload.downloadWorldAsset('/api/outputs/w.spz', 'w.spz'))).message)
-      .toBe(`Couldn't download the world. ${LOST}`);
+      .toBe(line("Couldn't download the world.", LOST));
   });
 });
 
@@ -160,9 +163,9 @@ describe('the chat image chip (one short line under the file name)', () => {
     const { chatUploadChipError } = await import('../../src/lib/chatUploadCopy');
     expect(chatUploadChipError(413, undefined)).toBe('Image > 20MB');
     expect(chatUploadChipError(415, undefined)).toBe('Not an image');
-    expect(chatUploadChipError(503, 'Internal Server Error')).toBe(NO_ANSWER);
-    expect(chatUploadChipError(400, undefined)).toBe(REFUSED);
+    expect(chatUploadChipError(503, 'Internal Server Error')).toBe('Nebula didn’t respond. Try again.');
+    expect(chatUploadChipError(400, undefined)).toBe('Try again, or reload if it keeps happening.');
     expect(chatUploadChipError(400, 'That image is empty.')).toBe('That image is empty.');
-    expect(chatUploadChipError(422, [{ loc: ['body', 'file'], msg: 'field required' }])).toBe(REFUSED);
+    expect(chatUploadChipError(422, [{ loc: ['body', 'file'], msg: 'field required' }])).toBe('Try again, or reload if it keeps happening.');
   });
 });

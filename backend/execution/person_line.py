@@ -62,6 +62,7 @@ read (a re-raise of another exception's text) needs its own test.
 """
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable
 from typing import NamedTuple, TypeVar
@@ -223,7 +224,7 @@ def missing_file_line(what: str = "file", value: object = None) -> str:
     "Veo clip", "Dubbing audio"); ``value`` (the missing path) tells the kind
     by its extension when ``what`` doesn't."""
     kind = _file_kind(what, value)
-    return f"A connected {kind + ' ' if kind else ''}file can't be found. Connect it again, then run the node again."
+    return f"A connected {kind + ' ' if kind else ''}file can’t be found. Connect it again, then run the node again."
 
 
 # How a person knows each key Settings stores: the provider's own spelling
@@ -307,13 +308,22 @@ def _add_need(key: str) -> str:
     return "sign in to Krea" if key == KREA_SIGN_IN_NEED else f"add {key}"
 
 
+# The most providers a missing-key line names (design's names rule); the frontend's MAX_KEY_NAMES.
+MAX_KEY_NAMES = 3
+
+
 def key_line(keys: Iterable[str]) -> str | None:
     """The line for a run that stopped at its own key check (GM, copy sweep
     item 12): "Add an OpenAI API key in Settings to run this node." The
     article goes by the first name; a provider whose own term is "token"
     keeps it."""
+    keys = list(keys)
     phrase = key_phrase(keys)
-    return f"Add {with_article(phrase)} in Settings to run this node." if phrase else None
+    if not phrase:
+        return None
+    if len(keys) > MAX_KEY_NAMES:  # four or more: the providers the card lists above
+        return "Add a key for one of its providers in Settings to run this node."
+    return f"Add {with_article(phrase)} in Settings to run this node."
 
 
 def key_name(key: str) -> tuple[str, str] | None:
@@ -353,12 +363,12 @@ def slow_job_line(provider: str) -> str:
 
 def download_line(provider: str) -> str:
     """A provider's result Nebula couldn't download (GM's rule 11, round 3f)."""
-    return f"Couldn't download the result from {provider}. Its download link may have expired. Run the node again."
+    return f"Nebula couldn’t download the result from {provider} because its download link may have expired. Run the node again."
 
 
 def unknown_model_line(provider: str, field: str = "Model") -> str:
     """The node's model isn't one the provider lists (GM's rule 10, round 3f)."""
-    return f"This node's model isn't one {provider} offers. Pick one in “{field}”, then run the node again."
+    return f"This node’s model isn’t one {provider} offers. Pick one in “{field}”, then run the node again."
 
 
 def no_result_line(provider: str) -> str:
@@ -516,7 +526,7 @@ def input_words(label: object) -> str:
         return known
     name = re.sub(r"\s+(URL|URLs|uri)$", lambda m: "s" if m.group(1) == "URLs" else "", port_name(raw)).strip()
     if not name:
-        return "the node's inputs"
+        return "the node’s inputs"
     phrase = re.sub(r"\bRefs\b", "references", _words(name), flags=re.IGNORECASE)
     last = phrase.split()[-1].lower()
     if last in _PORT_NOUNS:
@@ -888,3 +898,21 @@ def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]], *, again: bool 
         else:
             lines.append((f"{not_ready_subject(names)} {many}", len(names)))
     return lines
+
+
+def _tenths_of(size: int, unit: int) -> int:
+    """``size`` bytes in tenths of ``unit``, rounded half up with integer arithmetic (the frontend twin does the
+    same, so both print the same size)."""
+    return (20 * size + unit) // (2 * unit)
+
+
+def size_text(size: int | float) -> str:
+    """A size as a person line says it: MB to one decimal, GB from 1,024 MB, no trailing ".0".
+
+    The unit is chosen after rounding: a size that rounds to 1,024 MB reads "1 GB".
+    Mirrors frontend/src/lib/sizeText.ts."""
+    mib = 1024 * 1024
+    whole = math.floor(size + 0.5)
+    in_mb = _tenths_of(whole, mib)
+    tenths, unit = (_tenths_of(whole, 1024 * mib), "GB") if in_mb >= 10240 else (in_mb, "MB")
+    return f"{tenths // 10 if tenths % 10 == 0 else f'{tenths // 10}.{tenths % 10}'} {unit}"

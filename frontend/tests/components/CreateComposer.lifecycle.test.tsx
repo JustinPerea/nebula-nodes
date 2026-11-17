@@ -52,7 +52,7 @@ describe('Create composer launch intent', () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it.each(['Uploading references…', 'Retry, attach again or remove failed references to generate.'])('blocks button and shortcut until references resolve: %s', (referenceStatus) => {
+  it.each(['Uploading references…', 'Try again, attach again or remove failed references to generate.'])('blocks button and shortcut until references resolve: %s', (referenceStatus) => {
     const generate = vi.fn();
     const base = composer(generate);
     const view = render(<CreateComposer {...base.props} referencesBlocked referenceStatus={referenceStatus} />);

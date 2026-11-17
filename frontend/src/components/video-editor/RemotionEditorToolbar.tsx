@@ -178,7 +178,7 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
               <div className="final-export__error" role="alert"><LineText text={renderJob.error || renderJob.job?.error} /></div>
             )}
             {renderJob.job?.status === 'cancelled' && (
-              <div className="final-export__status">Export cancelled.</div>
+              <div className="final-export__status">Export canceled.</div>
             )}
           </div>
         )}

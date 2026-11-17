@@ -19,7 +19,7 @@ import {
 } from '../lib/canvasProposals';
 import type { Point } from '../lib/agentCursorMotion';
 import { useGraphStore, watchGraphSyncs } from './graphStore';
-import { PERSON_REQUIRED_CODE, failureMessage } from '../lib/errorCopy';
+import { PERSON_REQUIRED_CODE, becauseLine, failureMessage } from '../lib/errorCopy';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
 import { onPersonPromoted, personUnconfirmed } from '../lib/personSession';
 import { clearLineOnPromote } from '../lib/clearsOnPromote';
@@ -34,8 +34,10 @@ import { refuseEditWhileKept } from '../lib/keptCanvas';
  * replaced after the proposal was made (backend PROPOSAL_CANVAS_REPLACED_CODE). */
 export const PROPOSAL_CANVAS_REPLACED_CODE = 'proposal_canvas_replaced';
 /** GM - Design, round 22 (4b), verbatim; the same with no agent named. */
-export const PROPOSAL_CANVAS_REPLACED_LINE =
-  "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.";
+export const PROPOSAL_CANVAS_REPLACED_LINE = becauseLine({
+  heading: 'Couldn’t accept this proposal.',
+  reason: 'The canvas was cleared or replaced after it was made. Ask the agent for a new one.',
+});
 
 /** The answer's code for an Accept refused because the canvas would be past
  * Save's limits after it (backend accept_canvas_proposal, review 7 of PR
@@ -396,7 +398,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
           : error.limitKind === 'size' ? proposalTooLargeLine : proposalTooComplexLine)(entry.view.agent.name)
         : error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can accept this. Reload the page.'
-        : failureMessage(error, "Couldn't accept the proposal.");
+        : failureMessage(error, "Couldn’t accept the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
       clearRefusalOnPromote(id, error, message); // clears-on-promote: canvas-proposals.accept
     } finally {
@@ -421,7 +423,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     } catch (error) {
       const message = error instanceof ProposalRequestError && error.status === 403 && error.code !== PERSON_REQUIRED_CODE
         ? 'Only the canvas can reject this. Reload the page.'
-        : failureMessage(error, "Couldn't reject the proposal.");
+        : failureMessage(error, "Couldn’t reject the proposal.");
       set((state) => ({ errors: { ...state.errors, [id]: message } }));
       clearRefusalOnPromote(id, error, message); // clears-on-promote: canvas-proposals.reject
     } finally {

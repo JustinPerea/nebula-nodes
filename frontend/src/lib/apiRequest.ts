@@ -4,7 +4,7 @@ import { RequestFailedError, requestError, requestSucceeded, withHeading } from 
 
 /**
  * apiFetch for a call that names its action (GM, error-copy round 2:
- * "Couldn't {verb} {object}." then the reason). A request with no answer
+ * "Couldn’t {verb} {object}." then the reason). A request with no answer
  * comes back as a ConnectionLostError under `heading`; an answered failure
  * as a RequestFailedError (requestError: GM's line for its status, or the
  * backend's written reason), logged once for the console. Statuses in

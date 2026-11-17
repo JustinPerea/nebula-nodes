@@ -18,7 +18,7 @@ export const CLOSE_LINES: Array<[string, number, string | undefined, string, 'li
     'Nebula couldn’t close the batch because a grade is still running. Close the batch again when it finishes.', 'locked'],
   ['409, sealed meanwhile', 409, "These labels are sealed as blind ground truth, so there's nothing to close.",
     'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.', 'locked'],
-  ['409, changed somewhere else', 409, 'Labels changed in another window. Reload before saving.',
+  ['409, changed somewhere else', 409, 'Labels changed in another tab. Reload before saving.',
     'Nebula couldn’t close the batch because it changed somewhere else. Reload, then close the batch again.', 'locked'],
   ['409, no set anymore', 409, "There's no held-out set yet. Prepare a folder first.",
     'Nebula couldn’t close the batch because its held-out set no longer exists. Reload to get the latest references.', 'locked'],

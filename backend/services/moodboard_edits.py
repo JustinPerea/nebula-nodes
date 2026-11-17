@@ -641,7 +641,7 @@ class _Batch:
             taken = {str(f.get("name", "")).casefold() for f in self.frames}
             name = "Unsorted" if kind == "unsorted" else next(
                 f"Look {n}" for n in range(1, layout.FRAME_LIMIT + 2) if f"look {n}" not in taken)
-        rect = self._rect(op, "frame.create's rectangle")
+        rect = self._rect(op, "frame.create’s rectangle")
         around: list[tuple[dict[str, Any], dict[str, Any]]] = []
         if op.get("around") is not None:
             if rect is not None:
@@ -824,7 +824,7 @@ class _Batch:
             report = self._skip_report(item)
             words = " and ".join(SETTING_LABELS[key] for key in stale)
             report.update({"settings": stale, "message": f"Image {report['number']}\u2019s {words} changed since, left as is"
-                           if "number" in report else f"An image's {words} changed since, left as is"})
+                           if "number" in report else f"An image’s {words} changed since, left as is"})
             skipped.append(report)
         if not back:
             return "skipped" if stale else "unchanged"
@@ -860,13 +860,13 @@ class _Batch:
             try:
                 store.apply_fields(self.board, {key: {"text": before} if key == "briefOverride" else before}, by=by)
             except (store.BriefOverrideProtected, store.NotesOptInProtected):
-                skipped.append(self._field_skip(key, "is the person's to turn on" if key == "sendNotes"
-                                                else "is the person's to change"))
+                skipped.append(self._field_skip(key, "is the person’s to turn on" if key == "sendNotes"
+                                                else "is the person’s to change"))
                 continue
             except ValueError:
                 # Checked up front, so only the board as it is now can refuse it
                 # (a Keep anyway colour pinned out since).
-                skipped.append(self._field_skip(key, "can't go back"))
+                skipped.append(self._field_skip(key, "can’t go back"))
                 continue
             if (key != "colorChoices" and not choices_back
                     and field_value(self.board, "colorChoices") != found["colorChoices"]):
@@ -920,7 +920,7 @@ class _Batch:
             return None
         if board_image_problem(url, "url") is None:
             return None
-        return "is an image link from outside Nebula" if is_outside_link(url) else "isn't one of Nebula's own files"
+        return "is an image link from outside Nebula" if is_outside_link(url) else "isn’t one of Nebula’s own files"
 
     def _restore(self, item: dict[str, Any]) -> str:
         """Put one slice back: "applied", "unchanged" (already as it was) or "skipped"."""
@@ -1002,7 +1002,7 @@ class _Batch:
                 raise ValueError("a card id is taken")
         except ValueError:
             img["placements"] = saved
-            skipped.extend(self._skip_report(item, "can't go back there") for item in applied)
+            skipped.extend(self._skip_report(item, "can’t go back there") for item in applied)
             return False
         return True
 

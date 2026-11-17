@@ -710,7 +710,7 @@ class CanvasPins:
             raise PinError(422, "Pin a note to a node (nodeId) or to a canvas spot (position), not both")
         if node_id is not None:
             if not isinstance(node_id, str) or node_id not in graph_nodes:
-                raise PinError(404, "That node isn't on the canvas anymore.", {"code": NODE_GONE_CODE})
+                raise PinError(404, "That node isn’t on the canvas anymore.", {"code": NODE_GONE_CODE})
             anchor: dict[str, Any] = {"nodeId": node_id}
             spot = _stored_position(graph_nodes.get(node_id))
         else:
@@ -751,7 +751,7 @@ class CanvasPins:
             for index, pin in enumerate(pins):
                 if pin.get("id") == pin_id:
                     return public_pin(pins.pop(index))
-            raise PinError(404, "That note isn't there anymore. Reload to get the latest notes.")
+            raise PinError(404, "That note isn’t there anymore. Reload to get the latest notes.")
 
         return self._write(mutate)
 

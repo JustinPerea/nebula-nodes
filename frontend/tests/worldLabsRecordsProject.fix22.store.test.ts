@@ -33,10 +33,10 @@ const { useGraphStore } = await import('../src/store/graphStore');
 const { GRAPH_PARAMS_VERSION } = await import('../src/lib/savedParamsUpgrades');
 const { noticeSpy } = await import('./helpers/noticeSpy');
 
-const UNSAFE_CLONE = "Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead.";
-const DELTA_FORGET = "Couldn't delete “Delta brief”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.";
-const WORLD_FORGET = "Couldn't delete “Delta world”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.";
-const WORLD_UNLOCK = "Couldn't delete “Delta world”. A World Labs run needs your check first. Use the notice at the top of the screen.";
+const UNSAFE_CLONE = "Nebula couldn’t duplicate a paid World Labs node. Add a new one from the Nodes rail instead.";
+const DELTA_FORGET = "Nebula couldn’t delete “Delta brief” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.";
+const WORLD_FORGET = "Nebula couldn’t delete “Delta world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.";
+const WORLD_UNLOCK = "Nebula couldn’t delete “Delta world” because a World Labs run needs your check first. Use the notice at the top of the screen.";
 
 const text = (id: string, label = 'Delta brief', selected = false) => ({
   id, type: 'model-node', position: { x: 0, y: 0 }, selected,

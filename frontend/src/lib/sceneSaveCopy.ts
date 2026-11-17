@@ -122,7 +122,7 @@ export function sameSceneWriter(a: SceneWriter, b: SceneWriter): boolean {
  * Codex stops." A real server failure keeps sceneStoppedLine. */
 export function sceneOutpacedLine(scene: string, by: SceneOutpacedBy): string {
   const notYet = 'so your changes aren’t saved yet.';
-  if (by.kind === 'window') return `“${scene}” kept changing in another window, ${notYet} Nebula will try again when it stops.`;
+  if (by.kind === 'window') return `“${scene}” kept changing in another tab, ${notYet} Nebula will try again when it stops.`;
   // GM r19 answer 3: an unknown writer, and nothing said about who.
   if (by.kind === 'unknown') return `“${scene}” kept changing, ${notYet} Nebula will try again when it stops.`;
   if (by.name) return `${by.name} kept changing “${scene}”, ${notYet} Nebula will try again when ${agentNameInSentence(by.name)} stops.`;
@@ -138,7 +138,7 @@ export const TRY_AGAIN = 'Try again';
 export function sceneDeletedLine(scene: string, by: SceneWriter): string {
   const tail = 'so your changes to it can’t be saved.';
   if (by.kind === 'agent') return `${by.name ?? 'An agent'} deleted “${scene}”, ${tail}`;
-  if (by.kind === 'window') return `“${scene}” was deleted in another window, ${tail}`;
+  if (by.kind === 'window') return `“${scene}” was deleted in another tab, ${tail}`;
   return `“${scene}” was deleted, ${tail}`;
 }
 
@@ -166,7 +166,7 @@ function agentDeletedLine(lead: string, scenes: readonly string[]): string {
  * in another window (GM r9 answer 4): "You switched to “Y” in another window
  * first."; nobody known: "Nebula switched to “Y” first." */
 export function switchedFirst(project: string, agent: string | null, byPerson = false): string {
-  if (!agent && byPerson) return `You switched to “${project}” in another window first.`;
+  if (!agent && byPerson) return `You switched to “${project}” in another tab first.`;
   return `${agent ?? 'Nebula'} switched to “${project}” first.`;
 }
 /** The workspace moved and the backend named no project (an unfiled
@@ -188,7 +188,7 @@ export const UNSAVED_MARK = 'Unsaved';
  * name ("Codex changed “Shot 2” while you were editing it."). */
 export function sceneClashLine(scene: string, by: SceneWriter): string {
   if (by.kind === 'agent') return `${by.name ?? 'An agent'} changed “${scene}” while you were editing it.`;
-  if (by.kind === 'window') return `“${scene}” was changed in another window while you were editing it.`;
+  if (by.kind === 'window') return `“${scene}” was changed in another tab while you were editing it.`;
   // GM r19 answer 3, r20 answer 2: an unknown writer, passive, no actor.
   return `“${scene}” changed while you were editing it.`;
 }
@@ -204,14 +204,14 @@ export function sceneClashLine(scene: string, by: SceneWriter): string {
  * them.", "“Shot 2” was removed while you were editing it." */
 export function sceneReorderedLine(scene: string, by: SceneWriter): string {
   if (by.kind === 'agent') return `${by.name ?? 'An agent'} reordered the shots in “${scene}” while you were editing them.`;
-  const where = by.kind === 'window' ? ' in another window' : '';
+  const where = by.kind === 'window' ? ' in another tab' : '';
   return `The shots in “${scene}” were reordered${where} while you were editing them.`;
 }
 export function shotsRemovedLine(shots: readonly string[], by: SceneWriter): string {
   const names = quotedNames(shots, 'shots');
   const them = shots.length === 1 ? 'it' : 'them';
   if (by.kind === 'agent') return `${by.name ?? 'An agent'} removed ${names} while you were editing ${them}.`;
-  const where = by.kind === 'window' ? ' in another window' : '';
+  const where = by.kind === 'window' ? ' in another tab' : '';
   return `${names} ${shots.length === 1 ? 'was' : 'were'} removed${where} while you were editing ${them}.`;
 }
 

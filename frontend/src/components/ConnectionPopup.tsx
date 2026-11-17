@@ -254,7 +254,7 @@ export function ConnectionPopup() {
       if (!newId && isBackendOffline()) return;
       // A kept wire the server's rules refuse: the canvas notice says why.
       if (!newId && isCanvasKept()) { hideConnectionPopup(); return; }
-      if (!newId) { setError("Couldn't confirm the connected step. Check the canvas before trying again."); return; }
+      if (!newId) { setError("Nebula couldn’t confirm the connected step. Check the canvas before trying again."); return; }
       hideConnectionPopup();
       if (nextStep) {
         const ui = useUIStore.getState();
@@ -264,7 +264,7 @@ export function ConnectionPopup() {
       }
     } catch (error) {
       if (isOfflineRefusal(error) || isBackendOffline()) return;
-      if (useUIStore.getState().connectionPopup === popup) setError("Couldn't add the step. Check the canvas before trying again.");
+      if (useUIStore.getState().connectionPopup === popup) setError("Nebula couldn’t add the step. Check the canvas before trying again.");
     } finally { busy.current = false; setPending(false); }
   };
 

@@ -20,7 +20,7 @@ GEMINI_OMNI_EXTENSION_ERROR = (
 # parentheses, a whole sentence; round 3g, GM: "the period inside the quote
 # followed by a comma reads badly"). Agents keep the text above word for word.
 GEMINI_OMNI_EXTENSION_LINE = (
-    "Gemini Omni can edit a video but can't make it longer. Describe the change as an edit, like "
+    "Gemini Omni can edit a video but can’t make it longer. Describe the change as an edit, like "
     "“Change the lighting and keep everything else the same”, or use Veo 3.1 to extend the video."
 )
 

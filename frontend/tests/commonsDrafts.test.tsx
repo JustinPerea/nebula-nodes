@@ -46,7 +46,7 @@ describe('Commons comment submissions', () => {
     const input = await screen.findByRole('textbox', { name: 'Add a comment' });
     fireEvent.change(input, { target: { value: 'Keep this comment' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save the comment. The comment was not saved.");
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t save the comment because the comment was not saved.');
     expect(input).toHaveValue('Keep this comment');
     expect(onChanged).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
@@ -99,7 +99,7 @@ describe('Commons linked-folder submissions', () => {
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/references' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't link the folder. Folder is not allowed.");
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t link the folder. Folder is not allowed.');
     expect(input).toHaveValue('/synthetic/references');
     expect(onChanged).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));

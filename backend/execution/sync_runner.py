@@ -1329,7 +1329,7 @@ def get_handler_registry(
                     "Seedream 4.5 does not support image_size auto_3K; "
                     "choose a supported size or Seedream 5.0 Lite"
                 ),
-                    "Seedream 4.5 can't make the Auto 3K size. Choose another size, or use Seedream 5.0 Lite.")
+                    "Seedream 4.5 can’t make the Auto 3K size. Choose another size, or use Seedream 5.0 Lite.")
             images_input = inputs.get("images")
             raw_refs = images_input.value if images_input and images_input.value else None
             if not raw_refs:

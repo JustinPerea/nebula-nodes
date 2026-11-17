@@ -16,7 +16,7 @@ these all over; each one can be applied mechanically)":
 8. "Run again." / "run again" -> "Run the node again." / "then run the node again."
 9. One name and one unit style each: fal.ai, Black Forest Labs, Vertex AI,
    MB, "seconds", 1080p.
-10. "Unknown {Provider} {kind} model" -> "This node's model isn't one
+10. "Unknown {Provider} {kind} model" -> "This node’s model isn’t one
     {Provider} offers. Pick one in “Model”, then run the node again."
 11. "Couldn't {verb} {object}." first, then the reason, for downloads and reaches.
 
@@ -185,15 +185,15 @@ def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None
     assert "a port label not in quotes" not in rule_breaks("The wire into “Prompt” brings something it can't take.")
     assert "a field label not in quotes" not in rule_breaks("Set “Duration” to 10 or less.")
     assert "a field label not in quotes" not in rule_breaks(
-        "xAI edits videos only on Grok Imagine. Pick it in the node's Model field, or disconnect the video to edit.")
+        "xAI edits videos only on Grok Imagine. Pick it in the node’s Model field, or disconnect the video to edit.")
     # GM's own lines pass.
     for line in (
         "Set “Item cap” to a whole number from 1 to 25.",
         "Connect a prompt to this node, then run it again.",
         "Fill in “Style ID”, then run the node again.",
         "Connect a duration, or set “Requested Duration (s)”, then run it again.",
-        "This node's model isn't one Runway offers. Pick one in “Model”, then run the node again.",
-        "Couldn't download the result from Black Forest Labs. Its download link may have expired. "
+        "This node’s model isn’t one Runway offers. Pick one in “Model”, then run the node again.",
+        "Couldn’t download the result from Black Forest Labs. Its download link may have expired. "
         "Run the node again.",
         "Seedream takes up to 10 reference images, and 12 are connected.",
         "Training FLUX.2 styles needs the “Krea account” connection. Nothing was sent to Krea.",
@@ -524,7 +524,7 @@ def test_line_69_the_image_inputs_file_lowercase() -> None:
 
     exc = _raised(_image_input_output, {"filePath": "/no/such/file.png"})
     assert str(exc).startswith("Image Input file not found: '/no/such/file.png'. Set a valid path — ")
-    assert person_line(exc) == "The node's file can't be found. Choose it again, then run the node again."
+    assert person_line(exc) == "The node’s file can’t be found. Choose it again, then run the node again."
 
 
 def test_lines_70_to_72_name_the_cap_by_the_label_the_node_shows_in_quotes() -> None:
@@ -619,7 +619,7 @@ def test_line_164_is_gms_3d_krea_line_8() -> None:
 
 def test_xai_edits_videos_on_one_model_in_gms_words() -> None:
     assert _line_beside("execution/maker_routes_xai.py", "xAI edits videos on {} only, not {}") == (
-        "xAI edits videos only on {}. Pick it in the node's Model field, or disconnect the video to edit.")
+        "xAI edits videos only on {}. Pick it in the node’s “Model” setting, or disconnect the video.")
 
 
 def test_the_veo_extension_line_names_vertex_ai_and_the_gemini_api() -> None:
@@ -646,7 +646,7 @@ def test_rule_7_a_line_that_stops_before_sending_names_the_provider() -> None:
     assert _line_beside("services/krea_mcp_generation.py", "no job was submitted").endswith(
         "Nothing was sent to Krea.")
     assert _line_beside("services/krea_account.py", "does not offer {}; nothing was sent").startswith(
-        "Your Krea connection doesn't offer what this node needs. Nothing was sent to Krea.")
+        "Your Krea connection doesn’t offer what this node needs. Nothing was sent to Krea.")
 
 
 def test_rule_10_an_unknown_model_says_pick_one() -> None:
@@ -656,7 +656,7 @@ def test_rule_10_an_unknown_model_says_pick_one() -> None:
 
 def test_rule_9_units_and_names() -> None:
     assert _line_beside("services/typesafe_client.py", "is over TypeSafe's 16 MiB per-image limit") == (
-        "{} {} is over TypeSafe's 16 MB limit for one image, even as a small JPEG. Connect a smaller image.")
+        "{} {} is over TypeSafe’s 16 MB limit for one image, even as a small JPEG. Connect a smaller image.")
     assert _line_beside("execution/maker_routes_minimax_meshy.py", "MiniMax makes 1080P clips") == (
         "MiniMax makes 1080p clips at 6 seconds only.")
 

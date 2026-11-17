@@ -43,7 +43,7 @@ const node = (id: string, params: Record<string, unknown>, label = id, definitio
 const sent = () => fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? 'GET'} ${String(url).replace(/^https?:\/\/[^/]+/, '')}`);
 const notices: string[] = [];
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const STOP_LINE = "Couldn't stop the run. Nebula isn't answering, so it may still be going.";
+const STOP_LINE = "Nebula couldn’t stop the run because the server isn’t answering, so the run may still be going.";
 
 beforeEach(async () => {
   fetchMock.mockReset();
@@ -140,12 +140,12 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
     expect(notice).toBe('Nothing was undone. A setting on “Added” was changed after you accepted.');
   });
 
-  it("the person's other window: \"You … in another window\" (Y7e)", async () => {
+  it("the person's other window: \"You … in another tab\" (Y7e)", async () => {
     await acceptWith({ nodes: [], edges: [], updatedNodes: [node('n1', { value: 'b' }, 'Brief')], runNodeIds: [], idMap: {} },
       () => { own([node('n1', { value: 'b' }, 'Brief')]); otherWindow([node('n1', { value: 'c' }, 'Brief')]); });
     await sleep(10);
     const { notice } = await undoAndRead();
-    expect(notice).toBe('Nothing was undone. You changed “Text” for “Brief” in another window after you accepted.');
+    expect(notice).toBe('Nothing was undone. You changed “Text” for “Brief” in another tab after you accepted.');
   });
 
   it('the other window changed one of two settings: the rest is undone, and the line says "You"', async () => {
@@ -154,7 +154,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
       () => { own([node('n1', { value: 'b', x: 2 }, 'Brief')]); otherWindow([node('n1', { value: 'b', x: 3 }, 'Brief')]); });
     await sleep(10);
     const { notice } = await undoAndRead();
-    expect(notice).toBe('Undid the proposal except a setting on “Brief”. You changed it in another window after you accepted.');
+    expect(notice).toBe('Undid the proposal except a setting on “Brief”. You changed it in another tab after you accepted.');
   });
 
   it('an agent and the other window: mixed, so the actor goes (two settings on two nodes: counted, GM pr198 r1)', async () => {
@@ -216,16 +216,16 @@ describe("GM's partial-undo lines, every form (exact)", () => {
     expect(acceptUndoLine(one(['a', 'b', 'c', 'd']), { kind: 'agent', name: null }, false))
       .toBe('Undid the proposal except 4 settings an agent changed after you accepted.');
   });
-  it('you, in another window', () => {
-    expect(acceptUndoLine(one(['Text']), you, false)).toBe('Undid the proposal except “Text” for “Brief”. You changed it in another window after you accepted.');
-    expect(acceptUndoLine(one(['a', 'b']), you, false)).toBe('Undid the proposal except “a” and “b” for “Brief”. You changed them in another window after you accepted.');
-    expect(acceptUndoLine(one(['Text']), you, true)).toBe('Nothing was undone. You changed “Text” for “Brief” in another window after you accepted.');
-    expect(acceptUndoLine(one(['Name'], true), you, false)).toBe('Undid the proposal except “Brief”. You changed it in another window after you accepted.');
-    expect(acceptUndoLine(one(['a', 'b', 'c', 'd']), you, false)).toBe('Undid the proposal except 4 settings you changed in another window after you accepted.');
+  it('you, in another tab', () => {
+    expect(acceptUndoLine(one(['Text']), you, false)).toBe('Undid the proposal except “Text” for “Brief”. You changed it in another tab after you accepted.');
+    expect(acceptUndoLine(one(['a', 'b']), you, false)).toBe('Undid the proposal except “a” and “b” for “Brief”. You changed them in another tab after you accepted.');
+    expect(acceptUndoLine(one(['Text']), you, true)).toBe('Nothing was undone. You changed “Text” for “Brief” in another tab after you accepted.');
+    expect(acceptUndoLine(one(['Name'], true), you, false)).toBe('Undid the proposal except “Brief”. You changed it in another tab after you accepted.');
+    expect(acceptUndoLine(one(['a', 'b', 'c', 'd']), you, false)).toBe('Undid the proposal except 4 settings you changed in another tab after you accepted.');
     expect(acceptUndoLine([...one(['Name'], true), { node: 'Other', settings: ['x'] }], you, false))
-      .toBe('Undid the proposal except 2 changes you made in another window after you accepted.');
+      .toBe('Undid the proposal except 2 changes you made in another tab after you accepted.');
     expect(acceptUndoLine([{ node: 'A', settings: ['x'] }, { node: 'B', settings: ['y'] }], you, true))
-      .toBe('Nothing was undone. You changed every setting in the proposal in another window after you accepted.');
+      .toBe('Nothing was undone. You changed every setting in the proposal in another tab after you accepted.');
   });
   it('mixed or unknown: no actor', () => {
     // GM r18: never count 1; settings are counted from 4.
@@ -241,7 +241,7 @@ describe("GM's partial-undo lines, every form (exact)", () => {
     expect(droppedRenameLine({ kind: 'agent', name: 'Codex' }, 'Hero', 'Mine'))
       .toBe('Codex renamed this node “Hero” while Nebula was offline, so your rename to “Mine” wasn’t saved.');
     expect(droppedRenameLine(you, 'Hero', 'Mine'))
-      .toBe('You renamed this node “Hero” in another window while Nebula was offline, so your rename to “Mine” here wasn’t saved.');
+      .toBe('You renamed this node “Hero” in another tab while Nebula was offline, so your rename to “Mine” here wasn’t saved.');
     expect(droppedRenameLine(unknown, 'Hero', 'Mine'))
       .toBe('This node was renamed “Hero” while Nebula was offline, so your rename to “Mine” wasn’t saved.');
   });
@@ -303,7 +303,7 @@ describe('L5: the run-safety line only for the run-safety store\'s 507', () => {
     refuseWith({ detail: 'Nebula cannot verify durable paid-start safety storage; no World Labs request was sent', code: 'run_safeguards' });
     await useGraphStore.getState().executeNode('n1');
     expect(notices).toEqual([
-      "Couldn't run “Brief”. Nebula couldn't save its run safeguards, so nothing was started. Restart Nebula, then try again.",
+      "Nebula couldn’t run “Brief” because it couldn’t save its run safeguards. Restart Nebula, then try again.",
     ]);
   });
   it('project_store: not the run-safety line (a restart does not clear it), and nothing is started', async () => {

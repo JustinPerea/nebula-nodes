@@ -21,7 +21,7 @@ from services.render_jobs import render_job_manager
 from services import refusal_copy
 
 # GM's 404 pattern (error-copy round 3): the video the edit cuts from is gone.
-SOURCE_GONE = "That video isn't there anymore. Reload to get the latest outputs."
+SOURCE_GONE = "That video isn’t there anymore. Reload to get the latest outputs."
 
 
 router = APIRouter(tags=["render-exports"])

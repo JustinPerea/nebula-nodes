@@ -82,7 +82,7 @@ export function deletedNoticeText(count: number): string {
 
 /** "1 proposal couldn't be reopened." / "2 proposals couldn't be reopened." */
 export function notReopenedText(count: number): string {
-  return count === 1 ? "1 proposal couldn't be reopened." : `${count} proposals couldn't be reopened.`;
+  return count === 1 ? 'Nebula couldn’t reopen 1 proposal.' : `Nebula couldn’t reopen ${count} proposals.`;
 }
 
 /** What couldn't go back with the nodes. A pin counts only when its node came
@@ -91,9 +91,9 @@ export function notReopenedText(count: number): string {
 export function notRestoredText(notReattached: number, notReopened: number): string {
   if (notReattached === 0) return notReopened > 0 ? notReopenedText(notReopened) : '';
   const pins = notReattached === 1 ? '1 pin' : `${notReattached} pins`;
-  if (notReopened === 0) return `${pins} couldn't be re-attached.`;
+  if (notReopened === 0) return `Nebula couldn’t reattach ${pins}.`;
   const proposals = notReopened === 1 ? '1 proposal' : `${notReopened} proposals`;
-  return `${pins} and ${proposals} couldn't be restored.`;
+  return `Nebula couldn’t restore ${pins} and ${proposals}.`;
 }
 
 /**
@@ -115,9 +115,9 @@ export function notRestoredText(notReattached: number, notReopened: number): str
 export function lateRestoreText(notReopened: number, notReattached: number): string {
   const proposals = notReopened === 1 ? '1 proposal' : `${notReopened} proposals`;
   const pins = notReattached === 1 ? '1 pin' : `${notReattached} pins`;
-  if (notReattached > 0 && notReopened > 0) return `After the restore, ${pins} and ${proposals} couldn't be restored.`;
-  if (notReopened > 0) return `After the restore, ${proposals} couldn't be reopened.`;
-  if (notReattached > 0) return `After the restore, ${pins} couldn't be re-attached.`;
+  if (notReattached > 0 && notReopened > 0) return `After the restore, Nebula couldn’t restore ${pins} and ${proposals}.`;
+  if (notReopened > 0) return `After the restore, Nebula couldn’t reopen ${proposals}.`;
+  if (notReattached > 0) return `After the restore, Nebula couldn’t reattach ${pins}.`;
   return '';
 }
 

@@ -508,7 +508,7 @@ async def test_register_route_nodes_builds_a_router_from_the_route_clients(route
     await handler(node, PROMPT, {"FAL_KEY": "f"})
     assert run.await_args.kwargs["route"]["id"] == "fal" and run.await_args.kwargs["emit"] == "emit"
     # A route whose client hasn't landed fails before any provider request.
-    with pytest.raises(MissingCredentialError, match="can't run on Black Forest Labs in this version"):
+    with pytest.raises(MissingCredentialError, match="can’t run on Black Forest Labs in this version"):
         await handler(node.model_copy(update={"params": {**IMAGE_DEFAULTS, "_provider": "bfl"}}),
                       PROMPT, {"BFL_API_KEY": "b"})
 

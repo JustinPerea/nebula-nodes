@@ -70,7 +70,7 @@ describe('project graph replacement', () => {
     expect(loadRunHistory().map((run) => run.id)).toEqual(['run-A']);
   });
 
-  it('clears the canvas notice, so the old project\'s line and its buttons do not follow onto the new canvas', () => {
+  it('clears the canvas notice, so the old project’s line and its buttons do not follow onto the new canvas', () => {
     // Review, 2026-10-23: only Dismiss or the hold cleared it, so after an agent's
     // switch the old project's edit notice stayed under the switch toast.
     useGraphStore.getState().notify('An agent changed the canvas.', 'info');
@@ -266,7 +266,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
 
     expect(useGraphStore.getState().nodes).toEqual([]);
     // GM - Design, round 4: the duplicate refusal in one line.
-    expect(alert).toHaveBeenCalledWith("Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead.");
+    expect(alert).toHaveBeenCalledWith("Nebula couldn’t duplicate a paid World Labs node. Add a new one from the Nodes rail instead.");
   });
 
   it("B's checkpoint for its own node with the same id never lands on A's pasted node", () => {

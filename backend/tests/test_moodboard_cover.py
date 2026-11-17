@@ -328,7 +328,7 @@ def test_undoing_a_cover_whose_image_was_removed_since_is_left_as_is(client, roo
     # The cover goes back to img-b, which isn't on the board any more.
     undone = _ok(_edit(client, second["undo"]["ops"], headers=PERSON))
     assert undone["board"]["coverImageId"] == "img-c"
-    assert [s["message"] for s in undone["applied"][0]["skipped"]] == ["The cover can't go back, left as is"]
+    assert [s["message"] for s in undone["applied"][0]["skipped"]] == ["The cover can’t go back, left as is"]
 
 
 def test_a_restore_slice_with_a_bad_cover_is_refused(client, root):

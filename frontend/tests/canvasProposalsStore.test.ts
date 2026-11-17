@@ -255,18 +255,19 @@ describe('canvas proposals store', () => {
 });
 
 describe("a person-only refusal on accept or reject (GM, Q116 a)", () => {
-  const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
+  // The because form: the cause leads and the fix follows, ending "then try again" as the shared line does.
+  const GM_CLAUSE = "this tab isn’t connected as you. Open the link Nebula printed when it started.";
   it("says GM's line, not the accept-key line", async () => {
     const { ProposalRequestError } = await import('../src/lib/canvasProposals');
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     api.acceptProposal.mockRejectedValue(new ProposalRequestError(403, 'Only the person can do this.',
       { heading: "Couldn't accept the proposal.", detail: 'Only the person can do this.', code: 'person_required' } as never));
     await useCanvasProposalsStore.getState().accept('p_a');
-    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(`Couldn't accept the proposal. ${GM_LINE}`);
+    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(`Nebula couldn’t accept the proposal because ${GM_CLAUSE}`);
     api.rejectProposal.mockRejectedValue(new ProposalRequestError(403, 'Only the person can do this.',
       { heading: "Couldn't reject the proposal.", detail: 'Only the person can do this.', code: 'person_required' } as never));
     await useCanvasProposalsStore.getState().reject('p_a');
-    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(`Couldn't reject the proposal. ${GM_LINE}`);
+    expect(useCanvasProposalsStore.getState().errors.p_a).toBe(`Nebula couldn’t reject the proposal because ${GM_CLAUSE}`);
   });
 
   it('a 403 without the code keeps the accept-key line', async () => {
@@ -287,7 +288,7 @@ describe('GM round 22 (4b): Accept after the canvas was cleared or replaced', ()
       { heading: "Couldn't accept the proposal.", code: 'proposal_canvas_replaced' } as never));
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(useCanvasProposalsStore.getState().errors.p_a).toBe(
-      "Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.");
+      'Nebula couldn’t accept this proposal because the canvas was cleared or replaced after it was made. Ask the agent for a new one.');
   });
 });
 
@@ -338,7 +339,7 @@ describe('Accept that would make the canvas too complex to save', () => {
   });
   it('control: another refusal keeps the alert style', async () => {
     const { isNeutralProposalLine } = await import('../src/store/canvasProposalsStore');
-    expect(isNeutralProposalLine("Couldn't accept this proposal. The canvas was cleared or replaced after it was made. Ask the agent for a new one.")).toBe(false);
+    expect(isNeutralProposalLine('Nebula couldn’t accept this proposal because the canvas was cleared or replaced after it was made. Ask the agent for a new one.')).toBe(false);
   });
 });
 

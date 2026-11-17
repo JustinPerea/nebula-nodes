@@ -96,7 +96,7 @@ describe("the palette's Extract from reference", () => {
     const { container } = show();
     await extractFrom(container, png('broken.png'));
     await waitFor(() => expect(notice()?.text)
-      .toBe("Couldn't find colors in “broken.png”.\nNebula can't read this image. Try a PNG or JPEG."));
+      .toBe('Nebula couldn’t find colors in “broken.png” because the image isn’t in a format Nebula reads. Try a PNG or JPEG.'));
     expect(swatches()).toEqual([]);
   });
 
@@ -105,14 +105,14 @@ describe("the palette's Extract from reference", () => {
     const { container } = show();
     await extractFrom(container, png('clear.png'));
     await waitFor(() => expect(notice()?.text)
-      .toBe("Couldn't find colors in “clear.png”.\nThis image is too transparent to pull colors from."));
+      .toBe('Nebula couldn’t find colors in “clear.png” because it’s too transparent to pull colors from.'));
   });
 
   it("gives only the heading when it can't tell why", async () => {
     palette.extract.mockResolvedValue({ ok: false, reason: 'other' });
     const { container } = show();
     await extractFrom(container, png('odd.png'));
-    await waitFor(() => expect(notice()?.text).toBe("Couldn't find colors in “odd.png”."));
+    await waitFor(() => expect(notice()?.text).toBe('Nebula couldn’t find colors in “odd.png”.'));
   });
 
   it('writes the swatches and shows no notice when it finds colours', async () => {
@@ -322,7 +322,7 @@ describe('the status region (GM r18 4 on #208)', () => {
     const { container } = show(['#aaaaaa']);
     await extractFrom(container, png('broken.png'));
     await waitFor(() => expect(status(container)?.textContent)
-      .toBe("Couldn't find colors in “broken.png”. Nebula can't read this image. Try a PNG or JPEG."));
+      .toBe('Nebula couldn’t find colors in “broken.png” because the image isn’t in a format Nebula reads. Try a PNG or JPEG.'));
   });
 });
 

@@ -29,7 +29,7 @@ afterEach(() => resetDeletedSceneEditsForTests());
 
 afterEach(cleanup);
 
-const BANNER = 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.';
+const BANNER = 'The active project changed in another tab. Try again to save your unsaved edits as a recovered project.';
 const LINE = 'Your latest edits were saved as their own project, “Recovered canvas (recovered)”.';
 const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => ({
   projects: [], loading: false, busy: false, error: null,

@@ -586,7 +586,7 @@ describe('a held Cmd+Z, round 14 (review 13)', () => {
       act(() => { store().deleteNode('n2'); }); await settle();
       await undo(); await undo();
       await answer('n2', 409);
-      expect(notice()).toBe("Couldn't delete the node. It is running.");
+      expect(notice()).toBe("Nebula couldn’t delete the node because it is running.");
       expect(restoredValues()).toEqual(['n1=n1']);
       sameAsBackend();
     });

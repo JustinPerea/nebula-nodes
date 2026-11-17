@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * other 4xx can't. The raw answer stays on the error for debugging.
  */
 
-const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
-const NO_ANSWER = "Nebula didn't respond. Try again.";
+const LOST = 'Nebula’s server isn’t answering. Make sure it’s running, then try again.';
+const NO_ANSWER = 'Nebula didn’t respond. Try again.';
 
 sessionStorage.setItem('nebula.person', JSON.stringify({ token: crypto.randomUUID(), backend: 'http://localhost:8000' }));
 const { commonsApi, commonsEvaluationApi } = await import('../src/lib/commonsApi');
@@ -38,9 +38,9 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect(error.reason).toBe(LOST);
     expect(error.status).toBe(0);
     expect((error.cause as Error).cause).toBe(original);
-    // Round 2: the popover's short line (Save and leave is the retry), the banner's one line.
-    expect(saveFailure(error)).toEqual({ ok: false, reason: "Nebula's server isn't answering. Make sure it's running.",
-      message: `Couldn’t save your labels. ${LOST}`, retry: true });
+    // The popover's line and the banner's line are the same one because line.
+    const lostLine = 'Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.';
+    expect(saveFailure(error)).toEqual({ ok: false, reason: lostLine, message: lostLine, retry: true });
     expect(error.heading).toBe("Couldn’t save your labels.");
   });
 
@@ -64,11 +64,11 @@ describe('Commons request failures carry copy and keep their status', () => {
   });
 
   it('a 409 keeps the backend\'s words and is not retried', async () => {
-    answer = () => json({ detail: 'Labels changed in another window. Reload before saving.' }, 409);
+    answer = () => json({ detail: 'Labels changed in another tab. Reload before saving.' }, 409);
     const error = await failure(() => commonsEvaluationApi.labels(0, 3, {} as never));
-    expect(error.reason).toBe('Labels changed in another window. Reload before saving.');
-    expect(saveFailure(error)).toEqual({ ok: false, reason: 'Labels changed in another window. Reload before saving.',
-      message: "Couldn’t save your labels. Labels changed in another window. Reload before saving.", retry: false });
+    expect(error.reason).toBe('Labels changed in another tab. Reload before saving.');
+    const conflictLine = 'Nebula couldn’t save your labels because labels changed in another tab. Reload before saving.';
+    expect(saveFailure(error)).toEqual({ ok: false, reason: conflictLine, message: conflictLine, retry: false });
   });
 
   it.each([
@@ -82,19 +82,19 @@ describe('Commons request failures carry copy and keep their status', () => {
   });
 
   it.each([
-    [403, "You don't have access to this anymore. Reload to sign in again."],
-    [413, "That's too large to save."],
-  ])('a bare %i says GM\'s line for it and is not retried', async (status, line) => {
+    [403, 'You don’t have access to this anymore. Reload to sign in again.', 'Nebula couldn’t save your labels because you don’t have access to this anymore. Reload to sign in again.'],
+    [413, 'That’s too large to save.', 'Nebula couldn’t save your labels because it’s too large.'],
+  ])('a bare %i says GM\'s line for it and is not retried', async (status, bare, line) => {
     answer = () => new Response('', { status });
     const error = await failure(() => commonsEvaluationApi.labels(0, 3, {} as never));
-    expect(error.reason).toBe(line);
-    expect(saveFailure(error)).toEqual({ ok: false, reason: line, message: `${error.heading} ${line}`, retry: false });
+    expect(error.reason).toBe(bare);
+    expect(saveFailure(error)).toEqual({ ok: false, reason: line, message: line, retry: false });
   });
 
   it('a failure that isn\'t a request\'s says GM\'s general line, never its own message', () => {
+    const line = 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.';
     expect(saveFailure(new SyntaxError('Unexpected token < in JSON at position 0'))).toEqual({
-      ok: false, reason: "Try again, or reload if it keeps happening.",
-      message: "Couldn’t save your labels. Try again, or reload if it keeps happening.", retry: true,
+      ok: false, reason: line, message: line, retry: true,
     });
   });
 

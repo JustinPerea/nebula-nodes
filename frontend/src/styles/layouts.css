@@ -781,6 +781,8 @@ body:not(.app-slava-restraint) .agent-log__msg {
   display: block;
 }
 
+/* Only a notice that isn't a failure still has a heading line (a node's "Waiting for you to run it");
+   a failure is one sentence in .failure-lines__reason. */
 .failure-lines__heading {
   font-weight: 600;
 }

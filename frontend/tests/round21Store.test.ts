@@ -223,7 +223,7 @@ describe('G1: Create while following', () => {
     const error = await useGraphStore.getState().authorGenerationCluster({ definitionId: 'text-input', prompt: 'x', params: {},
       refPaths: [], quantity: 1, sessionId: 's', genId: 'g', layoutOrigin: { x: 0, y: 0 } } as never).catch((reason: unknown) => reason);
     expect(failureMessage(error, graphStoreModule.GENERATE_HEADING))
-      .toBe("Nebula couldn’t start the generation. Claude Code is opening “beta”.");
+      .toBe("Nebula couldn’t start the generation because Claude Code is opening “beta”.");
     expect(graphWrites.sent).toEqual([]);
   });
 });
@@ -299,7 +299,7 @@ describe('GM round 21 (LOCKED): a delete answered with a 500', () => {
       ? answer(500, { detail: 'boom' }) : answer());
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }]);
     await vi.waitFor(() => expect(lines()).toContain(
-      "Couldn't delete “Hero prompt”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula."));
+      "Nebula couldn’t delete “Hero prompt” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula."));
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toContain('n1');
     expect(useAgentLogStore.getState().entries.some((entry) => entry.message.includes('500'))).toBe(true);
   });

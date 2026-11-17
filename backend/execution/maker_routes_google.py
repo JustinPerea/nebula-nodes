@@ -381,7 +381,7 @@ def krea_omni_to_google(model: str) -> maker_routes.Translate:
             raise with_person_line(ValueError(
                 "Gemini Omni on Google's API can't take a start image and references together "
                 "(Google tells them apart only by tags in the prompt); use one or the other"
-            ), "Gemini Omni on Google's API can't take a start image and references together, since Google tells "
+            ), "Gemini Omni on Google’s API can’t take a start image and references together, since Google tells "
                 "them apart only by tags in the prompt. Use one or the other.")
         if start:
             out["task"] = "image_to_video"

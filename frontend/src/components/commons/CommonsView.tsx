@@ -233,13 +233,13 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
       return (
         <span className="commons-status commons-status--stopped">
           <StatusText text={`Stopped · call budget used (${status.worker.budget_used}/${budget})`}
-            title={`Library analysis is stopped: it used this run's call budget (${status.worker.budget_used} of ${budget} calls). Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
+            title={`Library analysis is stopped because it used ${status.worker.budget_used} of this run’s ${budget} calls. Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
         </span>
       );
     }
     const after = running
       ? ' to resume.'
-      : ", then press Start: library analysis is stopped, so it won't resume on its own.";
+      : ", then press Start: library analysis is stopped, so it won’t resume on its own.";
     const text = status.evaluation_assisted
       ? (running ? 'Paused · close agent review to resume' : 'Stopped · agent review open')
       : (running ? 'Paused until labels are sealed' : 'Stopped · labels not sealed');
@@ -247,7 +247,7 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
       ? <StatusText text={text}
           title={`Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling)${after}`} />
       : <StatusText text={text}
-          title={`Library analysis is paused while blind labeling is open, so it can't sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling${after}`} />}
+          title={`Library analysis is paused while blind labeling is open, so it can’t sway your reference labels. Seal the labels, or close the batch without sealing, in Blind labeling${after}`} />}
       {!running && <button type="button" className="commons-button commons-button--primary" disabled={readOnly} {...offlineMark(readOnly)} onClick={onStart}>Start</button>}
     </span>;
   }
@@ -274,7 +274,7 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
   if (state === 'budget_exhausted') {
     const budget = status.worker.budget ?? '∞';
     text = `Stopped · call budget used (${status.worker.budget_used}/${budget})`;
-    title = `Library analysis is stopped: it used this run's call budget (${status.worker.budget_used} of ${budget} calls). Restart Nebula to reset it.`;
+    title = `Library analysis is stopped because it used ${status.worker.budget_used} of this run’s ${budget} calls. Restart Nebula to reset it.`;
   } else if (state === 'cap_reached' || status.meter.remaining === 0) {
     // Settings takes a cap from 0: a cap of 0 never resets, and a cap lowered
     // below today's calls is not the number made (review of sf).

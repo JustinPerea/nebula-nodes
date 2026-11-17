@@ -36,7 +36,10 @@ const rel = (path: string) => relative(SRC, path);
 
 const BECAUSE = notConnectedBecause('load the connected apps');
 const LOCK = 'You can connect an agent when this tab is connected as you.';
-const OTHER = 'Couldn’t load the connected apps. Nebula didn’t respond. Try again.';
+// Any line that isn't a because line or a failure in the because form: it keeps the surface's own colour.
+const OTHER = 'Stop the run first.';
+// A failure in the because form (lib/errorCopy becauseLine) is a because line too: neutral, unless the caller says tone="failure".
+const FAILURE = 'Nebula couldn’t load the connected apps because the server didn’t respond. Try again.';
 
 afterEach(() => { cleanup(); resetLinesForTests(); });
 
@@ -52,6 +55,15 @@ describe('GM r14 (4): a because line is marked, and only a because line', () => 
     expect(view.getByTestId('span-holder').querySelector('.x')!.getAttribute('data-line-because')).toBe('own');
     expect(view.getByTestId('lock').hasAttribute('data-line-because')).toBe(false);
     expect(view.getByTestId('other').hasAttribute('data-line-because')).toBe(false);
+  });
+
+  it('a failure in the because form is marked too, and tone="failure" keeps the warning colour', () => {
+    const view = render(<div>
+      <p data-testid="failure"><LineText text={FAILURE} /></p>
+      <p data-testid="kept"><LineText text={FAILURE} tone="failure" /></p>
+    </div>);
+    expect(view.getByTestId('failure').getAttribute('data-line-because')).toBe('');
+    expect(view.getByTestId('kept').hasAttribute('data-line-because')).toBe(false);
   });
 
   it('the mark goes when the words change to another line, and when they go', () => {

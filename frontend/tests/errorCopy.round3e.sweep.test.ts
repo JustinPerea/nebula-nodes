@@ -41,7 +41,7 @@ describe('provider readiness', () => {
       providers: { OpenAI: { status: 'error', last_checked: new Date().toISOString() } },
       checkedAt: Date.now(), loading: false, error: null,
     } as never);
-    expect(errored.detail).toBe("Couldn't check OpenAI. The saved connection is unchanged. Use Check connections to try again.");
+    expect(errored.detail).toBe("Nebula couldn’t check OpenAI. The saved connection is unchanged. Use Check connections to try again.");
   });
 });
 
@@ -53,7 +53,7 @@ describe('a step written in the browser', () => {
     expect(failureMessage(writtenLine("The project didn't open. Try again."), "Couldn't update the note."))
       .toBe("The project didn't open. Try again.");
     expect(failureMessage(new Error("The project didn't open. Try again."), "Couldn't update the note."))
-      .toBe("Couldn't update the note. Try again, or reload if it keeps happening.");
+      .toBe("Nebula couldn’t update the note because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 
   it('is what the step helpers throw', async () => {

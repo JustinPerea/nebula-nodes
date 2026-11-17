@@ -286,9 +286,9 @@ describe('GM r32 answers 2 and 3: the "other" line, a stop line with [Try again]
     expect(stopLineOf('n1')).toMatchObject({ retry: true, trying: false });
     expect(stopped().n1).toBe(true);
     expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'other', reason: 'Try again, or reload if it keeps happening.', nebula: true,
-      line: OTHER('“Opening”') });
+      line: 'Nebula couldn’t save your changes to “Opening” because the server didn’t accept it. Try again, or reload if it keeps happening.' });
     expect(said).toEqual([]);
-    expect(unsaved('n1')).toBe(OTHER('“Opening”'));
+    expect(unsaved('n1')).toBe('Nebula couldn’t save your changes to “Opening” because the server didn’t accept it. Try again, or reload if it keeps happening.');
     const p0 = h.putsOf('n1').length;
     await sleep(300);
     expect(h.putsOf('n1').length).toBe(p0);

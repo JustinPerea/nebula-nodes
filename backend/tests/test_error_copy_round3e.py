@@ -169,8 +169,8 @@ def test_two_batches_into_one_node_read_without_internal_words():
     assert joined, [error.message for error in validate_graph(nodes, edges, {})]
     assert joined[0].message.startswith("Joining independent iterator batches is unsupported.")
     assert _clean(joined[0].person) == (
-        "This node takes items from two separate Batch or iterator nodes. Nebula won't combine them, because "
-        "that would multiply the paid runs. Feed it from one of them, then run it again.")
+        "This node takes items from two separate Batch or iterator nodes, and combining them would multiply the paid runs. "
+        "Feed it from one of them, then run it again.")
 
 
 def test_a_world_labs_node_after_a_batch_has_a_line():
@@ -179,7 +179,7 @@ def test_a_world_labs_node_after_a_batch_has_a_line():
     [error] = [e for e in validate_graph(nodes, edges, {"WORLDLABS_API_KEY": "set"}) if "recovery-aware" in e.message]
     assert error.message.startswith("World Labs recovery-aware operations cannot run inside an iterator.")
     assert _clean(error.person) == (
-        "A World Labs node can't run once for each item of a Batch or iterator. Give each World Labs run "
+        "A World Labs node can’t run once for each item of a Batch or iterator. Give each World Labs run "
         "its own node, then run them one at a time.")
 
 
@@ -200,8 +200,8 @@ def test_a_route_table_node_with_no_key_names_providers_not_env_vars(monkeypatch
     auto = [_node("t", "text-input", {"value": "a cat"}), _node("n1", ROUTES["id"], {})]
     [error] = _for(validate_graph(auto, [_edge("t", "text", "n1", "prompt")], {}), "n1")
     assert "Settings > Providers" in error.message
-    assert _clean(error.person).startswith("Add a Black Forest Labs API key, fal.ai API key")
-    assert error.person.endswith("in Settings to run this node.")
+    # Four or more providers are not listed by name: the card lists them above the line.
+    assert _clean(error.person) == "Add a key for one of its providers in Settings to run this node."
 
 
 def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch):
@@ -421,10 +421,10 @@ def test_a_check_only_agents_reach_reads_the_general_line_after_a_reload():
 
 PAPER_CASES = [
     ("Paper CLI unavailable; open Paper Desktop or configure NEBULA_PAPER_CLI", "unavailable",
-     "Paper isn't answering. Open Paper Desktop, then try again."),
+     "Paper isn’t answering. Open Paper Desktop, then try again."),
     ("Paper is disconnected or its request timed out; last good snapshot retained", "unavailable",
-     "Paper isn't answering. Open Paper Desktop, then try again."),
-    ("Paper tool failed", "unavailable", "Paper isn't answering. Open Paper Desktop, then try again."),
+     "Paper isn’t answering. Open Paper Desktop, then try again."),
+    ("Paper tool failed", "unavailable", "Paper isn’t answering. Open Paper Desktop, then try again."),
     ("Linked Paper object is missing", "missing",
      "The linked object is missing in Paper. Reconnect it, or link another object."),
     ("Choose an editable Paper object rather than the page root", "unavailable",
@@ -432,9 +432,9 @@ PAPER_CASES = [
     ("Paper object changed while exporting; refresh again", "unavailable",
      "The object changed while Paper was exporting it. Refresh the source again."),
     ("Paper export is unavailable or exceeds 32 MiB", "unavailable",
-     "Paper couldn't export this object, or its export is over 32 MB. Try a smaller object."),
+     "Paper couldn’t export this object, or its export is over 32 MB. Try a smaller object."),
     ("Snapshot integrity check failed", "unavailable",
-     "Nebula couldn't check the artwork Paper exported. Refresh the source again."),
+     "Nebula couldn’t check the artwork Paper exported. Refresh the source again."),
 ]
 
 
@@ -458,7 +458,7 @@ def test_a_missing_paper_source_keeps_its_text_and_gains_a_line():
     gone = error(KeyError("s1"))
     assert gone.status_code == 404
     assert gone.detail == {"message": "Paper source or snapshot not found",
-                           "person": "Nebula can't find this Paper source. Link the object again."}
+                           "person": "Paper can’t find the object. Link it again."}
 
 
 @pytest.mark.asyncio
@@ -491,7 +491,7 @@ async def test_a_failed_refresh_keeps_the_card_line_beside_its_text(tmp_path):
         await sources.refresh(linked["id"])
     kept = sources.get(linked["id"])
     assert kept["lastError"] == "Paper tool failed"
-    assert kept["lastErrorPerson"] == "Paper isn't answering. Open Paper Desktop, then try again."
+    assert kept["lastErrorPerson"] == "Paper isn’t answering. Open Paper Desktop, then try again."
 
     transport.error = None
     restored = await sources.refresh(linked["id"])

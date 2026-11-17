@@ -297,7 +297,7 @@ describe('Q4: focus after Discard and Save', () => {
   });
 
   it('Agent review, a failed save: focus stays on the button, live again', async () => {
-    api.accept.mockRejectedValue(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
+    api.accept.mockRejectedValue(new CommonsRequestError('Labels changed in another tab. Reload before saving.', 409));
     render(<CommonsReview />);
     await correct();
     const save = screen.getAllByText('Save corrections & next')[0] as HTMLButtonElement;
@@ -340,7 +340,7 @@ describe('Q4: focus after Discard and Save', () => {
   });
 
   it('Blind labeling, a failed Save labels: focus stays on it, live again; the flag is cleared, so a later remount takes nothing', async () => {
-    api.labels.mockRejectedValue(new CommonsRequestError('Labels changed in another window. Reload before saving.', 409));
+    api.labels.mockRejectedValue(new CommonsRequestError('Labels changed in another tab. Reload before saving.', 409));
     render(<CommonsEvaluation />);
     fireEvent.click(await screen.findByText('Set neutral'));
     const save = screen.getByText('Save labels') as HTMLButtonElement;

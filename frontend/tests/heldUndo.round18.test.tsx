@@ -414,7 +414,7 @@ describe('round 18 (review 17)', () => {
       nebula().holdAnswers = false;
       while (nebula().releaseAnswer()) await settle();
       await tick(6000);
-      expect(lines().some((line) => String(line).startsWith("Couldn’t undo that."))).toBe(true);
+      expect(lines().some((line) => String(line).startsWith("Nebula couldn’t undo that because"))).toBe(true);
       expect(ids()).toEqual(['n1']);
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
       sameAsNebula();
@@ -484,7 +484,7 @@ describe('round 18 (review 17)', () => {
       expect(nodeOf('n2')?.selected).toBe(true);
       expect(wires()).toEqual(['n1>n2']);
       // GM round 21 (LOCKED): a 500 names the node and says it's back.
-      expect(lines().some((line) => /^Couldn't delete “[^”]+”\. Nebula ran into an error, so it's back on the canvas\./.test(String(line)))).toBe(true);
+      expect(lines().some((line) => /^Nebula couldn’t delete “[^”]+” because the server hit an error, so it’s back on the canvas\./.test(String(line)))).toBe(true);
       // No step is left for a delete that didn't happen.
       expect(store().undoStack).toHaveLength(0);
       sameAsNebula();

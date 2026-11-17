@@ -38,12 +38,12 @@ BY_REQUEST: Any = object()
 def gone(thing: str, things: str) -> str:
     """GM's 404 line (round 3): "That {thing} isn't there anymore. Reload to
     get the latest {things}.", with the thing named the way the UI names it."""
-    return f"That {thing} isn't there anymore. Reload to get the latest {things}."
+    return f"That {thing} isn’t there anymore. Reload to get the latest {things}."
 
 
 def gone_from_trash(thing: str) -> str:
     """GM's 404 pattern for something no longer in Recently deleted."""
-    return f"That {thing} isn't in Recently deleted anymore. Reload to get the latest list."
+    return f"That {thing} isn’t in Recently deleted anymore. Reload to get the latest list."
 
 
 def person_reads(actor: Any = BY_REQUEST) -> bool:

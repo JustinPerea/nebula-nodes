@@ -2167,7 +2167,7 @@ _PARAMS_GATE_EXEMPT = frozenset({"/api/projects/recover"})
 # Shown verbatim by main's bundle (its project and run errors print `detail`).
 PARAMS_OUTDATED_DETAIL = (
     "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
-    "Reload the tab; your saved work is kept. If this keeps happening after a reload, this window's "
+    "Reload the tab; your saved work is kept. If this keeps happening after a reload, this tab's "
     "frontend build doesn't match the backend: rebuild the frontend, or restart the backend."
 )
 
@@ -13348,7 +13348,7 @@ async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
             asset_proposals.close(proposal.id, "invalidated", reason=detail[:200])
             await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
         # A detail that is already a whole sentence of Nebula's (the moodboard fallback above) is the line itself.
-        raise HTTPException(status_code=409, detail=detail if detail.startswith("Nebula couldn\u2019t ")
+        raise HTTPException(status_code=409, detail=detail if detail.startswith(("Nebula couldn\u2019t ", "Nebula couldn't "))
                             else f"This proposal no longer fits: {detail}") from exc
     except BaseException:
         _asset_deciding.discard(proposal.id)
@@ -18612,7 +18612,7 @@ async def acknowledge_provider_start_ambiguity(
 # holds the node; an ID in its params names that node's own fields by their
 # labels (round 3 review: a World export node has only "Resume Export
 # Operation ID"). Agents keep the detail with the id, unchanged.
-NODE_GONE_PERSON = "That node isn't on the canvas anymore."
+NODE_GONE_PERSON = "That node isn’t on the canvas anymore."
 
 
 def _node_refusal(status: int, specific: str, person: str) -> HTTPException:

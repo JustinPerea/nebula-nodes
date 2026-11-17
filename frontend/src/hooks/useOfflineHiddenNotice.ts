@@ -4,7 +4,7 @@ import { useBackendOffline } from '../lib/useBackendOffline';
 
 /**
  * A screen's own load-failure notice, hidden while Nebula is offline (GM, PR
- * #198 r2): "Character not found…", "Moodboard not found…", "Couldn't check
+ * #198 r2): "Character not found…", "Moodboard not found…", "Couldn’t check
  * the Commons status…" read as if something was lost when the backend is
  * only away, and the banner already says so. Returns the notice to show
  * (null while offline). On reconnect, `onReconnect` runs once while there is

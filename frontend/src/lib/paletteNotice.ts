@@ -12,17 +12,18 @@ import { quoted } from './quoted';
  * something else (no 2d context, a canvas error, no pixels at all). */
 export type PaletteFailure = 'decode' | 'transparent' | 'other';
 
-/** GM's copy: a heading naming the file, then the reason on its own line for
- * the two cases Nebula can tell; the heading alone for the rest. */
-const REASONS: Partial<Record<PaletteFailure, string>> = {
-  decode: "Nebula can't read this image. Try a PNG or JPEG.",
-  transparent: 'This image is too transparent to pull colors from.',
+/** The reason after "because" for the two cases Nebula can tell (GM: "Don't guess the reason" for the rest). */
+const CLAUSES: Partial<Record<PaletteFailure, string>> = {
+  decode: 'the image isn’t in a format Nebula reads. Try a PNG or JPEG.',
+  transparent: 'it’s too transparent to pull colors from.',
 };
 
+/** One line in the because form (design, error-copy round 5): "Nebula couldn’t find colors in “x.png”
+ * because …"; with no reason Nebula can tell, no "because": "Nebula couldn’t find colors in “x.png”." */
 export function paletteNotice(fileName: string, reason: PaletteFailure): string {
-  const heading = `Couldn't find colors in ${quoted(fileName)}.`;
-  const line = REASONS[reason];
-  return line ? `${heading}\n${line}` : heading;
+  const lead = `Nebula couldn’t find colors in ${quoted(fileName)}`;
+  const clause = CLAUSES[reason];
+  return clause ? `${lead} because ${clause}` : `${lead}.`;
 }
 
 /** The status line once a palette lands (GM r18 4 on #208): the real count. */

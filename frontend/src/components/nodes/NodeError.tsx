@@ -40,7 +40,7 @@ interface NodeErrorProps {
 
 /**
  * A node's run error on its card (error copy round 3c, GM - Design): the
- * heading "Couldn't run the node." over the person's line, the classifier's
+ * heading "Couldn’t run the node." over the person's line, the classifier's
  * line, or GM's general line, with the raw provider text behind a collapsed
  * Details toggle when the line isn't it (lib/nodeErrorCopy.ts). A line the
  * handler wrote for the person never shows the specific text: that is for
@@ -57,7 +57,7 @@ export function NodeError({ category, friendly, person, providerText, provider, 
   return (
     <div className={tone ? `${className} ${modifier}` : className} data-line-box="">
       <span className="model-node__error-message">
-        {copy.heading ? <FailureLines failure={copy} /> : <LineText text={copy.reason} />}
+        {copy.heading ? <FailureLines failure={copy} tone="failure" /> : <LineText text={copy.reason} tone="failure" />}
       </span>
       {copy.details && <ErrorDetails raw={copy.details} className="model-node__error-details nodrag nowheel" />}
     </div>

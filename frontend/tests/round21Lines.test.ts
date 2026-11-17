@@ -24,7 +24,7 @@ describe('L-8: cut-off saves count by node id', () => {
     expect(agentClearedLine([twin('n1'), twin('n2')], 'Codex'))
       .toBe('Codex cleared the canvas while you were editing 2 settings. Those changes weren’t saved.');
     expect(handoffFailedLine([twin('n1'), twin('n2')], 'Glass', 'Codex', 'Glass (recovered)'))
-      .toBe(`Couldn’t save 2 changes in “Glass” when Codex switched projects. Your edits were saved as a copy, “Glass${NBSP}(recovered)”.`);
+      .toBe(`Nebula couldn’t save 2 changes in “Glass” when Codex switched projects. Your edits were saved as a copy, “Glass${NBSP}(recovered)”.`);
   });
 
   it('the same node and setting twice is one change', () => {
@@ -37,13 +37,13 @@ describe('GM (LOCKED): the failed handoff line keeps quoted project names whole'
   it('non-breaking spaces inside the quoted names only', () => {
     expect(handoffFailedLine([{ nodeId: 'n1', node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered 2)'))
-      .toBe(`Couldn’t save “Text” for “Hero prompt” in “Glass${NBSP}campaign” when Claude Code switched projects. `
+      .toBe(`Nebula couldn’t save “Text” for “Hero prompt” in “Glass${NBSP}campaign” when Claude Code switched projects. `
         + `Your edits were saved as a copy, “Glass${NBSP}campaign${NBSP}(recovered${NBSP}2)”.`);
   });
 
   it('an unknown agent and an unnamed change', () => {
     expect(handoffFailedLine([], 'Glass campaign', null, 'Glass campaign (recovered)'))
-      .toBe(`Couldn’t save your last change in “Glass${NBSP}campaign” when an agent switched projects. `
+      .toBe(`Nebula couldn’t save your last change in “Glass${NBSP}campaign” when an agent switched projects. `
         + `Your edits were saved as a copy, “Glass${NBSP}campaign${NBSP}(recovered)”.`);
   });
 });
@@ -51,32 +51,32 @@ describe('GM (LOCKED): the failed handoff line keeps quoted project names whole'
 describe('GM (LOCKED): a delete answered with a 500', () => {
   it('one node', () => {
     expect(deleteServerErrorLine(['Hero prompt'])).toBe(
-      "Couldn't delete “Hero prompt”. Nebula ran into an error, so it's back on the canvas. Try again, and if it keeps happening, restart Nebula.");
+      "Nebula couldn’t delete “Hero prompt” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula.");
   });
   it('two and three nodes are named; four and more are counted', () => {
     expect(deleteServerErrorLine(['A', 'B'])).toBe(
-      "Couldn't delete “A” and “B”. Nebula ran into an error, so they're back on the canvas. Try again, and if it keeps happening, restart Nebula.");
+      "Nebula couldn’t delete “A” and “B” because the server hit an error, so they’re back on the canvas. Try again, and if it keeps happening, restart Nebula.");
     expect(deleteServerErrorLine(['A', 'B', 'C'])).toBe(
-      "Couldn't delete “A”, “B” and “C”. Nebula ran into an error, so they're back on the canvas. Try again, and if it keeps happening, restart Nebula.");
+      "Nebula couldn’t delete “A”, “B” and “C” because the server hit an error, so they’re back on the canvas. Try again, and if it keeps happening, restart Nebula.");
     expect(deleteServerErrorLine(['A', 'B', 'C', 'D'])).toBe(
-      "Couldn't delete 4 nodes. Nebula ran into an error, so they're back on the canvas. Try again, and if it keeps happening, restart Nebula.");
+      "Nebula couldn’t delete 4 nodes because the server hit an error, so they’re back on the canvas. Try again, and if it keeps happening, restart Nebula.");
   });
 });
 
 describe('GM derived: runs and Create while following', () => {
   it('a whole-canvas run, one node, several nodes, an unknown agent', () => {
-    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas')).toBe("Nebula couldn’t run the canvas. Codex is opening “Second canvas”.");
-    expect(runWhileFollowingLine('Hero', 'Codex', 'Second canvas')).toBe("Nebula couldn’t run “Hero”. Codex is opening “Second canvas”.");
-    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas', 3)).toBe("Nebula couldn’t run 3 nodes. Codex is opening “Second canvas”.");
-    expect(runWhileFollowingLine(null, null, 'Second canvas', 2)).toBe("Nebula couldn’t run 2 nodes. An agent is opening “Second canvas”.");
+    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas')).toBe("Nebula couldn’t run the canvas because Codex is opening “Second canvas”.");
+    expect(runWhileFollowingLine('Hero', 'Codex', 'Second canvas')).toBe("Nebula couldn’t run “Hero” because Codex is opening “Second canvas”.");
+    expect(runWhileFollowingLine(null, 'Codex', 'Second canvas', 3)).toBe("Nebula couldn’t run 3 nodes because Codex is opening “Second canvas”.");
+    expect(runWhileFollowingLine(null, null, 'Second canvas', 2)).toBe("Nebula couldn’t run 2 nodes because an agent is opening “Second canvas”.");
   });
 
   it('G1: Create says it in its own error style, never "Nebula is opening another project." bare', () => {
     expect(createWhileFollowingLine({ agent: 'Codex', projectName: 'Second canvas' }))
-      .toBe("Nebula couldn’t start the generation. Codex is opening “Second canvas”.");
+      .toBe("Nebula couldn’t start the generation because Codex is opening “Second canvas”.");
     expect(createWhileFollowingLine({ agent: null, projectName: 'Second canvas' }))
-      .toBe("Nebula couldn’t start the generation. An agent is opening “Second canvas”.");
-    expect(createWhileFollowingLine(null)).toBe("Nebula couldn’t start the generation. Another project is opening.");
+      .toBe("Nebula couldn’t start the generation because an agent is opening “Second canvas”.");
+    expect(createWhileFollowingLine(null)).toBe("Nebula couldn’t start the generation because another project is opening.");
   });
 
   it("G1: Create's own error style shows that same line (the store rejects with a FailureNotice under Create's heading)", () => {

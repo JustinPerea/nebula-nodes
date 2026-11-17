@@ -415,7 +415,7 @@ describe('review 18 LOW-1 and GM r30 item 4: the person’s reopen in another ta
     projectSwitch: { projectId: 'alpha', projectName: 'Glass campaign', previousRevision: 'rev-a',
       previousProjectId: 'alpha', previousProjectName: 'Glass campaign', actor: { kind: 'person', tab }, created: false } });
 
-  it('this tab hands its typing off into the project and follows, with no line and no “changed in another window”', async () => {
+  it('this tab hands its typing off into the project and follows, with no line and no “changed in another tab”', async () => {
     type('typed in window B');
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ workspaceRevision: 'rev-a2' }));
     vi.mocked(projects.getProject).mockImplementation(async (id) => project(id, undefined, 'typed in window B'));

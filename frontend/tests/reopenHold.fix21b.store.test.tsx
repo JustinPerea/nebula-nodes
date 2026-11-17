@@ -472,7 +472,7 @@ describe('review 19 item 6: focus goes to the canvas after a held Open', () => {
   });
 });
 
-describe('review 19 item 3 (GM r32, 3): the person’s reopen in another window', () => {
+describe('review 19 item 3 (GM r32, 3): the person’s reopen in another tab', () => {
   const personReopen = (tab: string) => bootSwitch({ workspaceRevision: 'rev-a2', proposalsKept: true,
     projectSwitch: { projectId: 'alpha', projectName: P, previousRevision: 'rev-a',
       previousProjectId: 'alpha', previousProjectName: P, actor: { kind: 'person', tab }, created: false } });
@@ -574,7 +574,7 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
     await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
     expect(useGraphStore.getState().nodes.some((node) => node.id === 'n2')).toBe(true);
     await vi.waitFor(() => expect(noticeNow()).toBe(
-      'Couldn\'t delete “Kept copy”. It has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in Run History.'));
+      'Nebula couldn’t delete “Kept copy” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.'));
   });
 });
 
@@ -593,7 +593,10 @@ describe('review 19 item 12: saved canvases are ordered by what Nebula owns, nev
 describe('review 19 item 14: curly apostrophes on the lines round 20 touched', () => {
   it('the update line and the reopen fallback', () => {
     const store = projectStoreSource();
-    expect(store).toContain('your unsaved edits haven’t been saved yet.');
+    // The update line is now its heading and a because line (becauseThen), so the old sentence is gone, straight or curly.
+    expect(store).toContain('Nebula was updated while this ${TAB} was open.');
+    expect(store).toContain("Couldn’t save your edits as a project.");
+    expect(store).not.toContain('haven’t been saved yet');
     expect(store).toContain('Try again before you reload, or they’ll be lost.');
     expect(store).toContain("'Nebula couldn’t reopen the project.'");
     expect(store).not.toContain("haven't been saved yet");

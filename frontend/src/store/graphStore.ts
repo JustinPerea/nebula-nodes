@@ -98,8 +98,8 @@ import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, held
 import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
-  PERSON_REQUIRED_CODE, failureMessage, headedLine, isNamedLine, readRefusal, refusalError, requestError,
-  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
+  PERSON_REQUIRED_CODE, becauseLine, failureMessage, isNamedLine, readRefusal, refusalError, requestError,
+  saysPersonRequired, warnFailure, writtenLine, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
 } from '../lib/errorCopy';
 import { clearRefusedOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { sentUnderPromote } from '../lib/personSession';
@@ -146,7 +146,7 @@ import { STALE_CANVAS_DETAIL, adoptCanvasRevision, getProjectContext, type Proje
 import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinctSaves, handoffFailedLine, savingCutOffLine,
   settingsOnOneNode, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
-import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
+import { createWhileFollowingLine, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, refuseEditWhileKept, setCanvasKept, setKeptCanvasClearer } from '../lib/keptCanvas';
 import { checkKeptWire, refusedConnectionLine, refusedDropLine, targetHandleAllowsMultiple } from '../lib/keptWires';
 import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplaced';
@@ -416,7 +416,7 @@ function markNodesErrored(
         // A line Nebula wrote (a refused start): no older run's reading beside it.
         errorCategory: undefined,
         errorFriendly: undefined,
-        errorPerson: hidden ? failureCopy(failure).reason : undefined,
+        errorPerson: hidden ? failureCopy(failure).cause : undefined,
         errorProviderText: hidden ? true : undefined,
         errorProvider: undefined,
         errorNotStarted: undefined,
@@ -851,7 +851,7 @@ function settleFailedStart(runId: string, err: unknown): void {
 }
 
 /** GM's 507 lines: the run safeguards (locked, round 16 of PR #114:
- * "Couldn't run “<node>”. Nebula couldn't save its run safeguards, so nothing
+ * "Couldn’t run “<node>”. Nebula couldn't save its run safeguards, so nothing
  * was started. Restart Nebula, then try again.") and the project list (r18,
  * storage case: "… Nebula can't read its project list, so nothing was
  * started. Check that the drive Nebula saves to is connected and has space,
@@ -862,7 +862,7 @@ function noteStorageRefusal(runId: string, reason: string): void {
   const state = useGraphStore.getState();
   const target = state.runHistory.find((record) => record.id === runId)?.targetNodeId;
   const label = target ? cardTitle(state.nodes, target) : null;
-  state.notify(`${label ? `Couldn't run \u201c${label}\u201d.` : "Couldn't start the run."} ${reason}`);
+  state.notify(becauseLine({ heading: label ? `Couldn’t run \u201c${label}\u201d.` : 'Couldn’t start the run.', reason }));
 }
 
 /** Run records that never ran: refused starts and, with `includePending`,
@@ -1484,7 +1484,7 @@ async function universalModelError(response: Response): Promise<UniversalModelEr
 
 /** GM - Design's line for a model picker that failed (round 13), naming the
  * node as its card does: a failed read of the provider's settings, or a
- * missing key named (review 13, L-5), else "Couldn't set up “X”.". */
+ * missing key named (review 13, L-5), else "Couldn’t set up “X”.". */
 function modelPickerFailure(err: unknown, name: string, definitionId: string): string {
   const kind = err instanceof UniversalModelError ? err.kind : null;
   if (kind === MODEL_SETTINGS_FAILURE) return modelSettingsFailedText(name);
@@ -1995,14 +1995,15 @@ export function deleteServerErrorLogLine(node: string, nodeId: string, status: n
 export function paramSaveFailedLine(params: string | (string | null)[], node: string, reverted: boolean): string {
   const names = typeof params === 'string' ? [params] : params;
   if (names.length <= 1) {
-    if (names[0] === null) return `Couldn’t save a setting on \u201c${node}\u201d.${reverted ? " It’s back to its last saved value." : ''}`;
-    return `Couldn’t save \u201c${names[0] ?? ''}\u201d for \u201c${node}\u201d.${reverted ? " It’s back to its last saved value." : ''}`;
+    const back = reverted ? " It’s back to its last saved value." : '';
+    if (names[0] === null) return `${becauseLine({ heading: `Couldn’t save a setting on \u201c${node}\u201d.`, reason: '' })}${back}`;
+    return `${becauseLine({ heading: `Couldn’t save \u201c${names[0] ?? ''}\u201d for \u201c${node}\u201d.`, reason: '' })}${back}`;
   }
   const what = names.includes(null) ? `${names.length} settings` : settingsOnOneNode(names as string[]);
-  return `Couldn’t save ${what} for “${node}”.${reverted ? " They’re back to their last saved values." : ''}`;
+  return `${becauseLine({ heading: `Couldn’t save ${what} for “${node}”.`, reason: '' })}${reverted ? " They’re back to their last saved values." : ''}`;
 }
 export function modelChangeFailedLine(node: string, currentModel: string): string {
-  return `Couldn't change the model for \u201c${node}\u201d.${currentModel ? ` It's still on ${currentModel}.` : ''}`;
+  return `${becauseLine({ heading: `Couldn’t change the model for \u201c${node}\u201d.`, reason: '' })}${currentModel ? ` It’s still on ${currentModel}.` : ''}`;
 }
 
 /** A param save the backend didn't take (no answer, or a refusal): its own
@@ -4951,7 +4952,7 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
       : Array.isArray(body.rendering.shots)
         ? body.rendering.shots.flatMap((n) => (Number.isInteger(n) && order[(n as number) - 1] ? [order[(n as number) - 1]] : []))
         : [];
-    if (named.length > 0) return { kind: 'rendering', shotIds: named, line: isNamedLine(detail) ? detail : headedLine(heading, detail) };
+    if (named.length > 0) return { kind: 'rendering', shotIds: named, line: isNamedLine(detail) ? detail : becauseLine({ heading, reason: detail }) };
   }
   // The Agent log's line for a refusal the person can't read the cause of:
   // the status and the code (GM #198 r12 answer 1), never in the person's text.
@@ -4988,8 +4989,8 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
   if (error) return { kind: 'kept', refused: 'other', line: notConnectedBecause(`save your changes to “${label}”`), reason: { text: null, nebula: false }, error };
   if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: detail, reason: { text: null, nebula: false }, error };
   const reason = copyForAnswer(status, body.detail, code);
-  const headed = headedLine(heading, reason);
-  // headedLine puts the heading first unless one side is empty or the reason
+  const headed = becauseLine({ heading, reason });
+  // becauseLine puts the heading first unless one side is empty or the reason
   // already says it whole; only a reason under the heading is kept as data.
   const underHeading = Boolean(heading && reason) && headed !== reason;
   return { kind: 'kept', refused: 'other', line: headed,
@@ -6196,15 +6197,15 @@ function sendWire(edge: Edge, want: boolean, set: GraphSet, after?: Promise<unkn
   return (after ? after.then(send) : send()).then(async (response) => {
     done(response.ok);
     if (response.ok) return;
-    const heading = `Couldn't ${want ? 'make' : 'remove'} that connection.`;
-    const { reason, error } = await backendRejectionReason(response, heading);
+    const heading = `Couldn’t ${want ? 'make' : 'remove'} that connection.`;
+    const { reason, error, status } = await backendRejectionReason(response, heading);
     set((state) => ({
       edges: want ? state.edges.filter((e) => e.id !== edge.id)
         : state.edges.some((e) => edgeKey(e) === edgeKey(edge)) ? state.edges : [...state.edges, edge],
     }));
     // Beside an agent's Undo, never over it (review 8, L-d), through notify, which registers a
     // refusal's line on the promote by the answer's own stamp (review 5 MEDIUM-1, round 7).
-    useGraphStore.getState().notify(headedLine(heading, reason), 'error', { error });
+    useGraphStore.getState().notify(becauseLine({ heading, reason, status }), 'error', { error });
   }, (err) => {
     done(false);
     console.warn('[nebula] Wire sync failed:', err);
@@ -7027,6 +7028,9 @@ function changeCanvasNodes(
   function applyDeleteAnswers(results: PromiseSettledResult<DeleteAnswer>[]): void {
     const confirmed = new Set<string>();
     const failures: string[] = [];
+    // The status each reason came with (undefined when none, or when the same reason came with two): the line's
+    // "server is busy" and "hit an error" clauses read it.
+    const statuses = new Map<string, number | undefined>();
     // The ids that failed with no answer from Nebula (GM, round 20, item 1).
     const unanswered: string[] = [];
     // The ids Nebula answered with a server error, and the status (GM round 21).
@@ -7047,7 +7051,9 @@ function changeCanvasNodes(
       } else if (goneBySync?.has(cliRemovedIds[index])) {
         confirmed.add(cliRemovedIds[index]);
       } else {
-        const reason = failureCopy(result.reason).reason;
+        const copy = failureCopy(result.reason);
+        const reason = copy.cause ?? '';
+        statuses.set(reason, statuses.has(reason) && statuses.get(reason) !== copy.status ? undefined : copy.status);
         const shots = result.reason && typeof result.reason === 'object' ? renderingRefusals.get(result.reason) : undefined;
         const node = onCanvas.find((candidate) => candidate.id === cliRemovedIds[index]);
         if (shots && node?.data.definitionId === 'cinema-scene') {
@@ -7073,7 +7079,7 @@ function changeCanvasNodes(
       // The step keeps its records, for an undo that comes back to that
       // graph (an import undone).
       for (const done of holds.values()) done(false);
-      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length, undefined, statuses);
       return;
     }
     // The writes still waiting for a deleted node are dropped (option (c)).
@@ -7167,15 +7173,15 @@ function changeCanvasNodes(
       get().notify(message);
       // The status goes in the Agent log, not in the line (GM). Nebula's
       // answers carry no error id yet. GM round 22 (4a), verbatim: one entry
-      // per node, "Couldn't delete “<node>”, node <id>. Nebula returned HTTP <status>."
+      // per node, "Couldn’t delete “<node>”, node <id>. Nebula returned HTTP <status>."
       for (const nodeId of ids) {
         window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system',
           message: deleteServerErrorLogLine(titleOf(nodeId), nodeId, serverErrors.get(nodeId)!) } }));
       }
     } else if (unsaid.length > 0) {
-      // GM, round 15 of PR #114: one kept node is named ("Couldn't delete “<node>”.").
+      // GM, round 15 of PR #114: one kept node is named ("Couldn’t delete “<node>”.").
       reportNodeDeletionFailure(unsaid, unsaid.length, failed.length === 1 && unsaid.length === failures.length
-        ? namedOnCanvas(onCanvas, failed[0]) : undefined);
+        ? namedOnCanvas(onCanvas, failed[0]) : undefined, statuses);
     }
     takeover?.(set, get);
   }
@@ -7463,25 +7469,29 @@ function deletedNotice(count: number, step: UndoEntry, kept: readonly KeptScene[
 }
 
 /** The nodes stay on the canvas (their delete wasn't confirmed). GM's
- * pattern: "Couldn't delete the node." then the reason, each reason once. */
+ * pattern: "Couldn’t delete the node." then the reason, each reason once. */
 function deletionHeading(count: number): string {
-  return count === 1 ? "Couldn't delete the node." : `Couldn't delete ${count} nodes.`;
+  return count === 1 ? "Couldn’t delete the node." : `Couldn’t delete ${count} nodes.`;
 }
 
 /** The backend's World Labs lines read as GM's trimmed ones (rounds 4 and
  * 4b, lib/worldLabsWaiting.ts deleteRefusalText: with a held node the line
- * starts with GM's own, "Couldn't delete them. …" for several); every other
+ * starts with GM's own, "Couldn’t delete them. …" for several); every other
  * reason as given, after `deletionHeading` when no node is held. A reason
- * that is a line of its own ("Couldn't delete “Agent scene”. …") is shown
+ * that is a line of its own ("Couldn’t delete “Agent scene”. …") is shown
  * alone, once, and the heading counts only the rest (GM, PR #198 r5 item 3:
  * the generic line never shows as well). */
-function reportNodeDeletionFailure(reasons: string[], count: number, name?: string): void {
+function reportNodeDeletionFailure(reasons: string[], count: number, name?: string,
+  statuses?: ReadonlyMap<string, number | undefined>): void {
   const named = [...new Set(reasons.filter(isNamedLine))];
   const rest = reasons.filter((reason) => !isNamedLine(reason));
   const parts = [...named];
   if (rest.length > 0 || named.length === 0) {
     const unnamed = rest.length > 0 ? rest.length : count;
-    parts.push(deleteRefusalText(deletionHeading(unnamed), unnamed, rest, named.length === 0 ? name : undefined));
+    // One status when every remaining reason came with the same one (the line's clause reads it).
+    const answered = new Set(rest.map((reason) => statuses?.get(reason)));
+    parts.push(deleteRefusalText(deletionHeading(unnamed), unnamed, rest, named.length === 0 ? name : undefined,
+      answered.size === 1 ? [...answered][0] : undefined));
   }
   const message = parts.join(' ').trim();
   console.warn(`[nebula] ${message}`);
@@ -7580,7 +7590,7 @@ async function requestTrackedCancellation(
 }
 
 /** GM - Design, round 16 of PR #114: a Stop that failed while offline. */
-export const STOP_FAILED_OFFLINE_LINE = "Couldn't stop the run. Nebula isn't answering, so it may still be going.";
+export const STOP_FAILED_OFFLINE_LINE = becauseLine({ heading: 'Couldn’t stop the run.', reason: 'The server isn’t answering, so the run may still be going.' });
 const stopFailureNoted = new Set<string>();
 
 async function honorCancellationAfterStart(
@@ -8036,7 +8046,7 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
  * The person asked to delete `ids` and the canvas keeps them, because one
  * holds World Labs state (error copy round 3b: a refusal that says nothing
  * is the worst kind). True when it refused: it says why once, in the
- * canvas's short notice (GM, round 15: "Couldn't delete “<node>”. <reason
+ * canvas's short notice (GM, round 15: "Couldn’t delete “<node>”. <reason
  * line>" for one node; round 4b's forms for several: lib/worldLabsWaiting
  * heldDeleteText), and sends nothing. An agent's delete
  * goes through the backend, which refuses it with its own text.
@@ -8093,7 +8103,7 @@ function scenesRefusedLine(scenes: readonly RenderingScene[]): string {
 
 /** The removals in `changes` minus the rendering scenes (GM, PR #198 r3
  * item 1: delete the rest, keep the scene, never silent). Null when every
- * removal was one: the person reads "Couldn't delete “Scene”. …" and
+ * removal was one: the person reads "Couldn’t delete “Scene”. …" and
  * nothing changes. `kept` are the scenes for the line after "Deleted 3 nodes.". */
 function withoutRenderingScenes(state: GraphState, changes: NodeChange[], set: GraphSet):
   { changes: NodeChange[]; kept: KeptScene[] } | null {
@@ -8263,8 +8273,7 @@ function providerSafeCloneParams(
 
 /** GM - Design, round 4 (one line at 560 px). Only the person reads it: the
  * canvas refuses the copy itself, and agents add nodes, never duplicate. */
-const WORLD_LABS_UNSAFE_CLONE_MESSAGE =
-  "Couldn't duplicate a paid World Labs node. Add a new one from the Nodes rail instead.";
+const WORLD_LABS_UNSAFE_CLONE_MESSAGE = becauseLine({ heading: 'Couldn’t duplicate a paid World Labs node.', reason: 'Add a new one from the Nodes rail instead.' });
 
 function warnUnsafeProviderClone(): void {
   console.warn(`[nebula] ${WORLD_LABS_UNSAFE_CLONE_MESSAGE}`);
@@ -8514,7 +8523,7 @@ async function executeHistoricalRun(
     }
     if (result.status !== 'started' && result.status !== 'validation_error') {
       throw new ExecutionStartRejectedError(
-        notStartedMessage("Couldn't start the run.", result.status),
+        notStartedMessage("Couldn’t start the run.", result.status),
         400,
       );
     }
@@ -8546,7 +8555,7 @@ async function executeHistoricalRun(
       nodes: !onItsCanvas ? state.nodes : markNodesErrored(
         state.nodes,
         scopeIds,
-        failureMessage(err, "Couldn't start the run."),
+        failureMessage(err, "Couldn’t start the run."),
         err,
       ),
       ...ownershipState(),
@@ -8557,7 +8566,7 @@ async function executeHistoricalRun(
 /** The first add on an empty tab couldn't read the backend's graph into it
  * (bringBackendGraphIntoEmptyTab). `raw` is the reason as it came (a network
  * error, the backend's detail or status, a parse error), for the console and
- * the Agent log; the person reads only "Couldn't add “<label>”." (GM). */
+ * the Agent log; the person reads only "Couldn’t add “<label>”." (GM). */
 class TabSyncFailure extends Error {
   readonly raw: string;
   constructor(raw: string) {
@@ -8569,17 +8578,17 @@ class TabSyncFailure extends Error {
 
 /** GM - Design, round 13 of PR #114, verbatim: an add that never reached the
  * backend because the tab never found one. Round 14 (GM) dropped the offline
- * add line ("Couldn't add “Text Input” while Nebula is offline."): offline is
+ * add line ("Couldn’t add “Text Input” while Nebula is offline."): offline is
  * read-only, so an add while the banner shows is blocked with no toast
  * (refuseEditWhileOffline), and one whose sync finds the backend gone reads
  * the add heading, as any failed sync does. */
 export function addNotConnectedLine(label: string): string {
-  return `Couldn't add \u201c${label}\u201d. Nebula isn't connected yet. Try again once it is.`;
+  return becauseLine({ heading: addHeading(label), reason: 'The server isn’t connected yet. Try again once it is.' });
 }
 /** Every add path's heading (GM's quoted form; round 13 made the refused
- * create's unquoted "Couldn't add <label>." match it). */
+ * create's unquoted "Couldn’t add <label>." match it). */
 function addHeading(label: string): string {
-  return `Couldn't add \u201c${label}\u201d.`;
+  return `Couldn’t add \u201c${label}\u201d.`;
 }
 
 /** How many graphSyncs this tab has applied (applyGraphSync), so an add's
@@ -8663,7 +8672,7 @@ async function bringBackendGraphIntoEmptyTab(
  * console; the person reads the heading and GM's line. */
 function notStartedMessage(heading: string, status: string | undefined): string {
   console.warn(`[nebula] ${heading} start status: ${status || 'unknown'}`);
-  return `${heading} ${REFUSED_FALLBACK_COPY}`;
+  return becauseLine({ heading, reason: REFUSED_FALLBACK_COPY });
 }
 
 /** The reason line for a refused canvas request (error-copy round 2, GM):
@@ -8671,11 +8680,13 @@ function notStartedMessage(heading: string, status: string | undefined): string 
  * itself goes to the console under `heading`, once per call site. A
  * person-only refusal says GM's line for it, by its code (Q116 a); its own
  * words, written for agents, go to the console only. */
-async function backendRejectionReason(response: Response, heading: string): Promise<{ reason: string; error: unknown }> {
+async function backendRejectionReason(response: Response, heading: string): Promise<{ reason: string; error: unknown; status: number }> {
   const read = await readRefusal(response);
   warnFailure(heading, response.status, read.detail);
   // Review 5 LOW-4 (round 7): the line carries this answer's own refusal and stamp.
-  return { reason: copyForAnswer(response.status, read.detail, read.code), error: refusalError(read) };
+  // The status goes with the reason: becauseLine words a 500 ("the server hit an error") apart from a
+  // gateway's 502 to 504 ("the server didn’t respond"), and the reason alone can't tell them apart.
+  return { reason: copyForAnswer(response.status, read.detail, read.code), error: refusalError(read), status: response.status };
 }
 
 type NodeCreationAttempt = {
@@ -8747,7 +8758,7 @@ function observePendingConnectedNodeCreation(nodes: Node<NodeData>[], edges: Edg
 /** An add that failed before its create was sent. A failed sync of the
  * backend's graph into the tab (TabSyncFailure) reads GM's line, "Couldn't
  * add “<label>”.", with the raw reason in the Agent log and the console (GM,
- * round 12 of PR #114); anything else reads under "Couldn't add {node}.". */
+ * round 12 of PR #114); anything else reads under "Couldn’t add {node}.". */
 function reportNodeCreationError(displayName: string, err: unknown): null {
   if (err instanceof TabSyncFailure) {
     const heading = addHeading(displayName);
@@ -8758,15 +8769,16 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
       window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
         detail: { source: 'system', message: `${heading} ${err.raw}` } }));
     }
-    useGraphStore.getState().notify(heading);
+    useGraphStore.getState().notify(becauseLine({ heading, reason: '' }));
     return null;
   }
   // Its own error with it (review 5 LOW-4): a refusal clears by its own stamp.
-  return reportNodeCreationFailure(displayName, failureCopy(err).reason, err);
+  const failure = failureCopy(err);
+  return reportNodeCreationFailure(displayName, failure.cause ?? '', err, failure.status);
 }
 
-function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown): null {
-  const message = headedLine(addHeading(displayName), reason);
+function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown, status?: number): null {
+  const message = becauseLine({ heading: addHeading(displayName), reason, status });
   console.warn(`[nebula] ${message}`);
   // A refusal's line carries the refusal (review 5 LOW-4): it clears by its own stamp.
   useGraphStore.getState().notify(message, 'error', { error });
@@ -8905,8 +8917,8 @@ async function createNodeOnBackend(
 
     if (!res.ok) {
       if (pendingNodeCreationAttempt === attempt) pendingNodeCreationAttempt = null;
-      const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
-      return reportNodeCreationFailure(definition.displayName, reason, error);
+      const { reason, error, status } = await backendRejectionReason(res, addHeading(definition.displayName));
+      return reportNodeCreationFailure(definition.displayName, reason, error, status);
     }
 
     let node: { id?: unknown };
@@ -9986,7 +9998,7 @@ function announceDrop(set: GraphSet, { undos, redos, applied }: DroppedPresses):
 }
 
 /** A skipped or dropped press's line (review 15, L-2): beside a failure the
- * canvas notice shows (a refused delete's "Couldn't delete the node. …"),
+ * canvas notice shows (a refused delete's "Couldn’t delete the node. …"),
  * never over it, since that line says why the press had nothing to undo. */
 function besideFailure(state: Pick<GraphState, 'undoNotice'>, text: string): Partial<GraphState> {
   if (state.undoNotice?.tone === 'error') return { messageNotice: { id: ++undoNoticeSeq, text, tone: 'info' } };
@@ -10415,7 +10427,7 @@ function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): voi
   const state = get();
   // The run lock keeps every step where it is, and says why (PR #198 review
   // 4, M1; GM r5 item 2): GM's shot line when the step would take away a shot
-  // that is rendering, else "Couldn't undo. You can undo when the run finishes."
+  // that is rendering, else "Couldn’t undo. You can undo when the run finishes."
   if (state.isExecuting) {
     refuseRunLockedStep(action, state, set);
     return;
@@ -10880,10 +10892,10 @@ function sendRestore(
   /** Review 17, W5 and L-2: Nebula refused it, or it never answered within
    * the hold limit. The person reads the undo failure line, always. On
    * the graph it was made in, the canvas goes back to where Nebula is. */
-  const refused = (reason: string, how: { text?: string; quiet?: boolean; error?: unknown } = {}) => {
+  const refused = (reason: string, how: { text?: string; quiet?: boolean; error?: unknown; status?: number } = {}) => {
     // An Undo held on a Delete (GM r39 item 3, r40 item 2): one neutral line
     // for a refused or failed restore, naming what it couldn't bring back as
-    // the cards read now, in place of "Couldn't undo that." or the timeout's.
+    // the cards read now, in place of "Couldn’t undo that." or the timeout's.
     const heldLine = notice.heldOnDelete && action === 'undo' && !how.quiet
       ? (state: GraphState) => bringBackFailedText(namesBroughtBack(entry, state.nodes)) : null;
     ownLinesWaiting.delete(notice.noticeId);
@@ -10893,7 +10905,7 @@ function sendRestore(
     set((state) => {
       // A refusal written for the person already says what couldn't be
       // done ("Couldn’t undo. It would remove “Shot 2”, …"; PR #198 GM r3 item 3).
-      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: heldLine?.(state) ?? how.text ?? headedLine(`Couldn’t ${action} that.`, reason), offer: null,
+      const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: heldLine?.(state) ?? how.text ?? becauseLine({ heading: `Couldn’t ${action} that.`, reason, status: how.status }), offer: null,
         ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) } };
       if (how.text) timeoutNoticeId = undoNoticeSeq;
       const stack = action === 'undo' ? state.redoStack : state.undoStack;
@@ -11070,9 +11082,9 @@ function sendRestore(
         });
         return;
       }
-      const { reason, error } = await backendRejectionReason(response, `Couldn't ${action} that.`);
+      const { reason, error, status } = await backendRejectionReason(response, `Couldn’t ${action} that.`);
       console.warn(`[nebula] ${action} refused: ${reason}`);
-      refused(reason, { error });
+      refused(reason, { error, status });
     } finally {
       // After its line, as before: a held change landing first would be a
       // newer step, and keep the line away (answerNotice).
@@ -11244,7 +11256,7 @@ function graphNotForThisTab(event: { workspaceRevision?: unknown; paramsVersion?
   }
   if (backendParamsVersion(event.paramsVersion) !== GRAPH_PARAMS_VERSION) {
     return "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
-      + "Reload the tab; your saved work is kept. If this keeps happening after a reload, this window's "
+      + "Reload the tab; your saved work is kept. If this keeps happening after a reload, this tab's "
       + "frontend build doesn't match the backend: rebuild the frontend, or restart the backend.";
   }
   return null;
@@ -12091,7 +12103,7 @@ async function askDirectRun(
     }));
     return await dialog.askPlaceholderRun(model, { changed, watch, ...(moved?.length ? { moved } : {}) });
   } catch (error) {
-    console.error("Couldn't open the run confirmation:", error);
+    console.error("Couldn’t open the run confirmation:", error);
     return null;
   }
 }
@@ -12911,7 +12923,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
 
   addNodeAndConnect: async (definitionId, position, connect) => {
     const definition = NODE_DEFINITIONS[definitionId];
-    const fail = (reason: string, error?: unknown) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason, error);
+    const fail = (reason: string, error?: unknown, status?: number) => reportNodeCreationFailure(definition?.displayName ?? definitionId, reason, error, status);
     if (!definition) return fail('This node is no longer available.');
     const before = get();
     // GM PR #205 r4 item 3: a run going doesn't lock it (the add and the
@@ -12974,8 +12986,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       });
       if (!res.ok) {
         definiteOutcome = res.status >= 400 && res.status < 500;
-        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
-        return fail(reason, error);
+        const { reason, error, status } = await backendRejectionReason(res, addHeading(definition.displayName));
+        return fail(reason, error, status);
       }
       const node = (await res.json()) as { id?: unknown; definitionId?: unknown; params?: Record<string, unknown>;
         connected?: boolean; edge?: Edge };
@@ -13113,9 +13125,9 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           'The backend response was lost after the node-create request was sent. Nebula did not add a local copy because the backend may already have committed it. Wait for canvas sync or reload before trying again.');
       }
       if (!res.ok) {
-        const { reason, error } = await backendRejectionReason(res, addHeading(definition.displayName));
+        const { reason, error, status } = await backendRejectionReason(res, addHeading(definition.displayName));
         takeBack();
-        return reportNodeCreationFailure(definition.displayName, reason, error);
+        return reportNodeCreationFailure(definition.displayName, reason, error, status);
       }
       let body: { id?: unknown };
       try {
@@ -14051,7 +14063,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (result.status === 'waiting') { settleWaitingStart(runId, set); return; }
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          notStartedMessage("Couldn't start the run.", result.status),
+          notStartedMessage("Couldn’t start the run.", result.status),
           400,
         );
       }
@@ -14083,7 +14095,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
           queuedScope,
-          failureMessage(err, "Couldn't start the run."),
+          failureMessage(err, "Couldn’t start the run."),
           err,
         ),
         ...ownershipState(),
@@ -14186,7 +14198,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (result.status === 'waiting') { settleWaitingStart(runId, set); return; }
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          notStartedMessage("Couldn't run the node.", result.status),
+          notStartedMessage("Couldn’t run the node.", result.status),
           400,
         );
       }
@@ -14217,7 +14229,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
         nodes: !onItsCanvas ? state.nodes : markNodesErrored(
           state.nodes,
           queuedScope,
-          failureMessage(err, "Couldn't run the node."),
+          failureMessage(err, "Couldn’t run the node."),
           err,
         ),
         ...ownershipState(),
@@ -14371,7 +14383,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           const { byNode, global } = validationReadings(result.errors);
           failShot(SHOT_NOT_STARTED_LINE, byNode.get(nodeId) ?? global
             ?? (byNode.size ? writtenReading(OTHER_NODE_LINE) : writtenReading(SHOT_NOT_STARTED_LINE)));
-        } else failShot(notStartedMessage("Couldn't start the shot.", result.status));
+        } else failShot(notStartedMessage("Couldn’t start the shot.", result.status));
         settleTrackedExecutionStatus('failed', runId, set, get);
         return;
       }
@@ -14383,7 +14395,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
       if (err instanceof ExecutionStartRejectedError) {
-        const line = failureMessage(err, "Couldn't start the shot.");
+        const line = failureMessage(err, "Couldn’t start the shot.");
         failShot(line);
         // PR #204 round 4: refused only for this tab, the shot's line goes on the promote while it is still there.
         const settledBefore = shotBefore;
@@ -14495,7 +14507,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
         throw new ExecutionStartRejectedError(
-          notStartedMessage("Couldn't start the run.", result.status),
+          notStartedMessage("Couldn’t start the run.", result.status),
           400,
         );
       }
@@ -14523,7 +14535,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({
         nodes: !onItsCanvas ? state.nodes
-          : markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn't start the run."), err),
+          : markNodesErrored(state.nodes, idSet, failureMessage(err, "Couldn’t start the run."), err),
         ...ownershipState(),
       }));
     }
@@ -14589,7 +14601,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       closeTrackedRun(set, runId, { status: 'failed' });
       set((state) => ({ nodes: !onItsCanvas ? state.nodes : result.status === 'validation_error'
         ? markNodesWithValidationErrors(state.nodes, idSet, result.errors)
-        : markNodesErrored(state.nodes, idSet, notStartedMessage("Couldn't start the run.", result.status)) }));
+        : markNodesErrored(state.nodes, idSet, notStartedMessage("Couldn’t start the run.", result.status)) }));
     } catch (error) {
       settleFailedStart(runId, error);
       if (!ownsRun(runId)) return;
@@ -14609,7 +14621,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       set((state) => ({ nodes: !onItsCanvas ? state.nodes : markNodesErrored(state.nodes, idSet,
         // GM r16 Q3 (round 10): any other reason says the nodes are there too, never "try again".
         generateRefused ? generateRefusedCopy(true) : createOrigin ? generateStartFailedCopy(error)
-          : failureMessage(error, "Couldn't start the run."), error, Boolean(createOrigin)) }));
+          : failureMessage(error, "Couldn’t start the run."), error, Boolean(createOrigin)) }));
     }
   },
 
@@ -16179,7 +16191,7 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
   // accepted proposal's merge.
   authorGenerationCluster: { refused: () => Promise.reject(new OfflineRefusal('POST', '/api/graph/cluster')),
     // While following, Create says it in its own error style (GM round 21, G1).
-    follow: { refused: () => Promise.reject(new FailureNotice(GENERATE_HEADING, followingReason(followingSwitch()))) } },
+    follow: { refused: () => Promise.reject(writtenLine(createWhileFollowingLine(followingSwitch()))) } },
   getOrCreateEditNodeDownstream: { refused: () => '' },
   deleteProviderRecovery: REFUSED_ASYNC, acknowledgeProviderStartAmbiguity: REFUSED_ASYNC,
   acknowledgeUncertainWorldLabsRun: REFUSED_VOID,

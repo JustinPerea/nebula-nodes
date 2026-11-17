@@ -26,7 +26,7 @@ describe('TabLoadBoundary', () => {
       </div>,
     );
     expect(screen.getByRole('alert')).toHaveTextContent(
-      "This part of Settings couldn't load. Reload the tab to try again.",
+      'Nebula couldn’t load this part of Settings. Reload the tab to try again.',
     );
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
   });

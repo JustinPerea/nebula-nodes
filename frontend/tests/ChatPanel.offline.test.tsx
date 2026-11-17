@@ -98,7 +98,7 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
     const [label] = await screen.findAllByText('Claude status unavailable');
-    expect(label).toHaveAttribute('title', "Couldn't check Claude status. Try again, or reload if it keeps happening.");
+    expect(label).toHaveAttribute('title', 'Nebula couldn’t check Claude status because the server didn’t accept it. Try again, or reload if it keeps happening.');
     expect(screen.queryByText('Nebula backend offline')).toBeNull();
     expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
   });
@@ -110,7 +110,7 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
 // gateway) answering for a backend it couldn't reach. A refusal whose reason
 // happens to say "network" is the backend answering.
 describe('ChatPanel decides "backend offline" from kind and status', () => {
-  const HEADING = "Couldn't check Claude status.";
+  const HEADING = 'Couldn’t check Claude status.';
 
   async function expectNotOffline() {
     render(<ChatPanel />);

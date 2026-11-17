@@ -1,6 +1,7 @@
 import { commonsCallsHeld, holdCommonsCalls } from './commonsHold';
 import { personHeldSettled } from './personSession';
 import { apiFetch } from './backend';
+import { quoted } from './quoted';
 import { CommonsRequestError } from './commonsRequestError';
 import { noteCommonsAnswered, noteCommonsOff } from './commonsOff';
 import {
@@ -177,7 +178,7 @@ export interface UploadResult {
  * table, backend/commons/person_copy.py, as every Commons refusal's do. */
 export function uploadFailureCopy(result: UploadResult): FailureCopy {
   return {
-    heading: `Couldn’t upload ${result.filename || 'that file'}.`,
+    heading: `Couldn’t upload ${result.filename ? quoted(result.filename) : 'that file'}.`,
     reason: result.person?.trim() || REFUSED_FALLBACK_COPY,
   };
 }

@@ -29,14 +29,18 @@ import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
 import { inDesktopShell, isBeforePromote, personGateHeld, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
 import { agentNameInSentence } from './personalAgentName';
 
+/** A line that starts "Nebula couldn’t " in either apostrophe spelling, optionally after "Saved. ": the one
+ * pattern every matcher below builds on, so a line's colour, role and form never depend on its apostrophes. */
+export const NEBULA_COULDNT = /^(?:Saved\. )?Nebula couldn['’]t /;
+
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
  * the backend is on this computer." apiFetch only ever calls Nebula's own
  * server, so this is never a provider the backend couldn't reach (those come
  * back as the backend's answer, with the classifier's "network" line). */
-export const CONNECTION_LOST_COPY = "Nebula's server isn't answering. Make sure it's running, then try again.";
+export const CONNECTION_LOST_COPY = 'Nebula’s server isn’t answering. Make sure it’s running, then try again.';
 /** An answer that says "not now": 408, 429 or any 5xx. */
-export const NO_RESPONSE_COPY = "Nebula didn't respond. Try again.";
+export const NO_RESPONSE_COPY = 'Nebula didn’t respond. Try again.';
 /** A refusal (any other 4xx) that came with no reason the person can read:
  * no `detail`, or FastAPI's list of field errors (GM, error-copy fallbacks).
  * Also what a failure that isn't a request's says (copyForError). Round 3f
@@ -44,9 +48,9 @@ export const NO_RESPONSE_COPY = "Nebula didn't respond. Try again.";
  * "That didn't work."". A node card says its own (lib/nodeErrorCopy.ts). */
 export const REFUSED_FALLBACK_COPY = "Try again, or reload if it keeps happening.";
 /** 401 or 403 with no reason (GM). */
-export const ACCESS_LOST_COPY = "You don't have access to this anymore. Reload to sign in again.";
+export const ACCESS_LOST_COPY = 'You don’t have access to this anymore. Reload to sign in again.';
 /** 413 with no reason (GM). */
-export const TOO_LARGE_COPY = "That's too large to save.";
+export const TOO_LARGE_COPY = "That’s too large to save.";
 
 /** GM r35 on PR #199, verbatim, for every refusal of a new project at the
  * project limit (the limit is for new projects: a restore, an Undo of a
@@ -165,25 +169,56 @@ const SERVER_BUSY_CLAUSE = 'the server is busy. Try again in a moment.';
  * help. No backend message ever shows to the person as it is: a reason not listed here says the
  * 4xx line (LOAD_NOT_ACCEPTED), and its raw text goes to the console.
  */
-export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map([
+export interface ReasonClause {
+  /** The clause after "because" on a surface that stands alone. */
+  alone: string;
+  /** The clause beside a button of its own (it ends "Try again."); `alone` when it has none. */
+  button?: string;
+}
+
+/**
+ * The clause table, one row per reason Nebula words itself (design's rulings, error-copy round 5):
+ * the reason as the backend or the browser wrote it (apostrophes read either way) and the words
+ * that follow "Nebula couldn’t ‹do X› because". A row is data: changing its words is a one-line
+ * edit here and its line in tests/becauseClause.test.ts. A reason that is no row falls to the
+ * pattern rows, then the sentence rule (clauseFor).
+ */
+const SESSION_ENDED = 'this tab’s session ended. Reload to sign in again.';
+export const REASON_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map<string, ReasonClause>([
   // The reference detail's 404 (backend refusal_copy.gone, GM error-copy round 3).
   [backendText("That reference isn't there anymore. Reload to get the latest references."),
-    'it isn’t there anymore. Reload to get the latest references.'],
+    { alone: 'it isn’t there anymore. Reload to get the latest references.' }],
   // A labeling image's position that isn't in the set (backend evaluation.REFERENCE_GONE).
   [backendText("That reference isn't in this held-out set. Reload to get the latest references."),
-    'it isn’t in this held-out set. Reload to get the latest references.'],
+    { alone: 'it isn’t in this held-out set. Reload to get the latest references.' }],
   // The references' search with filters the backend can't read (backend person_copy.BAD_FILTERS).
-  [backendText("Those filters didn't work. Clear them and try again."), 'those filters didn’t work. Clear them and try again.'],
-  // GM r30: a reference's image or video the blob route can't find (backend routes/commons get_blob).
-  [backendText('not found'), 'the file isn’t there anymore.'],
-  // GM r30: the UI session's 401s (backend commons/actors.py resolve_actor).
-  [backendText('invalid UI session token'), 'this window’s session ended. Reload to sign in again.'],
-  [backendText('no UI session: open Nebula from the desktop app or use the dev link'), 'this window’s session ended. Reload to sign in again.'],
-  // GM r30: a route only the person's own window may call (backend routes/commons human_dep).
-  [backendText('only the human UI session can do this'), 'this window isn’t signed in as you. Reload to sign in again.'],
+  [backendText("Those filters didn't work. Clear them and try again."), { alone: 'those filters didn’t work. Clear them and try again.' }],
+  // A reference's image or video the blob route can't find (backend routes/commons get_blob).
+  [backendText('not found'), { alone: 'the file isn’t there anymore.' }],
+  // The UI session's 401s (backend commons/actors.py resolve_actor): design says "tab".
+  [backendText('invalid UI session token'), { alone: SESSION_ENDED }],
+  [backendText('no UI session: open Nebula from the desktop app or use the dev link'), { alone: SESSION_ENDED }],
+  // A route only the person's own tab may call (backend routes/commons human_dep): not the person-gate check.
+  [backendText('only the human UI session can do this'), { alone: 'this tab isn’t signed in as you. Reload to sign in again.' }],
+  // The Commons intake's refusals (backend commons/person_copy INTAKE and the settings lines).
+  [backendText('Nebula can’t read that file type. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.'),
+    { alone: 'it isn’t a file type Nebula reads. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.' }],
+  [backendText('That file couldn’t be read. It may be damaged.'), { alone: 'the file couldn’t be read. It may be damaged.' }],
+  [backendText('That collection isn’t there anymore. Reload to get the latest collections.'),
+    { alone: 'the collection isn’t there anymore. Reload to get the latest collections.' }],
+  [backendText('Nebula can’t read that folder. Check that it exists and that Nebula can open it.'),
+    { alone: 'the folder can’t be read. Check that it exists and that Nebula can open it.' }],
+  [backendText('That setting isn’t available. Reload to get the latest settings.'),
+    { alone: 'the setting isn’t available anymore. Reload to get the latest settings.' }],
+  [backendText('That value doesn’t work for this setting. Reload to get the latest settings.'),
+    { alone: 'the setting doesn’t take that value. Reload to get the latest settings.' }],
 ]);
-/** 401 or 403 with no reason (GM's line, kept by GM r30). */
-const ACCESS_LOST_CLAUSE = 'you don’t have access to this anymore. Reload to sign in again.';
+/** The table with apostrophes folded, so a backend sentence turning curly changes no key. */
+const FOLDED_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map(
+  [...REASON_CLAUSES].map(([reason, row]) => [foldApostrophes(reason), row] as const));
+/** The load failures' view of the table (a load shows only these, never a backend sentence of its own). */
+export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map(
+  [...REASON_CLAUSES].map(([reason, row]) => [reason, row.alone] as const));
 /** GM r30 3: a server error (500) isn't "didn't respond". GM r31: "the server", not "Nebula's server". */
 const SERVER_ERROR_CLAUSE = 'the server hit an error. Try again.';
 /** GM r30: no answer at all (GM r31's wording). */
@@ -194,6 +229,7 @@ export const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try aga
 const SERVER_BUSY_RETRY_CLAUSE = 'the server is busy. Try again.';
 /** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
 export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';
+const NOT_ACCEPTED_ALONE = 'the server didn’t accept it. Try again, or reload if it keeps happening.';
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
  * activation_dep), and GM r30's page line for it. The Commons is on only when the backend starts
  * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
@@ -227,32 +263,11 @@ export function actionFailedLine(what: string, error: unknown, silent = ''): { l
   return { line, retryable: /(?:^|\.\s)Try again\.$/.test(line) };
 }
 
-/**
- * A one-line failure that a surface shows beside its own retry, said in the because form (the
- * standing rule: "Nebula couldn’t ‹do the thing› because ‹reason›. Try again."). `line` is
- * `<heading> <reason>` as failureMessage makes it; when the reason is GM's connection line or
- * its no-response line, the heading ("Couldn't open the project.") becomes the action and the
- * reason the server's: "Nebula couldn’t open the project because the server isn’t answering. Try
- * again." Any other line (a refusal's own words, a heading of another shape) goes through
- * shortLine as before.
- */
-export function retryBecauseLine(line: string): string {
-  const endings: [string, string][] = [[CONNECTION_LOST_COPY, NOT_ANSWERING_RETRY_CLAUSE], [NO_RESPONSE_COPY, NO_RESPONSE_CLAUSE]];
-  for (const [long, clause] of endings) {
-    if (!line.endsWith(long)) continue;
-    const heading = line.slice(0, line.length - long.length).trim();
-    const lead = /^(?:Nebula )?[Cc]ouldn['’]t /.exec(heading);
-    if (!lead || !heading.endsWith('.')) break;
-    return `Nebula couldn’t ${heading.slice(lead[0].length, -1)} because ${clause}`;
-  }
-  return shortLine(line);
-}
-
 /** The clause after "because" for a load's failure (loadFailedLine), COMMONS_OFF_COPY for the
  * Commons turned off, or null when the failure says nothing (a request refused offline). */
 function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<string, string> = LOAD_BECAUSE,
   beside: 'page' | 'button' = 'page'): string | null {
-  const { reason } = failureCopy(error);
+  const { cause: reason } = failureCopy(error);
   if (!reason) return null;
   const status = error instanceof RequestFailedError ? error.status : null;
   if (isNoAnswer(error) || status === NO_ANSWER_STATUS) return beside === 'button' ? NOT_ANSWERING_RETRY_CLAUSE : NOT_ANSWERING_CLAUSE;
@@ -263,7 +278,9 @@ function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<str
     if (status === 429) return beside === 'button' ? SERVER_BUSY_RETRY_CLAUSE : SERVER_BUSY_CLAUSE;
     return status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE;
   }
-  const clause = because.get(detail) ?? (reason === ACCESS_LOST_COPY ? ACCESS_LOST_CLAUSE : undefined);
+  const folded = foldApostrophes(detail);
+  const listed = [...because].find(([key]) => foldApostrophes(key) === folded)?.[1];
+  const clause = listed ?? (reason === ACCESS_LOST_COPY ? sentenceClause(reason) ?? undefined : undefined);
   if (clause) return clause;
   if (detail) console.warn(`[nebula] Couldn’t ${what}: the backend said "${detail}" (not shown).`);
   return LOAD_NOT_ACCEPTED;
@@ -283,7 +300,7 @@ export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
   [backendText("These labels are sealed as blind ground truth, so there's nothing to close."),
     'its labels were already sealed as blind ground truth. Reload to see them.'],
   // The batch changed somewhere else (a stale revision).
-  [backendText('Labels changed in another window. Reload before saving.'),
+  [backendText('Labels changed in another tab. Reload before saving.'),
     'it changed somewhere else. Reload, then close the batch again.'],
   // The batch was cleared meanwhile.
   [backendText("There's no held-out set yet. Prepare a folder first."),
@@ -312,7 +329,7 @@ export const CLOSE_COMMONS_OFF = 'Commons is turned off because Nebula started w
  */
 export function closeBatchFailedLine(error: unknown, held: boolean = personGateHeld()): string {
   const lead = 'Nebula couldn’t close the batch because';
-  const { reason } = failureCopy(error);
+  const { cause: reason } = failureCopy(error);
   if (!reason) return '';
   const status = error instanceof RequestFailedError ? error.status : null;
   const code = (error as { code?: unknown } | null)?.code;
@@ -328,7 +345,7 @@ export function closeBatchFailedLine(error: unknown, held: boolean = personGateH
     return `${lead} ${status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE}`;
   }
   const detail = error instanceof RequestFailedError ? detailText(error.detail) : '';
-  const clause = status === 409 ? CLOSE_BECAUSE.get(detail) : undefined;
+  const clause = status === 409 ? [...CLOSE_BECAUSE].find(([key]) => foldApostrophes(key) === foldApostrophes(detail))?.[1] : undefined;
   if (clause) return `${lead} ${clause}`;
   if (detail) console.warn(`[nebula] Couldn’t close the batch: the backend said "${detail}" (not shown).`);
   // Round 18l (review 17 logic NIT-1): an exception from Nebula's own code (not a request's
@@ -342,7 +359,7 @@ export function closeBatchFailedLine(error: unknown, held: boolean = personGateH
  * the Commons turned off (round 18k): it destroyed nothing, so its line is neutral
  * (CommonsErrorLine). */
 export function isBecauseFailure(text: string): boolean {
-  return /^(?:Saved\. )?Nebula couldn’t |^Commons is turned off because /.test(text);
+  return NEBULA_COULDNT.test(text) || /^Commons is turned off because /.test(text);
 }
 
 /** GM r41: the close's line says to try again (the close button beside it is the retry), or
@@ -382,7 +399,7 @@ export function savedReadBackLine(cause: string): string {
  * neutral, as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
 export function isLoadLine(text: string): boolean {
   // Round 18d (GM r32 3): a read-back after a saved write is a load's line too (savedReadBackLine).
-  return /^(?:Saved\. )?Nebula couldn’t (?:load|check) /.test(text) || text === COMMONS_OFF_COPY;
+  return new RegExp(`${NEBULA_COULDNT.source}(?:load|check) `).test(text) || text === COMMONS_OFF_COPY;
 }
 
 /** PR #204 round 18f (GM r35 4): the words before a load line's closing "Try again.", for the
@@ -439,7 +456,7 @@ export function thenRunFromCanvas(fix: string, always = false): string {
 
 /** GM r16 Q3: Generate's start failed for a reason other than this tab: the nodes are there. */
 export function generateStartFailedCopy(error: unknown): string {
-  const { reason } = failureCopy(error);
+  const { cause: reason } = failureCopy(error);
   return reason ? `${ADDED_LEAD}. ${thenRunFromCanvas(reason)}` : `${ADDED_LEAD}.`;
 }
 
@@ -450,7 +467,7 @@ export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
 
 /** The "because" form's reason, whatever it was doing (GM r6; GM r13's "Nebula added … but
  * couldn’t … because"): a line of that shape. */
-const NOT_CONNECTED_BECAUSE = /^Nebula (?:couldn’t|added .+ but couldn’t) .+ because this (?:tab|window) isn’t connected as you\. /;
+const NOT_CONNECTED_BECAUSE = new RegExp(`(?:${NEBULA_COULDNT.source}|^Nebula added .+ but couldn['’]t ).+ because this (?:tab|window) isn’t connected as you\\. `);
 
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
@@ -462,18 +479,13 @@ export function saysPersonRequired(line: string): boolean {
     || line.includes(PERSON_REQUIRED_DEV_COPY) || NOT_CONNECTED_BECAUSE.test(line);
 }
 
-/** GM's WRAP rule (round 2): "when the surface already has a retry button,
- * the reason line drops its 'try again'. The button is the retry." Only
- * failureCopy({ short: true }) picks these. */
-export const CONNECTION_LOST_SHORT_COPY = "Nebula's server isn't answering. Make sure it's running.";
 /** GM - Design, round 16 of PR #114: the one line for "no answer" wherever
  * #114 owns it (Settings never loaded, Create's cluster), whole even beside
  * Try again. */
-export const NEBULA_NOT_ANSWERING_COPY = "Nebula isn't answering. Make sure it's running, then try again.";
-export const NO_RESPONSE_SHORT_COPY = "Nebula didn't respond.";
+export const NEBULA_NOT_ANSWERING_COPY = 'Nebula isn’t answering. Make sure it’s running, then try again.';
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */
-export const BACKEND_NOT_RUNNING_COPY = "Nebula's backend isn't running. Start it, then reload.";
+export const BACKEND_NOT_RUNNING_COPY = 'Nebula’s backend isn’t running. Start it, then reload.';
 /**
  * GM r12 (2), PR #204 round 9: the Commons with no person session. The person's session is one
  * per launch and never expires on its own (backend services/person_session.py; commons/actors.py
@@ -487,7 +499,7 @@ export const BACKEND_NOT_RUNNING_COPY = "Nebula's backend isn't running. Start i
  */
 export function commonsNotConnectedCopy(heading: string, desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
-  const what = /^Couldn['’]t (.+)\.$/.exec(heading.trim())?.[1];
+  const what = failedWhat(heading);
   return what ? notConnectedBecause(what, desktop, reason) : personRequiredCopy(desktop, reason);
 }
 
@@ -522,12 +534,20 @@ export function canTryAgain(status: number): boolean {
 export interface FailureCopy {
   heading: string;
   reason: string;
+  /** The answer's status, where the failure came from a request (a 429 reads "busy", a 500 "hit an error"). */
+  status?: number;
+  /** failureCopy's single line: the action it says Nebula couldn’t do ('' when the heading isn't of that form). */
+  what?: string;
+  /** failureCopy's bare reason, as the error carries it (the old `reason` for a surface that words its own line). */
+  cause?: string;
+  /** failureCopy's line as it reads beside a button of its own (it ends "Try again."). */
+  button?: string;
 }
 
 /** How a line of its own opens: every form the backend's and the browser's
  * person lines use (review 5, N5): "Couldn't …", "Can't …", "Cannot …",
  * "Nebula couldn't …", "Nebula can't …". Group 1 is the verb. */
-const FAILURE_LEAD = /^(?:Nebula (?:couldn['’]t|can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) (\w+)/;
+const FAILURE_LEAD = new RegExp(`^(?:${NEBULA_COULDNT.source.slice(1)}|(?:Nebula (?:can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) )(\\w+)`);
 
 /** A reason that is a line of its own: it says what failed itself
  * ("Couldn't delete “Agent scene”. “Shot 2” is still running. …", "Nebula
@@ -621,7 +641,215 @@ function specifiesGeneric(heading: string, reason: string): boolean {
 /** The one-line form, for alerts, toasts, tooltips and status text (GM:
  * "Couldn't {verb} {object}. {reason}" in one string; headedLine). */
 export function oneLine(copy: FailureCopy): string {
-  return headedLine(copy.heading, copy.reason);
+  return becauseLine({ heading: copy.heading, reason: copy.reason, status: copy.status }, 'alone');
+}
+
+/** An apostrophe in one spelling, for comparing a backend sentence with a key whichever way it is written. */
+export function foldApostrophes(text: string): string {
+  return text.replace(/’/g, "'");
+}
+
+/**
+ * A straight apostrophe between two letters as the curly one (don't to don’t, Krea's to Krea’s), for
+ * words Nebula takes from elsewhere. Nothing else changes: text in “…”, "…" or backticks stays as it
+ * is, and so does any word with a slash, a backslash, an underscore, a digit or a file extension of 2 to 10
+ * letters (a path, an id, a file name such as "Krea's.png", "Bob's_file" or "Bob's.sketch", "photo 3's").
+ * Design's limit: a file name, an id or code in a reason must never change.
+ */
+export function curlApostrophes(text: string): string {
+  return text.split(/(“[^”]*”|"[^"]*"|`[^`]*`)/).map((part, index) => {
+    if (index % 2 === 1) return part;
+    return part.replace(/\S+/g, (word) => (/[\\/\d_]|\w\.[A-Za-z]{2,10}\b/.test(word) ? word : word.replace(/(\p{L})'(?=\p{L})/gu, '$1’')));
+  }).join('');
+}
+
+/** A heading of the form "Couldn’t ‹x›." (or "Nebula couldn’t ‹x›."), either apostrophe. The period
+ * inside a file name or a quoted name is not the sentence's end. */
+const FAILED_HEADING = /^(?:Nebula )?[Cc]ouldn['’]t ((?:[^.“]|“[^”]*”|\.(?=\w))+)\.$/;
+
+/**
+ * What a failure's heading says Nebula was doing: "Couldn’t load the character." gives "load the
+ * character". Null when the heading isn't of that form ("Save failed", a heading with no period,
+ * one that begins another way): such a line keeps its heading and reason as they are
+ * (tests/becauseClause.test.ts lists every heading in the app that returns null).
+ */
+export function failedWhat(heading: string): string | null {
+  const match = FAILED_HEADING.exec(heading.trim());
+  return match ? curlApostrophes(match[1]) : null;
+}
+
+/** The status rows: a reason Nebula words for an answer or for no answer at all. */
+function statusClause(reason: string, status: number | undefined, beside: 'alone' | 'button'): string | null {
+  reason = curlApostrophes(reason);
+  const button = beside === 'button';
+  if (reason === CONNECTION_LOST_COPY || reason === NEBULA_NOT_ANSWERING_COPY) return button ? NOT_ANSWERING_RETRY_CLAUSE : NOT_ANSWERING_CLAUSE;
+  if (reason === BACKEND_NOT_RUNNING_COPY) return 'the server isn’t running. Start Nebula, then reload.';
+  if (reason === NO_RESPONSE_COPY) {
+    if (status === 429) return button ? SERVER_BUSY_RETRY_CLAUSE : SERVER_BUSY_CLAUSE;
+    return status !== undefined && status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE;
+  }
+  // A refusal with no readable reason: "it" is the request, as the Cinema line says.
+  if (reason === REFUSED_FALLBACK_COPY) return button ? LOAD_NOT_ACCEPTED : NOT_ACCEPTED_ALONE;
+  if (reason === TOO_LARGE_COPY) return 'it’s too large.';
+  return null;
+}
+
+/** The pattern rows: refusal_copy.gone and the Recently deleted line, whatever the thing is called. */
+const GONE_LINE = /^That .+? isn['’]t there anymore\. (Reload to get the latest .+\.)$/;
+const GONE_FROM_TRASH_LINE = /^That .+? isn['’]t in Recently deleted anymore\. (Reload to get the latest list\.)$/;
+
+/** A clause from the status rows, the table or the pattern rows; null when the reason is none of them. */
+function clauseFromTables(reason: string, status: number | undefined, beside: 'alone' | 'button'): string | null {
+  const said = reason.trim();
+  const byStatus = statusClause(said, status, beside);
+  if (byStatus !== null) return byStatus;
+  const row = FOLDED_CLAUSES.get(foldApostrophes(said));
+  if (row) return beside === 'button' ? row.button ?? row.alone : row.alone;
+  const gone = GONE_LINE.exec(said);
+  if (gone) return `it isn’t there anymore. ${gone[1]}`;
+  const trashed = GONE_FROM_TRASH_LINE.exec(said);
+  return trashed ? `it isn’t in Recently deleted anymore. ${trashed[1]}` : null;
+}
+
+/** A reason that opens with an instruction or a bare status rather than saying why: it stands in for the reason. */
+const NOT_A_REASON = /^(?:Try|Reload|Restart|Check|Use|Wait|Stop|Run|Pick|Choose|Connect|Disconnect|Open|Close|Start|Install|Make|Fix|Remove|Download|Shorten|Give|Retry|Let|Click|Select|Add|Paste|Sign|Free|Update|Quit|Link|Refresh|Delete|Save|Keep|Send|Feed|Set|Turn|Describe|Downscale|Clear|Rebuild|Fill|Move|Review|Confirm|Generate|Upload|Enable|Disable|Create|Rename|Replace|Edit|Show|Allow|To|Please|Still|Nothing|Only|No|Not|Saved|Opened|Added|Done)\b/;
+/** The sentence rule's lead words that take a lower-case letter after "because". */
+const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An|They|Their|Part|Labels|Something|One|Some|Each|Both|Two|Another)\b/;
+
+/** The first words of the provider and app names Nebula's own lines open with ("Krea’s style images …", "Paper
+ * can’t find …"): a short copy of the copy lint's proper names (scripts/copy-lint-rules.json), not the whole list,
+ * to keep the startup bundle small. tests/nameLeads.guard.test.ts fails when the lint learns a name this list lacks. */
+const NAME_LEADS = /^(?:Gemini|Nano|Veo|Kling|Claude|Codex|Remotion|Hugging|World Labs|Black Forest|Nebula|Krea|Obsidian|Figma|Google|Vertex|Anthropic|Replicate|Runway|Ideogram|Meshy|Higgsfield|Seedream|Seedance|Grok|Luma|Recraft|Demucs|Whisper|Lyria|Imagen|Hunyuan|Quiver|Nous|Chrome|Electron|Opus|Sonnet|Haiku|Lottie|Tripo|Rodin|Qwen|Pika|Vidu|Topaz|Magnific|Hailuo|Paper|Wan|Jev|Speridlabs|Hermes|Mac|Windows|Linux|Cinema Studio|Character Studio|Moodboard Studio|Creator Studio|Commons|Agent Log|Marble|Finder)\b/;
+
+/** Whether a reason's first word can follow "because": a lead word (lower-cased by the rule), a lower-case word,
+ * a quoted name or a {} slot, a name Nebula knows (NAME_LEADS), or a name written with a capital inside it or a
+ * digit ("OpenAI", "ElevenLabs", "GPT-4"). A plain capitalised word ("File", "Source") starts a sentence of its
+ * own, not a clause. */
+/** A sentence's end: its closing mark, and any quote or bracket that closes after it ("… “try later.”"). */
+const ENDS_A_SENTENCE = /[.?!…][”’"')\]]*$/;
+
+function opensAClause(text: string): boolean {
+  if (LEADS_A_CLAUSE.test(text) || NAME_LEADS.test(text)) return true;
+  const first = text.split(/\s/)[0];
+  return !/^\p{Lu}/u.test(first) || /^\p{Lu}\S*[\p{Lu}\d]/u.test(first);
+}
+
+/** The sentence rule: a written sentence as the clause after "because". Its first word is lower-cased only when
+ * it is one of the lead words above (a name, a quoted name and a {} slot stay); apostrophes are curled between
+ * letters, and a reason written with no closing mark gets its full stop. Null for a reason that is an
+ * instruction, a line that names its own failure, nothing, or not a clause: one whose first word is a plain
+ * capitalised word ("File exceeds 500 MB limit"; opensAClause). The line then keeps the reason as its own
+ * sentence. */
+function sentenceClause(reason: string): string | null {
+  const text = reason.trim();
+  if (!text || NOT_A_REASON.test(text) || isNamedLine(text)) return null;
+  if (!opensAClause(text)) return null;
+  return endedSentence(curlApostrophes(LEADS_A_CLAUSE.test(text) ? text[0].toLowerCase() + text.slice(1) : text));
+}
+
+/**
+ * The clause after "because" for a failure's reason, `beside` saying where the line is read ('alone', or
+ * 'button' beside a Try again of its own). Taken from `source`: a reason, or an error (a request's, with its
+ * status) or a FailureCopy. Tried in order: the status rows, the REASON_CLAUSES table, the pattern rows, the
+ * sentence rule; null when the reason is none of these (an instruction, or nothing: the line then has no
+ * "because").
+ */
+export function clauseFor(source: unknown, beside: 'alone' | 'button' = 'alone'): string | null {
+  let reason = '';
+  let status: number | undefined;
+  if (typeof source === 'string') reason = source;
+  else if (source && typeof source === 'object') {
+    const asRecord = source as { reason?: unknown; status?: unknown };
+    reason = partsOf(source)?.reason ?? (typeof asRecord.reason === 'string' ? asRecord.reason : '');
+    if (typeof asRecord.status === 'number') status = asRecord.status;
+  }
+  return clauseFromTables(reason, status, beside) ?? sentenceClause(reason);
+}
+
+/** A reason that is a whole line of Nebula's, already in the because form. */
+const FULL_BECAUSE = new RegExp(`${NEBULA_COULDNT.source}.+ because `);
+const OWN_FAILURE = NEBULA_COULDNT;
+const FIRST_SENTENCE = /^((?:[^.“]|“[^”]*”|\.(?=\w))+\.)\s*([\s\S]*)$/;
+
+/** A reason that is a line of its own ("Couldn’t download the result. Its link may have expired. Run the node
+ * again."), as one line in the because form: its first sentence says what, the rest says why. */
+function namedLine(reason: string, beside: 'alone' | 'button'): string {
+  if (FULL_BECAUSE.test(reason)) return curlApostrophes(reason);
+  const split = FIRST_SENTENCE.exec(reason);
+  const what = failedWhat(sameFailureForm(split ? split[1] : reason));
+  if (what === null) return reason;
+  const rest = (split?.[2] ?? '').trim();
+  const clause = rest ? clauseFor(rest, beside) : null;
+  if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
+  return rest ? `Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(rest))}` : `Nebula couldn’t ${what}.`;
+}
+
+/** A sentence with its closing punctuation: a reason with none ("File exceeds 500 MB limit") gets a full stop. */
+function endedSentence(text: string): string {
+  return ENDS_A_SENTENCE.test(text) ? text : `${text}.`;
+}
+
+/** The action a reason's first sentence says Nebula could not do, or its whole because line ("Nebula couldn’t save
+ * the project because …" says "save the project"); null when it names none. */
+function reasonAction(reason: string): string | null {
+  const full = /^(?:Saved\. )?Nebula couldn['’]t (.+?) because /.exec(reason);
+  if (full) return curlApostrophes(full[1]);
+  const split = FIRST_SENTENCE.exec(reason);
+  return failedWhat(sameFailureForm(split ? split[1] : reason));
+}
+
+/** A refusal because this tab isn't the person's says so in the one form every such line has. */
+function personRequiredLine(what: string, reason: string): string | null {
+  if (reason === PERSON_REQUIRED_COPY) return notConnectedBecause(what, false);
+  if (reason === PERSON_REQUIRED_APP_COPY) return notConnectedBecause(what, true, '');
+  if (reason === PERSON_REQUIRED_DEV_COPY) return notConnectedBecause(what, true, 'debug-port');
+  return null;
+}
+
+/** What becauseLine takes: the heading and the reason, with the status the failure answered with, or the pieces a
+ * caller already has. `what` is the action as written (no heading is parsed, nothing is curled); `clause` is the
+ * text after "because" as written (no sentence rule, no lower-casing). */
+export interface BecauseParts { heading: string; reason: string; status?: number; what?: string; clause?: string }
+
+/**
+ * A failure as one line in the because form: "Nebula couldn’t ‹what› because ‹reason›." Its parts: the
+ * action from the heading (failedWhat), the reason from the status, the table or the sentence rule (clauseFor).
+ * With no known reason there is no "because": "Nebula couldn’t ‹what›." and, when the reason is only an
+ * instruction, the instruction after it. A heading that isn't "Couldn’t ‹x›." keeps its heading and reason
+ * (headedLine). A reason that says its own failure replaces a heading that only restates it or names
+ * nothing (isGenericHeading); a reason that is already a whole Nebula line stays as it is. `beside` is
+ * 'button' for a surface with its own Try again, so the line ends "Try again." where trying again helps.
+ */
+export function becauseLine(parts: BecauseParts, beside: 'alone' | 'button' = 'alone'): string {
+  const heading = parts.heading.trim();
+  const reason = parts.reason.trim();
+  // A caller that has the action (or the clause) itself hands it over: a name typed by a person or an agent
+  // is never parsed as a heading, and the words go in as written.
+  // (A FailureCopy has a `what` of its own, '' for a heading that isn't of the form: only a written one counts.)
+  const given = parts.what || undefined;
+  const what = given ?? failedWhat(heading);
+  if (parts.clause?.trim() && what !== null) return `Nebula couldn’t ${what} because ${parts.clause.trim()}`;
+  if (!reason) return what === null ? heading : `Nebula couldn’t ${what}.`;
+  if (!heading && given === undefined) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : reason;
+  if (what === null) return headedLine(heading, reason);
+  const person = personRequiredLine(what, reason);
+  if (person !== null) return person;
+  const clause = clauseFromTables(reason, parts.status, beside);
+  if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
+  const same = repeatsHeading(heading, reason) || isGenericHeading(heading);
+  // A reason that opens with its own "Nebula couldn’t …" replaces the heading only when it is the same failure
+  // (or says nothing the heading doesn't): a different one follows the heading's action, so the person still
+  // learns what was refused.
+  const own = OWN_FAILURE.test(reason) ? foldApostrophes(reasonAction(reason) ?? '') : null;
+  // The same action, or the same verb on the thing the heading only calls by its kind ("save the project" and
+  // "save “Harbor”").
+  const kind = /^(\w+) (?:the|this|that|your) /.exec(what);
+  const ownReplaces = own !== null && (same || own.toLowerCase() === foldApostrophes(what).toLowerCase()
+    || (kind !== null && own.startsWith(`${kind[1]} “`)));
+  if (ownReplaces || (isNamedLine(reason) && same)) return namedLine(reason, beside);
+  const sentence = sentenceClause(reason);
+  if (sentence !== null) return `Nebula couldn’t ${what} because ${sentence}`;
+  return `Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(reason))}`;
 }
 
 /**
@@ -642,7 +870,7 @@ export class ConnectionLostError extends TypeError {
   constructor(cause: unknown, options: { heading?: string; reason?: string; detail?: unknown } = {}) {
     const heading = options.heading ?? '';
     const reason = options.reason ?? CONNECTION_LOST_COPY;
-    super(oneLine({ heading, reason }), { cause });
+    super(oneLine({ heading, reason, status: NO_ANSWER_STATUS }), { cause });
     this.name = 'ConnectionLostError';
     this.heading = heading;
     this.reason = reason;
@@ -708,7 +936,7 @@ export class RequestFailedError extends Error {
       storageLimit?: StorageLimit | null; code?: string | null; overSaveLimit?: boolean; sizeBytes?: number | null;
       hold?: unknown; fix?: string | null; sentAt?: number | null; sentBeforePromote?: boolean; projectCounts?: ProjectCounts } = {}) {
     const reason = copyForAnswer(status, options.detail, options.code ?? null, options.reason);
-    super(oneLine({ heading, reason }), 'cause' in options ? { cause: options.cause } : undefined);
+    super(oneLine({ heading, reason, status }), 'cause' in options ? { cause: options.cause } : undefined);
     this.name = 'RequestFailedError';
     this.status = status;
     this.detail = options.detail;
@@ -756,12 +984,13 @@ export class FailureNotice extends Error {
 
   constructor(heading: string, reason: string,
     options: { standalone?: boolean; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
-    super(oneLine({ heading, reason }));
+    // A standalone line reads on its own, with no heading in front of it (writtenLine), as failureCopy shows it.
+    super(options.standalone ? reason : oneLine({ heading, reason }));
     this.name = 'FailureNotice';
     this.heading = heading;
     this.reason = reason;
     // A line that opens with its own "Nebula couldn’t …" is a whole line: no heading over it.
-    this.standalone = options.standalone ?? (heading === '' && /^Nebula couldn’t /.test(reason));
+    this.standalone = options.standalone ?? (heading === '' && NEBULA_COULDNT.test(reason));
     this.code = options.code ?? null;
     this.sentAt = sentAtOf(options);
   }
@@ -967,55 +1196,55 @@ function partsOf(error: unknown): FailureCopy | null {
   return null;
 }
 
-/** The short form of a reason, for a surface with its own retry button
- * (GM's WRAP rule). Only GM's two "try again" lines have one; a refusal's
- * reason, GM's 4xx fallback included, stays as it is. */
-export function shortReason(reason: string): string {
-  if (reason === CONNECTION_LOST_COPY) return CONNECTION_LOST_SHORT_COPY;
-  if (reason === NO_RESPONSE_COPY) return NO_RESPONSE_SHORT_COPY;
-  return reason;
-}
-
-/** What `failure` says, as FailureLines shows it: '' when it says nothing (a write refused while offline: the banner
- *  is its reason, failureCopy). A surface never shows a line or an alert for '' (#210 round 6t, GM r113 1). */
-export function failureText(failure: FailureCopy | string | null | undefined, retry = false): string {
-  if (!failure) return '';
-  if (typeof failure === 'string') return failure.trim();
-  const reason = retry ? shortReason(failure.reason) : failure.reason;
-  return [failure.heading, reason].map((part) => part.trim()).filter(Boolean).join(' ');
-}
-
-/** shortReason for a one-line string (a store keeps "<heading> <reason>"):
- * the same swap when the line ends with one of GM's two "try again" lines,
- * for a one-line surface whose own retry button sits beside it. */
-export function shortLine(line: string): string {
-  for (const long of [CONNECTION_LOST_COPY, NO_RESPONSE_COPY]) {
-    if (line.endsWith(long)) return line.slice(0, line.length - long.length) + shortReason(long);
+/** The page's closing step swapped for the button's own, on a line already in the because form (a store keeps
+ * the line, not its parts): "… because the server isn’t answering. Check that Nebula is running, then try again."
+ * reads "… because the server isn’t answering. Try again." beside a Try again button. Any other line is returned
+ * as it is. A surface that holds the parts says becauseLine(parts, 'button') instead. */
+export function besideButton(line: string): string {
+  const endings: readonly (readonly [string, string])[] = [
+    [NOT_ANSWERING_CLAUSE, NOT_ANSWERING_RETRY_CLAUSE],
+    [SERVER_BUSY_CLAUSE, SERVER_BUSY_RETRY_CLAUSE],
+    [NOT_ACCEPTED_ALONE, LOAD_NOT_ACCEPTED],
+  ];
+  for (const [page, button] of endings) {
+    if (line.endsWith(page)) return line.slice(0, line.length - page.length) + button;
   }
   return line;
 }
 
+/** What `failure` says, as FailureLines shows it: '' when it says nothing (a write refused while offline: the banner
+ *  is its reason, failureCopy). A surface never shows a line or an alert for '' (#210 round 6t, GM r113 1). `retry` is
+ *  for a surface whose own Try again button shows with the line. */
+export function failureText(failure: FailureCopy | string | null | undefined, retry = false): string {
+  if (!failure) return '';
+  if (typeof failure === 'string') return failure.trim();
+  const reason = retry ? failure.button ?? failure.reason : failure.reason;
+  return [failure.heading, reason].map((part) => part.trim()).filter(Boolean).join(' ');
+}
+
 /**
- * Heading and reason for a two-line surface (a popover, a notice, a panel:
- * heading on line 1, reason on line 2), from any error. A request's error
- * carries both; anything else says the connection line or GM's general line
- * (copyForError) under `heading`, never its own message. `short` is for a
- * surface whose retry button is shown with the line. `heading` also stands
- * in when the request's error has none.
+ * A failure as one line in the because form (becauseLine), from any error. A request's error carries its heading
+ * and reason; anything else says the connection line or the general line (copyForError) under `heading`, never its
+ * own message. `reason` is the line (alone: it ends in the page's own next step) and `button` is the same line for
+ * a surface whose Try again button is shown with it; `short` makes `reason` the button's. `cause` is the bare
+ * reason the error carries, for a surface that words its own line, and `what` the action. `heading` also stands in
+ * when the request's error has none. Empty for a write refused offline: the banner already pulsed.
  */
 export function failureCopy(error: unknown, options: { heading?: string; short?: boolean } = {}): FailureCopy {
-  // A write refused while offline (round 15 of PR #114) says nothing: the
-  // banner already pulsed. Every one-line form below is empty for it too.
-  if (isOfflineRefusal(error)) return { heading: '', reason: '' };
+  if (isOfflineRefusal(error)) return { heading: '', reason: '', cause: '', button: '', what: '' };
   const parts = partsOf(error) ?? { heading: '', reason: copyForError(error) };
   const standalone = error instanceof FailureNotice && error.standalone;
   const heading = standalone ? '' : parts.heading || options.heading || '';
-  return { heading, reason: options.short ? shortReason(parts.reason) : parts.reason };
+  const status = error instanceof ConnectionLostError || error instanceof RequestFailedError ? error.status : undefined;
+  const alone = becauseLine({ heading, reason: parts.reason, status }, 'alone');
+  const button = becauseLine({ heading, reason: parts.reason, status }, 'button');
+  return { heading: '', reason: options.short ? button : alone, what: failedWhat(heading) ?? '', cause: parts.reason,
+    button, ...(status === undefined ? {} : { status }) };
 }
 
 /** The one-line form of failureCopy, for a catch that has its own heading. */
 export function failureMessage(error: unknown, heading: string): string {
-  return oneLine(failureCopy(error, { heading }));
+  return failureCopy(error, { heading }).reason;
 }
 
 /** The one-line form under the caller's own heading, whatever heading the
@@ -1024,7 +1253,9 @@ export function failureMessage(error: unknown, heading: string): string {
  * reason, not the read's own "Nebula couldn’t load the canvas."). Round 3e. */
 export function failureUnder(error: unknown, heading: string): string {
   if (isOfflineRefusal(error)) return '';
-  return oneLine({ heading, reason: failureCopy(error).reason });
+  const parts = partsOf(error) ?? { heading: '', reason: copyForError(error) };
+  const status = error instanceof ConnectionLostError || error instanceof RequestFailedError ? error.status : undefined;
+  return becauseLine({ heading, reason: parts.reason, status }, 'alone');
 }
 
 // GM: "Never 'failed:', '(HTTP 503)' or status codes in the UI. Keep them in

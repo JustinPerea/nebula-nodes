@@ -213,13 +213,13 @@ describe('L3: both sides reordered the same list: Undo says so', () => {
 
   it('GM\'s lines, by who reordered', () => {
     const order = [{ node: 'Opening', settings: [], order: 'shots' as const }];
-    expect(acceptUndoLine(order, { kind: 'you' }, true)).toBe('Nothing was undone. You reordered the shots in another window after you accepted.');
+    expect(acceptUndoLine(order, { kind: 'you' }, true)).toBe('Nothing was undone. You reordered the shots in another tab after you accepted.');
     expect(acceptUndoLine(order, { kind: 'agent', name: 'Codex' }, true)).toBe('Nothing was undone. Codex reordered the shots after you accepted.');
     expect(acceptUndoLine(order, { kind: 'unknown' }, true)).toBe('Nothing was undone. The shots were reordered after you accepted.');
     expect(acceptUndoLine(order, { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except the shot order in “Opening”. Codex reordered the shots after you accepted.');
     expect(acceptUndoLine([{ node: 'Cut', settings: [], order: 'clips' as const }], { kind: 'you' }, false))
-      .toBe('Undid the proposal except the clip order in “Cut”. You reordered them in another window after you accepted.');
+      .toBe('Undid the proposal except the clip order in “Cut”. You reordered them in another tab after you accepted.');
     expect(acceptUndoLine([{ node: 'Cut', settings: [], order: 'clips' as const }], { kind: 'unknown' }, false))
       .toBe('Undid the proposal except the clip order in “Cut”. The clips were reordered after you accepted.');
   });
@@ -234,7 +234,7 @@ describe('L3: both sides reordered the same list: Undo says so', () => {
     });
     await sleep(10);
     const { notice } = await step('undo');
-    expect(notice).toBe('Nothing was undone. You reordered the clips in another window after you accepted.');
+    expect(notice).toBe('Nothing was undone. You reordered the clips in another tab after you accepted.');
   });
 });
 
@@ -337,7 +337,7 @@ describe('GM ask 3: an unlabeled setting is "a setting on “<node>”"; the Age
   });
 
   it('the save-failed toast', () => {
-    expect(paramSaveFailedLine([null], 'Flux', true)).toBe("Couldn’t save a setting on “Flux”. It’s back to its last saved value.");
-    expect(paramSaveFailedLine(['Prompt', null], 'Flux', false)).toBe("Couldn’t save 2 settings for “Flux”.");
+    expect(paramSaveFailedLine([null], 'Flux', true)).toBe("Nebula couldn’t save a setting on “Flux”. It’s back to its last saved value.");
+    expect(paramSaveFailedLine(['Prompt', null], 'Flux', false)).toBe("Nebula couldn’t save 2 settings for “Flux”.");
   });
 });

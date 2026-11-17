@@ -75,7 +75,7 @@ export function keyStatus(key: string, health: ProviderHealthState): { tone: Row
   if (health.loading) return { tone: 'busy', status: 'Checking… nothing is generated' };
   const entry = health.providers[PROVIDER_KEY_LABELS[key] ?? key];
   if (!providerCheckIsCurrent(entry, health.checkedAt)) {
-    return health.error ? { tone: 'warn', status: "Couldn't check", statusTone: 'warn' } : { tone: 'idle', status: 'Saved' };
+    return health.error ? { tone: 'warn', status: "Couldn’t check", statusTone: 'warn' } : { tone: 'idle', status: 'Saved' };
   }
   switch (entry.status) {
     case 'valid': return { tone: 'ok', status: 'Connected', statusTone: 'ok' };
@@ -83,7 +83,7 @@ export function keyStatus(key: string, health: ProviderHealthState): { tone: Row
     case 'invalid': return { tone: 'warn', status: 'Key rejected', statusTone: 'warn' };
     case 'unauthorized': return { tone: 'warn', status: 'No API access', statusTone: 'warn' };
     case 'insufficient_credits': return { tone: 'warn', status: 'Out of credits', statusTone: 'warn' };
-    default: return { tone: 'warn', status: "Couldn't check", statusTone: 'warn' };
+    default: return { tone: 'warn', status: "Couldn’t check", statusTone: 'warn' };
   }
 }
 

@@ -8,6 +8,9 @@ import { describe, expect, it } from 'vitest';
 const SRC = join(__dirname, '../../src');
 const BACKEND = join(__dirname, '../../../backend');
 
+// The backend writes curly apostrophes and the keys may use either, so both sides are folded before they are compared.
+const fold = (text: string) => text.replace(/\u2019/g, "'");
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, e.name);
@@ -49,19 +52,20 @@ function sites(): Site[] {
 }
 
 describe('backendText stays a match-string marker', () => {
-  it('is used only as a key of LOAD_BECAUSE or CLOSE_BECAUSE in lib/errorCopy.ts', () => {
+  it('is used only as a key of REASON_CLAUSES or CLOSE_BECAUSE in lib/errorCopy.ts', () => {
     const all = sites();
     expect(all.length).toBeGreaterThan(0);
-    const bad = all.filter((s) => s.file !== 'lib/errorCopy.ts' || !s.isKey || !['LOAD_BECAUSE', 'CLOSE_BECAUSE'].includes(s.table ?? ''));
+    const bad = all.filter((s) => s.file !== 'lib/errorCopy.ts' || !s.isKey || !['REASON_CLAUSES', 'CLOSE_BECAUSE'].includes(s.table ?? ''));
     expect(bad.map((s) => `${s.file}: ${s.text}`)).toEqual([]);
   });
 
   it('every wrapped key is the backend\'s own text, verbatim', () => {
     const backend = ['routes/commons.py', 'commons/actors.py', 'commons/evaluation.py', 'commons/person_copy.py', 'services/refusal_copy.py']
-      .map((f) => readFileSync(join(BACKEND, f), 'utf8')).join('\n');
+      .map((f) => fold(readFileSync(join(BACKEND, f), 'utf8'))).join('\n');
     const all = sites();
     expect(all.length).toBeGreaterThan(0);
-    for (const { text } of all) {
+    for (const { text: raw } of all) {
+      const text = fold(raw);
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).
       if (text.startsWith("That reference isn't there anymore")) {
         expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}.");
@@ -76,11 +80,22 @@ describe('backendText stays a match-string marker', () => {
     }
   });
 
-  it('every LOAD_BECAUSE and CLOSE_BECAUSE key is wrapped, so each is checked against the backend', async () => {
-    const { CLOSE_BECAUSE, LOAD_BECAUSE } = await import('../../src/lib/errorCopy');
-    for (const [name, table] of [['LOAD_BECAUSE', LOAD_BECAUSE], ['CLOSE_BECAUSE', CLOSE_BECAUSE]] as const) {
+  it('every REASON_CLAUSES and CLOSE_BECAUSE key is wrapped, so each is checked against the backend', async () => {
+    const { CLOSE_BECAUSE, REASON_CLAUSES } = await import('../../src/lib/errorCopy');
+    for (const [name, table] of [['REASON_CLAUSES', REASON_CLAUSES], ['CLOSE_BECAUSE', CLOSE_BECAUSE]] as const) {
       const wrapped = new Set(sites().filter((s) => s.table === name).map((s) => s.text));
       expect([...table.keys()].filter((k) => !wrapped.has(k)), name).toEqual([]);
     }
+  });
+
+  // A frontend copy of a backend person line is the same text, so a node's card reads the same live (the event
+  // carries the backend's line) and after a reload (the card rebuilds it from the stored error).
+  it('the Gemini Omni guardrail line is the backend\'s, word for word', async () => {
+    const { GEMINI_OMNI_REASON } = await import('../../src/lib/nodeErrorCopy');
+    const source = readFileSync(join(BACKEND, 'services/provider_capabilities.py'), 'utf8');
+    const block = /GEMINI_OMNI_EXTENSION_LINE = \(([\s\S]*?)\n\)/.exec(source)?.[1];
+    expect(block, 'GEMINI_OMNI_EXTENSION_LINE is a parenthesised string in provider_capabilities.py').toBeTruthy();
+    const line = [...block!.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((piece) => piece[1]).join('');
+    expect(GEMINI_OMNI_REASON).toBe(line);
   });
 });

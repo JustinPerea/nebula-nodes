@@ -335,7 +335,7 @@ describe('Canvas toolbar hierarchy', () => {
     const { panel } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
     // error-copy round 2 (GM): the heading names the action, then the reason.
-    await waitFor(() => expect(notices).toHaveBeenCalledWith("Couldn't clear the canvas. Provider is still settling."));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith('Nebula couldn’t clear the canvas. Provider is still settling.'));
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
     expect(mocks.endStep).toHaveBeenCalledWith(mocks.undoStep);
@@ -351,7 +351,7 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
     await waitFor(() => expect(notices).toHaveBeenCalledWith(
-      "Couldn't clear the canvas. A run is still going. Wait for it to finish or stop it first."));
+      'Nebula couldn’t clear the canvas because a run is still going. Wait for it to finish or stop it first.'));
     expect(mocks.clear).not.toHaveBeenCalled();
   });
 
@@ -361,7 +361,7 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
     await waitFor(() => expect(notices).toHaveBeenCalledWith(
-      "Couldn't clear the canvas. Try again, or reload if it keeps happening."));
+      'Nebula couldn’t clear the canvas because the server didn’t accept it. Try again, or reload if it keeps happening.'));
   });
 
   it('does not request clear after a declined confirmation or a run starting during confirmation', () => {
@@ -404,7 +404,7 @@ describe('Canvas toolbar hierarchy', () => {
     };
     it('a value nested past Save\'s depth: GM\'s line under the import heading, and nothing comes in', async () => {
       // A param's value sits 5 deep: 59 more is Save's edge, 60 past it.
-      expect(await importWith([cliNode(deep(60))])).toEqual(['Nebula couldn’t import the CLI canvas. This canvas is too complex to open.']);
+      expect(await importWith([cliNode(deep(60))])).toEqual(['Nebula couldn’t import the CLI canvas because this canvas is too complex to open.']);
       expect(mocks.load).not.toHaveBeenCalled();
       expect(console.error).toHaveBeenCalledWith('[nebula] CLI canvas import', 'Graph is nested more than 64 levels deep.');
     });
@@ -422,7 +422,7 @@ describe('Canvas toolbar hierarchy', () => {
       expect(fileCount(atSaveEdge + 1)).toBe(GRAPH_MAX_VALUES + 1);
       expect(measureShape({ nodes: [cliNode(Array.from({ length: atSaveEdge + 1 }, () => 0))], edges: [] }).count).toBeLessThanOrEqual(GRAPH_MAX_VALUES);
       expect(await importWith([cliNode(Array.from({ length: atSaveEdge + 1 }, () => 0))]))
-        .toEqual(['Nebula couldn’t import the CLI canvas. This canvas is too complex to open.']);
+        .toEqual(['Nebula couldn’t import the CLI canvas because this canvas is too complex to open.']);
       expect(mocks.load).not.toHaveBeenCalled();
     });
     it('values: at Save\'s count it comes in', async () => {
@@ -430,7 +430,7 @@ describe('Canvas toolbar hierarchy', () => {
       expect(mocks.load).toHaveBeenCalledTimes(1);
     });
     it('a value Nebula can\'t read: GM\'s value line', async () => {
-      expect(await importWith([cliNode(Number.NaN)])).toEqual(['Nebula couldn’t import the CLI canvas. Part of this canvas holds a value Nebula can’t read.']);
+      expect(await importWith([cliNode(Number.NaN)])).toEqual(['Nebula couldn’t import the CLI canvas because part of this canvas holds a value Nebula can’t read.']);
       expect(mocks.load).not.toHaveBeenCalled();
     });
 
@@ -498,14 +498,14 @@ describe('Canvas toolbar hierarchy', () => {
   // Error copy round 3e (GM): "Nebula couldn’t import the CLI canvas." then the
   // reason; it said "Could not fetch CLI graph — is the backend running?".
   it.each([
-    [new ConnectionLostError(new TypeError('Failed to fetch')), "Nebula's server isn't answering. Make sure it's running, then try again."],
-    [new RequestFailedError('Nebula couldn’t load the canvas.', 503), "Nebula didn't respond. Try again."],
-    [new Error('boom'), "Try again, or reload if it keeps happening."],
+    [new ConnectionLostError(new TypeError('Failed to fetch')), 'the server isn’t answering. Check that Nebula is running, then try again.'],
+    [new RequestFailedError('Nebula couldn’t load the canvas.', 503), 'the server didn’t respond. Try again.'],
+    [new Error('boom'), 'the server didn’t accept it. Try again, or reload if it keeps happening.'],
   ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
     mocks.cli.mockRejectedValue(error);
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
-    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Nebula couldn’t import the CLI canvas. ${reason}`));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith(`Nebula couldn’t import the CLI canvas because ${reason}`));
   });
 
   it('an empty CLI canvas says so in the canvas words (GM PR #205 r6 item 5)', async () => {

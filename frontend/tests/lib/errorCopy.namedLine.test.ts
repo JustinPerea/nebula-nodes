@@ -12,6 +12,7 @@ import { deleteRefusalText } from '../../src/lib/worldLabsWaiting';
  */
 
 const NAMED = "Couldn’t delete “Agent scene”. “Shot 2” is still running. Stop the run first.";
+const NAMED_BECAUSE = "Nebula couldn’t delete “Agent scene” because “Shot 2” is still running. Stop the run first.";
 
 describe('the rule', () => {
   it('a named reason alone, under a generic heading or one with the same failure', () => {
@@ -20,7 +21,8 @@ describe('the rule', () => {
     expect(headedLine("Couldn’t delete the node.", NAMED)).toBe(NAMED);
     expect(headedLine("Couldn’t delete 2 nodes.", NAMED)).toBe(NAMED);
     expect(headedLine("Couldn’t delete “Agent scene”.", NAMED)).toBe(NAMED);
-    expect(oneLine({ heading: "Couldn’t delete the node.", reason: NAMED })).toBe(NAMED);
+    // A named line in the because form: the action, then the named reason (nothing lost, no generic heading).
+    expect(oneLine({ heading: "Couldn’t delete the node.", reason: NAMED })).toBe(NAMED_BECAUSE);
   });
 
   it('a heading that names something the reason doesn\'t stays', () => {
@@ -31,12 +33,12 @@ describe('the rule', () => {
   });
 
   it('a refused request\'s own message follows it', () => {
-    expect(new RequestFailedError("Couldn’t delete the node.", 409, { detail: NAMED }).message).toBe(NAMED);
+    expect(new RequestFailedError("Couldn’t delete the node.", 409, { detail: NAMED }).message).toBe(NAMED_BECAUSE);
   });
 
   it('the canvas\'s delete refusals', () => {
-    expect(deleteRefusalText("Couldn’t delete the node.", 1, [NAMED])).toBe(NAMED);
-    expect(deleteRefusalText("Couldn’t delete 2 nodes.", 2, [NAMED, NAMED])).toBe(NAMED);
+    expect(deleteRefusalText("Couldn’t delete the node.", 1, [NAMED])).toBe(NAMED_BECAUSE);
+    expect(deleteRefusalText("Couldn’t delete 2 nodes.", 2, [NAMED, NAMED])).toBe(NAMED_BECAUSE);
   });
 });
 
@@ -53,40 +55,28 @@ describe('the rule', () => {
  * can't double (its tail is fixed copy, or never a line of its own).
  */
 const HAND_BUILT: { file: string; text: string; why: string }[] = [
+  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(rest))}`',
+    why: 'the action, then the named line the backend wrote (a line that names the thing and its fix has no reason to fold in)' },
+  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(reason))}`',
+    why: 'the action, then a reason that is already a sentence of its own with its fix (an instruction, not a cause)' },
+  { file: 'lib/nodeErrorCopy.ts', text: '`Nebula couldn’t ${what}. ${curlApostrophes(named)}`',
+    why: "the action, then the provider's own unclassified line, kept whole so its fix is not lost" },
+  { file: 'lib/providerReadiness.ts', text: "`${becauseLine({ heading: `Couldn’t check ${provider}.`, reason: '' })} The saved connection is unchanged. Use Check connections to try again.`",
+    why: 'the action from the builder, then two fixed sentences: what stays as it was, and the fix (neither is a cause)' },
   { file: 'lib/errorCopy.ts', text: '`${heading} ${reason}`', why: 'headedLine itself: the one place the rule is applied' },
   { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`',
     why: "GM's because form (PR #204 r6) in the desktop window: the tail is one of its two fixed sentences" },
   { file: 'lib/errorCopy.ts', text: '`${GENERATE_HEADING} ${CLUSTER_NOT_ADDED} ${personRequiredCopy(desktop, reason)}`',
     why: "GM's Generate refusal, nodes not added (PR #204 r8, GM r10 3; heading GM r12 2): two fixed sentences, then personRequiredCopy's fixed sentences" },
-  { file: 'lib/worldLabsWaiting.ts', text: '`${heading} ${WORLD_LABS_NEEDS_CHECK}`',
-    why: "GM's own World Labs line: the tail is a fixed sentence, never a named line" },
   { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix || 'Try again, or remove it.'}`",
     why: "GM's Keychain line (PR #203 r28 item 2, r29 item 6): the tail is GM's fixed sentence or the backend's fix sentence, never a named line" },
-  { file: 'lib/worldLabsWaiting.ts', text: '`${heading} It${RECOVERY_ID_FORGET_TAIL}`',
-    why: "GM's own World Labs line: the tail is a fixed sentence" },
-  { file: 'lib/worldLabsWaiting.ts', text: '`Couldn\'t delete them. ${waiting} waiting on World Labs. Check Marble, then ${then}`',
-    why: "GM's own World Labs line: the interpolations are its fixed words" },
   // GM r39 item 2's "Couldn’t …. You can …" run-lock lines are gone: PR #205 r1 answer 2 made
   // the key-press refusals the lock line alone (lib/cinemaScene runLockedLine), no heading.
-  { file: 'store/graphStore.ts', text: '`${heading} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
   { file: 'store/graphStore.ts', text: '`${heading} ${err.raw}`', why: "the Agent log's raw form (agents read the raw text)" },
-  { file: 'lib/cinemaScene.ts', text: '`Couldn’t delete “${scene}”. ${text} ${several ? \'are\' : \'is\'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}`',
-    why: "GM's own scene line: the interpolations are names and its fixed words" },
   // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
   // fixed "is opening" or "isn't answering" sentence, never a failure line.
-  { file: 'lib/canvasFollow.ts', text: '`Nebula couldn’t run ${what}. ${followingReason({ agent, projectName: project })}`',
-    why: 'GM\'s following line (#195 round 21): the tail is "<agent> is opening “<project>”."' },
-  { file: 'lib/canvasFollow.ts', text: '`${CREATE_WHILE_FOLLOWING_HEADING} ${followingReason(switching)}`',
-    why: 'GM\'s following line for Create: the tail is the same fixed "is opening" sentence' },
-  { file: 'lib/deleteCopy.ts', text: '`Couldn\'t delete ${nodeNameList(names)}. ${DELETE_NO_ANSWER_REASON}`',
-    why: 'GM\'s no-answer delete line (#195; #200\'s form since the merge): the tail is a fixed sentence' },
   { file: 'components/canvas/PinComposer.tsx', text: '`${headingText} ${targetNode}`',
     why: 'PR #200\'s note composer: an accessible name (the heading and the node id when two cards share a title), never a failure line' },
-  { file: 'lib/canvasFileDrop.ts', text: '`Couldn\'t add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`', why: 'the tail is a fixed sentence' },
-  { file: 'store/providerReadinessStore.ts', text: '`${CHECK_HEADING} ${REFUSED_FALLBACK_COPY}`', why: 'the fixed fallback after a heading' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${subject}. ${damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL}`', why: 'the tail is one of two fixed sentences' },
-  { file: 'lib/studioBoundary.ts', text: '`Couldn’t show ${label ? `“${label}”` : \'this node\'}. ${damaged ? CARD_DAMAGED : CARD_NEUTRAL}`',
-    why: 'the tail is one of two fixed sentences' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${label ? `“${label}”` : \'a node\'}${where}, node ${nodeId}. ${what}`',
     why: 'Agent log: the tail is a field sentence ("scene.base is missing.")' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t draw ${label ? `“${label}”` : \'a node\'}, node ${nodeId}. ${errorText(error)}`',
@@ -117,10 +107,6 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     text: "`${LOST_ADD_OPENING}${what} because the moodboard hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}`",
     why: "GM r16 7a's lost add line: the names are quoted file names, the tail one of two fixed steps" },
   // Seen once constant openings were read (round 6l): two older lines, each a fixed heading over a fixed tail.
-  { file: 'lib/cinemaMotion.ts', text: '`${UNCONFIRMED} ${NO_RESPONSE_SHORT_COPY}`',
-    why: 'the fixed "Couldn\'t confirm the video connection." over the fixed "Nebula didn\'t respond."' },
-  { file: 'lib/graphFile.ts', text: '`${SAVE_GRAPH} ${graphSizeLine(blob.size, GRAPH_BUNDLE_MAX_IMPORT_BYTES)}`',
-    why: 'the fixed "Couldn\'t save the graph." over graphSizeLine\'s fixed size sentences, never a line of its own' },
     // The Agent log's raw save line: agents read the backend's own detail,
     // with the status and code (GM #198 r12 answer 1, round 13).
   { file: 'store/graphStore.ts', text: "`Couldn’t save “${label}”, node ${nodeId}: HTTP ${status}${code ? ` ${code}` : ''}. ${detail || 'No detail.'}`",

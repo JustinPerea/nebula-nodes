@@ -82,6 +82,7 @@ export function buildContext(rules, repo = REPO) {
   // A phrase is stripped longest first, so "GPT Image 2.5" goes before "GPT Image".
   const phrases = [...names.phrases].sort((a, b) => b.length - a.length);
   const retry = new RegExp(rules.retryPattern);
+  const british = new RegExp(rules.britishSpellingPattern);
   const units = new Set(rules.units);
   // Key names count as names only as a key reference; some place and product names only after a verb.
   const keys = new Set(rules.keyNames.map((k) => k.toLowerCase()));
@@ -92,7 +93,7 @@ export function buildContext(rules, repo = REPO) {
     paren: !!g.inParens,
     beforeLower: !!g.beforeLowerCase,
   }));
-  return { rules, proper, phrases, retry, units, keys, keyVerbs, gated };
+  return { rules, proper, phrases, retry, british, units, keys, keyVerbs, gated };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -221,6 +222,7 @@ function checkLine(text, kind, ctx) {
   if (/["']/.test(noUrl)) hits.push('straight-quote');
   if (/\.\.\./.test(noUrl) && !keyShape(t)) hits.push('three-dots');
   if (/—/.test(noCode)) hits.push('em-dash');
+  if (ctx.british.test(noCode)) hits.push('us-spelling');
   const sentence = isSentence(t, rules);
   if (sentence) {
     const plain = stripUnitParens(

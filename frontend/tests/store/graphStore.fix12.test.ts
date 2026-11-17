@@ -368,7 +368,7 @@ describe('M-1 (GM r19 answer 2): a clash answered while the save was stopped', (
   });
 });
 
-describe('L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the person’s own tab', () => {
+describe('L-1 (GM r19 answer 3, r20 answer 2): "another tab" only for the person’s own tab', () => {
   it('a sync from a writer nobody knows: the neutral clash line, and [Use theirs]', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([400]);
@@ -384,7 +384,7 @@ describe('L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the per
     expect(unsaved()).toBe('“Opening” changed while you were editing it.');
   });
 
-  it('the person’s other tab: "another window"', async () => {
+  it('the person’s other tab: "another tab"', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([400]);
     h.failNext(1);
@@ -392,7 +392,7 @@ describe('L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the per
     await sleep(40);
     h.other((shots) => setPrompt(shots, 's1', 'other tab'), 'window');
     await sleep(30);
-    expect(clashes().n1?.line).toBe('“Opening” was changed in another window while you were editing it.');
+    expect(clashes().n1?.line).toBe('“Opening” was changed in another tab while you were editing it.');
   });
 
   it('a writer nobody knows removes the shot the person changed: the passive removed line', async () => {
@@ -408,7 +408,7 @@ describe('L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the per
     expect(clashes().n1?.line).toBe('“Shot 2” was removed while you were editing it.');
   });
 
-  it('two writers on one clash (Codex, then a script): neutral, not "another window"', async () => {
+  it('two writers on one clash (Codex, then a script): neutral, not "another tab"', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([400]);
     h.failNext(1000);
@@ -491,7 +491,7 @@ describe('L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused
 
   it.each([
     ['Codex', { kind: 'agent', name: 'Codex' }, AGENT, 'Codex deleted “Opening”, so your changes to it can’t be saved.'],
-    ['the person’s other tab', { kind: 'person', name: 'You' }, WINDOW, '“Opening” was deleted in another window, so your changes to it can’t be saved.'],
+    ['the person’s other tab', { kind: 'person', name: 'You' }, WINDOW, '“Opening” was deleted in another tab, so your changes to it can’t be saved.'],
     ['a writer nobody knows', { kind: 'anonymous', name: 'Someone' }, UNKNOWN, '“Opening” was deleted, so your changes to it can’t be saved.'],
   ])('the delete’s sync comes first (%s): said once, by who; restored, the save resumes', async (_who, by, origin, line) => {
     const h = backend(S3);

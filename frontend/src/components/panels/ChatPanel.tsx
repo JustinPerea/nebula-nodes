@@ -74,7 +74,7 @@ const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
 // /clear's canvas clear refused (a run going): GM's line, with the refusal
 // under Clear's heading as the notice (lib/chatClear.ts has the lines).
-const CLEAR_CANVAS = "Couldn't clear the canvas.";
+const CLEAR_CANVAS = "Couldn’t clear the canvas.";
 type ChatSelection = { agent: ChatAgent; claude: ModelSelection; codex: ModelSelection };
 const CHAT_SELECTION_KEY = 'nebula:chat-selection';
 
@@ -605,7 +605,7 @@ export function ChatPanel() {
         .catch((error: unknown) => {
           if (!cancelled) {
             setModelCatalog(null);
-            setCatalogError(actionFailedLine('load the models', error, failureMessage(error, "Couldn't load the models.")).line);
+            setCatalogError(actionFailedLine('load the models', error, failureMessage(error, "Couldn’t load the models.")).line);
           }
         })
         .finally(() => { if (!cancelled) setCatalogLoading(false); });
@@ -648,7 +648,7 @@ export function ChatPanel() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setClaudeStatus(null);
-          setClaudeStatusError(failureMessage(err, "Couldn't check Claude status."));
+          setClaudeStatusError(failureMessage(err, "Couldn’t check Claude status."));
           setClaudeBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
@@ -681,7 +681,7 @@ export function ChatPanel() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setCodexStatus(null);
-          setCodexStatusError(failureMessage(err, "Couldn't check Codex status."));
+          setCodexStatusError(failureMessage(err, "Couldn’t check Codex status."));
           setCodexBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
@@ -704,7 +704,7 @@ export function ChatPanel() {
       setCodexLoginState(state);
       setNotice(deviceAuth ? 'Codex device login started.' : 'ChatGPT account login started.');
     } catch (err) {
-      const line = failureMessage(err, "Couldn't start the ChatGPT sign-in.");
+      const line = failureMessage(err, "Couldn’t start the ChatGPT sign-in.");
       setCodexLoginError(line);
       clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login (GM, #204 r3)
     } finally {
@@ -735,7 +735,7 @@ export function ChatPanel() {
         }
       } catch (err) {
         if (cancelled) return;
-        const line = failureMessage(err, "Couldn't check the ChatGPT sign-in.");
+        const line = failureMessage(err, "Couldn’t check the ChatGPT sign-in.");
         setCodexLoginError(line);
         clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login-check (GM, #204 r3)
         retryTimer = window.setTimeout(poll, 2500);
@@ -1324,7 +1324,7 @@ export function ChatPanel() {
                 parts: [
                   ...msg.parts.map((p) =>
                     p.kind === 'tool' && p.result === undefined
-                      ? { ...p, result: '(cancelled before this tool returned)', isError: true }
+                      ? { ...p, result: '(canceled before this tool returned)', isError: true }
                       : p,
                   ),
                   { kind: 'system', ...notice },
@@ -1785,7 +1785,7 @@ export function ChatPanel() {
 
   const status = useMemo(() => {
     if (!connected) return 'disconnected';
-    if (cancelState === 'requested') return 'cancelling…';
+    if (cancelState === 'requested') return 'canceling…';
     if (cancelState === 'failed') return 'cancel failed';
     if (busy) return 'thinking…';
     return 'ready';

@@ -168,7 +168,7 @@ describe('a file upload into a file param', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
     uploads[1].fail();
     await settle();
-    expect(useGraphStore.getState().undoNotice?.text).toContain('Couldn\'t upload “new.png”.');
+    expect(useGraphStore.getState().undoNotice?.text).toContain('Nebula couldn’t upload “new.png”');
   });
 
   it('writes nothing to a node deleted mid-upload, and nothing throws', async () => {

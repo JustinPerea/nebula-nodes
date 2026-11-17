@@ -334,14 +334,14 @@ describe('when the backend refuses the undo', () => {
 });
 
 describe('two open tabs', () => {
-  it('another window\'s edit is a step here, named as such', () => {
+  it('another tab\'s edit is a step here, named as such', () => {
     const { nodes, edges } = start();
     sync([...nodes, textNode('n3', 'fog')], edges, { edit: { actor: { kind: 'person' }, tab: 'tab-other-window' } });
     expect(useGraphStore.getState().undoStack).toHaveLength(1);
     // No notice when it lands: only agents' edits announce themselves.
     expect(useGraphStore.getState().undoNotice).toBeNull();
     useGraphStore.getState().undo();
-    expect(useGraphStore.getState().undoNotice?.text).toBe('Undid an edit from another window.');
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Undid an edit from another tab.');
   });
 });
 

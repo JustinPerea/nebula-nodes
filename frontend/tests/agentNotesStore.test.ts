@@ -162,7 +162,7 @@ describe('agent notes store (Updates)', () => {
     await done;
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeNull();
     expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(1);
-    expect(useAgentNotesStore.getState().error).toBe("Couldn't dismiss the update. That update is no longer in the list.");
+    expect(useAgentNotesStore.getState().error).toBe("Nebula couldn’t dismiss the update because that update is no longer in the list.");
   });
 
   it('loads the canvas list on demand', async () => {

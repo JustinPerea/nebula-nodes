@@ -82,14 +82,14 @@ function logged(run: () => void): string[] {
   return lines;
 }
 
-const NEUTRAL = 'Nebula ran into a problem drawing it, but its data is fine. Reload Nebula to try again.';
+const NEUTRAL = 'something went wrong drawing it, but its data is fine. Reload Nebula to try again.';
 
 describe('L3: a card that throws on data that checks out', () => {
   it('GM r5: the neutral line, the header kept, the Agent log names the error', () => {
     const lines = logged(() => render(<Flow nodes={[card({ label: 'Hero still', definitionId: 'text-input',
       params: { text: '' }, outputs: {} })]} />));
     const boundary = document.querySelector('[data-node-card-boundary]')!;
-    expect(boundary.querySelector('.node-card-boundary__line')!.textContent).toBe(`Couldn’t show “Hero still”. ${NEUTRAL}`);
+    expect(boundary.querySelector('.node-card-boundary__line')!.textContent).toBe(`Nebula couldn’t show “Hero still” because ${NEUTRAL}`);
     // GM r4: the header (icon and label) stays; only the body is replaced.
     const header = boundary.querySelector('.node-card-boundary__header')!;
     expect(header.textContent).toContain('Hero still');
@@ -99,7 +99,7 @@ describe('L3: a card that throws on data that checks out', () => {
   });
 
   it('with no label: "Couldn’t show this node. …"', () => {
-    expect(nodeCardBoundaryLine(null, false)).toBe(`Couldn’t show this node. ${NEUTRAL}`);
+    expect(nodeCardBoundaryLine(null, false)).toBe(`Nebula couldn’t show this node because ${NEUTRAL}`);
   });
 });
 
@@ -118,7 +118,7 @@ describe('L3: a card whose data is damaged', () => {
     const lines = logged(() => render(<Flow nodes={[card(data)]} />));
     const boundary = document.querySelector('[data-node-card-boundary]')!;
     expect(boundary.querySelector('.node-card-boundary__line')!.textContent)
-      .toBe('Couldn’t show “Hero still”. Some of its data is missing or damaged.');
+      .toBe('Nebula couldn’t show “Hero still” because some of its data is missing or damaged.');
     expect(lines).toEqual([`Couldn’t open “Hero still”, node n7. ${field} is damaged.`]);
   });
 
@@ -126,7 +126,7 @@ describe('L3: a card whose data is damaged', () => {
     expect(nodeDataProblem({ label: { broken: true }, definitionId: 'text-input', params: {}, outputs: {} })).toEqual({ field: 'label', state: 'damaged' });
     render(<Flow nodes={[card({ label: { broken: true }, definitionId: 'text-input', params: {}, outputs: {} })]} />);
     expect(document.querySelector('.node-card-boundary__line')!.textContent)
-      .toBe("Couldn’t show this node. Some of its data is missing or damaged.");
+      .toBe("Nebula couldn’t show this node because some of its data is missing or damaged.");
   });
 
   it('data that checks out is not damaged', () => {
@@ -139,7 +139,7 @@ describe('L3: a card whose data is damaged', () => {
   it('a header icon that throws doesn\'t take the canvas down: the card still says why', () => {
     flags.iconThrows = true;
     render(<Flow nodes={[card({ label: 'Hero still', definitionId: 'text-input', params: {}, outputs: {} })]} />);
-    expect(document.querySelector('.node-card-boundary__line')!.textContent).toBe(`Couldn’t show “Hero still”. ${NEUTRAL}`);
+    expect(document.querySelector('.node-card-boundary__line')!.textContent).toBe(`Nebula couldn’t show “Hero still” because ${NEUTRAL}`);
     expect(document.querySelector('.node-card-boundary__header')!.textContent).toContain('Hero still');
   });
 });
@@ -153,7 +153,7 @@ describe('L3: the studio boundary', () => {
     const lines = logged(() => render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => null}><Throws /></StudioBoundary>));
     expect(document.querySelector('.studio-boundary__line')!.textContent)
-      .toBe("Couldn’t open “Opening”. Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.");
+      .toBe("Nebula couldn’t open “Opening” because something went wrong showing it, but its data is fine. Reload Nebula to try again.");
     // GM r6 item 5 (fix round 5): the studio's own neutral Agent log line.
     expect(lines).toEqual(["Couldn’t open “Opening” in Cinema, node n4. studio broke"]);
     fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }));
@@ -164,10 +164,10 @@ describe('L3: the studio boundary', () => {
     render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => 'scene.base'}><Throws /></StudioBoundary>);
     expect(document.querySelector('.studio-boundary__line')!.textContent)
-      .toBe("Couldn’t open “Opening”. Some of its data is missing or damaged, so Nebula can’t show it.");
-    expect(studioBoundaryLine('editor', null, true)).toBe("Couldn’t open this clip. Some of its data is missing or damaged, so Nebula can’t show it.");
+      .toBe("Nebula couldn’t open “Opening” because some of its data is missing or damaged.");
+    expect(studioBoundaryLine('editor', null, true)).toBe("Nebula couldn’t open this clip because some of its data is missing or damaged.");
     expect(studioBoundaryLine('editor', null, false))
-      .toBe("Couldn’t open this clip. Nebula ran into a problem showing it, but its data is fine. Reload Nebula to try again.");
+      .toBe("Nebula couldn’t open this clip because something went wrong showing it, but its data is fine. Reload Nebula to try again.");
   });
 
   it('a header that throws stays inside the boundary: a plain header with the way back', () => {

@@ -43,7 +43,7 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
       setUndoError(null);
       return true;
     } catch (err) {
-      setDeleteError(failureCopy(err, { heading: `Couldn't delete the ${NOUN[kind]}.` }));
+      setDeleteError(failureCopy(err, { heading: `Couldn’t delete the ${NOUN[kind]}.` }));
       return false;
     } finally {
       setBusy(false);
@@ -64,7 +64,7 @@ export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
       // The line beside the toast's Undo is the whole sentence, "Nebula couldn’t restore the moodboard
       // because …. Try again." (a reason where trying again cannot help names the fix instead).
       const { line } = actionFailedLine(`restore the ${NOUN[kind]}`, err);
-      setUndoError(line || failureCopy(err, { heading: `Couldn't restore the ${NOUN[kind]}.` }));
+      setUndoError(line || failureCopy(err, { heading: `Couldn’t restore the ${NOUN[kind]}.` }));
       return null;
     } finally {
       setBusy(false);

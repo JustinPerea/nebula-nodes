@@ -8,9 +8,9 @@ import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 /**
  * The Commons' leave popover (commons-leave). GM - Design's copy, verbatim:
- * "Your labels aren't saved." with Save and leave (primary), Discard and
- * leave, Stay; after a failed save "Couldn’t save your labels." and the
- * reason, and no Save and leave when saving again can't work (a conflict:
+ * "Your labels aren’t saved." with Save and leave (primary), Discard and
+ * leave, Stay; after a failed save one line, "Nebula couldn’t save your labels because …",
+ *  and no Save and leave when saving again can't work (a conflict:
  * Discard and leave, Stay, focus on Stay); for a grading run alone "Agent
  * review is still running." with Stop and leave (primary), Stay. Anchored to the clicked control (the toolbar
  * menu's anchoring); focus starts on the primary choice and Tab stays among
@@ -31,7 +31,6 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   const readOnly = useBackendOffline();
   const anchorRef = useMemo(() => ({ current: asking.anchor }), [asking.anchor]);
   const lineId = useId();
-  const reasonId = useId();
   const dismiss = useCallback(() => {
     onStay(false);
     // A press on nothing focusable leaves focus nowhere: give it back to the control.
@@ -57,8 +56,10 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   const settled = failed && !asking.retry;
   // Labels to save come first; a grading run alone gets its own ask.
   const labels = failed || unsaved || !running;
-  const line = failed ? "Couldn’t save your labels." : labels ? "Your labels aren't saved." : 'Agent review is still running.';
-  const reason = failed ? asking.failure : null;
+  // A failed save is one line in the because form; with no reason known, it says only what failed. A failure that
+  // says nothing (the offline banner already does) raises no alert, as the popover never did for one.
+  const said = failed && asking.failure !== '';
+  const line = failed ? asking.failure || 'Nebula couldn’t save your labels.' : labels ? 'Your labels aren’t saved.' : 'Agent review is still running.';
   const anchorKind = asking.anchor?.matches('.workspace-header__back') ? 'back'
     : asking.anchor?.matches('.project-workspace-controls__home') ? 'home' : 'other';
 
@@ -84,13 +85,11 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
     // tabIndex -1: a press on the popover's text or padding focuses the
     // panel (not the page), so Escape and the Tab loop keep working.
     <div ref={panelRef} role="alertdialog" tabIndex={-1} aria-modal="false" aria-labelledby={lineId}
-      aria-describedby={reason ? reasonId : undefined} data-leave-popover="" data-anchor={anchorKind}
+      data-leave-popover="" data-anchor={anchorKind}
       className={`commons-leave${position ? ' commons-leave--open' : ''}`} style={style} onKeyDown={onKeyDown}>
-      <p id={lineId} className="commons-leave__line">{line}</p>
-      {/* An alert: a failed Save and leave lands here in place, with focus
-          still on the button, so it has to be announced; keyed by the
-          opening so the same reason a second time is announced again. */}
-      {reason && <p key={asking.seq} id={reasonId} className="commons-leave__reason" role="alert">{reason}</p>}
+      {/* A failed Save and leave lands here in place, with focus still on the button, so its line is
+          an alert, keyed by the opening so the same line a second time is announced again. */}
+      <p key={failed ? asking.seq : 'ask'} id={lineId} className="commons-leave__line" role={said ? 'alert' : undefined}>{line}</p>
       {labels && running && <p className="commons-leave__reason">Agent review is still running.</p>}
       <div className="commons-leave__actions">
         {labels ? (

@@ -20,7 +20,7 @@ describe('Paper desktop artwork links', () => {
     expect(isDesktopMode()).toBe(true);
     // Error copy round 3e (GM): a written line, never "Could not".
     await expect(openExternalUrl('paper://file/a/b/c')).rejects
-      .toThrow("Couldn't open the Paper artwork. Update the Nebula desktop app, then try again.");
+      .toThrow("Nebula couldn’t open the Paper artwork because this version of the desktop app can’t open Paper. Update it, then try again.");
   });
 
   it('passes the exact clicked artwork URL to the dedicated bridge', async () => {
@@ -36,7 +36,7 @@ describe('Paper desktop artwork links', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const error = await openExternalUrl('paper://file/a/b/c').catch((e: Error) => e);
     // The bridge's own text goes to the console, the line to the card.
-    expect((error as Error).message).toBe("Couldn't open the Paper artwork. Paper Desktop didn't open it. Use Open source link.");
+    expect((error as Error).message).toBe("Nebula couldn’t open the Paper artwork because Paper Desktop didn’t open it. Use “Open source link”.");
     expect(warn).toHaveBeenCalledWith('[nebula] Paper desktop link', 'No Paper handler');
     warn.mockRestore();
   });

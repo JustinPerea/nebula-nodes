@@ -231,14 +231,15 @@ describe('Canvas file drop', () => {
     await drop([file('archive.zip', 'application/zip'), file('a.png', 'image/png')]);
     expect(uploads().map((entry) => entry.name)).toEqual(['a.png']);
     expect(uploads()[0]).toMatchObject({ x: 300, y: 200 });
-    expect(notice()).toBe(`Couldn't add “archive.zip”. ${TYPES}`);
+    expect(notice()).toBe('Nebula couldn’t add “archive.zip” because it isn’t a file type Nebula reads. '
+      + 'Use images, video, audio, PDFs or text files.');
     expect(useGraphStore.getState().undoNotice?.tone).toBe('error');
   });
 
   it('says so when an upload fails, with the reason', async () => {
     api.fetch.mockImplementation(async () => new Response('', { status: 503 }));
     await drop([file('side.png', 'image/png')]);
-    expect(notice()).toBe("Couldn't upload “side.png”. Nebula didn't respond. Try again.");
+    expect(notice()).toBe('Nebula couldn’t upload “side.png” because the server didn’t respond. Try again.');
   });
 
   it('says so when the server does not answer', async () => {
@@ -246,27 +247,27 @@ describe('Canvas file drop', () => {
     api.fetch.mockImplementation(async () => { throw new ConnectionLostError(new TypeError('Failed to fetch')); });
     await drop([file('tone.wav', 'audio/wav')]);
     expect(notice()).toBe(
-      "Couldn't upload “tone.wav”. Nebula's server isn't answering. Make sure it's running, then try again.");
+      'Nebula couldn’t upload “tone.wav” because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('gives a drop one notice: a count over the shared reason (GM)', async () => {
     api.fetch.mockImplementation(async () => new Response('{}', { status: 200 }));
     await drop([file('a.zip'), file('b.exe'), file('c.png', 'image/png')]);
-    expect(notice()).toBe(`Couldn't add 2 of 3 files.\n${TYPES}`);
+    expect(notice()).toBe(`Nebula couldn’t add 2 of 3 files.\n${TYPES}`);
   });
 
   it('says "the n files" when none went in', async () => {
     await drop([file('a.zip'), file('b.exe'), file('c.dmg'), file('d.key')]);
     expect(uploads()).toEqual([]);
-    expect(notice()).toBe(`Couldn't add the 4 files.\n${TYPES}`);
+    expect(notice()).toBe(`Nebula couldn’t add the 4 files.\n${TYPES}`);
   });
 
   it('names the files when the reasons differ, two then "and k more"', async () => {
     api.fetch.mockImplementation(async () => new Response('', { status: 503 }));
     await drop([file('a.zip'), file('b.png', 'image/png')]);
-    expect(notice()).toBe("Couldn't add the 2 files.\nNot added: “a.zip”, “b.png”.");
+    expect(notice()).toBe("Nebula couldn’t add the 2 files.\nNot added: “a.zip”, “b.png”.");
     await drop([file('a.zip'), file('b.png', 'image/png'), file('c.png', 'image/png'), file('d.exe'), file('e.pdf', 'application/pdf')]);
-    expect(notice()).toBe("Couldn't add the 5 files.\nNot added: “a.zip”, “b.png” and 3 more.");
+    expect(notice()).toBe("Nebula couldn’t add the 5 files.\nNot added: “a.zip”, “b.png” and 3 more.");
   });
 
   it('shows no notice when every file goes in', async () => {

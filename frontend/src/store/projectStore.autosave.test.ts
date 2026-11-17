@@ -155,7 +155,7 @@ describe('project autosave', () => {
     expect(useProjectStore.getState()).toMatchObject({ dirty: false, saveStatus: 'saved' });
   });
 
-  it('stops after an in-flight save when another window takes over the project', async () => {
+  it('stops after an in-flight save when another tab takes over the project', async () => {
     let finish: () => void = () => {};
     saveProject.mockImplementationOnce((_id, snapshot) => new Promise((resolve) => {
       finish = () => resolve(saved(snapshot));
@@ -169,7 +169,7 @@ describe('project autosave', () => {
     const onSocket = vi.mocked(wsClient.subscribeFirst).mock.calls.at(-1)?.[0];
     onSocket?.({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     expect(useProjectStore.getState()).toMatchObject({ initialized: false, dirty: true,
-      error: 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.' });
+      error: 'The active project changed in another tab. Try again to save your unsaved edits as a recovered project.' });
     finish();
     await vi.advanceTimersByTimeAsync(2000);
 
@@ -184,13 +184,13 @@ describe('project autosave', () => {
 
   it('shows the retry state when a save fails, and Retry saves it', async () => {
     // Round 3e: the API's typed refusal (ProjectRequestError is one); a plain Error's text is never shown.
-    saveProject.mockRejectedValueOnce(new RequestFailedError("Couldn't save the project.", 507, { reason: 'Disk full.' }));
+    saveProject.mockRejectedValueOnce(new RequestFailedError('Couldn’t save the project.', 507, { reason: 'Disk full.' }));
     setPrompt('b');
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(savedPrompts()).toEqual(['b']);
     expect(flushCalls).toBe(1);
-    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: "Couldn't save the project. Disk full." });
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'error', error: 'Nebula couldn’t save the project. Disk full.' });
 
     vi.mocked(api.listProjects).mockResolvedValueOnce({ projects: [summary], activeProjectId: 'p1', workspaceRevision: 'r1' });
     await useProjectStore.getState().retry();

@@ -2,9 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiFetch, fetchUrl } from '../../src/lib/backend';
 import { fetchClaudeStatus } from '../../src/lib/api';
 import {
-  CONNECTION_LOST_COPY,
   ConnectionLostError,
-  REFUSED_FALLBACK_COPY,
   failureMessage,
 } from '../../src/lib/errorCopy';
 
@@ -18,9 +16,9 @@ import {
  * a JSON SyntaxError and the caller's own abort keep their class.
  */
 
-const LOST = CONNECTION_LOST_COPY;
-const GENERAL = REFUSED_FALLBACK_COPY;
 const HEADING = "Couldn't check Claude status.";
+const LOST_LINE = 'Nebula couldn’t check Claude status because the server isn’t answering. Check that Nebula is running, then try again.';
+const GENERAL_LINE = 'Nebula couldn’t check Claude status because the server didn’t accept it. Try again, or reload if it keeps happening.';
 
 /** Headers and the first bytes arrive, then the stream errors as fetch's does mid-body. */
 function droppingResponse(init: ResponseInit = {}): Response {
@@ -51,7 +49,7 @@ describe('apiFetch: a body that drops mid-read is a lost connection', () => {
     expect(error).toBeInstanceOf(ConnectionLostError);
     expect((error as ConnectionLostError).heading).toBe('');
     expect((error as ConnectionLostError).cause).toBeInstanceOf(TypeError);
-    expect(failureMessage(error, HEADING)).toBe(`${HEADING} ${LOST}`);
+    expect(failureMessage(error, HEADING)).toBe(LOST_LINE);
   });
 
   it('a clone\'s read is classified too', async () => {
@@ -78,7 +76,7 @@ describe('apiFetch: a body that drops mid-read is a lost connection', () => {
     answer = () => droppingResponse();
     const error = await fetchClaudeStatus().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(error, HEADING)).toBe(`${HEADING} ${LOST}`);
+    expect(failureMessage(error, HEADING)).toBe(LOST_LINE);
   });
 
   it('fetchUrl classifies the read under its own heading', async () => {
@@ -86,7 +84,7 @@ describe('apiFetch: a body that drops mid-read is a lost connection', () => {
     const response = await fetchUrl('/api/outputs/a.json', {}, "Couldn't load it.");
     const error = await response.text().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(error, 'Other heading.')).toBe(`Couldn't load it. ${LOST}`);
+    expect(failureMessage(error, 'Other heading.')).toBe('Nebula couldn’t load it because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 });
 
@@ -98,7 +96,7 @@ describe('apiFetch: body failures that are not a dropped connection keep their c
     const error = await response.json().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(TypeError);
     expect(error).not.toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(error, HEADING)).toBe(`${HEADING} ${GENERAL}`);
+    expect(failureMessage(error, HEADING)).toBe(GENERAL_LINE);
   });
 
   it('a locked body (a bug) stays a plain TypeError', async () => {
@@ -115,7 +113,7 @@ describe('apiFetch: body failures that are not a dropped connection keep their c
     const response = await apiFetch('/api/x');
     const error = await response.json().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SyntaxError);
-    expect(failureMessage(error, HEADING)).toBe(`${HEADING} ${GENERAL}`);
+    expect(failureMessage(error, HEADING)).toBe(GENERAL_LINE);
   });
 
   it('the caller\'s own abort mid-body comes back as the AbortError', async () => {
@@ -134,7 +132,7 @@ describe('apiFetch: body failures that are not a dropped connection keep their c
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(TypeError);
     expect(error).not.toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(error, HEADING)).toBe(`${HEADING} ${GENERAL}`);
+    expect(failureMessage(error, HEADING)).toBe(GENERAL_LINE);
   });
 
   it('an answer that is not a real Response (a test double) is handed out untouched', async () => {

@@ -14,16 +14,11 @@ import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
  * stubbed, so the words are made where the requests are, not per screen.
  */
 
-const LOST = "Nebula's server isn't answering. Make sure it's running, then try again.";
-const NO_ANSWER = "Nebula didn't respond. Try again.";
-// Round 2 (GM's WRAP rule): "when the surface already has a retry button, the
-// reason line drops its 'try again'. The button is the retry." The leave
-// popover offers Save and leave, so it says these.
-const LOST_SHORT = "Nebula's server isn't answering. Make sure it's running.";
-const NO_ANSWER_SHORT = "Nebula didn't respond.";
-// Round 2: the banner is a one-line surface: "Couldn’t {verb} {object}. {reason}".
-const LABELS = "Couldn’t save your labels.";
-const CONFLICT = 'Labels changed in another window. Reload before saving.';
+// A failure is one sentence in the because form (design): "Nebula couldn’t save your labels because ...".
+const LOST = 'Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.';
+const NO_ANSWER = 'Nebula couldn’t save your labels because the server didn’t respond. Try again.';
+const BUSY = 'Nebula couldn’t save your labels because the server is busy. Try again in a moment.';
+const CONFLICT = 'Nebula couldn’t save your labels because labels changed in another tab. Reload before saving.';
 
 vi.mock('../src/components/commons/CommonsDetail', () => ({ CommonsDetail: () => null }));
 vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => null }));
@@ -83,12 +78,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-const cases: Array<[string, Failure, string, string]> = [
-  ['a lost connection', 'network', LOST, LOST_SHORT],
-  ['a 503', 503, NO_ANSWER, NO_ANSWER_SHORT],
-  ['a 502', 502, NO_ANSWER, NO_ANSWER_SHORT],
-  ['a 429', 429, NO_ANSWER, NO_ANSWER_SHORT],
-  ['a 408', 408, NO_ANSWER, NO_ANSWER_SHORT],
+const cases: Array<[string, Failure, string]> = [
+  ['a lost connection', 'network', LOST],
+  ['a 503', 503, NO_ANSWER],
+  ['a 502', 502, NO_ANSWER],
+  ['a 429', 429, BUSY],
+  ['a 408', 408, NO_ANSWER],
 ];
 
 describe('the red banner above Blind labeling', () => {
@@ -102,7 +97,7 @@ describe('the red banner above Blind labeling', () => {
     fireEvent.click(await screen.findByText('Set neutral'));
     fireEvent.click(screen.getByText('Save labels'));
     const alert = await banner();
-    expect(alert.textContent).toBe(`${LABELS} ${line}`);
+    expect(alert.textContent).toBe(line);
     expect(alert).not.toHaveTextContent('Failed to fetch');
     expect(alert).not.toHaveTextContent(/Commons request failed|\(\d{3}\)/);
   });
@@ -112,7 +107,7 @@ describe('the red banner above Blind labeling', () => {
     render(<CommonsEvaluation />);
     fireEvent.click(await screen.findByText('Set neutral'));
     fireEvent.click(screen.getByText('Save labels'));
-    expect((await banner()).textContent).toBe(`${LABELS} ${CONFLICT}`);
+    expect((await banner()).textContent).toBe(CONFLICT);
   });
 });
 
@@ -127,15 +122,16 @@ describe('the leave popover\'s reason line', () => {
     await waitFor(() => expect(commonsUnsaved()).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Back to Canvas' }));
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
-    await waitFor(() => expect(popover()).toHaveTextContent("Couldn’t save your labels."));
+    await waitFor(() => expect(popover().querySelector('.commons-leave__line')?.textContent).toMatch(/^Nebula couldn’t save your labels/));
     return popover();
   }
 
-  it.each(cases)('after %s reads GM\'s short line under the heading, and Save and leave is offered again', async (_name, failure, _line, short) => {
+  it.each(cases)('after %s reads the one because line, and Save and leave is offered again', async (_name, failure, line) => {
     state.labels = failure;
     const shown = await failSaveAndLeave();
-    expect(shown.querySelector('.commons-leave__line')).toHaveTextContent("Couldn’t save your labels.");
-    expect(shown.querySelector('.commons-leave__reason')?.textContent).toBe(short);
+    // One line, the same sentence the banner shows; no separate heading and reason.
+    expect(shown.querySelector('.commons-leave__line')?.textContent).toBe(line);
+    expect(shown.querySelector('.commons-leave__reason')).toBeNull();
     expect(shown).not.toHaveTextContent('Failed to fetch');
     expect(within(shown).getByRole('button', { name: 'Save and leave' })).toBeTruthy();
     expect(useUIStore.getState().viewMode).toBe('commons');
@@ -144,7 +140,7 @@ describe('the leave popover\'s reason line', () => {
   it('after a 409 keeps the backend\'s words and offers no Save and leave', async () => {
     state.labels = 409;
     const shown = await failSaveAndLeave();
-    await waitFor(() => expect(shown.querySelector('.commons-leave__reason')?.textContent).toBe(CONFLICT));
+    await waitFor(() => expect(shown.querySelector('.commons-leave__line')?.textContent).toBe(CONFLICT));
     expect(within(shown).queryByRole('button', { name: 'Save and leave' })).toBeNull();
   });
 });

@@ -197,7 +197,7 @@ describe('GM follow-up 2: a failed handoff is one line, with Open copy', () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('recovered'), name: 'Glass campaign (recovered)' });
     agentOpens();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
-    const line = "Couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
+    const line = "Nebula couldn’t save “Text” for “Hero prompt” in “Glass\u00a0campaign” when Claude Code switched projects. "
       + 'Your edits were saved as a copy, “Glass\u00a0campaign\u00a0(recovered)”.';
     await vi.waitFor(() => expect(lines()).toContain(line));
     const notice = [useGraphStore.getState().undoNotice, useGraphStore.getState().messageNotice].find((item) => item?.text === line);
@@ -235,7 +235,7 @@ describe('M1: the canvas is read-only while it follows an agent\'s switch', () =
     const started = vi.spyOn(execution, 'executeNode');
     await useGraphStore.getState().executeNode('n1');
     expect(started).not.toHaveBeenCalled();
-    expect(lines()).toContain("Nebula couldn’t run “Hero prompt”. Claude Code is opening “beta”.");
+    expect(lines()).toContain("Nebula couldn’t run “Hero prompt” because Claude Code is opening “beta”.");
     land();
     await vi.waitFor(() => expect(useProjectStore.getState().activeProject?.id).toBe('beta'));
   });

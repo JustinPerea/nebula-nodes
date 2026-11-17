@@ -25,7 +25,7 @@ import { SettingsTopNotice } from '../../src/components/panels/settings/Settings
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { renamedLabel, routeUnavailable } from '../../src/lib/directRoute';
 import { RequestFailedError } from '../../src/lib/errorCopy';
-import { RUN_NODE_HEADING, WAITING_CATEGORY, WAITING_HEADING, nodeErrorCopy } from '../../src/lib/nodeErrorCopy';
+import { WAITING_CATEGORY, WAITING_HEADING, nodeErrorCopy } from '../../src/lib/nodeErrorCopy';
 import { DISMISS_FAILED } from '../../src/lib/settingsNotice';
 import { resetSettingsWrites, saveField } from '../../src/lib/settingsWrites';
 import { useSettingsDraftStore } from '../../src/store/settingsDraftStore';
@@ -59,8 +59,10 @@ describe('the agent stop card (GM r39 item 1, r40 item 5)', () => {
     expect(WAITING_HEADING).toBe('Waiting for you to run it');
     expect(copy.heading).toBe(WAITING_HEADING);
     expect(copy.reason).toBe(STOP);
-    // Any other failure keeps its heading.
-    expect(nodeErrorCopy({ raw: 'x', category: 'unknown', person: 'Try again.' }).heading).toBe(RUN_NODE_HEADING);
+    // Any other failure is one line that names the action (no separate heading).
+    const failed = nodeErrorCopy({ raw: 'x', category: 'unknown', person: 'Try again.' });
+    expect(failed.heading).toBe('');
+    expect(failed.reason).toMatch(/^Nebula couldn’t run the node/);
   });
 
   it.each([STOP, TAB])('is a notice, not an error: the waiting tone', (person) => {

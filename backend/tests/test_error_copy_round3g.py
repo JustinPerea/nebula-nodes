@@ -13,7 +13,7 @@ GM, verbatim (2026-10-23):
 3. "World Labs: keep the quotes." (already pinned by
    test_error_copy_round3f.test_review_rule_5_the_lines_the_label_guard_found_quote_their_fields)
 - "Gemini Omni: the period inside the quote followed by a comma reads badly.
-  → "Gemini Omni can edit a video but can't make it longer. Describe the
+  → "Gemini Omni can edit a video but can’t make it longer. Describe the
   change as an edit, like “Change the lighting and keep everything else the
   same”, or use Veo 3.1 to extend the video.""
 
@@ -182,7 +182,7 @@ def test_the_gemini_omni_line_closes_the_quote_before_the_comma() -> None:
     from services.provider_capabilities import GEMINI_OMNI_EXTENSION_ERROR, GEMINI_OMNI_EXTENSION_LINE
 
     assert GEMINI_OMNI_EXTENSION_LINE == (
-        "Gemini Omni can edit a video but can't make it longer. Describe the change as an edit, like "
+        "Gemini Omni can edit a video but can’t make it longer. Describe the change as an edit, like "
         "“Change the lighting and keep everything else the same”, or use Veo 3.1 to extend the video.")
     assert not rule_breaks(GEMINI_OMNI_EXTENSION_LINE)
     # Agents keep the guardrail word for word.

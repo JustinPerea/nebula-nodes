@@ -17,6 +17,7 @@ import { RecentlyDeletedAssets, UndoDeleteToast, type TrashOpenRequest } from '.
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureCopy, failureMessage, failureText, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
+import { quoted } from '../../lib/quoted';
 import { isBackendOffline, isOfflineRefusal, probeOffline, refuseEditWhileOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { agentActorLabel } from '../../lib/agentActorLabel';
@@ -562,11 +563,11 @@ function focusAfterLine(line: HTMLElement, keyboard: boolean, project: string | 
  * a write refused while offline says nothing (the banner is the reason), so no line, and never an empty alert. Every
  * failure the Studio shows goes through here (tests/moodboardNoticeText.test.ts holds the ratchet).
  */
-function FailureLine({ failure, className, retry = false, alert = false, neutral = false }: {
-  failure: FailureCopy | string | null | undefined; className?: string; retry?: boolean; alert?: boolean; neutral?: boolean }) {
+function FailureLine({ failure, className, id, retry = false, alert = false, neutral = false }: {
+  failure: FailureCopy | string | null | undefined; className?: string; id?: string; retry?: boolean; alert?: boolean; neutral?: boolean }) {
   if (!failure || !failureText(failure, retry)) return null;
   return (
-    <div className={className} role={alert ? 'alert' : neutral ? 'status' : undefined} {...(neutral ? { 'data-line-neutral': '' } : {})}>
+    <div id={id} className={className} role={alert ? 'alert' : neutral ? 'status' : undefined} {...(neutral ? { 'data-line-neutral': '' } : {})}>
       <FailureLines failure={failure} retry={retry} />
     </div>
   );
@@ -1102,6 +1103,8 @@ function skippedLines(edited: MoodboardEditResult): string[] {
 }
 
 export function MoodboardStudioView() {
+  // The load failure's line, which the Try again beside it is described by.
+  const loadLineId = useId();
   const moodboardEditorId = useUIStore((s) => s.moodboardEditorId);
   const moodboardEditorScope = useUIStore((s) => s.moodboardEditorScope);
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
@@ -1320,7 +1323,7 @@ export function MoodboardStudioView() {
           setRestoring((batch) => batch && batch.map((board) => (board.id === found.id ? { ...board, sent: sends } : board)));
         }
       }).catch((err) => {
-        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn't load the moodboard." }) });
+        if (current()) patch({ loadError: failureCopy(err, { heading: "Couldn’t load the moodboard." }) });
       });
     }
     return () => { cancelled = true; };
@@ -1654,7 +1657,7 @@ export function MoodboardStudioView() {
   const uploadFiles = (files: File[]) => Promise.all(files.map((file) => {
     const fd = new FormData();
     fd.append('file', file);
-    return apiRequest(`Couldn't upload ${file.name || 'the image'}.`, '/api/uploads', { method: 'POST', body: fd })
+    return apiRequest(`Couldn’t upload ${file.name ? quoted(file.name) : 'the image'}.`, '/api/uploads', { method: 'POST', body: fd })
       .then((r) => r.json())
       .then((data: { url: string }) => data.url);
   }));
@@ -1842,7 +1845,7 @@ export function MoodboardStudioView() {
         // Refused while offline (a drop or paste on a paused board): nothing
         // was sent, the banner pulsed, and no empty line shows (GM r12 2).
         if (isOfflineRefusal(err)) return;
-        const line = failureCopy(err, { heading: "Couldn't upload the image." });
+        const line = failureCopy(err, { heading: "Couldn’t upload the image." });
         // On the board the add was made on, wherever the person is now.
         if (here()) patch({ saveError: line });
         else if (boardStanding(board) !== 'gone') {
@@ -2054,9 +2057,10 @@ export function MoodboardStudioView() {
       // The step names its own action (the edit request's heading is the
       // board save's), and the toolbar's Retry runs the same undo (or redo)
       // of this step again (GM, round 3: "Make Retry redo the failed action").
-      const failure = {
-        ...failureCopy(err),
-        heading: direction === 'undo' ? "Couldn't undo the change." : "Couldn't redo the change.",
+      const said = failureCopy(err);
+      const failure: FailureCopy = {
+        heading: direction === 'undo' ? "Couldn’t undo the change." : "Couldn’t redo the change.",
+        reason: said.cause ?? '', ...(said.status === undefined ? {} : { status: said.status }),
       };
       store.failSave(key, attempt.id, failure, { retry: direction, step: step.id });
       store.clearOnPromote(key, err, failure); // clears-on-promote: studio.undo-redo (GM, #204 r3)
@@ -2281,7 +2285,7 @@ export function MoodboardStudioView() {
         thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
       if (ownsAnalysis()) {
-        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn't analyze the moodboard." }), saveState: 'error',
+        store.patch(targetKey, { saveError: failureCopy(err, { heading: "Couldn’t analyze the moodboard." }), saveState: 'error',
           retry: 'analyze', retryStep: null });
       }
     } finally {
@@ -2320,7 +2324,7 @@ export function MoodboardStudioView() {
       else rememberBrief(kept);
     } catch (err) {
       if (isCurrent()) {
-        const failure = failureCopy(err, { heading: "Couldn't save your brief." });
+        const failure = failureCopy(err, { heading: "Couldn’t save your brief." });
         patch({ saveError: failure });
         useAssetStudioDraftStore.getState().clearOnPromote(key, err, failure); // clears-on-promote: studio.brief (GM, #204 r3)
       }
@@ -2675,7 +2679,7 @@ export function MoodboardStudioView() {
         } else recheckGone();
         return;
       }
-      setRestoreError(failureCopy(err, { heading: "Couldn't restore the moodboard." }));
+      setRestoreError(failureCopy(err, { heading: "Couldn’t restore the moodboard." }));
       return;
     }
     if (!mounted.current) return;
@@ -2940,7 +2944,7 @@ export function MoodboardStudioView() {
       </div>
       {(canRetry || saveOwed) && (
         <button type="button" className="moodboard-studio-toolbar__button" onClick={retryFailed}>
-          Retry
+          Try again
         </button>
       )}
       {savedId && !isDraftId && loaded && (
@@ -3008,12 +3012,12 @@ export function MoodboardStudioView() {
 
   const loadingBlock = (
     <div className="moodboard-studio-view__loading">
-      {/* Retry loading reloads the board, so it shows (with GM's short line)
+      {/* Try again reloads the board, so it shows (the line ends “Try again.”)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading moodboard…'}
+      {shownLoadError ? <FailureLine id={loadLineId} failure={shownLoadError} retry={projectReady} alert /> : 'Loading moodboard…'}
       {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
-        onClick={() => patch({ loadError: null, revision: revision + 1 })}>Retry loading</button>}
+        aria-describedby={failureText(shownLoadError, true) ? loadLineId : undefined} onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}
     </div>
   );
 
@@ -3177,7 +3181,7 @@ export function MoodboardStudioView() {
               Q36 a: at 0 no node gets the board, text included. */}
           <span>Strength {draft.strength.toFixed(2)} · {draft.strength <= 0
             ? 'moodboard off: connected nodes get none of it'
-            : <>the total the moodboard&apos;s images share on Krea 2</>}</span>
+            : <>the total the moodboard’s images share on Krea 2</>}</span>
           <input
             type="range"
             min={0}
@@ -3475,7 +3479,7 @@ function MoodboardRail({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(failureMessage(err, "Couldn't load the moodboards."));
+          setError(failureMessage(err, "Couldn’t load the moodboards."));
           setListing({ for: listKey, items: [] });
         }
       })

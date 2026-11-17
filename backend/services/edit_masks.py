@@ -38,7 +38,7 @@ def _open(data: bytes, label: str) -> Image.Image:
         image = Image.open(io.BytesIO(data), formats=_FORMATS)
         image.load()
     except Exception as exc:  # Pillow raises several types for bad data
-        raise with_person_line(ValueError(f"{label} isn't a PNG, JPEG, WebP or GIF image Nebula can read"), f"{label} isn't a PNG, JPEG, WebP or GIF image Nebula can read.") from exc
+        raise with_person_line(ValueError(f"{label} isn't a PNG, JPEG, WebP or GIF image Nebula can read"), f"{label} isn’t a PNG, JPEG, WebP or GIF image Nebula can read.") from exc
     return image
 
 
@@ -50,7 +50,7 @@ def image_size(path: str | Path) -> tuple[int, int]:
             return image.size
     except OSError as exc:  # missing file, or a format Pillow may not parse here
         raise with_person_line(ValueError("The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, "
-                                        "so its mask can't be sized to it"), "The image to edit isn't a PNG, JPEG, WebP or GIF file Nebula can read, so its mask can't be sized to it.") from exc
+                                        "so its mask can't be sized to it"), "The image to edit isn’t a PNG, JPEG, WebP or GIF file Nebula can read, so its mask can’t be sized to it.") from exc
 
 
 def has_transparency(image: Image.Image) -> bool:

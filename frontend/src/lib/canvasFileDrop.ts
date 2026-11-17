@@ -18,12 +18,14 @@
 import { apiRequest } from './apiRequest';
 import { refuseEditWhileFollowing } from './canvasFollow';
 import { refuseEditWhileKept } from './keptCanvas';
-import { failureCopy, failureMessage } from './errorCopy';
+import { becauseLine, failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
 import { refuseEditWhileOffline } from './backendConnection';
 import { quoted } from './quoted';
 
 export const DROP_TYPES_LINE = 'Nebula takes images, video, audio, PDFs and text files.';
+/** Why one dropped file was refused, as a reason the because line reads. */
+export const DROP_TYPE_REASON = 'It isn’t a file type Nebula reads. Use images, video, audio, PDFs or text files.';
 
 /** Names a mixed-reason drop notice lists before "and {k} more." */
 export const DROP_NOTICE_MAX_NAMES = 2;
@@ -149,11 +151,11 @@ export function dropNoticeText(failures: readonly DropFailure[], total: number):
   const reasonOf = (failure: DropFailure) => (failure.kind === 'upload' ? failure.reason : DROP_TYPES_LINE);
   if (failures.length === 1) {
     const [failure] = failures;
-    return failure.kind === 'upload' ? failure.line : `Couldn't add ${quoted(failure.name)}. ${DROP_TYPES_LINE}`;
+    return failure.kind === 'upload' ? failure.line : becauseLine({ heading: `Couldn’t add ${quoted(failure.name)}.`, reason: DROP_TYPE_REASON });
   }
   const heading = failures.length >= total
-    ? `Couldn't add the ${failures.length} files.`
-    : `Couldn't add ${failures.length} of ${total} files.`;
+    ? becauseLine({ heading: `Couldn’t add the ${failures.length} files.`, reason: '' })
+    : becauseLine({ heading: `Couldn’t add ${failures.length} of ${total} files.`, reason: '' });
   const reasons = new Set(failures.map(reasonOf));
   if (reasons.size === 1) return `${heading}\n${reasonOf(failures[0])}`;
   const names = failures.slice(0, DROP_NOTICE_MAX_NAMES).map((failure) => quoted(failure.name)).join(', ');
@@ -206,7 +208,7 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     form.append('y', String(spot.y));
     // One undo step per dropped file, taken before its graphSync lands.
     const undoStep = useGraphStore.getState().beginUndoStep();
-    const heading = `Couldn't upload ${quoted(file.name)}.`;
+    const heading = `Couldn’t upload ${quoted(file.name)}.`;
     // The node the upload adds, which comes with its echo (review 11, L-2).
     let arrives: string[] = [];
     try {
@@ -219,7 +221,7 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     } catch (error) {
       useGraphStore.getState().cancelUndoStep(undoStep);
       failed.set(at, { kind: 'upload', name: file.name, line: failureMessage(error, heading),
-        reason: failureCopy(error, { heading }).reason });
+        reason: failureCopy(error, { heading }).cause ?? '' });
     } finally {
       // An undo pressed while the upload was on its way acts once its node is
       // on the canvas (review 10, L-2; review 11, L-2).

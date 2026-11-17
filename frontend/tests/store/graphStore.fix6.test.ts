@@ -163,7 +163,7 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
     expect(notice()).toBe("You can delete “A” and “B” when the run finishes.");
   });
 
-  it('another window\'s run: the deleted names and the kept scenes, both in canvas order', async () => {
+  it('another tab\'s run: the deleted names and the kept scenes, both in canvas order', async () => {
     useGraphStore.setState({ nodes: [cinema('n3', [{ id: 's1', prompt: 'a' }], 'First scene'), cinema('n4', [{ id: 's1', prompt: 'a' }], 'Ref scene'),
       textNode('n5', 'A'), textNode('n6', 'B')] } as never);
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -181,10 +181,10 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
   });
 });
 
-describe('GM r9 decision 2: a clash with another window waits for the person', () => {
-  const LINE = '“Opening” was changed in another window while you were editing it.';
+describe('GM r9 decision 2: a clash with another tab waits for the person', () => {
+  const LINE = '“Opening” was changed in another tab while you were editing it.';
 
-  it('kept edits, then another window changes the same shot: mine stay on screen, saves send theirs for it, Keep mine saves mine', async () => {
+  it('kept edits, then another tab changes the same shot: mine stay on screen, saves send theirs for it, Keep mine saves mine', async () => {
     setSceneRetryDelaysForTests([400, 400, 400]);
     const h = harness({ first: () => json({ detail: 'boom' }, 500), later: () => json({ detail: 'boom' }, 500) });
     typeIn('s1', 'mine');
@@ -194,7 +194,7 @@ describe('GM r9 decision 2: a clash with another window waits for the person', (
     expect(unsaved()).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.");
     h.answerLater(() => json({ ok: true }));
     // The person's other tab (review 11, L-1: "another window" only then).
-    syncs({ ...backendGraph({ id: 's1', prompt: 'from another window' }),
+    syncs({ ...backendGraph({ id: 's1', prompt: 'from another tab' }),
       edit: { id: 'ed_window', actor: { kind: 'person', name: 'You' }, tab: 'tab-other' } });
     await sleep(60);
     expect(brief()).toEqual(['s1:mine', 's2:b']);
@@ -203,7 +203,7 @@ describe('GM r9 decision 2: a clash with another window waits for the person', (
     // The person's next edit elsewhere saves, with Shot 1 as the other window left it.
     typeIn('s2', 'and more');
     await sleep(120);
-    expect(h.puts.at(-1)).toEqual(['s1:from another window', 's2:and more']);
+    expect(h.puts.at(-1)).toEqual(['s1:from another tab', 's2:and more']);
     expect(brief()).toEqual(['s1:mine', 's2:and more']);
     expect(unsaved()).toBe(LINE);
     useGraphStore.getState().resolveSceneClash('n1', 'mine');

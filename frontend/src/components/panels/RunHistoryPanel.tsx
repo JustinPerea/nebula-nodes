@@ -33,7 +33,7 @@ const STATUS_LABEL: Record<RunRecord['status'], string> = {
   running: 'Running',
   complete: 'Complete',
   failed: 'Failed',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
 };
 
 /**
@@ -179,8 +179,8 @@ export function RunHistoryPanel() {
             title={isExecuting
               ? runFinishesLine(RUN_LOCK_VERBS.clearRunHistory)
               : providerRecoveries.length > 0 || providerStartAmbiguities.length > 0
-                ? "Can't clear while a World Labs recovery ID is saved."
-                : 'Clear Run History'}
+                ? "You can clear run history after you forget the World Labs recovery ID."
+                : 'Clear run history'}
           >
             <Trash2 size={13} strokeWidth={1.85} aria-hidden="true" focusable="false" />
           </button>
@@ -344,11 +344,11 @@ export function RunHistoryPanel() {
                         aria-label={recoveryReplayReady
                           ? `Recover ${runTriggerLabel(r.trigger)} run`
                           : r.status === 'failed'
-                          ? `Retry failed ${runTriggerLabel(r.trigger)} run`
+                          ? `Run failed nodes again, from the ${runTriggerLabel(r.trigger)} run`
                           : `Rerun ${runTriggerLabel(r.trigger)}`}
                       >
                         <RotateCcw size={11} strokeWidth={2} aria-hidden="true" focusable="false" />
-                        {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Retry failed' : 'Rerun'}
+                        {recoveryReplayReady ? 'Recover' : r.status === 'failed' ? 'Run failed nodes again' : 'Rerun'}
                       </button>
                       {Boolean(r.paperInputs?.length) && !recoveryReplayReady && (
                         <button

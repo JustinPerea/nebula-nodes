@@ -60,7 +60,7 @@ class AccountTools:
             # The tool's name is for agents; the card says it in words.
             raise with_person_line(
                 RuntimeError(f"Your Krea connection does not offer {name}; nothing was sent"),
-                "Your Krea connection doesn't offer what this node needs. Nothing was sent to Krea. "
+                "Your Krea connection doesn’t offer what this node needs. Nothing was sent to Krea. "
                 "Choose another provider, or check the connection in Settings.")
         try:
             Draft202012Validator(tool.inputSchema).validate(arguments)

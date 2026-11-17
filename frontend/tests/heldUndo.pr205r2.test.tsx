@@ -170,7 +170,7 @@ describe('PR #205 round 2: held undo on a Delete', () => {
       // The first press restored n3; the second went to the edit, and its refusal is that undo's.
       expect(restores()).toHaveLength(2);
       expect(lines().join(' ')).not.toMatch(/bring back/);
-      expect(lines().join(' ')).toMatch(/Couldn.t undo/);
+      expect(lines().join(' ')).toMatch(/Nebula couldn.t undo/);
     });
   });
 
@@ -199,7 +199,7 @@ describe('PR #205 round 2: held undo on a Delete', () => {
       await late(409);
       expect(ids()).toEqual(['n1', 'n2']);
       expect(lines()).toHaveLength(1);
-      expect(lines()[0]).toMatch(/^Couldn.t delete/);
+      expect(lines()[0]).toMatch(/^Nebula couldn.t delete/);
       expect(lines().join(' ')).not.toMatch(/Try Undo again|bring back/);
       // The same notice, in place: the line changed, not the toast.
       expect(store().undoNotice?.id).toBe(id);
@@ -218,10 +218,10 @@ describe('PR #205 round 2: held undo on a Delete', () => {
       const id = store().messageNotice!.id;
       await late(409);
       expect(lines().join(' ')).not.toMatch(/Try Undo again/);
-      expect(lines().some((line) => /^Couldn.t delete/.test(line))).toBe(true);
+      expect(lines().some((line) => /^Nebula couldn.t delete/.test(line))).toBe(true);
       // In the give-up line's place, and the error line where it was.
       expect(store().messageNotice?.id).toBe(id);
-      expect(store().messageNotice?.text).toMatch(/^Couldn.t delete/);
+      expect(store().messageNotice?.text).toMatch(/^Nebula couldn.t delete/);
       expect(store().undoNotice?.text).toBe('Something else failed.');
     });
 

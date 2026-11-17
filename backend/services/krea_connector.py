@@ -307,7 +307,7 @@ class KreaConnector:
                                           "client_id": pending["client_id"], "tokens": tokens})
                         self.vault.set_revision(revision)
                         self._state, self._error = None, None
-                        code, message = 200, "Krea is connected. You can close this window and return to Nebula."
+                        code, message = 200, "Krea is connected. You can close this tab and return to Nebula."
                     except Exception:
                         self._state, self._error = "needs_auth", "Krea authorization could not be completed; connect again"
                     await self._close_pending()

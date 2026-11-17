@@ -29,11 +29,10 @@ import { ModelNode } from '../src/components/nodes/ModelNode';
 import { BatchNode } from '../src/components/nodes/BatchNode';
 import { OutputRenderer } from '../src/components/create-studio/OutputRenderer';
 
-const HEADING = "Couldn't run the node.";
 // Round 3f (GM): a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
-const GENERAL = "Run the node again. If it keeps failing, open Details.";
+const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
 const KEY = 'Missing API key: OPENAI_API_KEY';
 const KEY_LINE = 'Add an OpenAI API key in Settings to run this node.';
 const PORT = "Required input port 'prompt' is not connected";
@@ -51,8 +50,7 @@ const node = (id: string, definitionId = 'gpt-image-1-generate', extra: Partial<
 const send = (event: Record<string, unknown>) =>
   useGraphStore.getState().handleExecutionEvent(event as unknown as ExecutionEvent);
 const data = (id: string) => useGraphStore.getState().nodes.find((n) => n.id === id)!.data;
-const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message, .failure-lines__reason')?.textContent ?? null;
 
 beforeEach(() => {
   useGraphStore.getState().resetExecution();
@@ -140,7 +138,7 @@ describe('the Create Studio result card (LOW-3)', () => {
   it('draws a missing key neutral, as the canvas card does', () => {
     const { container } = output(true);
     expect(container.querySelector('.create-output--error--key')).not.toBeNull();
-    expect(reason(container)).toBe(KEY_LINE);
+    expect(reason(container)).toBe(`Nebula couldn’t start the run. ${KEY_LINE}`);
   });
 
   it('draws any other refusal as a failure', () => {
@@ -153,8 +151,8 @@ describe('the card', () => {
 
   it("shows the heading over the person's line and no keys", () => {
     const { container } = render(<ModelNode {...card({ error: KEY, errorPerson: KEY_LINE })} />);
-    expect(heading(container)).toBe(HEADING);
-    expect(reason(container)).toBe(KEY_LINE);
+    expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
+    expect(reason(container)).toBe(`Nebula couldn’t run the node. ${KEY_LINE}`);
     expect(container.textContent).not.toContain('OPENAI_API_KEY');
   });
 
@@ -171,8 +169,8 @@ describe('the Batch card over its cap', () => {
 
   it('says the cap once when the run stopped on it', () => {
     const { container } = render(<BatchNode {...batch({ state: 'error', error: OVER_CAP, errorPerson: OVER_CAP_LINE })} />);
-    expect(heading(container)).toBe(HEADING);
-    expect(reason(container)).toBe(OVER_CAP_LINE);
+    expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
+    expect(reason(container)).toBe(`Nebula couldn’t run the node because ${OVER_CAP_LINE.replace('This Batch', 'this Batch')}`);
     expect(container.textContent).not.toContain('exceed the cap');
     expect(container.textContent).not.toContain('batch_size_cap');
   });
@@ -187,13 +185,13 @@ describe('the Batch card over its cap', () => {
 
   it('keeps its own cap warning while editing, before any run', () => {
     const { container } = render(<BatchNode {...batch({})} />);
-    expect(heading(container)).toBeNull();
+    expect(reason(container)).toBeNull();
     expect(container.textContent).toContain('3 items exceed the cap of 2.');
   });
 
   it('keeps its own warning beside a run error about something else', () => {
     const { container } = render(<BatchNode {...batch({ state: 'error', error: 'boom', errorCategory: 'unknown' })} />);
-    expect(heading(container)).toBe(HEADING);
+    expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
     expect(container.textContent).toContain('3 items exceed the cap of 2.');
   });
 });

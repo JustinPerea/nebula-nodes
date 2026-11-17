@@ -63,23 +63,22 @@ afterEach(() => {
 // -- GM item 4: the shot panel's own wording ---------------------------------------
 
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
-const SHOT_HEADING = "Couldn't generate the shot.";
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
-const reason = (root: ParentNode) => root.querySelector('.failure-lines__reason')?.textContent ?? null;
+const reason = (root: ParentNode) => root.querySelector('.model-node__error-message')?.textContent ?? null;
 
 describe('the Cinema shot panel says "Generate the shot again."', () => {
   it('names the provider that answered, says "open Details" without one, and stops short with nothing behind Details', () => {
     expect(nodeErrorCopy({ raw: RAW, category: 'unknown', provider: 'fal.ai', surface: 'shot' })).toEqual({
-      heading: SHOT_HEADING, reason: 'Generate the shot again. If it keeps failing, Details shows what fal.ai said.', details: RAW });
+      heading: '', reason: 'Nebula couldn’t generate the shot. Generate it again. If it keeps failing, “Details” shows what fal.ai said.', details: RAW });
     expect(nodeErrorCopy({ raw: RAW, category: 'unknown', surface: 'shot' }).reason)
-      .toBe('Generate the shot again. If it keeps failing, open Details.');
-    expect(nodeErrorCopy({ raw: '', category: 'unknown', surface: 'shot' }).reason).toBe('Generate the shot again.');
+      .toBe('Nebula couldn’t generate the shot. Generate it again. If it keeps failing, open “Details”.');
+    expect(nodeErrorCopy({ raw: '', category: 'unknown', surface: 'shot' }).reason).toBe('Nebula couldn’t generate the shot. Generate it again.');
   });
 
   it('the node card keeps "Run the node again."', () => {
-    expect(nodeErrorCopy({ raw: RAW, category: 'unknown', provider: 'fal.ai' })).toEqual({ heading: "Couldn't run the node.",
-      reason: 'Run the node again. If it keeps failing, Details shows what fal.ai said.', details: RAW });
-    expect(nodeErrorCopy({ raw: '', category: 'unknown' }).reason).toBe('Run the node again.');
+    expect(nodeErrorCopy({ raw: RAW, category: 'unknown', provider: 'fal.ai' })).toEqual({ heading: '',
+      reason: 'Nebula couldn’t run the node. Run it again. If it keeps failing, “Details” shows what fal.ai said.', details: RAW });
+    expect(nodeErrorCopy({ raw: '', category: 'unknown' }).reason).toBe('Nebula couldn’t run the node. Run it again.');
   });
 
   function shotPanel(output: NonNullable<CinemaSceneSpec['shots'][number]['output']>) {
@@ -96,18 +95,18 @@ describe('the Cinema shot panel says "Generate the shot again."', () => {
     const withProvider = shotPanel({ status: 'error', error: RAW.slice(0, 40), errorCategory: 'unknown', errorRaw: RAW,
       errorProvider: 'fal.ai' });
     let error = withProvider.container.querySelector('.cinema-shot-panel__error')!;
-    expect(heading(error)).toBe(SHOT_HEADING);
-    expect(reason(error)).toBe('Generate the shot again. If it keeps failing, Details shows what fal.ai said.');
+    expect(heading(error)).toBeNull();
+    expect(reason(error)).toBe('Nebula couldn’t generate the shot. Generate it again. If it keeps failing, “Details” shows what fal.ai said.');
     cleanup();
     const without = shotPanel({ status: 'error', error: RAW.slice(0, 40), errorCategory: 'unknown', errorRaw: RAW });
     error = without.container.querySelector('.cinema-shot-panel__error')!;
-    expect(reason(error)).toBe('Generate the shot again. If it keeps failing, open Details.');
+    expect(reason(error)).toBe('Nebula couldn’t generate the shot. Generate it again. If it keeps failing, open “Details”.');
   });
 
   it('a card\'s NodeError keeps the card wording', () => {
     const { container } = render(<NodeError raw={RAW} category="unknown" provider="fal.ai" />);
-    expect(heading(container)).toBe("Couldn't run the node.");
-    expect(reason(container)).toBe('Run the node again. If it keeps failing, Details shows what fal.ai said.');
+    expect(heading(container)).toBeNull();
+    expect(reason(container)).toBe('Nebula couldn’t run the node. Run it again. If it keeps failing, “Details” shows what fal.ai said.');
   });
 });
 
@@ -180,7 +179,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
   { status, headers: { 'content-type': 'application/json' } });
 
 describe('the readiness line when something answered', () => {
-  const ANSWERED = "Couldn't check the connections. Try again, or reload if it keeps happening.";
+  const ANSWERED = "Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.";
 
   it('an answered failure reads GM\'s line, never "didn\'t respond"', async () => {
     for (const status of [503, 500, 429, 404]) {
@@ -200,6 +199,6 @@ describe('the readiness line when something answered', () => {
     mocks.fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState().error)
-      .toBe("Couldn't check the connections. Nebula's server isn't answering. Make sure it's running, then try again.");
+      .toBe("Nebula couldn’t check the connections because the server isn’t answering. Check that Nebula is running, then try again.");
   });
 });

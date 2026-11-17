@@ -1,4 +1,4 @@
-import { nodeNameList } from './errorCopy';
+import { becauseLine, nodeNameList } from './errorCopy';
 import { agentNameInSentence } from './personalAgentName';
 
 /**
@@ -51,9 +51,9 @@ function ending(how: CutOffEnding): string {
 export function savingCutOffLine(saves: CutOffSave[], project: string, how: CutOffEnding): string {
   const [only] = saves;
   const named = saves.length === 1 && only.node && only.setting;
-  const head = named
+  const head = becauseLine({ heading: named
     ? `Couldn’t save “${only.setting}” for “${only.node}” in “${project}”.`
-    : `Couldn’t save your last change in “${project}”.`;
+    : `Couldn’t save your last change in “${project}”.`, reason: '' });
   return `${head} ${ending(how)}`;
 }
 
@@ -96,11 +96,15 @@ export function handoffFailedLine(saves: CutOffSave[], project: string, agent: s
   const changes = distinctSaves(saves);
   const [only] = changes;
   const left = keepTogether(project);
-  const head = changes.length === 1 && only.node && only.setting
-    ? `Couldn’t save “${only.setting}” for “${only.node}” in “${left}”`
-    : changes.length > 1 ? `Couldn’t save ${changes.length} changes in “${left}”`
-      : `Couldn’t save your last change in “${left}”`;
-  return `${head} when ${agent ? agentNameInSentence(agent) : 'an agent'} switched projects. Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
+  const who = agent ? agentNameInSentence(agent) : 'an agent';
+  // The action goes in as written (becauseLine's `what`): an agent's name is typed by the person who connected
+  // it, and a name such as "Dr. Bot" must not be read as the end of a sentence.
+  const what = changes.length === 1 && only.node && only.setting
+    ? `save “${only.setting}” for “${only.node}” in “${left}” when ${who} switched projects`
+    : changes.length > 1 ? `save ${changes.length} changes in “${left}” when ${who} switched projects`
+      : `save your last change in “${left}” when ${who} switched projects`;
+  const failed = becauseLine({ heading: '', reason: '', what });
+  return `${failed} Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
 }
 
 /** A project name that wraps as one piece: its spaces non-breaking. */
@@ -164,8 +168,8 @@ export function changesNotSavedLine(saves: CutOffSave[]): string | null {
   // Several nodes: the shared name list (errorCopy nodeNameList, GM
   // 2026-10-27): two nodes titled “Text” read "2 “Text” nodes"; 4+, "4 nodes".
   // The PR #198 ’ sweep keeps the curly apostrophe.
-  if (nodes.size > 1) return `Couldn’t save your changes to ${nodeNameList([...nodes.values()])}.`;
-  return `Couldn’t save ${settingsOnOneNode(settings.map((save) => save.setting!))} for “${settings[0].node}”.`;
+  if (nodes.size > 1) return becauseLine({ heading: `Couldn’t save your changes to ${nodeNameList([...nodes.values()])}.`, reason: '' });
+  return becauseLine({ heading: `Couldn’t save ${settingsOnOneNode(settings.map((save) => save.setting!))} for “${settings[0].node}”.`, reason: '' });
 }
 
 /** One node's settings as GM counts them (round 23): “a”; “a” and “b”;

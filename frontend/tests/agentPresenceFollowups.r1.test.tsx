@@ -348,7 +348,7 @@ describe('GM answers 3 and 4, review L-6: repeated names grouped, in canvas orde
       { nodeId: 'n1', node: 'Text', setting: 'Text', order: 0 },
       { nodeId: 'n2', node: 'Text', setting: 'Text', order: 1 },
     ]);
-    expect(line).toBe('Couldn’t save your changes to 2 “Text” nodes and “Brief”.');
+    expect(line).toBe('Nebula couldn’t save your changes to 2 “Text” nodes and “Brief”.');
   });
 
   const row = (nodeId: string, label: string): PlaceholderRunRow => ({ nodeId, name: `“${label}”`, model: null, modelKey: 'm',

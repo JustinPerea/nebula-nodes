@@ -69,16 +69,16 @@ const INPUT_FILE_CARDS = new Set(['image-input', 'video-input', 'audio-input', '
 async function downloadOutput(url: string, filename: string): Promise<void> {
   try {
     await downloadWorldAsset(url, filename, {
-      heading: "Couldn't download the output.",
+      heading: "Couldn’t download the output.",
       tooLargeMessage:
         'This output is too large for a safe in-browser download. Use the local Nebula output folder instead.',
     });
   } catch (err) {
     console.error('[nebula] output download', err);
-    // "Couldn't download the output. <reason>" (downloadWorldAsset's own
+    // "Couldn’t download the output. <reason>" (downloadWorldAsset's own
     // lines keep their reason; anything else reads GM's general line).
     // A canvas notice, not a window.alert (round 3f).
-    showNotice(failureMessage(err, "Couldn't download the output."), 'error', err);
+    showNotice(failureMessage(err, "Couldn’t download the output."), 'error', err);
   }
 }
 
@@ -625,7 +625,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             <button
               type="button"
               className="model-node__enhance nodrag"
-              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it's connected to", kept: 'rewrite' })}
+              {...lock.act({ title: "Ask Claude to rewrite this prompt for the node it’s connected to", kept: 'rewrite' })}
               onClick={(e) => {
                 e.stopPropagation();
                 handleEnhance();

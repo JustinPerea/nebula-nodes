@@ -148,7 +148,7 @@ describe("an agent's arrange is part of the agent's undo step", () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
-  it('a layout write from another window is still its own step', () => {
+  it('a layout write from another tab is still its own step', () => {
     agentApply();
     sync([mine, ...agentNodes(ARRANGED)], [], { moved: ['n2', 'n3'], edit: { actor: { kind: 'person' }, tab: 'other-tab-0001' } });
     expect(useGraphStore.getState().undoStack).toHaveLength(2);

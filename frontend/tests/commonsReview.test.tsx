@@ -38,7 +38,7 @@ it('shows proposals immediately and accepts only after the human clicks', async 
 });
 
 it('preserves corrections and navigation guard if a stale save fails', async () => {
-  api.accept.mockRejectedValue(new Error('This review changed in another window. Reload before saving.'));
+  api.accept.mockRejectedValue(new Error('This review changed in another tab. Reload before saving.'));
   render(<CommonsReview />);
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
   fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });

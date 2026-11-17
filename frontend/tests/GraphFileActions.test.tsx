@@ -167,7 +167,7 @@ describe('workspace-independent graph file actions', () => {
     mocks.saveToFile.mockRejectedValueOnce(new Error('bundle broke'));
     render(<GraphFileActions />);
     await act(async () => { requestGraphSave(); });
-    await waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe('Nebula couldn’t save the canvas. Try again, or reload if it keeps happening.'));
+    await waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe('Nebula couldn’t save the canvas because the server didn’t accept it. Try again, or reload if it keeps happening.'));
   });
 
   it('saves the live Canvas camera when disabled Commons falls back to Canvas', async () => {
@@ -234,11 +234,11 @@ describe('workspace-independent graph file actions', () => {
     // error-copy round 2 (GM): "Nebula couldn’t load the canvas." then the
     // reason. A refusal with no code reads as a damaged file, never the
     // backend's words (review 8 of PR #205, limits LOW-4).
-    expect(notice()).toMatchObject({ text: 'Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula canvas.', tone: 'error', offer: null });
+    expect(notice()).toMatchObject({ text: 'Nebula couldn’t load the canvas because this file is damaged or isn’t a Nebula canvas.', tone: 'error', offer: null });
     // A code with no line, the same.
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'graph.json is too large', code: 'graph_something_new' }), { status: 413 }));
     await act(async () => { requestGraphLoad(); });
-    expect(notice()?.text).toBe('Nebula couldn’t load the canvas. This file is damaged or isn’t a Nebula canvas.');
+    expect(notice()?.text).toBe('Nebula couldn’t load the canvas because this file is damaged or isn’t a Nebula canvas.');
     // A conflict (a run is active) keeps its own line.
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Cannot load a graph while a run is active.' }), { status: 409 }));
     await act(async () => { requestGraphLoad(); });
@@ -249,12 +249,12 @@ describe('workspace-independent graph file actions', () => {
       ['graph_cycle', 'This file is damaged or isn’t a Nebula canvas.']]) {
       mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'unknown node definition no-such-node', code }), { status: 400 }));
       await act(async () => { requestGraphLoad(); });
-      expect(notice()?.text).toBe(`Nebula couldn’t load the canvas. ${line}`);
+      expect(notice()?.text).toBe(`Nebula couldn’t load the canvas because ${line.replace(/^This/, 'this')}`);
     }
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.apiFetch.mockResolvedValueOnce(new Response('', { status: 503 }));
     await act(async () => { requestGraphLoad(); });
-    expect(notice()?.text).toBe("Nebula couldn’t load the canvas. Nebula didn't respond. Try again.");
+    expect(notice()?.text).toBe("Nebula couldn’t load the canvas because the server didn’t respond. Try again.");
     expect(alert).not.toHaveBeenCalled();
     expect(useGraphStore.getState().nodes[0].id).toBe('existing');
     expect(useUIStore.getState().viewMode).toBe('create');
@@ -356,7 +356,7 @@ describe('workspace-independent graph file actions', () => {
       expect(createProject).toHaveBeenCalledOnce();
       expect(flags()).toEqual([true]);
       expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['existing']);
-      expect(notices).toEqual(["Nebula couldn’t load the canvas. Try again, or reload if it keeps happening."]);
+      expect(notices).toEqual(["Nebula couldn’t load the canvas because the server didn’t accept it. Try again, or reload if it keeps happening."]);
     });
 
     it("waiting behind #178's screen, or turned away with its own line: no second line, nothing loaded", async () => {
@@ -473,7 +473,7 @@ describe('workspace-independent graph file actions', () => {
         await act(async () => { requestGraphLoad(); });
         await waitFor(() => expect(useGraphStore.getState().nodes[0].id).toBe('n8'));
         await waitFor(() => expect(lines()).toEqual(
-          ["Couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]));
+          ["Nebula couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]));
       });
     });
   });

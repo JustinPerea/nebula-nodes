@@ -89,7 +89,7 @@ function backendGraph(s2: Shot = { id: 's2', prompt: 'b' }) {
   };
 }
 
-describe('H1-new: a shot removal another window\'s run refuses (review 4, R3)', () => {
+describe('H1-new: a shot removal another tab\'s run refuses (review 4, R3)', () => {
   function setUp(status = 409, detail = REMOVE_LINE) {
     const graph = backendGraph();
     useGraphStore.setState({ nodes: graph.nodes, edges: graph.edges } as never);
@@ -194,7 +194,7 @@ const select = (...which: string[]) => useGraphStore.setState((state) => ({
 describe('M1: during the tab\'s own run, every delete and undo path says why', () => {
   it('the scene, by the menu, the Delete key or deleteSelected: GM\'s scene line', async () => {
     await ownShotRun();
-    const line = "Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.";
+    const line = "Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.";
     useGraphStore.getState().deleteNode('n4');
     expect(notice()).toBe(line);
     useGraphStore.setState({ undoNotice: null } as never);
@@ -289,7 +289,7 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
 
 // -- M1: another window's run ---------------------------------------------------------------
 
-const SCENE_LINE = "Couldn’t delete “Opening”. “Shot 2” is still running. Stop the run first.";
+const SCENE_LINE = "Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.";
 
 describe('M1: a run this tab doesn\'t own: the backend\'s named line, once', () => {
   function otherWindowRun() {

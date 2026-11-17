@@ -241,8 +241,8 @@ describe('Settings shell', () => {
   // answer reads its own reason, never "the backend isn't running".
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch')),
-      "Couldn't check Krea. Nebula's server isn't answering. Make sure it's running, then try again."],
-    [new RequestFailedError("Couldn't check the Krea connection.", 503), "Couldn't check Krea. Nebula didn't respond. Try again."],
+      'Nebula couldn’t check Krea because the server isn’t answering. Check that Nebula is running, then try again.'],
+    [new RequestFailedError('Couldn’t check the Krea connection.', 503), 'Nebula couldn’t check Krea because the server didn’t respond. Try again.'],
   ])("Krea's first check says why it failed (%#)", async (error, line) => {
     getKreaConnectionMock.mockReset().mockRejectedValue(error);
     await renderSettings();
@@ -262,18 +262,18 @@ describe('Settings shell', () => {
   it.each([
     // Round 16 (GM): with no answer, the unified line in full.
     [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: 'Couldn’t load your API keys.' }),
-      "Nebula isn't answering. Make sure it's running, then try again."],
-    [new RequestFailedError('Couldn’t load your API keys.', 503), "Nebula didn't respond."],
-    [new RequestFailedError('Couldn’t load your API keys.', 400), "Try again, or reload if it keeps happening."],
+      'Nebula couldn’t load your API keys because the server isn’t answering. Try again.'],
+    [new RequestFailedError('Couldn’t load your API keys.', 503), 'Nebula couldn’t load your API keys because the server didn’t respond. Try again.'],
+    [new RequestFailedError('Couldn’t load your API keys.', 400), 'Nebula couldn’t load your API keys because the server didn’t accept it. Try again.'],
     // Review 12 of PR #203, LOW-3: a settings file the backend can't read says so, with its path
     // (the backend's 409 line; it used to answer a cut-short file with a 500).
     [new RequestFailedError('Couldn’t load your API keys.', 409, { detail: 'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.' }),
-      'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.'],
-  ])('a failed first load says the heading and the short reason (%#)', async (error, reason) => {
+      'Nebula couldn’t load your API keys. Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.'],
+  ])('a failed first load says one because line beside Try again (%#)', async (error, reason) => {
     getSettingsMock.mockRejectedValueOnce(error);
     render(<Settings />);
     const alert = await screen.findByRole('alert');
-    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe('Couldn’t load your API keys.');
+    expect(alert.querySelector('.failure-lines__heading')).toBeNull();
     expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe(reason);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
@@ -281,7 +281,7 @@ describe('Settings shell', () => {
   it('keeps a failed first load actionable, and Try again loads the panel', async () => {
     getSettingsMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: {} });
     render(<Settings />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load your API keys.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t load your API keys because the server didn’t accept it. Try again.');
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await screen.findByRole('searchbox', { name: 'Search providers and models' });
@@ -396,7 +396,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
 
   it.each([
     ['valid', 'Connected'], ['invalid', 'Key rejected'], ['unauthorized', 'No API access'],
-    ['insufficient_credits', 'Out of credits'], ['error', "Couldn't check"], ['configured_unverified', 'Saved'],
+    ['insufficient_credits', 'Out of credits'], ['error', 'Couldn’t check'], ['configured_unverified', 'Saved'],
   ])('shows a %s check as "%s" only after Check connections', async (status, text) => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ OpenAI: status }));
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
@@ -629,7 +629,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   // GM r22 item 3: a 409 for a settings file Nebula can't read names the file
   // by its full path, in the row, as the backend said it.
   const UNREADABLE = 'Nothing was saved because Nebula can’t read the keys saved in /Users/fixture/.nebula/settings.json. Fix “apiKeys” in that file, then try again.';
-  const unreadable = () => new RequestFailedError("Couldn't save your settings.", 409, { detail: UNREADABLE, code: 'keys_unreadable' });
+  const unreadable = () => new RequestFailedError('Couldn’t save your settings.', 409, { detail: UNREADABLE, code: 'keys_unreadable' });
 
   it('says the 409 line with the full path when a save can’t read the settings file', async () => {
     updateSettingsMock.mockRejectedValueOnce(unreadable());
@@ -652,7 +652,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     + 'Check the file’s permissions, then try again.';
 
   it('says the read-only line when Nebula isn’t allowed to change the settings file', async () => {
-    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError("Couldn't save your settings.", 409,
+    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError('Couldn’t save your settings.', 409,
       { detail: UNWRITABLE, code: 'settings_unwritable' }));
     await renderSettings();
     await addKey('Anthropic', 'fixture-anthropic');
@@ -661,14 +661,14 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   });
 
   it('picks the line by the code: the same words with no code are any other 409', async () => {
-    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError("Couldn't save your settings.", 409, { detail: UNREADABLE }));
+    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError('Couldn’t save your settings.', 409, { detail: UNREADABLE }));
     await renderSettings();
     await addKey('Anthropic', 'fixture-anthropic');
     expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
   });
 
   it('keeps its own line for any other 409', async () => {
-    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError("Couldn't save your settings.", 409, { detail: 'Something else.' }));
+    updateSettingsMock.mockRejectedValueOnce(new RequestFailedError('Couldn’t save your settings.', 409, { detail: 'Something else.' }));
     await renderSettings();
     await addKey('Anthropic', 'fixture-anthropic');
     expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
@@ -875,7 +875,7 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     await act(async () => { remote([]); });
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
     expect(said()).toHaveTextContent(/^Replicate token removed\.$/);
-    expect(document.body).not.toHaveTextContent(/another window/);
+    expect(document.body).not.toHaveTextContent(/another tab/);
   });
 
   it('labels the Krea row by its link’s word, "Krea · API key" (GM r21 item 7)', async () => {
@@ -1253,7 +1253,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   const CANT_READ = 'Nothing was saved because Nebula can’t read ~/Library/Application Support/Nebula/settings.json. Fix the file, then try again.';
   it('writes nothing to the Keychain when the backend can’t read the settings file, and says why', async () => {
     const { credentials } = setupDesktopBridge();
-    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ, code: 'settings_unreadable' }));
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError('Couldn’t save the API key.', 409, { detail: CANT_READ, code: 'settings_unreadable' }));
     await renderSettings();
     await addKey('OpenAI', 'fixture-openai');
     expect(await screen.findByRole('alert')).toHaveTextContent(CANT_READ);
@@ -1265,7 +1265,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   it('clears nothing in the Keychain when the backend can’t read the settings file', async () => {
     const { credentials } = setupDesktopBridge();
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ, code: 'settings_unreadable' }));
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError('Couldn’t save the API key.', 409, { detail: CANT_READ, code: 'settings_unreadable' }));
     removeKey('OpenAI');
     expect(await screen.findByText(CANT_READ)).toBeInTheDocument();
     expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', '', { check: true }]]);
@@ -1278,7 +1278,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   function refuseTheSecondCall() {
     updateCredentialMock.mockReset().mockImplementation((_key: string, _value: string, options?: { check?: boolean }) =>
       options?.check ? Promise.resolve({ status: 'ok' })
-        : Promise.reject(new RequestFailedError("Couldn't save the API key.", 409, { detail: CANT_READ, code: 'settings_unreadable' })));
+        : Promise.reject(new RequestFailedError('Couldn’t save the API key.', 409, { detail: CANT_READ, code: 'settings_unreadable' })));
   }
 
   it('puts the Keychain back when the backend refuses after the Keychain took the key', async () => {
@@ -1387,7 +1387,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   it('a 500, and the backend still holds the old key: the Keychain is put back', async () => {
     const { credentials } = setupDesktopBridge();
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    failTheSecondCall(new RequestFailedError("Couldn't save the API key.", 500));
+    failTheSecondCall(new RequestFailedError('Couldn’t save the API key.', 500));
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
     fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
     const input = await screen.findByLabelText('OpenAI API key');
@@ -1400,7 +1400,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
   it('a 503, and the backend holds the new key after all: committed, never put back (a 5xx isn’t a refusal)', async () => {
     const { credentials } = setupDesktopBridge();
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
-    failTheSecondCall(new RequestFailedError("Couldn't save the API key.", 503));
+    failTheSecondCall(new RequestFailedError('Couldn’t save the API key.', 503));
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***-new' } });
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
     fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
@@ -1461,7 +1461,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     await screen.findByRole('alert');
     // The retry: the check itself is refused, with its own fix.
     const fix = 'Fix “apiKeys” in ~/.nebula/settings.json, then try again.';
-    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError("Couldn't save the API key.", 409,
+    updateCredentialMock.mockReset().mockRejectedValue(new RequestFailedError('Couldn’t save the API key.', 409,
       { detail: 'Nothing was saved because …', code: 'keys_unreadable', fix }));
     fireEvent.submit(screen.getByLabelText('OpenAI API key').closest('form')!);
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Nebula couldn’t save this key and is still '
@@ -1662,7 +1662,7 @@ describe('Settings — preferences', () => {
     // The Agent log is on by default (Q38); the switch turns it off.
     const agentLog = screen.getByRole('switch', { name: /Agent log/ });
     expect(agentLog).toBeChecked();
-    expect(screen.getByText("Every agent's actions, bottom right")).toBeInTheDocument();
+    expect(screen.getByText('Every agent’s actions, bottom right')).toBeInTheDocument();
     fireEvent.click(agentLog);
     expect(useUIStore.getState().agentLogEnabled).toBe(false);
     expect(localStorage.getItem('nebula:agentLog:enabled')).toBe('0');
@@ -1701,7 +1701,7 @@ describe('Settings — preferences', () => {
     openTab('Preferences');
     updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
     fireEvent.change(screen.getByRole('combobox', { name: 'Ask before costly runs' }), { target: { value: '10' } });
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Nebula couldn’t save");
     expect(useUIStore.getState().runCostConfirmUsd).toBe(2);
     useUIStore.getState().setRunCostConfirmUsd(1);
   });
@@ -1863,16 +1863,16 @@ describe('Settings — preferences', () => {
   it('says why the connected apps could not load', async () => {
     // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
-    getOutsideSpendMock.mockRejectedValue(new RequestFailedError("Couldn't load the connected apps.", 403, { reason: 'Only the person can do this from the Nebula canvas.' }));
+    getOutsideSpendMock.mockRejectedValue(new RequestFailedError('Couldn’t load the connected apps.', 403, { reason: 'Only the person can do this from the Nebula canvas.' }));
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
     openTab('Preferences');
-    expect(await screen.findByText("Couldn't load the connected apps. Only the person can do this from the Nebula canvas.")).toBeInTheDocument();
+    expect(await screen.findByText('Nebula couldn’t load the connected apps. Only the person can do this from the Nebula canvas.')).toBeInTheDocument();
   });
 
   it('PR #204 r6 (GM r6 2): refused as not connected, the because line, and the read runs again on the promote', async () => {
     const session = await import('../src/lib/personSession');
     session.resetPersonSessionForTests();
-    getOutsideSpendMock.mockRejectedValueOnce(new RequestFailedError("Couldn't load the connected apps.", 403,
+    getOutsideSpendMock.mockRejectedValueOnce(new RequestFailedError('Couldn’t load the connected apps.', 403,
       { reason: 'Only the person can do this.', code: 'person_required' }));
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
     openTab('Preferences');
@@ -1924,7 +1924,7 @@ describe('Settings — storage', () => {
     const exports = screen.getByRole('textbox', { name: 'Exports' });
     fireEvent.change(exports, { target: { value: '/exports' } });
     fireEvent.blur(exports);
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save. Try again.");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Nebula couldn’t save. Try again.");
     expect(exports).toHaveValue('/exports');
   });
 
@@ -2038,9 +2038,8 @@ describe('Settings while Nebula is offline', () => {
     getSettingsMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'), { heading: 'Couldn’t load your API keys.' }));
     render(<Settings />);
     const alert = await screen.findByRole('alert');
-    expect(alert.querySelector('.failure-lines__heading')?.textContent).toBe('Couldn’t load your API keys.');
-    // GM, round 16: the unified line in full, beside Try again.
-    expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe("Nebula isn't answering. Make sure it's running, then try again.");
+    // One line, ending as the button does.
+    expect(alert.querySelector('.failure-lines__reason')?.textContent).toBe('Nebula couldn’t load your API keys because the server isn’t answering. Try again.');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
     resetBackendConnectionForTests();
   });

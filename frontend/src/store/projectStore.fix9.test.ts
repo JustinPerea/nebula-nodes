@@ -79,7 +79,7 @@ describe('GM r11, 2 (as GM r13, 1 has it): the tab says the project the person o
   });
 });
 
-describe('GM r11, 5: after a restore, no "another window" line', () => {
+describe('GM r11, 5: after a restore, no "another tab" line', () => {
   it('a tab with everything saved goes to Projects home with no line', async () => {
     sync('r1', 'restore-old');
     sync('r2', 'restore-new');
@@ -121,7 +121,7 @@ describe('GM r11, 5: after a restore, no "another window" line', () => {
   it('a real other window keeps its line', () => {
     sync('r1', 'restore-old');
     sync('r2', 'restore-old');
-    expect(useProjectStore.getState().error).toBe('The active project changed in another window. Reload projects to continue.');
+    expect(useProjectStore.getState().error).toBe('The active project changed in another tab. Reload projects to continue.');
   });
 });
 

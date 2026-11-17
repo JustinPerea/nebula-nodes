@@ -56,7 +56,7 @@ describe('apiFetch while offline', () => {
 describe('an OfflineRefusal has no words (no toast, no line)', () => {
   const refusal = new OfflineRefusal('POST', '/api/execute');
   it('errorCopy gives it none', () => {
-    expect(failureCopy(refusal)).toEqual({ heading: '', reason: '' });
+    expect(failureCopy(refusal)).toEqual({ heading: '', reason: '', button: '', cause: '', what: '' });
     expect(failureUnder(refusal, "Couldn't start the run.")).toBe('');
     expect(copyForError(refusal)).toBe('');
   });

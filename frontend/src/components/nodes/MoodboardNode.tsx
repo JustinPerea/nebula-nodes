@@ -42,7 +42,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
     ? `${moodboardImagesLabel(board.imageCount ?? 0, board.setAsideCount)} · ${board.mode ?? 'look'}`
     : status === 'empty' ? 'Choose one in the Inspector'
       : status === 'missing' ? `#${boardId} was deleted for good or never existed`
-        : status === 'error' ? "Couldn't load this moodboard" : 'Loading…';
+        : status === 'error' ? 'Nebula couldn’t load this moodboard.' : 'Loading…';
   // A board in Recently deleted keeps its name and picture here, with Restore.
   const trashed = status === 'trashed';
   const thumb = storedImageView(board?.thumbnail);

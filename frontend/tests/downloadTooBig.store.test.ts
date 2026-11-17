@@ -20,13 +20,13 @@ const shared = await import('../src/lib/graphFileShared');
 afterEach(() => vi.restoreAllMocks());
 
 describe('Download a copy', () => {
-  it("past the string cap: Couldn't download a copy. It's too big to download in a browser.", async () => {
+  it("past the string cap: Nebula couldn’t download a copy because it’s too big to download in a browser.", async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(shared.saveProjectCopyToFile).mockRejectedValueOnce(new shared.BrowserStringLimitError());
     useProjectStore.setState({ activeProject: { id: 'p1', name: 'Glass campaign' } } as never);
     await useProjectStore.getState().downloadProjectCopy();
     // PR #204 r6 (review 4 LOW-2): the failure goes with the line, for its code and stamp.
-    expect(showNotice).toHaveBeenCalledWith("Couldn't download a copy. It's too big to download in a browser.", 'error',
+    expect(showNotice).toHaveBeenCalledWith("Nebula couldn’t download a copy because it’s too big to download in a browser.", 'error',
       expect.any(shared.BrowserStringLimitError));
   });
 });

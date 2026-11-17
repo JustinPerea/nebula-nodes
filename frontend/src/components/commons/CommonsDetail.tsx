@@ -13,7 +13,7 @@ import { actorLabel, analysisBadge } from '../../lib/commonsFormat';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
-import { ANALYSIS_FAILED, analysisFailureIsNeutral, analysisFailureReason } from '../../lib/commonsAnalysisCopy';
+import { analysisFailureIsNeutral, analysisFailureLine, analysisFailureReason, analysisFailureRetries } from '../../lib/commonsAnalysisCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { CommonsErrorLine } from './CommonsErrorLine';
@@ -342,17 +342,21 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
       {asset.analysis_state === 'analysis_failed' && (
         analysisFailureIsNeutral(asset.last_error_kind) ? (
-          // Too transparent: nothing in it is seen, so it was never sent. Not an error (GM r5 on #208).
+          // Too transparent: nothing in it is seen, so it was never sent. Not an error (design, r5 on #208), so
+          // the note says what is so and does not word it as a failure.
           <p className="commons-notice commons-notice--muted">{analysisFailureReason(asset.last_error_kind)}</p>
         ) : (
         <div className="commons-notice commons-notice--error commons-analysis-failure" data-line-box="">
           <div className="commons-analysis-failure__text">
-            <FailureLines failure={{ heading: ANALYSIS_FAILED, reason: analysisFailureReason(asset.last_error_kind) }} />
+            <FailureLines failure={{ heading: '', reason: analysisFailureLine(asset.last_error_kind) }} />
             {asset.last_error && (
               <ErrorDetails raw={asset.last_error} className="commons-analysis-failure__details" />
             )}
           </div>
-          <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Retry</button>
+          {/* The analyzer's refusal would get the same answer again: its line ends at the reason, with no button. */}
+          {analysisFailureRetries(asset.last_error_kind) && (
+            <button type="button" className="commons-button" onClick={() => run(() => commonsApi.reanalyze(assetId))}>Try again</button>
+          )}
         </div>
         )
       )}

@@ -428,7 +428,7 @@ describe('round 16 (review 15): an undo takes off only what its step added; no s
       expect(dropped()).toBe(false);
       expect(valueOf('n1')).toBe('E1');
       await answer('n2', 409);
-      expect(notice()).toBe("Couldn't delete the node. Nebula failed.");
+      expect(notice()).toBe("Nebula couldn’t delete the node because Nebula failed.");
       // GM r39 item 3: the press held on the refused delete goes silently (before r39 it read
       // "1 undo was skipped while a change was saving." here); the second press undoes the typing.
       expect(message()).toBeNull();

@@ -222,7 +222,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
           get().closed(setId, already[1] as Exclude<QuestionSetStatus, 'open'>, null);
           return false;
         }
-        const line = failureMessage(error, "Couldn't send the answers.");
+        const line = failureMessage(error, "Couldn’t send the answers.");
         set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
         // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
         clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.answer
@@ -243,7 +243,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       try {
         await dismissQuestions(setId, entry.answerKey);
       } catch (error) {
-        const line = failureMessage(error, "Couldn't dismiss the questions.");
+        const line = failureMessage(error, "Couldn’t dismiss the questions.");
         set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
         // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
         clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.dismiss

@@ -96,7 +96,7 @@ describe('MeshPreview', () => {
     fireEvent.click(preview);
     await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
     const copy = document.querySelector('.mesh-modal__fallback-copy')?.textContent ?? '';
-    expect(copy).toBe("Couldn't load the 3D preview. Nebula didn't respond. Try again.");
+    expect(copy).toBe('Nebula couldn’t load the 3D preview because the server didn’t respond. Try again.');
     expect(copy).not.toMatch(/HTTP|503/);
   });
 
@@ -117,7 +117,7 @@ describe('MeshPreview', () => {
       fireEvent.click(preview);
       await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
       expect(document.querySelector('.mesh-modal__fallback-copy')?.textContent)
-        .toBe("Couldn't load the 3D preview. Try again, or reload if it keeps happening.");
+        .toBe('Nebula couldn’t load the 3D preview because the server didn’t accept it. Try again, or reload if it keeps happening.');
     } finally {
       if (original) Object.defineProperty(URL, 'createObjectURL', original);
       else delete (URL as unknown as Record<string, unknown>).createObjectURL;
@@ -133,7 +133,7 @@ describe('MeshPreview', () => {
     fireEvent.click(preview);
     await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
     expect(document.querySelector('.mesh-modal__fallback-copy')?.textContent)
-      .toBe("Couldn't load the 3D preview. Nebula's server isn't answering. Make sure it's running, then try again.");
+      .toBe('Nebula couldn’t load the 3D preview because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('typeerror review (2026-10-24): a connection that drops while the model streams still says the connection line', async () => {
@@ -148,7 +148,7 @@ describe('MeshPreview', () => {
     fireEvent.click(preview);
     await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
     expect(document.querySelector('.mesh-modal__fallback-copy')?.textContent)
-      .toBe("Couldn't load the 3D preview. Nebula's server isn't answering. Make sure it's running, then try again.");
+      .toBe('Nebula couldn’t load the 3D preview because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('error-copy round 2: a download that can\'t reach Nebula says "Couldn\'t download the 3D model."', async () => {
@@ -157,7 +157,7 @@ describe('MeshPreview', () => {
     fireEvent.click(screen.getByRole('button', { name: /open ply splat export preview/i }));
     fireEvent.click(await screen.findByRole('button', { name: /download/i }));
     expect((await screen.findByRole('alert')).textContent)
-      .toBe("Couldn't download the 3D model. Nebula's server isn't answering. Make sure it's running, then try again.");
+      .toBe('Nebula couldn’t download the 3D model because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
   it('presents PLY output as a valid download-only splat instead of a broken model viewer', async () => {

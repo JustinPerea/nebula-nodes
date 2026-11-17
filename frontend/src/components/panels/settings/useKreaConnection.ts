@@ -27,7 +27,7 @@ export function useKreaConnection() {
     }).catch((value: unknown) => {
       // Round 3f (GM): no answer reads "Nebula's server isn't answering. …";
       // an answer reads its own reason (errorCopy), under this row's heading.
-      if (!cancelled && requestVersion.current === version) setError(failureUnder(value, "Couldn't check Krea."));
+      if (!cancelled && requestVersion.current === version) setError(failureUnder(value, "Couldn’t check Krea."));
     });
     return () => { cancelled = true; };
   }, [setConnection]);
@@ -41,7 +41,7 @@ export function useKreaConnection() {
         if (!cancelled && requestVersion.current === version) setConnection(state);
       }).catch(() => {
         if (!cancelled && requestVersion.current === version) {
-          setError("Couldn't check sign-in progress. Use Check connection to retry.");
+          setError("Nebula couldn’t check sign-in progress. Use Check connection to try again.");
           setConnection({ status: 'error' });
         }
       });
@@ -56,7 +56,7 @@ export function useKreaConnection() {
     setLaunchError(null);
     try { setConnection(await action()); }
     catch (value) {
-      const line = failureMessage(value, "Couldn't update the Krea connection.");
+      const line = failureMessage(value, "Couldn’t update the Krea connection.");
       setError(line);
       // PR #204 round 4 (review 2 MEDIUM): connect, check and disconnect are person-only
       // (routes/krea_connector.py person_only); refused only for this tab, the line goes on the promote.
@@ -94,7 +94,7 @@ export function useKreaConnection() {
       const url = state.authorizationUrl;
       if (state.status !== 'connecting' || !url || !isKreaAuthorizationUrl(url)) {
         signInWindow?.close();
-        if (state.status === 'connecting') setLaunchError("Couldn't prepare Krea sign-in. Use Restart sign-in to try again.");
+        if (state.status === 'connecting') setLaunchError("Nebula couldn’t prepare Krea sign-in. Use Restart sign-in to try again.");
         return state;
       }
       try {

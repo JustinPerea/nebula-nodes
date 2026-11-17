@@ -40,7 +40,7 @@ export class TabLoadBoundary extends Component<{ children: ReactNode }, { failed
     if (this.state.failed) {
       return (
         <div className="settings__load-error" role="alert">
-          <p>This part of Settings couldn't load. Reload the tab to try again.</p>
+          <p>Nebula couldn’t load this part of Settings. Reload the tab to try again.</p>
         </div>
       );
     }
@@ -184,7 +184,7 @@ export function Settings() {
       <ScrollFade className="panel__body settings__body">
         {loadState === 'error' && !saved ? (
           <div className="settings__load-error" role="alert">
-            <p>{loadFailure && <FailureLines failure={loadFailure} />}</p>
+            <p>{loadFailure && <FailureLines failure={loadFailure} retry />}</p>
             <button type="button" className="settings__button" onClick={() => setRetryLoad((value) => value + 1)}>Try again</button>
           </div>
         ) : !ready ? (

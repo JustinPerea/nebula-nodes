@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { X } from 'lucide-react';
 import type { CreateDraftUpload } from '../../store/createDraftStore';
-import { shortLine } from '../../lib/errorCopy';
+import { besideButton } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
 
 export interface AttachedRef {
@@ -26,19 +26,22 @@ function UploadChip({ upload, canRetry, onRetry, onRemove }: {
 }) {
   const input = useRef<HTMLInputElement>(null);
   const uploading = upload.status === 'uploading';
+  const line = upload.error ?? 'Nebula couldn’t upload this image.';
   return (
     <div className="reference-tray__chip reference-tray__upload" aria-busy={uploading}>
       <div>
         <span className="reference-tray__name">{upload.name}</span>
         <span className="reference-tray__status" role={uploading ? 'status' : 'alert'}>
-          {/* GM's WRAP rule: the chip's Retry / Attach again is the retry. */}
-          {uploading ? 'Uploading…' : <LineText text={shortLine(upload.error ?? "Couldn't upload this image.")} />}
+          {/* Beside a “Try again” button the line ends “Try again.” The draft keeps only the line (it is saved with the
+              page), so the button's ending is swapped in here (besideButton). Beside “Attach again” it stays as written:
+              its ending must not name a button that isn't there. */}
+          {uploading ? 'Uploading…' : <LineText text={canRetry ? besideButton(line) : line} />}
         </span>
       </div>
       {!uploading && <button type="button" className="reference-tray__retry"
         onClick={() => canRetry ? onRetry() : input.current?.click()}
-        aria-label={`${canRetry ? 'Retry' : 'Attach again'} ${upload.name}`}>
-        {canRetry ? 'Retry' : 'Attach again'}
+        aria-label={canRetry ? `Try again to upload “${upload.name}”` : `Attach again ${upload.name}`}>
+        {canRetry ? 'Try again' : 'Attach again'}
       </button>}
       <input ref={input} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden
         onChange={(event) => {

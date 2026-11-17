@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
@@ -6,8 +6,8 @@ import { noticeSpy } from '../helpers/noticeSpy';
  * tab no longer clears the backend's canvas. If the backend has nodes the tab
  * doesn't show (an agent's, or ones this tab missed), the add brings them in
  * through the canvas's normal sync, then adds the node where the person put
- * it. No toast. If that sync fails, the node isn't added (not even locally)
- * and the person reads "Couldn't add “<label>”."; the reason goes to the
+ * it. No toast. If that sync fails, the node isn’t added (not even locally)
+ * and the person reads "Couldn’t add “<label>”."; the reason goes to the
  * Agent log. Character, Moodboard and dynamic nodes go the same way, and a
  * failure never leaves the node only in this tab.
  *
@@ -29,12 +29,24 @@ vi.mock('../../src/lib/backend', async (importOriginal) => ({
   getCachedBackendBaseUrl: () => backendDiscovery.baseUrl,
 }));
 
+// Lets a test make the empty-tab sync's last step throw, the one way an add's own failure (not a failed sync)
+// reaches reportNodeCreationError.
+const adopt = vi.hoisted(() => ({ fail: null as unknown }));
+vi.mock('../../src/lib/projectContext', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../src/lib/projectContext')>();
+  return { ...real, adoptCanvasRevision: (...args: Parameters<typeof real.adoptCanvasRevision>) => {
+    if (adopt.fail) throw adopt.fail;
+    return real.adoptCanvasRevision(...args);
+  } };
+});
+
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 const alertMock = noticeSpy();
 
 const { useGraphStore } = await import('../../src/store/graphStore');
+const errorCopy = await import('../../src/lib/errorCopy');
 // The Agent log listens for nebula:agent-log-entry once loaded, as with the app.
 const { useAgentLogStore } = await import('../../src/store/agentLogStore');
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
@@ -57,7 +69,9 @@ const paths = () => fetchMock.mock.calls.map(([url, init]) =>
 const alerted = () => alertMock.mock.calls.map(([text]) => text);
 const logged = () => useAgentLogStore.getState().entries.map((entry) => entry.message);
 const label = (definitionId: string) => NODE_DEFINITIONS[definitionId].displayName;
-const couldntAdd = (definitionId: string) => `Couldn't add “${label(definitionId)}”.`;
+const couldntAdd = (definitionId: string) => `Nebula couldn’t add “${label(definitionId)}”.`;
+// The Agent log and the console keep the action's heading with the raw reason after it.
+const addHeading = (definitionId: string) => `Couldn’t add “${label(definitionId)}”.`;
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -78,8 +92,8 @@ const ADDS: [string, string, Add][] = [
   ['addMoodboardNode', 'nebula-moodboard', (position) => useGraphStore.getState().addMoodboardNode('mb_1', position)],
 ];
 
-describe('the first add on an empty tab syncs the backend\'s nodes in and never clears', () => {
-  it.each(ADDS)('%s: brings the agent\'s node in, then adds where the person put it', async (_name, definitionId, add) => {
+describe('the first add on an empty tab syncs the backend’s nodes in and never clears', () => {
+  it.each(ADDS)('%s: brings the agent’s node in, then adds where the person put it', async (_name, definitionId, add) => {
     fetchMock.mockResolvedValueOnce(backendHas()).mockResolvedValueOnce(json({ id: 'n2' }));
     expect(await add({ x: 10, y: 20 })).toBe('n2');
     expect(paths()).toEqual(['GET /api/graph/export', 'POST /api/graph/node']);
@@ -105,7 +119,7 @@ describe('the first add on an empty tab syncs the backend\'s nodes in and never 
     expect(alerted()).toEqual([]);
   });
 
-  it('a tab with nodes doesn\'t ask at all', async () => {
+  it('a tab with nodes doesn’t ask at all', async () => {
     useGraphStore.setState({ nodes: [{ ...agentsNode }] as never });
     fetchMock.mockResolvedValueOnce(json({ id: 'n2' }));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBe('n2');
@@ -115,15 +129,15 @@ describe('the first add on an empty tab syncs the backend\'s nodes in and never 
 
 const SYNC_FAILURES: [string, () => void, RegExp][] = [
   ['the export is refused', () => fetchMock.mockResolvedValueOnce(json({ detail: 'export broke' }, 500)), /export broke/],
-  ['the export can\'t be read', () => fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 200 })),
+  ['the export can’t be read', () => fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 200 })),
     /JSON|Unexpected/],
-  ['the export is another project\'s', () => fetchMock.mockResolvedValueOnce(backendHas({ workspaceRevision: 'b' })),
+  ['the export is another project’s', () => fetchMock.mockResolvedValueOnce(backendHas({ workspaceRevision: 'b' })),
     /out of date/],
-  ['the export is another params version\'s', () => fetchMock.mockResolvedValueOnce(
+  ['the export is another params version’s', () => fetchMock.mockResolvedValueOnce(
     backendHas({ paramsVersion: GRAPH_PARAMS_VERSION + 1 })), /Nebula was updated while this tab was open/],
 ];
 
-describe('a sync that fails: nothing is added, the person reads GM\'s line, the reason goes to the Agent log', () => {
+describe('a sync that fails: nothing is added, the person reads GM’s line, the reason goes to the Agent log', () => {
   for (const [what, fail, reason] of SYNC_FAILURES) {
     it.each(ADDS)(`%s, when ${what}`, async (_name, definitionId, add) => {
       fail();
@@ -132,7 +146,7 @@ describe('a sync that fails: nothing is added, the person reads GM\'s line, the 
       expect(paths().filter((path) => !path.startsWith('GET'))).toEqual([]);
       expect(alerted()).toEqual([couldntAdd(definitionId)]);
       expect(logged()).toHaveLength(1);
-      expect(logged()[0].startsWith(`${couldntAdd(definitionId)} `)).toBe(true);
+      expect(logged()[0].startsWith(`${addHeading(definitionId)} `)).toBe(true);
       expect(logged()[0]).toMatch(reason);
     });
   }
@@ -146,12 +160,12 @@ describe('a sync that fails: nothing is added, the person reads GM\'s line, the 
     expect(logged()[0]).toMatch(/export broke/);
   });
 
-  it('with no backend found at all, nothing is added and GM\'s line says so (round 13, GM: local-only adds are refused)', async () => {
+  it('with no backend found at all, nothing is added and GM’s line says so (round 13, GM: local-only adds are refused)', async () => {
     backendDiscovery.baseUrl = null;
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
-    expect(alerted()).toEqual(["Couldn't add “Text Input”. Nebula isn't connected yet. Try again once it is."]);
+    expect(alerted()).toEqual(["Nebula couldn’t add “Text Input” because the server isn’t connected yet. Try again once it is."]);
     // The next add on the tab asks again.
     expect(useGraphStore.getState().backendFreshStartPending).toBe(true);
   });
@@ -161,7 +175,7 @@ describe('a sync that fails: nothing is added, the person reads GM\'s line, the 
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
-    expect(alerted()).toEqual([`Couldn't add “${label(definitionId)}”. Nebula isn't connected yet. Try again once it is.`]);
+    expect(alerted()).toEqual([`Nebula couldn’t add “${label(definitionId)}” because the server isn’t connected yet. Try again once it is.`]);
   });
 
   it('a dynamic node with no backend found at all: its card comes off again', async () => {
@@ -169,20 +183,35 @@ describe('a sync that fails: nothing is added, the person reads GM\'s line, the 
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
     await vi.waitFor(() => expect(alerted()).toEqual([
-      `Couldn't add “${label('openrouter-universal')}”. Nebula isn't connected yet. Try again once it is.`]));
+      `Nebula couldn’t add “${label('openrouter-universal')}” because the server isn’t connected yet. Try again once it is.`]));
     expect(useGraphStore.getState().nodes).toEqual([]);
     expect(useGraphStore.getState().undoStack).toEqual([]);
   });
 });
 
-describe('a refused create after the sync: the add path\'s own line, and nothing only in this tab', () => {
+describe('an add that fails with the server’s own answer keeps its status', () => {
+  const { RequestFailedError } = errorCopy;
+  afterEach(() => { adopt.fail = null; });
+  it.each([
+    [429, 'Nebula couldn’t add “Text Input” because the server is busy. Try again in a moment.'],
+    [500, 'Nebula couldn’t add “Text Input” because the server hit an error. Try again.'],
+    [503, 'Nebula couldn’t add “Text Input” because the server didn’t respond. Try again.'],
+  ])('a %s reads its own clause', async (status, line) => {
+    fetchMock.mockResolvedValueOnce(json({ empty: true, nodes: [], edges: [], paramsVersion: GRAPH_PARAMS_VERSION }));
+    adopt.fail = new RequestFailedError('Couldn’t add “Text Input”.', status);
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(alerted()).toEqual([line]);
+  });
+});
+
+describe('a refused create after the sync: the add path’s own line, and nothing only in this tab', () => {
   it.each(ADDS)('%s', async (_name, definitionId, add) => {
     fetchMock.mockResolvedValueOnce(json({ empty: true, nodes: [], edges: [] }))
       .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
     // Round 13 (review 12 item 5): GM's quoted heading on every add path.
-    expect(alerted()).toEqual([`Couldn't add “${label(definitionId)}”. Graph has protected provider state`]);
+    expect(alerted()).toEqual([`Nebula couldn’t add “${label(definitionId)}”. Graph has protected provider state.`]);
   });
 
   it('a dynamic node is taken off the tab again', async () => {
@@ -190,24 +219,24 @@ describe('a refused create after the sync: the add path\'s own line, and nothing
       .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
     useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
     await vi.waitFor(() => expect(alerted()).toEqual([
-      `Couldn't add “${label('openrouter-universal')}”. Graph has protected provider state`]));
+      `Nebula couldn’t add “${label('openrouter-universal')}”. Graph has protected provider state.`]));
     expect(useGraphStore.getState().nodes).toEqual([]);
   });
 });
 
-// Round 13 of PR #114 (GM) said "Couldn't add “Text Input” while Nebula is
+// Round 13 of PR #114 (GM) said "Couldn’t add “Text Input” while Nebula is
 // offline."; round 14 (GM) dropped it: offline is read-only, so an add while
 // the banner shows sends nothing and says nothing (the banner pulses;
 // graphStore.readOnly.test.ts walks every edit), and an add whose sync finds
 // the backend gone reads the add heading, as any failed sync.
 describe('an add while Nebula is offline', () => {
-  it.each(ADDS)('%s: the backend can\'t be reached during the sync', async (_name, definitionId, add) => {
+  it.each(ADDS)('%s: the backend can’t be reached during the sync', async (_name, definitionId, add) => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
     expect(alerted()).toEqual([couldntAdd(definitionId)]);
     // The reason still goes to the Agent log, under GM's line.
-    expect(logged()[0]).toMatch(/Failed to fetch|Nebula's/);
+    expect(logged()[0]).toMatch(/Failed to fetch|Nebula[’']s/);
   });
 
   it.each(ADDS)('%s: the banner shows offline, so nothing is sent and no toast shows', async (_name, _definitionId, add) => {
@@ -249,7 +278,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe('a socket sync that lands while the add\'s export is out wins (R12-A/B)', () => {
+describe('a socket sync that lands while the add’s export is out wins (R12-A/B)', () => {
   it("R12-A: an agent's Clear lands first; the stale export brings nothing back", async () => {
     const exported = deferred<Response>();
     const created = deferred<Response>();
@@ -282,7 +311,7 @@ describe('a socket sync that lands while the add\'s export is out wins (R12-A/B)
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1']);
   });
 
-  it('a sync that is not this tab\'s (another project) doesn\'t count: the export still applies', async () => {
+  it('a sync that is not this tab’s (another project) doesn’t count: the export still applies', async () => {
     const exported = deferred<Response>();
     fetchMock.mockReturnValueOnce(exported.promise).mockResolvedValueOnce(json({ id: 'n2' }));
     const adding = useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
@@ -322,13 +351,13 @@ describe('Undo after the first add on an empty tab removes only the new node (R1
 });
 
 // Review 12 item 6 (GM: the settling line is fine on other writes as long as
-// each leads with its own "Couldn't <action>."): an add refused while a World
+// each leads with its own "Couldn’t <action>."): an add refused while a World
 // Labs run is still starting.
-describe('the World Labs starting line on an add leads with the add\'s own heading', () => {
+describe('the World Labs starting line on an add leads with the add’s own heading', () => {
   it('addNode', async () => {
     useGraphStore.setState({ nodes: [{ ...agentsNode }] as never });
     fetchMock.mockResolvedValueOnce(json({ detail: 'A World Labs run is still starting. Try again in a moment.' }, 409));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
-    expect(alerted()).toEqual(["Couldn't add “Text Input”. A World Labs run is still starting. Try again in a moment."]);
+    expect(alerted()).toEqual(["Nebula couldn’t add “Text Input” because a World Labs run is still starting. Try again in a moment."]);
   });
 });

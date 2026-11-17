@@ -596,6 +596,35 @@
    "rules": [
     "title-case"
    ]
+  },
+  {
+   "text": "The export was cancelled before it finished, so nothing was saved.",
+   "kind": "text",
+   "rules": [
+    "us-spelling"
+   ]
+  },
+  {
+   "text": "The export was canceled before it finished, so nothing was saved.",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Cancelling the export…",
+   "kind": "text",
+   "rules": [
+    "us-spelling"
+   ]
+  },
+  {
+   "text": "Canceling the export…",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Cancellation requested…",
+   "kind": "text",
+   "rules": []
   }
  ]
 }

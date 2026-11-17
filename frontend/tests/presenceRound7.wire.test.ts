@@ -141,7 +141,7 @@ describe('review 5 MEDIUM-1: a wire the gate refused', () => {
     net.held.add('/api/graph/connect');
     useGraphStore.getState().onConnect(connection('n1', 'n2'));
     await release('/api/graph/connect', { status: 403, detail: PERSON_REQUIRED_COPY });
-    expect(shown()).toContain(PERSON_REQUIRED_COPY);
+    expect(shown()).toContain('because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     session.notePersonPromoted();
     await flush();
     expect(shown()).toBeNull();

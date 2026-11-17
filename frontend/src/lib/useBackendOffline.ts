@@ -102,9 +102,9 @@ export const OFFLINE_VERBS = {
   seeRunHistory: 'see run history',
   /** Run history's Rerun (GM, PR #200 r4 item 2). */
   rerun: 'rerun it',
-  /** Run history's Retry and Recover (PR #200 fix round 3, GM's round 3
+  /** Run history's Run failed nodes again and Recover (PR #200 fix round 3, design's round 3
    * answers). */
-  retry: 'retry it',
+  retry: 'run its failed nodes again',
   recover: 'recover it',
 } as const;
 export type OfflineVerb = typeof OFFLINE_VERBS[keyof typeof OFFLINE_VERBS];

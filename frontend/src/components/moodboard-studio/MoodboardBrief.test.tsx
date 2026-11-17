@@ -64,7 +64,7 @@ describe('BriefPanel', () => {
     });
     expect(screen.getByText('Written by an agent')).toBeTruthy();
     expect(screen.queryByText('Written by you')).toBeNull();
-    expect(screen.getByText("An agent's brief")).toBeTruthy();
+    expect(screen.getByText("An agent’s brief")).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('since an agent wrote this');
   });
 

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureMessage } from '../../lib/errorCopy';
+import { quoted } from '../../lib/quoted';
 import { storedImageView } from '../../lib/storedImage';
 import { surfaceAnchor } from '../../lib/agentAnchors';
 import { OutsideImageNote } from '../OutsideImageNote';
@@ -68,8 +69,8 @@ export function CharacterDefinitionPanel({
     const uploads = Array.from(files).map((file) => {
       const fd = new FormData();
       fd.append('file', file);
-      // GM, error-copy round 2: "Couldn't upload {filename}." then the reason.
-      return apiRequest(`Couldn't upload ${file.name}.`, '/api/uploads', { method: 'POST', body: fd })
+      // GM, error-copy round 2: "Couldn’t upload {filename}." then the reason.
+      return apiRequest(`Couldn’t upload ${quoted(file.name)}.`, '/api/uploads', { method: 'POST', body: fd })
         .then((r) => r.json())
         .then((data: { filePath: string; url: string }) => data.url);
     });
@@ -77,7 +78,7 @@ export function CharacterDefinitionPanel({
       .then((urls) => addReferenceViews(urls.filter(Boolean)))
       .catch((err) => {
         console.error('[character] reference view upload failed:', err);
-        setUploadError(failureMessage(err, "Couldn't upload the image."));
+        setUploadError(failureMessage(err, "Couldn’t upload the image."));
       })
       .finally(() => setUploading(false));
   };
