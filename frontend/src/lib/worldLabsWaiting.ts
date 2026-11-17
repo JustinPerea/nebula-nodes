@@ -228,7 +228,7 @@ const isHeldReason = (reason: string) => isUnlockReason(reason) || isForgetReaso
  * (two held nodes give the same line twice), so two of them read "They're
  * waiting".
  */
-export function deleteRefusalText(heading: string, count: number, reasons: readonly string[], name?: string): string {
+export function deleteRefusalText(heading: string, count: number, reasons: readonly string[], name?: string, status?: number): string {
   const heldCount = reasons.filter(isHeldReason).length;
   const unique = [...new Set(reasons)];
   const held = unique.filter(isHeldReason);
@@ -237,7 +237,7 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
     const named = unique.filter(isNamedLine);
     const plain = unique.filter((reason) => !isNamedLine(reason));
     return [...named.map((line) => becauseLine({ heading: '', reason: line })),
-      ...(plain.length > 0 || named.length === 0 ? [becauseLine({ heading, reason: plain.join(' ') })] : [])].join(' ');
+      ...(plain.length > 0 || named.length === 0 ? [becauseLine({ heading, reason: plain.join(' '), status })] : [])].join(' ');
   }
   const unlock = held.some(isUnlockReason);
   const others = unique.filter((reason) => !isHeldReason(reason));

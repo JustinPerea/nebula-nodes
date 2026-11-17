@@ -131,11 +131,11 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   // GM: a timeout or a rate limit is a 4xx that works on a second try.
   for (const status of [408, 429]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));
-    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels. Try again', retry: true });
+    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels. Try again.', retry: true });
   }
   for (const status of [400, 401, 403, 404, 413, 422]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Refused', status));
-    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because Refused', retry: false });
+    expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels. Refused.', retry: false });
   }
 });
 

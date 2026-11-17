@@ -54,7 +54,7 @@ describe('uploadReference', () => {
 
   it('rejects a successful response without a usable image reference', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ filePath: null, url: '' }) });
-    await expect(uploadReference(image())).rejects.toThrow('Nebula couldn’t upload x.png because the upload sent back no image.');
+    await expect(uploadReference(image())).rejects.toThrow('Nebula couldn’t upload “x.png” because the upload sent back no image.');
   });
 });
 
@@ -83,7 +83,7 @@ describe('Create reference ownership', () => {
     await waitFor(() => expect(draft().uploads[0].status).toBe('error'));
     const failed = draft().uploads[0];
     // error-copy round 2 (GM): the file and GM's line for a 503, whatever its body said.
-    expect(failed.error).toBe("Nebula couldn’t upload x.png because the server didn’t respond. Try again.");
+    expect(failed.error).toBe("Nebula couldn’t upload “x.png” because the server didn’t respond. Try again.");
     expect(canRetryCreateReference(session, failed.id)).toBe(true);
     fetchMock.mockResolvedValueOnce(response());
     retryCreateReference(session, failed.id);

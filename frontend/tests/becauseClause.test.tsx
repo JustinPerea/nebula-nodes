@@ -12,9 +12,12 @@ import {
   ACCESS_LOST_COPY, BACKEND_NOT_RUNNING_COPY, CONNECTION_LOST_COPY, ConnectionLostError, FailureNotice, NEBULA_NOT_ANSWERING_COPY,
   NO_RESPONSE_COPY, PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_COPY, PERSON_REQUIRED_DEV_COPY, REASON_CLAUSES, REFUSED_FALLBACK_COPY,
   RequestFailedError, TOO_LARGE_COPY, becauseLine, besideButton, clauseFor, curlApostrophes, failedWhat, failureCopy, failureMessage,
-  foldApostrophes, overProjectLimitCopy,
+  foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
 } from '../src/lib/errorCopy';
 import { nodeErrorCopy } from '../src/lib/nodeErrorCopy';
+import { createWhileFollowingLine, runWhileFollowingLine } from '../src/lib/canvasFollow';
+import { quoted } from '../src/lib/quoted';
+import { handoffFailedLine } from '../src/lib/savingCutOff';
 import { resetLinesForTests } from '../src/lib/notConnectedLine';
 import { headingSites } from './helpers/headingSites';
 
@@ -150,12 +153,33 @@ describe('the pattern rows and the sentence rule', () => {
     expect(becauseLine({ heading: "Couldn't load your projects.", reason: '' })).toBe('Nebula couldn’t load your projects.');
   });
 
+  it('a reason that ends inside a quote or a bracket is a finished sentence, with no second full stop', () => {
+    expect(becauseLine({ heading: 'Couldn’t save “x”.', reason: 'File is huge (max 5 MB.)' }))
+      .toBe('Nebula couldn’t save “x”. File is huge (max 5 MB.)');
+    expect(becauseLine({ heading: 'Couldn’t run the node.', reason: 'OpenAI said “try later.”' }))
+      .toBe('Nebula couldn’t run the node because OpenAI said “try later.”');
+  });
+
+  it('a reason that names the thing the heading calls by its kind is the same failure', () => {
+    expect(becauseLine({ heading: 'Couldn’t save the project.', reason: 'Nebula couldn’t save “Harbor” because the disk is full.' }))
+      .toBe('Nebula couldn’t save “Harbor” because the disk is full.');
+    expect(becauseLine({ heading: 'Couldn’t delete “World”.', reason: 'Nebula couldn’t delete “world” because it is open.' }))
+      .toBe('Nebula couldn’t delete “world” because it is open.');
+    // A different thing under the same verb keeps the heading.
+    expect(becauseLine({ heading: 'Couldn’t save the project.', reason: 'Nebula couldn’t save its World Labs safeguards. Restart Nebula, then try again.' }))
+      .toBe('Nebula couldn’t save the project. Nebula couldn’t save its World Labs safeguards. Restart Nebula, then try again.');
+  });
+
+  it('an empty clause is no clause', () => {
+    expect(becauseLine({ heading: 'Couldn’t save “x”.', reason: '', clause: ' ' })).toBe('Nebula couldn’t save “x”.');
+  });
+
   it('puts a reason that names its own failure in the heading’s place', () => {
     expect(becauseLine({ heading: "Couldn't stop the reply.", reason: "Couldn't stop the reply. The agent isn't answering." }))
       .toBe('Nebula couldn’t stop the reply because the agent isn’t answering.');
     expect(becauseLine({ heading: "Couldn't run the node.", reason: 'Couldn’t download the result from Krea. Its download link may have expired. Run the node again.' }))
       .toBe('Nebula couldn’t download the result from Krea because its download link may have expired. Run the node again.');
-    expect(becauseLine({ heading: "Couldn't open the project.", reason: 'Nebula couldn’t delete it because it is open.' }))
+    expect(becauseLine({ heading: "Couldn't delete it.", reason: 'Nebula couldn’t delete it because it is open.' }))
       .toBe('Nebula couldn’t delete it because it is open.');
     expect(becauseLine({ heading: "Couldn't run the graph.", reason: "Couldn't reach the provider. Check your connection." }))
       .toBe('Nebula couldn’t run the graph. Couldn’t reach the provider. Check your connection.');
@@ -305,5 +329,139 @@ describe('a node’s run failure names the provider where it is known', () => {
     const waiting = nodeErrorCopy({ category: 'waiting', person: 'Idol needs you to run it.' });
     expect(waiting.heading).toBe('Waiting for you to run it');
     expect(waiting.reason).toBe('Idol needs you to run it.');
+  });
+});
+
+describe('a quoted name in a heading is read whole', () => {
+  const upload = (name: string) => `Couldn’t upload ${quoted(name)}.`;
+  const lost = (name: string) => `Nebula couldn’t upload ${quoted(name)} because the server didn’t respond. Try again.`;
+
+  it.each(["Bob's photo.png", 'scan 2. final.png', 'shot.', "it's. a. file.png", 'Bob’s_file', "Bob's.sketch"])('%s', (name) => {
+    expect(failedWhat(upload(name))).toBe(`upload ${quoted(name)}`);
+    expect(becauseLine({ heading: upload(name), reason: NO_RESPONSE_COPY, status: 503 })).toBe(lost(name));
+  });
+});
+
+describe('a reason that is not a clause is not put after “because”', () => {
+  const big = 'Couldn’t upload “big.mov”.';
+  it.each([
+    ['File exceeds 500 MB limit', 'Nebula couldn’t upload “big.mov”. File exceeds 500 MB limit.'],
+    ['File is too small to be a valid media file', 'Nebula couldn’t upload “big.mov”. File is too small to be a valid media file.'],
+    ['Source file not found', 'Nebula couldn’t upload “big.mov”. Source file not found.'],
+    ['Empty request body.', 'Nebula couldn’t upload “big.mov”. Empty request body.'],
+    // A name or a quoted name, a {} slot, a lead word and a digit still follow "because".
+    ['OpenAI rejected the key.', 'Nebula couldn’t upload “big.mov” because OpenAI rejected the key.'],
+    ['ElevenLabs is out of credits.', 'Nebula couldn’t upload “big.mov” because ElevenLabs is out of credits.'],
+    ['Krea’s limit is 20 MB.', 'Nebula couldn’t upload “big.mov” because Krea’s limit is 20 MB.'],
+    ['“Shot 2” is still running.', 'Nebula couldn’t upload “big.mov” because “Shot 2” is still running.'],
+    ['The file is damaged.', 'Nebula couldn’t upload “big.mov” because the file is damaged.'],
+    ['the file is damaged.', 'Nebula couldn’t upload “big.mov” because the file is damaged.'],
+  ])('%s', (reason, line) => {
+    expect(becauseLine({ heading: big, reason })).toBe(line);
+  });
+
+  it('the same rule where a named line’s rest becomes the clause', () => {
+    expect(becauseLine({ heading: '', reason: 'Couldn’t download the result. File missing' }))
+      .toBe('Nebula couldn’t download the result. File missing.');
+    expect(becauseLine({ heading: '', reason: 'Couldn’t download the result. Its link may have expired.' }))
+      .toBe('Nebula couldn’t download the result because its link may have expired.');
+  });
+});
+
+describe('a reason that opens “Nebula couldn’t …” replaces the heading only for the same failure', () => {
+  it('a different failure follows the heading’s action', () => {
+    expect(becauseLine({ heading: 'Couldn’t delete “World”.', reason: "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again." }))
+      .toBe('Nebula couldn’t delete “World”. Nebula couldn’t save its World Labs safeguards. Restart Nebula, then try again.');
+    expect(becauseLine({ heading: 'Couldn’t run “Hero still”.',
+      reason: 'Nebula couldn’t download the result from Replicate because its download link may have expired. Run the node again.' }))
+      .toBe('Nebula couldn’t run “Hero still”. Nebula couldn’t download the result from Replicate because its download link may have expired. Run the node again.');
+  });
+
+  it('the same failure is one sentence, not the heading twice', () => {
+    expect(becauseLine({ heading: 'Couldn’t stop the reply.', reason: 'Nebula couldn’t stop the reply. The agent isn’t answering.' }))
+      .toBe('Nebula couldn’t stop the reply because the agent isn’t answering.');
+    expect(becauseLine({ heading: 'Couldn’t save the project.', reason: 'Nebula couldn’t save the project because the disk is full.' }))
+      .toBe('Nebula couldn’t save the project because the disk is full.');
+    // A generic heading is replaced by the specific line.
+    expect(becauseLine({ heading: 'Couldn’t delete the node.', reason: 'Nebula couldn’t delete “Agent scene” because “Shot 2” is still running. Stop the run first.' }))
+      .toBe('Nebula couldn’t delete “Agent scene” because “Shot 2” is still running. Stop the run first.');
+  });
+});
+
+describe('the caller hands over the action or the clause', () => {
+  it('`what` and `clause` go in as written', () => {
+    expect(becauseLine({ heading: '', reason: '', what: 'save “a” when Dr. Bot switched', clause: 'The Archivist is opening “Proj”.' }))
+      .toBe('Nebula couldn’t save “a” when Dr. Bot switched because The Archivist is opening “Proj”.');
+    expect(becauseLine({ heading: '', reason: '', what: "open Bob's thing" })).toBe("Nebula couldn’t open Bob's thing.");
+    expect(becauseLine({ heading: '', reason: 'The server is busy.', what: 'run “Dr. Who”' }))
+      .toBe('Nebula couldn’t run “Dr. Who” because the server is busy.');
+  });
+
+  it.each([
+    ['The Archivist', 'Nebula couldn’t run “Hero” because The Archivist is opening “Proj”.'],
+    ['Stop Motion Bot', 'Nebula couldn’t run “Hero” because Stop Motion Bot is opening “Proj”.'],
+    ['Dr. Bot', 'Nebula couldn’t run “Hero” because Dr. Bot is opening “Proj”.'],
+    ['Your Helper', 'Nebula couldn’t run “Hero” because your Helper is opening “Proj”.'],
+    ['Codex', 'Nebula couldn’t run “Hero” because Codex is opening “Proj”.'],
+  ])('an agent called %s keeps its name and the because (run)', (agent, line) => {
+    expect(runWhileFollowingLine('Hero', agent, 'Proj')).toBe(line);
+    expect(createWhileFollowingLine({ agent, projectName: 'Proj' }))
+      .toBe(line.replace('run “Hero”', 'start the generation'));
+  });
+
+  it('with no agent name the reason keeps its own words', () => {
+    expect(runWhileFollowingLine(null, null, 'Proj')).toBe('Nebula couldn’t run the canvas because an agent is opening “Proj”.');
+    expect(createWhileFollowingLine(null)).toBe('Nebula couldn’t start the generation because another project is opening.');
+  });
+
+  it('the hand-off line starts “Nebula couldn’t” for a name with “. ” in it', () => {
+    const copy = 'Recovered';
+    for (const agent of ['Dr. Bot', 'Stop Motion Bot', 'Claude Code']) {
+      expect(handoffFailedLine([{ node: 'Text', setting: 'prompt' }], 'Proj', agent, copy))
+        .toBe(`Nebula couldn’t save “prompt” for “Text” in “Proj” when ${agent} switched projects. Your edits were saved as a copy, “${copy}”.`);
+    }
+  });
+});
+
+describe('curlApostrophes leaves a typed name alone', () => {
+  it('a word with an underscore or a long extension keeps its apostrophe; a possessive still curls', () => {
+    expect(curlApostrophes("Bob's_file")).toBe("Bob's_file");
+    expect(curlApostrophes("Bob's.sketch")).toBe("Bob's.sketch");
+    expect(curlApostrophes("Bob's.photoshop")).toBe("Bob's.photoshop");
+    expect(curlApostrophes("Krea's limit")).toBe('Krea’s limit');
+    expect(curlApostrophes("Krea's. Next")).toBe('Krea’s. Next');
+  });
+});
+
+describe('one apostrophe rule for “Nebula couldn’t”', () => {
+  const lines = [
+    "Nebula couldn't save the project because x.", 'Nebula couldn’t save the project because x.',
+    "Saved. Nebula couldn't load the settings back because x. Reload to see them.",
+  ];
+  it.each(lines)('%s', (line) => {
+    expect(isBecauseFailure(line)).toBe(true);
+    expect(new FailureNotice('', line).standalone).toBe(true);
+  });
+
+  it('a load line is a load line with either apostrophe', () => {
+    expect(isLoadLine("Nebula couldn't load the models because x.")).toBe(true);
+    expect(isLoadLine('Nebula couldn’t check the key because x.')).toBe(true);
+    expect(isLoadLine("Nebula couldn't save the models because x.")).toBe(false);
+  });
+
+  it('a whole because line through becauseLine comes out curly outside quoted names', () => {
+    expect(becauseLine({ heading: 'Couldn’t save the project.', reason: "Nebula couldn't save the project because x." }))
+      .toBe('Nebula couldn’t save the project because x.');
+    expect(becauseLine({ heading: '', reason: "Nebula couldn't open “Bob's.png” because it isn't there." }))
+      .toBe("Nebula couldn’t open “Bob's.png” because it isn’t there.");
+  });
+});
+
+describe('a failureCopy goes through oneLine and FailureLines whole', () => {
+  it('a written line with no heading has an empty `what` that is not read as an action', () => {
+    const line = 'Nebula couldn’t send the message because this tab isn’t connected as you. Open the link Nebula printed when it started.';
+    const copy = failureCopy(new FailureNotice('', line));
+    expect(copy.what).toBe('');
+    expect(oneLine(copy)).toBe(line);
   });
 });

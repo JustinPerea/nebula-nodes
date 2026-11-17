@@ -56,7 +56,9 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   const settled = failed && !asking.retry;
   // Labels to save come first; a grading run alone gets its own ask.
   const labels = failed || unsaved || !running;
-  // A failed save is one line in the because form; with no reason known, it says only what failed.
+  // A failed save is one line in the because form; with no reason known, it says only what failed. A failure that
+  // says nothing (the offline banner already does) raises no alert, as the popover never did for one.
+  const said = failed && asking.failure !== '';
   const line = failed ? asking.failure || 'Nebula couldn’t save your labels.' : labels ? 'Your labels aren’t saved.' : 'Agent review is still running.';
   const anchorKind = asking.anchor?.matches('.workspace-header__back') ? 'back'
     : asking.anchor?.matches('.project-workspace-controls__home') ? 'home' : 'other';
@@ -87,7 +89,7 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
       className={`commons-leave${position ? ' commons-leave--open' : ''}`} style={style} onKeyDown={onKeyDown}>
       {/* A failed Save and leave lands here in place, with focus still on the button, so its line is
           an alert, keyed by the opening so the same line a second time is announced again. */}
-      <p key={failed ? asking.seq : 'ask'} id={lineId} className="commons-leave__line" role={failed ? 'alert' : undefined}>{line}</p>
+      <p key={failed ? asking.seq : 'ask'} id={lineId} className="commons-leave__line" role={said ? 'alert' : undefined}>{line}</p>
       {labels && running && <p className="commons-leave__reason">Agent review is still running.</p>}
       <div className="commons-leave__actions">
         {labels ? (

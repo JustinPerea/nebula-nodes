@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { becauseLine } from './errorCopy';
+import { agentNameInSentence } from './personalAgentName';
 
 /**
  * Round 20 of PR #195 (review 19, M1; GM - Design's follow-up of 2026-10-27).
@@ -123,14 +124,25 @@ export function runWhileFollowingLine(node: string | null, agent: string | null,
   byNebula = false): string {
   const what = count !== undefined && count >= 2 ? `${count} nodes` : node === null ? 'the canvas' : `“${node}”`;
   if (byNebula) return `You can run ${what} when “${project}” opens.`;
-  return becauseLine({ heading: `Couldn’t run ${what}.`, reason: followingReason({ agent, projectName: project }) });
+  return followingLine({ heading: '', what: `run ${what}` }, { agent, projectName: project });
+}
+
+/** The because line for an action refused while following: an agent's own name leads its clause, so the clause
+ * goes in as written (the sentence rule would lower-case "The Archivist" or drop the "because" for "Stop Motion
+ * Bot"). A caller with no agent name keeps the reason's own words. */
+function followingLine(action: { heading: string; what?: string }, switching: FollowingSwitch | null): string {
+  if (switching && !switching.byNebula && switching.agent) {
+    return becauseLine({ ...action, reason: '',
+      clause: `${agentNameInSentence(switching.agent)} is opening “${switching.projectName}”.` });
+  }
+  return becauseLine({ ...action, reason: followingReason(switching) });
 }
 
 /** Create's line while following (G1), in its normal error style: its own
  * heading (graphStore's GENERATE_HEADING) over followingReason. */
 export const CREATE_WHILE_FOLLOWING_HEADING = 'Nebula couldn’t start the generation.';
 export function createWhileFollowingLine(switching: FollowingSwitch | null): string {
-  return becauseLine({ heading: CREATE_WHILE_FOLLOWING_HEADING, reason: followingReason(switching) });
+  return followingLine({ heading: CREATE_WHILE_FOLLOWING_HEADING }, switching);
 }
 
 /** Tests share one module: each starts from here. */

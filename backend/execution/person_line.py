@@ -62,6 +62,7 @@ read (a re-raise of another exception's text) needs its own test.
 """
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable
 from typing import NamedTuple, TypeVar
@@ -899,10 +900,19 @@ def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]], *, again: bool 
     return lines
 
 
+def _tenths_of(size: int, unit: int) -> int:
+    """``size`` bytes in tenths of ``unit``, rounded half up with integer arithmetic (the frontend twin does the
+    same, so both print the same size)."""
+    return (20 * size + unit) // (2 * unit)
+
+
 def size_text(size: int | float) -> str:
     """A size as a person line says it: MB to one decimal, GB from 1,024 MB, no trailing ".0".
 
+    The unit is chosen after rounding: a size that rounds to 1,024 MB reads "1 GB".
     Mirrors frontend/src/lib/sizeText.ts."""
-    mb = size / (1024 * 1024)
-    value, unit = (mb / 1024, "GB") if mb >= 1024 else (mb, "MB")
-    return f"{round(value + 1e-9, 1):g} {unit}"
+    mib = 1024 * 1024
+    whole = math.floor(size + 0.5)
+    in_mb = _tenths_of(whole, mib)
+    tenths, unit = (_tenths_of(whole, 1024 * mib), "GB") if in_mb >= 10240 else (in_mb, "MB")
+    return f"{tenths // 10 if tenths % 10 == 0 else f'{tenths // 10}.{tenths % 10}'} {unit}"

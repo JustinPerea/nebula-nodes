@@ -88,6 +88,10 @@ describe('Cinema motion handoff', () => {
       mocks.fetch.mockResolvedValueOnce(response(value)); render(panel());
       fireEvent.click(screen.getByRole('button', { name: 'Send to motion' }));
       await screen.findByRole('alert'); expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+      // The button says what it retries through the line beside it.
+      const line = document.getElementById(screen.getByRole('button', { name: 'Try again' }).getAttribute('aria-describedby') ?? '');
+      expect(line).toBe(screen.getByRole('alert'));
+      expect(line?.textContent).toMatch(/^Nebula couldn’t confirm the video connection/);
       expect(screen.queryByRole('button', { name: 'View video node' })).toBeNull();
       expect(useGraphStore.getState().nodes).toHaveLength(1); expect(useGraphStore.getState().edges).toEqual([]);
     });

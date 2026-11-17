@@ -17,6 +17,7 @@ import { RecentlyDeletedAssets, UndoDeleteToast, type TrashOpenRequest } from '.
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
 import { failureCopy, failureMessage, failureText, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
+import { quoted } from '../../lib/quoted';
 import { isBackendOffline, isOfflineRefusal, probeOffline, refuseEditWhileOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { agentActorLabel } from '../../lib/agentActorLabel';
@@ -562,11 +563,11 @@ function focusAfterLine(line: HTMLElement, keyboard: boolean, project: string | 
  * a write refused while offline says nothing (the banner is the reason), so no line, and never an empty alert. Every
  * failure the Studio shows goes through here (tests/moodboardNoticeText.test.ts holds the ratchet).
  */
-function FailureLine({ failure, className, retry = false, alert = false, neutral = false }: {
-  failure: FailureCopy | string | null | undefined; className?: string; retry?: boolean; alert?: boolean; neutral?: boolean }) {
+function FailureLine({ failure, className, id, retry = false, alert = false, neutral = false }: {
+  failure: FailureCopy | string | null | undefined; className?: string; id?: string; retry?: boolean; alert?: boolean; neutral?: boolean }) {
   if (!failure || !failureText(failure, retry)) return null;
   return (
-    <div className={className} role={alert ? 'alert' : neutral ? 'status' : undefined} {...(neutral ? { 'data-line-neutral': '' } : {})}>
+    <div id={id} className={className} role={alert ? 'alert' : neutral ? 'status' : undefined} {...(neutral ? { 'data-line-neutral': '' } : {})}>
       <FailureLines failure={failure} retry={retry} />
     </div>
   );
@@ -1102,6 +1103,8 @@ function skippedLines(edited: MoodboardEditResult): string[] {
 }
 
 export function MoodboardStudioView() {
+  // The load failure's line, which the Try again beside it is described by.
+  const loadLineId = useId();
   const moodboardEditorId = useUIStore((s) => s.moodboardEditorId);
   const moodboardEditorScope = useUIStore((s) => s.moodboardEditorScope);
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
@@ -1654,7 +1657,7 @@ export function MoodboardStudioView() {
   const uploadFiles = (files: File[]) => Promise.all(files.map((file) => {
     const fd = new FormData();
     fd.append('file', file);
-    return apiRequest(`Couldn’t upload ${file.name || 'the image'}.`, '/api/uploads', { method: 'POST', body: fd })
+    return apiRequest(`Couldn’t upload ${file.name ? quoted(file.name) : 'the image'}.`, '/api/uploads', { method: 'POST', body: fd })
       .then((r) => r.json())
       .then((data: { url: string }) => data.url);
   }));
@@ -3012,9 +3015,9 @@ export function MoodboardStudioView() {
       {/* Try again reloads the board, so it shows (the line ends “Try again.”)
           only for a load that failed; with no project open there's nothing
           to reload, and the line says what to do (round 3b). */}
-      {shownLoadError ? <FailureLine failure={shownLoadError} retry={projectReady} alert /> : 'Loading moodboard…'}
+      {shownLoadError ? <FailureLine id={loadLineId} failure={shownLoadError} retry={projectReady} alert /> : 'Loading moodboard…'}
       {shownLoadError && projectReady && <button type="button" className="moodboard-studio-toolbar__button"
-        onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}
+        aria-describedby={failureText(shownLoadError, true) ? loadLineId : undefined} onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}
     </div>
   );
 

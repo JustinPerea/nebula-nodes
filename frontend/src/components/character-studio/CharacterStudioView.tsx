@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
   createCharacter,
@@ -109,6 +109,8 @@ const AUTOSAVE_DEBOUNCE_MS = 600;
  *  ≥3-view guard (spec §6): when referenceViews.length < 3 we never call
  *  create/update — we surface an inline message and stay in 'draft' state. */
 export function CharacterStudioView() {
+  // The load failure's line, which the Try again beside it is described by.
+  const loadLineId = useId();
   const characterEditorId = useUIStore((s) => s.characterEditorId);
   const characterEditorScope = useUIStore((s) => s.characterEditorScope);
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
@@ -448,9 +450,9 @@ export function CharacterStudioView() {
         {loading ? (
           <div className="character-studio-view__loading">
             {/* As in the board's Studio (round 3b): no Try again with no project open. */}
-            {shownLoadError ? <div role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Character…'}
+            {shownLoadError ? <div id={loadLineId} role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Character…'}
             {shownLoadError && projectReady && <button type="button" className="character-studio-view__retry"
-              onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}
+              aria-describedby={loadLineId} onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}
           </div>
         ) : (
           <>

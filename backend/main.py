@@ -13348,7 +13348,7 @@ async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
             asset_proposals.close(proposal.id, "invalidated", reason=detail[:200])
             await _announce_closed_asset_proposals([proposal], actor=dict(_PERSON_ACTOR))
         # A detail that is already a whole sentence of Nebula's (the moodboard fallback above) is the line itself.
-        raise HTTPException(status_code=409, detail=detail if detail.startswith("Nebula couldn\u2019t ")
+        raise HTTPException(status_code=409, detail=detail if detail.startswith(("Nebula couldn\u2019t ", "Nebula couldn't "))
                             else f"This proposal no longer fits: {detail}") from exc
     except BaseException:
         _asset_deciding.discard(proposal.id)

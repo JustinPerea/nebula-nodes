@@ -97,11 +97,13 @@ export function handoffFailedLine(saves: CutOffSave[], project: string, agent: s
   const [only] = changes;
   const left = keepTogether(project);
   const who = agent ? agentNameInSentence(agent) : 'an agent';
-  const heading = changes.length === 1 && only.node && only.setting
-    ? `Couldn’t save “${only.setting}” for “${only.node}” in “${left}” when ${who} switched projects.`
-    : changes.length > 1 ? `Couldn’t save ${changes.length} changes in “${left}” when ${who} switched projects.`
-      : `Couldn’t save your last change in “${left}” when ${who} switched projects.`;
-  const failed = becauseLine({ heading, reason: '' });
+  // The action goes in as written (becauseLine's `what`): an agent's name is typed by the person who connected
+  // it, and a name such as "Dr. Bot" must not be read as the end of a sentence.
+  const what = changes.length === 1 && only.node && only.setting
+    ? `save “${only.setting}” for “${only.node}” in “${left}” when ${who} switched projects`
+    : changes.length > 1 ? `save ${changes.length} changes in “${left}” when ${who} switched projects`
+      : `save your last change in “${left}” when ${who} switched projects`;
+  const failed = becauseLine({ heading: '', reason: '', what });
   return `${failed} Your edits were saved as a copy, “${keepTogether(copyName)}”.`;
 }
 

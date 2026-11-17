@@ -110,6 +110,14 @@ describe('deleting a node', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(1);
   });
 
+  it('a delete answered 429 says the server is busy; a refusal with another status keeps its own words', async () => {
+    useGraphStore.setState({ nodes: [textNode('n1')] as never });
+    fetchMock.mockResolvedValueOnce(json({ detail: 'Slow down' }, 429));
+    useGraphStore.getState().onNodesChange([{ type: 'remove', id: 'n1' }]);
+    await vi.waitFor(() => expect(alertMock).toHaveBeenCalled());
+    expect(alerted()).toBe('Nebula couldn’t delete the node because the server is busy. Try again in a moment.');
+  });
+
   it('two refused deletes with the same reason say it once', async () => {
     useGraphStore.setState({ nodes: [textNode('n1'), textNode('n2')] as never });
     fetchMock.mockImplementation(async () => json({ detail: 'A run is going.' }, 409));

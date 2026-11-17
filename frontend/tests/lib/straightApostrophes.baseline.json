@@ -23,7 +23,6 @@
   "lib/createFiles.ts": 2,
   "lib/createPresets.ts": 3,
   "lib/createTranscode.ts": 1,
-  "lib/createUploads.ts": 1,
   "lib/directRoute.ts": 5,
   "lib/editor/api.ts": 1,
   "lib/errorCopy.ts": 1,
@@ -45,7 +44,6 @@
   "lib/savedParamsUpgrades.ts": 1,
   "lib/settingsWrites.ts": 2,
   "lib/trash.ts": 4,
-  "lib/uploadReference.ts": 1,
   "lib/worldDownload.ts": 1,
   "store/graphStore.ts": 6
 }

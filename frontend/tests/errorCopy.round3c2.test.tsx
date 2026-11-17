@@ -42,8 +42,9 @@ afterEach(() => resetDeletedSceneEditsForTests());
 // names one (tests/errorCopy.round3f.test.tsx).
 const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
 const MASK = 'No mask painted yet — open the Mask Painter node and paint one';
-const MASK_RUN = `Nebula couldn’t run the node. ${MASK}`;
-const MASK_SHOT = `Nebula couldn’t generate the shot. ${MASK}`;
+// The raw reason has no closing punctuation, so the line gives it one.
+const MASK_RUN = `Nebula couldn’t run the node. ${MASK}.`;
+const MASK_SHOT = `Nebula couldn’t generate the shot. ${MASK}.`;
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;

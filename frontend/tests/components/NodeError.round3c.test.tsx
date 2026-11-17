@@ -213,7 +213,7 @@ describe('review: the Details toggle on the canvas, and a named failure after a 
     // Reload: node_errors dropped the hint that equalled the error, so graphSync has no friendly line.
     const reloaded = nodeErrorCopy({ raw, category: 'invalid_input', friendly: undefined });
     // The raw text is for agents; the card says the guardrail as a reason.
-    const guardrail = 'Nebula couldn’t run the node because Gemini Omni can’t make a video longer. Use Veo 3.1 to extend it.';
+    const guardrail = 'Nebula couldn’t run the node because Gemini Omni can edit a video but can’t make it longer. Describe the change as an edit, like “Change the lighting and keep everything else the same”, or use Veo 3.1 to extend the video.';
     expect(live).toEqual({ heading: '', reason: guardrail, details: null });
     expect(reloaded).toEqual(live);
     const { container } = render(<NodeError raw={raw} category="invalid_input" />);

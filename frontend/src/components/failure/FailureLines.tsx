@@ -14,7 +14,7 @@ export function FailureLines({ failure, retry = false, tone }: { failure: Failur
   if (typeof failure === 'string') return <LineText text={failure} tone={tone} />;
   // A heading of the form "Couldn’t ‹x›." over a reason (a failure built by hand, not by failureCopy) is one sentence too.
   const made = failure.heading !== '' && failedWhat(failure.heading) !== null;
-  const line = made ? becauseLine(failure, retry ? 'button' : 'alone')
+  const line = made ? becauseLine({ heading: failure.heading, reason: failure.reason, status: failure.status }, retry ? 'button' : 'alone')
     : (retry ? failure.button ?? failure.reason : failure.reason) || failure.reason;
   return (
     <span className="failure-lines">

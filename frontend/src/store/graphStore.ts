@@ -99,7 +99,7 @@ import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
   PERSON_REQUIRED_CODE, becauseLine, failureMessage, isNamedLine, readRefusal, refusalError, requestError,
-  saysPersonRequired, warnFailure, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
+  saysPersonRequired, warnFailure, writtenLine, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
 } from '../lib/errorCopy';
 import { clearRefusedOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { sentUnderPromote } from '../lib/personSession';
@@ -146,7 +146,7 @@ import { STALE_CANVAS_DETAIL, adoptCanvasRevision, getProjectContext, type Proje
 import { agentClearedLine, changesNotSavedLine, changesSavedAsCopyLine, distinctSaves, handoffFailedLine, savingCutOffLine,
   settingsOnOneNode, type CutOffEnding, type CutOffSave } from '../lib/savingCutOff';
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../lib/deleteCopy';
-import { followingReason, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
+import { createWhileFollowingLine, followingSwitch, refuseEditWhileFollowing, runWhileFollowingLine } from '../lib/canvasFollow';
 import { isCanvasKept, keptCanvasTakesTyping, pulseKeptCanvas, refuseEditWhileKept, setCanvasKept, setKeptCanvasClearer } from '../lib/keptCanvas';
 import { checkKeptWire, refusedConnectionLine, refusedDropLine, targetHandleAllowsMultiple } from '../lib/keptWires';
 import { noteCanvasReplaced, type CanvasReplacement } from '../lib/canvasReplaced';
@@ -7028,6 +7028,9 @@ function changeCanvasNodes(
   function applyDeleteAnswers(results: PromiseSettledResult<DeleteAnswer>[]): void {
     const confirmed = new Set<string>();
     const failures: string[] = [];
+    // The status each reason came with (undefined when none, or when the same reason came with two): the line's
+    // "server is busy" and "hit an error" clauses read it.
+    const statuses = new Map<string, number | undefined>();
     // The ids that failed with no answer from Nebula (GM, round 20, item 1).
     const unanswered: string[] = [];
     // The ids Nebula answered with a server error, and the status (GM round 21).
@@ -7048,7 +7051,9 @@ function changeCanvasNodes(
       } else if (goneBySync?.has(cliRemovedIds[index])) {
         confirmed.add(cliRemovedIds[index]);
       } else {
-        const reason = failureCopy(result.reason).cause ?? '';
+        const copy = failureCopy(result.reason);
+        const reason = copy.cause ?? '';
+        statuses.set(reason, statuses.has(reason) && statuses.get(reason) !== copy.status ? undefined : copy.status);
         const shots = result.reason && typeof result.reason === 'object' ? renderingRefusals.get(result.reason) : undefined;
         const node = onCanvas.find((candidate) => candidate.id === cliRemovedIds[index]);
         if (shots && node?.data.definitionId === 'cinema-scene') {
@@ -7074,7 +7079,7 @@ function changeCanvasNodes(
       // The step keeps its records, for an undo that comes back to that
       // graph (an import undone).
       for (const done of holds.values()) done(false);
-      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length);
+      if (failures.length > 0) reportNodeDeletionFailure(failures, failures.length, undefined, statuses);
       return;
     }
     // The writes still waiting for a deleted node are dropped (option (c)).
@@ -7176,7 +7181,7 @@ function changeCanvasNodes(
     } else if (unsaid.length > 0) {
       // GM, round 15 of PR #114: one kept node is named ("Couldn’t delete “<node>”.").
       reportNodeDeletionFailure(unsaid, unsaid.length, failed.length === 1 && unsaid.length === failures.length
-        ? namedOnCanvas(onCanvas, failed[0]) : undefined);
+        ? namedOnCanvas(onCanvas, failed[0]) : undefined, statuses);
     }
     takeover?.(set, get);
   }
@@ -7476,13 +7481,17 @@ function deletionHeading(count: number): string {
  * that is a line of its own ("Couldn’t delete “Agent scene”. …") is shown
  * alone, once, and the heading counts only the rest (GM, PR #198 r5 item 3:
  * the generic line never shows as well). */
-function reportNodeDeletionFailure(reasons: string[], count: number, name?: string): void {
+function reportNodeDeletionFailure(reasons: string[], count: number, name?: string,
+  statuses?: ReadonlyMap<string, number | undefined>): void {
   const named = [...new Set(reasons.filter(isNamedLine))];
   const rest = reasons.filter((reason) => !isNamedLine(reason));
   const parts = [...named];
   if (rest.length > 0 || named.length === 0) {
     const unnamed = rest.length > 0 ? rest.length : count;
-    parts.push(deleteRefusalText(deletionHeading(unnamed), unnamed, rest, named.length === 0 ? name : undefined));
+    // One status when every remaining reason came with the same one (the line's clause reads it).
+    const answered = new Set(rest.map((reason) => statuses?.get(reason)));
+    parts.push(deleteRefusalText(deletionHeading(unnamed), unnamed, rest, named.length === 0 ? name : undefined,
+      answered.size === 1 ? [...answered][0] : undefined));
   }
   const message = parts.join(' ').trim();
   console.warn(`[nebula] ${message}`);
@@ -8764,7 +8773,8 @@ function reportNodeCreationError(displayName: string, err: unknown): null {
     return null;
   }
   // Its own error with it (review 5 LOW-4): a refusal clears by its own stamp.
-  return reportNodeCreationFailure(displayName, failureCopy(err).cause ?? '', err);
+  const failure = failureCopy(err);
+  return reportNodeCreationFailure(displayName, failure.cause ?? '', err, failure.status);
 }
 
 function reportNodeCreationFailure(displayName: string, reason: string, error?: unknown, status?: number): null {
@@ -16181,7 +16191,7 @@ const EDIT_GATES: Partial<Record<keyof GraphState, EditGate>> = {
   // accepted proposal's merge.
   authorGenerationCluster: { refused: () => Promise.reject(new OfflineRefusal('POST', '/api/graph/cluster')),
     // While following, Create says it in its own error style (GM round 21, G1).
-    follow: { refused: () => Promise.reject(new FailureNotice(GENERATE_HEADING, followingReason(followingSwitch()))) } },
+    follow: { refused: () => Promise.reject(writtenLine(createWhileFollowingLine(followingSwitch()))) } },
   getOrCreateEditNodeDownstream: { refused: () => '' },
   deleteProviderRecovery: REFUSED_ASYNC, acknowledgeProviderStartAmbiguity: REFUSED_ASYNC,
   acknowledgeUncertainWorldLabsRun: REFUSED_VOID,

@@ -78,11 +78,11 @@ describe('Commons upload, per file', () => {
     const shown = [...alert.querySelectorAll('.failure-lines')].map((item) => [
       item.querySelector('.failure-lines__heading')?.textContent ?? null, item.querySelector('.failure-lines__reason')?.textContent]);
     expect(shown).toEqual([
-      [null, 'Nebula couldn’t upload dusk.png because it’s too large.'],
-      [null, 'Nebula couldn’t upload notes.txt because it isn’t a file type Nebula reads. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.'],
-      [null, 'Nebula couldn’t upload broken.png because the file couldn’t be read. It may be damaged.'],
-      [null, 'Nebula couldn’t upload new.png because Nebula is still checking that file.'],
-      [null, 'Nebula couldn’t upload odd.png because the server didn’t accept it. Try again, or reload if it keeps happening.'],
+      [null, 'Nebula couldn’t upload “dusk.png” because it’s too large.'],
+      [null, 'Nebula couldn’t upload “notes.txt” because it isn’t a file type Nebula reads. Use JPG, PNG, WebP, GIF, HEIC, MP4 or MOV.'],
+      [null, 'Nebula couldn’t upload “broken.png” because the file couldn’t be read. It may be damaged.'],
+      [null, 'Nebula couldn’t upload “new.png” because Nebula is still checking that file.'],
+      [null, 'Nebula couldn’t upload “odd.png” because the server didn’t accept it. Try again, or reload if it keeps happening.'],
     ]);
     for (const raw of RAW) expect(alert).not.toHaveTextContent(raw);
     // On 1fc3d846 the refresh after an upload cleared the error at once (a

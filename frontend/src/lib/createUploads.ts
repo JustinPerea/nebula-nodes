@@ -3,6 +3,7 @@ import { useCreateDraftStore } from '../store/createDraftStore';
 
 import { uploadReference } from './uploadReference';
 import { failureMessage } from './errorCopy';
+import { quoted } from './quoted';
 export { uploadReference, type UploadedReference } from './uploadReference';
 
 // Transient files/controllers never enter browser storage or saved recipes.
@@ -33,7 +34,7 @@ async function finishUpload(sessionId: string, id: string, attempt: string) {
       if (!draft.uploads.some((upload) => upload.id === id && upload.attempt === attempt && upload.status === 'uploading')) return {};
       return { uploads: draft.uploads.map((upload) => upload.id === id
         // uploadReference's error names the file and the reason (error-copy round 2).
-        ? { ...upload, status: 'error', error: failureMessage(error, `Couldn't upload ${upload.name}.`) }
+        ? { ...upload, status: 'error', error: failureMessage(error, `Couldn’t upload ${upload.name ? quoted(upload.name) : 'the file'}.`) }
         : upload) };
     });
   } finally {

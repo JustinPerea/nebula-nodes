@@ -87,4 +87,15 @@ describe('backendText stays a match-string marker', () => {
       expect([...table.keys()].filter((k) => !wrapped.has(k)), name).toEqual([]);
     }
   });
+
+  // A frontend copy of a backend person line is the same text, so a node's card reads the same live (the event
+  // carries the backend's line) and after a reload (the card rebuilds it from the stored error).
+  it('the Gemini Omni guardrail line is the backend\'s, word for word', async () => {
+    const { GEMINI_OMNI_REASON } = await import('../../src/lib/nodeErrorCopy');
+    const source = readFileSync(join(BACKEND, 'services/provider_capabilities.py'), 'utf8');
+    const block = /GEMINI_OMNI_EXTENSION_LINE = \(([\s\S]*?)\n\)/.exec(source)?.[1];
+    expect(block, 'GEMINI_OMNI_EXTENSION_LINE is a parenthesised string in provider_capabilities.py').toBeTruthy();
+    const line = [...block!.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((piece) => piece[1]).join('');
+    expect(GEMINI_OMNI_REASON).toBe(line);
+  });
 });

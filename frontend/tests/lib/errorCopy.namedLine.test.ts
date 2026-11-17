@@ -11,7 +11,7 @@ import { deleteRefusalText } from '../../src/lib/worldLabsWaiting';
  * specific line exists, the generic one never shows as well."
  */
 
-const NAMED = "Nebula couldn’t delete “Agent scene” because “Shot 2” is still running. Stop the run first.";
+const NAMED = "Couldn’t delete “Agent scene”. “Shot 2” is still running. Stop the run first.";
 const NAMED_BECAUSE = "Nebula couldn’t delete “Agent scene” because “Shot 2” is still running. Stop the run first.";
 
 describe('the rule', () => {
@@ -55,9 +55,9 @@ describe('the rule', () => {
  * can't double (its tail is fixed copy, or never a line of its own).
  */
 const HAND_BUILT: { file: string; text: string; why: string }[] = [
-  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${curlApostrophes(rest)}`',
+  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(rest))}`',
     why: 'the action, then the named line the backend wrote (a line that names the thing and its fix has no reason to fold in)' },
-  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${curlApostrophes(reason)}`',
+  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(reason))}`',
     why: 'the action, then a reason that is already a sentence of its own with its fix (an instruction, not a cause)' },
   { file: 'lib/nodeErrorCopy.ts', text: '`Nebula couldn’t ${what}. ${curlApostrophes(named)}`',
     why: "the action, then the provider's own unclassified line, kept whole so its fix is not lost" },

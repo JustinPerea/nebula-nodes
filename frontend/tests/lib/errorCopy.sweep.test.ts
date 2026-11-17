@@ -103,7 +103,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't delete the style.", () => presets.deletePreset('s1')],
   ["Couldn't enhance the prompt.", () => enhance.enhancePrompt('a cat')],
   ["Couldn't convert the image.", () => transcode.downloadTranscoded('/api/outputs/a.png', 'jpg')],
-  ["Couldn't upload ref.png.", () => upload.uploadReference(png())],
+  ["Couldn't upload “ref.png”.", () => upload.uploadReference(png())],
 ];
 
 beforeAll(async () => { await getBackendBaseUrl(); });

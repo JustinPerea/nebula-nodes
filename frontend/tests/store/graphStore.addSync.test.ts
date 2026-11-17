@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
@@ -29,12 +29,24 @@ vi.mock('../../src/lib/backend', async (importOriginal) => ({
   getCachedBackendBaseUrl: () => backendDiscovery.baseUrl,
 }));
 
+// Lets a test make the empty-tab sync's last step throw, the one way an add's own failure (not a failed sync)
+// reaches reportNodeCreationError.
+const adopt = vi.hoisted(() => ({ fail: null as unknown }));
+vi.mock('../../src/lib/projectContext', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../src/lib/projectContext')>();
+  return { ...real, adoptCanvasRevision: (...args: Parameters<typeof real.adoptCanvasRevision>) => {
+    if (adopt.fail) throw adopt.fail;
+    return real.adoptCanvasRevision(...args);
+  } };
+});
+
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 const alertMock = noticeSpy();
 
 const { useGraphStore } = await import('../../src/store/graphStore');
+const errorCopy = await import('../../src/lib/errorCopy');
 // The Agent log listens for nebula:agent-log-entry once loaded, as with the app.
 const { useAgentLogStore } = await import('../../src/store/agentLogStore');
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
@@ -177,6 +189,21 @@ describe('a sync that fails: nothing is added, the person reads GM’s line, the
   });
 });
 
+describe('an add that fails with the server’s own answer keeps its status', () => {
+  const { RequestFailedError } = errorCopy;
+  afterEach(() => { adopt.fail = null; });
+  it.each([
+    [429, 'Nebula couldn’t add “Text Input” because the server is busy. Try again in a moment.'],
+    [500, 'Nebula couldn’t add “Text Input” because the server hit an error. Try again.'],
+    [503, 'Nebula couldn’t add “Text Input” because the server didn’t respond. Try again.'],
+  ])('a %s reads its own clause', async (status, line) => {
+    fetchMock.mockResolvedValueOnce(json({ empty: true, nodes: [], edges: [], paramsVersion: GRAPH_PARAMS_VERSION }));
+    adopt.fail = new RequestFailedError('Couldn’t add “Text Input”.', status);
+    expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
+    expect(alerted()).toEqual([line]);
+  });
+});
+
 describe('a refused create after the sync: the add path’s own line, and nothing only in this tab', () => {
   it.each(ADDS)('%s', async (_name, definitionId, add) => {
     fetchMock.mockResolvedValueOnce(json({ empty: true, nodes: [], edges: [] }))
@@ -184,7 +211,7 @@ describe('a refused create after the sync: the add path’s own line, and nothin
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
     // Round 13 (review 12 item 5): GM's quoted heading on every add path.
-    expect(alerted()).toEqual([`Nebula couldn’t add “${label(definitionId)}” because Graph has protected provider state`]);
+    expect(alerted()).toEqual([`Nebula couldn’t add “${label(definitionId)}”. Graph has protected provider state.`]);
   });
 
   it('a dynamic node is taken off the tab again', async () => {
@@ -192,7 +219,7 @@ describe('a refused create after the sync: the add path’s own line, and nothin
       .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
     useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 10, y: 20 });
     await vi.waitFor(() => expect(alerted()).toEqual([
-      `Nebula couldn’t add “${label('openrouter-universal')}” because Graph has protected provider state`]));
+      `Nebula couldn’t add “${label('openrouter-universal')}”. Graph has protected provider state.`]));
     expect(useGraphStore.getState().nodes).toEqual([]);
   });
 });

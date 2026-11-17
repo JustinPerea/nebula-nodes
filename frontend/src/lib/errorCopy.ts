@@ -29,6 +29,10 @@ import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
 import { inDesktopShell, isBeforePromote, personGateHeld, personPromotions, personUnavailableReason, sentUnderPromote } from './personSession';
 import { agentNameInSentence } from './personalAgentName';
 
+/** A line that starts "Nebula couldn’t " in either apostrophe spelling, optionally after "Saved. ": the one
+ * pattern every matcher below builds on, so a line's colour, role and form never depend on its apostrophes. */
+export const NEBULA_COULDNT = /^(?:Saved\. )?Nebula couldn['’]t /;
+
 /** No answer at all: the connection dropped, or the backend isn't there.
  * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
  * the backend is on this computer." apiFetch only ever calls Nebula's own
@@ -355,7 +359,7 @@ export function closeBatchFailedLine(error: unknown, held: boolean = personGateH
  * the Commons turned off (round 18k): it destroyed nothing, so its line is neutral
  * (CommonsErrorLine). */
 export function isBecauseFailure(text: string): boolean {
-  return /^(?:Saved\. )?Nebula couldn’t |^Commons is turned off because /.test(text);
+  return NEBULA_COULDNT.test(text) || /^Commons is turned off because /.test(text);
 }
 
 /** GM r41: the close's line says to try again (the close button beside it is the retry), or
@@ -395,7 +399,7 @@ export function savedReadBackLine(cause: string): string {
  * neutral, as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
 export function isLoadLine(text: string): boolean {
   // Round 18d (GM r32 3): a read-back after a saved write is a load's line too (savedReadBackLine).
-  return /^(?:Saved\. )?Nebula couldn’t (?:load|check) /.test(text) || text === COMMONS_OFF_COPY;
+  return new RegExp(`${NEBULA_COULDNT.source}(?:load|check) `).test(text) || text === COMMONS_OFF_COPY;
 }
 
 /** PR #204 round 18f (GM r35 4): the words before a load line's closing "Try again.", for the
@@ -463,7 +467,7 @@ export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
 
 /** The "because" form's reason, whatever it was doing (GM r6; GM r13's "Nebula added … but
  * couldn’t … because"): a line of that shape. */
-const NOT_CONNECTED_BECAUSE = /^Nebula (?:couldn’t|added .+ but couldn’t) .+ because this (?:tab|window) isn’t connected as you\. /;
+const NOT_CONNECTED_BECAUSE = new RegExp(`(?:${NEBULA_COULDNT.source}|^Nebula added .+ but couldn['’]t ).+ because this (?:tab|window) isn’t connected as you\\. `);
 
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
@@ -543,7 +547,7 @@ export interface FailureCopy {
 /** How a line of its own opens: every form the backend's and the browser's
  * person lines use (review 5, N5): "Couldn't …", "Can't …", "Cannot …",
  * "Nebula couldn't …", "Nebula can't …". Group 1 is the verb. */
-const FAILURE_LEAD = /^(?:Nebula (?:couldn['’]t|can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) (\w+)/;
+const FAILURE_LEAD = new RegExp(`^(?:${NEBULA_COULDNT.source.slice(1)}|(?:Nebula (?:can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) )(\\w+)`);
 
 /** A reason that is a line of its own: it says what failed itself
  * ("Couldn't delete “Agent scene”. “Shot 2” is still running. …", "Nebula
@@ -637,7 +641,7 @@ function specifiesGeneric(heading: string, reason: string): boolean {
 /** The one-line form, for alerts, toasts, tooltips and status text (GM:
  * "Couldn't {verb} {object}. {reason}" in one string; headedLine). */
 export function oneLine(copy: FailureCopy): string {
-  return becauseLine(copy, 'alone');
+  return becauseLine({ heading: copy.heading, reason: copy.reason, status: copy.status }, 'alone');
 }
 
 /** An apostrophe in one spelling, for comparing a backend sentence with a key whichever way it is written. */
@@ -648,14 +652,14 @@ export function foldApostrophes(text: string): string {
 /**
  * A straight apostrophe between two letters as the curly one (don't to don’t, Krea's to Krea’s), for
  * words Nebula takes from elsewhere. Nothing else changes: text in “…”, "…" or backticks stays as it
- * is, and so does any word with a slash, a backslash, a digit or a file extension (a path, an id, a
- * file name such as "Krea's.png" or "photo 3's"). Design's limit: a file name, an id or code in a
- * reason must never change.
+ * is, and so does any word with a slash, a backslash, an underscore, a digit or a file extension of 2 to 10
+ * letters (a path, an id, a file name such as "Krea's.png", "Bob's_file" or "Bob's.sketch", "photo 3's").
+ * Design's limit: a file name, an id or code in a reason must never change.
  */
 export function curlApostrophes(text: string): string {
   return text.split(/(“[^”]*”|"[^"]*"|`[^`]*`)/).map((part, index) => {
     if (index % 2 === 1) return part;
-    return part.replace(/\S+/g, (word) => (/[\\/\d]|\w\.[A-Za-z]{2,5}\b/.test(word) ? word : word.replace(/(\p{L})'(?=\p{L})/gu, '$1’')));
+    return part.replace(/\S+/g, (word) => (/[\\/\d_]|\w\.[A-Za-z]{2,10}\b/.test(word) ? word : word.replace(/(\p{L})'(?=\p{L})/gu, '$1’')));
   }).join('');
 }
 
@@ -712,12 +716,34 @@ const NOT_A_REASON = /^(?:Try|Reload|Restart|Check|Use|Wait|Stop|Run|Pick|Choose
 /** The sentence rule's lead words that take a lower-case letter after "because". */
 const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An|They|Their|Part|Labels|Something|One|Some|Each|Both|Two|Another)\b/;
 
+/** The first words of the provider and app names Nebula's own lines open with ("Krea’s style images …", "Paper
+ * can’t find …"): a short copy of the copy lint's proper names (scripts/copy-lint-rules.json), not the whole list,
+ * to keep the startup bundle small. tests/nameLeads.guard.test.ts fails when the lint learns a name this list lacks. */
+const NAME_LEADS = /^(?:Gemini|Nano|Veo|Kling|Claude|Codex|Remotion|Hugging|World Labs|Black Forest|Nebula|Krea|Obsidian|Figma|Google|Vertex|Anthropic|Replicate|Runway|Ideogram|Meshy|Higgsfield|Seedream|Seedance|Grok|Luma|Recraft|Demucs|Whisper|Lyria|Imagen|Hunyuan|Quiver|Nous|Chrome|Electron|Opus|Sonnet|Haiku|Lottie|Tripo|Rodin|Qwen|Pika|Vidu|Topaz|Magnific|Hailuo|Paper|Wan|Jev|Speridlabs|Hermes|Mac|Windows|Linux|Cinema Studio|Character Studio|Moodboard Studio|Creator Studio|Commons|Agent Log|Marble|Finder)\b/;
+
+/** Whether a reason's first word can follow "because": a lead word (lower-cased by the rule), a lower-case word,
+ * a quoted name or a {} slot, a name Nebula knows (NAME_LEADS), or a name written with a capital inside it or a
+ * digit ("OpenAI", "ElevenLabs", "GPT-4"). A plain capitalised word ("File", "Source") starts a sentence of its
+ * own, not a clause. */
+/** A sentence's end: its closing mark, and any quote or bracket that closes after it ("… “try later.”"). */
+const ENDS_A_SENTENCE = /[.?!…][”’"')\]]*$/;
+
+function opensAClause(text: string): boolean {
+  if (LEADS_A_CLAUSE.test(text) || NAME_LEADS.test(text)) return true;
+  const first = text.split(/\s/)[0];
+  return !/^\p{Lu}/u.test(first) || /^\p{Lu}\S*[\p{Lu}\d]/u.test(first);
+}
+
 /** The sentence rule: a written sentence as the clause after "because". Its first word is lower-cased only when
  * it is one of the lead words above (a name, a quoted name and a {} slot stay); apostrophes are curled between
- * letters. Null for a reason that is an instruction, a line that names its own failure, or nothing. */
+ * letters. Null for a reason that is an instruction, a line that names its own failure, nothing, or not a
+ * clause: one that doesn't end in a full stop, a question mark or an exclamation mark ("File exceeds 500 MB
+ * limit"), or whose first word is a plain capitalised word (opensAClause). The line then keeps the reason as
+ * its own sentence. */
 function sentenceClause(reason: string): string | null {
   const text = reason.trim();
   if (!text || NOT_A_REASON.test(text) || isNamedLine(text)) return null;
+  if (!ENDS_A_SENTENCE.test(text) || !opensAClause(text)) return null;
   return curlApostrophes(LEADS_A_CLAUSE.test(text) ? text[0].toLowerCase() + text.slice(1) : text);
 }
 
@@ -741,21 +767,33 @@ export function clauseFor(source: unknown, beside: 'alone' | 'button' = 'alone')
 }
 
 /** A reason that is a whole line of Nebula's, already in the because form. */
-const FULL_BECAUSE = /^(?:Saved\. )?Nebula couldn[’'] ?t .+ because /;
-const OWN_FAILURE = /^Nebula couldn[’']t /;
+const FULL_BECAUSE = new RegExp(`${NEBULA_COULDNT.source}.+ because `);
+const OWN_FAILURE = NEBULA_COULDNT;
 const FIRST_SENTENCE = /^((?:[^.“]|“[^”]*”|\.(?=\w))+\.)\s*([\s\S]*)$/;
 
 /** A reason that is a line of its own ("Couldn’t download the result. Its link may have expired. Run the node
  * again."), as one line in the because form: its first sentence says what, the rest says why. */
 function namedLine(reason: string, beside: 'alone' | 'button'): string {
-  if (FULL_BECAUSE.test(reason)) return reason;
+  if (FULL_BECAUSE.test(reason)) return curlApostrophes(reason);
   const split = FIRST_SENTENCE.exec(reason);
   const what = failedWhat(sameFailureForm(split ? split[1] : reason));
   if (what === null) return reason;
   const rest = (split?.[2] ?? '').trim();
   const clause = rest ? clauseFor(rest, beside) : null;
   if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
-  return rest ? `Nebula couldn’t ${what}. ${curlApostrophes(rest)}` : `Nebula couldn’t ${what}.`;
+  return rest ? `Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(rest))}` : `Nebula couldn’t ${what}.`;
+}
+
+/** A sentence with its closing punctuation: a reason with none ("File exceeds 500 MB limit") gets a full stop. */
+const endedSentence = (text: string) => (ENDS_A_SENTENCE.test(text) ? text : `${text}.`);
+
+/** The action a reason's first sentence says Nebula could not do, or its whole because line ("Nebula couldn’t save
+ * the project because …" says "save the project"); null when it names none. */
+function reasonAction(reason: string): string | null {
+  const full = /^(?:Saved\. )?Nebula couldn['’]t (.+?) because /.exec(reason);
+  if (full) return curlApostrophes(full[1]);
+  const split = FIRST_SENTENCE.exec(reason);
+  return failedWhat(sameFailureForm(split ? split[1] : reason));
 }
 
 /** A refusal because this tab isn't the person's says so in the one form every such line has. */
@@ -766,6 +804,11 @@ function personRequiredLine(what: string, reason: string): string | null {
   return null;
 }
 
+/** What becauseLine takes: the heading and the reason, with the status the failure answered with, or the pieces a
+ * caller already has. `what` is the action as written (no heading is parsed, nothing is curled); `clause` is the
+ * text after "because" as written (no sentence rule, no lower-casing). */
+export interface BecauseParts { heading: string; reason: string; status?: number; what?: string; clause?: string }
+
 /**
  * A failure as one line in the because form: "Nebula couldn’t ‹what› because ‹reason›." Its parts: the
  * action from the heading (failedWhat), the reason from the status, the table or the sentence rule (clauseFor).
@@ -775,26 +818,36 @@ function personRequiredLine(what: string, reason: string): string | null {
  * nothing (isGenericHeading); a reason that is already a whole Nebula line stays as it is. `beside` is
  * 'button' for a surface with its own Try again, so the line ends "Try again." where trying again helps.
  */
-export function becauseLine(parts: { heading: string; reason: string; status?: number }, beside: 'alone' | 'button' = 'alone'): string {
+export function becauseLine(parts: BecauseParts, beside: 'alone' | 'button' = 'alone'): string {
   const heading = parts.heading.trim();
   const reason = parts.reason.trim();
-  if (!reason) {
-    const alone = failedWhat(heading);
-    return alone === null ? heading : `Nebula couldn’t ${alone}.`;
-  }
-  if (!heading) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : reason;
-  const what = failedWhat(heading);
+  // A caller that has the action (or the clause) itself hands it over: a name typed by a person or an agent
+  // is never parsed as a heading, and the words go in as written.
+  // (A FailureCopy has a `what` of its own, '' for a heading that isn't of the form: only a written one counts.)
+  const given = parts.what || undefined;
+  const what = given ?? failedWhat(heading);
+  if (parts.clause?.trim() && what !== null) return `Nebula couldn’t ${what} because ${parts.clause.trim()}`;
+  if (!reason) return what === null ? heading : `Nebula couldn’t ${what}.`;
+  if (!heading && given === undefined) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : reason;
   if (what === null) return headedLine(heading, reason);
   const person = personRequiredLine(what, reason);
   if (person !== null) return person;
   const clause = clauseFromTables(reason, parts.status, beside);
   if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
-  if (OWN_FAILURE.test(reason) || (isNamedLine(reason) && (repeatsHeading(heading, reason) || isGenericHeading(heading)))) {
-    return namedLine(reason, beside);
-  }
+  const same = repeatsHeading(heading, reason) || isGenericHeading(heading);
+  // A reason that opens with its own "Nebula couldn’t …" replaces the heading only when it is the same failure
+  // (or says nothing the heading doesn't): a different one follows the heading's action, so the person still
+  // learns what was refused.
+  const own = OWN_FAILURE.test(reason) ? foldApostrophes(reasonAction(reason) ?? '') : null;
+  // The same action, or the same verb on the thing the heading only calls by its kind ("save the project" and
+  // "save “Harbor”").
+  const kind = /^(\w+) (?:the|this|that|your) /.exec(what);
+  const ownReplaces = own !== null && (same || own.toLowerCase() === foldApostrophes(what).toLowerCase()
+    || (kind !== null && own.startsWith(`${kind[1]} “`)));
+  if (ownReplaces || (isNamedLine(reason) && same)) return namedLine(reason, beside);
   const sentence = sentenceClause(reason);
   if (sentence !== null) return `Nebula couldn’t ${what} because ${sentence}`;
-  return `Nebula couldn’t ${what}. ${curlApostrophes(reason)}`;
+  return `Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(reason))}`;
 }
 
 /**
@@ -935,7 +988,7 @@ export class FailureNotice extends Error {
     this.heading = heading;
     this.reason = reason;
     // A line that opens with its own "Nebula couldn’t …" is a whole line: no heading over it.
-    this.standalone = options.standalone ?? (heading === '' && /^Nebula couldn’t /.test(reason));
+    this.standalone = options.standalone ?? (heading === '' && NEBULA_COULDNT.test(reason));
     this.code = options.code ?? null;
     this.sentAt = sentAtOf(options);
   }

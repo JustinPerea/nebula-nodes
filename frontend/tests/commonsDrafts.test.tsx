@@ -99,7 +99,7 @@ describe('Commons linked-folder submissions', () => {
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/references' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t link the folder because Folder is not allowed.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nebula couldn’t link the folder. Folder is not allowed.');
     expect(input).toHaveValue('/synthetic/references');
     expect(onChanged).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));

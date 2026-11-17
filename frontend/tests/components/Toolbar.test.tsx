@@ -335,7 +335,7 @@ describe('Canvas toolbar hierarchy', () => {
     const { panel } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
     // error-copy round 2 (GM): the heading names the action, then the reason.
-    await waitFor(() => expect(notices).toHaveBeenCalledWith('Nebula couldn’t clear the canvas because Provider is still settling.'));
+    await waitFor(() => expect(notices).toHaveBeenCalledWith('Nebula couldn’t clear the canvas. Provider is still settling.'));
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
     expect(mocks.endStep).toHaveBeenCalledWith(mocks.undoStep);

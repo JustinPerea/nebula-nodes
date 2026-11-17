@@ -3,7 +3,11 @@ import { becauseLine, curlApostrophes, failedWhat } from './errorCopy';
 
 /** The Gemini Omni guardrail's text, which agents read word for word, and the reason the card says instead. */
 const GEMINI_OMNI_GUARDRAIL = /^Gemini Omni capability guardrail:/;
-const GEMINI_OMNI_REASON = 'Gemini Omni can’t make a video longer. Use Veo 3.1 to extend it.';
+/** The backend's card line for the guardrail, word for word (services/provider_capabilities.py
+ * GEMINI_OMNI_EXTENSION_LINE; tests/lib/backendText.guard.test.ts pins the two together): a node's card reads the
+ * same live (the event carries the line) and after a reload (it does not). */
+export const GEMINI_OMNI_REASON = 'Gemini Omni can edit a video but can’t make it longer. Describe the change as an edit, like '
+  + '“Change the lighting and keep everything else the same”, or use Veo 3.1 to extend the video.';
 
 /**
  * What a node's card says when its run failed (error copy round 3c, GM -

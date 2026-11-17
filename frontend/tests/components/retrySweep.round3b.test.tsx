@@ -97,3 +97,34 @@ describe('Undo in the delete toast', () => {
     expect(onUndo).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a failed load’s Try again is described by the line beside it', () => {
+  // The Studios' Recently deleted list also fetches: an empty list.
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: [] }), { headers: { 'content-type': 'application/json' } })));
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+  const described = (button: HTMLElement) => {
+    const id = button.getAttribute('aria-describedby');
+    expect(id).toBeTruthy();
+    return document.getElementById(id!);
+  };
+
+  it('Character', async () => {
+    api.characters.mockRejectedValue(unavailable('Couldn’t load the character.'));
+    api.character.mockRejectedValue(unavailable('Couldn’t load the character.'));
+    useUIStore.getState().enterCharacterEditor('character-a');
+    render(<CharacterStudioView />); await settle();
+    const line = described(screen.getByRole('button', { name: 'Try again' }));
+    expect(line).toHaveTextContent('Nebula couldn’t load the character because the server didn’t respond. Try again.');
+  });
+
+  it('Moodboard', async () => {
+    api.board.mockRejectedValue(unavailable('Couldn’t load the moodboard.'));
+    api.boards.mockRejectedValue(unavailable('Couldn’t load the moodboard.'));
+    useUIStore.getState().enterMoodboardEditor('board-a', 'project');
+    render(<MoodboardStudioView />); await settle();
+    const line = described(screen.getByRole('button', { name: 'Try again' }));
+    expect(line).toHaveTextContent(/^Nebula couldn’t load the moodboard because the server didn’t respond\. Try again\.$/);
+  });
+});

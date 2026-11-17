@@ -1,6 +1,7 @@
 import { backendAssetUrlSync } from './backend';
 import { apiRequest } from './apiRequest';
 import { FailureNotice } from './errorCopy';
+import { quoted } from './quoted';
 
 export interface UploadedReference {
   filePath: string;   // absolute on-disk path — safe to feed image-input
@@ -12,7 +13,7 @@ const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp
 export async function uploadReference(file: File, signal?: AbortSignal): Promise<UploadedReference> {
   // Written lines under the upload's heading (round 3e: as plain Errors the
   // chip read GM's general line instead).
-  const heading = `Couldn't upload ${file.name || 'the image'}.`;
+  const heading = `Couldn’t upload ${file.name ? quoted(file.name) : 'the image'}.`;
   if (file.size > MAX_REFERENCE_BYTES) throw new FailureNotice(heading, 'Image exceeds the 20 MB limit.');
   const type = file.type.toLowerCase();
   if (!IMAGE_TYPES.has(type)

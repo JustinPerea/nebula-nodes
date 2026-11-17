@@ -26,6 +26,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const refInputRef = useRef<HTMLInputElement>(null);
   const promptId = useId();
   const reasonId = useId();
+  const motionLineId = useId();
   const [variationCount, setVariationCount] = useState(2);
 
   const executeShot = useGraphStore((s) => s.executeShot);
@@ -289,13 +290,14 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               : isImportingGraph && motionHandoff?.status !== 'pending'
                 ? lockLine(motionHandoff?.status === 'ready' ? RUN_LOCK_VERBS.viewVideoNode : RUN_LOCK_VERBS.sendToMotion, 'import')
                 : undefined}
-            aria-busy={motionHandoff?.status === 'pending' || undefined}>
+            aria-busy={motionHandoff?.status === 'pending' || undefined}
+            aria-describedby={motionHandoff?.status === 'error' ? motionLineId : undefined}>
             {motionHandoff?.status === 'ready' ? 'View video node'
               : motionHandoff?.status === 'pending' ? 'Connecting video node…'
                 : motionHandoff?.status === 'error' ? 'Try again' : 'Send to motion'}
           </button>
           {motionHandoff?.status === 'error' ? (
-            <p className="cinema-shot-panel__motion-feedback" role="alert"><LineText text={motionHandoff.error} /></p>
+            <p id={motionLineId} className="cinema-shot-panel__motion-feedback" role="alert"><LineText text={motionHandoff.error} /></p>
           ) : (
             <p className="cinema-shot-panel__motion-feedback" role={motionHandoff ? 'status' : undefined}>
               {motionHandoff?.status === 'ready' ? 'Video node connected. Open it to set the prompt and generate.'
