@@ -220,7 +220,9 @@ describe('the repo', () => {
     expect(fresh.map((f: { file: string; lines: number[]; text: string }) => `${f.file}:${f.lines[0]} ${f.text}`)).toEqual([]);
     expect(stale.map((s: { file: string; text: string }) => `${s.file} ${s.text}`)).toEqual([]);
     expect(markers.filter((m: { ok: boolean }) => !m.ok)).toEqual([]);
-  });
+    // The scan parses every source file. It takes under a second alone and several seconds beside
+    // the rest of a CI shard, so it gets its own limit.
+  }, 120_000);
 
   it('every baseline entry names a family and a rule the rules file knows', () => {
     for (const e of readBaseline().entries) {
