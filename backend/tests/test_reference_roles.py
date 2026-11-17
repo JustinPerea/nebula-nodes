@@ -247,7 +247,7 @@ APPROVED_DUAL_ROUTE_SPLITS.update({
 # direct-only param each gains is pinned exactly here (`directParams`), so a
 # change to any existing param, or to the new one, still fails.
 _ELEVENLABS_VOICE_ID = {"key": "voice_id", "label": "ElevenLabs voice ID", "type": "string", "required": False,
-                        "placeholder": "ElevenLabs voice ID · uses your ElevenLabs key"}
+                        "placeholder": "ElevenLabs voice ID · runs on your ElevenLabs key"}
 APPROVED_DUAL_ROUTE_SPLITS.update({
     "elevenlabs-music": {
         "envKeyName": ("FAL_KEY", ["ELEVENLABS_API_KEY", "FAL_KEY"]), "directKeyName": "ELEVENLABS_API_KEY",

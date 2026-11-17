@@ -2608,7 +2608,7 @@
         "label": "ElevenLabs voice ID",
         "type": "string",
         "required": false,
-        "placeholder": "ElevenLabs voice ID · uses your ElevenLabs key"
+        "placeholder": "ElevenLabs voice ID · runs on your ElevenLabs key"
       }
     ]
   },
@@ -2760,7 +2760,7 @@
         "label": "ElevenLabs voice ID",
         "type": "string",
         "required": false,
-        "placeholder": "ElevenLabs voice ID · uses your ElevenLabs key"
+        "placeholder": "ElevenLabs voice ID · runs on your ElevenLabs key"
       }
     ]
   },
@@ -5895,7 +5895,7 @@
         "type": "textarea",
         "required": false,
         "default": "",
-        "placeholder": "Optional. Use {text1}, {text2}, {text3} placeholders"
+        "placeholder": "Optional. Use {text1}, {text2}, {text3} placeholders."
       }
     ]
   },
@@ -21134,7 +21134,7 @@
       },
       {
         "id": "prompt",
-        "label": "Prompt (redefine only)",
+        "label": "Prompt (Redefine only)",
         "dataType": "Text",
         "required": false
       }

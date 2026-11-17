@@ -6724,7 +6724,7 @@ No settings.
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/topaz/upscale/image` |
 | **Execution** | async-poll |
-| **Inputs** | Image (Image)*, Prompt (redefine only) (Text) |
+| **Inputs** | Image (Image)*, Prompt (Redefine only) (Text) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
