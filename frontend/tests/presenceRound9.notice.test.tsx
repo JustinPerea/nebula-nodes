@@ -184,7 +184,7 @@ describe('review 7 NIT-2 and NIT-3: what registers, not what the page says', () 
 
   it('a Commons line: neutral (the shared because style, GM r14 (4)) and a status when it is the because form, red and an alert otherwise', async () => {
     const commons = copy.commonsNotConnectedCopy('Couldn’t load the references.', false);
-    expect(commons).toBe('Nebula couldn’t load the references because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
+    expect(commons).toBe('Nebula couldn’t load the references because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     render(<>
       <PersonRequiredBanner />
       <CommonsErrorLine line={commons} />

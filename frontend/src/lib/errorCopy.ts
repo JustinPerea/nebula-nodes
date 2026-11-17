@@ -136,8 +136,8 @@ export const MARK_READ_REFUSED_DEV_COPY =
  */
 export function notConnectedBecause(what: string, desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
-  if (!desktop) return `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.`;
-  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? DEFERS_TO_NOTICE : 'Quit Nebula and open it again, then try again.';
+  if (!desktop) return `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
+  const fix = reason === 'debug-port' || reason === 'dev-renderer' ? DEFERS_TO_NOTICE : 'Quit Nebula and open it again.';
   return `Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`;
 }
 

@@ -1876,7 +1876,7 @@ describe('Settings — preferences', () => {
       { reason: 'Only the person can do this.', code: 'person_required' }));
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
     openTab('Preferences');
-    expect(await screen.findByText('Nebula couldn’t load the connected apps because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Nebula couldn’t load the connected apps because this tab isn’t connected as you. Open the link Nebula printed when it started.')).toBeInTheDocument();
     const calls = getOutsideSpendMock.mock.calls.length;
     act(() => { session.notePersonPromoted(); });
     await waitFor(() => expect(getOutsideSpendMock.mock.calls.length).toBe(calls + 1));

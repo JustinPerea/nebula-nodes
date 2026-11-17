@@ -14243,7 +14243,7 @@ def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
 RUN_ID_STOPPED = "run {id} was already stopped, so this id can’t start again. Start a new run with a new id."
 RUN_ID_RAN = "run {id} already ran, so this id can’t start again. Start a new run with a new id."
 RUN_ID_STOP_RECORDED = "run {id} was stopped, so this id can’t start again. Start a new run with a new id."
-RUN_ID_STOPPED_BEFORE_START = "run {id} was canceled before it started"
+RUN_ID_STOPPED_BEFORE_START = "run {id} was cancelled before it started"
 
 
 def _stopped_id_refusal(run_id: str) -> str:

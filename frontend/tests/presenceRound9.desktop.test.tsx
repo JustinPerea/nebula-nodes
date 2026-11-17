@@ -71,7 +71,7 @@ describe('GM r12 (07): the general notice in the desktop app\'s dev setups', () 
     desktopWindow({});
     expect(await session.personToken()).not.toBeNull();
     expect(session.personRequiredMessage()).toBe('This window isn’t connected as you. Quit Nebula and open it again.');
-    expect(copy.notConnectedBecause('load your agents')).toBe('Nebula couldn’t load your agents because this window isn’t connected as you. Quit Nebula and open it again, then try again.');
+    expect(copy.notConnectedBecause('load your agents')).toBe('Nebula couldn’t load your agents because this window isn’t connected as you. Quit Nebula and open it again.');
     expect(copy.generateRefusedCopy(true)).toBe('Nebula added the nodes to the canvas but couldn’t start the generation because this window isn’t connected as you. Quit Nebula and open it again, then run them from the canvas.');
   });
 });

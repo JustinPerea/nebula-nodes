@@ -37,7 +37,7 @@ import type { SavedProject } from '../src/lib/projects';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 const gate = (heading: string) => new projects.ProjectRequestError('Only the person can do this.', 403, { heading, code: PERSON_REQUIRED_CODE });
-const BECAUSE = (what: string) => `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.`;
+const BECAUSE = (what: string) => `Nebula couldn’t ${what} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
 const initial = useProjectStore.getState();
 function project(id = 'alpha'): SavedProject {
   return {

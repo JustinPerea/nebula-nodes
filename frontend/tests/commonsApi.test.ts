@@ -59,7 +59,7 @@ describe('commonsApi', () => {
     // again, so a 401 after the silent refetch says GM's 401 line.
     // Round 9 (GM r12 2): the person session never expires on its own; a 401 means this window
     // isn't connected as the person, so it is the because form, with the packaged app's fix.
-    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this window isn’t connected as you. Quit Nebula and open it again, then try again.');
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this window isn’t connected as you. Quit Nebula and open it again.');
     expect(uiToken).toHaveBeenCalledTimes(2);
     expect(apiFetch).toHaveBeenCalledTimes(2);
     expect(apiFetch.mock.calls[0][1].headers.Authorization).not.toBe(apiFetch.mock.calls[1][1].headers.Authorization);
@@ -70,10 +70,10 @@ describe('commonsApi', () => {
     // #204 round 14 (Justin): the token is dropped only once Nebula's health has answered online.
     noteProbeAnswer(startHealthProbe(), 'online');
     // Round 2 (GM): a plain browser tab, where only a fresh terminal link helps.
-    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(sessionStorage.getItem('nebula.commons.token')).toBeNull();
     expect(sessionStorage.getItem('nebula.person')).toBeNull();
-    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(apiFetch).toHaveBeenCalledTimes(2);
     resetBackendConnectionForTests();
   });
@@ -104,7 +104,7 @@ describe('commonsApi', () => {
 
   it('does not make a request without human authority', async () => {
     sessionStorage.clear();
-    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
+    await expect(commonsApi.status()).rejects.toThrow('Nebula couldn’t check Commons status because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(apiFetch).not.toHaveBeenCalled();
   });
 

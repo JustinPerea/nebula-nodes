@@ -64,7 +64,7 @@ afterEach(() => {
 const gate = { status: 403, body: { detail: 'Only the person can do this.', code: 'person_required' } };
 const alerts = () => screen.queryAllByRole('alert').map((node) => node.textContent ?? '');
 
-const BECAUSE = 'Nebula couldn’t save the style because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.';
+const BECAUSE = 'Nebula couldn’t save the style because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 const notice = () => { const state = useGraphStore.getState(); return state.messageNotice?.text ?? state.undoNotice?.text ?? ''; };
 const presets = () => sent.filter((entry) => entry.path === '/api/presets');
 

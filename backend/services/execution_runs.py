@@ -244,7 +244,7 @@ class ExecutionRunRegistry:
     def assert_admissible(self, run_id: str) -> None:
         if run_id in self._cancel_before_start or self.tombstoned(run_id):
             raise ExecutionCancelledBeforeStartError(
-                f"run {run_id} was canceled before it started"
+                f"run {run_id} was cancelled before it started"
             )
         if len(self._cancel_before_start) >= self._max_records:
             raise ExecutionCancellationCapacityError(

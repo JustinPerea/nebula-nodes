@@ -112,7 +112,7 @@ describe('GM r6 (2) and survivor M9: the project save\'s line and its retry', ()
 
   it('the line is the because form, with no "try again" and no "needs your OK"', async () => {
     await refusedSave();
-    expect(state().saveError).toBe('Nebula couldn’t save the project because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
+    expect(state().saveError).toBe('Nebula couldn’t save the project because this tab isn’t connected as you. Open the link Nebula printed when it started.');
   });
 
   it('another project open by the promote: the retry sends nothing to it', async () => {

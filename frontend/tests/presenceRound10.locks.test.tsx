@@ -148,7 +148,7 @@ describe('the person-only lists on a demote (GM r17 item 6)', () => {
     act(() => { vi.advanceTimersByTime(HELD_LOOK_DELAY_MS + 1); });
     expect(screen.queryAllByTestId('personal-agent-row')).toHaveLength(0);
     expect(screen.getByRole('alert').textContent).toBe(
-      'Nebula couldn’t load your agents because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
+      'Nebula couldn’t load your agents because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     act(() => notePersonPromoted());
     await flush();
     expect(api.fetchPersonalAgents).toHaveBeenCalledTimes(2);

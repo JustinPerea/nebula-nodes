@@ -50,7 +50,7 @@ const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 const { resetLinesForTests } = await import('../src/lib/notConnectedLine');
 const { resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
 
-const PAGE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.';
+const PAGE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 const ADD_LINE = 'You can add references when this tab is connected as you.';
 const TOKEN = 'a'.repeat(43);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });

@@ -22,8 +22,8 @@ import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
 const APP_LINE = "This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.";
 // What the card shows: the same refusal as one because line (the stored line above is what agents read).
-const GM_CARD = "Nebula couldn’t run the node because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
-const APP_CARD = "Nebula couldn’t run the node because this window isn’t connected as you. Quit Nebula and open it again, then try again.";
+const GM_CARD = "Nebula couldn’t run the node because this tab isn’t connected as you. Open the link Nebula printed when it started.";
+const APP_CARD = "Nebula couldn’t run the node because this window isn’t connected as you. Quit Nebula and open it again.";
 const BILLING = "n1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the change instead with propose_change (`nebula propose`); the person accepts it on the canvas.";
 
 const krea = {

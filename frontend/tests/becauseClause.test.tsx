@@ -164,9 +164,9 @@ describe('the pattern rows and the sentence rule', () => {
   it('shows a person refusal in the not-connected form', () => {
     const heading = "Couldn't delete the project for good.";
     expect(becauseLine({ heading, reason: PERSON_REQUIRED_COPY }))
-      .toBe('Nebula couldn’t delete the project for good because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.');
+      .toBe('Nebula couldn’t delete the project for good because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     expect(becauseLine({ heading, reason: PERSON_REQUIRED_APP_COPY }))
-      .toBe('Nebula couldn’t delete the project for good because this window isn’t connected as you. Quit Nebula and open it again, then try again.');
+      .toBe('Nebula couldn’t delete the project for good because this window isn’t connected as you. Quit Nebula and open it again.');
     expect(becauseLine({ heading, reason: PERSON_REQUIRED_DEV_COPY }))
       .toBe('Nebula couldn’t delete the project for good because this window isn’t connected as you. The notice below says why.');
   });

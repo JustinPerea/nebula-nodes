@@ -123,7 +123,7 @@ def test_a_stop_that_lands_at_the_world_labs_claim_says_what_every_reused_id_say
     monkeypatch.setattr(main_module, "_fresh_paid_worldlabs_claims", lambda _nodes: [("worldlabs-world", "n1")])
 
     def stopped(**_kwargs):
-        raise ProviderStartCancelledError("run wl-run was canceled before it started")
+        raise ProviderStartCancelledError("run wl-run was cancelled before it started")
 
     monkeypatch.setattr(main_module.provider_start_guard, "claim", stopped)
     with pytest.raises(HTTPException) as refused:

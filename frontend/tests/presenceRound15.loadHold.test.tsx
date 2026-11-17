@@ -201,7 +201,7 @@ describe('useCommonsLoadLines\' hold', () => {
     const view = mount();
     act(() => { view.result.current.start('status'); view.result.current.start('references'); });
     act(() => view.result.current.show('status', notConnected('Couldn’t check Commons status.'), 'Couldn’t check Commons status.'));
-    expect(view.result.current.lines).toEqual(['Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.']);
+    expect(view.result.current.lines).toEqual(['Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.']);
   });
 
   it('the hold starts again once the lines have gone', async () => {
