@@ -154,9 +154,30 @@ describe('one look for every neutral Commons line, wherever it sits (GM r30 1)',
     }
     expect([...looks]).toEqual([JSON.stringify({ ...NEUTRAL, fill: 'var(--sr-surface-control)' })]);
   });
-  it('an action\'s failure keeps the warning tint', () => {
+  it('an action\'s failure takes the warning tint, never the accent tint (design: one tint per tone)', () => {
     const view = render(<CommonsErrorLine line="Couldn’t save the settings. That setting isn’t available. Reload to get the latest settings." />);
-    expect(lineFill(view.container.querySelector('[data-commons-line]')!)).toBe('var(--sr-error-soft)');
+    const fill = lineFill(view.container.querySelector('[data-commons-line]')!);
+    expect(fill).toBe('var(--sr-warning-soft)');
+    expect(fill).not.toMatch(/accent|error|danger/);
+  });
+});
+
+describe('design: one tint per tone, and a note or the current row is no accent fill or bar', () => {
+  const fillOf = (className: string) => {
+    const box = document.createElement('div'); box.className = className; document.body.appendChild(box);
+    const fill = lineFill(box); box.remove(); return fill;
+  };
+  it('every failure or warning fill is the warning tint (or the neutral one for a note), none the accent tint', () => {
+    for (const cls of ['commons-notice commons-notice--error', 'chat-panel__model-error', 'chat-panel__notice', 'line-box', 'project-home__error', 'inspector__notice--warning']) {
+      expect(fillOf(cls), cls).toBe('var(--sr-warning-soft)');
+    }
+    for (const cls of ['personal-agents__terms', 'inspector__notice']) expect(fillOf(cls), cls).toMatch(/^var\(--sr-surface-control(?:-hover)?\)$/);
+  });
+  it('the current row of the model list keeps its active fill and has no bar', () => {
+    const row = document.createElement('button'); row.className = 'chat-panel__model-row chat-panel__model-row--active'; document.body.appendChild(row);
+    expect(leftBar(row)).toBe(false);
+    expect(lineFill(row)).toBe('var(--sr-surface-control-active)');
+    row.remove();
   });
 });
 

@@ -205,9 +205,9 @@
 .personal-agents__terms {
   margin-top: 4px;
   padding: 4px 8px;
-  /* Design: a note is a fill, never a bar down its edge. */
+  /* Design: a note is a neutral fill, never a bar down its edge and never the accent tint. */
   border-radius: var(--sr-radius-control);
-  background: var(--sr-accent-soft);
+  background: var(--sr-surface-control);
 }
 
 .personal-agents__actions { display: flex; flex-wrap: wrap; gap: 6px; }

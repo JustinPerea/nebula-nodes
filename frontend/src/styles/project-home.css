@@ -183,7 +183,7 @@ body.app-slava-restraint .project-home__secondary:hover:not(:disabled):not([aria
 body.app-slava-restraint .project-home__empty-search { width: 28px; height: 28px; margin-bottom: 20px; color: var(--sr-ink-meta); }
 body.app-slava-restraint .project-home__loading { display: flex; align-items: center; gap: 10px; min-height: 140px; color: var(--sr-ink-light); font-size: 13px; }
 body.app-slava-restraint .project-home__loading-dot { width: 6px; height: 6px; border-radius: var(--sr-radius-pill); background: var(--sr-ink-light); }
-body.app-slava-restraint .project-home__error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-error-border); border-radius: var(--sr-node-media-radius); background: var(--sr-error-soft); color: var(--sr-ink); font-size: 13px; line-height: 1.5; }
+body.app-slava-restraint .project-home__error { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 28px; border: 1px solid var(--sr-error-border); border-radius: var(--sr-node-media-radius); background: var(--sr-warning-soft); color: var(--sr-ink); font-size: 13px; line-height: 1.5; }
 body.app-slava-restraint .project-home__error > span { overflow-wrap: anywhere; }
 /* GM, Q116 a: a person-only refusal's line, with the agents' text behind the
    shared collapsed Details toggle (components/failure/ErrorDetails) under it. */

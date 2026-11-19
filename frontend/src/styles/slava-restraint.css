@@ -1126,7 +1126,8 @@ body.app-slava-restraint .chat-panel__model-search::placeholder {
 body.app-slava-restraint .chat-panel__model-error {
   padding: 8px 10px;
   border-bottom: 1px solid var(--sr-edge);
-  background: var(--sr-accent-soft);
+  /* Design: a failure takes the warning tint; orange is the brand accent, not a status colour. */
+  background: var(--sr-warning-soft);
   color: var(--sr-accent);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
@@ -1165,8 +1166,8 @@ body.app-slava-restraint .chat-panel__model-row:hover {
 }
 
 body.app-slava-restraint .chat-panel__model-row--active {
+  /* Design: the current row is the active fill alone, no bar down its edge. */
   background: var(--sr-surface-control-active);
-  box-shadow: 2px 0 0 var(--sr-accent) inset;
 }
 
 body.app-slava-restraint .chat-panel__model-row-name {
@@ -1515,7 +1516,7 @@ body.app-slava-restraint .chat-panel__notice {
   padding: 7px 10px;
   border: 1px solid var(--sr-accent-border-muted);
   border-radius: var(--sr-radius-control);
-  background: var(--sr-danger-soft);
+  background: var(--sr-warning-soft);
   color: var(--sr-danger);
   font-size: var(--sr-type-label);
 }
@@ -2161,12 +2162,17 @@ body.app-slava-restraint .inspector__control-stack {
 body.app-slava-restraint .inspector__notice {
   border: 1px solid var(--sr-accent-border);
   border-radius: var(--sr-radius-control);
-  background: var(--sr-accent-soft);
+  /* Design: a note is the neutral fill; the warning variant below takes the warning tint. */
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-label);
   line-height: var(--sr-line-meta);
   padding: var(--sr-space-2) var(--sr-space-3);
+}
+
+body.app-slava-restraint .inspector__notice--warning {
+  background: var(--sr-warning-soft);
 }
 
 /* A missing key is something to do, not a failure: the neutral treatment the

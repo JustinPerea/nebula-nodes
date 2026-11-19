@@ -85,7 +85,7 @@
   padding: 8px 10px;
   border: 1px solid var(--sr-danger-border);
   border-radius: var(--sr-radius-control);
-  background: var(--sr-danger-soft);
+  background: var(--sr-warning-soft);
   color: var(--sr-danger);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-label);
