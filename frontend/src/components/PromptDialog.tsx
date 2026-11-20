@@ -12,7 +12,7 @@ export interface PromptRequest {
 }
 
 /** Shared text-entry dialog for browser and desktop workflows. */
-export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 0, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK', heading, headingLabel, footer }: {
+export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 0, onChange, confirm, onRefused, multiline = false, confirmLabel = 'OK', heading, headingLabel, footer, focusFallback }: {
   request: PromptRequest;
   onDone: (value: string | null) => void;
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
@@ -53,10 +53,17 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   headingLabel?: string;
   /** A line under the buttons (PR #204 round 10: Send note's lock line, components/PersonLock). */
   footer?: ReactNode;
+  /** Where focus goes on close when nothing usable had it on open (a pointer
+   *  opened the dialog with <body> active): never <body> (design). */
+  focusFallback?: () => HTMLElement | null;
 }) {
   const [value, setValue] = useState(request.initial);
   const input = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const form = useRef<HTMLFormElement>(null);
+  const focusFallbackRef = useRef(focusFallback);
+  useEffect(() => {
+    focusFallbackRef.current = focusFallback;
+  });
 
   useEffect(() => {
     const previous = document.activeElement;
@@ -69,7 +76,14 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
     } else {
       field?.select();
     }
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected && previous !== document.body) {
+        previous.focus();
+        return;
+      }
+      const active = document.activeElement;
+      if (!active || active === document.body) focusFallbackRef.current?.()?.focus({ preventScroll: true });
+    };
   }, [multiline]);
 
   // After a refused edit the counter shows whatever is left, until an edit

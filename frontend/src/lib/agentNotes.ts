@@ -276,6 +276,27 @@ export function isUnread(note: AgentNote): boolean {
   return !note.readAt && !note.dismissedAt;
 }
 
+/** The canvas proposal an Update is about (its Review action's id), or null. */
+export function canvasProposalIdOf(note: AgentNote): string | null {
+  if (note.about !== 'proposal') return null;
+  for (const action of note.actions) {
+    if (action.op.kind === 'proposal.review' && action.op.target === 'canvas' && typeof action.op.proposalId === 'string') {
+      return action.op.proposalId || null;
+    }
+  }
+  return null;
+}
+
+/**
+ * The corner drops no card for a proposal Update whose proposal is the one
+ * the bar shows now: the person is looking at it (design). A different
+ * proposal, or the bar closed (`shownId` null), drops as usual.
+ */
+export function suppressedByBar(note: AgentNote, shownId: string | null): boolean {
+  if (!shownId) return false;
+  return canvasProposalIdOf(note) === shownId;
+}
+
 export function surfaceKey(surface: { kind: 'canvas'; projectId: string | null } | { kind: 'board'; boardId: string }): string {
   return surface.kind === 'canvas' ? `canvas:${surface.projectId ?? ''}` : `board:${surface.boardId}`;
 }

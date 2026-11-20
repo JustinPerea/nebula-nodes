@@ -47,6 +47,7 @@ const { useAgentNotesStore } = await import('../src/store/agentNotesStore');
 const { useUIStore } = await import('../src/store/uiStore');
 const { useProjectStore } = await import('../src/store/projectStore');
 const { useAssetProposalsStore } = await import('../src/store/assetProposalsStore');
+const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 
 const CLAUDE = { kind: 'agent', id: 'claude', name: 'Claude', color: '#E8825A' } as const;
 const CODEX = { kind: 'agent', id: 'codex', name: 'Codex', color: '#5AA9E8' } as const;
@@ -100,6 +101,7 @@ beforeEach(() => {
     ['n4', { id: 'n4', measured: { width: 240, height: 160 }, internals: { positionAbsolute: { x: 2000, y: 1500 } } }],
   ]);
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  useCanvasProposalsStore.setState({ barShownId: null });
 });
 
 afterEach(() => {
@@ -514,5 +516,70 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
     const entry = openEntry();
     expect(entry.textContent).toContain('Withdrawn by Claude');
     expect(within(entry).queryByRole('button', { name: 'Review' })).toBeNull();
+  });
+});
+
+describe('no card for a proposal the bar already shows (design)', () => {
+  const proposalNote = (id: string, proposalId: string) => note(id, {
+    about: 'proposal', text: 'Claude proposes 1 change on the canvas', parts: [{ text: 'Claude proposes 1 change on the canvas' }],
+    actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId, target: 'canvas' } }],
+  });
+  const card = () => screen.queryByRole('status', { name: /Update from Claude/ });
+
+  it('the same proposal: no card, and the Update is marked read', () => {
+    vi.useFakeTimers();
+    useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeNull();
+    expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_1']);
+  });
+
+  it('a different proposal drops its card as usual', () => {
+    vi.useFakeTimers();
+    useCanvasProposalsStore.setState({ barShownId: 'cp_other' });
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeTruthy();
+    expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+  });
+
+  it('with the bar closed it drops its card as usual', () => {
+    vi.useFakeTimers();
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeTruthy();
+  });
+
+  it('a card already dropped closes when its proposal becomes the one the bar shows', () => {
+    vi.useFakeTimers();
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeTruthy();
+    act(() => { useCanvasProposalsStore.setState({ barShownId: 'cp_1' }); });
+    tick(1500);
+    expect(card()).toBeNull();
+    expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_1']);
+  });
+
+  it('a queued card is dropped from the queue when its proposal opens in the bar', () => {
+    vi.useFakeTimers();
+    render(<AppAgentNotes />);
+    sync([]);
+    added(note('an_1'), 1);
+    tick(1000);
+    added(proposalNote('an_2', 'cp_1'), 2);
+    act(() => { useCanvasProposalsStore.setState({ barShownId: 'cp_1' }); });
+    tick(12000);
+    expect(card()).toBeNull();
+    expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_2']);
   });
 });
