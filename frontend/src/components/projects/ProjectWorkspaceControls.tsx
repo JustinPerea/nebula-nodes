@@ -60,8 +60,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
     wrap.style.setProperty('--follow-grow', `${grew}px`);
     return () => { wrap.style.removeProperty('--follow-grow'); };
   });
-  // Review 3 LOW-3 (GM: "the bar goes on top, same as the other editors"):
-  // while following, the pill sits above a full-screen modal's scrim (the
+  // While following, the pill sits above a full-screen modal's scrim (the
   // mask painter's), so the bar that says why it is read-only shows
   // (slava-restraint.css .canvas-tabs-wrap[data-following]).
   useLayoutEffect(() => {

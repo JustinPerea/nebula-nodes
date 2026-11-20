@@ -49,13 +49,8 @@ const rulesFor = (cls: string) => rules.filter(({ selector }) =>
 const decls = (body: string, prop: string) =>
   [...body.matchAll(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'g'))].map((m) => m[1].trim());
 
-/** Rules that apply in a skin: unskinned rules, and that skin's own. */
-type Skin = 'classic' | 'slava';
-const inSkin = (selector: string, skin: Skin) => {
-  if (selector.includes('body:not(.app-slava-restraint)')) return skin === 'classic';
-  if (selector.includes('.app-slava-restraint')) return skin === 'slava';
-  return true;
-};
+/** Rules that apply: the app always runs with body.app-slava-restraint, so a rule that needs it absent never does. */
+const applies = (selector: string) => !selector.includes('body:not(.app-slava-restraint)');
 
 /** Slava's layer tokens (--sr-layer-*), for resolving z-indexes. */
 const tokens = new Map<string, number>();
@@ -145,9 +140,9 @@ describe('the cursor layer paints inside the canvas', () => {
   });
 });
 
-describe.each(['slava'] as const)('the chrome sits above the canvas in the %s skin', (skin) => {
+describe('the chrome sits above the canvas', () => {
   it.each(CHROME)('.%s (%s) is fixed at a z-index above the canvas', (cls) => {
-    const applied = rulesFor(cls).filter((r) => inSkin(r.selector, skin));
+    const applied = rulesFor(cls).filter((r) => applies(r.selector));
     const positions = applied.flatMap((r) => decls(r.body, 'position')).map((p) => p.replace(/\s*!important$/, ''));
     expect(positions.length).toBeGreaterThan(0);
     expect(new Set(positions)).toEqual(new Set(['fixed']));

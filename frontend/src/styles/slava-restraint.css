@@ -2924,6 +2924,12 @@ body.app-slava-restraint .agent-log__entry--muted .agent-log__msg {
   body.app-slava-restraint .agent-log--executing .agent-log__signal-cell {
     animation: none;
   }
+
+  /* After the hide and notice-action rules above, which set the transitions. */
+  body.app-slava-restraint .agent-log__hide,
+  body.app-slava-restraint .agent-log-hidden-notice__action {
+    transition: none;
+  }
 }
 
 body.app-slava-restraint .mesh-preview {

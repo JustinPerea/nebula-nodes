@@ -659,6 +659,11 @@ body.app-slava-restraint :is(
     border: 0;
   }
 
+  /* Full-screen modal: square corners, after the panel radius set above. */
+  body.app-slava-restraint .world-modal {
+    border-radius: 0;
+  }
+
   .world-modal__header,
   .world-modal__toolbar,
   .world-modal__footer {
@@ -677,6 +682,10 @@ body.app-slava-restraint :is(
 
   .world-modal__segmented--quality {
     overflow: visible;
+  }
+
+  body.app-slava-restraint .world-modal__segmented--quality {
+    max-width: none;
   }
 
   .world-modal__header-actions .world-modal__button {

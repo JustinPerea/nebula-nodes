@@ -98,7 +98,7 @@ body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typ
   }
 
   .model-node--skipped .model-node__card > :not(.node-skip),
-body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
+  body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
     transition: none;
   }
 }
