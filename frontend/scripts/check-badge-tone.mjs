@@ -30,12 +30,15 @@ import {
 // Role badges (`commons-badge--role-*`: Attract, Avoid) are neutral by rule: design says a role is a
 // category, not good or bad news, so a role rule may not set color, border or background at all
 // (the plain badge colours come from the base .commons-badge rule). There is no allow-list.
+//
+// Eyebrows (findAccentEyebrows below) take the same no-accent rule, with the same limits: alias
+// tokens and TSX colours are not followed, and nested CSS that reaches an eyebrow fails.
 
 const SRC = join(process.cwd(), 'src');
 const MODIFIER = /\.commons-(?:badge|source)--[\w-]+/;
 /** The badge or source class itself, with or without a modifier: the base rule may not use the accent either. */
 const BADGE = /\.commons-(?:badge|source)(?![\w])/;
-const COLOUR_PROP = /^(?:color|fill|stroke|background(?:-color|-image)?|outline(?:-color)?|border(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?(?:-color)?|border-image(?:-source)?|box-shadow|text-shadow|accent-color|caret-color|text-decoration(?:-color)?|column-rule(?:-color)?)$/i;
+const COLOUR_PROP = /^(?:color|fill|stroke|background(?:-color|-image)?|outline(?:-color)?|border(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?(?:-color)?|border-image(?:-source)?|box-shadow|text-shadow|accent-color|caret-color|text-decoration(?:-color)?|column-rule(?:-color)?|-webkit-text-fill-color|text-emphasis(?:-color)?)$/i;
 const ROLE = /\.commons-badge--role-[\w-]+/;
 const ACCENT_VAR = /var\(\s*--sr-accent(?![\w])[\w-]*/i;
 const DANGER_VAR = /var\(\s*--sr-danger(?![\w])[\w-]*/i;
@@ -46,10 +49,17 @@ function main() {
   const files = collectCssFiles(SRC);
   const hits = [];
   const capsHits = [];
+  const eyebrowHits = [];
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
     hits.push(...findAccentBadges(source, relative(SRC, file)));
     capsHits.push(...findCapsBadges(source, relative(SRC, file)));
+    eyebrowHits.push(...findAccentEyebrows(source, relative(SRC, file)));
+  }
+  if (eyebrowHits.length > 0) {
+    console.error('An eyebrow is painted in the brand accent. An eyebrow is a label: it takes the light ink, var(--sr-ink-light) (design: the accent is for the primary action, the selection and the agent).');
+    for (const hit of eyebrowHits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }  (${hit.reason})`);
+    process.exit(1);
   }
   if (capsHits.length > 0) {
     console.error('A badge or tag is drawn in capitals. A badge reads in sentence case; only a field label keeps its caps (design).');
@@ -98,6 +108,48 @@ export function findAccentBadges(source, file) {
           ? 'the literal accent colour'
           : null;
       if (reason) hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector, decl: `${declaration.prop}: ${compact(declaration.value)}`, reason });
+    }
+  }
+  return hits;
+}
+
+// Design: an eyebrow (a class named eyebrow, kicker or overline) is a label, not a primary action, a
+// selection or the agent, so it never reads the accent: no var(--sr-accent...) and no accent literal, at rest or in any state.
+// Same limit as above: an alias token or a colour set from TSX is not followed.
+const EYEBROW_CLASS = /(?:^|[_-])(?:eyebrow|kicker|overline)(?:$|[_-])/;
+
+const hasEyebrowClass = (selector) => selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => EYEBROW_CLASS.test(m[1])));
+// A nested BEM suffix (`&__eyebrow`, `&-kicker`) names an eyebrow without a leading dot.
+const NESTED_EYEBROW_SUFFIX = /&(?:[\w-]*[_-])?(?:eyebrow|kicker|overline)(?![\w])/;
+function nestedAccentEyebrow(body) {
+  return parseRules(body).some((inner) => {
+    const accent = ACCENT_VAR.test(inner.body) || ACCENT_LITERAL.test(inner.body);
+    const eyebrow = hasEyebrowClass(inner.selector) || NESTED_EYEBROW_SUFFIX.test(inner.selector);
+    if (inner.nested) return nestedAccentEyebrow(inner.body) || (eyebrow && accent);
+    return eyebrow && accent;
+  });
+}
+
+/** Every declaration on an eyebrow selector that paints the accent: { file, line, selector, decl, reason }. */
+export function findAccentEyebrows(source, file) {
+  const css = stripComments(source);
+  const lineStarts = computeLineStarts(css);
+  const hits = [];
+  for (const rule of parseRules(css)) {
+    const selector = compact(rule.selector);
+    const eyebrow = hasEyebrowClass(selector);
+    // Nested CSS isn't read: a nested block on an eyebrow selector fails, and so does one that
+    // reaches an eyebrow class further in and paints it in the accent (`.a { .a__eyebrow { ... } }`).
+    if (rule.nested) {
+      if (eyebrow || nestedAccentEyebrow(rule.body)) hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
+      continue;
+    }
+    if (!eyebrow) continue;
+    for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
+      if (!COLOUR_PROP.test(declaration.prop)) continue;
+      if (ACCENT_VAR.test(declaration.value) || ACCENT_LITERAL.test(declaration.value)) {
+        hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector, decl: `${declaration.prop}: ${compact(declaration.value)}`, reason: 'the brand accent: an eyebrow is a label' });
+      }
     }
   }
   return hits;
