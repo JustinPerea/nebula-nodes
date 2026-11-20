@@ -4,7 +4,7 @@ import { NodeInspectorPopover } from '../../src/components/panels/NodeInspectorP
 import { useUIStore } from '../../src/store/uiStore';
 
 /**
- * GM - Design, 2026-10-23:
+ * Design, 2026-10-23:
  * 1. "Floating panels stop above a reserved notice band, whether or not a
  *    notice is showing ... The panels never move when a notice comes or goes,
  *    and a notice never covers Run / Duplicate / Delete. Those are what
@@ -12,11 +12,11 @@ import { useUIStore } from '../../src/store/uiStore';
  * 5. "Floating panels stop below the workspace header and the selection
  *    toolbar, whichever is lower, plus the same 8 px gap."
  *
- * GM r68 (2026-11-03) lets the unpinned Inspector beside a node grow "up to
+ * Design (2026-11-03) lets the unpinned Inspector beside a node grow "up to
  * the space between the floating top chrome (the selection toolbar) and the
- * bottom bar, with 12 px clear of each", and GM r72 sets that bottom line:
+ * bottom bar, with 12 px clear of each", and design sets that bottom line:
  * "Cap to the BAND line, not the bar: the reserved notice band wins; a notice
- * covering Run/Duplicate/Delete is the overlap r57 rules out. Unpinned only;
+ * covering Run/Duplicate/Delete is the overlap rule 1 above rules out. Unpinned only;
  * pinned keeps its rule." So the unpinned panel keeps 12 px clear of the
  * toolbar and of the band, and rule 1 above still holds for it. The pinned
  * Inspector keeps both rules above as they were.
@@ -30,7 +30,7 @@ vi.mock('../../src/components/panels/Inspector', () => ({
 }));
 
 const GAP = 8;
-/** GM r68: the unpinned Inspector's clearance from the toolbar and the bar. */
+/** Design: the unpinned Inspector's clearance from the toolbar and the bar. */
 const CLEAR = 12;
 let callbacks: Map<number, FrameRequestCallback>;
 let nextRaf: number;
@@ -121,8 +121,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('the floating Inspector and the reserved notice band (GM r72: 12 px clear of the band)', () => {
-  it("GM's setup: it ends above the band, so a notice never covers its foot row", () => {
+describe('the floating Inspector and the reserved notice band (12 px clear of the band)', () => {
+  it("the setup from design's report: it ends above the band, so a notice never covers its foot row", () => {
     viewport(1280, 800);
     const { bandTop } = barAndBand(1280, 800);
     header(1280);
@@ -161,7 +161,7 @@ describe('the floating Inspector and the reserved notice band (GM r72: 12 px cle
     const { bandTop } = barAndBand(1280, 800);
     openBeside(rect(575, 437, 82, 90));
     expect(bounds().bottom).toBeLessThanOrEqual(bandTop);
-    // GM r72: "pinned keeps its rule": it stands on the band's line itself,
+    // Design: "pinned keeps its rule": it stands on the band's line itself,
     // without the unpinned panel's 12 px clearance.
     expect(bounds().bottom).toBe(bandTop);
     expect(bounds().height).toBe(440);
@@ -169,7 +169,7 @@ describe('the floating Inspector and the reserved notice band (GM r72: 12 px cle
 });
 
 describe('the measured top line', () => {
-  it('a node near the top: the Inspector opens below the selection toolbar, 12 px clear (r68)', () => {
+  it('a node near the top: the Inspector opens below the selection toolbar, 12 px clear', () => {
     viewport(1280, 800);
     barAndBand(1280, 800);
     header(1280);
@@ -178,7 +178,7 @@ describe('the measured top line', () => {
     expect(bounds().top).toBe(92 + 49 + CLEAR);
   });
 
-  // GM - Design, 2026-10-23 (round 3, answer 5): "The Inspector jumping on
+  // Design, 2026-10-23: "The Inspector jumping on
   // deselect: hold it. A panel shouldn't move unless someone moves it. While
   // it's open, use the lower of the two top lines (the toolbar's) whether or
   // not the toolbar is showing." The toolbar's Panel keeps the toolbar's

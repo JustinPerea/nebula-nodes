@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * GM, PR #204 round 3: on the promote, every line whose only reason was "this
+ * Design (PR #204): on the promote, every line whose only reason was "this
  * tab isn't connected as you" clears at once, wherever it sits; a line with
  * any other reason stays. The mechanism (lib/clearsOnPromote) and the
  * surfaces it was found missing from: the Updates list's "Couldn't mark the
@@ -80,10 +80,10 @@ describe('the mechanism', () => {
 describe('the surfaces', () => {
   const surface = { kind: 'canvas' as const, projectId: null };
 
-  it('the Updates list: a read refused because this tab isn\'t connected shows no line at all (round 14)', async () => {
+  it('the Updates list: a read refused because this tab isn\'t connected shows no line at all', async () => {
     notesApi.markAgentNotesRead.mockRejectedValue(refused("Couldn't mark the updates as read."));
     await useAgentNotesStore.getState().markRead(surface);
-    // GM r23 item 5 (it used to show MARK_READ_REFUSED_COPY until the promote): a mark-read is
+    // Design (it used to show MARK_READ_REFUSED_COPY until the promote): a mark-read is
     // never the person's own press, so nothing shows and nothing waits here to clear.
     expect(useAgentNotesStore.getState().error).toBeNull();
     expect(useAgentNotesStore.getState().error).not.toBe(MARK_READ_REFUSED_COPY);
@@ -99,7 +99,7 @@ describe('the surfaces', () => {
     expect(useAgentNotesStore.getState().error).toBe(line);
   });
 
-  it('a canvas toast saying GM\'s person line goes on the promote; another toast stays', () => {
+  it('a canvas toast saying design\'s person line goes on the promote; another toast stays', () => {
     useGraphStore.setState({ undoNotice: null, messageNotice: null } as never);
     useGraphStore.getState().notify(`Couldn't set up “Chat”. ${PERSON_REQUIRED_COPY}`);
     expect(useGraphStore.getState().undoNotice?.text).toContain(PERSON_REQUIRED_COPY);

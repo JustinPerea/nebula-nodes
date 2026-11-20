@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { withFocusFixup } from './helpers/focusFixup';
 
 /**
- * GM review of Q107 a (2026-10-21): with the Updates chip in the Commons
+ * Design review (2026-10-21): with the Updates chip in the Commons
  * header, the toolbar wrapped to two rows at 1280 even with the compact chip.
  * Its two least-used sections, Blind labeling and Settings, fold into a More
  * menu while the chip shows below 1440 px (commons.css; jsdom has no media
@@ -23,7 +23,7 @@ vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => n
 const { CommonsView } = await import('../src/components/commons/CommonsView');
 const { useUIStore } = await import('../src/store/uiStore');
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   useUIStore.setState({ viewMode: 'commons', commonsEnabled: true, commonsReturnView: 'canvas' });

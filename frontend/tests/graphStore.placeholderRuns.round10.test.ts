@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 9 of the Q133 confirm (Justin, 2026-10-25: a paid placeholder never
+ * A review of the confirm (Justin, 2026-10-25: a paid placeholder never
  * runs without the person's confirmation, and what runs never costs more than
- * they were shown), with GM - Design's round-10 rulings:
- * - L-3: a node labelled with its model id still asks again when the model
+ * they were shown), with design's rulings:
+ * - A node labelled with its model id still asks again when the model
  *   switches (the seen key is the raw model name, always).
- * - GM item 2: a Krea node's sub-model setting is named in its row, so a
+ * - Design: a Krea node's sub-model setting is named in its row, so a
  *   switch re-asks (Krea-plan rows have no dollar amount to change).
- * - GM item 1: the replay sentence names the changed nodes.
+ * - Design: the replay sentence names the changed nodes.
  */
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
@@ -47,7 +47,7 @@ const edit = (id: string, change: (data: Record<string, unknown>) => Record<stri
     ? { ...n, data: change(n.data as unknown as Record<string, unknown>) } : n) as never });
 };
 
-describe('review 9 and GM round 10', () => {
+describe('the confirm: a model id switch, a Krea variant and a replay', () => {
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
     useGraphStore.setState({ nodes: [], edges: [], undoStack: [], redoStack: [], runHistory: [], isExecuting: false, isImportingGraph: false,
@@ -68,7 +68,7 @@ describe('review 9 and GM round 10', () => {
     vi.restoreAllMocks();
   });
 
-  it('L-3: labelled with its model id, switched (name and model) after the click: asks again, nothing runs unasked', async () => {
+  it('labelled with its model id, switched (name and model) after the click: asks again, nothing runs unasked', async () => {
     useGraphStore.setState({ nodes: [node('p', 'nano-banana', {}, {}, 'Still'),
       node('u', 'openrouter-universal', { pending: codex }, { model: 'openai/gpt-4o-mini' }, 'openai/gpt-4o-mini')] as never,
     edges: [{ id: 'e1', source: 'p', target: 'u', sourceHandle: 'image', targetHandle: 'images' }] as never });
@@ -83,7 +83,7 @@ describe('review 9 and GM round 10', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  describe('GM item 2: a Krea Variant switch', () => {
+  describe('a Krea Variant switch', () => {
     beforeEach(() => {
       useGraphStore.setState({ nodes: [node('k', 'krea-2-generate', { pending: codex }, { _kreaAuth: 'mcp', variant: 'medium' }, 'Hero')] as never,
         edges: [] });
@@ -122,7 +122,7 @@ describe('review 9 and GM round 10', () => {
     });
   });
 
-  it("GM item 1: a replay names the node Codex changed after the save", async () => {
+  it("a replay names the node Codex changed after the save", async () => {
     const record: RunRecord = { id: 'saved', trigger: 'node', status: 'complete', startedAt: 1, targetNodeId: 'b',
       snapshot: { nodes: [
         { id: 'a', definitionId: 'nano-banana', params: { model: 'cheap' }, outputs: {} },

@@ -11,7 +11,7 @@ import { CARD_WIDTH_SPRING_ATTR, useCardWidthSpring } from '../../src/lib/cardWi
 import { houseDots } from '../helpers/houseDots';
 
 /**
- * GM r68 (2026-11-03), the unpinned Inspector beside a node:
+ * Design (2026-11-03), the unpinned Inspector beside a node:
  * - "It grows to fit its content, up to the space between the floating top
  *   chrome (the selection toolbar) and the bottom bar, with 12 px clear of
  *   each. At 1440x900 that's about 660 px. It scrolls only past that."
@@ -25,15 +25,15 @@ import { houseDots } from '../helpers/houseDots';
  *   under the pointer."
  * - "A pinned panel keeps its 440 px start and the person's own size."
  *
- * GM r72: "Cap to the BAND line (~612 at 1440x900), not the bar: the reserved
- * notice band wins; a notice covering Run/Duplicate/Delete is the overlap r57
- * rules out. Unpinned only; pinned keeps its rule." So the bottom line is 12
+ * Design: "Cap to the BAND line (~612 at 1440x900), not the bar: the reserved
+ * notice band wins; a notice covering Run/Duplicate/Delete is the overlap that
+ * rule 1 in NodeInspectorBand.test.tsx rules out. Unpinned only; pinned keeps its rule." So the bottom line is 12
  * px above the notice region's reserved band, not the bar.
  *
  * jsdom has no layout: the panel's header and foot (CHROME) and the body's
  * content get the heights each test says; the toolbar, the bar and the band
  * the rects the live check measured at 1440x900 (toolbar 272-1168 x 92-142,
- * bar 475-965 x 828-876, band 766-820, so 154-754: 600 px of room; GM's
+ * bar 475-965 x 828-876, band 766-820, so 154-754: 600 px of room; design's
  * "~612" was an estimate).
  */
 
@@ -136,7 +136,7 @@ function openBeside(node: DOMRect) {
   frames(1);
 }
 
-/** Lets the open end (GM r82): its height holds for OPEN_STABLE_FRAMES frames. */
+/** Lets the open end (design): its height holds for OPEN_STABLE_FRAMES frames. */
 function settle() {
   frames(OPEN_STABLE_FRAMES);
 }
@@ -191,7 +191,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the unpinned Inspector grows to fit its content (GM r68)', () => {
+describe('the unpinned Inspector grows to fit its content', () => {
   it('takes its whole body, in its first frame, so the body does not scroll', () => {
     chromeAt(1440, 900);
     // Style Reference, measured live: 416 px of body under a 115 px header and foot.
@@ -224,14 +224,14 @@ describe('the unpinned Inspector grows to fit its content (GM r68)', () => {
     expect(bounds().height).toBe(300);
   });
 
-  it('stops 12 px clear of the toolbar and of the notice band (not the bar, GM r72), and only then scrolls', () => {
+  it('stops 12 px clear of the toolbar and of the notice band (not the bar), and only then scrolls', () => {
     const { barTop, bandTop, topLine, bottomLine } = chromeAt(1440, 900);
     contentHeight = 2000;
     openBeside(rect(560, 200, 82, 56));
     const box = bounds();
     expect(box.top).toBe(topLine);
     expect(box.bottom).toBe(bottomLine);
-    // 154-754 at 1440x900, as measured live (GM r72 estimated "~612").
+    // 154-754 at 1440x900, as measured live (design estimated "~612").
     expect(box.height).toBe(600);
     expect(box.bottom).toBe(bandTop - CLEAR);
     expect(box.bottom).toBeLessThan(barTop - CLEAR);
@@ -250,7 +250,7 @@ describe('the unpinned Inspector grows to fit its content (GM r68)', () => {
   });
 });
 
-describe('a node low on the screen (GM r68)', () => {
+describe('a node low on the screen', () => {
   it('shifts the panel up to fit before it gets shorter', () => {
     const { bottomLine } = chromeAt(1440, 900);
     contentHeight = 416;
@@ -274,7 +274,7 @@ describe('a node low on the screen (GM r68)', () => {
   });
 });
 
-describe('a height change from the content (GM r68)', () => {
+describe('a height change from the content', () => {
   /** Where the file row sits on screen: a fixed offset under the panel's top. */
   const rowTop = () => bounds().top + 72;
 
@@ -348,7 +348,7 @@ describe('a height change from the content (GM r68)', () => {
     }
   });
 
-  it('never springs on a move, and a move mid-spring ends it at once (rigid wins, GM r22 Q5)', () => {
+  it('never springs on a move, and a move mid-spring ends it at once (rigid wins)', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     chromeAt(1440, 900);
     contentHeight = 300;
@@ -384,9 +384,9 @@ describe('a height change from the content (GM r68)', () => {
 });
 
 /**
- * GM r82 (review 1 MEDIUM-1): "The open lasts until content is stable: every
+ * Design: "The open lasts until content is stable: every
  * img complete, then 2 stable frames. Any settle before then counts as
- * placement; a change after holds the top (r72). Cap the open at 300 ms from
+ * placement; a change after holds the top. Cap the open at 300 ms from
  * mount; after the cap the panel is placed and later changes hold. ... Any
  * move inside the open is the same top-anchored spring, never a jump. First
  * and second open give the same result: Style Reference at y 784 -> 154-754
@@ -395,7 +395,7 @@ describe('a height change from the content (GM r68)', () => {
  * Style Reference measured live: 416 px of body empty (531 with the chrome),
  * 485 with its preview (600).
  */
-describe('the open lasts until its content is stable (GM r82)', () => {
+describe('the open lasts until its content is stable', () => {
   const LOW = () => rect(560, 784, 82, 56);
 
   for (const after of [1, 2]) {
@@ -503,7 +503,7 @@ describe('the open lasts until its content is stable (GM r82)', () => {
     expect(bounds()).toEqual({ top: topLine, height: 600, bottom: bottomLine });
   });
 
-  it('a reopen starts afresh: no spring on open, no held top kept (review 1 LOW-2)', () => {
+  it('a reopen starts afresh: no spring on open, no held top kept', () => {
     const { bottomLine } = chromeAt(1440, 900);
     contentHeight = 150;
     openBeside(rect(560, 400, 82, 56));
@@ -524,11 +524,11 @@ describe('the open lasts until its content is stable (GM r82)', () => {
 });
 
 /**
- * GM r82 (review 1 LOW-1): "a window resize re-places and drops the held top;
+ * Design: "a window resize re-places and drops the held top;
  * glides to the fresh placement on the same spring, following the resize
  * live."
  */
-describe('a window resize re-places the panel (GM r82)', () => {
+describe('a window resize re-places the panel', () => {
   it('drops the held top and glides to the fresh placement, following the resize live', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     chromeAt(1440, 900);
@@ -583,8 +583,8 @@ describe('a window resize re-places the panel (GM r82)', () => {
   });
 });
 
-/** Review 1 LOW-3: the guards the first round's mutants showed untested. */
-describe('the guards (review 1 LOW-3)', () => {
+/** The guards the first mutation pass showed untested. */
+describe('the guards', () => {
   it('counts the body\'s padding in the height it needs', () => {
     chromeAt(1440, 900);
     const real = window.getComputedStyle.bind(window);
@@ -674,18 +674,18 @@ describe('the guards (review 1 LOW-3)', () => {
     expect(CONTENT_RESIZE_MS).toBeLessThanOrEqual(spring + 100);
   });
 
-  it('the open is GM r82\'s: 2 stable frames, capped at 300 ms', () => {
+  it('the open is design\'s: 2 stable frames, capped at 300 ms', () => {
     expect(OPEN_STABLE_FRAMES).toBe(2);
     expect(OPEN_SETTLE_CAP_MS).toBe(300);
   });
 });
 
 /**
- * Review 1 NIT-2, GM r82: "A flip in bottom placement springs like every
+ * Design: "A flip in bottom placement springs like every
  * other move." Under its node, the panel follows the node's bottom edge, so
  * the card growing (a preview landing) moves it: on the spring, never a jump.
  */
-describe('the card growing under the panel (GM r82)', () => {
+describe('the card growing under the panel', () => {
   it('moves a panel under the node on the spring, and flips it above on the spring too', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     chromeAt(1440, 1400);
@@ -715,7 +715,7 @@ describe('the card growing under the panel (GM r82)', () => {
     expect(bounds().top).toBe(480 - 10 - 300);
   });
 
-  it('under the node, the card growing holds no top: a resize after it moves the panel at once (GM r92 is beside only)', () => {
+  it('under the node, the card growing holds no top: a resize after it moves the panel at once (the held top applies only beside the node)', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     chromeAt(1440, 1400);
     contentHeight = 185;
@@ -748,11 +748,11 @@ describe('the card growing under the panel (GM r82)', () => {
 });
 
 /**
- * Review 2 LOW-1: the moves review 2's mutants showed untested. A zoom
+ * The moves the earlier mutation pass showed untested. A zoom
  * changes the card's size and its place together; a resize can land in the
- * same frame as a move. Both are moves: rigid, never the spring (review 7 M2).
+ * same frame as a move. Both are moves: rigid, never the spring.
  */
-describe('a move that comes with a size change (review 2 LOW-1)', () => {
+describe('a move that comes with a size change', () => {
   it('a zoom (the card moves and grows in one frame) moves the panel at once, with no spring', () => {
     chromeAt(1440, 900);
     contentHeight = 300;
@@ -787,19 +787,19 @@ describe('a move that comes with a size change (review 2 LOW-1)', () => {
 });
 
 /**
- * Review 3 MEDIUM-1, GM r92: "hold the top, as r68 says. A move is read from
+ * Design: "hold the top, as the first ruling above says. A move is read from
  * the node's own box. A card offset change inside a node that hasn't moved
  * counts as growth: the top holds, the height springs, and the file row
  * stays under the pointer."
  *
  * The card (`.model-node__card`, the anchor) sits in its React Flow node
  * (`.react-flow__node`) on the canvas (`.react-flow__viewport`, its pan and
- * zoom in its transform). Review 3 measured an Image Input upload live at
+ * zoom in its transform). A reviewer measured an Image Input upload live at
  * 1440x1000: the node stays at 156.5, while its card goes from 200 + 56 to
  * 236.6 + 180 (the preview raises the node's top padding), and the panel's
  * need from 300 to 486 px.
  */
-describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM r92)', () => {
+describe('a preview landing in a node that has not moved', () => {
   const rowTop = () => bounds().top + 72;
   let nodeRect: DOMRect;
   let canvas: HTMLElement;
@@ -916,7 +916,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
   });
 
   /**
-   * GM r104 (review 4 MEDIUM-1): the panel keeps its gap to the card. On a
+   * Design: the panel keeps its gap to the card. On a
    * resize of the card's own content its facing edge follows the card's edge
    * on the layout spring, with the height, as one motion; a real move stays
    * rigid. The ratchet: on a content resize the panel's x and y never change
@@ -1006,7 +1006,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
   for (const order of ['together', 'card first', 'card only']) {
     it(`placed right, the card widening as its preview lands (${order}): the left edge follows it on the spring, never a one-frame jump`, () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      // Review 4's live case: 1440x1000, the panel right of an Image Input
+      // A reviewer's live case: 1440x1000, the panel right of an Image Input
       // whose card widens 179.5 -> 215.4 px as the preview lands.
       chromeAt(1440, 1000);
       contentHeight = 300 - CHROME;
@@ -1082,7 +1082,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
     expect(moved.top).toBeCloseTo(220.7, 5);
   });
 
-  it('a window resize mid-spring re-places it, and the re-place takes the spring, left included (GM r82, r104)', () => {
+  it('a window resize mid-spring re-places it, and the re-place takes the spring, left included', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     chromeAt(1440, 1000);
     contentHeight = 300 - CHROME;
@@ -1106,7 +1106,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
   });
 
   /**
-   * GM r107: the card's width springs too (lib/cardWidthSpring.ts), on the
+   * Design: the card's width springs too (lib/cardWidthSpring.ts), on the
    * same spring, and the panel's facing edge follows it frame by frame, so
    * the gap between them holds every frame (never the panel over the card's
    * edge, its label or its port). The ratchet: on every frame of the content
@@ -1123,7 +1123,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
    * one frame after `animate` (a pending animation resolves its start time on
    * the next frame) and ends with a `finish` event before that frame's step.
    */
-  describe('the card springs its width and the panel follows its edge, the gap held every frame (GM r107)', () => {
+  describe('the card springs its width and the panel follows its edge, the gap held every frame', () => {
     const followRule = (() => {
       const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '');
@@ -1182,7 +1182,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
 
     /**
      * Opens beside an Image Input whose card is 179.5 px wide, with the card's
-     * own spring on it, and (GM r111) a port on one side or none. The port is
+     * own spring on it, and (design) a port on one side or none. The port is
      * the house skin's: a 20 px handle centred 14 px out from the card's
      * edge, riding it every frame, its 9 px dot drawn 4 px toward the card,
      * so the dot's outer edge is 14.5 px out.
@@ -1265,13 +1265,13 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       const port = document.querySelector<HTMLElement>('.react-flow__handle-right')?.getBoundingClientRect();
       return {
         ...shown, cardRight: card.right, committedLeft, committedFollows, follows, marked: anchor.hasAttribute(CARD_WIDTH_SPRING_ATTR),
-        // The output dot's outer edge as painted (GM r111): the handle's centre, less the 4 px rest offset, plus half the 9 px dot.
+        // The output dot's outer edge as painted (design): the handle's centre, less the 4 px rest offset, plus half the 9 px dot.
         portOuter: port ? port.left + port.width / 2 - 4 + 4.5 : null,
       };
     }
 
     /**
-     * GM r114: the panel clears the port's 20 px hit target and hover circle
+     * Design: the panel clears the port's 20 px hit target and hover circle
      * by 2 px, the farthest of the three (the dot + 8 is nearer at 100 %):
      * 12 px from the handle's centre, so 11.5 px from the dot's outer edge
      * (0.5 px past the centre) at zoom 1.
@@ -1325,14 +1325,14 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
     }
 
     /**
-     * GM r111: a port is a drag source, so the panel never covers it. Placed
+     * Design: a port is a drag source, so the panel never covers it. Placed
      * right of a card with an output port, the panel's edge stands 8 px
      * clear of the outer edge of that port's dot (14.5 px out, so 22.5 px
      * from the card here), and the ratchet measures from the port: within
      * 1 px of 8 on every frame while the card springs and the port rides
      * its edge.
      */
-    it('placed right with an output port, a preview landing: 8 px clear of the port\'s dot every frame (GM r111)', () => {
+    it('placed right with an output port, a preview landing: 8 px clear of the port\'s dot every frame', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       chromeAt(1440, 1000);
       contentHeight = 300 - CHROME;
@@ -1358,7 +1358,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
 
     for (const order of ['the card still', 'the card springing in the same frame', 'the card springing a frame later (as live)'] as const) {
       const withSpring = order !== 'the card still';
-      it(`the output port steps 1 px out from the card, ${order}: 8 px clear of its dot every frame (GM r111, found live)`, () => {
+      it(`the output port steps 1 px out from the card, ${order}: 8 px clear of its dot every frame (found live)`, () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         chromeAt(1440, 1000);
         contentHeight = 300 - CHROME;
@@ -1379,8 +1379,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
           expect(seen[0].follows).toBe(true);
           expect(seen[0].committedLeft).toBeCloseTo(seen[0].left, 5);
         } else {
-          // The card widens in the same frame as the port's step (review 5
-          // NIT-2): the card is painted at its old width this frame (its
+          // The card widens in the same frame as the port's step: the card is painted at its old width this frame (its
           // spring starts after the step), so the panel takes the port's
           // step alone, in this frame, and the gap is exact, not 7 px for a
           // frame. Then it follows the card.
@@ -1399,13 +1398,13 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
     }
 
     /**
-     * GM r114 (review 5 MEDIUM-2): a window resize a few frames into the
-     * card's width spring re-places the panel (r82), and the re-place takes
+     * Design: a window resize a few frames into the
+     * card's width spring re-places the panel, and the re-place takes
      * the spring: its top, which the follow doesn't track, glides on the
      * spring, and its left keeps following the card, each within the spring's
      * per-frame step. Seen live: the top jumped 400 px in one frame.
      */
-    it('a window resize a few frames into the card\'s spring: the top glides, the left keeps the card (GM r114)', () => {
+    it('a window resize a few frames into the card\'s spring: the top glides, the left keeps the card', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       chromeAt(1440, 1000);
       contentHeight = 300 - CHROME;
@@ -1444,7 +1443,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
      * The held frame is only for a card that will spring: with the width
      * spring off (reduced motion) or not on that card (a Character card),
      * the card is at its new width in this frame, so the panel is at its new
-     * edge in it, not an old one (review 5 NIT-2's guards).
+     * edge in it, not an old one.
      */
     for (const why of ['reduced motion', 'a card with no width spring'] as const) {
       it(`${why}: the port's step and the card's widening in one frame take no held frame`, () => {
@@ -1480,7 +1479,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
     }
 
     /**
-     * Review 5 LOW-1: the follow is the open's, so it ends with the open.
+     * The follow is the open's, so it ends with the open.
      * Another node opened in the middle of a follow starts clean: no follow
      * attribute, no spring, its first placement is where its card is.
      */
@@ -1510,7 +1509,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
     });
 
     /**
-     * Review 5 LOW-1: the frame the follow ends in is committed before it is
+     * The frame the follow ends in is committed before it is
      * painted, like the frames of the follow: the card lands at rest there, off
      * its last overshoot, and the panel takes that last step with it.
      */
@@ -1550,7 +1549,7 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
       for (const f of seen) expect(f.left).toBe(830);
     });
 
-    it('placed left with an input port, the card springs: 8 px clear of the input\'s dot every frame, and it holds (GM r111)', () => {
+    it('placed left with an input port, the card springs: 8 px clear of the input\'s dot every frame, and it holds', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       chromeAt(1440, 1000);
       contentHeight = 300 - CHROME;
@@ -1574,11 +1573,11 @@ describe('a preview landing in a node that has not moved (review 3 MEDIUM-1, GM 
 });
 
 /**
- * Review 2 LOW-2: closing clears the frame, so a reopen never paints the last
+ * Closing clears the frame, so a reopen never paints the last
  * open's frame (for one frame, or for good when the node has no card on
  * screen to place it by).
  */
-describe('closing clears the frame (review 2 LOW-2)', () => {
+describe('closing clears the frame', () => {
   it('a reopen paints nothing of the last open before it measures', () => {
     chromeAt(1440, 900);
     contentHeight = 416;
@@ -1629,7 +1628,7 @@ const HAIRLINE_SELECTOR = (() => {
 const hairline = () => panel().querySelector<HTMLElement>('.node-inspector-popover__foot')!.matches(HAIRLINE_SELECTOR);
 
 /**
- * GM r87 (review 2 MEDIUM-1): "A 1 px hairline in the Restraint border token
+ * Design: "A 1 px hairline in the Restraint border token
  * on the top edge of the Run/Duplicate/Delete foot row whenever the body can
  * scroll further down; gone at the end. ... Test: a capped body not scrolled
  * to the end always shows the hairline, incl. cuts between fields (the 900
@@ -1638,15 +1637,15 @@ const hairline = () => panel().querySelector<HTMLElement>('.node-inspector-popov
  * The hairline is the foot's ::before, shown by
  * `.node-inspector-popover__foot[data-more-below]` (styles/slava-restraint.css;
  * its CSS is pinned in inspectorBodyFade.test.tsx), which the popover sets
- * from the body's overflow (GM r98: held through a height spring).
+ * from the body's overflow (design: the state is held through a height spring).
  * jsdom draws no pseudo-elements, so these tests check that the rule's
  * selector matches the foot. It reads the scroll position only, never where
- * the cut falls: review 2 measured the low Style Reference's cut between
+ * the cut falls: a reviewer measured the low Style Reference's cut between
  * fields at 1440x900 (the Strength slider wholly under it, 291 px changed by
  * the fade) and at 1440x820 (only the gap between fields: 0 px changed).
  * Content: 602 px, as measured live (117 px of scroll at 1440x900).
  */
-describe("the foot row's hairline while there is more below (GM r87)", () => {
+describe("the foot row's hairline while there is more below", () => {
   const LOW = () => rect(560, 784, 82, 56);
   const left = () => body().scrollHeight - body().clientHeight - body().scrollTop;
   /** The body's size changed: ScrollFade re-measures (a ResizeObserver in the
@@ -1712,17 +1711,17 @@ describe("the foot row's hairline while there is more below (GM r87)", () => {
 });
 
 /**
- * GM r92 Q3 (review 3 LOW-1): "the line waits until the open has settled.
+ * Design: "the line waits until the open has settled.
  * It's hidden during the open (images complete + 2 frames, 300 ms cap), then
  * shows if there's more to scroll, on the pop spring. Add a test that an
- * empty Style Reference open never shows the line." Q2: "keep the hairline
+ * empty Style Reference open never shows the line." Design also said: "keep the hairline
  * on the pinned Inspector. Wherever a body scrolls, it's the same cue."
  *
- * Review 3 measured the empty Style Reference open live: the panel holds 531
+ * A reviewer measured the empty Style Reference open live: the panel holds 531
  * px while its content settles, overflowing by 10 px down to 1 over about 10
  * frames, and the line read 1 from the first painted frame.
  */
-describe('the hairline waits for the open to settle (GM r92 Q2, Q3)', () => {
+describe('the hairline waits for the open to settle', () => {
   const LOW = () => rect(560, 784, 82, 56);
   const relayout = () => {
     act(() => { window.dispatchEvent(new Event('resize')); });
@@ -1890,7 +1889,7 @@ describe('the hairline waits for the open to settle (GM r92 Q2, Q3)', () => {
 });
 
 /**
- * GM r98: "HOLD the line's state while a height spring runs, rather than
+ * Design: "HOLD the line's state while a height spring runs, rather than
  * hiding it. If the line is already showing (body scrolled partway, more
  * below) when a growth spring starts, it stays on, no blink. If it's off, it
  * stays off. When the spring rests, check again and spring to the new state.
@@ -1904,7 +1903,7 @@ describe('the hairline waits for the open to settle (GM r92 Q2, Q3)', () => {
  * panel's height on screen (`animated`), so the body's overflow mid-spring is
  * the spring's lag; a line that read it live would blink.
  */
-describe('the hairline holds its state through a height spring (GM r98)', () => {
+describe('the hairline holds its state through a height spring', () => {
   const more = () => body().getAttribute('data-scroll-more') === 'true';
   const relayout = () => {
     act(() => { window.dispatchEvent(new Event('resize')); });
@@ -2022,7 +2021,7 @@ describe('the hairline holds its state through a height spring (GM r98)', () => 
     }));
   }
 
-  it('under reduced motion nothing waits for a spring: the line reads the body in the same frame (review 4 NIT-1)', () => {
+  it('under reduced motion nothing waits for a spring: the line reads the body in the same frame', () => {
     reducedMotion();
     scrolledPartway();
     // The "No preview" row goes: the panel jumps to 531 px; nothing is below now.
@@ -2044,7 +2043,7 @@ describe('the hairline holds its state through a height spring (GM r98)', () => 
   });
 });
 
-describe('the pinned Inspector (GM r68: unchanged)', () => {
+describe('the pinned Inspector keeps its own rules', () => {
   it('keeps its 440 px start whatever its content, and never springs', () => {
     useUIStore.getState().setInspectorPinned(true);
     chromeAt(1440, 900);
@@ -2067,7 +2066,7 @@ describe("the layout spring's CSS", () => {
 
   it('springs the floating popover only while data-content-resizing is on, never the pinned one', () => {
     const moving = rules(outside).filter((r) => r.selector.includes('.node-inspector-popover') && /transition\s*:[^;]*(height|top)/.test(r.block));
-    // The spring, and (GM r107, r114) the same spring on its height and top (never its left, which tracks the card) while it follows a card springing its width.
+    // The spring, and (design) the same spring on its height and top (never its left, which tracks the card) while it follows a card springing its width.
     expect(moving.map((r) => r.selector)).toEqual([
       '.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)',
       '.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned)',
@@ -2088,7 +2087,7 @@ describe("the layout spring's CSS", () => {
   it('jumps for reduced motion', () => {
     const off = rules(reduced).filter((r) => r.selector.split(',').map((part) => part.trim()).includes('.node-inspector-popover[data-content-resizing]:not(.node-inspector-popover--pinned)'));
     expect(off).toHaveLength(1);
-    // The rule that follows a springing card is more specific, so it is named too (GM r107).
+    // The rule that follows a springing card is more specific, so it is named too (design).
     expect(off[0].selector.split(',').map((part) => part.trim()))
       .toContain('.node-inspector-popover[data-content-resizing][data-follows-card]:not(.node-inspector-popover--pinned)');
     expect(off[0].block).toMatch(/transition:\s*none/);
@@ -2108,7 +2107,7 @@ describe('the source', () => {
   });
 });
 
-describe('one source for the toolbar+12 top line (GM r72)', () => {
+describe('one source for the toolbar+12 top line', () => {
   const read = (path: string) => readFileSync(resolve(__dirname, '../../src', path), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   it('the popover takes its top line from floatingChromeTopLine and its bottom line from the band', () => {

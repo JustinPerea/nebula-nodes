@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   ui: { createSessionId: 'test-session', settingsCache: { apiKeys: {} }, consumePendingPreset: () => null },
   graph: { nodes: [] as Node<NodeData>[], edges: [], runHistory: [], activeRuns: [],
     createLaunchingIds: [], createCancelledLaunchIds: [], isImportingGraph: false, unsavedScenes: {},
-    // GM, #204 r6: Save style's lines show in the app's notice region (graphStore notify).
+    // Design (#204): Save style's lines show in the app's notice region (graphStore notify).
     notify: vi.fn() },
 }));
 
@@ -102,7 +102,7 @@ describe('Create style saving', () => {
     expect(view.getByRole('button', { name: 'Saving…' })).toBeDisabled();
     await act(async () => { reject(new RequestFailedError("Couldn’t save the style.", 409, { reason: 'Preset storage unavailable.' })); });
     expect(mocks.graph.notify).toHaveBeenCalledWith(expect.stringContaining('Preset storage unavailable'), 'error', expect.anything());
-    // Not in the toolbar row (GM r6): the row keeps its layout.
+    // Not in the toolbar row (design): the row keeps its layout.
     expect(view.container.querySelector('.create-view__topbar [role="alert"]')).toBeNull();
     fireEvent.click(view.getByRole('button', { name: 'Save current' }));
     expect(await view.findByRole('textbox', { name: 'Name this style:' })).toHaveValue('Retry name');

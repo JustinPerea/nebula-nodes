@@ -1,13 +1,13 @@
 /**
- * PR #203 round 9: one cost class, one key state, one cost-tooltip formatter.
+ * PR #203: one cost class, one key state, one cost-tooltip formatter.
  *
- * - Review 8, LOW-3: the class (directRoute keyBilling), the account it
+ * - The class (directRoute keyBilling), the account it
  *   names (keyBillingAccount) and its label (keyBillingLabel) agree with the
  *   backend case by case (backend/tests/fixtures/key_billing_cases.json), and
  *   nothing else in the app reads the route flag.
- * - Review 8, LOW-1 (GM r17 item 1): the switcher's "key is set" is the one
+ * - Design: the switcher's "key is set" is the one
  *   predicate (isKeySet): a key that is only invisible characters is unset.
- * - GM r16 item 3 and r17 items 3 and 4: every cost tooltip leads with the
+ * - Design: every cost tooltip leads with the
  *   paid nodes, priced or not, has no bare "Estimated cost" heading, and the
  *   Accept chip writes the Run chip's reason lines through one formatter.
  */
@@ -29,7 +29,7 @@ type BillingCase = { definitionId: string; params: Record<string, unknown>; apiK
   kind: 'free' | 'mayCost'; account: string; label: string };
 const CASES = (keyBillingCases as unknown as { cases: BillingCase[] }).cases;
 
-describe('one cost class, as the backend gives it (review 8, LOW-3)', () => {
+describe('one cost class, as the backend gives it', () => {
   it.each(CASES.map((testCase) => [JSON.stringify(testCase.params), JSON.stringify(testCase.apiKeys), testCase] as const))(
     'params %s, keys %s', (_params, _keys, testCase) => {
       const definition = NODE_DEFINITIONS[testCase.definitionId];
@@ -90,7 +90,7 @@ export function flagReads(files: Record<string, string>): string[] {
   return found;
 }
 
-describe('nothing but keyBilling reads the route flag (review 8, LOW-3 and NIT-1)', () => {
+describe('nothing but keyBilling reads the route flag', () => {
   it('in the app', () => {
     const files = Object.fromEntries(sources(SRC).map((path) => [relative(SRC, path), readFileSync(path, 'utf8')]));
     expect(Object.keys(files).length).toBeGreaterThan(100);
@@ -115,9 +115,9 @@ describe('nothing but keyBilling reads the route flag (review 8, LOW-3 and NIT-1
   });
 });
 
-// -- one key state (GM r17 item 1; review 8, LOW-1) --------------------------------------
+// -- one key state (design) --------------------------------------
 
-describe('the switcher reads a key as set only when it is (review 8, LOW-1)', () => {
+describe('the switcher reads a key as set only when it is', () => {
   const flux = [{ id: 'f', data: { definitionId: 'flux-2-pro', label: 'Flux', params: { _provider: 'fal' } } }];
   it.each(['', ' ', '​', '﻿​', ' ⁠\n'])('%j is no key', (value) => {
     expect(providerKeyWarnings(flux, NODE_DEFINITIONS, { FAL_KEY: value }))
@@ -128,7 +128,7 @@ describe('the switcher reads a key as set only when it is (review 8, LOW-1)', ()
   });
 });
 
-// -- one cost tooltip (GM r16 item 3; r17 items 3 and 4) ---------------------------------
+// -- one cost tooltip (design) ---------------------------------
 
 const pricing: PricingTable = {
   currencies: {},
@@ -141,7 +141,7 @@ const KEYS = { HF_TOKEN: 'hf_fixture', GOOGLE_API_KEY: 'set', OPENAI_API_KEY: 's
 const at = (id: string, definitionId: string, label: string, x: number, params: Record<string, unknown> = {}): Node<NodeData> =>
   ({ id, position: { x, y: 0 }, data: { definitionId, label, params } as unknown as NodeData });
 
-describe('no cost tooltip has a bare "Estimated cost" heading (GM r16 item 3)', () => {
+describe('no cost tooltip has a bare "Estimated cost" heading', () => {
   it('every closed chip form is a sentence', () => {
     for (const [low, high] of [[0, 0], [0.0047, 0.0047], [0.01, 0.0149], [0.13, 0.13], [9.996, 10.2], [0, 0.43], [0.05, 0.43]]) {
       const title = chipTitle(chipEstimate(low, high, false));
@@ -176,7 +176,7 @@ estimate: ProposalView['cost']['estimate']): ProposalView {
   } as unknown as ProposalView;
 }
 
-describe('the Accept chip carries the Run chip\'s reason lines, by one formatter (GM r17 item 4)', () => {
+describe('the Accept chip carries the Run chip\'s reason lines, by one formatter', () => {
   it('unpriced paid nodes beside Idol: the same tooltip on both chips', () => {
     const graph = [at('a', 'nano-banana', 'A', 0), at('b', 'claude-chat', 'B', 100), at('e', 'gpt-image-2-edit', 'Edit', 200),
       at('i', 'speridlabs-idol', 'Idol', 300)];
@@ -239,7 +239,7 @@ describe('the Accept chip carries the Run chip\'s reason lines, by one formatter
   });
 });
 
-describe('the bar\'s line 1 wraps and is never cut (GM r16 item 4)', () => {
+describe('the bar\'s line 1 wraps and is never cut', () => {
   it('no rule for it holds it to one line or clips it', () => {
     const css = readFileSync(resolve(SRC, 'styles/canvasProposals.css'), 'utf8');
     const rules = [...css.matchAll(/([^{}]*\.proposal-bar__summary[^{}]*)\{([^}]*)\}/g)].map((match) => match[2]);
@@ -248,7 +248,7 @@ describe('the bar\'s line 1 wraps and is never cut (GM r16 item 4)', () => {
   });
 });
 
-describe('every tab hears a key change from anywhere (review 8, NIT-3)', () => {
+describe('every tab hears a key change from anywhere', () => {
   it('App starts the socket listener with the app, so no screen misses one', () => {
     expect(readFileSync(resolve(SRC, 'App.tsx'), 'utf8')).toMatch(/^import '\.\/store\/settingsChangedSocket';$/m);
   });

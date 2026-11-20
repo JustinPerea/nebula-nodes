@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MaskPainterModal } from '../../src/components/panels/DeferredMaskPainter';
 
-// Review 9, M-2: the mask painter rendered inside the Inspector popover. Under
+// The mask painter rendered inside the Inspector popover. Under
 // the Slava restraint skin the popover's backdrop-filter makes it the
 // containing block of the painter's position:fixed overlay, so the "modal"
 // was the popover's 260x300 box: header and Close hidden, the canvas and the

@@ -4,7 +4,7 @@ import postcss, { type AtRule, type Rule } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
 
 /**
- * Review 10, M-1: what the app's own stylesheets declare for an element,
+ * What the app's own stylesheets declare for an element,
  * resolved the way the browser cascades them, so a test can say a modal looks
  * the same wherever it renders. jsdom's getComputedStyle can't: it drops any
  * shorthand that holds a var() ("border: 1px solid var(--sr-edge)") and
@@ -38,7 +38,7 @@ export interface SheetRule {
   state: string;
   /** `base` without attribute selectors or :not(): every state the element
    * can take ([data-open], [aria-expanded="true"] …), for a check that has
-   * to see them all (review 12 NIT-2, the frame ratchet). */
+   * to see them all (the frame ratchet). */
   loose: string;
   specificity: [number, number, number];
   order: number;
@@ -77,7 +77,7 @@ function ofListSpecificity(node: selectorParser.Pseudo): Specificity | null {
 
 function specificityOf(selector: selectorParser.Selector): [number, number, number] {
   let a = 0; let b = 0; let c = 0;
-  // The selector's own nodes, one by one (the fix from PR #204 round 13, brought here by
+  // The selector's own nodes, one by one (the fix from PR #204, brought here by
   // fix/moodboard-board-layout: a walk() that returned false at an :is(), :not() or :where()
   // ended the whole walk, so nothing after it counted, and `.a:where(.b) .c` read (0,1,0)).
   // Combinators sit between the compounds in `nodes`; a pseudo's arguments are read only
@@ -88,7 +88,7 @@ function specificityOf(selector: selectorParser.Selector): [number, number, numb
     else if (node.type === 'tag' && node.value !== '*') c += 1;
     else if (node.type === 'pseudo') {
       const name = node.value.toLowerCase();
-      // Round 17 (review 12 NIT-4, review 13 NIT-2), against Selectors Level 4 section 16: a
+      // Against Selectors Level 4 section 16: a
       // pseudo-element counts as a type, the CSS 2 one-colon forms too (`a:before` is (0,0,2)).
       if (name.startsWith('::') || LEGACY_ELEMENTS.has(name)) c += 1;
       else if (name === ':where') continue;
@@ -209,7 +209,7 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
   root.walkRules((rule: Rule) => {
     for (let parent = rule.parent; parent && parent.type !== 'root'; parent = parent.parent) {
       if (parent.type === 'atrule' && /keyframes|font-face/.test((parent as AtRule).name)) return;
-      // A forced-colors block is a mode of its own (GM PR #205 r8 item 4): the
+      // A forced-colors block is a mode of its own (design, PR #205): the
       // cascade here is the normal one; tests read that block on its own.
       if (parent.type === 'atrule' && (parent as AtRule).name === 'media' && /forced-colors\s*:\s*active/.test((parent as AtRule).params)) return;
     }
@@ -264,10 +264,10 @@ function rulesOf(css: string, file: string, order: { next: number }, from?: stri
       let loose = base;
       try {
         selectorParser((root) => {
-          // PR #204 round 11: `data-line-because` marks a line's words (components/LineText), not
+          // PR #204: `data-line-because` marks a line's words (components/LineText), not
           // a state a control takes, so a rule for it reaches only an element that carries it:
           // the because sheet's sans face (styles/becauseLine.css) isn't a pin edge's own font.
-          // Round 18 (GM r28 1): `data-line-neutral` marks a Commons load line's box the same way.
+          // Design: `data-line-neutral` marks a Commons load line's box the same way.
           root.walkAttributes((attribute) => { if (!LINE_MARKS.has(attribute.attribute)) attribute.remove(); });
           root.walkPseudos((pseudo) => { if (pseudo.value === ':not') pseudo.remove(); });
           // A compound left empty ("> [data-x]") matches anything: "*".

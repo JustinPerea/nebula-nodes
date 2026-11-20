@@ -1,14 +1,14 @@
 /**
- * Round 19 of PR #199, the frontend's rules and lines:
- * - GM r28, 1 (review 17 drops-locks-ui LOW-1): a drop on a handle of the
+ * PR #199, the frontend's rules and lines:
+ * - Design: a drop on a handle of the
  *   same kind says its own line ("Nebula couldn’t connect two outputs. Drag from an
  *   output to an input." / "… two inputs …"), never another failure's
  *   reason (it was read as an input: "isn’t on the node anymore", a loop);
- * - review 17 drops-locks-ui NIT: the kept one-connection refusal says
+ * - The kept one-connection refusal says
  *   "only one connection";
- * - GM r27, 1: each kept control its own verb ("You can delete the note
+ * - Design: each kept control its own verb ("You can delete the note
  *   after you save it as a project.");
- * - GM r27, 3 and review 17 NIT-2: Nebula's own reopen says the lock form
+ * - Design: Nebula's own reopen says the lock form
  *   while it follows; the following lines use ’.
  */
 import { readFileSync } from 'node:fs';
@@ -30,10 +30,10 @@ const edge = (source: string, sourceHandle: string, target: string, targetHandle
 const OUTPUTS = 'Nebula couldn’t connect two outputs. Drag from an output to an input.';
 const INPUTS = 'Nebula couldn’t connect two inputs. Drag from an output to an input.';
 
-describe('GM r28, 1: a drop on a handle of the same kind', () => {
+describe('a drop on a handle of the same kind', () => {
   const nodes = [node('t', 'text-input'), node('t2', 'text-input'), node('s', 'seedream-4-5'), node('s2', 'seedream-4-5')];
 
-  it('GM’s two lines, verbatim', () => {
+  it('the two same-kind drop lines, verbatim', () => {
     expect(SAME_KIND_DROP_LINES).toEqual({ source: OUTPUTS, target: INPUTS });
   });
 
@@ -76,7 +76,7 @@ describe('GM r28, 1: a drop on a handle of the same kind', () => {
   });
 });
 
-describe('review 17 NIT: the kept one-connection refusal', () => {
+describe('the kept one-connection refusal', () => {
   it('“It takes only one connection.”', () => {
     const capped = node('c', 'universal', { isDynamic: true,
       dynamicInputPorts: [{ id: 'refs', label: 'Refs', dataType: 'Image', multiple: true, maxConnections: 1 }], dynamicOutputPorts: [] });
@@ -86,8 +86,8 @@ describe('review 17 NIT: the kept one-connection refusal', () => {
   });
 });
 
-describe('GM r27, 1: each kept control its own verb', () => {
-  it('a note’s Delete, GM’s line verbatim; Rerun, Retry and Recover by their own verbs', () => {
+describe('each kept control its own verb', () => {
+  it('a note’s Delete, design’s line verbatim; Rerun, Retry and Recover by their own verbs', () => {
     expect(keptLockTitle('delete-note')).toBe('You can delete the note after you save it as a project.');
     expect(keptLockTitle('rerun')).toBe('You can rerun it after you save it as a project.');
     expect(keptLockTitle('retry')).toBe('You can run its failed nodes again after you save it as a project.');
@@ -104,7 +104,7 @@ describe('GM r27, 1: each kept control its own verb', () => {
   });
 });
 
-describe('GM r27, 3 and review 17 NIT-2: the following lines', () => {
+describe('the following lines', () => {
   it('Nebula’s own reopen: the lock form', () => {
     expect(runWhileFollowingLine(null, null, 'Delta', undefined, true)).toBe('You can run the canvas when “Delta” opens.');
     expect(runWhileFollowingLine('Hero', null, 'Delta', undefined, true)).toBe('You can run “Hero” when “Delta” opens.');
@@ -116,7 +116,7 @@ describe('GM r27, 3 and review 17 NIT-2: the following lines', () => {
   });
 });
 
-describe('GM r28, 2: the person’s own selection isn’t in the in-app activity', () => {
+describe('the person’s own selection isn’t in the in-app activity', () => {
   it('no app surface reads selection events (the Agent log takes agentPresence and window lines; Updates are agents’ notes)', async () => {
     const { readdirSync, statSync } = await import('node:fs');
     const root = resolve(__dirname, '../src');

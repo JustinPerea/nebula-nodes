@@ -3,7 +3,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 // The canvas shows exactly the backend's wires between backend nodes, plus
-// the person's own wires that are still on their way (found by the Q82 lane's
+// the person's own wires that are still on their way (found by a
 // live check, 2026-10-21: after an agent's undo the backend had no wires, but
 // the open canvas still drew e1 until a reload).
 
@@ -161,7 +161,7 @@ describe("the person's own wire on its way", () => {
     expect(wires()).toEqual([]);
   });
 
-  it("an agent's unwire after the connect's own sync, before its answer, still drops it (review)", async () => {
+  it("an agent's unwire after the connect's own sync, before its answer, still drops it", async () => {
     net.held.add('/api/graph/connect');
     useGraphStore.getState().onConnect(connection('n1', 'n2'));
     sync(nodes(), [wire('n1', 'n2', 'e1')], { edit: { tab: 'mine' } });
@@ -228,7 +228,7 @@ describe('a wire the person deleted', () => {
     expect(wires()).toEqual(['e1:n1->n2']);
   });
 
-  it("an agent's re-wire after the delete's own sync, before its answer, shows (review)", async () => {
+  it("an agent's re-wire after the delete's own sync, before its answer, shows", async () => {
     sync(nodes(), [wire('n1', 'n2', 'e1')], { edit: CLAUDE });
     net.held.add('/api/graph/edge');
     useGraphStore.getState().onEdgesChange([{ type: 'remove', id: 'e1' }]);
@@ -251,7 +251,7 @@ describe('a wire the person deleted', () => {
   });
 });
 
-describe('a late answer does not bring back what a sync already took away (review)', () => {
+describe('a late answer does not bring back what a sync already took away', () => {
   const pairNodes = () => [textNode('n1'), previewNode('n2'), previewNode('n3', 420)];
   const pairWire = () => ({ ...wire('n1', 'n3', 'e1'), data: { dataType: 'Text' } });
   const addPair = () => {
@@ -314,7 +314,7 @@ describe('a late answer does not bring back what a sync already took away (revie
   });
 });
 
-// PR #216 r3: a proposal's model change drops the wires its new model can't
+// PR #216: a proposal's model change drops the wires its new model can't
 // take; the person's Undo of that Accept puts them back with the old model.
 describe("an accepted proposal's removed connections", () => {
   it('leave with Accept and come back with its Undo', async () => {
@@ -332,7 +332,7 @@ describe("an accepted proposal's removed connections", () => {
 
     useGraphStore.getState().undo();
     expect(links()).toEqual(['n1->n2']);
-    // The canvas's own wire comes back, never one made up from its ends (review 2 FE6/F12).
+    // The canvas's own wire comes back, never one made up from its ends.
     expect(useGraphStore.getState().edges.map((edge) => [edge.id, edge.type])).toEqual([['e1', 'typed-edge']]);
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n2')?.data.params).toEqual({});
     await flush();
@@ -352,7 +352,7 @@ describe("an accepted proposal's removed connections", () => {
     expect(useGraphStore.getState().edges.map((edge) => [edge.id, edge.type])).toEqual([['e1', 'typed-edge']]);
   });
 
-  it('leave a wire the person drew again alone on Undo (review 2 F7)', () => {
+  it('leave a wire the person drew again alone on Undo', () => {
     sync(nodes(), [wire('n1', 'n2', 'e1')], { graphReplaced: true });
     const step = useGraphStore.getState().beginUndoStep();
     const swapped = { ...previewNode('n2'), data: { ...previewNode('n2').data, params: { model: 'b' } } };
@@ -385,7 +385,7 @@ describe("an accepted proposal's removed connections", () => {
   });
 });
 
-describe('a wire drawn to a dynamic node before its create answered (review)', () => {
+describe('a wire drawn to a dynamic node before its create answered', () => {
   it('is sent once the node has its backend id, and stays through the next sync', async () => {
     net.held.add('/api/graph/node');
     const tempId = useGraphStore.getState().addDynamicNode('openrouter-universal', { x: 800, y: 0 })!;

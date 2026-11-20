@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { inputFileName, middleTruncate } from '../src/lib/fileName';
 
-// GM - Design, drop follow-ups (2026-10-24): a long file name is cut in the
+// Design, drop follow-ups (2026-10-24): a long file name is cut in the
 // middle so its extension stays, "quarterly-rep….pdf".
 
 describe('middleTruncate', () => {
@@ -10,7 +10,7 @@ describe('middleTruncate', () => {
     expect(middleTruncate('exactly-eighteen.a', 18)).toBe('exactly-eighteen.a');
   });
 
-  it("keeps a long name's extension (GM's example)", () => {
+  it("keeps a long name's extension (design's example)", () => {
     expect(middleTruncate('quarterly-report-final-version-2026.pdf', 18)).toBe('quarterly-rep….pdf');
   });
 

@@ -1,8 +1,8 @@
 /**
- * Error copy round 3f (GM - Design): GM's general line split by surface, the
- * Cinema shot panel's heading, and the shared lines GM rewrote.
+ * Error copy (design): design's general line split by surface, the
+ * Cinema shot panel's heading, and the shared lines design rewrote.
  *
- * GM: "Couldn't run the node." followed by "That didn't work." says the same
+ * Design: "Couldn't run the node." followed by "That didn't work." says the same
  * thing twice, and reloading doesn't fix a provider failure.
  * - On node cards and the Cinema shot panel → "Run the node again. If it
  *   keeps failing, Details shows what {Provider} said." With no provider:
@@ -69,7 +69,7 @@ afterEach(() => {
   mocks.fetch.mockReset();
 });
 
-describe('GM\'s general line under any other heading', () => {
+describe('the general failure line under any other heading', () => {
   it('drops "That didn\'t work."', () => {
     expect(errorCopy.REFUSED_FALLBACK_COPY).toBe(ELSEWHERE);
     expect(errorCopy.copyForError(new Error('internal'))).toBe(ELSEWHERE);
@@ -78,7 +78,7 @@ describe('GM\'s general line under any other heading', () => {
   it('a request with no answer says the server on this computer isn\'t answering', () => {
     expect(errorCopy.CONNECTION_LOST_COPY).toBe(SERVER);
     expect(errorCopy.copyForError(new errorCopy.ConnectionLostError(new TypeError('Failed to fetch')))).toBe(SERVER);
-    // typeerror (2026-10-24): a TypeError nothing classified is a browser-side failure, not no answer.
+    // PR #191 (2026-10-24): a TypeError nothing classified is a browser-side failure, not no answer.
     expect(errorCopy.copyForError(new TypeError('Failed to fetch'))).toBe(ELSEWHERE);
     // Beside a Try again button, the line ends in the button's own words.
     const alone = 'Nebula couldn’t load the moodboard because the server isn’t answering. Check that Nebula is running, then try again.';
@@ -109,7 +109,7 @@ describe('the node card\'s general line', () => {
     const person = 'Add a fal.ai API key in Settings to run this node.';
     expect(nodeErrorCopy({ raw: RAW, category: 'auth', person, provider: 'fal.ai' }).reason).toBe(`Nebula couldn’t run the node. ${person}`);
     const friendly = 'fal.ai is having trouble right now. Try again in a few minutes.';
-    // A classified failure takes the category's clause with the provider named (design D18), not the backend's words.
+    // A classified failure takes the category's clause with the provider named (design), not the backend's words.
     expect(nodeErrorCopy({ raw: RAW, category: 'network', friendly, provider: 'fal.ai' }).reason)
       .toBe('Nebula couldn’t run the node because fal.ai isn’t answering. Check your connection, then try again.');
   });
@@ -187,7 +187,7 @@ describe('the Cinema shot panel', () => {
       errorRaw: RAW, errorProvider: 'BytePlus' });
     const error = container.querySelector('.cinema-shot-panel__error')!;
     expect(heading(error)).toBeNull();
-    // Round 3g (GM): the shot panel's own wording.
+    // Design: the shot panel's own wording.
     expect(reason(error)).toBe('Nebula couldn’t generate the shot. Generate it again. If it keeps failing, “Details” shows what BytePlus said.');
     expect(error.querySelector('details')!.textContent).toContain('req_123');
   });
@@ -212,7 +212,7 @@ describe('the Cinema shot panel', () => {
 
 // -- other shared lines ---------------------------------------------------------
 
-describe('the shared lines GM rewrote', () => {
+describe('the shared lines design rewrote', () => {
   it('a refused run says "run the node again" (rule 8)', () => {
     expect(NOTHING_RAN_LINE).toBe('Nothing ran. Check the inputs and API keys, then run the node again.');
   });
@@ -240,7 +240,7 @@ describe('the shared lines GM rewrote', () => {
     useGraphStore.setState({ isImportingGraph: true });
     const error = await useGraphStore.getState().authorGenerationCluster({ definitionId: 'flux-2-pro' } as never)
       .catch((caught: unknown) => caught);
-    // GM, PR #205 r1: the refused action's lock line, standing alone.
+    // Design (PR #205): the refused action's lock line, standing alone.
     const lock = 'You can start the generation when the import finishes.';
     expect(errorCopy.failureCopy(error)).toEqual({ heading: '', reason: lock, button: lock, cause: lock, what: '' });
   });
@@ -273,7 +273,7 @@ describe('the Commons status tooltips', () => {
 
   it('writes the time the same way in every locale', () => {
     // The browser's own format is "00:00" in many locales, and "12:00\u202fAM"
-    // (a narrow space) in newer ones: neither is GM's "12:00 AM".
+    // (a narrow space) in newer ones: neither is design's "12:00 AM".
     vi.spyOn(Date.prototype, 'toLocaleTimeString').mockReturnValue('00:00');
     const line = title(status({ worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
       meter: { calls: 20, cap: 20, remaining: 0, resets_at: new Date(2026, 8, 28, 0, 0).toISOString() } }));

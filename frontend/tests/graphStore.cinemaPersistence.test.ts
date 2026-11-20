@@ -192,17 +192,17 @@ describe('Cinema scene persistence ordering', () => {
     edit(spec('Rejected'));
     await settle();
     expect(console.warn).toHaveBeenCalled();
-    // PR #198 fix round 7 (GM r9 decision 2): the same field changed on both
+    // PR #198 (design): the same field changed on both
     // sides is a clash. The person's value stays on screen, and the person
     // is asked; until then, saves send the other side's value for it.
     receive(spec('External recovery'));
     expect(current().shots[0].prompt).toBe('Rejected');
-    // Review 11, L-1 (GM r19 answer 3): a sync that names no writer is
+    // Design: a sync that names no writer is
     // unknown, and the line says nothing of who.
     expect(useGraphStore.getState().sceneClashes.n1?.line).toBe('“Scene” changed while you were editing it.');
     edit(spec('Retry edit'));
     await settle();
-    // Fix round 4 (review 4, HIGH): a refused write also reads the backend's
+    // A refused write also reads the backend's
     // graph again (GET /api/graph/export), so only the PUTs are counted here.
     const puts = () => transport.fetch.mock.calls.flatMap((call, index) => (call[1]?.method === 'PUT' ? [index] : []));
     expect(current().shots[0].prompt).toBe('Retry edit');

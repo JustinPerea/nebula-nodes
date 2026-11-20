@@ -1,5 +1,5 @@
 /**
- * A fake Nebula backend for the held-undo tests (round 17): it keeps the
+ * A fake Nebula backend for the held-undo tests: it keeps the
  * graph (node ids, params and wires), applies each request when it arrives,
  * queues the graphSync each change broadcasts (its echo, in order), and
  * holds or releases each HTTP answer. Tests choose when echoes and answers
@@ -15,7 +15,7 @@ export interface FakeWire { id: string; source: string; sourceHandle: string; ta
 interface HeldAnswer { id: number; label: string; release: () => void }
 type Graph = { nodes: FakeNode[]; edges: FakeWire[] };
 /** An echo, the request whose change it shows, and its syncSeq (PR #205
- * review 8: main.py numbers every graphSync as it reads the graph, and a
+ * main.py numbers every graphSync as it reads the graph, and a
  * restore's or a node delete's answer names its own sync's number). */
 type Echo = Graph & { request: number; seq: number };
 

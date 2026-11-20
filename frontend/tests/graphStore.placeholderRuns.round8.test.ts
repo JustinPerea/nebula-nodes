@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 7 of the Q133 confirm (Justin, 2026-10-25: a paid placeholder never
+ * A review of the confirm (Justin, 2026-10-25: a paid placeholder never
  * runs without the person's confirmation, and what runs never costs more than
- * they were shown), with the coordinator's decisions and GM - Design's round 8:
- * - L1: a replay's classification follows what runs: a placeholder deleted
+ * they were shown), with the decisions made and design's rulings:
+ * - A replay's classification follows what runs: a placeholder deleted
  *   from the canvas, or turned into another type, is never "finished"; the
  *   replay's saved copy runs as a normal paid node. One still a placeholder
  *   by id is asked about, as Nebula does.
- * - L2: a row counts as seen only if its node, model and price all match.
- * - L3: a notice never takes an agent's Undo away.
- * - GM item 4: a yes dropped while a graph import runs says so.
+ * - A row counts as seen only if its node, model and price all match.
+ * - A notice never takes an agent's Undo away.
+ * - Design: a yes dropped while a graph import runs says so.
  */
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
@@ -78,7 +78,7 @@ const record = (): RunRecord => ({ id: 'saved', trigger: 'node', status: 'comple
     { id: 'b', definitionId: 'nano-banana', params: {}, outputs: {} },
   ], edges: [{ id: 'e1', source: 'a', sourceHandle: 'image', target: 'b', targetHandle: 'images' }] } } as never);
 
-describe("review 7: the person's direct run once the placeholder dialog has shown", () => {
+describe("the person's direct run once the placeholder dialog has shown", () => {
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
     useGraphStore.setState({ nodes: [node('a', 'nano-banana', { pending: codex }), node('b')] as never,
@@ -103,7 +103,7 @@ describe("review 7: the person's direct run once the placeholder dialog has show
     vi.restoreAllMocks();
   });
 
-  describe('L1: a replay follows what runs', () => {
+  describe('a replay follows what runs', () => {
     it('Codex deletes its placeholder while the dialog is open: "Run without…", the saved copy runs as a muted row', async () => {
       useGraphStore.setState({ runHistory: [record()] });
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
@@ -157,7 +157,7 @@ describe("review 7: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe('L2: a row counts as seen only if its node, model and price all match', () => {
+  describe('a row counts as seen only if its node, model and price all match', () => {
     it('same node, another model, cheaper, no placeholder left: asks again with the changed line', async () => {
       useGraphStore.setState({ nodes: [node('a', 'nano-banana', { pending: codex }), node('b', 'nano-banana')] as never });
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
@@ -198,7 +198,7 @@ describe("review 7: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe("L3: a notice never takes an agent's Undo away", () => {
+  describe("a notice never takes an agent's Undo away", () => {
     const agentUndo = () => {
       const entry = { id: 'x' };
       useGraphStore.setState({ undoStack: [entry] as never,
@@ -233,7 +233,7 @@ describe("review 7: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe('GM round 8, item 4: a yes dropped while a graph import runs', () => {
+  describe('a yes dropped while a graph import runs', () => {
     it('node Run: "Nothing ran. Nebula is still importing. Click “Run” again when it finishes."', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
       askMock.mockImplementationOnce(async (model: PlaceholderRunConfirm) => {

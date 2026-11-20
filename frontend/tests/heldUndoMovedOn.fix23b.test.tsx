@@ -1,8 +1,7 @@
-// PR #199 fix round 23, lane B (review 21 reopen-tabs NIT-3, mutants G1 and
-// G2): a refused delete brings its node back as it was at the press only when
+// PR #199: a refused delete brings its node back as it was at the press only when
 // the person hasn't moved on. Moving on is either half alone: inspecting
-// another node with no canvas selection (G1), or selecting another node on
-// the canvas with nothing inspected (G2). Round 20's SEL changes both at once,
+// another node with no canvas selection, or selecting another node on
+// the canvas with nothing inspected. The earlier test in heldUndo.round20.test.tsx ("a refused delete after the person moved on comes back unselected (design)") changes both at once,
 // so it can't tell the halves apart.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
@@ -38,7 +37,7 @@ const emit = (event: Record<string, unknown>) => {
 };
 let clock = Date.now();
 
-describe('review 21 NIT-3 (G1, G2): either half of moving on alone counts', () => {
+describe('either half of moving on alone counts', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -97,7 +96,7 @@ describe('review 21 NIT-3 (G1, G2): either half of moving on alone counts', () =
     await tick(2000);
   };
 
-  it('G1: the person inspected another node (nothing selected on the canvas): n2 comes back unselected, n1 stays inspected', async () => {
+  it('the person inspected another node (nothing selected on the canvas): n2 comes back unselected, n1 stays inspected', async () => {
     await deleteRefusedLater();
     useUIStore.getState().selectNode('n1');
     expect(store().nodes.some((node) => node.selected)).toBe(false);
@@ -107,7 +106,7 @@ describe('review 21 NIT-3 (G1, G2): either half of moving on alone counts', () =
     expect(useUIStore.getState().selectedNodeId).toBe('n1');
   });
 
-  it('G2: the person selected another node on the canvas (nothing inspected): n2 comes back unselected, n1 stays selected', async () => {
+  it('the person selected another node on the canvas (nothing inspected): n2 comes back unselected, n1 stays selected', async () => {
     await deleteRefusedLater();
     expect(useUIStore.getState().selectedNodeId).toBeNull();
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: node.id === 'n1' })) }));
@@ -115,8 +114,8 @@ describe('review 21 NIT-3 (G1, G2): either half of moving on alone counts', () =
     expect(nodeOf('n2')).toBeTruthy();
     expect(nodeOf('n2')?.selected ?? false).toBe(false);
     expect(nodeOf('n1')?.selected).toBe(true);
-    // Since main's "the unpinned Inspector follows the selection" (#205 r11-r18, merged in
-    // round 25), the one selected node is the inspected one too.
+    // Since main's "the unpinned Inspector follows the selection" (PR #205, merged in
+    // later), the one selected node is the inspected one too.
     expect(useUIStore.getState().selectedNodeId).toBe('n1');
   });
 

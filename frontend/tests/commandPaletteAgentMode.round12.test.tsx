@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 
-// Review 11, two older palette bugs (fixed now: Justin, complete fixes as we
+// Two older palette bugs (fixed now: Justin, complete fixes as we
 // hit them). "Ask the agent…" closed the palette (run closed it before the
 // command ran, since 657f7a19), so agent mode was unreachable and its Escape
 // (back to commands) never ran. And an Escape (or Enter) that only ends an

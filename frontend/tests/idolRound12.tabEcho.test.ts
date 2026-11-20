@@ -1,7 +1,7 @@
 /**
- * PR #203 round 12, review 11 copy MEDIUM-1, as the live app runs it: the id
+ * PR #203, as the live app runs it: the id
  * this tab's settings writes carry (apiFetch's X-Nebula-Tab) is the id its
- * socket drops the echo of. Round 12's first build kept a second id in
+ * socket drops the echo of. The first build kept a second id in
  * settingsSignal.ts; apiFetch overwrote the header with lib/tabId.ts's, so
  * every echo read as a change made elsewhere and the person's own save was
  * said twice in the live app, while tests that took both ids from one module
@@ -34,7 +34,7 @@ const heard = (origin: string | undefined) => {
   return events;
 };
 
-describe('the echo of a settings write this tab sent (review 11, copy MEDIUM-1)', () => {
+describe('the echo of a settings write this tab sent', () => {
   it('carries one tab id on the save, the removal and the desktop credential write', async () => {
     await updateSettings({ apiKeys: { HF_TOKEN: 'hf_fixture' } });
     await deleteSettingsApiKey('HF_TOKEN');

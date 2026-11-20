@@ -7,7 +7,7 @@ import { clearKeptCanvas, keepCanvasLocally, releaseKeptCanvas, useGraphStore } 
 import { clearKeptTab, resetKeptCanvasForTests, setKeptCanvasSaving, subscribeKeptPulse } from '../src/lib/keptCanvas';
 
 /**
- * GM r18 on PR #199: a kept tab is a full scratch canvas. Moves,
+ * Design on PR #199: a kept tab is a full scratch canvas. Moves,
  * deletes, a clear, duplicates and Arrange change only this tab (nothing is
  * sent), and Undo and Redo walk the kept tab's own steps: they start empty
  * when the canvas is kept, so Undo never steps back into the history Nebula
@@ -59,7 +59,7 @@ function expectTabOnly() {
   expect(useGraphStore.getState().redoStack).toEqual([]);
 }
 
-describe('GM r18: delete, move and undo are the kept tab’s own', () => {
+describe('delete, move and undo are the kept tab’s own', () => {
   it('Delete takes the node and its wires off this tab, with "Deleted the node." and Undo; Undo puts them back where they were', () => {
     useGraphStore.getState().deleteCanvasElements(['n2'], []);
     expect(ids()).toEqual(['n1', 'n3']);
@@ -118,7 +118,7 @@ describe('GM r18: delete, move and undo are the kept tab’s own', () => {
     expect(pulses).toBe(0);
   });
 
-  it('Undo takes the typing back first, then the delete (GM r19, 5: typing is a step); a duplicate is a step too', () => {
+  it('Undo takes the typing back first, then the delete (typing is a step); a duplicate is a step too', () => {
     useGraphStore.getState().deleteNode('n1');
     useGraphStore.getState().updateNodeData('n2', { params: { value: 'n2 typed after' } });
     useGraphStore.getState().undo();
@@ -135,12 +135,12 @@ describe('GM r18: delete, move and undo are the kept tab’s own', () => {
   });
 });
 
-describe('GM r18 guard: Undo never steps back into the history Nebula saved', () => {
+describe('Undo never steps back into the history Nebula saved (design)', () => {
   it('undoing past the first kept edit stops there: the canvas stays, the saved steps stay', () => {
     useGraphStore.getState().deleteNode('n3');
     useGraphStore.getState().updateNodeData('n1', { params: { value: 'n1 typed' } });
     const saved = useGraphStore.getState().undoStack;
-    useGraphStore.getState().undo(); // the typing (GM r19, 5)
+    useGraphStore.getState().undo(); // the typing (design)
     expect(values()).toEqual(['n1', 'n2']);
     useGraphStore.getState().undo(); // the first kept edit, undone
     const afterFirst = useGraphStore.getState();
@@ -168,7 +168,7 @@ describe('GM r18 guard: Undo never steps back into the history Nebula saved', ()
   });
 });
 
-describe('GM r18 guard: Clear canvas is undoable while kept', () => {
+describe('Clear canvas is undoable while kept (design)', () => {
   it('a clear takes every node and wire off this tab as one step; Undo brings the kept edits back', () => {
     useGraphStore.getState().updateNodeData('n2', { params: { value: 'kept typing' } });
     expect(clearKeptCanvas()).toBe(true);

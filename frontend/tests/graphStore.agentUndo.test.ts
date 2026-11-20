@@ -276,7 +276,7 @@ describe('the person\'s own steps and the agent\'s share one stack', () => {
     // The upload's own echo adds the node: not a second step.
     sync([...nodes, textNode('n3', 'uploaded')], edges, { edit: { actor: { kind: 'person' }, tab: TAB_ID } });
     expect(useGraphStore.getState().undoStack).toEqual([step]);
-    // Review 10, L-2: an undo pressed before the write answered waits for the answer.
+    // An undo pressed before the write answered waits for the answer.
     useGraphStore.getState().undo();
     expect(ids()).toEqual(['n1', 'n2', 'n3']);
     useGraphStore.getState().endUndoStep(step);
@@ -346,7 +346,7 @@ describe('two open tabs', () => {
   });
 });
 
-describe('the canvas names the edit its undo step came from (U1)', () => {
+describe('the canvas names the edit its undo step came from', () => {
   // n2's params, so the person's typing on n1 in earlier tests (kept until
   // its save lands) can't hide the agent's change.
   const wide = () => ({ ...imageNode('n2'), data: { ...imageNode('n2').data, params: { aspect_ratio: '16:9' } } });

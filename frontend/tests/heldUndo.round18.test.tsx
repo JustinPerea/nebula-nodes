@@ -2,24 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
 
-// Review 17, round 18. Every case runs against a fake Nebula that applies
+// Every case runs against a fake Nebula that applies
 // each request, and checks what reached it and that the canvas ends where
-// Nebula's graph does. Turned from the reviewer's probes (r17/fe/w17,
-// propforeign seed 104) into failing tests first.
-// H-1: a write is admitted when the person acts: the project and the graph
+// Nebula's graph does. Turned from a reviewer's probes (a foreign-add
+// property seed) into failing tests first.
+// A write is admitted when the person acts: the project and the graph
 //   it was made in are read then. A write that waited behind an undo's
 //   restore isn't sent when either changed meanwhile, and one that is sent
 //   carries the revision read at admission. The same for a queued restore.
-// M-1: a step that can't be popped (a failed add under a newer step) adds
+// A step that can't be popped (a failed add under a newer step) adds
 //   nothing, so it is dead and no undo takes off what someone else added.
-// M-2: a node held while an undo's restore is on its way keeps the newest
+// A node held while an undo's restore is on its way keeps the newest
 //   copy Nebula synced, and takes it when the hold ends.
-// L-1: the first sync after a param PUT's answer ends the wait for its echo,
+// The first sync after a param PUT's answer ends the wait for its echo,
 //   whatever form Nebula saved the value in.
-// L-2: a restore that never answers fails at the hold limit; a waiting undo
+// A restore that never answers fails at the hold limit; a waiting undo
 //   never blocks a project switch.
-// W5: a refused undo always says so, and the canvas ends where Nebula is.
-// GM r18 (2): a deleted node leaves the canvas at once (option (c)).
+// A refused undo always says so, and the canvas ends where Nebula is.
+// Design: a deleted node leaves the canvas at once.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -96,7 +96,7 @@ const refuse = (match: (path: string, init?: RequestInit) => boolean, status: nu
 
 let clock = Date.now();
 
-describe('round 18 (review 17)', () => {
+describe('held Undo: write admission, dead steps, node holds and restore limits', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -130,8 +130,8 @@ describe('round 18 (review 17)', () => {
       providerRecoveries: [], providerStartAmbiguities: [] } as never);
   };
 
-  describe('H-1: a write waiting behind an undo goes only to the graph it was made in', () => {
-    it('W1: an agent switches project while the writes wait: none is sent', async () => {
+  describe('a write waiting behind an undo goes only to the graph it was made in', () => {
+    it('an agent switches project while the writes wait: none is sent', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
       type('n1', 'A');
@@ -153,7 +153,7 @@ describe('round 18 (review 17)', () => {
       expect(fake.sent.filter((call) => call.method !== 'GET' && call.context === null)).toEqual([]);
     });
 
-    it('W1: a write sent after its wait carries the revision read when the person acted', async () => {
+    it('a write sent after its wait carries the revision read when the person acted', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
@@ -170,7 +170,7 @@ describe('round 18 (review 17)', () => {
       expect(nebula().valueOf('n2')).toBe('B');
     });
 
-    it('W1 control: with no undo waiting, the writes go out with the project', async () => {
+    it('control: with no undo waiting, the writes go out with the project', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n2', 'B');
@@ -181,7 +181,7 @@ describe('round 18 (review 17)', () => {
         .toEqual([{ id: 'p1', revision: 'r1' }, { id: 'p1', revision: 'r1' }]);
     });
 
-    it('W2: an agent imports a graph while a delete waits: the delete never reaches the imported node', async () => {
+    it('an agent imports a graph while a delete waits: the delete never reaches the imported node', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
       await tick(1100);
@@ -243,10 +243,10 @@ describe('round 18 (review 17)', () => {
     });
   });
 
-  describe('M-1: an add that failed under a newer step takes nothing off', () => {
+  describe('an add that failed under a newer step takes nothing off', () => {
     const failAdds = () => refuse((path, init) => path === '/api/graph/node' && init?.method === 'POST', 500, 'Nope.');
 
-    it('Z1: the failed add\'s Cmd+Z never takes off a node a reconnect brought', async () => {
+    it('the failed add\'s Cmd+Z never takes off a node a reconnect brought', async () => {
       start([textFakeNode('n1')]);
       nebula().holdAnswers = true;
       failAdds();
@@ -271,7 +271,7 @@ describe('round 18 (review 17)', () => {
       sameAsNebula();
     });
 
-    it('Z2: the same with nothing arriving: the typing is undone and nothing else', async () => {
+    it('the same with nothing arriving: the typing is undone and nothing else', async () => {
       start([textFakeNode('n1')]);
       nebula().holdAnswers = true;
       failAdds();
@@ -290,8 +290,8 @@ describe('round 18 (review 17)', () => {
     });
   });
 
-  describe('M-2: a node held during a waiting undo takes the newest copy Nebula synced', () => {
-    it('W3: an agent edits a node a waiting undo put back: the canvas shows it, and the next PUT keeps it', async () => {
+  describe('a node held during a waiting undo takes the newest copy Nebula synced', () => {
+    it('an agent edits a node a waiting undo put back: the canvas shows it, and the next PUT keeps it', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'n1', note: 'x' } }, textFakeNode('n2')]);
       await del('n1');
       nebula().holdAnswers = true;
@@ -328,7 +328,7 @@ describe('round 18 (review 17)', () => {
       sameAsNebula();
     });
 
-    it('control (P-11): an echo from before the waiting undo still leaves the undo\'s value', async () => {
+    it('control: an echo from before the waiting undo still leaves the undo\'s value', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
       await tick(1100);
@@ -352,13 +352,13 @@ describe('round 18 (review 17)', () => {
     });
   });
 
-  describe('L-1: the first sync after the PUT\'s answer ends the wait for its echo', () => {
-    it('L3x: Nebula saves its own form of the value; an agent\'s edit right after shows, and the next PUT keeps it', async () => {
+  describe('the first sync after the PUT\'s answer ends the wait for its echo', () => {
+    it('Nebula saves its own form of the value; an agent\'s edit right after shows, and the next PUT keeps it', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'n1', note: 'x' } }]);
       fake.override = (path, init) => {
         if (path === '/api/graph/node/n1' && init?.method === 'PUT') {
           const body = JSON.parse(String(init.body)) as { params: Record<string, unknown> };
-          // Round 19: a write carries only the keys it changed (M-C).
+          // A write carries only the keys it changed.
           if ('value' in body.params) body.params = { ...body.params, value: String(body.params.value).trim() };
           return nebula().apiFetch(path, { ...init, body: JSON.stringify(body) });
         }
@@ -376,8 +376,8 @@ describe('round 18 (review 17)', () => {
     });
   });
 
-  describe('L-2: a restore that never answers', () => {
-    it('W4: fails at the hold limit with the undo failure line, then the waiting typing goes out', async () => {
+  describe('a restore that never answers', () => {
+    it('fails at the hold limit with the undo failure line, then the waiting typing goes out', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
       await tick(1100);
@@ -390,7 +390,7 @@ describe('round 18 (review 17)', () => {
       expect(store().canSwitchProject()).toBe(true);
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
       await tick(15_000); await settle();
-      // GM, round 19: "Nothing was undone. Nebula isn't answering. …"
+      // Design: "Nothing was undone. Nebula isn’t answering. …"
       expect(lines()).toContain("Nothing was undone. Nebula isn’t answering. Make sure it’s running, then try again.");
       expect(writes()).toContain('PUT /api/graph/node/n2');
       expect(nebula().valueOf('n2')).toBe('B');
@@ -402,7 +402,7 @@ describe('round 18 (review 17)', () => {
     });
   });
 
-  describe('W5: a refused undo always says so, and the canvas ends where Nebula is', () => {
+  describe('a refused undo always says so, and the canvas ends where Nebula is', () => {
     it('a newer step landed first: the line shows, and the node the undo put back goes again', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       await del('n2');
@@ -425,7 +425,7 @@ describe('round 18 (review 17)', () => {
     });
   });
 
-  describe('GM r18 (2), option (c): a deleted node leaves the canvas the moment Delete is pressed', () => {
+  describe('a deleted node leaves the canvas the moment Delete is pressed', () => {
     it('the node and its wires go at once, before any echo or answer', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [canvasWire('n1', 'n2')]);
       nebula().holdEchoes = true;
@@ -447,19 +447,19 @@ describe('round 18 (review 17)', () => {
       expect(valueOf('n1')).toBe('AGENT');
     });
 
-    it('Cmd+Z while the delete is on its way waits silently; once it lands, the held press brings it back with its wire (GM r39 item 3)', async () => {
+    it('Cmd+Z while the delete is on its way waits silently; once it lands, the held press brings it back with its wire', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [canvasWire('n1', 'n2')]);
       nebula().holdAnswers = true;
       await del('n2');
       await undo();
-      // GM r39 item 3 (reversing r18's option (c) refusal): no line while it waits.
+      // Design (reversing the earlier refusal): no line while it waits.
       expect(lines()).not.toContain(DROPPED_UNDO_TEXT);
       expect(ids()).toEqual(['n1']);
       expect(writes().filter((call) => call === 'POST /api/graph/restore')).toHaveLength(0);
       nebula().holdAnswers = false;
       while (nebula().releaseAnswer()) await settle();
       await settle();
-      // GM r40 item 1: then the usual Undo toast.
+      // Design: then the usual Undo toast.
       expect(ids()).toEqual(['n1', 'n2']);
       expect(wires()).toEqual(['n1>n2']);
       expect(notice()).toBe('Restored the node.');
@@ -468,7 +468,7 @@ describe('round 18 (review 17)', () => {
       sameAsNebula();
     });
 
-    it('a failed delete puts the node back where it was, with its wires and the failure line, selected again when nothing changed since the press (GM r34 addendum 3)', async () => {
+    it('a failed delete puts the node back where it was, with its wires and the failure line, selected again when nothing changed since the press (design)', async () => {
       start([textFakeNode('n1'), { ...textFakeNode('n2'), position: { x: 420, y: 260 } }], [canvasWire('n1', 'n2')], ['n2']);
       nebula().holdAnswers = true;
       refuse((path, init) => path === '/api/graph/node/n2' && init?.method === 'DELETE', 500, 'Nope.');
@@ -479,11 +479,11 @@ describe('round 18 (review 17)', () => {
       await settle();
       expect(ids()).toEqual(['n1', 'n2']);
       expect(nodeOf('n2')?.position).toEqual({ x: 420, y: 260 });
-      // GM r34 addendum 3 (refining r20 B): the person did nothing since the
+      // Design: the person did nothing since the
       // press, so the selection it had comes back with it.
       expect(nodeOf('n2')?.selected).toBe(true);
       expect(wires()).toEqual(['n1>n2']);
-      // GM round 21 (LOCKED): a 500 names the node and says it's back.
+      // Design (LOCKED): a 500 names the node and says it's back.
       expect(lines().some((line) => /^Nebula couldn’t delete “[^”]+” because the server hit an error, so it’s back on the canvas\./.test(String(line)))).toBe(true);
       // No step is left for a delete that didn't happen.
       expect(store().undoStack).toHaveLength(0);

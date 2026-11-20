@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ALPHA_MIN, kMeansColors, paletteFromPixels, pixelWeight } from '../src/lib/paletteExtract';
 
 /**
- * Alpha counts the same on both sides (PR #208 round 2). The backend
+ * Alpha counts the same on both sides (PR #208). The backend
  * (cinema/color.py, tests/test_colour_alpha.py) and this side read one
  * contract: contracts/fixtures/colour/alpha.json. A pixel under alpha 16 isn't
  * counted; the rest count by alpha / 255. The vision readers' surfaces are
@@ -63,8 +63,8 @@ describe('paletteFromPixels counts alpha as the backend does', () => {
   it('leaves out pixels under the threshold and weighs the rest by alpha', () => {
     // One cluster over opaque red and blue at alpha 64: its centre sits a
     // fifth of the way to blue (64 / (255 + 64)), not half way.
-    // The clustering is where the weights count (round 8: the swatch shown is
-    // then the cluster's own pixel nearest that centre, GM r15).
+    // The clustering is where the weights count (the swatch shown is
+    // then the cluster's own pixel nearest that centre, design).
     const rgba = [[200, 0, 0, 255], [0, 0, 200, 64], [0, 255, 0, ALPHA_MIN - 1]];
     const [centre] = kMeansColors(rgba.map((p) => p.slice(0, 3)), rgba.map((p) => pixelWeight(p[3])), 1);
     expect(centre.rgb.map(Math.round)).toEqual([Math.round(200 * 255 / 319), 0, Math.round(200 * 64 / 319)]);
@@ -81,7 +81,7 @@ describe('paletteFromPixels counts alpha as the backend does', () => {
     const rgb = [[255, 0, 0], [250, 10, 0], [0, 0, 255], [10, 10, 240], [0, 200, 0]];
     const hex = (c: number[]) => `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
     expect(kMeansColors(rgb, rgb.map(() => 1), 2).map((c) => hex(c.rgb))).toEqual(['#a84600', '#0505f8']);
-    // Shown, each cluster is its own pixel nearest its centre (GM r15).
+    // Shown, each cluster is its own pixel nearest its centre (design).
     expect(paletteFromPixels(data, 2)).toMatchObject({ ok: true, colors: ['#fa0a00', '#0000ff'] });
   });
 });

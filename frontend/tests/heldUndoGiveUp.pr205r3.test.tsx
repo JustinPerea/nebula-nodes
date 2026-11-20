@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
 
-// PR #205 round 3, review 2 of the held Undo's give-up line and its guards.
-// - Undo LOW-1 (P11): "Try Undo again" is true only while its Delete's step
+// PR #205, a review of the held Undo's give-up line and its guards.
+// - Undo: "Try Undo again" is true only while its Delete's step
 //   is next in line. A newer step above it (or a late ok with the step no
 //   longer on top) takes the line off; Undo then never meets a false line.
-// - Undo NIT-2: the guards with no test, M7 (forgetRemoved walks the steps
-//   re-pushed in its place), M9 (a late ok on top keeps the line), M10 (only
-//   that Delete's own answer takes its place) and M14 (a new canvas takes it
-//   off: the line never stands over another graph).
+// - Undo: the guards with no test: forgetRemoved walks the steps
+//   re-pushed in its place, a late ok on top keeps the line, only
+//   that Delete's own answer takes its place, and a new canvas takes it
+//   off (the line never stands over another graph).
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -57,7 +57,7 @@ const refuseRestores = () => {
 };
 let clock = Date.now();
 
-describe('PR #205 round 3: the give-up line', () => {
+describe('PR #205: the give-up line', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -98,7 +98,7 @@ describe('PR #205 round 3: the give-up line', () => {
     await settle();
   };
 
-  it('P11 (undo LOW-1): a newer edit after the give-up takes "Try Undo again" off; the late ok and the next Undo never bring it back', async () => {
+  it('a newer edit after the give-up takes "Try Undo again" off; the late ok and the next Undo never bring it back', async () => {
     start([textFakeNode('n1'), { ...textFakeNode('n2'), label: 'Brief' }]);
     await giveUpOn('n2');
     expect(lines()).toEqual([bringBack('“Brief”')]);
@@ -130,7 +130,7 @@ describe('PR #205 round 3: the give-up line', () => {
     expect(ids()).toEqual(['n1', 'n2']);
   });
 
-  it('M9: a late ok with the step on top keeps "Try Undo again" (still true) beside the Delete\'s own line', async () => {
+  it('a late ok with the step on top keeps "Try Undo again" (still true) beside the Delete\'s own line', async () => {
     start([textFakeNode('n1'), { ...textFakeNode('n2'), label: 'Brief' }]);
     nebula().holdAnswers = true;
     store().deleteNode('n2');
@@ -149,7 +149,7 @@ describe('PR #205 round 3: the give-up line', () => {
     expect(ids()).toEqual(['n1', 'n2']);
   });
 
-  it('M10: another Delete\'s late refusal never takes the place of this Delete\'s give-up line', async () => {
+  it('another Delete\'s late refusal never takes the place of this Delete\'s give-up line', async () => {
     start([textFakeNode('n1'), { ...textFakeNode('n2'), label: 'Brief' }, { ...textFakeNode('n3'), label: 'Note' }]);
     refuseDeleteOf('n2');
     nebula().holdAnswers = true;
@@ -169,7 +169,7 @@ describe('PR #205 round 3: the give-up line', () => {
     expect(store().undoNotice?.text).toMatch(/^Nebula couldn.t delete/);
   });
 
-  it('M14: a new canvas takes the give-up line off (it named the old graph\'s node)', async () => {
+  it('a new canvas takes the give-up line off (it named the old graph\'s node)', async () => {
     start([textFakeNode('n1'), { ...textFakeNode('n2'), label: 'Brief' }]);
     await giveUpOn('n2');
     expect(lines()).toEqual([bringBack('“Brief”')]);
@@ -178,7 +178,7 @@ describe('PR #205 round 3: the give-up line', () => {
     expect(lines().join(' ')).not.toMatch(/Try Undo again/);
   });
 
-  it('M12: a late refusal with no line of its own (Nebula says the canvas is out of date while a cut-off write answers) takes the give-up line off', async () => {
+  it('a late refusal with no line of its own (Nebula says the canvas is out of date while a cut-off write answers) takes the give-up line off', async () => {
     start([textFakeNode('n1'), { ...textFakeNode('n2'), label: 'Brief' }]);
     nebula().holdAnswers = true;
     // A write for this canvas still on its way when another canvas opens.
@@ -200,7 +200,7 @@ describe('PR #205 round 3: the give-up line', () => {
     expect(lines().join(' ')).not.toMatch(/Try Undo again/);
   });
 
-  it('M7: a two-node Delete re-pushed by one node\'s echo, the other refused: Undo names (and brings back) only the one that left', async () => {
+  it('a two-node Delete re-pushed by one node\'s echo, the other refused: Undo names (and brings back) only the one that left', async () => {
     start([textFakeNode('n1'), { ...textFakeNode('n2'), label: 'Brief' }, { ...textFakeNode('n3'), label: 'Note' }]);
     refuseDeleteOf('n2');
     nebula().holdAnswers = true;
@@ -213,7 +213,7 @@ describe('PR #205 round 3: the give-up line', () => {
     await settle();
     // Note's echo takes it off there while the canvas still shows it, so the
     // Delete's step is re-pushed above Codex's (placeEchoedDeletes). Since
-    // round 18 a Delete's nodes leave the canvas when it is pressed, so this
+    // a Delete's nodes leave the canvas when it is pressed, so this
     // state is set by hand: the walk is kept as the guard for that path.
     useGraphStore.setState({ nodes: [...store().nodes, canvasNode({ ...textFakeNode('n3'), label: 'Note' })] });
     nebula().deliverEchoes(); await settle();

@@ -93,7 +93,7 @@ describe('CanvasUndoNotice', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  // Error copy round 3b (live check): a refusal line ("Couldn’t delete the node. This node is still
+  // Error copy (live check): a refusal line ("Couldn’t delete the node. This node is still
   // waiting on World Labs. …") was cut to one line with an ellipsis, so the step it names ("use
   // “Checked Marble — forget” in Run history", now "Forget ID") never showed, and it left after 6 seconds, before
   // it could be read. A notice with no button wraps and stays up for its reading time.

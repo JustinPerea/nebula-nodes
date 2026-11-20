@@ -5,13 +5,13 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * GM, PR #203 r4: without a Hugging Face token, Run on an Idol node is
+ * Design (PR #203): without a Hugging Face token, Run on an Idol node is
  * locked in the shared disabled style with the lock reason as its tooltip,
  * so a sure-to-fail run is never sent. Every Run surface: the selection
- * toolbar, the Inspector and the node's context menu. Review r3 LOW-2: it is
+ * toolbar, the Inspector and the node's context menu. It is
  * aria-disabled, not natively disabled, so a keyboard reaches it and its
  * reason (its accessible description), as the toolbar Run is while
- * following; one cursor on every surface. GM r6: a node fed by Idol locks
+ * following; one cursor on every surface. Design: a node fed by Idol locks
  * too (its run would run Idol), and the whole canvas's Run, Cmd+Enter and
  * the palette's Run graph say the canvas's line.
  */
@@ -33,8 +33,8 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { keyIdolInEachTest } from './helpers/keyedSpace';
 
-// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
-// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+// PR #203: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (tests/helpers/keyedSpace.ts).
 keyIdolInEachTest();
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
@@ -91,7 +91,7 @@ const surfaces = [
 
 describe('a keyed Space route without its key (Idol\'s keyed shape): Run is locked', () => {
   for (const [where, mount] of surfaces) {
-    it(`${where}: locked with GM's reason, focusable, and a click or key sends nothing`, () => {
+    it(`${where}: locked with design's reason, focusable, and a click or key sends nothing`, () => {
       setup({});
       const run = mount();
       expect(run).toHaveAttribute('aria-disabled', 'true');
@@ -141,7 +141,7 @@ describe('a keyed Space route without its key (Idol\'s keyed shape): Run is lock
   }
 });
 
-describe('the selection toolbar reads the run plan of the selection (GM, PR #203 r8 item 2)', () => {
+describe('the selection toolbar reads the run plan of the selection (PR #203)', () => {
   function chain(selected: string[]) {
     const pick = (n: Node<NodeData>) => ({ ...n, selected: selected.includes(n.id) });
     const text: Node<NodeData> = { id: 'text', type: 'model-node', position: { x: 0, y: 200 },

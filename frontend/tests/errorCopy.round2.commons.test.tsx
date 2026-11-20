@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * error-copy round 2 (GM - Design), the Commons:
+ * error-copy (design), the Commons:
  * - Upload per file: "heading 'Couldn’t upload {filename}.' with the mapped
  *   reason line below it, e.g. 'Couldn’t upload dusk.png. That's too large
  *   to save.' Never pass the raw backend text through." The backend sends,
@@ -37,7 +37,7 @@ async function backend(input: RequestInfo | URL, init?: RequestInit): Promise<Re
       { filename: 'broken.png', ok: false, error: RAW[2], reason: 'unreadable', person: "That file couldn't be read. It may be damaged." },
       // A code newer than this frontend: the backend's line still shows.
       { filename: 'new.png', ok: false, error: RAW[3], reason: 'a_code_this_build_does_not_know', person: 'Nebula is still checking that file.' },
-      // No `person` (a backend from before this change): GM's 4xx fallback, never `error`.
+      // No `person` (a backend from before this change): design's 4xx fallback, never `error`.
       { filename: 'odd.png', ok: false, error: RAW[3], reason: 'a_code_this_build_does_not_know' },
       { filename: 'fine.png', ok: true, asset_id: 'a1' },
     ] });
@@ -92,7 +92,7 @@ describe('Commons upload, per file', () => {
   });
 });
 
-describe('text-wrap: pretty on popover and notice body text (GM)', () => {
+describe('text-wrap: pretty on popover and notice body text', () => {
   const css = (file: string) => readFileSync(join(__dirname, '../src/styles', file), 'utf8');
   const rule = (source: string, selector: string) => {
     const at = source.indexOf(`${selector} {`);

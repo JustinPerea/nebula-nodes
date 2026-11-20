@@ -3,7 +3,7 @@ import type { Edge } from '@xyflow/react';
 import { ownAddStep } from '../src/lib/canvasUndo';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 10: tests for the held-undo mutants round 9's mutation run left alive (each named
+// PR #205: tests for the held-undo mutants a mutation run left alive (each named
 // in its test). Harness as heldUndo.pr205r9.test.tsx: a fake Nebula, echoes and agents' syncs on one
 // socket queue, each numbered when Nebula read the graph.
 
@@ -61,7 +61,7 @@ const claude = { actor: { kind: 'agent', name: 'Claude', id: 'claude' } };
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 let clock = Date.now();
 
-describe('PR #205 round 9: no sync older than an edit Nebula answered OK undoes it', () => {
+describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () => {
   const snapGraph = () => ({ nodes: [...nebula().nodes.values()].map(clone), edges: clone(nebula().edges) });
   const fireOf = (graph: ReturnType<typeof snapGraph>, seq: number | null, edit?: Record<string, unknown>) => () => emit({
     nodes: FakeNebula.syncNodes(graph), edges: graph.edges, empty: graph.nodes.length === 0,

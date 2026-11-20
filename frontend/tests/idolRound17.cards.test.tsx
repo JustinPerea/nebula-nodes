@@ -1,5 +1,5 @@
 /**
- * PR #203 round 17, GM r32: one heading over a refused run. Every card that
+ * Design (PR #203): one heading over a refused run. Every card that
  * shows a node's run error (the model card, a universal model's card, the
  * Batch card, Create Studio's result) says "Nebula couldn’t start the run."
  * when the pre-call check refused the run (node data `errorNotStarted`), the

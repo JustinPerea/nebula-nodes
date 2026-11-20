@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-it('opens the reference a Review on its Update asks for (Q92 a)', async () => {
+it('opens the reference a Review on its Update asks for', async () => {
   requestReview({ kind: 'commons', targetId: 'ast_1' });
   render(<CommonsView />);
   expect(await screen.findByRole('region', { name: 'Detail ast_1' })).toBeTruthy();

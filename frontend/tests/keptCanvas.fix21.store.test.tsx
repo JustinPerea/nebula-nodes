@@ -1,5 +1,5 @@
 /**
- * Round 21 of PR #199 (GM r31):
+ * PR #199 (design):
  * - 1: the World Labs line names the press of the notice's own button;
  * - 2: the held-reopen lines (the canvas's, after the person asked, and the
  *   card's on Projects) go the moment they are false; a run nobody asked to
@@ -110,7 +110,7 @@ let notices: CanvasNoticeDetail[] = [];
 const onNotice = (event: Event) => { notices.push((event as CustomEvent<CanvasNoticeDetail>).detail); };
 let unsubscribe: (() => void) | null = null;
 
-// The table of lines loads when a hold first arrives (review 21 LOW-1); these
+// The table of lines loads when a hold first arrives; these
 // tests are about the lines themselves, so it is loaded first.
 beforeAll(async () => { await loadReopenHoldLines(); });
 
@@ -172,7 +172,7 @@ const WL = 'You can reopen “Glass campaign” after you check its World Labs r
 const RUN = 'You can reopen “Glass campaign” when the run finishes.';
 const ambiguity = { runId: 'wl-run', nodeId: 'n1', kind: 'worldlabs-environment', message: 'Staged.', durable: true };
 const card = () => reopenHoldNow()?.line ?? null;
-/** The canvas line wherever it sits: by Stop, or by the World Labs notice or Run history (GM r32, 2). */
+/** The canvas line wherever it sits: by Stop, or by the World Labs notice or Run history (design). */
 const shownNow = () => noticeNow() ?? useProjectStore.getState().heldReopenLine?.line ?? null;
 /** Nebula's verdict, read as the tab reads it. */
 const verdict = async (hold: Record<string, unknown> | null) => {
@@ -187,8 +187,8 @@ const askToReopen = async () => {
   expect(useProjectStore.getState().screen).toBe('workspace');
 };
 
-describe('GM r31, 1: the World Labs line names the press', () => {
-  it('GM’s line, quoting the notice button’s own label', () => {
+describe('the World Labs line names the press', () => {
+  it('the reopen line for a World Labs run quotes the notice button’s own label', () => {
     expect(reopenHoldLine('Glass campaign', 'alpha', AMBIGUITY_ALPHA as never)).toBe(WL);
     expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'uncertain' })).toBe(WL);
     expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'uncertain' })).toContain(`press “${UNLOCK_LABEL}”.`);
@@ -202,7 +202,7 @@ describe('GM r31, 1: the World Labs line names the press', () => {
   });
 });
 
-describe('GM r31, 2: the held-reopen lines go the moment they are false', () => {
+describe('the held-reopen lines go the moment they are false', () => {
   it('a run: the canvas line after Open, and the card line, both go as the run finishes', async () => {
     duplicateN1();
     useGraphStore.setState({ isExecuting: true });
@@ -238,7 +238,7 @@ describe('GM r31, 2: the held-reopen lines go the moment they are false', () => 
     expect(card()).toBeNull();
   });
 
-  it('a hold that turns into another (a run, then a World Labs hold): the run’s line goes, and the new hold’s line takes its place (review 19 item 9)', async () => {
+  it('a hold that turns into another (a run, then a World Labs hold): the run’s line goes, and the new hold’s line takes its place', async () => {
     duplicateN1();
     useGraphStore.setState({ isExecuting: true });
     await askToReopen();
@@ -283,7 +283,7 @@ describe('GM r31, 2: the held-reopen lines go the moment they are false', () => 
   });
 });
 
-describe('GM r31, 4 and 5: the reload line, with its subject, true until the reload', () => {
+describe('the reload line, with its subject, true until the reload', () => {
   const update = () => {
     type('Unsaved edit');
     useProjectStore.setState({ activeProject: null });
@@ -293,7 +293,7 @@ describe('GM r31, 4 and 5: the reload line, with its subject, true until the rel
   const OF = (name: string) => `Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “${name}”.`;
   const relist = (names: Array<[string, string]>) => useProjectStore.setState({ projects: names.map(([id, name]) => summary(id, name)) });
 
-  it('GM’s subject: “Nebula couldn’t save your changes because it was updated.”', async () => {
+  it('the reload line names its subject: “Nebula couldn’t save your changes because it was updated.”', async () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('copy-1', 'Recovered Shot 7 copy'), sourceName: 'Shot 7' });
     update();
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(OF('Shot 7')));

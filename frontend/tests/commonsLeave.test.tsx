@@ -5,8 +5,8 @@ import { withFocusFixup } from './helpers/focusFixup';
 import type { LabelingWork, SaveResult } from '../src/components/commons/commonsLeave';
 
 /**
- * Leaving the Commons with unsaved labels asks first (commons-leave, GM -
- * Design's treatment, 2026-10-22). #163 held every exit and disabled the
+ * Leaving the Commons with unsaved labels asks first (commons-leave, design's treatment,
+ * 2026-10-22). #163 held every exit and disabled the
  * Commons' Back, Projects, the tabs and More. Now: the tabs and More stay
  * enabled (moving between sections isn't leaving; the panels keep their
  * drafts), and the real exits (Back, Projects, the browser's Back, the
@@ -102,7 +102,7 @@ const home = () => screen.getByRole('button', { name: /^Back to projects|^Saving
 const popover = () => screen.getByRole('alertdialog');
 const popoverButtons = () => within(popover()).getAllByRole('button').map((button) => button.textContent);
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   history.replaceState(null, '', '/#commons');
@@ -262,7 +262,7 @@ describe("the Commons' Back and Projects ask instead of being disabled", () => {
     expect(useProjectStore.getState().screen).toBe('home');
   });
 
-  // GM: a conflict (or any refusal the same request would get again) can't
+  // Design: a conflict (or any refusal the same request would get again) can't
   // be fixed by saving again, so Save and leave goes and focus waits on Stay,
   // where the person can reload. A failure worth retrying (no answer, a
   // server error) keeps Save and leave as the retry.

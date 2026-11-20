@@ -1,8 +1,7 @@
 /**
- * Round 17 of PR #199 (GM r23, 1 and 2; review 15 kept-wires-ui LOW-2,
- * LOW-3, NIT-2), the kept-wire rules as a library:
+ * PR #199 (design), the kept-wire rules as a library:
  * - the person's refusal is the tab's own line, from the types it knows
- *   (round 18, GM r25 and r26: every type it takes, and the loop line);
+ *   (design: every type it takes, and the loop line);
  * - the connections Save as a project left out are said in the tab's words,
  *   naming each, and from 2 on counted, naming up to 3;
  * - one predicate decides "replaced" for the kept rules and onConnect, so a
@@ -28,7 +27,7 @@ const node = (id: string, definitionId: string, data: Record<string, unknown> = 
 const edge = (source: string, sourceHandle: string, target: string, targetHandle: string): Edge =>
   ({ id: `${source}-${target}-${targetHandle}-${Math.random()}`, source, sourceHandle, target, targetHandle });
 
-describe('GM r23 (1): a refused kept connection says what the input takes, in the tab’s words', () => {
+describe('a refused kept connection says what the input takes, in the tab’s words', () => {
   it('the wrong kind: “Nebula couldn’t connect to “References”. It takes images and masks, not text.”', () => {
     const check = checkKeptWire({ source: 't', sourceHandle: 'text', target: 's', targetHandle: 'images' },
       [node('t', 'text-input'), node('s', 'seedream-4-5')], []);
@@ -46,7 +45,7 @@ describe('GM r23 (1): a refused kept connection says what the input takes, in th
   });
 });
 
-describe('review 15 kept-wires-ui LOW-2: “replaced” is one predicate for the kept rules and onConnect', () => {
+describe('“replaced” is one predicate for the kept rules and onConnect', () => {
   const capped = node('c', 'fal-universal', { isDynamic: true,
     dynamicInputPorts: [{ id: 'refs', label: 'Refs', dataType: 'Image', required: false, multiple: true, maxConnections: 1 }],
     dynamicOutputPorts: [] });
@@ -68,7 +67,7 @@ describe('review 15 kept-wires-ui LOW-2: “replaced” is one predicate for the
   });
 });
 
-describe('review 15 kept-wires-ui LOW-3: dynamic ports (W10, W11)', () => {
+describe('dynamic ports', () => {
   const cinema = node('cin', 'cinema-scene', { isDynamic: true, dynamicInputPorts: [],
     dynamicOutputPorts: [{ id: 'shot_abc', label: 'Shot 1', dataType: 'Image', required: false }] });
   const universal = node('u', 'replicate-universal', { isDynamic: true, dynamicOutputPorts: [],
@@ -85,7 +84,7 @@ describe('review 15 kept-wires-ui LOW-3: dynamic ports (W10, W11)', () => {
   });
 });
 
-describe('review 15 kept-wires-ui LOW-3 / GM r23 (2): one compatibility rule, shared with the backend', () => {
+describe('one compatibility rule, shared with the backend (design)', () => {
   it('the frontend reads the shared file: every pair of types answers the file’s rule', () => {
     const shared = JSON.parse(readFileSync(join(__dirname, '../src/lib/portRules.json'), 'utf8')) as typeof PORT_RULES;
     expect([...shared.types].sort()).toEqual([...PORT_DATA_TYPES].sort());
@@ -112,11 +111,11 @@ describe('review 15 kept-wires-ui LOW-3 / GM r23 (2): one compatibility rule, sh
   });
 });
 
-describe('GM r23 (2): the connections Save as a project left out, in the tab’s words', () => {
+describe('the connections Save as a project left out, in the tab’s words', () => {
   const wire = (kind: string, more: Partial<DroppedWire> = {}): DroppedWire => ({ kind, source: 'n1', target: 'n2',
     sourceName: 'A', targetName: 'B', ...more });
 
-  it('one, named, with GM’s reasons', () => {
+  it('one, named, with design’s reasons', () => {
     expect(droppedConnectionsLine([wire('loop')])).toBe('Nebula left out the connection from “A” to “B” because it connected the node to itself.');
     expect(droppedConnectionsLine([wire('duplicate')])).toBe('Nebula left out the connection from “A” to “B” because the same connection was already there.');
     expect(droppedConnectionsLine([wire('missing', { target: null, targetWas: 'local-9', targetName: null })], (id) => (id === 'local-9' ? 'B' : null)))

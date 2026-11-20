@@ -2,16 +2,16 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 4 of the Q133 confirm (Justin, 2026-10-25: a paid placeholder never
+ * A review of the confirm (Justin, 2026-10-25: a paid placeholder never
  * runs without the person's confirmation, and what runs never costs more than
- * they were shown), with GM - Design's round-5 rulings:
- * - H1: a price read from an input's size is measured for the dialog, which
+ * they were shown), with design's rulings:
+ * - A price read from an input's size is measured for the dialog, which
  *   updates in place when it arrives;
- * - M1: Nebula's refusal carries its own estimate, and the canvas asks again
+ * - Nebula's refusal carries its own estimate, and the canvas asks again
  *   with it ("This run changed since you last reviewed it."), never showing
  *   the refusal's "Click “Run” again" words, on a node's Run, a Cinema shot
  *   and a replay;
- * - GM 4: once the placeholder dialog showed, the browser's costly-run
+ * - Design: once the placeholder dialog showed, the browser's costly-run
  *   confirm never follows it for a run the person's confirmed total covers.
  */
 
@@ -23,7 +23,7 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 const askMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
-/** The person clicks Run on the words the dialog showed (it hands them back: review 5, L6). */
+/** The person clicks Run on the words the dialog showed (it hands them back). */
 const yes = async (model: unknown) => model;
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
 
@@ -64,7 +64,7 @@ function refusal(high: number, message = 'Nothing ran. This run includes 1 paid 
 
 const errors = () => useGraphStore.getState().nodes.map((node) => node.data.error).filter(Boolean);
 
-describe("review 4: the person's direct run over a paid placeholder", () => {
+describe("the person's direct run over a paid placeholder", () => {
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
     useGraphStore.setState({ nodes: [imageNode('a', true), imageNode('b'), cinemaNode()] as never,
@@ -91,7 +91,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     vi.restoreAllMocks();
   });
 
-  describe("M1: Nebula's refusal re-opens the dialog with its own numbers", () => {
+  describe("Nebula's refusal re-opens the dialog with its own numbers", () => {
     it("a node's Run asks again with Nebula's total and the changed line, then runs at it, with no error", async () => {
       askMock.mockImplementation(yes);
       const execute = vi.spyOn(api, 'executeNode')
@@ -177,7 +177,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     });
   });
 
-  describe('M3 / GM: the dialog re-asked over a changed run says so', () => {
+  describe('the dialog re-asked over a changed run says so (design)', () => {
     it('the second ask after an agent changed the run carries the changed line', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
       askMock.mockImplementationOnce(async (model: unknown) => {
@@ -193,7 +193,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     });
   });
 
-  describe('H1: a price read from the input file', () => {
+  describe('a price read from the input file', () => {
     beforeEach(() => {
       usePricingStore.setState({ table: JSON.parse(readFileSync(`${__dirname}/../../backend/data/model_pricing.json`, 'utf8')) } as never);
       useUIStore.setState({ settingsCache: { apiKeys: { BFL_API_KEY: 'set' }, loaded: true } } as never);
@@ -219,7 +219,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
       });
       await useGraphStore.getState().executeNode('u');
       expect(request).toHaveBeenCalledWith([{ ref: '/clips/long-1080p.mp4', kind: 'Video' }]);
-      // GM - Design, round 6, item 2: the row says so while its input is measured.
+      // Design: the row says so while its input is measured.
       expect(shown[0].rows[0].price).toBe('price depends on its input');
       const measured = shown[shown.length - 1];
       expect(measured.rows[0].price).toMatch(/^\$\d/);
@@ -230,7 +230,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     });
   });
 
-  describe("GM 4: one dialog, never the browser's confirm after it", () => {
+  describe("one dialog, never the browser's confirm after it", () => {
     it('an agent clearing its placeholder mid-dialog runs at the total the person confirmed, with no second dialog', async () => {
       useUIStore.setState({ runCostConfirmUsd: 0.01 });
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
@@ -257,7 +257,7 @@ describe("review 4: the person's direct run over a paid placeholder", () => {
     });
   });
 
-  describe("M1: the tab's keys are read again before it asks", () => {
+  describe("the tab's keys are read again before it asks", () => {
     it('asks App for a fresh copy of the settings when the dialog opens', async () => {
       const refresh = vi.fn();
       window.addEventListener('nebula:settings-refresh', refresh);

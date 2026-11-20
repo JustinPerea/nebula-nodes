@@ -1,9 +1,8 @@
-// PR #199 fix round 23 (GM r36 item 6, refining review 21 reopen-tabs NIT-2;
-// NIT-3's G4): after a refused delete, the person's own focus change counts
+// PR #199 (design): after a refused delete, the person's own focus change counts
 // as moving on (the node comes back unselected, and focus stays where they
 // put it); focus Nebula moved itself doesn't (the node comes back selected
 // and inspected as at the press). restoreFocusMark never takes focus from
-// whatever holds it at the restore (G4); with focus on <body>, it puts it
+// whatever holds it at the restore; with focus on <body>, it puts it
 // back where it was at the press.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
@@ -42,7 +41,7 @@ let clock = Date.now();
 let frameQueue: FrameRequestCallback[] = [];
 const runFrames = () => { const due = frameQueue; frameQueue = []; for (const callback of due) callback(0); };
 
-describe('GM r36 item 6: focus the person moved counts as moving on; focus Nebula moved doesn\u2019t', () => {
+describe('focus the person moved counts as moving on; focus Nebula moved doesn\u2019t', () => {
   let card: HTMLElement;
   let chat: HTMLElement;
   beforeEach(() => {
@@ -144,7 +143,7 @@ describe('GM r36 item 6: focus the person moved counts as moving on; focus Nebul
     expect(nodeOf('n2')?.selected ?? false).toBe(false);
   });
 
-  it('Nebula moved focus itself (to a line, after a timer): n2 comes back selected and inspected, focus not stolen (G4)', async () => {
+  it('Nebula moved focus itself (to a line, after a timer): n2 comes back selected and inspected, focus not stolen', async () => {
     await deleteRefusedLater();
     await tick(50);
     chat.focus(); // no input from the person: Nebula's own move

@@ -256,7 +256,7 @@ describe('Preparing the held-out set outlives the panel', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     await waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
     first.unmount();
-    // Round 3e: the API's typed refusal; a plain Error's own text is never shown.
+    // The API's typed refusal; a plain Error's own text is never shown.
     fail(new RequestFailedError("Couldn’t prepare the held-out set.", 409, { reason: 'A reference is still downloading from iCloud.' }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 

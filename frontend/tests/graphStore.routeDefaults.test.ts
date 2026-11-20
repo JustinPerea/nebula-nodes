@@ -45,7 +45,7 @@ describe('route-table node defaults', () => {
   });
 
   it('addNode sends the provider choice and each route\'s defaults', async () => {
-    // Round 13 of PR #114: an add always goes through the backend (a tab
+    // PR #114: an add always goes through the backend (a tab
     // with no backend refuses it), so the defaults are what the create sends.
     apiFetchMock.mockReset().mockImplementation(async (url: string) => (url === '/api/graph/export'
       ? { ok: true, json: async () => ({ empty: true }) }

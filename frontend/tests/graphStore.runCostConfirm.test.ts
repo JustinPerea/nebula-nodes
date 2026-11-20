@@ -8,7 +8,7 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 const askMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
-/** The person clicks Run on the words the dialog showed (it hands them back: review 5, L6). */
+/** The person clicks Run on the words the dialog showed (it hands them back). */
 const yes = async (model: unknown) => model;
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
   connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn(),
@@ -83,7 +83,7 @@ describe('run cost confirmation', () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
-  // Q125 item 3, GM - Design 2026-10-25: the cost shown before a run counts
+  // Design 2026-10-25: the cost shown before a run counts
   // what that run will do with agents' placeholders.
   describe('with an agent\'s placeholder', () => {
     const codex = { agent: { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true }, at: 1 };
@@ -109,7 +109,7 @@ describe('run cost confirmation', () => {
       expect(confirm.mock.calls[0][0]).toContain('Includes 2 nodes Codex is still setting up.');
     });
 
-    // Q133 (Justin, 2026-10-25): always ask first when a placeholder the run
+    // Justin, 2026-10-25: always ask first when a placeholder the run
     // makes normal calls a paid model, whatever the costly-run setting.
     describe('a paid placeholder in the run', () => {
       beforeEach(() => { askMock.mockReset(); });
@@ -157,7 +157,7 @@ describe('run cost confirmation', () => {
         expect(execute.mock.calls[0][7]).toBeCloseTo(1.2);
       });
 
-      // Review 3, finding 2: the re-check after the dialog compares the whole
+      // The re-check after the dialog compares the whole
       // confirmation, not only which placeholders are in it.
       const paidX = () => {
         const state = useGraphStore.getState();
@@ -198,7 +198,7 @@ describe('run cost confirmation', () => {
         expect(execute).not.toHaveBeenCalled();
       });
 
-      // Review 5, H1: once the dialog has shown it stays the authority; the
+      // Once the dialog has shown it stays the authority; the
       // costly-run setting and the browser's confirm never take over.
       it('asks again in the dialog when an agent made it normal and added a paid node meanwhile', async () => {
         useUIStore.setState({ runCostConfirmUsd: 0.01 });

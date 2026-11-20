@@ -1,13 +1,12 @@
 /**
- * Round 17 of PR #199 (GM r23, 2; GM r24; review 15 renumber-recover LOW-2),
- * the store's side, on keptCanvas.fix16.store's harness:
+ * PR #199, the store's side, on keptCanvas.fix16.store's harness:
  * - the connections Save as a project left out are the second sentence of
  *   the notice that confirms the save, on all three endings: the copy opens
  *   here, the tab reloads for an update (the line survives the reload, as
  *   "opened after the update" does), and Save lands on Projects;
  * - a node deleted while kept takes its connections with it, so none of the
  *   four checks can fail at Save for a connection the tab still shows;
- * - review 15 HIGH-1: a sync whose `renumbered` says Nebula gave the tab's
+ * - A sync whose `renumbered` says Nebula gave the tab's
  *   local nodes its own ids replaces them (never both), and the selection
  *   and the Inspector follow.
  */
@@ -187,7 +186,7 @@ const DROPPED = [{ source: 'n1', sourceHandle: 'text', target: null, targetHandl
 const DROPPED_LINE = 'Nebula left out the connection from “Hero prompt” because the node it went to isn’t on the canvas.';
 const copyListing = () => listing({ projects: [summary('alpha'), summary('alpha-rec')] });
 
-describe('GM r24 on PR #199: the left-out connections are said on every ending of Save as a project', () => {
+describe('the left-out connections are said on every ending of Save as a project (design, PR #199)', () => {
   it('the copy opens here: the saved toast, then the line', async () => {
     keepWithEdits();
     const copy = project('alpha-rec', 'Recovered Glass campaign');
@@ -239,7 +238,7 @@ describe('GM r24 on PR #199: the left-out connections are said on every ending o
   });
 });
 
-describe('GM r23 (2) and (a) on PR #199: the names in the notice', () => {
+describe('the names in the notice (design, PR #199)', () => {
   it('a left-out connection the copy names by its new id only: the tab’s own name for the node it renumbered', async () => {
     keepWithEdits();
     const local = await useGraphStore.getState().addNode('text-input', { x: 400, y: 0 });
@@ -267,7 +266,7 @@ describe('GM r23 (2) and (a) on PR #199: the names in the notice', () => {
   });
 });
 
-describe('GM r23 (2) on PR #199: a node deleted while kept takes its connections with it', () => {
+describe('a node deleted while kept takes its connections with it (design, PR #199)', () => {
   it('delete a kept node with connections in and out: none is left pointing at it, and the rest still pass the rules', () => {
     keepWith([canvasNode('n2', 'seedream-4-5', 300), canvasNode('n3', 'seedream-4-5', 600)]);
     useGraphStore.getState().onConnect({ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'prompt' });
@@ -291,7 +290,7 @@ describe('GM r23 (2) on PR #199: a node deleted while kept takes its connections
   });
 });
 
-describe('review 15 HIGH-1 on PR #199: the tab adopts the ids Nebula gave its local nodes', () => {
+describe('the tab adopts the ids Nebula gave its local nodes (PR #199)', () => {
   it('a duplicate (a local id), selected and inspected; a sync renumbers it: one node, by the new id, still selected', () => {
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: true })) }));
     useGraphStore.getState().duplicateSelected();

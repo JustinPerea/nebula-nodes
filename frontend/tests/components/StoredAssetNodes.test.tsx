@@ -58,7 +58,7 @@ function reply(body: unknown, status = 200) {
 
 beforeEach(() => {
   setOpenProject(['project-1', 'Project one']);
-  boards = { gm: board('gm', 'Good Machines', 3), other: board('other', 'Other board', 1) };
+  boards = { main: board('main', 'Good Machines', 3), other: board('other', 'Other board', 1) };
   trashedBoards = {};
   posted = [];
   net.apiFetch.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
@@ -112,37 +112,37 @@ const fetchesOf = (path: string) => net.apiFetch.mock.calls.filter(([p]) => p ==
 
 describe('Moodboard card', () => {
   it('shows the board the moodboard param names, as it is now', async () => {
-    card(MoodboardNode, { moodboard: 'gm' });
+    card(MoodboardNode, { moodboard: 'main' });
     expect(await screen.findByText('Good Machines')).toBeVisible();
     expect(screen.getByText('3 images · look')).toBeVisible();
   });
 
   it('follows a rename and a new image without the node changing', async () => {
-    card(MoodboardNode, { moodboard: 'gm' });
+    card(MoodboardNode, { moodboard: 'main' });
     await screen.findByText('Good Machines');
-    boards.gm = board('gm', 'GM references', 4);
-    emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: false });
-    expect(await screen.findByText('GM references')).toBeVisible();
+    boards.main = board('main', 'Renamed references', 4);
+    emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'main', deleted: false });
+    expect(await screen.findByText('Renamed references')).toBeVisible();
     expect(screen.getByText('4 images · look')).toBeVisible();
   });
 
   it('reads the board again when the socket comes back, so a change made while it was down shows', async () => {
-    card(MoodboardNode, { moodboard: 'gm' });
+    card(MoodboardNode, { moodboard: 'main' });
     await screen.findByText('Good Machines');
     // An agent set an image aside while the backend restarted: its
     // storedAssetChanged went to no one (backend main.py /ws: not replayed).
-    boards.gm = { ...boards.gm, images: boards.gm.images.map((image, index) => ({ ...image, excluded: index === 0 })) };
+    boards.main = { ...boards.main, images: boards.main.images.map((image, index) => ({ ...image, excluded: index === 0 })) };
     emit({ type: 'socketReconnected' });
     expect(await screen.findByText('3 images · 1 set aside · look')).toBeVisible();
   });
 
   it('says a deleted board is in Recently deleted, offers Restore and no Open button', async () => {
-    card(MoodboardNode, { moodboard: 'gm' }, true);
+    card(MoodboardNode, { moodboard: 'main' }, true);
     await screen.findByText('Good Machines');
     expect(screen.getByRole('button', { name: 'Open moodboard' })).toBeVisible();
-    trashedBoards.gm = boards.gm;
-    delete boards.gm;
-    emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: true });
+    trashedBoards.main = boards.main;
+    delete boards.main;
+    emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'main', deleted: true });
     expect(await screen.findByText('In Recently deleted')).toBeVisible();
     expect(screen.getByText('Good Machines')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Open moodboard' })).toBeNull();
@@ -152,12 +152,12 @@ describe('Moodboard card', () => {
   });
 
   it('says the board is gone when it is deleted for good, and offers no Open button', async () => {
-    card(MoodboardNode, { moodboard: 'gm' }, true);
+    card(MoodboardNode, { moodboard: 'main' }, true);
     await screen.findByText('Good Machines');
-    delete boards.gm;
-    emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: true });
+    delete boards.main;
+    emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'main', deleted: true });
     expect(await screen.findByText('Moodboard not found')).toBeVisible();
-    expect(screen.getByText('#gm was deleted for good or never existed')).toBeVisible();
+    expect(screen.getByText('#main was deleted for good or never existed')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Open moodboard' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
   });
@@ -170,16 +170,16 @@ describe('Moodboard card', () => {
   });
 
   it('reads a node the canvas still holds with the old internal id', async () => {
-    card(MoodboardNode, { _moodboardId: 'gm', _moodboardName: 'Stale copy' });
+    card(MoodboardNode, { _moodboardId: 'main', _moodboardName: 'Stale copy' });
     expect(await screen.findByText('Good Machines')).toBeVisible();
     expect(screen.queryByText('Stale copy')).toBeNull();
   });
 
   it('fetches a board once however many cards show it', async () => {
-    card(MoodboardNode, { moodboard: 'gm' });
-    card(MoodboardNode, { moodboard: 'gm' });
+    card(MoodboardNode, { moodboard: 'main' });
+    card(MoodboardNode, { moodboard: 'main' });
     await waitFor(() => expect(screen.getAllByText('Good Machines')).toHaveLength(2));
-    expect(fetchesOf('/api/moodboards/gm')).toBe(1);
+    expect(fetchesOf('/api/moodboards/main')).toBe(1);
   });
 });
 
@@ -199,7 +199,7 @@ describe('Settings in the selection toolbar', () => {
     useUIStore.setState({ selectedNodeId: null });
     useUIStore.getState().setInspectorVisible(false);
     try {
-      card(MoodboardNode, { moodboard: 'gm' }, true);
+      card(MoodboardNode, { moodboard: 'main' }, true);
       fireEvent.click(await screen.findByRole('button', { name: 'Show node settings' }));
       expect(useUIStore.getState().selectedNodeId).toBe('n2');
       expect(useUIStore.getState().panels.inspector.visible).toBe(true);
@@ -223,24 +223,24 @@ describe('adding a node from the Assets panel', () => {
     useGraphStore.setState({ nodes: [{ id: 'n1', position: { x: 0, y: 0 },
       data: { definitionId: 'text-input', label: 'Text', params: {}, outputs: {}, state: 'idle' } }],
     edges: [], backendFreshStartPending: false });
-    await useGraphStore.getState().addMoodboardNode('gm', { x: 10, y: 20 },
-      { name: 'Good Machines', thumbnail: '/api/outputs/gm.png', imageCount: 3, mode: 'look' });
+    await useGraphStore.getState().addMoodboardNode('main', { x: 10, y: 20 },
+      { name: 'Good Machines', thumbnail: '/api/outputs/main.png', imageCount: 3, mode: 'look' });
     expect(posted).toEqual([{ path: '/api/graph/node',
-      body: { definitionId: 'nebula-moodboard', params: { moodboard: 'gm', send_notes: 'board' }, position: { x: 10, y: 20 } } }]);
-    expect(useStoredAssetsStore.getState().entries['moodboard:gm']?.summary?.name).toBe('Good Machines');
+      body: { definitionId: 'nebula-moodboard', params: { moodboard: 'main', send_notes: 'board' }, position: { x: 10, y: 20 } } }]);
+    expect(useStoredAssetsStore.getState().entries['moodboard:main']?.summary?.name).toBe('Good Machines');
   });
 });
 
 describe('Inspector', () => {
   it('picks a board from a list and stores its id in the moodboard param', async () => {
     useGraphStore.setState({ nodes: [{ id: 'n2', position: { x: 0, y: 0 },
-      data: { definitionId: 'nebula-moodboard', label: 'Moodboard', params: { moodboard: 'gm' }, outputs: {}, state: 'idle' } }],
+      data: { definitionId: 'nebula-moodboard', label: 'Moodboard', params: { moodboard: 'main' }, outputs: {}, state: 'idle' } }],
     edges: [] });
     useUIStore.setState({ selectedNodeId: 'n2' });
     render(<Inspector embedded />);
     const select = await screen.findByRole('combobox', { name: 'Moodboard' });
     await screen.findByRole('option', { name: 'Other board' });
-    expect((select as HTMLSelectElement).value).toBe('gm');
+    expect((select as HTMLSelectElement).value).toBe('main');
     fireEvent.change(select, { target: { value: 'other' } });
     expect(useGraphStore.getState().nodes[0].data.params.moodboard).toBe('other');
     expect(screen.queryByRole('textbox', { name: 'Moodboard' })).toBeNull();

@@ -53,7 +53,7 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect(saveFailure(error).retry).toBe(true);
   });
 
-  it('the export says "ZIP" in capitals, as everywhere else (GM, round 3)', async () => {
+  it('the export says "ZIP" in capitals, as everywhere else', async () => {
     answer = () => new Response('', { status: 503 });
     expect((await failure(() => commonsApi.exportZip())).heading).toBe("Couldn’t export the ZIP.");
   });
@@ -84,14 +84,14 @@ describe('Commons request failures carry copy and keep their status', () => {
   it.each([
     [403, 'You don’t have access to this anymore. Reload to sign in again.', 'Nebula couldn’t save your labels because you don’t have access to this anymore. Reload to sign in again.'],
     [413, 'That’s too large to save.', 'Nebula couldn’t save your labels because it’s too large.'],
-  ])('a bare %i says GM\'s line for it and is not retried', async (status, bare, line) => {
+  ])('a bare %i says design\'s line for it and is not retried', async (status, bare, line) => {
     answer = () => new Response('', { status });
     const error = await failure(() => commonsEvaluationApi.labels(0, 3, {} as never));
     expect(error.reason).toBe(bare);
     expect(saveFailure(error)).toEqual({ ok: false, reason: line, message: line, retry: false });
   });
 
-  it('a failure that isn\'t a request\'s says GM\'s general line, never its own message', () => {
+  it('a failure that isn\'t a request\'s says design\'s general line, never its own message', () => {
     const line = 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.';
     expect(saveFailure(new SyntaxError('Unexpected token < in JSON at position 0'))).toEqual({
       ok: false, reason: line, message: line, retry: true,
@@ -105,7 +105,7 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect((await failure(() => commonsApi.blob('/api/commons/blobs/abc'))).reason).toBe(NO_ANSWER);
   });
 
-  // typeerror2 (2026-10-24): the body read is classified where apiFetch hands
+  // PR #191 (2026-10-24): the body read is classified where apiFetch hands
   // out the Response, so the Commons call's catch asks isNoAnswer, not
   // "any TypeError".
   it('a connection that drops while the body arrives says the connection line', async () => {

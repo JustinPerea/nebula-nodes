@@ -2,19 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
 
-// Review 19, round 20. The reviewer's probes (r19/fe r19new: CLR1, CLR2,
-// RST, SEL, DR) turned into failing tests first, against the fake Nebula of
-// round 17, with GM's lines (gm-item3-r20.md and its follow-up).
-// L2 (GM 3, follow-up 4): an agent's clear that dropped the person's editing
+// A reviewer's probes turned into failing tests first, against the fake Nebula in
+// tests/helpers/undoFakeBackend.ts, with design's lines and their follow-up.
+// Design (follow-up): an agent's clear that dropped the person's editing
 //   says so; the person's own clear and a backend restart never do.
-// M2: a sync after a backend restart (the same canvas, its revision kept, or
+// A sync after a backend restart (the same canvas, its revision kept, or
 //   one moved by a restart that lost it) is not a clear.
-// L1 (GM B, refined by GM r34 addendum 3 on PR #199): a refused delete brings
+// Design (PR #199): a refused delete brings
 //   the node back unselected once the person has moved on; with nothing changed
 //   since the press, as it was (selected, inspected, focused).
-// L4: two drains at once: a save that landed is never named as cut off.
-// GM 1: a failed delete with no answer names the nodes.
-// M3: a delete from before a clear never touches the new canvas.
+// Two drains at once: a save that landed is never named as cut off.
+// Design: a failed delete with no answer names the nodes.
+// A delete from before a clear never touches the new canvas.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -90,7 +89,7 @@ let clock = Date.now();
 
 const project = (name = 'Glass campaign') => { store().setCanvasProjectName?.(() => name); };
 
-describe('round 20 (review 19)', () => {
+describe('held Undo: an agent\'s clear, a backend restart and a refused delete', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -137,8 +136,8 @@ describe('round 20 (review 19)', () => {
     nodes: FakeNebula.syncNodes({ nodes: [...nebula().nodes.values()], edges: nebula().edges }), edges: nebula().edges,
     empty: nebula().nodes.size === 0, workspaceRevision: 'r1', canvasRevision: canvas, ...extra });
 
-  describe("L2: an agent's clear says what it dropped (GM 3, follow-up 4)", () => {
-    it('CLR1: typing still in its debounce: never sent, and named', async () => {
+  describe("an agent's clear says what it dropped", () => {
+    it('typing still in its debounce: never sent, and named', async () => {
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n2', 'Typed');
@@ -150,7 +149,7 @@ describe('round 20 (review 19)', () => {
       expect(lines()).toContain("Codex cleared the canvas while you were editing “Text” for “n2”. That change wasn’t saved.");
     });
 
-    it('CLR2: a PUT on its way that Nebula refuses for the old canvas is named', async () => {
+    it('a PUT on its way that Nebula refuses for the old canvas is named', async () => {
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       refuse((path, init) => path === '/api/graph/node/n2' && init?.method === 'PUT', 409, STALE_CANVAS_DETAIL);
@@ -237,7 +236,7 @@ describe('round 20 (review 19)', () => {
     });
   });
 
-  describe('M2: a backend restart is never a clear', () => {
+  describe('a backend restart is never a clear', () => {
     it('the reconnect sync keeps the canvas revision: the typing goes out, no line', async () => {
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '2' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
@@ -251,11 +250,11 @@ describe('round 20 (review 19)', () => {
       expect(lines()).toEqual([]);
     });
 
-    it("RST as the reviewer wrote it: a sync with no edit whose revision moved but whose canvas didn't keeps the typing", async () => {
-      // Round 21 (review 20, L-4): only when Nebula says it lost its revisions.
+    it("a sync with no edit whose revision moved but whose canvas didn't keeps the typing", async () => {
+      // Only when Nebula says it lost its revisions.
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '2' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
-      // Round 22 (review 21, L-b): a restart is a sync from another process.
+      // A restart is a sync from another process.
       sync('2', { bootId: 'rst-boot-a' });
       await settle();
       type('n2', 'Typed');
@@ -283,12 +282,12 @@ describe('round 20 (review 19)', () => {
       expect(lines().filter((line) => String(line).includes('cleared the canvas'))).toEqual([]);
       // That canvas is gone: its typing never reaches a node that takes its id.
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
-      // Round 22 (review 21, L-a): and it is never lost with no line.
+      // And it is never lost with no line.
       expect(lines()).toEqual(["Nebula couldn’t save “Text” for “n2”."]);
     });
   });
 
-  it('SEL (L1, GM B, refined by GM r34 addendum 3): a refused delete after the person moved on comes back unselected', async () => {
+  it('a refused delete after the person moved on comes back unselected (design)', async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2')], [], ['n2']);
     useUIStore.getState().selectNode('n2');
@@ -313,7 +312,7 @@ describe('round 20 (review 19)', () => {
     cleanup();
   });
 
-  it('GM r34 addendum 3: a refused delete with nothing changed since the press puts back the selection, the inspected node and the focus', async () => {
+  it('a refused delete with nothing changed since the press puts back the selection, the inspected node and the focus (design)', async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2')], [], ['n2']);
     useUIStore.getState().selectNode('n2');
@@ -348,7 +347,7 @@ describe('round 20 (review 19)', () => {
     }
   });
 
-  it('GM r34 addendum 3: in a multi-select, the refused nodes come back selected; the deleted ones are gone', async () => {
+  it('in a multi-select, the refused nodes come back selected; the deleted ones are gone (design)', async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')], [], ['n1', 'n2']);
     nebula().holdAnswers = true;
@@ -371,7 +370,7 @@ describe('round 20 (review 19)', () => {
     expect(useUIStore.getState().selectedNodeId).toBeNull();
   });
 
-  it('DR (L4): two drains at once: the save that landed is cut off for neither', async () => {
+  it('two drains at once: the save that landed is cut off for neither', async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2')]);
     nebula().holdAnswers = true;
@@ -392,7 +391,7 @@ describe('round 20 (review 19)', () => {
     expect(nebula().valueOf('n2')).toBe('Typed');
   });
 
-  describe('GM 1: a failed delete with no answer', () => {
+  describe('a failed delete with no answer', () => {
     const noAnswer = (ids: string[]) => {
       fake.override = (path, init) => {
         const match = /^\/api\/graph\/node\/(n\d+)$/.exec(path);
@@ -445,7 +444,7 @@ describe('round 20 (review 19)', () => {
     });
   });
 
-  it("M3 (seed 84's shape): a delete from before an agent's clear never drops the typing on the new node with its id", async () => {
+  it("a delete from before an agent's clear never drops the typing on the new node with its id (seed 84's shape)", async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
     nebula().holdAnswers = true;

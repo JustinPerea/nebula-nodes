@@ -2,18 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 7: review 6 of the agent steps under a hold.
-// - MEDIUM-1: a refused Delete of nodes with a connection between them
-//   places every held edit in one pass, in Nebula's order (K5, the random
+// PR #205: a review of the agent steps under a hold.
+// - A refused Delete of nodes with a connection between them
+//   places every held edit in one pass, in Nebula's order (and in random
 //   interleavings): canvas = Nebula after each Undo and Redo, and each Undo
 //   takes back only what it names.
-// - MEDIUM-2: the join clears Redo, as every landed agent change does (K4).
-// - LOW-1: a refused rename leaves no trace on a held copy (K3).
-// - LOW-2: the reachable survivors (K1, K2, K7).
-// - P-A: a restore Nebula applied after the limit never makes a step whose
-//   Undo deletes a node that exists (K6). P-B: an agent's clear during a
-//   restore hold keeps another agent's held edit (P13).
-// The harness is round 6's (round 18's fake Nebula).
+// - The join clears Redo, as every landed agent change does.
+// - A refused rename leaves no trace on a held copy.
+// - The reachable survivors.
+// - A restore Nebula applied after the limit never makes a step whose
+//   Undo deletes a node that exists. An agent's clear during a
+//   restore hold keeps another agent's held edit.
+// The harness is the fake Nebula in tests/helpers/undoFakeBackend.ts.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -72,7 +72,7 @@ const claude = { actor: { kind: 'agent', name: 'Claude', id: 'claude' } };
 const wire = (source: string, target: string): FakeWire => ({ id: `w-${source}-${target}`, source, sourceHandle: 'text', target, targetHandle: 'text' });
 let clock = Date.now();
 
-describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
+describe("PR #205: held edits in one pass, in Nebula's order", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -157,12 +157,12 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     return lines;
   };
 
-  describe('MEDIUM-1: a refused Delete of nodes with a connection between them', () => {
+  describe('a refused Delete of nodes with a connection between them', () => {
     const refuse = (pattern: RegExp) => {
       fake.override = (path, init) => (init?.method === 'DELETE' && pattern.test(path)
         ? nebula().later(`refused ${path}`, () => new Response(JSON.stringify({ detail: 'It is running.' }), { status: 409 })) : null);
     };
-    it('K5: n2 and n3 refused, Codex sets n1, Claude connects n3>n2: one step each, and Codex\'s Undo leaves the connection off', async () => {
+    it('n2 and n3 refused, Codex sets n1, Claude connects n3>n2: one step each, and Codex\'s Undo leaves the connection off', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, { ...textFakeNode('n3'), params: { value: 'x0' } }]);
       refuse(/^\/api\/graph\/node\/n[23]$/);
       nebula().holdAnswers = true;
@@ -235,7 +235,7 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  // The reviewer's generator (review 6, held-undo): 2-3 agents mixing
+  // The reviewer's generator (held-undo): 2-3 agents mixing
   // values, renames and connections, on every kind of hold.
   describe('random interleavings: canvas = Nebula after each Undo and Redo, and each takes back only its edit', () => {
     const ALL = ['n1', 'n2', 'n3', 'n4'];
@@ -339,8 +339,8 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     }
   });
 
-  describe('MEDIUM-2: the join clears Redo, as every landed agent change does', () => {
-    it('K4: the person types then undoes it during the hold; after Claude\'s change joins, Redo has nothing to take it off', async () => {
+  describe('the join clears Redo, as every landed agent change does', () => {
+    it('the person types then undoes it during the hold; after Claude\'s change joins, Redo has nothing to take it off', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await restoreHeld();
       agentDoes(claude, 'ed_r7k4claude0001', () => { nebula().edges.push(wire('n1', 'n2')); n1().label = 'Claude'; });
@@ -359,8 +359,8 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  describe('LOW-1: a refused rename leaves no trace on a held copy', () => {
-    it.each([['500', 500], ['409', 409], ['a network failure', 0]] as const)('K3 (%s): the canvas ends as Nebula, and Codex\'s Undo and Redo never write the refused name', async (_label, status) => {
+  describe('a refused rename leaves no trace on a held copy', () => {
+    it.each([['500', 500], ['409', 409], ['a network failure', 0]] as const)('a refused rename answered %s: the canvas ends as Nebula, and Codex\'s Undo and Redo never write the refused name', async (_label, status) => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       fake.override = (path, init) => {
         if (init?.method === 'DELETE' && path === '/api/graph/node/n1') return nebula().later('refused n1', () => new Response(JSON.stringify({ detail: 'It is running.' }), { status: 409 }));
@@ -398,8 +398,8 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  describe('LOW-2: the paths the notes called unreachable', () => {
-    it('K1: a Paste during the restore hold sits above the agent\'s step; the held rename joins that step under it', async () => {
+  describe('the paths the notes called unreachable', () => {
+    it('a Paste during the restore hold sits above the agent\'s step; the held rename joins that step under it', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2'), { ...textFakeNode('n3'), params: { value: 'x0' } }], [], ['n3']);
       store().copySelected();
       await restoreHeld();
@@ -417,7 +417,7 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
       sameAsNebula();
     });
 
-    it('K2: a Delete chain step left on top by an Undo of its Delete: an earlier held change goes under it', async () => {
+    it('a Delete chain step left on top by an Undo of its Delete: an earlier held change goes under it', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, textFakeNode('n3')]);
       fake.override = (path, init) => (init?.method === 'DELETE' && path === '/api/graph/node/n1'
         ? nebula().later('refused n1', () => new Response(JSON.stringify({ detail: 'It is running.' }), { status: 409 })) : null);
@@ -449,7 +449,7 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
       sameAsNebula();
     });
 
-    it('K7: the person renames after the last held sync: the name stays theirs, and Codex\'s step holds only its value', async () => {
+    it('the person renames after the last held sync: the name stays theirs, and Codex\'s step holds only its value', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await restoreHeld();
       agentDoes(codex, 'ed_r7k7codex00001', () => { n1().params = { value: 'CODEX' }; });
@@ -467,8 +467,8 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  describe('already on main: the late restore (P-A) and the clear (P-B)', () => {
-    it('K6: a restore Nebula applied answers after the limit, Claude connected and renamed n1 meanwhile: no Undo deletes n1', async () => {
+  describe('already on main: the late restore and the clear', () => {
+    it('a restore Nebula applied answers after the limit, Claude connected and renamed n1 meanwhile: no Undo deletes n1', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       store().onNodesChange([{ id: 'n1', type: 'remove' }]);
       await settle(); await tick(6000); await settle();
@@ -495,7 +495,7 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
       sameAsNebula();
     });
 
-    it('P13: Codex sets the held node, then Claude clears the canvas: each Undo brings back its own', async () => {
+    it('Codex sets the held node, then Claude clears the canvas: each Undo brings back its own', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2'), textFakeNode('n3')]);
       await restoreHeld();
       agentDoes(codex, 'ed_r7p13codex0001', () => { n1().params = { value: 'CODEX' }; });
@@ -517,7 +517,7 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  describe('GM PR #205 r14 item 2: the Undo Save\'s line offers for a change nobody named', () => {
+  describe('the Undo Save\'s line offers for a change nobody named (design, PR #205)', () => {
     const personStep = () => ({ kind: 'snapshot', nodes: store().nodes, edges: store().edges });
     const unnamedSync = (change: () => void) => {
       nebula().request += 1;
@@ -556,7 +556,7 @@ describe("PR #205 round 7: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  describe('item 6: typing queued behind a restore, then undone', () => {
+  describe('typing queued behind a restore, then undone', () => {
     it('the typing\'s save is answered before the Undo\'s restore goes: Nebula ends where the canvas does, with no failed-save line', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'h0' } }]);
       store().onNodesChange([{ id: 'n1', type: 'remove' }]);

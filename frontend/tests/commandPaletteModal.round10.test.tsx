@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { ReactFlowProvider, type Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Review 9, L-1: the command palette covers the window but was no modal
+// The command palette covers the window but was no modal
 // dialog: a click on a group label put focus on the page, and Backspace then
 // deleted the selected node behind it (Cmd+Enter, Cmd+Z, Cmd+D the same way).
 // It is now a labelled modal dialog that keeps focus, so no canvas key acts
@@ -101,7 +101,7 @@ describe('the command palette is a modal dialog', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
-  // GM, PR #203 r13 item 1 (round 6 review, stacking LOW-1): the page behind
+  // Design (PR #203): the page behind
   // the palette is inert and aria-hidden, the canvas with it, so a control
   // there can't be focused or pressed; on close it is back, and focus goes
   // back to the control that opened it.

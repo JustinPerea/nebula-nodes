@@ -9,7 +9,7 @@ vi.mock('../src/lib/backend', async (original) => ({
 import { CONTENT_HASH_NAME, fileParamName, shownFileName, UPLOADED_FILE } from '../src/lib/fileName';
 import { uploadingLabel, uploadProjectChangedLine } from '../src/lib/uploadNotice';
 
-// GM r48 Q1 on #222: a file param's name, everywhere it shows, is the name it
+// Design on #222: a file param's name, everywhere it shows, is the name it
 // was uploaded with, else the path's base name, and never a bare content
 // hash ("Uploaded file"). One shared function names it (lib/fileName.ts
 // fileParamName, and shownFileName for a name already in hand); this ratchet
