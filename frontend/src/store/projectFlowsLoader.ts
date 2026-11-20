@@ -1,7 +1,7 @@
 import { deferredModule, preloadAll, type DeferredModule } from '../lib/lazyWithPreload';
 
 /**
- * PR #199 round 25: the project store's flows (store/projectFlows.ts: opening,
+ * PR #199: the project store's flows (store/projectFlows.ts: opening,
  * making, switching, releasing and saving a project, and every line they
  * say) load as one chunk instead of with the entry, which stays under its
  * budget. The store's state, its API shape and its autosave hot path stay in

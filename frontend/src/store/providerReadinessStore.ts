@@ -11,7 +11,7 @@ interface ProviderReadinessState extends ProviderHealthState {
   checkConnections: () => Promise<void>;
   invalidate: () => void;
   /** Clear the check results of these keys' providers only, keeping the
-   * rest (GM, PR #203 r19 item 7). */
+   * rest (design, PR #203). */
   forget: (keys: readonly string[]) => void;
 }
 
@@ -20,9 +20,9 @@ const statuses = new Set<ProviderHealthStatus>(['not_configured', 'configured_un
 let requestVersion = 0;
 // The providers whose key changed while a check runs (forget): its result for them is dropped.
 const forgottenSinceCheck = new Set<string>();
-/** GM, round 3f: "Couldn’t check the connections. Nebula's server isn't
+/** Design: "Couldn’t check the connections. Nebula's server isn't
  * answering. Make sure it's running, then try again." That is the request
- * with no answer (CONNECTION_LOST_COPY). Round 3g, GM: ""Nebula didn't
+ * with no answer (CONNECTION_LOST_COPY). Design: ""Nebula didn't
  * respond" is wrong when something did answer. → "Couldn’t check the
  * connections. Try again, or reload if it keeps happening."", for any
  * answered failure, a malformed answer included. */
@@ -93,7 +93,7 @@ export const useProviderReadinessStore = create<ProviderReadinessState>((set, ge
 
 if (typeof window !== 'undefined') {
   // A settings change keeps the person's connection checks, except those of
-  // the keys it changed (GM, PR #203 r19 item 7; review 9, keys LOW-2): a
+  // the keys it changed (design, PR #203): a
   // favourite, a folder or a limit clears nothing, and a reconnect clears
   // nothing by itself (the read it starts does: uiStore setSettingsCache
   // forgets the keys whose value it finds changed). A signal that doesn't

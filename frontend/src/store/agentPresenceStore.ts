@@ -9,7 +9,7 @@ import { AGENT_FALLBACK_COLOR } from '../lib/agentCursorColor';
 /** Cursors dim after this long without news, and disappear after AGENT_CURSOR_EXPIRE_MS. */
 export const AGENT_CURSOR_IDLE_MS = 20_000;
 export const AGENT_CURSOR_EXPIRE_MS = 120_000;
-// Narration's 3 s (GM - Design, round 19) lives with the cursor's label, which
+// Narration's 3 s (design) lives with the cursor's label, which
 // the Agent log shares.
 export { AGENT_SAY_MS } from '../lib/agentCursorLabel';
 /** The bubble's fade: the length of --agent-cursor-say-fade in agentCursor.css. */
@@ -40,7 +40,7 @@ export interface AgentCursor {
   receivedAt: number;
   /** Increments per event so the same target can replay a gesture. */
   seq: number;
-  /** What the last action was, for the Agents panel (Q125 item 2). */
+  /** What the last action was, for the Agents panel. */
   did: AgentCursorDid | null;
   /** From the replay a person tab gets on connect: drawn where it is, with no
    *  flight, until its next event. */
@@ -51,7 +51,7 @@ export interface AgentCursor {
   proposalId: string | null;
   /** When it came to where it is, in the backend's clock (its `since`, else
    *  the event's `at`): the column order, the same in every tab and after a
-   *  reload (GM - Design, PR #211 r21). */
+   *  reload (design, PR #211). */
   arrivedAt: number;
   /** Whether `arrivedAt` is the backend's own arrival (`since`): the same in
    *  every tab, so ties go by the cursor's key. Without it (an older event,
@@ -63,7 +63,7 @@ export interface AgentCursorDid {
   verb: string;
   nodeId: string | null;
   label: string | null;
-  /** When the action happened, in this tab's clock: a pointer gesture GM cut
+  /** When the action happened, in this tab's clock: a pointer gesture the design removed
    *  (a click, a drag) keeps the action before it, with its own time. */
   at: number;
 }
@@ -86,7 +86,7 @@ interface AgentPresenceState {
   prune: (now?: number) => void;
   /** The server refused this tab's hello (a demoted tab): its numbered
    *  cursors are person-only and go, as any cursor leaves; the agents' form
-   *  draws unnumbered cursors as events arrive (GM - Design, PR #211 r9 item 6). */
+   *  draws unnumbered cursors as events arrive (design, PR #211). */
   demote: () => void;
   /** Drop node anchors when the whole graph is cleared or replaced: ids restart per graph. */
   forgetGraph: () => void;
@@ -210,7 +210,7 @@ function withEvent(
     // that one has left the backend (it went quiet for
     // AGENT_CURSOR_EXPIRE_MS, or the cap pushed it out): it goes here too,
     // so two cursors never read the same name. The same holds when a cursor
-    // the tab already shows comes with a new number (review 2, LOW-2).
+    // the tab already shows comes with a new number.
     for (const other of Object.values(next)) {
       if (other.id === agent.id && other.session?.ordinal === session.ordinal) delete next[other.key];
     }

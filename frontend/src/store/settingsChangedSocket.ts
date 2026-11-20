@@ -4,18 +4,18 @@ import { TAB_ID } from '../lib/tabId';
 import { onPersonPromoted } from '../lib/personSession';
 
 /**
- * Every key change reaches every one of the person's tabs (review 8 of PR
- * #203, NIT-3): the backend sends `settingsChanged` to their tabs only (never
- * to agents: review 9, keys LOW-1), with no values, after PUT /api/settings,
+ * Every key change reaches every one of the person's tabs (PR #203): the backend sends
+ * `settingsChanged` to their tabs only (never
+ * to agents), with no values, after PUT /api/settings,
  * a key's DELETE and the desktop credential bridge (main.py
  * _broadcast_settings_changed). Its `keys` names the keys whose value changed
- * (names only), so connection checks are cleared for those alone (GM, PR
- * #203 r19 item 7). The tab then reads GET /api/settings again through the
+ * (names only), so connection checks are cleared for those alone (design, PR #203). The tab then
+ * reads GET /api/settings again through the
  * same signal a save in this tab sends ('nebula:settings-saved'), with a
  * `detail` saying it came from elsewhere ({ source: 'remote', keys }), so
  * every cache that listens for it (the settings cache the bar, the chips and
  * the switcher read; provider readiness; the zoom manifest; an open
- * Settings panel, r19 item 6) refreshes. A token set from a second window,
+ * Settings panel) refreshes. A token set from a second window,
  * the CLI or the desktop app flips an open proposal bar without a reload. A
  * reconnected socket reads them again too ({ source: 'reconnect' }), since a
  * change made while it was away sent nothing it heard, and so does a socket
@@ -32,9 +32,8 @@ wsClient.subscribe((event) => {
     // one apiFetch sends on every write (X-Nebula-Tab, lib/tabId.ts; the
     // backend's main._writing_tab). The write's own confirm already told
     // every cache here, with the keys it changed ('local'), so the echo says
-    // nothing, whether it lands before the write's answer or after it
-    // (review 11 of PR #203, copy MEDIUM-1). A change from anywhere else,
-    // during this tab's write too, has another origin or none.
+    // nothing, whether it lands before the write's answer or after it. A change
+    // from anywhere else, during this tab's write too, has another origin or none.
     if (event.origin === TAB_ID) return;
     const keys = Array.isArray(event.keys) ? event.keys.filter((key): key is string => typeof key === 'string') : undefined;
     const detail: SettingsSavedDetail = { source: 'remote', ...(keys ? { keys } : {}) };
@@ -50,8 +49,8 @@ function readAgain(): void {
 
 // A promote reads them again too: the backend sends `settingsChanged` only to
 // a promoted socket, so a change made between this socket's connect (or the
-// reconnect read above) and its promote sent nothing it heard (PR #203 round
-// 15; round 14's CI caught the gap in a test). The promote is main's one
+// reconnect read above) and its promote sent nothing it heard (PR #203;
+// CI caught the gap in a test). The promote is main's one
 // signal (lib/personSession onPersonPromoted), not an event of its own.
 onPersonPromoted(readAgain);
 

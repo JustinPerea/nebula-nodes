@@ -183,7 +183,7 @@ describe('project autosave', () => {
   });
 
   it('shows the retry state when a save fails, and Retry saves it', async () => {
-    // Round 3e: the API's typed refusal (ProjectRequestError is one); a plain Error's text is never shown.
+    // The API's typed refusal (ProjectRequestError is one); a plain Error's text is never shown.
     saveProject.mockRejectedValueOnce(new RequestFailedError('Couldn’t save the project.', 507, { reason: 'Disk full.' }));
     setPrompt('b');
     await vi.advanceTimersByTimeAsync(2000);

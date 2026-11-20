@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fix round 7 of PR #199 (GM r8 and GM's answers to review 7): the saved
-// line shows once (a filing the restore notice says gets no toast), a
-// canvas is named once, and a canvas saved over the save limit is marked
-// for its own line. The person's own clear and load refusals read GM's
-// lines, the load naming its file.
+// PR #199: the saved line shows once (a filing the restore notice says gets
+// no toast), a canvas is named once, and a canvas saved over the save limit
+// is marked for its own line. The person's own clear and load refusals read
+// the design lines, the load naming its file.
 
 vi.mock('../lib/wsClient', () => ({
   wsClient: { setViewing: vi.fn(), notePersonAct: vi.fn(), connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
@@ -50,7 +49,7 @@ async function listed(extra: Record<string, unknown>, revision: string) {
   return useProjectStore.getState();
 }
 
-describe('GM r8 (a): the saved line shows once', () => {
+describe('the saved line shows once', () => {
   it('no toast for a filing the restore notice says as it renders', async () => {
     const state = await listed({ catalogRestore: restore('r-a', { id: 'c1', name: 'Recovered canvas' }),
       canvasSaved: { id: 'c1', name: 'Recovered canvas', at: '2026-10-28T10:00:00Z' } }, 'r2');
