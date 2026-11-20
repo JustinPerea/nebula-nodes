@@ -404,7 +404,7 @@ async function runAppearanceSmokeChecks(cdp) {
     hermesBody: document.body.classList.contains('app-hermes'),
     tone: !!document.querySelector('.chat-panel__tone-toggle'),
     bloom: !!document.querySelector('.hermes-bloom-portal'),
-    model: !!document.querySelector('.chat-panel__model-trigger'),
+    model: !!document.querySelector('.chat-model-picker__trigger'),
   }));
   assertSlavaCheck(codex.selected && codex.slavaBody && !codex.hermesBody, 'selecting Codex keeps the supported appearance');
   assertSlavaCheck(!codex.tone && !codex.bloom && codex.model, 'Codex retains model controls without theme controls');
@@ -695,7 +695,7 @@ async function runSlavaInspectorCoverage(cdp) {
 
   const modelAssertions = await evaluate(cdp, () => ({
     modelParam: !!document.querySelector('.inspector-shell [data-inspector-param="model"][data-inspector-kind="string"]'),
-    notice: document.querySelector('.inspector-shell .inspector__notice--warning')?.textContent?.trim() ?? '',
+    notice: document.querySelector('.inspector-shell .inspector__notice--key')?.textContent?.trim() ?? '',
     modelSelection: !!document.querySelector('.inspector-shell .inspector__model-selection-text'),
     favoritePressed: document.querySelector('.inspector-shell .inspector__favorite-button')?.getAttribute('aria-pressed'),
   }));
@@ -1409,7 +1409,7 @@ async function runSlavaInteractionChecks(cdp) {
     ].some((className) => document.body.classList.contains(className)),
     toneControl: !!document.querySelector('.chat-panel__tone-toggle'),
     bloomPortal: !!document.querySelector('.hermes-bloom-portal'),
-    modelControl: !!document.querySelector('.chat-panel__model-trigger'),
+    modelControl: !!document.querySelector('.chat-model-picker__trigger'),
     agent: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') ?? '',
   }));
   assertSlavaCheck(codexModeAssertions.storeSkin === 'slava-restraint' && codexModeAssertions.storedSkin === 'slava-restraint', 'Codex agent switch keeps the supported saved appearance');

@@ -267,8 +267,6 @@ body.app-slava-restraint {
   --sr-node-mesh-grid-color: rgba(201, 202, 200, 0.20);
   --sr-node-mesh-grid-soft: rgba(201, 202, 200, 0.10);
   --sr-node-mesh-line: rgba(255, 255, 255, 0.24);
-  --sr-node-error-bg: rgba(0, 0, 0, 0.40);
-  --sr-node-error-border-width: 2px;
   --sr-node-error-padding: 6px 10px;
   --sr-node-error-margin: 0 14px 8px;
   --sr-node-error-radius: 4px;
@@ -446,7 +444,6 @@ body.app-slava-restraint .mesh-modal__download-icon {
 }
 
 body.app-slava-restraint .chat__tool-icon,
-body.app-slava-restraint .chat-panel__model-caret,
 body.app-slava-restraint .chat-panel__chip-close-icon,
 body.app-slava-restraint .connection-popup__category-chevron,
 body.app-slava-restraint .panel__group-chevron,
@@ -1051,9 +1048,6 @@ body.app-slava-restraint .chat-panel__agent-btn:focus-visible,
 body.app-slava-restraint .chat-panel__agent-btn--active:focus-visible,
 body.app-slava-restraint .chat-panel__tone-btn:focus-visible,
 body.app-slava-restraint .chat-panel__tone-btn--active:focus-visible,
-body.app-slava-restraint .chat-panel__model-trigger:focus-visible,
-body.app-slava-restraint .chat-panel__model-search:focus-visible,
-body.app-slava-restraint .chat-panel__model-row:focus-visible,
 body.app-slava-restraint .chat-panel__textarea:focus-visible,
 body.app-slava-restraint .chat-panel__send:focus-visible,
 body.app-slava-restraint .chat__codeblock-apply:focus-visible,
@@ -1070,32 +1064,6 @@ body.app-slava-restraint .chat-panel__session {
   letter-spacing: 0;
 }
 
-body.app-slava-restraint .chat-panel__model-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-right: 4px;
-  padding: 2px 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--sr-ink-light);
-  cursor: pointer;
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-meta);
-  letter-spacing: 0;
-}
-
-body.app-slava-restraint .chat-panel__model-trigger:hover {
-  border-color: var(--sr-edge);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--sr-ink);
-}
-
-body.app-slava-restraint .chat-panel__model-caret {
-  color: var(--sr-ink-faint);
-}
-
 body.app-slava-restraint .chat-panel__model-picker {
   display: flex;
   flex-direction: column;
@@ -1107,90 +1075,6 @@ body.app-slava-restraint .chat-panel__model-picker {
   background: rgba(0, 0, 0, 0.34);
   box-shadow: var(--sr-shadow-popover);
   font-family: var(--sr-ui);
-}
-
-body.app-slava-restraint .chat-panel__model-search {
-  padding: 9px 10px;
-  border: none;
-  border-bottom: 1px solid var(--sr-edge);
-  border-radius: 0;
-  outline: none;
-  background: transparent;
-  color: var(--sr-ink);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-label);
-}
-
-body.app-slava-restraint .chat-panel__model-search::placeholder {
-  color: var(--sr-ink-faint);
-}
-
-body.app-slava-restraint .chat-panel__model-error {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--sr-edge);
-  background: var(--sr-accent-soft);
-  color: var(--sr-accent);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-meta);
-  line-height: var(--sr-line-meta);
-}
-
-body.app-slava-restraint .chat-panel__model-list {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-body.app-slava-restraint .chat-panel__model-row {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 8px 10px;
-  border: none;
-  border-bottom: 1px solid var(--sr-edge);
-  background: transparent;
-  color: var(--sr-ink-light);
-  cursor: pointer;
-  font-family: var(--sr-ui);
-  text-align: left;
-}
-
-body.app-slava-restraint .chat-panel__model-row:last-child {
-  border-bottom: none;
-}
-
-body.app-slava-restraint .chat-panel__model-row:hover {
-  background: var(--sr-surface-control-hover);
-  color: var(--sr-ink);
-}
-
-body.app-slava-restraint .chat-panel__model-row--active {
-  background: var(--sr-surface-control-active);
-  box-shadow: 2px 0 0 var(--sr-accent) inset;
-}
-
-body.app-slava-restraint .chat-panel__model-row-name {
-  color: var(--sr-ink);
-  font-size: var(--sr-type-body);
-  font-weight: 600;
-  line-height: var(--sr-line-compact);
-}
-
-body.app-slava-restraint .chat-panel__model-row-id {
-  color: var(--sr-ink-meta);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-micro);
-  letter-spacing: 0;
-  text-transform: lowercase;
-}
-
-body.app-slava-restraint .chat-panel__model-empty {
-  padding: 12px 10px;
-  color: var(--sr-ink-meta);
-  font-size: var(--sr-type-body);
-  text-align: center;
 }
 
 body.app-slava-restraint .chat-panel__messages {
@@ -1209,7 +1093,6 @@ body.app-slava-restraint .chat-panel__input {
 }
 
 body.app-slava-restraint .chat-panel__messages::-webkit-scrollbar,
-body.app-slava-restraint .chat-panel__model-list::-webkit-scrollbar,
 body.app-slava-restraint .chat__codeblock-body::-webkit-scrollbar,
 body.app-slava-restraint .chat__tool-input::-webkit-scrollbar,
 body.app-slava-restraint .chat__tool-output::-webkit-scrollbar,
@@ -1218,7 +1101,6 @@ body.app-slava-restraint .chat-panel__thinking-body::-webkit-scrollbar {
 }
 
 body.app-slava-restraint .chat-panel__messages::-webkit-scrollbar-thumb,
-body.app-slava-restraint .chat-panel__model-list::-webkit-scrollbar-thumb,
 body.app-slava-restraint .chat__codeblock-body::-webkit-scrollbar-thumb,
 body.app-slava-restraint .chat__tool-input::-webkit-scrollbar-thumb,
 body.app-slava-restraint .chat__tool-output::-webkit-scrollbar-thumb,
@@ -1515,10 +1397,12 @@ body.app-slava-restraint .chat-panel__chip-close {
 body.app-slava-restraint .chat-panel__notice {
   margin: 0 0 8px;
   padding: 7px 10px;
-  border: 1px solid var(--sr-accent-border-muted);
+  /* Design: a warning notice is the warning text on the warning tint, no border, as the node
+     card's run failure is; a neutral line reads the neutral tokens (styles/becauseLine.css). */
+  border: none;
   border-radius: var(--sr-radius-control);
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+  background: var(--sr-warning-soft);
+  color: var(--sr-warning);
   font-size: var(--sr-type-label);
 }
 
@@ -2161,9 +2045,10 @@ body.app-slava-restraint .inspector__control-stack {
 }
 
 body.app-slava-restraint .inspector__notice {
-  border: 1px solid var(--sr-accent-border);
+  /* Design: a note is the neutral fill alone, no border. */
+  border: none;
   border-radius: var(--sr-radius-control);
-  background: var(--sr-accent-soft);
+  background: var(--sr-surface-control-hover);
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-label);
@@ -2171,11 +2056,10 @@ body.app-slava-restraint .inspector__notice {
   padding: var(--sr-space-2) var(--sr-space-3);
 }
 
-/* A missing key is something to do, not a failure: the neutral treatment the
-   node card gives the same line (.model-node__error--key), never the accent
-   box. */
+/* A missing key, or a missing Krea sign-in, is something to do, not a failure: the
+   neutral treatment the node card gives the same line (.model-node__error--key), never the
+   accent box. */
 body.app-slava-restraint .inspector__notice--key {
-  border-color: var(--sr-edge-strong);
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-light);
 }
@@ -4295,9 +4179,10 @@ body.app-slava-restraint .model-node--image-surface .react-flow__handle {
 
 body.app-slava-restraint .model-node__error {
   color: var(--sr-warning);
-  background: var(--sr-node-error-bg);
+  /* Design: a notice is a fill, never a bar down its edge. A run failure takes the warning
+     tint; a because line, the waiting and key lines below take the neutral notice fill. */
+  background: var(--sr-warning-soft);
   border: none;
-  border-left: var(--sr-node-error-border-width) solid var(--sr-accent);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-label);
   padding: var(--sr-node-error-padding);
@@ -4305,10 +4190,9 @@ body.app-slava-restraint .model-node__error {
   border-radius: var(--sr-node-error-radius);
 }
 
-/* Safety/moderation block: a muted left-rail (warning, not the accent used for
+/* Safety/moderation block: slightly muted (warning tint, not the accent used for
    real failures) so a declined request reads as informational, not broken. */
 body.app-slava-restraint .model-node__error--blocked {
-  border-left-color: var(--sr-warning);
   opacity: 0.92;
 }
 body.app-slava-restraint .model-node__error-details summary {
@@ -4317,16 +4201,16 @@ body.app-slava-restraint .model-node__error-details summary {
 
 /* An agent's run stopped at a node only the person may run: a stop by
    design, not a failure (GM, PR #203 r39 item 1). The notice style: the
-   card's muted text on a neutral rail, never the error or warning colour. */
+   card's muted text on the neutral notice fill, never the error or warning colour. */
 body.app-slava-restraint .model-node__error--waiting {
   color: var(--sr-ink-light);
-  border-left-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control);
 }
 /* A missing key reads the same way: something to do, not a failure (copy
    sweep item 12; NodeError `missingKey`). */
 body.app-slava-restraint .model-node__error--key {
   color: var(--sr-ink-light);
-  border-left-color: var(--sr-edge-strong);
+  background: var(--sr-surface-control);
 }
 body.app-slava-restraint .model-node__error--key .failure-lines__heading {
   color: var(--sr-ink);

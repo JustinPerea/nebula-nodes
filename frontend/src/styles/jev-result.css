@@ -375,8 +375,10 @@ body.app-slava-restraint .jev-result__branch span {
 
 body.app-slava-restraint .jev-result__hint {
   margin: 0;
-  padding-left: 10px;
-  border-left: 2px solid color-mix(in srgb, var(--jev-unsure) 60%, transparent);
+  padding: 6px 10px;
+  /* Design: a hint is a fill, never a bar down its edge. */
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
   color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
   line-height: var(--sr-line-meta);

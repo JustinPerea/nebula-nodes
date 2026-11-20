@@ -34,7 +34,7 @@ describe('the Inspector’s Krea sign-in notice', () => {
     useGraphStore.setState({ nodes: [krea], edges: [] });
     useUIStore.getState().selectNode('k1');
     const { container } = render(<Inspector embedded />);
-    const notices = [...container.querySelectorAll('.inspector__notice--warning')].map((node) => node.textContent?.trim());
+    const notices = [...container.querySelectorAll('.inspector__notice--key')].map((node) => node.textContent?.trim());
     expect(notices).toContain('Krea sign-in required. Sign in to Krea in Settings.');
     expect(container.textContent).not.toMatch(/Connect or check Krea/);
   });

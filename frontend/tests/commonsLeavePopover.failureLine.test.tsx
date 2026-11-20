@@ -5,7 +5,7 @@ import type { LeaveAsking } from '../src/components/commons/commonsLeave';
 
 afterEach(cleanup);
 
-const asking = (failure: string | null): LeaveAsking => ({ anchor: null, failure, retry: true, pending: false, slow: false, seq: 1 });
+const asking = (failure: string | null): LeaveAsking => ({ anchor: null, failure, panel: null, retry: true, pending: false, slow: false, seq: 1 });
 const show = (failure: string | null) => render(
   <CommonsLeavePopover asking={asking(failure)} unsaved running={false} onChoose={vi.fn()} onStay={vi.fn()} />);
 

@@ -284,11 +284,13 @@ button[data-offline-neutral]:hover {
   width: min(92vw, 680px);
   transform: translateX(-50%);
   padding: 10px 10px 10px 14px;
-  border: 1px solid rgb(255 180 120 / 34%);
+  /* Design: the warning tint, laid over an opaque surface because this notice floats over the
+     canvas, with the warning text and no border. */
+  border: none;
   border-radius: 12px;
   box-shadow: 0 10px 34px rgb(0 0 0 / 52%);
-  background: rgb(39 23 13 / 97%);
-  color: #ffd2b3;
+  background: linear-gradient(var(--sr-warning-soft), var(--sr-warning-soft)), var(--sr-canvas-elevated, #060607);
+  color: var(--sr-warning);
   font-family: var(--sr-ui);
   font-size: 12px;
   line-height: 1.35;
@@ -312,8 +314,8 @@ button[data-offline-neutral]:hover {
   align-items: center;
   gap: 12px;
   padding-top: 8px;
-  border-top: 1px solid rgb(255 210 180 / 16%);
-  color: #fff0e5;
+  border-top: 1px solid var(--sr-edge, rgb(255 255 255 / 12%));
+  color: var(--sr-warning);
 }
 
 .provider-recovery-status--reopen-only .provider-recovery-status__reopen {
@@ -382,7 +384,7 @@ button[data-offline-neutral]:hover {
 }
 
 .provider-recovery-status .provider-recovery-status__error {
-  color: #fff0e5;
+  color: var(--sr-warning);
   font-weight: 600;
 }
 
@@ -420,7 +422,7 @@ button[data-offline-neutral]:hover {
 }
 
 .provider-recovery-status button:hover {
-  outline: 1px solid rgb(255 210 180 / 58%);
+  outline: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 30%));
 }
 
 .provider-recovery-status button:focus-visible {

@@ -412,12 +412,12 @@ body.app-slava-restraint .commons-settings > .commons-panel-title {
 
 /* -- messages + page candidates ---------------------------------------------- */
 
-/* A Commons line's rail and the inset of its words (PR #204 round 13, GM r21 1): one measure,
-   read by the line (.commons-notice) and by Add's lock line, which lines up with its words. */
+/* The inset of a Commons line's words (PR #204 round 13, GM r21 1): one measure, read by the
+   line (.commons-notice) and by Add's lock line, which lines up with its words. A line is a fill,
+   never a bar down its edge (design). */
 body.app-slava-restraint {
-  --commons-line-rail: 2px;
   --commons-line-pad-x: 10px;
-  --commons-line-text-x: calc(var(--commons-line-rail) + var(--commons-line-pad-x));
+  --commons-line-text-x: var(--commons-line-pad-x);
 }
 
 body.app-slava-restraint .commons-messages {
@@ -431,7 +431,6 @@ body.app-slava-restraint .commons-notice {
   align-items: center;
   gap: 10px;
   margin: 0;
-  border-left: var(--commons-line-rail) solid currentColor;
   padding: 6px var(--commons-line-pad-x);
   background: var(--sr-surface-control);
   color: var(--sr-ink-light);
@@ -444,7 +443,10 @@ body.app-slava-restraint .commons-notice__list {
 }
 
 body.app-slava-restraint .commons-notice--error {
-  color: var(--sr-error);
+  /* Design: one tint per tone. A failure is the warning tint, never the orange accent; a neutral
+     line (data-line-neutral) reads the neutral fill through the same token (styles/becauseLine.css). */
+  background: var(--sr-warning-soft);
+  color: var(--sr-warning);
 }
 
 /* Round 18f (GM r35 4): a load line's "Try again", inline at the end of its sentence, in the

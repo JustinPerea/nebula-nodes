@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { createContext, useEffect, useState, type RefObject } from 'react';
 import { setCommonsLeaveAsk, whenCommonsClean } from '../../lib/commonsUnsaved';
 import { CommonsRequestError } from '../../lib/commonsRequestError';
 import { canTryAgain, failureCopy, oneLine } from '../../lib/errorCopy';
@@ -17,7 +17,9 @@ import { canTryAgain, failureCopy, oneLine } from '../../lib/errorCopy';
 /** `retry`: saving again could work (GM: only then is Save and leave offered
  * again). `reason` is the popover's line and `message` the panel banner's: both the one
  * line in the because form ("Nebula couldn’t save your labels because …"). */
-export type SaveResult = { ok: true } | { ok: false; reason: string; message: string; retry: boolean };
+export type SaveResult = { ok: true } | { ok: false; reason: string; message: string; retry: boolean;
+  /** Which panel's save failed (set by the leave, not by the panel). */
+  panel?: LabelingPanel };
 type SaveFailure = Extract<SaveResult, { ok: false }>;
 
 /**
@@ -35,6 +37,20 @@ export function saveFailure(error: unknown): SaveFailure {
   // Save and leave is the retry, and the line says the step that works in words.
   const message = oneLine(failureCopy(error, { heading: "Couldn’t save your labels." }));
   return { ok: false, reason: message, message, retry };
+}
+
+/**
+ * The failure the leave popover is showing, for the panel behind it that failed (null when it
+ * shows none, or another panel's). The popover is where the person acted, so it says the failure
+ * once: that panel's own notice with the same words stands down while the popover is open
+ * (CommonsErrorLine), and reads again if the person chooses Stay and the failure still stands.
+ * Another panel's identical sentence is its own and keeps showing (leaveFailureFor).
+ */
+export const CommonsLeaveFailure = createContext<string | null>(null);
+
+/** What a panel's CommonsLeaveFailure holds: the popover's failure when this panel is the one that failed. */
+export function leaveFailureFor(asking: LeaveAsking | null, panel: LabelingPanel): string | null {
+  return asking?.failure && asking.panel === panel ? asking.failure : null;
 }
 
 /**
@@ -64,6 +80,8 @@ export interface LeaveAsking {
   anchor: HTMLElement | null;
   /** Set when a save failed: its reason ('' when there is none). */
   failure: string | null;
+  /** The panel whose save failed (null with no failure). */
+  panel: LabelingPanel | null;
   /** Whether saving again could work after that failure. */
   retry: boolean;
   /** A chosen leave is being carried out (its saves are running). */
@@ -129,7 +147,7 @@ function controller(setAsking: (next: LeaveAsking | null | ((current: LeaveAskin
   const open = (leave: Leave, failure: SaveFailure | null) => {
     current = leave;
     seq += 1;
-    setAsking({ anchor: leave.anchor, failure: failure?.reason ?? null, retry: failure?.retry ?? true,
+    setAsking({ anchor: leave.anchor, failure: failure?.reason ?? null, panel: failure?.panel ?? null, retry: failure?.retry ?? true,
       pending: false, slow: false, seq });
   };
   const focusBack = (anchor: HTMLElement | null) => {
@@ -144,13 +162,16 @@ function controller(setAsking: (next: LeaveAsking | null | ((current: LeaveAskin
     if (returnFocus) focusBack(anchor);
   };
 
+  const panelWorks = () => (Object.entries(latest.current) as Array<[LabelingPanel, LabelingWork | null]>)
+    .filter((entry): entry is [LabelingPanel, LabelingWork] => entry[1] !== null);
+
   const request = (leave: Leave, toggle = false): void => {
     if (toggle && current && current.anchor === leave.anchor) { close(true); return; }
     const mine = ++turn;
     cancelGo();
-    const works = Object.values(latest.current).filter((work): work is LabelingWork => work !== null);
     if (!held(latest.current)) { go(leave); return; }
-    const saving = works.map((work) => work.saving).filter((save): save is Promise<SaveResult> => save !== null);
+    const saving = panelWorks().flatMap(([panel, work]) => (work.saving
+      ? [work.saving.then((result): SaveResult => (result.ok ? result : { ...result, panel }))] : []));
     if (saving.length === 0) { open(leave, null); return; }
     // A save already in progress: wait for it, with no popover; say so on the
     // clicked control if it takes a moment.
@@ -181,11 +202,11 @@ function controller(setAsking: (next: LeaveAsking | null | ((current: LeaveAskin
     try {
       const works = () => Object.values(latest.current).filter((work): work is LabelingWork => work !== null);
       if (choice === 'save') {
-        for (const work of works().filter((w) => w.unsaved)) {
+        for (const [panel, work] of panelWorks().filter(([, w]) => w.unsaved)) {
           let result: SaveResult;
           try { result = await work.save(); } catch (error) { result = saveFailure(error); }
           if (mine !== turn) return;
-          if (!result.ok) { open(leave, result); return; }
+          if (!result.ok) { open(leave, { ...result, panel }); return; }
         }
       } else if (choice === 'discard') {
         for (const work of works().filter((w) => w.unsaved)) work.discard();

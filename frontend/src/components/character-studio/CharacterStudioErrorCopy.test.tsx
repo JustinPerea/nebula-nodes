@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Character } from '../../types';
 
 /**
@@ -85,6 +87,24 @@ describe('a Character save that fails', () => {
     const alert = await screen.findByRole('alert');
     await waitFor(() => expect(line(alert)).toBe('Nebula couldn’t load the character because the server didn’t respond. Try again.'));
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
+  it('design: the load failure line and its Try again are one block, the button right after the line', async () => {
+    state.load = 503;
+    act(() => { useUIStore.getState().enterCharacterEditor('c1', 'global'); });
+    render(<CharacterStudioView />);
+    const alert = await screen.findByRole('alert');
+    const button = screen.getByRole('button', { name: 'Try again' });
+    const block = document.querySelector('.character-studio-view__loading')!;
+    expect(block.contains(alert) && block.contains(button)).toBe(true);
+    expect(alert.nextElementSibling).toBe(button);
+    expect(button.getAttribute('aria-describedby')).toBe(alert.id);
+    // The block centres its two rows as a group with a small gap, not each in its own half of the page.
+    const css = readFileSync(resolve(__dirname, '../../styles/character-studio.css'), 'utf8');
+    const rule = css.match(/\.character-studio-view__loading \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/place-content:\s*safe center/);
+    expect(rule).toMatch(/gap:\s*\d+px/);
+    expect(rule).not.toMatch(/place-items:\s*center/);
   });
 });
 
