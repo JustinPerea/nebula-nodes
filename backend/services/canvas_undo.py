@@ -55,7 +55,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from services import pending_nodes
 from services.canvas_events import MOVE_THRESHOLD_PX, actor_record
-from services.node_names import quoted
+from services.node_names import node_name_list, quoted
 
 UNDO_TTL_SECONDS = 3600
 MAX_EDITS = 100
@@ -109,15 +109,12 @@ def wire_body(wire: Wire) -> dict[str, str]:
     return {"source": wire[0], "sourceHandle": wire[1], "target": wire[2], "targetHandle": wire[3]}
 
 
-def _wire_text(wire: Wire) -> str:
-    return f"{wire[0]}.{wire[1]} → {wire[2]}.{wire[3]}"
-
-
 # -- what an edit changed ------------------------------------------------------
 
 def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, Any]], *,
                    removed: list[str], changed: list[str], renamed: list[str], moved: list[str],
-                   shown: Mapping[str, Any], ready: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
+                   shown: Mapping[str, Any], ready: list[str] | tuple[str, ...] = (),
+                   name_of: Callable[[str], str] | None = None) -> dict[str, Any]:
     """The canvas as an edit is about to change it: only what the edit names.
 
     ``shown`` are the positions the canvas shows (a node without a stored one
@@ -125,7 +122,9 @@ def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, An
     person saw it. ``ready`` are the agent's placeholders the edit makes
     normal (``pending: false``): their flags, so an undo makes them
     placeholders again, as the person's Cmd+Z does (Q125 item 3). A removed
-    node keeps its flag the same way."""
+    node keeps its flag the same way. ``name_of`` is the name the canvas shows
+    a node by (main._node_label): a removed node keeps it as ``name``, so an
+    undo line can still name it once it is gone (design: names, never ids)."""
     def node_copy(node_id: str) -> dict[str, Any]:
         node = nodes[node_id]
         position = node.get("position") or shown.get(node_id)
@@ -135,6 +134,7 @@ def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, An
             "definitionId": str(node.get("definitionId") or ""),
             "params": copy.deepcopy(node.get("params") or {}),
             "label": node.get("label") or None,
+            **({"name": name_of(node_id)} if name_of else {}),
             **({"position": {"x": float(position["x"]), "y": float(position["y"])}}
                if isinstance(position, Mapping) else {}),
             "outputs": copy.deepcopy(node.get("outputs") or {}),
@@ -164,15 +164,21 @@ def _point(value: Any) -> dict[str, float] | None:
 
 
 def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, Any]],
-                  *, added: list[str]) -> dict[str, Any] | None:
+                  *, added: list[str], name_of: Callable[[str], str] | None = None) -> dict[str, Any] | None:
     """What undoing the edit means, from the canvas before it and now; None
-    when the edit changed nothing that undo would put back."""
+    when the edit changed nothing that undo would put back. With ``name_of``
+    each entry also keeps ``name``, the node's name as the edit left it, for
+    the undo's lines (design: they name nodes, never ids); an inverse kept
+    without names still works (plan_undo falls back to the card type)."""
+    def named(node_id: str) -> dict[str, str]:
+        return {"name": name_of(node_id)} if name_of else {}
+
     wires_before = {tuple(wire) for wire in before["wires"]}
     wires_after = {wire_key(edge) for edge in edges}
     inverse: dict[str, Any] = {
         "added": [{"id": node_id, "definitionId": str(nodes[node_id].get("definitionId") or ""),
                    "params": copy.deepcopy(nodes[node_id].get("params") or {}),
-                   "label": nodes[node_id].get("label") or None}
+                   "label": nodes[node_id].get("label") or None, **named(node_id)}
                   for node_id in added if node_id in nodes],
         "addedWires": sorted(wires_after - wires_before),
         "changed": [],
@@ -182,7 +188,8 @@ def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]]
         "removedWires": sorted(wires_before - wires_after),
         # Placeholders the edit made ready: undo makes them placeholders again,
         # but only while the node is as the edit left it (_ready_changed_since).
-        "ready": [{"id": node_id, "pending": copy.deepcopy(flag), **_ready_state(nodes[node_id], node_id, edges)}
+        "ready": [{"id": node_id, "pending": copy.deepcopy(flag), **named(node_id),
+                   **_ready_state(nodes[node_id], node_id, edges)}
                   for node_id, flag in (before.get("ready") or {}).items()
                   if node_id in nodes and not pending_nodes.is_pending(nodes[node_id])],
     }
@@ -191,17 +198,26 @@ def build_inverse(before: Mapping[str, Any], nodes: Mapping[str, dict[str, Any]]
         if now is not None and (now.get("params") or {}) != params:
             inverse["changed"].append({"id": node_id, "definitionId": str(now.get("definitionId") or ""),
                                        "before": copy.deepcopy(params),
-                                       "after": copy.deepcopy(now.get("params") or {})})
+                                       "after": copy.deepcopy(now.get("params") or {}), **named(node_id)})
     for node_id, label in before["labels"].items():
         now = nodes.get(node_id)
         if now is not None and (now.get("label") or None) != label:
-            inverse["renamed"].append({"id": node_id, "before": label, "after": now.get("label") or None})
+            inverse["renamed"].append({"id": node_id, "before": label, "after": now.get("label") or None,
+                                       **named(node_id)})
     for node_id, point in before["positions"].items():
         now = nodes.get(node_id)
         if now is not None and point is not None and _point(now.get("position")) != point:
-            inverse["moved"].append({"id": node_id, "before": point, "after": _point(now.get("position"))})
+            inverse["moved"].append({"id": node_id, "before": point, "after": _point(now.get("position")),
+                                     **named(node_id)})
     if not any(inverse.values()):
         return None
+    if name_of:
+        # The ends of the wires it added or took away, which an undo line may
+        # need after a node is gone though the edit never named it.
+        ends = {end for key in ("addedWires", "removedWires") for wire in inverse[key] for end in (wire[0], wire[2])}
+        names = {node["id"]: node["name"] for node in inverse["removed"] if node.get("name")}
+        names.update({node_id: name_of(node_id) for node_id in sorted(ends) if node_id in nodes})
+        inverse["names"] = {node_id: names[node_id] for node_id in sorted(ends) if node_id in names}
     return inverse
 
 
@@ -248,27 +264,50 @@ def _moved_far(before: Mapping[str, float], after: Mapping[str, float] | None) -
     return math.hypot(after["x"] - before["x"], after["y"] - before["y"]) >= MOVE_THRESHOLD_PX
 
 
-def describe(inverse: Mapping[str, Any]) -> str:
-    """One line on what undoing this edit does."""
+def describe(inverse: Mapping[str, Any], type_name: Callable[[str], str] | None = None) -> str:
+    """One line on what undoing this edit does, naming nodes as the edit
+    recorded them (design: "Undo removes “Brief” and “Hero”, puts back
+    “Notes”, and returns “Model” to how it was. Anything changed or run since
+    is left as it is."). It runs without the graph, so the names are the ones
+    kept with the inverse; ``type_name`` (definition id to card type name)
+    names a node of an inverse kept without them."""
+    def names(entries: list[Mapping[str, Any]]) -> str:
+        unique = list({str(entry["id"]): entry for entry in entries}.values())
+        return node_name_list([quoted(_recorded_name(entry, type_name))[1:-1] for entry in unique])
+
+    def count(entries: list[Mapping[str, Any]]) -> int:
+        return len({str(entry["id"]) for entry in entries})
+
     parts: list[str] = []
     if inverse["added"]:
-        parts.append("removes " + _ids([node["id"] for node in inverse["added"]]))
+        parts.append("removes " + names(inverse["added"]))
     if inverse["removed"]:
-        parts.append("puts back " + _ids([node["id"] for node in inverse["removed"]]))
-    earlier = [item["id"] for key in ("changed", "renamed", "moved") for item in inverse[key]]
+        parts.append("puts back " + names(inverse["removed"]))
+    earlier = [item for key in ("changed", "renamed", "moved") for item in inverse[key]]
     if earlier:
-        parts.append("returns " + _ids(list(dict.fromkeys(earlier))) + " to how they were")
+        parts.append(f"returns {names(earlier)} to how {'it was' if count(earlier) == 1 else 'they were'}")
     if inverse.get("ready"):
-        parts.append("makes " + _ids([item["id"] for item in inverse["ready"]]) + " placeholders again")
+        parts.append(f"makes {names(inverse['ready'])} "
+                     f"{'a placeholder' if count(inverse['ready']) == 1 else 'placeholders'} again")
     wires = len(inverse["addedWires"]) + len(inverse["removedWires"])
     if wires and not parts:
         parts.append(f"puts {wires} connection{'s' if wires != 1 else ''} back")
-    return "Undo " + "; ".join(parts) + ". Anything changed or run since is left as it is."
+    joined = "changes nothing" if not parts else parts[0] if len(parts) == 1 else (
+        " and ".join(parts) if len(parts) == 2 else ", ".join(parts[:-1]) + ", and " + parts[-1])
+    return "Undo " + joined + ". Anything changed or run since is left as it is."
 
 
-def _ids(ids: list[str], limit: int = 6) -> str:
-    shown = ", ".join(ids[:limit])
-    return shown + (f" and {len(ids) - limit} more" if len(ids) > limit else "")
+def _recorded_name(entry: Mapping[str, Any], type_name: Callable[[str], str] | None = None) -> str:
+    """A node's name from an inverse entry: the name recorded when the edit
+    was made, else its card type's display name, else the id (only for an
+    inverse kept before names were, with no card type to ask)."""
+    name = str(entry.get("name") or entry.get("label") or "").strip()
+    if name:
+        return name
+    definition_id = str(entry.get("definitionId") or "")
+    if type_name and definition_id:
+        return type_name(definition_id) or str(entry["id"])
+    return str(entry["id"])
 
 
 # -- the plan: what undo does to the canvas as it is now -----------------------------
@@ -322,6 +361,7 @@ def plan_undo(
     ran: Mapping[str, list[dict[str, Any]]] | None = None,
     name_of: Callable[[str], str] | None = None,
     param_label: Callable[[str, str], str] | None = None,
+    type_name: Callable[[str], str] | None = None,
 ) -> UndoPlan:
     """The restore that undoes ``inverse`` on the canvas as it is now.
 
@@ -352,10 +392,45 @@ def plan_undo(
     key with its underscores as spaces. The skipped entries carry the same
     ``keys``, ``part`` and ``reason`` either way.
 
-    ``cannot_remove`` says why a node can't be deleted now (paid state), and
+    Every line names a node, never its id (design). A node still on the canvas
+    is named as ``name_of`` shows it; one that is gone (removed since, or a
+    wire's missing end) by the name the edit recorded for it (``name`` on the
+    inverse's entries), else its card type's display name (``type_name``:
+    definition id to name; also for an inverse kept without names), the id
+    only when nothing else exists. The skipped entries keep ``nodeId`` and the
+    other structured fields.
+
+    ``cannot_remove`` says why a node can't be deleted now as the whole line
+    for the skipped entry, naming nodes (paid state, a shot still running),
+    and
     ``refused_change`` why a param change isn't the agent's to make (who
     bills a run, notes to generators); both None when it is fine."""
     skipped: list[dict[str, Any]] = []
+
+    recorded: dict[str, Mapping[str, Any]] = {}  # node -> an inverse entry that knows its name
+    for key in ("added", "removed", "changed", "renamed", "moved", "ready"):
+        for entry in inverse.get(key) or []:
+            if entry.get("name") or str(entry["id"]) not in recorded:
+                recorded[str(entry["id"])] = entry
+
+    def name(node_id: str, *, live: bool = True) -> str:
+        """The node quoted, for a line: on the canvas as it shows now (unless
+        ``live`` is off: a different node holds the id), else as the edit
+        recorded it, else its label then card type as the inverse knew them."""
+        entry = recorded.get(node_id) or {}
+        if live and node_id in nodes:
+            return quoted(name_of(node_id) if name_of else str(nodes[node_id].get("label")
+                                                               or nodes[node_id].get("definitionId") or node_id))
+        label = str((inverse.get("names") or {}).get(node_id) or entry.get("name") or entry.get("label") or "").strip()
+        if label:
+            return quoted(label)
+        definition_id = str(entry.get("definitionId") or (nodes.get(node_id) or {}).get("definitionId") or "")
+        return quoted(type_name(definition_id) if type_name and definition_id and type_name(definition_id) else node_id)
+
+    def shown(node_id: str, *, live: bool = True) -> str:
+        """``name`` without its quotes: the skip entries' ``name``, which the
+        person's activity line quotes itself."""
+        return name(node_id, live=live)[1:-1]
 
     kept_parts: dict[str, list[str]] = {}  # node -> the parts someone changed since, as words
     kept_entries: list[tuple[dict[str, Any], str]] = []  # skip entries whose message is set once the plan is known
@@ -375,13 +450,13 @@ def plan_undo(
         return words
 
     def kept_line(node_id: str, went_back: bool) -> str:
-        name = quoted(name_of(node_id) if name_of else str(nodes[node_id].get("label") or nodes[node_id].get("definitionId") or ""))
+        shown = name(node_id)
         parts = kept_parts[node_id]
         if not went_back:
-            return f"{name} changed after that step, so Nebula left it as it is."
+            return f"{shown} changed after that step, so Nebula left it as it is."
         if len(parts) == 1:
-            return f"{name}\u2019s {parts[0]} changed after that step, so Nebula left it as it is."
-        return f"{name}\u2019s {_listed(parts)} changed after that step, so Nebula left them as they are."
+            return f"{shown}\u2019s {parts[0]} changed after that step, so Nebula left it as it is."
+        return f"{shown}\u2019s {_listed(parts)} changed after that step, so Nebula left them as they are."
 
     current_wires = {wire_key(edge) for edge in edges}
     edit_wires = {tuple(wire) for wire in inverse["addedWires"]}
@@ -412,19 +487,21 @@ def plan_undo(
                 or authored(node["definitionId"], now.get("params") or {})
                 != authored(node["definitionId"], node["params"])
                 or (now.get("label") or None) != node["label"]):
-            reason, message = "changed since", f"{node_id} changed since, so it stays"
+            reason, message = "changed since", f"{name(node_id)} changed after that step, so Nebula left it as it is."
         else:
             foreign = sorted(wire for wire in current_wires if node_id in (wire[0], wire[2]) and wire not in edit_wires)
             if foreign:
                 other = foreign[0][2] if foreign[0][0] == node_id else foreign[0][0]
-                reason, message = "wired since", f"{node_id} was connected to {other} since, so it stays"
+                reason, message = "wired since", (f"{name(node_id)} was connected to {name(other)} after that step, "
+                                                  "so Nebula left it as it is.")
             else:
                 refusal = cannot_remove(node_id, now)
                 if refusal:
-                    reason, message = "can't be removed now", f"{node_id} stays: {refusal}"
+                    reason, message = "can't be removed now", refusal
         if reason:
             kept.add(node_id)
-            skipped.append({"nodeId": node_id, "part": "node", "reason": reason, "message": message})
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "node", "reason": reason,
+                            "message": message})
         else:
             remove.append(node_id)
 
@@ -448,12 +525,13 @@ def plan_undo(
         node_id = change["id"]
         now = nodes.get(node_id)
         if now is None:
-            skipped.append({"nodeId": node_id, "part": "params", "reason": "removed since",
-                            "message": f"{node_id} was removed since"})
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "params", "reason": "removed since",
+                            "message": f"{name(node_id)} was removed after that step, so Nebula couldn\u2019t change it back."})
             continue
         if str(now.get("definitionId") or "") != change["definitionId"]:
-            skipped.append({"nodeId": node_id, "part": "params", "reason": "a different node now",
-                            "message": f"{node_id} is a different node now"})
+            skipped.append({"nodeId": node_id, "name": shown(node_id, live=False), "part": "params",
+                            "reason": "a different node now",
+                            "message": f"{name(node_id, live=False)} is a different node now, so Nebula left it as it is."})
             continue
         current = dict(now.get("params") or {})
         before, after = change["before"], change["after"]
@@ -483,13 +561,16 @@ def plan_undo(
             held.extend((key, "together") for key in sorted(back))
             back = {}
         if stale:
-            keep(node_id, {"nodeId": node_id, "part": "params", "keys": stale, "reason": "changed since",
+            keep(node_id, {"nodeId": node_id, "name": shown(node_id), "part": "params", "keys": stale,
+                           "reason": "changed since",
                            "message": ""}, param_words(node_id, stale))
         if held:
             names = [key for key, _reason in held]
-            skipped.append({"nodeId": node_id, "part": "params", "keys": names, "reason": "the person's to change",
-                            "message": f"{node_id}'s {', '.join(names)} is the person's to change back "
-                                       "(propose_change sends it to them)"})
+            words = param_words(node_id, names)
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "params", "keys": names,
+                            "reason": "the person's to change",
+                            "message": f"{name(node_id)}\u2019s {_listed(words)} {'is' if len(words) == 1 else 'are'} "
+                                       "the person\u2019s to change back. Ask them with propose_change."})
         if back:
             item(node_id)["params"] = _with(current, back)
 
@@ -505,7 +586,8 @@ def plan_undo(
             leave(node_id, "name")
             continue
         if label != rename["after"]:
-            keep(node_id, {"nodeId": node_id, "part": "name", "reason": "changed since", "message": ""}, ["name"])
+            keep(node_id, {"nodeId": node_id, "name": shown(node_id), "part": "name", "reason": "changed since",
+                           "message": ""}, ["name"])
             continue
         item(node_id)["label"] = rename["before"] or ""
 
@@ -521,8 +603,8 @@ def plan_undo(
             leave(node_id, "position")
             continue
         if point != move["after"]:
-            skipped.append({"nodeId": node_id, "part": "position", "reason": "moved since",
-                            "message": f"{node_id} was moved since, left where it is"})
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "position", "reason": "moved since",
+                            "message": f"{name(node_id)} was moved after that step, so Nebula left it where it is."})
             continue
         item(node_id)["position"] = dict(move["before"])
 
@@ -540,8 +622,9 @@ def plan_undo(
             leave(node_id, "placeholder")
             continue
         if _ready_changed_since(ready, now, current_wires):
-            skipped.append({"nodeId": node_id, "part": "placeholder", "reason": "changed since",
-                            "message": f"{node_id} changed since, so it stays a normal node"})
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "placeholder",
+                            "reason": "changed since",
+                            "message": f"{name(node_id)} changed after that step, so Nebula left it as a normal node."})
             continue
         item(node_id)["pending"] = copy.deepcopy(ready["pending"])
 
@@ -569,8 +652,9 @@ def plan_undo(
         missing = next((end for end in (edge[0], edge[2]) if end not in present), None)
         if missing is not None:
             skipped.append({"part": "wire", "wire": wire_body(edge), "reason": "gone since",
-                            "nodeId": missing,
-                            "message": f"the connection {_wire_text(edge)} can't come back: {missing} is gone"})
+                            "nodeId": missing, "name": shown(missing),
+                            "message": (f"Nebula couldn\u2019t put back the connection from {name(edge[0])} to "
+                                        f"{name(edge[2])} because {name(missing)} is gone.")})
             continue
         wire.append(wire_body(edge))
 
@@ -579,9 +663,9 @@ def plan_undo(
                      or any(node_id in (edge["source"], edge["target"]) for edge in wire + unwire))
         entry["message"] = kept_line(node_id, went_back)
 
-    ran_skips = [{"nodeId": node_id, "part": "node", "reason": "ran since", "left": parts,
+    ran_skips = [{"nodeId": node_id, "name": shown(node_id), "part": "node", "reason": "ran since", "left": parts,
                   "ranBy": [actor_record(actor) for actor in ran[node_id]],
-                  "message": f"{node_id} ran since (run by {_runners(ran[node_id])}), so it stays"}
+                  "message": f"{_runners(ran[node_id])} ran {name(node_id)} after that step, so Nebula left it as it is."}
                  for node_id, parts in ran_left.items()]
     return UndoPlan(
         restore={"action": "undo", "nodes": list(items.values()), "remove": remove, "wire": wire, "unwire": unwire},
@@ -614,6 +698,48 @@ def kept_lines(skipped: list[dict[str, Any]]) -> list[str]:
             seen.add(key)
             lines.append(line)
     return lines
+
+
+def activity_line(agent: str, skipped: list[dict[str, Any]], name_of: Callable[[str], str] | None = None) -> str:
+    """The person's activity line for an agent's undo (design), no counts in
+    the short forms, no colon, no parens. Nothing kept: "Codex undid its
+    edit." Parts kept (a part is a node, counted once): "Codex undid its edit
+    except “Hero” and “Brief”, which ran after that.", "…except “Notes”, which
+    changed after that." (every kept reason but a run reads "changed"), and
+    both: "…except “Hero”, which ran after that, and “Notes”, which changed
+    after that." From 4 parts in all they are counted: "…except 4 parts that
+    ran or changed after that." (only ran: "4 nodes that ran"; only changed:
+    "4 parts that changed").
+
+    A skip names its node in ``name`` (else ``name_of`` gives it from
+    ``nodeId``). A wire skip counts as a kept part of the node in its
+    ``nodeId``: the end that is gone, or the target that no longer takes the
+    connection."""
+    ran: dict[str, str] = {}
+    kept: dict[str, str] = {}
+    for item in skipped:
+        node_id = item.get("nodeId")
+        if not node_id:
+            continue
+        shown = str(item.get("name") or "") or (name_of(node_id) if name_of else str(node_id))
+        if item.get("reason") == "ran since":
+            ran[node_id] = shown
+        else:
+            kept[node_id] = shown
+    kept = {node_id: shown for node_id, shown in kept.items() if node_id not in ran}
+    if not ran and not kept:
+        return f"{agent} undid its edit."
+    total = len(ran) + len(kept)
+    if total >= 4:
+        what = (f"{total} parts that ran or changed" if ran and kept else f"{total} nodes that ran" if ran
+                else f"{total} parts that changed")
+        return f"{agent} undid its edit except {what} after that."
+    clauses = []
+    if ran:
+        clauses.append(f"{node_name_list(list(ran.values()))}, which ran after that")
+    if kept:
+        clauses.append(f"{node_name_list(list(kept.values()))}, which changed after that")
+    return f"{agent} undid its edit except {', and '.join(clauses)}."
 
 
 def nothing_went_back(skipped: list[dict[str, Any]], left: str = "") -> str:
@@ -664,7 +790,10 @@ def _noun(label: str) -> str:
 
 
 def _runners(actors: list[dict[str, Any]]) -> str:
-    """Who ran a node, in a skip's message: "the person", "Codex", "the person and Codex"."""
+    """Who ran a node, leading a skip's message (design): "Codex", "The
+    person", "The person and Codex". Agent names aren't quoted (only things
+    are); the person reads "You" in person-facing text, which has no runner
+    names at all today (the activity line)."""
     names: list[str] = []
     for actor in actors:
         kind = actor.get("kind")
@@ -672,7 +801,9 @@ def _runners(actors: list[dict[str, Any]]) -> str:
                 else "Nebula" if kind == "system" else "an unnamed client")
         if name not in names:
             names.append(name)
-    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    if names[0] in ("the person", "an unnamed client"):
+        names[0] = names[0][0].upper() + names[0][1:]
+    return _listed(names)
 
 
 def _with(params: Mapping[str, Any], back: Mapping[str, Any]) -> dict[str, Any]:
@@ -758,8 +889,12 @@ def _actor_key(actor: Mapping[str, Any]) -> str:
 
 class CanvasUndoBook:
     def __init__(self, clock: Callable[[], float] = time.time, *, persist_path: Path | None = None,
-                 unrestored_base: int | None = None, prior_state: bool = False) -> None:
+                 unrestored_base: int | None = None, prior_state: bool = False,
+                 type_name: Callable[[str], str] | None = None) -> None:
         self._clock = clock
+        # Definition id to card type name, for the undo summary of an inverse
+        # kept without node names (describe has no graph access).
+        self._type_name = type_name
         # Where the per-project id epochs are kept across restarts (round 20
         # of PR #195, review 19 M2): the canvas revision a tab holds is this
         # epoch, so a restart that started it again at 0 read as an agent's
@@ -917,7 +1052,7 @@ class CanvasUndoBook:
             self._drop(oldest, f"Nebula keeps the undo of the last {MAX_EDITS} edits, and this is now older "
                                "(the oldest is dropped first)")
         return {"token": token, "editId": edit_id, "expiresInSeconds": UNDO_TTL_SECONDS,
-                "summary": describe(inverse)}
+                "summary": describe(inverse, self._type_name)}
 
     def take(self, token: str, *, agent_id: str, project_id: str | None) -> EditRecord:
         """The record a token undoes, for this agent on this project."""

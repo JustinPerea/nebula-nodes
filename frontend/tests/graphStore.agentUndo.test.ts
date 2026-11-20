@@ -319,7 +319,7 @@ describe('an agent edit while the person is mid-change', () => {
 describe('when the backend refuses the undo', () => {
   it('puts the canvas and the stack back and says why', async () => {
     net.restoreStatus = 409;
-    net.restoreDetail = 'n3 is a different node now, so this step can\'t be put back.';
+    net.restoreDetail = 'Nebula couldn’t undo this step because “fog” is a different node now. Reload the canvas to see the current version.';
     const { nodes, edges } = start();
     sync([...nodes, textNode('n3', 'fog')], edges, { edit: CLAUDE });
     const entry = useGraphStore.getState().undoStack[0];
@@ -329,7 +329,7 @@ describe('when the backend refuses the undo', () => {
     await vi.waitFor(() => expect(ids()).toEqual(['n1', 'n2', 'n3']));
     expect(useGraphStore.getState().undoStack).toEqual([entry]);
     expect(useGraphStore.getState().redoStack).toEqual([]);
-    expect(useGraphStore.getState().undoNotice?.text).toContain('different node now');
+    expect(useGraphStore.getState().undoNotice?.text).toContain('“fog” is a different node now');
   });
 });
 

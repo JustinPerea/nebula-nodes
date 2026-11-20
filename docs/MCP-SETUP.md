@@ -5185,8 +5185,10 @@ stays whole: it isn't removed, its params, name and position aren't put
 back, and no connection into it is taken away or put back, because those inputs
 made its result. It is one `skipped` item with reason `ran since`,
 `ranBy` (`[{kind, name}]`), `left` (the parts it kept: `node`, `params`,
-`name`, `position`, `wires in`) and a message such as "n3 ran since (run
-by the person), so it stays". Connections out of it follow the rules above. Only
+`name`, `position`, `wires in`) and a message such as "The person ran
+“Brief” after that step, so Nebula left it as it is." (an agent's name
+leads and isn't quoted: "Codex ran “Brief” after that step, …"; several
+runners join as "The person and Codex ran …"). Connections out of it follow the rules above. Only
 runs the undoing agent started itself don't count, so an agent can still
 undo its own experiments. A run counts if it was asked for after the edit
 landed, including one still going when the undo comes (all the nodes it
@@ -5196,7 +5198,42 @@ reached the node after. The person's own Cmd+Z is unchanged.
 Each part someone changed since is left as it is and listed in `skipped`
 (`{nodeId, part, keys?, wire?, reason, message}`, plus `ranBy` and `left`
 for `ran since`), as a moodboard restore does. A param only the person may change back (opening a Moodboard node's
-"send notes" again) is skipped too. The rest is one restore through the
+"send notes" again) is skipped too: "“Hero”’s model is the person’s to change back. Ask them with propose_change."
+Every line in `message` and `skipped[].message`, and the `summary` an apply
+returns ("Undo removes “Brief” and “Hero”, puts back “Notes”, and returns
+“Model” to how it was. Anything changed or run since is left as it is."),
+names nodes by the name the canvas shows, never by id; the ids stay in
+`nodeId` and the other fields. A node that is gone is named by the name it
+had when the edit was made ("“Brief” was removed after that step, so Nebula
+couldn’t change it back."; a connection: "Nebula couldn’t put back the
+connection from “Hero” to “Brief” because “Brief” is gone."), else its card
+type's name. Other kept lines read "“Brief” changed after that step, so
+Nebula left it as it is.", "“Brief” was connected to “Hero” after that step,
+…", "“Brief” is a different node now, …", "“Brief” was moved after that
+step, so Nebula left it where it is." and "“Brief” changed after that step,
+so Nebula left it as a normal node.". A node that can't be removed now reads, by the kind of refusal:
+"Nebula left “Brief” as it is because " plus, by the node's World Labs state,
+"its World Labs run is still starting. Undo again in a moment.", "it has a
+World Labs run that isn’t settled. Ask the person to check it in Marble and
+confirm in the notice at the top of their screen.", "it has a World Labs run
+that isn’t settled. Ask the person to check the run in Marble, then use
+“Forget ID” in run history." or "its settings hold a World Labs ID. Ask the
+person to check it in Marble, then clear “Existing World ID”." (only the
+fields that hold an ID, joined with "and"),
+or, for a Cinema scene, "Nebula left “Scene” as it is because “Shot 2” is
+still running as run ‹run id›." (several: "…because “Shot 2” and “Shot 3” are
+still running as runs ‹a› and ‹b›."); any other refusal reads "Nebula left
+“Brief” as it is. ‹the refusal, with ids replaced by names›". The
+person's activity line is "Codex undid its edit." when nothing was kept, else
+"Codex undid its edit except “Hero” and “Brief”, which ran after that.", "…
+except “Notes”, which changed after that." (every kept part reads "changed":
+a part of a node, or a connection that couldn’t go back, counts once for the
+node it names) or both ("…except “Hero”, which ran
+after that, and “Notes”, which changed after that."); from 4 parts they are
+counted ("…except 4 parts that ran or changed after that."). The person's own
+Cmd+Z on a node that became something else is refused with "Nebula couldn’t
+undo this step because “Brief” is a different node now. Reload the canvas to
+see the current version.". The rest is one restore through the
 same staging as the canvas's Cmd+Z, so it lands whole or not at all, and
 the person can undo the undo. `status` is `undone`; `skipped` when nothing
 could go back (the token keeps working, for when the person puts a changed

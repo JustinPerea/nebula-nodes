@@ -373,7 +373,20 @@ def test_a_node_that_became_something_else_is_refused_and_nothing_changes(api):
         "nodes": [{"id": prompt, "definitionId": "nano-banana", "params": {}}],
     })
     assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Nebula couldn’t undo this step because “Text Input” is a different node now. "
+        "Reload the canvas to see the current version.")
     assert {k: dict(v) for k, v in api.graph.nodes.items()} == before
+
+
+def test_the_refused_step_names_the_node_as_the_canvas_shows_it(api):
+    prompt, _ = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    response = _restore(api, {"nodes": [{"id": prompt, "definitionId": "nano-banana", "params": {}}]})
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Nebula couldn’t undo this step because “Brief” is a different node now. "
+        "Reload the canvas to see the current version.")
 
 
 def test_a_wire_to_a_missing_node_is_refused(api):

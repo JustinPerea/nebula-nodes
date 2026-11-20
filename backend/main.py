@@ -220,8 +220,8 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, kept_lines, nothing_went_back,
-    plan_undo, touched_nodes,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, activity_line, build_inverse, capture_before, kept_lines,
+    nothing_went_back, plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
@@ -8199,11 +8199,14 @@ class _RenderingSceneRefusal(CodedRefusal):
     any run rendering them can be stopped), so the canvas can word a
     multi-select delete's kept scene in GM's form (PR #198 review 4, M1) and
     put back only those shots of a refused save (review 5), without reading
-    it out of the line."""
+    it out of the line. ``run_ids`` (not in the answer) names the runs, for
+    the undo line that says which."""
 
-    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any]) -> None:
+    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any],
+                 run_ids: Sequence[str] = ()) -> None:
         super().__init__(status_code, detail, {"code": "rendering_shots", "rendering": rendering})
         self.rendering = rendering
+        self.run_ids = list(run_ids)
 
 
 def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
@@ -8234,7 +8237,7 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     # agent refusal"); a no-op for the person's own request.
     _log_agent_refusal(specific)
     raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(specific, person, route="canvas"),
-                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable})
+                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable}, run_ids)
 
 
 _agent_log_tasks: set[asyncio.Task[None]] = set()
@@ -18705,13 +18708,17 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
                                     fields=_recovery_field_labels([node]) if state == "params" else ())
         if state == "recovery" and not live_checkpoint:
             person = _shared_id_delete_person(node_id, holding) or person
-        raise _node_refusal(
+        refusal = _node_refusal(
             409,
             f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
             "Check Marble, then resolve its exact recovery/ambiguity record "
             "first.",
             person,
         )
+        # The kind, for the undo line (_undo_cannot_remove); not in the answer.
+        refusal.kind = "paid_state"  # type: ignore[attr-defined]
+        refusal.state = state  # type: ignore[attr-defined]
+        raise refusal
 
 
 def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, Any]) -> bool:
@@ -19605,8 +19612,8 @@ async def _restore_graph(
                 continue
             if str(current.get("definitionId") or "") != definition_id:
                 raise HTTPException(status_code=409, detail=(
-                    f"{node_id} is a different node now, so this step can't be put back. "
-                    "Reload the canvas to see the current graph."))
+                    f"Nebula couldn\u2019t undo this step because \u201c{_node_label(node_id, candidate)}\u201d "
+                    "is a different node now. Reload the canvas to see the current version."))
             # A node that is still there changes only what the item sends: the
             # canvas leaves out params and name when the step didn't touch them.
             if "params" in raw:
@@ -19802,7 +19809,8 @@ async def _restore_graph(
 # a count of clears from this same base or from 0).
 canvas_undo_book = CanvasUndoBook(
     persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None,
-    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT)
+    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT,
+    type_name=lambda definition_id: _undo_type_name(definition_id))
 
 
 def _advance_canvas_revision_after_a_failed_load() -> None:
@@ -19837,6 +19845,7 @@ def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, A
         moved=[key for key in spec.move if not key.startswith("+")],
         shown=shown,
         ready=list(spec.ready),
+        name_of=_node_label,
     )
 
 
@@ -19845,7 +19854,7 @@ def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, An
     and the project it was made in. Built later, it would take in whatever
     another request changed while this one was still broadcasting."""
     project_id, project_name = _open_project_brief()
-    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
+    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added, name_of=_node_label),
             "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id),
             "mark": canvas_undo_book.mark()}
 
@@ -19886,11 +19895,43 @@ def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any
     return None
 
 
+def _undo_paid_because(state: str | None, node: Mapping[str, Any]) -> str:
+    """The because-clause of the undo's can't-remove line for each World Labs
+    state _ensure_node_deletable computes (design); each wording is here only."""
+    if state == "active":
+        return "its World Labs run is still starting. Undo again in a moment."
+    if state == "ambiguity":
+        return ("it has a World Labs run that isn\u2019t settled. Ask the person to check it in Marble and "
+                "confirm in the notice at the top of their screen.")
+    if state == "recovery":
+        return ("it has a World Labs run that isn\u2019t settled. Ask the person to check the run in Marble, then use "
+                f"{FORGET_BUTTON} in run history.")
+    return ("its settings hold a World Labs ID. Ask the person to check it in Marble, then clear "
+            f"{_quoted_fields(_recovery_field_labels([dict(node)]))}.")
+
+
 def _undo_cannot_remove(node_id: str, node: dict[str, Any]) -> str | None:
+    """Why an undo leaves a node it would remove, as one line naming nodes
+    (design), chosen by the kind of refusal _ensure_node_deletable raised, not
+    by its words: World Labs paid state (one line per state), a Cinema scene with a shot still
+    running, else the refusal's own text after a plain "left it as it is"."""
     try:
         _ensure_node_deletable(node_id, node)
     except HTTPException as exc:
-        return str(exc.detail)
+        name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(
+            str(node.get("label") or _node_label(node_id)))
+        lead = f"Nebula left {name} as it is"
+        if isinstance(exc, _RenderingSceneRefusal) and exc.run_ids:
+            what, several = _shot_names([int(n) for n in exc.rendering["shots"]])
+            runs = exc.run_ids
+            ids = ("run " + runs[0]) if len(runs) == 1 else "runs " + ", ".join(runs[:-1]) + " and " + runs[-1]
+            return f"{lead} because {what} {'are' if several else 'is'} still running as {ids}."
+        if getattr(exc, "kind", None) == "paid_state":
+            return f"{lead} because {_undo_paid_because(getattr(exc, 'state', None), node)}"
+        logging.getLogger("nebula.undo").info("undo kept %s: a removal refusal of an unlisted kind (%s, status %s)",
+                    node_id, type(exc).__name__, exc.status_code)
+        text = re.sub(rf"(?<![\w-]){re.escape(node_id)}(?![\w-])", lambda _m: name, str(exc.detail)).strip()
+        return f"{lead}. {text}"
     return None
 
 
@@ -19981,6 +20022,13 @@ def _undo_param_label(definition_id: str, key: str) -> str:
     return str((param or {}).get("label") or "").split(" \u00b7 ")[0].strip() or _undo_key_words(key)
 
 
+def _undo_type_name(definition_id: str) -> str:
+    """A card type's display name (the canvas title), for an undo line about a node
+    that is gone and whose name the inverse never recorded; "" when unknown."""
+    definition = node_registry.get_all().get(definition_id)
+    return node_route.canvas_title(definition) if definition else ""
+
+
 def _undo_key_words(key: str) -> str:
     """A param key in lower-case words: filePath and file_path both give "file path"."""
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key).replace("_", " ").lower()
@@ -19989,7 +20037,7 @@ def _undo_key_words(key: str) -> str:
 def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
     """The parts an undo left, in its reply's message: the kept lines are
     sentences already, so they join with a space and take no lead-in. A line
-    that isn't a full sentence (a ran-since or moved-since note) gets its stop."""
+    that lacks its stop (an entry from an older record) gets one."""
     return " ".join(line if line.endswith((".", "!", "?")) else line + "." for line in kept_lines(skipped))
 
 
@@ -20050,7 +20098,8 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
                      cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
-                     ran=_undo_ran_since(record), name_of=_node_label, param_label=_undo_param_label)
+                     ran=_undo_ran_since(record), name_of=_node_label, param_label=_undo_param_label,
+                     type_name=_undo_type_name)
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:
@@ -20072,9 +20121,12 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # With the restore's own events, before any await (round 8 of PR #114).
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
+            "name": _quoted(_node_label(wire["target"]))[1:-1],
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
-            "message": (f"the connection {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
-                        f"can't come back: {wire['reason']}")} for wire in wire_skips]
+            # The restore's own reason names ports and ids; the line says what the person can see.
+            "message": (f"Nebula couldn\u2019t put back the connection from {_quoted(_node_label(wire['source']))} to "
+                        f"{_quoted(_node_label(wire['target']))} because the two nodes don\u2019t take that "
+                        "connection now.")} for wire in wire_skips]
         record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
         record.last_skipped = skipped
         canvas_undo_book.note_events(undo_id, canvas_events.events_of_edit(undo_id))
@@ -20103,10 +20155,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             # The proposals it reopened are journaled after its edit.undone
             # (their fit check awaits): the link lists them too (review 8).
             _note_link_events(undo_id)
-    stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
-    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
-                   + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"
-                      if stays else ""))
+    publish_action(activity_line(identity.name, skipped, _node_label))
     extras = _undo_extras_text(result)
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",

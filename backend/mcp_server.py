@@ -2001,8 +2001,9 @@ def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict
     A run counts as a change: a node the person, another agent or an unnamed
     client ran since your edit stays whole (not removed; its params, name,
     position and the connections into it stay as they ran) as one `skipped` item,
-    reason "ran since", with `ranBy` and a message such as "n3 ran since (run
-    by the person), so it stays". Your own runs don't count, so you can still
+    reason "ran since", with `ranBy` and a message such as "The person ran
+    \u201cBrief\u201d after that step, so Nebula left it as it is." (every message names
+    nodes, never ids; `nodeId` has the id). Your own runs don't count, so you can still
     undo your own experiments.
     Nodes you removed get back the pins that were on them (`reattached`; a
     pin that can't go back, say because the person deleted it since, is in
