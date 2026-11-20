@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
-import { DECORATION, FAILURE_MESSAGE, ICON_ONLY, isDisabledScoped, isDimLiteral, scan } from '../scripts/check-text-ink.mjs';
+import { DECORATION, FAILURE_MESSAGE, ICON_ONLY, isDisabledScoped, isDimLiteral, normaliseCombinators, scan } from '../scripts/check-text-ink.mjs';
 
 /**
  * scripts/check-text-ink.mjs runs in `npm run lint` (design: text takes the light ink; white at .40
@@ -316,6 +316,27 @@ describe('check-text-ink: icon-only controls need meta ink', () => {
   });
 });
 
+describe('check-text-ink: combinator whitespace', () => {
+  const DIM = '{ color: var(--sr-ink-faint); }';
+  const defs = ':root { --sr-ink-faint: rgba(255, 255, 255, 0.20); }\n';
+
+  it('normalises spaces around > + ~ and runs of spaces', () => {
+    expect(normaliseCombinators('.a+.b')).toBe('.a + .b');
+    expect(normaliseCombinators('.a   >   .b ~ .c')).toBe('.a > .b ~ .c');
+  });
+
+  it('reads the DECORATION selector written without spaces around +', () => {
+    const tight = `body.app-slava-restraint .structured-preview__status-item+.structured-preview__status-item::before ${DIM}`;
+    const loose = `body.app-slava-restraint .structured-preview__status-item  +  .structured-preview__status-item::before ${DIM}`;
+    expect(css(tight, defs)).toEqual([]);
+    expect(css(loose, defs)).toEqual([]);
+  });
+
+  it('still fails a selector that is not listed, however it is spaced', () => {
+    expect(css(`.a+.b::before ${DIM}`, defs)).toHaveLength(1);
+  });
+});
+
 describe('check-text-ink: decoration is hidden from assistive tech', () => {
   const SRC = join(import.meta.dirname, '..', 'src');
   const walk = (dir: string, ext: string[]): string[] =>
@@ -361,15 +382,50 @@ describe('check-text-ink: decoration is hidden from assistive tech', () => {
     return jsxElements().filter((element) => pattern.test(element.classes));
   }
 
+  /** Every rule in every stylesheet whose selector list has a part whose last compound is `selector`'s (a more specific rule counts) and that sets `content`: the LAST content declaration of each. */
+  function lastContents(sources: string[], selector: string): { selector: string; content: string }[] {
+    const lastCompound = (part: string) => part.split(/\s*[>+~]\s*|\s+/).pop() ?? '';
+    const subject = lastCompound(normaliseCombinators(selector));
+    const found: { selector: string; content: string }[] = [];
+    for (const source of sources) {
+      for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const parts = match[1].split(',').map((part) => normaliseCombinators(part.trim()));
+        if (!parts.some((part) => lastCompound(part) === subject)) continue;
+        const contents = [...match[2].matchAll(/(?:^|;|\s)content\s*:\s*([^;]*)/g)].map((m) => m[1].trim());
+        if (contents.length > 0) found.push({ selector: match[1].trim(), content: contents[contents.length - 1] });
+      }
+    }
+    return found;
+  }
+  const hasEmptyAlt = (content: string) => /^(['"]).*\1\s*\/\s*(''|"")$/.test(content);
+
   it.each([...DECORATION].filter((selector) => selector.includes('::')))(
-    '%s is a pseudo-element whose content has empty alt text',
+    '%s is a pseudo-element whose content has empty alt text in every rule that sets it',
     (selector) => {
-      const rule = new RegExp(`${selector.replace(/[.+*?^${}()|[\]\\]/g, '\\$&').replace(/\\ /g, '\\s+')}\\s*\\{([^}]*)\\}`);
-      const bodies = cssSources.map((source) => rule.exec(source)?.[1]).filter((body): body is string => body !== undefined);
-      expect(bodies.length).toBeGreaterThan(0);
-      for (const body of bodies) expect(body).toMatch(/content:\s*(['"]).*\1\s*\/\s*(''|"")/);
+      const rules = lastContents(cssSources, selector);
+      expect(rules.length).toBeGreaterThan(0);
+      expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toEqual([]);
     },
   );
+
+  const DECORATED = '.project-workspace-controls__count::before';
+  it('mutation: swapped declarations (alt text first, plain content last) fail', () => {
+    const rules = lastContents([`${DECORATED} { content: '·' / ''; content: '·'; }`], DECORATED);
+    expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toHaveLength(1);
+  });
+
+  it('mutation: a later rule with plain content fails, even a more specific one', () => {
+    const good = `${DECORATED} { content: '·' / ''; }`;
+    const later = `.project-workspace-controls--x ${DECORATED} { content: '·'; }`;
+    const rules = lastContents([good, later], DECORATED);
+    expect(rules).toHaveLength(2);
+    expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toHaveLength(1);
+  });
+
+  it('the shipped order (plain, then alt text) passes', () => {
+    const rules = lastContents([`${DECORATED} { content: '·'; content: '·' / ''; }`], DECORATED);
+    expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toEqual([]);
+  });
 
   it.each([...DECORATION].filter((selector) => !selector.includes('::')))(
     '%s is aria-hidden="true" wherever a component renders it',

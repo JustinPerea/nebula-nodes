@@ -28,8 +28,7 @@ import {
 //   - white at an alpha in that range as a literal in every form: rgba(255,255,255,.45), rgb(255 255
 //     255 / 40%), #ffffff66, #fff8, hsla(0,0%,100%,.3), hsl(0 0% 100% / 50%).
 // A fallback counts only when the variable is defined nowhere in src: var(--undefined, <dim>) fails.
-// .55 and above pass. Exactly .20 (--sr-ink-faint) is outside the check for now: a follow-up audit
-// decides the text at .20, and that change extends the check to it.
+// .55 and above pass.
 //
 // Exempt:
 //   - a rule whose selector scopes to :disabled, [disabled] or [aria-disabled="true"] on the element
@@ -55,6 +54,9 @@ import {
 // Known limits (this is a text check, not a CSS engine):
 //   - nested CSS rules (`&`, or a `{` between declarations) are skipped;
 //   - the value must be the colour itself: color-mix(...) of dim white, or a calc, is not followed;
+//   - `opacity` over light ink is not multiplied in (color: var(--sr-ink-light) with opacity .36 reads
+//     as .20 on screen and passes), and the `-webkit-text-stroke` shorthand is not read (only
+//     `-webkit-text-stroke-color` is);
 //   - a custom property defined as dim white in ANY rule makes every use of it dim, even where
 //     another rule overrides it (--swatch is meta by default and overridden per swatch; it is only
 //     read by background, so it passes);
@@ -354,12 +356,17 @@ function expandIs(part) {
   return splitTopLevel(match[2]).map((alt) => `${match[1]}${alt}${match[3]}`.trim());
 }
 
+/** One space around > + ~ and runs of spaces collapsed, so `.a+.b` and `.a  +  .b` match the listed `.a + .b`. */
+export function normaliseCombinators(selector) {
+  return selector.replace(/\s*([>+~])\s*/g, ' $1 ').replace(/\s+/g, ' ').trim();
+}
+
 function isIconOnly(part) {
-  return expandIs(stripPrefix(part)).every((alt) => ICON_ONLY.has(alt));
+  return expandIs(normaliseCombinators(stripPrefix(part))).every((alt) => ICON_ONLY.has(normaliseCombinators(alt)));
 }
 
 function isDecoration(part) {
-  return DECORATION.has(stripPrefix(part));
+  return DECORATION.has(normaliseCombinators(stripPrefix(part)));
 }
 
 function isSvgTextSelector(part) {

@@ -604,7 +604,7 @@ body.app-slava-restraint .commons-axis {
 }
 
 body.app-slava-restraint .commons-axis--set {
-  color: var(--sr-ink-light);
+  color: var(--sr-ink);
 }
 
 body.app-slava-restraint .commons-axis__head {
@@ -708,6 +708,8 @@ body.app-slava-restraint .commons-tile {
   padding: 0;
   overflow: hidden;
   cursor: pointer;
+  /* A <button> keeps the browser's own control font; the badges and caption inside take the app font from here. */
+  font: inherit;
   transition: border-color 160ms var(--commons-spring), transform 200ms var(--commons-spring);
 }
 
@@ -776,7 +778,6 @@ body.app-slava-restraint .commons-badge {
   padding: 1px 7px;
   background: var(--sr-glass-strong);
   color: var(--sr-ink-light);
-  font-family: inherit;
   font-size: 10px;
   letter-spacing: 0.03em;
   white-space: nowrap;

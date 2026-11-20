@@ -210,11 +210,6 @@ body.app-slava-restraint .character-palette__empty--error {
   color: var(--line-warning, var(--sr-error));
 }
 
-/* The open Character is another project's: say where, above the list. */
-body.app-slava-restraint .character-rail__empty--notice {
-  color: var(--sr-ink-light);
-}
-
 body.app-slava-restraint .character-rail__new:disabled,
 body.app-slava-restraint .character-palette__new:disabled {
   opacity: 0.45;
