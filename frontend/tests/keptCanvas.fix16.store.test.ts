@@ -1,16 +1,15 @@
 /**
- * Round 16 of PR #199 (review 14; GM r21 and r22), the store's side. The
+ * PR #199 (design), the store's side. The
  * harness is keptCanvas.fix15.store's (catalogRestore.fix11.store's):
- * - HIGH-1: nodes added while kept are renumbered by the copy, and the tab
+ * - Nodes added while kept are renumbered by the copy, and the tab
  *   adopts the copy's ids, so typing after [Save as a project] reaches Nebula.
- * - GM r21 (3): wires drawn while kept are this tab's own, held to the
+ * - Design: wires drawn while kept are this tab's own, held to the
  *   server's wire rules (a refused one never exists).
- * - GM r21 (5): Discard opens the saved copy of the canvas, else Projects.
- * - GM r22 (2): an update while kept: Save and Discard reload.
- * - The project limit (Justin, 2026-10-31, replacing GM r22's limit line):
+ * - Design: Discard opens the saved copy of the canvas, else Projects.
+ * - Design: an update while kept: Save and Discard reload.
+ * - The project limit (Justin, 2026-10-31, replacing design's limit line):
  *   the person's kept save asks to pass it, as a restore may.
- * - Review 14 kept-hold MEDIUM-3, LOW-1, LOW-2 (H24), LOW-4, NIT-1;
- *   lock-order LOW-1 (M14), LOW-2 and NIT-3.
+ * - Review findings on the busy state, the lock order and the lazy restore copy.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -188,7 +187,7 @@ const noticeText = () => {
 };
 const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
 
-describe('GM r21 (3) on PR #199: a connection drawn while kept is this tab’s own, by the server’s rules', () => {
+describe('a connection drawn while kept is this tab’s own, by the server’s rules (design, PR #199)', () => {
   it('a wire the rules allow: drawn here, nothing sent, one kept step that Undo and Redo walk', async () => {
     keepWith([canvasNode('n2', 'seedream-4-5', 300)]);
     const saved = useGraphStore.getState().undoStack;
@@ -270,7 +269,7 @@ describe('GM r21 (3) on PR #199: a connection drawn while kept is this tab’s o
   });
 });
 
-describe('review 14 of PR #199, HIGH-1: a node added while kept is the copy’s own after [Save as a project]', () => {
+describe('PR #199: a node added while kept is the copy’s own after [Save as a project]', () => {
   it('add, type, Save: the copy’s ids are the tab’s, and typing after the save reaches Nebula', async () => {
     keepWithEdits();
     const local = await useGraphStore.getState().addNode('text-input', { x: 400, y: 0 });
@@ -311,13 +310,13 @@ describe('review 14 of PR #199, HIGH-1: a node added while kept is the copy’s 
     vi.mocked(projects.openProject).mockResolvedValueOnce({ project: copy, workspaceRevision: 'rev-copy',
       paramsVersion: GRAPH_PARAMS_VERSION, canvasRevision: '1' } as never);
     await useProjectStore.getState().saveKeptEdits();
-    // Round 17 (GM r23, 2): the tab's own line, naming the connection.
+    // Design: the tab's own line, naming the connection.
     expect(notices.at(-1)?.text).toBe('Your latest edits were saved as their own project, “Glass campaign (recovered)”. '
       + 'Nebula left out the connection from “Hero prompt” to “Seedream 4.5” because “Seedream 4.5” takes only one connection there.');
   });
 });
 
-describe('GM r21 (5) on PR #199: [Discard edits] opens the saved copy of the canvas, else Projects', () => {
+describe('[Discard edits] opens the saved copy of the canvas, else Projects (design, PR #199)', () => {
   it('the project isn’t in the restored list but its copy is (“Recovered canvas”): the copy opens', async () => {
     keepWithEdits();
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ projects: [summary('beta'), summary('rec', 'Recovered canvas')],
@@ -350,7 +349,7 @@ describe('GM r21 (5) on PR #199: [Discard edits] opens the saved copy of the can
   });
 });
 
-describe('GM r22 (2) on PR #199: Nebula updated while kept (review 14 kept-hold MEDIUM-1: P4, P4b)', () => {
+describe('Nebula updated while kept (design, PR #199)', () => {
   const newer = GRAPH_PARAMS_VERSION + 1;
   const outdated = async () => {
     reportParamsOutdated(newer);
@@ -365,7 +364,7 @@ describe('GM r22 (2) on PR #199: Nebula updated while kept (review 14 kept-hold 
     expect(vi.mocked(reloadPage)).not.toHaveBeenCalled();
   });
 
-  it('P4: Discard leaves kept mode and reloads (no open in this bundle)', async () => {
+  it('Discard leaves kept mode and reloads (no open in this bundle)', async () => {
     keepWithEdits();
     await outdated();
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ paramsVersion: newer }));
@@ -378,7 +377,7 @@ describe('GM r22 (2) on PR #199: Nebula updated while kept (review 14 kept-hold 
     expect(vi.mocked(projects.recoverProject)).not.toHaveBeenCalled();
   });
 
-  it('P4b: Save as a project files the copy, then reloads by itself and opens it after', async () => {
+  it('Save as a project files the copy, then reloads by itself and opens it after', async () => {
     keepWithEdits();
     await outdated();
     vi.mocked(projects.recoverProject).mockResolvedValue(project('alpha-rec', 'Glass campaign (recovered)'));
@@ -448,8 +447,8 @@ describe('Justin, 2026-10-31: [Save as a project] may pass the project limit, as
   });
 });
 
-describe('review 14 of PR #199, kept-hold: the rest', () => {
-  it('MEDIUM-3 (P1): a save pause carried into kept mode doesn’t send Discard to the held-edits screen', async () => {
+describe('PR #199, kept-hold: the rest', () => {
+  it('a save pause carried into kept mode doesn’t send Discard to the held-edits screen', async () => {
     useProjectStore.setState({ savePaused: { bytes: 17 * 1024 * 1024 }, saveStatus: 'paused', dirty: true });
     keepWithEdits();
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ activeProjectId: null, workspaceRevision: 'rev-restored' }));
@@ -460,7 +459,7 @@ describe('review 14 of PR #199, kept-hold: the rest', () => {
     expect(useProjectStore.getState()).toMatchObject({ unsavedEdits: null, screen: 'workspace', activeProject: { id: 'alpha' } });
   });
 
-  it('LOW-1: Discard, then Save while it is on its way: one busy state, only the discard runs', async () => {
+  it('Discard, then Save while it is on its way: one busy state, only the discard runs', async () => {
     keepWithEdits();
     let answer: (list: ProjectList) => void = () => {};
     vi.mocked(projects.listProjects).mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
@@ -476,7 +475,7 @@ describe('review 14 of PR #199, kept-hold: the rest', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
   });
 
-  it('LOW-1: Save, then Discard while it is on its way: only the save runs', async () => {
+  it('Save, then Discard while it is on its way: only the save runs', async () => {
     keepWithEdits();
     let answer: (saved: SavedProject) => void = () => {};
     vi.mocked(projects.recoverProject).mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
@@ -493,7 +492,7 @@ describe('review 14 of PR #199, kept-hold: the rest', () => {
     expect(notices).not.toContainEqual({ text: DISCARDED_KEPT_EDITS, tone: 'info' });
   });
 
-  it('LOW-2 (H24): a Save whose open throws leaves the canvas kept, and its routes off still refused', async () => {
+  it('a Save whose open throws leaves the canvas kept, and its routes off still refused', async () => {
     keepWithEdits();
     vi.mocked(projects.recoverProject).mockResolvedValue(project('alpha-rec', 'Glass campaign (recovered)'));
     const open = vi.spyOn(useProjectStore.getState(), 'open').mockRejectedValueOnce(new Error('boom'));
@@ -506,7 +505,7 @@ describe('review 14 of PR #199, kept-hold: the rest', () => {
     expect(pulses).toBeGreaterThan(0);
   });
 
-  it('LOW-4: a Discard whose open fails says the real reason on the kept line', async () => {
+  it('a Discard whose open fails says the real reason on the kept line', async () => {
     keepWithEdits();
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ activeProjectId: null, workspaceRevision: 'rev-restored' }));
     vi.mocked(projects.openProject).mockRejectedValueOnce(new projects.ProjectRequestError('The disk is full.', 507,
@@ -519,7 +518,7 @@ describe('review 14 of PR #199, kept-hold: the rest', () => {
     expect(useProjectStore.getState().keptEdits?.discarding).toBe(false);
   });
 
-  it('NIT-1: Save as a project checks offline too, as Discard does (nothing is sent)', async () => {
+  it('Save as a project checks offline too, as Discard does (nothing is sent)', async () => {
     keepWithEdits();
     noteBackendConnection('offline');
     expect(keptExitBlocker()).toBe('offline');
@@ -530,8 +529,8 @@ describe('review 14 of PR #199, kept-hold: the rest', () => {
   });
 });
 
-describe('review 14 of PR #199, lock-order', () => {
-  it('M14: kept and offline at once: a refused edit pulses the kept line, not the offline banner', () => {
+describe('PR #199, lock-order', () => {
+  it('kept and offline at once: a refused edit pulses the kept line, not the offline banner', () => {
     keepWithEdits();
     noteBackendConnection('offline');
     let banner = 0;
@@ -545,7 +544,7 @@ describe('review 14 of PR #199, lock-order', () => {
     expect(useGraphStore.getState().nodes.length).toBeGreaterThan(0);
   });
 
-  it('LOW-2: a kept tab shares neither its selection nor its view', async () => {
+  it('a kept tab shares neither its selection nor its view', async () => {
     keepWithEdits();
     const { publishCanvasSelection } = await import('../src/lib/canvasSelection');
     const { publishCanvasView } = await import('../src/lib/canvasView');
@@ -555,7 +554,7 @@ describe('review 14 of PR #199, lock-order', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('NIT-3: kept and following at once: Save and Discard wait for the follow, as kept’s live controls do', () => {
+  it('kept and following at once: Save and Discard wait for the follow, as kept’s live controls do', () => {
     keepWithEdits();
     setFollowingSwitch({ projectName: 'Beta', agent: 'Claude' });
     expect(keptExitBlocker()).toBe('following');

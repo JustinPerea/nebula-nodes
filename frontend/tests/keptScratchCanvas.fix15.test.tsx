@@ -1,13 +1,13 @@
 /**
- * Round 15 of PR #199 (GM r19 and r20; review 13), the kept tab's own side.
- * - GM r19, 5: kept Undo covers typing and a rename (as normal Undo does),
+ * PR #199 (design), the kept tab's own side.
+ * - Design: kept Undo covers typing and a rename (as normal Undo does),
  *   an added node is the kept tab's own (a local node, one step), and an
  *   empty kept Undo reads disabled wherever its button shows.
- * - Review 13 kept-scratch LOW-4: the mutants that survived (redo
+ * - The mutants that survived (redo
  *   truncation, the bottom bar's kept Clear, refuseTabOnlyEdit while the save
  *   is on its way, a typing-then-redo round trip, the stale notice button,
  *   the bottom bar's Arrange) each have a test now.
- * - GM r19, 4 and r20: the lock order (kept first) and the routes that
+ * - Design: the lock order (kept first) and the routes that
  *   replace the canvas hold with their kept lines.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -97,7 +97,7 @@ function expectTabOnly() {
   expect(useGraphStore.getState().redoStack).toEqual([]);
 }
 
-describe('GM r19 (5): kept Undo covers typing and a rename', () => {
+describe('kept Undo covers typing and a rename', () => {
   it('typing is a kept step: Undo puts the value back, Redo brings it again; nothing is sent', () => {
     type('n1', 'n1 typed');
     expect(useGraphStore.getState().keptUndo).toHaveLength(1);
@@ -119,7 +119,7 @@ describe('GM r19 (5): kept Undo covers typing and a rename', () => {
     expect(values()).toEqual(['n1', 'n2', 'n3']);
   });
 
-  it('a rename is live and a kept step (review 13 kept-scratch LOW-2): the typed name stays; Undo puts the old one back', () => {
+  it('a rename is live and a kept step: the typed name stays; Undo puts the old one back', () => {
     useGraphStore.getState().renameNode('n2', 'Hero prompt');
     expect(labels()).toEqual(['Text Input', 'Hero prompt', 'Text Input']);
     expect(pulses).toBe(0);
@@ -130,7 +130,7 @@ describe('GM r19 (5): kept Undo covers typing and a rename', () => {
     expectTabOnly();
   });
 
-  it('M13: typing into a copy, then Undo and Redo, keeps what was typed (the step is taken as the canvas has it)', () => {
+  it('typing into a copy, then Undo and Redo, keeps what was typed (the step is taken as the canvas has it)', () => {
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((n) => ({ ...n, selected: n.id === 'n3' })) }));
     useGraphStore.getState().duplicateSelected();
     const copy = ids()[3];
@@ -150,7 +150,7 @@ describe('GM r19 (5): kept Undo covers typing and a rename', () => {
     expectTabOnly();
   });
 
-  it('M4: a new kept edit after Undo empties Redo, and Redo then changes nothing', () => {
+  it('a new kept edit after Undo empties Redo, and Redo then changes nothing', () => {
     useGraphStore.getState().deleteNode('n1');
     useGraphStore.getState().undo();
     expect(useGraphStore.getState().keptRedo).toHaveLength(1);
@@ -161,7 +161,7 @@ describe('GM r19 (5): kept Undo covers typing and a rename', () => {
   });
 });
 
-describe('GM r19 (5): adding a node is the kept tab’s own', () => {
+describe('adding a node is the kept tab’s own', () => {
   it('a library add puts a local node on this tab (no request), one step Undo takes off', async () => {
     const added = await useGraphStore.getState().addNode('text-input', { x: 50, y: 60 });
     expect(added).toBeTruthy();
@@ -214,15 +214,15 @@ describe('GM r19 (5): adding a node is the kept tab’s own', () => {
   });
 });
 
-describe('review 13 kept-scratch LOW-4: the surviving mutants', () => {
-  it('M10: refuseTabOnlyEdit refuses (and pulses) while [Save as a project] is on its way, and lets typing through before', () => {
+describe('the surviving mutants', () => {
+  it('refuseTabOnlyEdit refuses (and pulses) while [Save as a project] is on its way, and lets typing through before', () => {
     expect(refuseTabOnlyEdit()).toBe(false);
     setKeptCanvasSaving(true);
     expect(refuseTabOnlyEdit()).toBe(true);
     expect(pulses).toBe(1);
   });
 
-  it('M17: the bottom bar’s Arrange (autoLayout) is a kept step too', () => {
+  it('the bottom bar’s Arrange (autoLayout) is a kept step too', () => {
     const before = useGraphStore.getState().nodes.map((n) => ({ ...n.position }));
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((n, index) => ({ ...n, position: { x: 0, y: index } })) }));
     const scrambled = useGraphStore.getState().nodes.map((n) => ({ ...n.position }));
@@ -234,7 +234,7 @@ describe('review 13 kept-scratch LOW-4: the surviving mutants', () => {
     expectTabOnly();
   });
 
-  it('M8: the bottom bar’s Clear while kept asks its own confirm, sends nothing and is one kept step', () => {
+  it('the bottom bar’s Clear while kept asks its own confirm, sends nothing and is one kept step', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: /Canvas actions/ }));
@@ -247,7 +247,7 @@ describe('review 13 kept-scratch LOW-4: the surviving mutants', () => {
     expectTabOnly();
   });
 
-  it('M14 and GM r19 (5): a kept notice whose step is no longer on top reads disabled; an empty stack too', () => {
+  it('a kept notice whose step is no longer on top reads disabled; an empty stack too (design)', () => {
     render(<CanvasUndoNotice />);
     act(() => useGraphStore.getState().deleteNode('n1'));
     expect(screen.getByRole('button', { name: 'Undo' })).not.toBeDisabled();
@@ -268,7 +268,7 @@ describe('review 13 kept-scratch LOW-4: the surviving mutants', () => {
   });
 });
 
-describe('GM r19 (4): kept first in the lock order', () => {
+describe('kept first in the lock order', () => {
   it('the bottom Run while kept shows the kept line and mark over a follow and offline', () => {
     noteBackendConnection('offline');
     render(<Toolbar />);
@@ -279,14 +279,14 @@ describe('GM r19 (4): kept first in the lock order', () => {
     expect(run).not.toHaveAttribute('data-offline-disabled');
   });
 
-  it('merge-integrity LOW-2 (M2): unkept and offline, a control the run holds says the run’s line, not the offline one', () => {
+  it('merge-integrity: unkept and offline, a control the run holds says the run’s line, not the offline one', () => {
     const props = lockedAction(canvasLockOf(null, true, false), { title: 'Generate', kept: 'generate' }, { verb: 'generate', run: true, runTitle: runFinishesLine('generate') });
     expect(props.title).toBe(runFinishesLine('generate'));
     expect(props.title).not.toBe(offlineReason('generate'));
   });
 });
 
-describe('GM r20: the routes that would replace a kept canvas hold, each with its own verb', () => {
+describe('the routes that would replace a kept canvas hold, each with its own verb', () => {
   it('Back to projects, Open copy: disabled with the kept mark and their lines; the lines name both ways out', () => {
     useProjectStore.setState({ activeProject: { id: 'alpha', name: 'Alpha' } as never, screen: 'workspace' });
     render(<><ProjectWorkspaceControls /><OpenCopyButton projectId="copy" onOpen={() => {}} /></>);
@@ -312,7 +312,7 @@ describe('GM r20: the routes that would replace a kept canvas hold, each with it
     expect(screen.getByRole('button', { name: /Import CLI canvas/ })).toHaveAttribute('title', keptLockTitle('import'));
   });
 
-  it('GM r19 (2): Forget ID has its own verb, verbatim, at both of its controls', () => {
+  it('Forget ID has its own verb, verbatim, at both of its controls', () => {
     expect(keptLockTitle('forget')).toBe('You can forget the ID after you save it as a project.');
     for (const file of ['components/panels/RunHistoryPanel.tsx', 'components/panels/ForgetRecoveryConfirm.tsx']) {
       const source = readFileSync(resolve(__dirname, '../src', file), 'utf8');
@@ -322,13 +322,13 @@ describe('GM r20: the routes that would replace a kept canvas hold, each with it
   });
 });
 
-describe('GM r20: [Save as a project] [Discard edits] on the kept line', () => {
+describe('[Save as a project] [Discard edits] on the kept line', () => {
   beforeEach(() => {
     useProjectStore.setState({ screen: 'workspace', activeProject: { id: 'alpha', name: 'Alpha' } as never,
       keptEdits: { sourceId: 'alpha', sourceName: 'Alpha', lead: null, saving: false, error: null } });
   });
 
-  it('Discard asks first: GM’s title, body and buttons, focus on [Keep them]; Keep them and Escape change nothing', () => {
+  it('Discard asks first: design’s title, body and buttons, focus on [Keep them]; Keep them and Escape change nothing', () => {
     const discard = vi.spyOn(useProjectStore.getState(), 'discardKeptEdits');
     render(<KeptEditsNotice />);
     fireEvent.click(screen.getByRole('button', { name: DISCARD_EDITS }));
@@ -354,7 +354,7 @@ describe('GM r20: [Save as a project] [Discard edits] on the kept line', () => {
     expect(discard).toHaveBeenCalledTimes(1);
   });
 
-  it('GM r19 (4): each button names its own blocker: a run’s line, then its own offline line', () => {
+  it('each button names its own blocker: a run’s line, then its own offline line', () => {
     useGraphStore.setState({ isExecuting: true });
     const view = render(<KeptEditsNotice />);
     for (const name of ['Save as a project', DISCARD_EDITS]) {

@@ -1,5 +1,5 @@
 /**
- * PR #199 round 27 (final review): the chooser leaves no way to delete the kept canvas's own project (its row
+ * PR #199: the chooser leaves no way to delete the kept canvas's own project (its row
  * is disabled with the reason); the Delete that makes room keeps its Undo toast after the chooser closes and
  * the automatic save waits for it; the chooser's own failures show in it; Escape disarms Empty first and
  * Cancel waits while busy.

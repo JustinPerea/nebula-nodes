@@ -1,9 +1,9 @@
 /**
- * Error copy round 3g: GM - Design's answers to round 3f's questions, and two
- * fixes (GM, verbatim, 2026-10-23).
+ * Error copy: design's answers to the earlier questions, and two
+ * fixes (design, verbatim, 2026-10-23).
  *
- * 1. The Delete key's interim confirm (GM's option c) is gone: undo puts
- *    back everything a delete removed, so every delete shows GM's Undo
+ * 1. The Delete key's interim confirm (design) is gone: undo puts
+ *    back everything a delete removed, so every delete shows design's Undo
  *    notice instead (tests/undoRestoresDeletes.test.tsx).
  * 4. "Cinema shot panel: yes, use shot wording. "Generate the shot again. If
  *    it keeps failing, Details shows what {Provider} said." With no provider:
@@ -60,7 +60,7 @@ afterEach(() => {
   mocks.fetch.mockReset();
 });
 
-// -- GM item 4: the shot panel's own wording ---------------------------------------
+// -- Design: the shot panel's own wording ---------------------------------------
 
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 const heading = (root: ParentNode) => root.querySelector('.failure-lines__heading')?.textContent ?? null;
@@ -110,7 +110,7 @@ describe('the Cinema shot panel says "Generate the shot again."', () => {
   });
 });
 
-// -- GM item 5: the provider chip names the provider in full when it fits -----------
+// -- Design: the provider chip names the provider in full when it fits -----------
 
 const fixture = pricingCases as unknown as { definitions: Record<string, ModelNodeDefinition>; pricing: PricingTable };
 const TABLE = fixture.definitions.table;
@@ -158,7 +158,7 @@ describe('the provider chip', () => {
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys: { BFL_API_KEY: KEY },
       kreaConnection: { status: 'disconnected' } } });
     render(<ProviderSwitcher definition={TABLE} params={{}} variant="chip" onPick={vi.fn()} />);
-    // GM, PR #203 r32 item 3: the name is the chip's visible text, the full name its description.
+    // Design (PR #203): the name is the chip's visible text, the full name its description.
     const chip = screen.getByRole('button', { name: 'Auto · BFL', description: 'Provider for “Fixture Route Table”: Auto · Black Forest Labs' });
     expect(chip).toHaveAttribute('title', 'Auto runs it on Black Forest Labs. Change provider');
     expect(chip).toHaveTextContent('Auto · BFL');
@@ -173,7 +173,7 @@ describe('the provider chip', () => {
   });
 });
 
-// -- GM's readiness fix ---------------------------------------------------------
+// -- Design's readiness fix ---------------------------------------------------------
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body),
   { status, headers: { 'content-type': 'application/json' } });
@@ -181,7 +181,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
 describe('the readiness line when something answered', () => {
   const ANSWERED = "Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.";
 
-  it('an answered failure reads GM\'s line, never "didn\'t respond"', async () => {
+  it('an answered failure reads design\'s line, never "didn\'t respond"', async () => {
     for (const status of [503, 500, 429, 404]) {
       mocks.fetch.mockResolvedValueOnce(json(status, { detail: 'internal' }));
       await useProviderReadinessStore.getState().checkConnections();

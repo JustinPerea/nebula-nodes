@@ -75,7 +75,7 @@ function row(name: RegExp | string) {
 }
 
 /** A row's setup button ("Add key →", "Add token →", "Sign in"): its name is
- * the visible label (GM, PR #203 r30 item 3), so it's found within its row. */
+ * the visible label (design, PR #203), so it's found within its row. */
 function setupIn(name: RegExp | string, label: string) {
   return within(row(name).closest('[data-provider-row]') as HTMLElement).getByRole('menuitem', { name: label });
 }
@@ -101,7 +101,7 @@ describe('ProviderSwitcher rows', () => {
     expect(setupIn(/^Krea · plan/, 'Sign in')).toHaveAccessibleDescription('Sign in to Krea in Settings.');
     // fal can't take 9:21: a block note, and no price.
     const fal = row(/^fal\.ai/);
-    // Round 3f (GM): the setting by its label, in quotes, with the option's label.
+    // Design: the setting by its label, in quotes, with the option's label.
     expect(fal).toHaveTextContent("Doesn’t take “Aspect ratio” set to 9:21.");
     expect(fal.querySelector('.provider-switcher__price')).toHaveTextContent('-');
   });
@@ -125,11 +125,11 @@ describe('ProviderSwitcher rows', () => {
   });
 });
 
-describe('ProviderSwitcher on Idol\'s keyless Space route (GM PR #203 r1, r4 and r12)', () => {
+describe('ProviderSwitcher on Idol\'s keyless Space route (design, PR #203)', () => {
   const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
   const renderIdol = () => render(<ProviderSwitcher definition={IDOL} params={{}} variant="inspector" onPick={vi.fn()} />);
 
-  it('without the token: "Auto · free", "Free on Hugging Face." and no "Add token →" (GM r12 item 2)', () => {
+  it('without the token: "Auto · free", "Free on Hugging Face." and no "Add token →"', () => {
     withKeys({});
     renderIdol();
     const space = row(/^Hugging Face/).closest('[data-provider-row]') as HTMLElement;
@@ -268,7 +268,7 @@ describe('ProviderSwitcher keyboard', () => {
     fireEvent.click(row(/^Black Forest Labs/));
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(pill);
-    // Round 3g: the pill wraps, so it names the provider in full.
+    // The pill wraps, so it names the provider in full.
     expect(pill).toHaveTextContent('Black Forest Labs');
   });
 
@@ -333,7 +333,7 @@ describe('Inspector and pills show only the route options', () => {
     }
     render(<Pills />);
     const pills = document.querySelector('.param-pills')!;
-    // GM, PR #203 r32 item 3: the name is the visible text, the rest its description.
+    // Design (PR #203): the name is the visible text, the rest its description.
     expect(pills.firstElementChild).toHaveAccessibleName('Provider Auto · fal.ai');
     expect(pills.firstElementChild).toHaveAccessibleDescription(/^Provider for “Fixture Route Table”: Auto · fal\.ai\. (?!Can't run)\S/);
     const resolution = screen.getByTitle('Resolution').querySelector('select')!;
@@ -417,7 +417,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     // there; a Krea token now moves Auto to Krea, which doesn't offer it.
     withKeys({ FAL_KEY: KEY, KREA_API_TOKEN: KEY });
     selectNode('krea-3', { reasoning_level: 'medium' });
-    // selectNode titles the card by its id (a rename, which a line would quote, r39 item 8); this one is untitled.
+    // selectNode titles the card by its id (a rename, which a line would quote); this one is untitled.
     useGraphStore.setState({ nodes: [{ ...useGraphStore.getState().nodes[0], data: { ...useGraphStore.getState().nodes[0].data, label: 'Krea 3' } }] });
     render(<Inspector embedded />);
     const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
@@ -431,7 +431,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     expect(document.querySelector('.provider-switcher__stop')).toBeNull();
   });
 
-  // The Inspector's bug (GM - Design, 2026-10-23): a floating panel beside a
+  // The Inspector's bug (design, 2026-10-23): a floating panel beside a
   // node low on the canvas must stay above the bottom bar. The chip's popover
   // flipped up only when it ran off the window, so just above the bar it
   // opened down over the bar.
@@ -464,7 +464,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     }
   });
 
-  // Review 9, M-1's path for popovers: the chip's popover is portalled from
+  // The path for popovers: the chip's popover is portalled from
   // inside the node card, so its keys bubble (React) to React Flow's node,
   // which moved the node on ArrowLeft/ArrowRight and selected it on Enter or
   // Space from a menu item. React Flow ignores keys from inside `.nokey`.

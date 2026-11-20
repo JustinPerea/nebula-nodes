@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 6 of the Q133 confirm (Justin, 2026-10-25: a paid placeholder never
+ * A review of the confirm (Justin, 2026-10-25: a paid placeholder never
  * runs without the person's confirmation, and what runs never costs more than
- * they were shown), with GM - Design's round-7 answers:
- * - L-a: after a yes, the run goes ahead without asking again only if every
+ * they were shown), with design's answers:
+ * - After a yes, the run goes ahead without asking again only if every
  *   row and every "Not included" note in it was on screen; anything new asks.
- * - L-b: the dialog tracks only this run's placeholders; one that left the
+ * - The dialog tracks only this run's placeholders; one that left the
  *   run (deleted or disconnected) is never "finished".
- * - L-c: a yes dropped because another run started first says so.
- * - L-e: the confirmed amount is the one shown, rounded up to the cent.
+ * - A yes dropped because another run started first says so.
+ * - The confirmed amount is the one shown, rounded up to the cent.
  */
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
@@ -68,7 +68,7 @@ const ANOTHER_RUN = 'Nothing ran. Another run started first. Click “Run” aga
 const ANOTHER_RUN_CINEMA = 'Nothing ran. Another run started first. Generate again when it finishes.';
 const notice = () => useGraphStore.getState().undoNotice?.text ?? null;
 
-describe("review 6: the person's direct run once the placeholder dialog has shown", () => {
+describe("the person's direct run once the placeholder dialog has shown", () => {
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
     useGraphStore.setState({ nodes: [node('a', 'nano-banana', { pending: codex }), node('b')] as never,
@@ -92,7 +92,7 @@ describe("review 6: the person's direct run once the placeholder dialog has show
     vi.restoreAllMocks();
   });
 
-  describe('L-a: a cheaper run goes ahead only if everything in it was on screen', () => {
+  describe('a cheaper run goes ahead only if everything in it was on screen', () => {
     it('a new paid node with a "Not included" cost joins and Codex finishes on a cheaper model: asks again', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
       askMock.mockImplementationOnce(async (model: PlaceholderRunConfirm) => {
@@ -127,9 +127,9 @@ describe("review 6: the person's direct run once the placeholder dialog has show
       expect(execute.mock.calls[0][7]).toBe(0.3);
     });
 
-    // Review 7, L2 (coordinator's decision): a row at another price was not
-    // seen, so this asks again (until round 8 it went ahead at the total shown;
-    // the case that still goes ahead, every row unchanged, is in round 8's tests).
+    // Coordinator's decision: a row at another price was not
+    // seen, so this asks again (before that decision it went ahead at the total shown;
+    // the case that still goes ahead, every row unchanged, is in graphStore.placeholderRuns.round8.test.ts).
     it('the same nodes, one cheaper: asks again, since that row changed', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
       askMock.mockImplementationOnce(async (model: PlaceholderRunConfirm) => {
@@ -143,7 +143,7 @@ describe("review 6: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe('L-b: only this run\'s placeholders, and one that left is not "finished"', () => {
+  describe('only this run\'s placeholders, and one that left is not "finished"', () => {
     beforeEach(() => {
       // Claude Code's unrelated placeholder elsewhere on the canvas.
       useGraphStore.setState({ nodes: [...useGraphStore.getState().nodes, node('z', 'nano-banana', { pending: claude })] as never });
@@ -210,7 +210,7 @@ describe("review 6: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe('L-c: a yes dropped because another run started first says so', () => {
+  describe('a yes dropped because another run started first says so', () => {
     it('on the re-ask after Nebula refused: the notice, and the other run is left alone', async () => {
       useGraphStore.setState({ nodes: [...useGraphStore.getState().nodes, cinemaNode()] as never,
         edges: [...useGraphStore.getState().edges, { id: 'e3', source: 'a', target: 'cine', sourceHandle: 'image', targetHandle: 'character_refs' }] });
@@ -263,7 +263,7 @@ describe("review 6: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe('L-e: the amount confirmed is the one shown, rounded up to the cent', () => {
+  describe('the amount confirmed is the one shown, rounded up to the cent', () => {
     it('$0.201 shows "Run for $0.21" and sends 0.21', async () => {
       useGraphStore.setState({ nodes: [node('a', 'nano-banana', { pending: codex }, { model: 'odd' })] as never, edges: [] });
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);

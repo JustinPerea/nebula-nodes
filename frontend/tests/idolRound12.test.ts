@@ -1,15 +1,15 @@
 /**
- * PR #203 round 12: GM r22 and r23, and review 11's copy and settings items.
+ * PR #203: design, and a reviewer's copy and settings items.
  *
- * - GM r22 item 1: "~$0.13 · 1 may cost", pinned on the Run chip.
- * - GM r22 item 4: person lines say "Krea API key", as the row does.
- * - GM r23 (review 11, copy NIT-1): "Hugging Face token saved." /
+ * - Design: "~$0.13 · 1 may cost", pinned on the Run chip.
+ * - Design: person lines say "Krea API key", as the row does.
+ * - Design: "Hugging Face token saved." /
  *   "Hugging Face token removed." / "Hugging Face token saved. Checking it now."
- * - GM r23 (review 11, copy NIT-3): the Krea sign-in row's summary and the
+ * - Design: the Krea sign-in row's summary and the
  *   readiness detail.
- * - Review 11, copy LOW-2: the notice region keeps clear of the workspace rail.
- * - Review 11, copy MEDIUM-1: each tab knows its own write's echo (lib/tabId.ts).
- * - Review 11, NIT-4: a kind the canvas doesn't name is never counted free.
+ * - The notice region keeps clear of the workspace rail.
+ * - Each tab knows its own write's echo (lib/tabId.ts).
+ * - A kind the canvas doesn't name is never counted free.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -30,7 +30,7 @@ const SRC = resolve(__dirname, '../src');
 const at = (id: string, definitionId: string, label: string, x: number, params: Record<string, unknown> = {}): Node<NodeData> =>
   ({ id, position: { x, y: 0 }, data: { definitionId, label, params } as unknown as NodeData });
 
-describe('"~$0.13 · 1 may cost" (GM r22 item 1)', () => {
+describe('"~$0.13 · 1 may cost"', () => {
   it('is the Run chip for a priced paid run beside Idol with a token', () => {
     const graph = [at('n', 'gpt-image-1-5', 'Hero', 0), at('i', 'speridlabs-idol', 'Idol', 100)];
     const summary = summarizeRunScope(graph, [], { kind: 'graph' },
@@ -40,14 +40,14 @@ describe('"~$0.13 · 1 may cost" (GM r22 item 1)', () => {
   });
 });
 
-describe('the provider’s own noun (GM r23; review 11, copy NIT-1)', () => {
+describe('the provider’s own noun', () => {
   it('says "Hugging Face token" in every notice', () => {
     expect(keyNoun('HF_TOKEN')).toBe('Hugging Face token');
     expect(keyChangedLine('HF_TOKEN', true)).toBe('Hugging Face token saved.');
     expect(keyChangedLine('HF_TOKEN', false)).toBe('Hugging Face token removed.');
   });
 
-  it('keeps every other row’s word: "Replicate token" (GM r25 item 3), "Krea · API key"', () => {
+  it('keeps every other row’s word: "Replicate token", "Krea · API key"', () => {
     expect(keyChangedLine('REPLICATE_API_TOKEN', true)).toBe('Replicate token saved.');
     expect(keyNoun('KREA_API_TOKEN')).toBe('Krea · API key');
     expect(keyNoun('OPENAI_API_KEY')).toBe('OpenAI key');
@@ -60,7 +60,7 @@ describe('the provider’s own noun (GM r23; review 11, copy NIT-1)', () => {
   });
 });
 
-describe('"Krea API key" in person lines, as the row says (GM r22 item 4)', () => {
+describe('"Krea API key" in person lines, as the row says', () => {
   it('names the key as the backend does', () => {
     expect(KEY_NAMES.KREA_API_TOKEN).toEqual(['Krea', 'API key']);
     expect((routeTables as unknown as { keyNames: Record<string, string[]> }).keyNames.KREA_API_TOKEN).toEqual(['Krea', 'API key']);
@@ -73,7 +73,7 @@ describe('"Krea API key" in person lines, as the row says (GM r22 item 4)', () =
   });
 });
 
-describe('the Krea sign-in words (GM r23; review 11, copy NIT-3 and LOW-3)', () => {
+describe('the Krea sign-in words', () => {
   it('the readiness detail', () => {
     const def = NODE_DEFINITIONS['krea-2-generate'];
     const ready = modelReadiness(def, { _kreaAuth: 'mcp' }, { loaded: true, apiKeys: {}, kreaConnection: { status: 'disconnected' } } as never,
@@ -82,10 +82,10 @@ describe('the Krea sign-in words (GM r23; review 11, copy NIT-3 and LOW-3)', () 
   });
 });
 
-describe('the notice region keeps clear of the workspace rail (review 11, copy LOW-2; round 22)', () => {
+describe('the notice region keeps clear of the workspace rail', () => {
   // Main's mechanism (workspace-rail.css writes --notice-left-clearance while the rail shows; the
   // region's own left and right read it, centred). This PR's own :has(.workspace-rail) rule set
-  // left and right outright and lost the centring beside the docked Agent log (live check, round 22:
+  // left and right outright and lost the centring beside the docked Agent log (live check:
   // 70 px wide at x 70 where main is 650 px at x 395); it is gone.
   const css = readFileSync(resolve(SRC, 'styles/noticeRegion.css'), 'utf8');
   const rail = readFileSync(resolve(SRC, 'styles/workspace-rail.css'), 'utf8');
@@ -100,7 +100,7 @@ describe('the notice region keeps clear of the workspace rail (review 11, copy L
   });
 });
 
-describe('each tab knows its own write (review 11, copy MEDIUM-1)', () => {
+describe('each tab knows its own write', () => {
   it('has one id: the socket drops echoes by the id apiFetch sends (tests/idolRound12.tabEcho.test.ts)', () => {
     const socket = readFileSync(resolve(SRC, 'store/settingsChangedSocket.ts'), 'utf8');
     expect(socket).toContain("import { TAB_ID } from '../lib/tabId';");
@@ -108,7 +108,7 @@ describe('each tab knows its own write (review 11, copy MEDIUM-1)', () => {
   });
 });
 
-describe('one source for the badge and "Connected · N" (review 11, copy NIT-2)', () => {
+describe('one source for the badge and "Connected · N"', () => {
   const nous = (checkedAt: number) => ({ checkedAt, providers: {
     Nous: { configured: true, status: 'valid', last_checked: new Date(checkedAt).toISOString() } } } as never);
 
@@ -121,7 +121,7 @@ describe('one source for the badge and "Connected · N" (review 11, copy NIT-2)'
   });
 });
 
-describe('a kind the canvas doesn’t name is never counted free (review 11, NIT-4)', () => {
+describe('a kind the canvas doesn’t name is never counted free', () => {
   it('counts free runs from kind "free" when a token turns Idol into may cost', async () => {
     const { liveKeyBilling } = await import('../src/lib/canvasProposalsBar');
     const view = {

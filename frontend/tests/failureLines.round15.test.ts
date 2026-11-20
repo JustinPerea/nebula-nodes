@@ -3,11 +3,11 @@ import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
 import { envKeyNames } from '../src/lib/directRoute';
 import { modelKeyMissingText, modelSettingsFailedText } from '../src/lib/failureLines';
 
-// Review 14, L-F: GM - Design, round 15, item 1, verbatim. The model
+// Design, verbatim: the model
 // pickers' line when the provider's key isn't set names the key to add;
 // "Nebula couldn’t load the model settings for “X”." stays for when the key is
 // there and reading the provider's settings failed.
-describe("GM round 15, item 1: the model pickers' lines", () => {
+describe("the model pickers' lines", () => {
   const keysOf = (id: string) => envKeyNames(NODE_DEFINITIONS[id]);
   it('OpenRouter', () => {
     expect(modelKeyMissingText('X', keysOf('openrouter-universal'))).toBe('Nebula couldn’t set up “X” because it needs an OpenRouter API key. Add one in Settings.');

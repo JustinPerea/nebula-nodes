@@ -15,7 +15,7 @@ const status = (patch: Partial<CommonsStatus>): CommonsStatus => ({
 });
 const stopped = { state: 'stopped', running: false, budget_used: 0, budget: null };
 const queue = (queued: number, held: number) => ({ queued, analyzing: 0, analysis_failed: 0, held, ready: 0 });
-// The cap's reset time, local time written like "12:00 AM" (GM, round 3f).
+// The cap's reset time, local time written like "12:00 AM" (design).
 const resetTime = clockTime(new Date(RESETS_AT));
 
 function rendered(value: CommonsStatus | null) {
@@ -41,10 +41,10 @@ it('shows the normal worker line once the batch is closed', () => {
   expect(screen.queryByText(/paused/i)).toBeNull();
 });
 
-// GM - Design (sf, after #157): "Keep the worker status to its state plus one
+// Design (after #157): "Keep the worker status to its state plus one
 // action, short enough to show whole at 1280 (about 36 characters), with the
 // full explanation in the tooltip." Its two exact strings are pinned; every
-// other status follows the same rule. The cap is GM's own assisted string
+// other status follows the same rule. The cap is design's own assisted string
 // (37 characters, 200.6 px at Inter 400 11px, measured): the room the toolbar
 // gives the text is 244-245 px beside Start/Stop and 301 px without (Updates
 // chip present, 1280 and 1440, measured live).
@@ -56,7 +56,7 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
   ['the agent-review pause', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: true },
     'Paused · close agent review to resume', null,
     [/^Library analysis is paused: the agent graded these references before the blind labels were sealed/, /Close them as an assisted review/, /to resume\.$/]],
-  // A pause only lifts: a stopped worker still needs Start (review of sf). GM:
+  // A pause only lifts: a stopped worker still needs Start. Design:
   // "\"Paused\" next to \"Start\" reads as a contradiction, and it hides the
   // state the person has to act on first. When the worker is stopped, start
   // the label with \"Stopped\" and give it the stopped colour." The tooltip
@@ -67,7 +67,7 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
   ['the agent-review pause with the worker stopped', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: true, worker: stopped },
     'Stopped · agent review open', 'Start',
     [/^Library analysis is paused: the agent graded these references/, /Close them as an assisted review/, /then press Start/, /won’t resume on its own\.$/]],
-  // GM: "the label names whatever has to be fixed first, and the tooltip lists
+  // Design: "the label names whatever has to be fixed first, and the tooltip lists
   // anything still blocking after that." A used budget needs a restart first.
   ['the sealed-labels pause with the call budget used', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false,
     worker: { state: 'budget_exhausted', running: false, budget_used: 40, budget: 40 } },
@@ -90,7 +90,7 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
     meter: { calls: 20, cap: 20, remaining: 0, resets_at: RESETS_AT } },
     'Paused · daily cap', 'Stop',
     [/^Library analysis is paused\. It made 20 analysis calls today, and Settings has “Analysis calls per day” at 20\./, new RegExp(`Resumes at ${resetTime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, when the daily cap resets\\.`)]],
-  // Settings takes a cap from 0 (review of sf): a cap of 0 never resets, and a
+  // Settings takes a cap from 0: a cap of 0 never resets, and a
   // cap lowered below today's calls reports the calls made, not the cap.
   ['a daily cap of 0', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
     meter: { calls: 0, cap: 0, remaining: 0, resets_at: RESETS_AT } },
@@ -198,7 +198,7 @@ it('gives a stopped worker the stopped colour even while a pause also holds', ()
     worker: { state: 'budget_exhausted', running: false, budget_used: 40, budget: 40 } }));
   expect(budget.line.classList.contains('commons-status--stopped')).toBe(true);
   cleanup();
-  // Running, the pause keeps GM's pause strings and no stopped colour.
+  // Running, the pause keeps design's pause strings and no stopped colour.
   const running = rendered(status({ evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false }));
   expect(running.text).toBe('Paused until labels are sealed');
   expect(running.line.classList.contains('commons-status--stopped')).toBe(false);

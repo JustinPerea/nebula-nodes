@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MaskPainterModal } from '../../src/components/panels/MaskPainterModal';
 import { isCanvasShortcutTarget } from '../../src/lib/canvasShortcutScope';
 
-// Review 8, L-d: the mask painter covers the whole canvas, but it was no
+// The mask painter covers the whole canvas, but it was no
 // modal dialog: with focus on the page, Cmd+Enter or Delete acted on the
 // graph behind it. It is aria-modal now, with focus management: focus starts
 // on Close, Tab stays inside, Escape closes it, a slip to the page comes back,

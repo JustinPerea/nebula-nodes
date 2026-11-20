@@ -1,9 +1,8 @@
 /**
- * PR #204 (GM r41, the string table): every close-batch failure, as [why, status, the backend's
- * detail, the line verbatim, whether the close stays live]. GM r41: only a line ending "Try again."
+ * PR #204 (design, the string table): every close-batch failure, as [why, status, the backend's
+ * detail, the line verbatim, whether the close stays live]. Design: only a line ending "Try again."
  * or "Try again in a moment." leaves the close live. tests/commonsCopy.ratchet renders each row in
- * both panes; tests/tryAgainLines.ratchet takes its close rows from the live ones (round 18o,
- * review 18 logic LOW-6), so a new live row needs no hand-kept second list.
+ * both panes; tests/tryAgainLines.ratchet takes its close rows from the live ones, so a new live row needs no hand-kept second list.
  */
 export const CLOSE_LINES: Array<[string, number, string | undefined, string, 'live' | 'locked']> = [
   ['503, no answer in time', 503, undefined, 'Nebula couldn’t close the batch because the server didn’t respond. Try again.', 'live'],
@@ -34,7 +33,7 @@ export const CLOSE_LINES: Array<[string, number, string | undefined, string, 'li
     'Nebula couldn’t close the batch because this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.', 'locked'],
   ['403, a foreign Host (local_guard)', 403, 'Host not allowed',
     'Nebula couldn’t close the batch because this sign-in isn’t allowed to do that. Open the link Nebula printed when it started.', 'locked'],
-  // Tested-only (GM r43 Q5): in the app a 404 "Commons is disabled" switches the Commons to its off
+  // Tested-only (design): in the app a 404 "Commons is disabled" switches the Commons to its off
   // view and the dialog unmounts with the pane (tests/presenceRound18l.closeOff), so this line
   // shows only where the dialog renders alone.
   ['Commons off (tested-only)', 404, 'Commons is disabled',

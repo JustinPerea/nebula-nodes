@@ -1,9 +1,9 @@
 /**
- * GM - Design, 2026-10-23 (round 4): "TRIM EDITOR TIMELINE: yes, it publishes
+ * Design, 2026-10-23: "TRIM EDITOR TIMELINE: yes, it publishes
  * its top edge. A notice should never sit over a timeline being edited, even
  * one that shares its column."
  *
- * Round 4b (GM, on #181): "Trim editor: yes, publish the transport's top edge
+ * (design, on #181): "Trim editor: yes, publish the transport's top edge
  * as well, so notices sit over the preview's bottom edge. Cut, Vol and zoom
  * are being used while someone edits."
  *

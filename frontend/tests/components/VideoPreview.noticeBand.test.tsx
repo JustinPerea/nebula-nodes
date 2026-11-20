@@ -1,6 +1,6 @@
 /**
- * Round 4b review: in the trim editor the transport row publishes its top
- * edge (GM, on #181: "publish the transport's top edge as well, so notices
+ * In the trim editor the transport row publishes its top
+ * edge (design, on #181: "publish the transport's top edge as well, so notices
  * sit over the preview's bottom edge. Cut, Vol and zoom are being used while
  * someone edits."). The preview's bottom edge then carries the notice, so
  * nothing the person reads or uses may live there:
@@ -9,7 +9,7 @@
  *   and the "Rendered" tag) sits on the preview's top edge instead;
  * - after Render preview, the rendered video shows its own native controls on
  *   its bottom edge. The preview then stops the picture above the notice
- *   region's reserved band, the way floating panels do (GM, round 2:
+ *   region's reserved band, the way floating panels do (design:
  *   "Floating panels stop above a reserved notice band, whether or not a
  *   notice is showing"), so a notice never covers its scrubber or time.
  */
@@ -80,7 +80,7 @@ describe("the trim editor's preview keeps its own readout and controls clear of 
     expect(hud).not.toMatch(/(^|[\s;])bottom:/);
   });
 
-  it('the readout keeps a gap before its "Rendered" tag (GM: "00:00:05:00Rendered" is a visible defect)', () => {
+  it('the readout keeps a gap before its "Rendered" tag ("00:00:05:00Rendered" is a visible defect)', () => {
     const css = readFileSync(join(__dirname, '../../src/components/editor/EditorView.css'), 'utf8');
     const hud = rule(css, '.editor-preview__hud');
     expect(hud).toMatch(/(^|[\s;])display:\s*(inline-)?flex/);

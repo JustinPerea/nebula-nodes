@@ -56,7 +56,7 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   fireEvent.click(screen.getByText('Save labels'));
   await screen.findByRole('alert');
   expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
-  // Round 18n (GM r44 1, r45 Q1): unsaved labels lock the toggle in place, its own line right under it.
+  // Design: unsaved labels lock the toggle in place, its own line right under it.
   const toggle = screen.getByText('Review batch · 0 / 15') as HTMLButtonElement;
   act(() => toggle.focus());
   act(() => fixup.current().flush());
@@ -74,7 +74,7 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   expect(screen.getByText('Save or discard your label changes to change the reference.')).toBeTruthy();
 });
 
-it('round 18n: Discard frees the toggle and its line goes; a save in flight disables it natively, with no line', async () => {
+it('Discard frees the toggle and its line goes; a save in flight disables it natively, with no line', async () => {
   const value = batch(); value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
   api.get.mockResolvedValue(value);
   let finish: (next: EvaluationBatch) => void = () => {};
@@ -101,7 +101,7 @@ it('round 18n: Discard frees the toggle and its line goes; a save in flight disa
   expect(screen.getByText('Close without sealing…')).toBeTruthy();
 });
 
-// GM (commons-leave): "UNSAVED" beside Save gives the state, so the status
+// Design (commons-leave): "UNSAVED" beside Save gives the state, so the status
 // line keeps only the rule. And the leave popover offers Save and leave
 // again only when saving again could work: a conflict can't, a lost
 // connection or a server error can.
@@ -118,19 +118,19 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
 
   api.labels.mockRejectedValueOnce(new CommonsRequestError('Labels changed in another tab. Reload before saving.', 409));
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because labels changed in another tab. Reload before saving.', retry: false });
-  // The API's error carries the copy (lib/commonsApi, error-copy); round 2:
+  // The API's error carries the copy (lib/commonsApi, error-copy):
   // the leave popover's line is the one because line, the same as the panel's banner.
   api.labels.mockRejectedValueOnce(new CommonsRequestError('Nebula didn’t respond. Try again.', 503));
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server didn’t respond. Try again.', retry: true });
   api.labels.mockRejectedValueOnce(new CommonsRequestError('Nebula’s server isn’t answering. Make sure it’s running, then try again.', 0));
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.', retry: true });
   // An error that didn't come through the API never shows its own message
-  // (GM), and a TypeError the API didn't classify is not "isn't answering"
-  // (typeerror, 2026-10-24): GM's general line.
+  // (design), and a TypeError the API didn't classify is not "isn't answering"
+  // (typeerror, 2026-10-24): design's general line.
   api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.',
     message: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.', retry: true });
-  // GM: a timeout or a rate limit is a 4xx that works on a second try.
+  // Design: a timeout or a rate limit is a 4xx that works on a second try.
   for (const status of [408, 429]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));
     expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels. Try again.', retry: true });
@@ -169,11 +169,11 @@ it('offers sealing and the abandon close before any agent grade', async () => {
   expect(screen.getByText('Close without sealing…')).toBeTruthy();
 });
 
-it('error copy round 3b: the intro uses GM\'s words for what Blind labeling picks, not "near-duplicate clusters"', async () => {
+it('error copy: the intro uses design\'s words for what Blind labeling picks, not "near-duplicate clusters"', async () => {
   api.get.mockResolvedValue(null);
   render(<CommonsEvaluation />);
   await screen.findByText('Prepare the held-out set');
-  // GM's refusal says "references that look different from each other"; the intro now says the same.
+  // Design's refusal says "references that look different from each other"; the intro now says the same.
   expect(screen.getByText(/Nebula picks 15 references to label and 30 to tune with/).textContent).toBe(
     'Scan a local folder before you import it. Nebula picks 15 references to label and 30 to tune with, '
     + 'choosing references that look different from each other and spreading them across subfolders. '

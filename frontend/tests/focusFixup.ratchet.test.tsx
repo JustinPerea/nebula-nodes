@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18l (review 17 MEDIUM-1): the focus-fixup helper, and the rule for where it must be
+ * PR #204: the focus-fixup helper, and the rule for where it must be
  * installed.
  *
  * Why not "every test that asserts activeElement after an async action": 78 test files assert
@@ -11,7 +11,7 @@
  * toHaveFocus) and renders from src/components/commons/, uses useFocusHandover, renders
  * AgentSpendSection or PersonalAgentsSection, renders <App/> at the Commons' hash, or speaks of the
  * focus fixup installs the helper. No file blurs, or moves focus away, by hand "as Chrome (or a
- * browser) would": the helper does it. Round 18o (review 18 logic LOW-1): toHaveFocus, <App/> at
+ * browser) would": the helper does it. The rule also reads toHaveFocus, <App/> at
  * #commons, and a comment saying a browser blurs and jsdom doesn't near a .focus() or .blur().
  */
 import { act, cleanup, render } from '@testing-library/react';
@@ -129,7 +129,6 @@ describe('ratchet: focus tests where a control can be disabled in place install 
     expect(INSTALLS.test('withFocusFixup();')).toBe(true);
     expect(INSTALLS.test("import { withFocusFixup } from './helpers/focusFixup';")).toBe(false);
     expect(NEEDS_FIXUP.test("from '../src/components/commons/CommonsCloseBatch'")).toBe(true);
-    // Round 18o (review 18 logic LOW-1).
     expect(ASSERTS_FOCUS.test('expect(input).toHaveFocus();')).toBe(true);
     expect(ASSERTS_FOCUS.test('expect(input).not.toHaveFocus();')).toBe(true);
     expect(BY_HAND.test("// A browser blurs a field as it becomes disabled; jsdom doesn't, so the\n// focus moves away by hand.\nconst x = 1;\nact(() => elsewhere.focus());")).toBe(true);

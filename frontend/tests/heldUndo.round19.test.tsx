@@ -2,20 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
 
-// Review 18, round 19. Turned from the reviewer's probes (r18/fe: h1, m2,
-// w5, sw) into failing tests first, against the fake Nebula of round 17.
-// H-A: a Clear is a canvas replacement: a write or restore held from before
-//   it never reaches the new nodes that reuse its ids (C1-C3), and every
+// Turned from a reviewer's probes into failing tests first, against the
+// fake Nebula in tests/helpers/undoFakeBackend.ts.
+// A Clear is a canvas replacement: a write or restore held from before
+//   it never reaches the new nodes that reuse its ids, and every
 //   write carries the canvas revision read when the person acted.
-// G-1 (GM, round 19): a switch or an import waits for the saves on their way
-//   (15 s at most), and one that didn't land is said in GM's line on the new
+// Design: a switch or an import waits for the saves on their way
+//   (15 s at most), and one that didn't land is said in design's line on the new
 //   canvas, never the out-of-date line.
-// M-A: typing that waited behind an undo reaches Nebula when its node's
-//   Delete then fails (D1).
-// M-B: a failed delete puts back the wires Nebula has (refusal seed 264).
-// M-C, L-C: a param write carries only the keys the person changed (M2a,
-//   M2b, W5b).
-// L-B: a restore that timed out but landed late counts as undone (T1).
+// Typing that waited behind an undo reaches Nebula when its node's
+//   Delete then fails.
+// A failed delete puts back the wires Nebula has (refusal seed 264).
+// A param write carries only the keys the person changed.
+// A restore that timed out but landed late counts as undone.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -96,7 +95,7 @@ let clock = Date.now();
 const TIMEOUT_LINE = "Nothing was undone. Nebula isn't answering. Make sure it's running, then try again.";
 const project = (name = 'Glass campaign') => { store().setCanvasProjectName?.(() => name); };
 
-describe('round 19 (review 18)', () => {
+describe('held Undo: a Clear, switches and imports, and param writes', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -154,7 +153,7 @@ describe('round 19 (review 18)', () => {
   };
 
   describe('H-A: a Clear is a canvas replacement', () => {
-    it('C1: a PUT held behind a slow undo never reaches the n2 an agent made after clearing', async () => {
+    it('a PUT held behind a slow undo never reaches the n2 an agent made after clearing', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
       type('n1', 'A');
@@ -175,7 +174,7 @@ describe('round 19 (review 18)', () => {
       expect(stale()).toEqual([]);
     });
 
-    it('C2: an undo queued behind a slow one never overwrites the n1 an agent made after clearing', async () => {
+    it('an undo queued behind a slow one never overwrites the n1 an agent made after clearing', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
@@ -195,7 +194,7 @@ describe('round 19 (review 18)', () => {
       expect(cliIds()).toEqual(['n1']);
     });
 
-    it('C3: the person clears while a PUT waits, then adds a node that becomes n1: the PUT never reaches it', async () => {
+    it('the person clears while a PUT waits, then adds a node that becomes n1: the PUT never reaches it', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n2', 'A');
@@ -229,7 +228,7 @@ describe('round 19 (review 18)', () => {
       expect(stale()).toEqual([]);
     });
 
-    it("C3 from chat: the chat's /clear is a replacement too, so the PUT never reaches the next n1", async () => {
+    it("from chat: the chat's /clear is a replacement too, so the PUT never reaches the next n1", async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n2', 'A');
@@ -303,7 +302,7 @@ describe('round 19 (review 18)', () => {
     });
   });
 
-  describe('G-1 (GM, round 19): a switch or an import waits for the saves on their way', () => {
+  describe('a switch or an import waits for the saves on their way', () => {
     it('debounced typing goes out at once; once it lands the switch has nothing to say', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1')]);
@@ -316,7 +315,7 @@ describe('round 19 (review 18)', () => {
       expect(lines()).toEqual([]);
     });
 
-    it('a save refused meanwhile: the new canvas names its setting, node and project in GM\'s words', async () => {
+    it('a save refused meanwhile: the new canvas names its setting, node and project in design\'s words', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([{ ...textFakeNode('n1'), label: 'Hero prompt' }]);
       refuse((path, init) => path === '/api/graph/node/n1' && init?.method === 'PUT', 500, 'Nope.');
@@ -381,7 +380,7 @@ describe('round 19 (review 18)', () => {
       expect(lines()).toEqual(["Nebula couldn’t save “Text” for “n2” in “Glass campaign”. It was still saving when you switched."]);
     });
 
-    it('S1: an undo, a delete and typing all still out: one line, never the out-of-date line', async () => {
+    it('an undo, a delete and typing all still out: one line, never the out-of-date line', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A'); await tick(1100);
@@ -411,7 +410,7 @@ describe('round 19 (review 18)', () => {
       expect(lines()).toEqual(["Nebula couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when the import replaced the canvas."]);
     });
 
-    it('an agent\'s import while typing waits behind an undo: GM\'s import line, not the out-of-date line', async () => {
+    it('an agent\'s import while typing waits behind an undo: design\'s import line, not the out-of-date line', async () => {
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
       start([textFakeNode('n1'), { ...textFakeNode('n2'), label: 'Hero prompt' }]);
       type('n1', 'A');
@@ -436,7 +435,7 @@ describe('round 19 (review 18)', () => {
       expect(stale()).toEqual([]);
     });
 
-    it('GM\'s lines, word for word', () => {
+    it('design\'s lines, word for word', () => {
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', { kind: 'switch' }))
         .toBe("Nebula couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched.");
       expect(savingCutOffLine([], 'Glass campaign', { kind: 'switch' }))
@@ -459,7 +458,7 @@ describe('round 19 (review 18)', () => {
   });
 
   describe('M-A: typing that waited behind an undo, then Delete, the delete fails', () => {
-    it('D1: the typing reaches Nebula, so the node comes back as the card shows it', async () => {
+    it('the typing reaches Nebula, so the node comes back as the card shows it', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
       await tick(1100);
@@ -535,7 +534,7 @@ describe('round 19 (review 18)', () => {
       expect(JSON.parse(put!.body!)).toEqual({ params: { value: 'B' } });
     });
 
-    it('M2a: an agent\'s edit synced while a waiting undo held the node is kept', async () => {
+    it('an agent\'s edit synced while a waiting undo held the node is kept', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'n1', note: 'x' } }, textFakeNode('n2')]);
       await del('n1'); await tick(1000);
       nebula().holdAnswers = true;
@@ -550,7 +549,7 @@ describe('round 19 (review 18)', () => {
       expect(nodeOf('n1')?.data.params).toEqual({ value: 'B', note: 'AG' });
     });
 
-    it('M2b: the same with a param undo holding the node', async () => {
+    it('the same with a param undo holding the node', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'n1', note: 'x' } }]);
       type('n1', 'A'); await tick(1100);
       nebula().holdAnswers = true;
@@ -566,7 +565,7 @@ describe('round 19 (review 18)', () => {
       expect(nodeOf('n1')?.data.params.note).toBe('AG');
     });
 
-    it('W5b: a refused undo of typing while the person typed into another field: nothing is undone, here or in Nebula', async () => {
+    it('a refused undo of typing while the person typed into another field: nothing is undone, here or in Nebula', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'n1', note: 'x' } }]);
       type('n1', 'A'); await tick(1100);
       refuse((path) => path === '/api/graph/restore', 409, 'That step is no longer there.');
@@ -584,7 +583,7 @@ describe('round 19 (review 18)', () => {
   });
 
   describe('L-B: a restore that timed out', () => {
-    it('says GM\'s line at the limit', async () => {
+    it('says design\'s line at the limit', async () => {
       start([textFakeNode('n1')]);
       type('n1', 'A'); await tick(1100);
       fake.override = (path, init) => (path === '/api/graph/restore' ? new Promise<Response>(() => {}) : nebula().apiFetch(path, init));
@@ -594,7 +593,7 @@ describe('round 19 (review 18)', () => {
       expect(valueOf('n1')).toBe('A');
     });
 
-    it('T1: applied late, the step counts as undone, and the next Cmd+Z is never a silent no-op', async () => {
+    it('applied late, the step counts as undone, and the next Cmd+Z is never a silent no-op', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A'); await tick(1100);
       let late: (() => void) | null = null;

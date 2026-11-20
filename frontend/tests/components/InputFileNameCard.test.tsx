@@ -7,7 +7,7 @@ import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { resetUploadNamesForTests } from '../../src/lib/uploadNames';
 
-// GM - Design, drop follow-ups (2026-10-24): every input card (Image, Video,
+// Design, drop follow-ups (2026-10-24): every input card (Image, Video,
 // Audio, Document) names the file it holds, an image under its picture, cut in the middle when long so the
 // extension stays.
 
@@ -60,7 +60,7 @@ describe("an input card's file name", () => {
     expect(line?.textContent).toBe(name);
   });
 
-  it('names an image under its picture (GM: every input card names its file)', () => {
+  it('names an image under its picture (every input card names its file)', () => {
     const { container } = renderNode(inputNode('image-input', 'png', 'moodboard-ref.png'));
     const picture = container.querySelector('.model-node__preview');
     const line = container.querySelector('.model-node__file-name');
@@ -84,7 +84,7 @@ describe("an input card's file name", () => {
     expect(renderNode(empty).container.querySelector('.model-node__file-name')).toBeNull();
   });
 
-  // GM r48 Q1 on #222: the name it was uploaded with, from Nebula's upload
+  // Design on #222: the name it was uploaded with, from Nebula's upload
   // record when the node keeps none (an agent set the file), and never a
   // bare content hash.
   it('names a stored file with no kept name by the upload record, else "Uploaded file", never the hash', async () => {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * The same bug as the Inspector's (GM - Design, 2026-10-23: "runs past the
+ * The same bug as the Inspector's (design, 2026-10-23: "runs past the
  * bottom edge ... and it overlaps the bottom bar"): the canvas's right-click
  * menu opened at the pointer with no clamp at all, so near the bottom its
  * last items (Delete) ran under the bottom bar or off the window.
@@ -95,7 +95,7 @@ describe('the right-click menu near the edges', () => {
     fireEvent(window, new Event('resize'));
     expect(menuBox().bottom).toBeLessThanOrEqual(560 - 8);
   });
-  // GM - Design, 2026-10-23 (answer 1): floating panels stop above the
+  // Design, 2026-10-23: floating panels stop above the
   // reserved notice band (one notice plus its gap), shown or not.
   it('opened just above the bottom bar, it stops above the reserved notice band', () => {
     const band = document.createElement('div');

@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 5 of the Q133 confirm (Justin, 2026-10-25: a paid placeholder never
+ * A review of the confirm (Justin, 2026-10-25: a paid placeholder never
  * runs without the person's confirmation, and what runs never costs more than
- * they were shown), with GM - Design's round-6 rulings:
- * - H1: once the dialog has shown for a run it stays the authority. An agent
+ * they were shown), with design's rulings:
+ * - Once the dialog has shown for a run it stays the authority. An agent
  *   finishing its placeholders while it is open (and making the run pricier)
  *   asks again with "Run with Codex's changes?", never the costly-run setting
  *   or the browser's confirm; the run sends the total the person saw, which
  *   Nebula holds it to with no placeholder left, and its refusal re-asks.
- * - L2 / GM item 4: a refused or declined run leaves the canvas as it was:
+ * - Design: a refused or declined run leaves the canvas as it was:
  *   no Run history record, nothing Queued, no Stop, nothing streaming.
- * - GM item 3: from Cinema the button says Generate; the shot has its row.
+ * - Design: from Cinema the button says Generate; the shot has its row.
  */
 
 const apiFetchMock = vi.hoisted(() => vi.fn());
@@ -70,7 +70,7 @@ function refusal(high: number, placeholders: string[] = ['a'], message = 'Nothin
 const errors = () => useGraphStore.getState().nodes.map((node) => node.data.error).filter(Boolean);
 const states = () => Object.fromEntries(useGraphStore.getState().nodes.map((node) => [node.id, node.data.state]));
 
-describe("review 5: the person's direct run once the placeholder dialog has shown", () => {
+describe("the person's direct run once the placeholder dialog has shown", () => {
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
     useGraphStore.setState({ nodes: [imageNode('a', true), imageNode('b'), cinemaNode()] as never,
@@ -97,7 +97,7 @@ describe("review 5: the person's direct run once the placeholder dialog has show
     vi.restoreAllMocks();
   });
 
-  describe('H1: the agent finishes its placeholder and makes the run pricier while the dialog is open', () => {
+  describe('the agent finishes its placeholder and makes the run pricier while the dialog is open', () => {
     it.each([
       ['off', null],
       ['on', 0.01],
@@ -144,9 +144,9 @@ describe("review 5: the person's direct run once the placeholder dialog has show
       expect(execute.mock.calls[0][7]).toBe(9.6);
     });
 
-    // Review 7, L2 (coordinator's decision): a row counts as seen only if its
+    // Coordinator's decision: a row counts as seen only if its
     // node, model and price all match, so a row now at another price asks
-    // again, even when cheaper (this test said "goes ahead" until round 8).
+    // again, even when cheaper (this test said "goes ahead" before that decision).
     it('a run that got cheaper asks again: its row changed price', async () => {
       const execute = vi.spyOn(api, 'executeNode').mockResolvedValue({ status: 'started' } as never);
       askMock.mockImplementationOnce(async (model: PlaceholderRunConfirm) => { codexFinishes('cheap'); return model; })
@@ -186,7 +186,7 @@ describe("review 5: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe('L2 / GM item 4: a refused run leaves the canvas exactly as it was', () => {
+  describe('a refused run leaves the canvas exactly as it was (design)', () => {
     beforeEach(() => {
       useGraphStore.setState({ nodes: useGraphStore.getState().nodes.map((node) => node.id === 'b'
         ? { ...node, data: { ...node.data, state: 'complete', outputs: { image: { type: 'Image', value: '/api/outputs/x.png' } } } }
@@ -258,7 +258,7 @@ describe("review 5: the person's direct run once the placeholder dialog has show
     });
   });
 
-  describe('GM item 3: from Cinema the button says Generate, and the shot has its own row', () => {
+  describe('from Cinema the button says Generate, and the shot has its own row', () => {
     it('Generate shot: “Shot 1” · Nano Banana, and "Generate for $X"', async () => {
       askMock.mockResolvedValue(null);
       await useGraphStore.getState().executeShot('cine', 's1', undefined, 2);

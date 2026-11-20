@@ -1,12 +1,12 @@
 /**
- * PR #203 round 10, as drawn:
- * - GM r19 item 3 (review 9, cost LOW-2): the Accept button's description
+ * PR #203, as drawn:
+ * - Design: the Accept button's description
  *   is the count chip's tooltip; its name stays the visible text.
- * - Review 9, cost NIT-3: the mutants that survived it.
- *   - C8: the bar places canvas nodes' reasons left to right.
- *   - N8: line 1 has no inline style that could clip it.
- *   - N1: the onboarding tour lets a closing dialog's focus return through.
- *   - N4: a dialog's close returns focus through returnFocusTo.
+ * - The mutants that survived it.
+ *   - The bar places canvas nodes' reasons left to right.
+ *   - Line 1 has no inline style that could clip it.
+ *   - The onboarding tour lets a closing dialog's focus return through.
+ *   - A dialog's close returns focus through returnFocusTo.
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -79,7 +79,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('the Accept button reads its count chip\'s tooltip (GM r19 item 3; review 9, cost LOW-2)', () => {
+describe('the Accept button reads its count chip\'s tooltip', () => {
   it('as its description, with its name the visible text', () => {
     graph.state.nodes = [canvasNode('n1', 'Writer', 0), canvasNode('n2', 'Editor', 100), canvasNode('n3', 'Krea 2', 200)];
     useCanvasProposalsStore.getState().open(proposal([
@@ -89,7 +89,7 @@ describe('the Accept button reads its count chip\'s tooltip (GM r19 item 3; revi
     ]), 'key-a');
     render(<ProposalBar />);
     const accept = screen.getByRole('button', { name: 'Accept and run 2 paid · 1 on Krea plan' });
-    // GM, PR #203 r20 item 2: line 1 and the reason naming the same nodes are one.
+    // Design (PR #203): line 1 and the reason naming the same nodes are one.
     const tooltip = '“Writer” and “Editor” call paid providers that have no listed price.\n'
       + '“Krea 2” runs on your Krea plan.';
     expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title', tooltip);
@@ -98,7 +98,7 @@ describe('the Accept button reads its count chip\'s tooltip (GM r19 item 3; revi
     expect(document.querySelectorAll(`[id="${accept.getAttribute('aria-describedby')}"]`)).toHaveLength(1);
   });
 
-  it('reads canvas nodes\' reasons left to right, where they sit now (mutant C8)', () => {
+  it('reads canvas nodes\' reasons left to right, where they sit now', () => {
     // The proposal lists them right to left; the canvas places them.
     graph.state.nodes = [canvasNode('n1', 'Right', 900), canvasNode('n2', 'Left', 0)];
     useCanvasProposalsStore.getState().open(proposal([
@@ -111,7 +111,7 @@ describe('the Accept button reads its count chip\'s tooltip (GM r19 item 3; revi
     expect(title.indexOf('“Left” can’t be priced')).toBeLessThan(title.indexOf('“Right” has no listed price.'));
   });
 
-  it('line 1 has no inline style that could hold it to one line (mutant N8)', () => {
+  it('line 1 has no inline style that could hold it to one line', () => {
     graph.state.nodes = [canvasNode('n1', 'Writer', 0)];
     useCanvasProposalsStore.getState().open({ ...proposal([
       { ref: 'n1', nodeId: 'n1', name: 'Writer', kind: 'paid', reason: { kind: 'noPrice' } },
@@ -124,7 +124,7 @@ describe('the Accept button reads its count chip\'s tooltip (GM r19 item 3; revi
   });
 });
 
-describe('at 760 px the bar wraps and the chip moves under the button (GM r19 item 8; review 9, cost NIT-4)', () => {
+describe('at 760 px the bar wraps and the chip moves under the button', () => {
   it('the button wraps its chip onto its own line, and nothing in the actions clips', async () => {
     const css = (await import('node:fs')).readFileSync(`${process.cwd()}/src/styles/canvasProposals.css`, 'utf8');
     const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -141,7 +141,7 @@ describe('at 760 px the bar wraps and the chip moves under the button (GM r19 it
   });
 });
 
-describe('the onboarding tour lets a closing dialog\'s focus return through (review 9, cost NIT-3, mutant N1)', () => {
+describe('the onboarding tour lets a closing dialog\'s focus return through', () => {
   it('pulls ordinary focus back into the tour, but not the return', () => {
     const outside = document.createElement('button');
     outside.textContent = 'Outside the tour';
@@ -158,7 +158,7 @@ describe('the onboarding tour lets a closing dialog\'s focus return through (rev
   });
 });
 
-describe('a dialog\'s close returns focus through returnFocusTo (review 9, cost NIT-3, mutant N4)', () => {
+describe('a dialog\'s close returns focus through returnFocusTo', () => {
   it('focuses its opener with a visible ring and without scrolling', async () => {
     const opener = document.createElement('button');
     opener.textContent = 'Opener';

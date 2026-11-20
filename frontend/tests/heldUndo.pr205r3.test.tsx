@@ -2,19 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 3: review 2 of the newest-synced-copy restore, and GM r3/r4.
-// - Review 2, undo MEDIUM-1: typing never sent (and a rename on its way) is
+// PR #205: a review of the newest-synced-copy restore, and design.
+// - Typing never sent (and a rename on its way) is
 //   kept in the Delete's step when the DELETE answers before the "node gone"
-//   sync (P1c, P1d; both orders, both paths: the held Undo and one after).
-// - GM r4 item 1: an agent's edit landing while the Delete is on its way is
+//   sync (both orders, both paths: the held Undo and one after).
+// - Design: an agent's edit landing while the Delete is on its way is
 //   its own step under the Delete (the agent-edit line on its Undo); the
 //   person's older steps never revert it silently.
-// - GM r4 item 2: a restored node comes back selected, replacing the
+// - Design: a restored node comes back selected, replacing the
 //   selection, with or without a sync during its Delete.
-// - GM r3 item 4: the agent's connections to it come back too, while the
+// - Design: the agent's connections to it come back too, while the
 //   node at the other end is there.
-// - Review 2, undo NIT-2: P7 (the agent's move, mutant M4).
-// The harness is the reviewer's probe (round 18's fake Nebula).
+// - The agent's move.
+// The harness is the fake Nebula in tests/helpers/undoFakeBackend.ts.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -71,7 +71,7 @@ const PATHS = [['held Undo', true], ['Undo after the answer', false]] as const;
 const ORDERS = [['gone sync first', true], ['answer first', false]] as const;
 const CASES = PATHS.flatMap(([path, held]) => ORDERS.map(([order, goneFirst]) => [`${path}, ${order}`, held, goneFirst] as const));
 
-describe('PR #205 round 3: the copy a Delete brings back', () => {
+describe('PR #205: the copy a Delete brings back', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -140,7 +140,7 @@ describe('PR #205 round 3: the copy a Delete brings back', () => {
       edges, empty: false, ...(change.position ? { moved: ['n1'] } : {}), edit: { ...codex, id: `ed_${Math.random()}` } });
   };
 
-  describe('review 2, undo MEDIUM-1: the person\'s own typing and rename stay theirs', () => {
+  describe('the person\'s own typing and rename stay theirs', () => {
     it.each(CASES)('typing never sent, a sync with n1 during the Delete (%s): Undo brings it back as typed, here and in Nebula', async (_label, held, goneFirst) => {
       start([{ ...textFakeNode('n1'), params: { value: 'saved' } }, textFakeNode('n2')]);
       store().updateNodeData('n1', { params: { value: 'TYPED' } });
@@ -175,7 +175,7 @@ describe('PR #205 round 3: the copy a Delete brings back', () => {
     });
   });
 
-  describe('GM r4 item 1: the agent\'s edit is its own step under the Delete', () => {
+  describe('the agent\'s edit is its own step under the Delete', () => {
     it.each(CASES)('%s: Undo restores the agent\'s copy; the next Undo undoes only the agent\'s edit, with its line; the next, the person\'s own older step', async (_label, held, goneFirst) => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       // The person's own earlier step: an edit to n2.
@@ -237,7 +237,7 @@ describe('PR #205 round 3: the copy a Delete brings back', () => {
     });
   });
 
-  describe('GM r4 item 2: a restored node comes back selected, replacing the selection', () => {
+  describe('a restored node comes back selected, replacing the selection', () => {
     it.each([['no sync during the Delete', false], ['a sync with n1 during the Delete', true]] as const)('%s: n1 selected, n2 (selected now) not', async (_label, withSync) => {
       start([textFakeNode('n1'), textFakeNode('n2')], [], ['n1']);
       await deleteHeld();
@@ -258,7 +258,7 @@ describe('PR #205 round 3: the copy a Delete brings back', () => {
     });
   });
 
-  describe('GM r3 item 4: the agent\'s connections to the node come back with it', () => {
+  describe('the agent\'s connections to the node come back with it', () => {
     it.each(CASES)('%s: the agent connected n1 to n2 while the Delete was on its way; Undo brings the connection back, here and in Nebula', async (_label, held, goneFirst) => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       await deleteHeld();
@@ -325,8 +325,8 @@ describe('PR #205 round 3: the copy a Delete brings back', () => {
     });
   });
 
-  describe('review 2, undo NIT-2 (M4): the agent\'s move', () => {
-    it('P7: the agent moved the node while its Delete was on its way: it comes back where the agent put it', async () => {
+  describe('the agent\'s move', () => {
+    it('the agent moved the node while its Delete was on its way: it comes back where the agent put it', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       await deleteHeld();
       store().undo(); await settle();

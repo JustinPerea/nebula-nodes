@@ -4,7 +4,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * GM, PR #203 r6 item 1: nothing on the canvas runs until the Hugging Face
+ * Design (PR #203): nothing on the canvas runs until the Hugging Face
  * token is added. The toolbar's Run is locked (aria-disabled, focusable)
  * with the canvas's line, and reads it out as its scope line (item 3);
  * Cmd+Enter and the palette's "Run graph" (both executeGraph) show that line
@@ -38,8 +38,8 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { keyIdolInEachTest } from './helpers/keyedSpace';
 
-// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
-// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+// PR #203: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (tests/helpers/keyedSpace.ts).
 keyIdolInEachTest();
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };

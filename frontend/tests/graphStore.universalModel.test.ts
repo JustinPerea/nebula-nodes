@@ -245,7 +245,7 @@ describe('the picker and the person\'s unsent edits', () => {
       await picked;
       // The waiting temperature edit reached the backend before the model,
       // so the backend configured over it.
-      // Round 19 (review 18, M-C): only the key the person changed.
+      // Only the key the person changed.
       expect(order[0]).toBe('/api/graph/node/n3 {"params":{"temperature":0.2}}');
       expect(order[1]).toBe('/api/graph/node/n3/model {"model":"openai/gpt-4o"}');
       // max_tokens, typed while the model was read, stays and is sent with the new model.
@@ -253,7 +253,7 @@ describe('the picker and the person\'s unsent edits', () => {
       await vi.advanceTimersByTimeAsync(400);
       const puts = order.filter((line) => line.startsWith('/api/graph/node/n3 '));
       expect(puts).toHaveLength(2);
-      // Round 19 (review 18, M-C): the keys the person typed, merged by
+      // The keys the person typed, merged by
       // Nebula into the model it configured; never a whole-params copy.
       const second = JSON.parse(puts[1].slice('/api/graph/node/n3 '.length)).params;
       expect(second).toMatchObject({ max_tokens: 99 });

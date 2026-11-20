@@ -1,5 +1,5 @@
 /**
- * Round 20 of PR #195 (GM - Design's follow-up of 2026-10-27, verbatim):
+ * PR #195 (design's follow-up of 2026-10-27, verbatim):
  * while the tab follows an agent's switch the project bar says "Opening
  * “<project>”…" in place of the save state, without changing width; Run is
  * disabled with "Wait for “<project>” to open."; and a failed handoff's line
@@ -44,7 +44,7 @@ afterEach(() => {
 });
 
 describe('the project bar while it follows', () => {
-  it('"Opening “beta”…" in the name slot, in place of the old name and the save state (GM round 21, item 1)', () => {
+  it('"Opening “beta”…" in the name slot, in place of the old name and the save state', () => {
     const { container } = render(<ProjectWorkspaceControls />);
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     act(() => setFollowingSwitch({ projectName: 'beta', agent: 'Claude Code' }));
@@ -64,12 +64,12 @@ describe('the project bar while it follows', () => {
     expect(screen.getByText('Glass campaign')).toBeInTheDocument();
   });
 
-  it('the quote and the ellipsis never shrink (a long name is cut in script, PR #200 fix round 1)', () => {
+  it('the quote and the ellipsis never shrink (a long name is cut in script, PR #200)', () => {
     const css = readFileSync(resolve(__dirname, '../src/components/projects/ProjectWorkspaceControls.css'), 'utf8');
     expect(css).toMatch(/\.project-workspace-controls__opening-fixed \{ flex: 0 0 auto; \}/);
   });
 
-  // PR #200 fix round 1 (GM bug 1, r21 blocker B): the bar grows to fit the
+  // PR #200 (design): the bar grows to fit the
   // name; it never gets narrower than it was as the follow starts.
   it('never narrower than it was; it grows to fit (no width or max-width held)', () => {
     const { container } = render(<ProjectWorkspaceControls />);
@@ -82,7 +82,7 @@ describe('the project bar while it follows', () => {
   });
 });
 
-describe('the node popover\'s Inspector while it follows (round 21, review 20 L-2)', () => {
+describe('the node popover\'s Inspector while it follows', () => {
   function Gate() {
     useFollowingReadOnly();
     return null;

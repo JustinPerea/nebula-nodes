@@ -2,22 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 8: review 7 of the held Undo (held-undo-order report).
-// - HIGH-1 (W9, W9b): a restore whose echo trails its answer, an agent's sync
+// PR #205: a review of the held Undo (held-undo-order report).
+// - A restore whose echo trails its answer, an agent's sync
 //   between that lacks the node: the canvas keeps it, and every Undo and Redo
 //   after leaves the canvas as Nebula has it.
-// - MEDIUM-1 (F1): one agent edit to a node a restore holds and to a node a
+// - One agent edit to a node a restore holds and to a node a
 //   refused Delete holds is one step; its Undo takes back both changes.
-// - MEDIUM-2 (F2, F3, the generator's "delete held"): an agent's edit that
+// - An agent's edit that
 //   took a held node off is that edit's removal, and its Undo brings it back
 //   with its connections.
-// - LOW-1 (X1, L1a, L1b): a refused rename never reaches Nebula through an
+// - A refused rename never reaches Nebula through an
 //   earlier held copy, a Delete's put-back, or an agent step's Redo.
-// - GM r16 item 4 (X2): an agent's clear during a Delete on its way: the
+// - Design: an agent's clear during a Delete on its way: the
 //   clear's Undo brings the node back as Nebula had it, with the other
 //   agent's edit.
-// - LOW-3 (W1, W3b): the wait for an unanswered save ends at the 15 s cap.
-// The harness is round 7's (round 18's fake Nebula).
+// - The wait for an unanswered save ends at the 15 s cap.
+// The harness is the fake Nebula in tests/helpers/undoFakeBackend.ts.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -75,7 +75,7 @@ const claude = { actor: { kind: 'agent', name: 'Claude', id: 'claude' } };
 const wire = (source: string, target: string): FakeWire => ({ id: `w-${source}-${target}`, source, sourceHandle: 'text', target, targetHandle: 'text' });
 let clock = Date.now();
 
-describe("PR #205 round 8: the held Undo after review 7", () => {
+describe("PR #205: the held Undo", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -184,7 +184,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     return out;
   };
 
-  it('W1: an earlier save never answered: the Undo of a Delete waits 15 s, then goes; nothing lost or doubled', async () => {
+  it('an earlier save never answered: the Undo of a Delete waits 15 s, then goes; nothing lost or doubled', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }]);
     recordLines();
     const release = hangPut(isPut('n2'));
@@ -205,7 +205,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     await undo(); sameAsNebula(); expect(cliIds()).toEqual(['n1', 'n2']);
   });
 
-  it('W3b: two restores while the save never answers: the second waits behind the first, both land within two caps', async () => {
+  it('two restores while the save never answers: the second waits behind the first, both land within two caps', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, { ...textFakeNode('n3'), params: { value: 'x0' } }]);
     recordLines();
     const release = hangPut(isPut('n2'));
@@ -259,14 +259,14 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     expect(notice()).toBe('Redid Claude’s edit.');
     expect(nebula().nodes.get('n2')?.label).toBe('Claude');
   };
-  it('W9: the wait; Claude\'s sync during it lacks n1 and the restore\'s echo trails its answer: Undo and Redo agree with Nebula', async () => {
+  it('the wait; Claude\'s sync during it lacks n1 and the restore\'s echo trails its answer: Undo and Redo agree with Nebula', async () => {
     await trailingEcho(true);
   });
-  it('W9b: the same with a slow restore and no wait', async () => {
+  it('the same with a slow restore and no wait', async () => {
     await trailingEcho(false);
   });
 
-  it('F1: a restore hold on n1, a refused Delete of n2 behind it; Claude sets n1 and connects n1>n2 in one edit: one step, one Undo', async () => {
+  it('a restore hold on n1, a refused Delete of n2 behind it; Claude sets n1 and connects n1>n2 in one edit: one step, one Undo', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, textFakeNode('n3')]);
     await restoreHeld();
     refuseDelete('n2');
@@ -284,7 +284,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     expect(nebula().valueOf('n1')).toBe('v0');
   });
 
-  it('F2: a restore hold; Claude deletes the node it brought back, then Codex sets n2: Codex\'s Undo leaves n1 off, Claude\'s brings it back', async () => {
+  it('a restore hold; Claude deletes the node it brought back, then Codex sets n2: Codex\'s Undo leaves n1 off, Claude\'s brings it back', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }]);
     await restoreHeld();
     agentDoes(claude, 'ed_r8f2claude0001', () => { nebula().nodes.delete('n1'); });
@@ -299,7 +299,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     expect(out[2]).toMatchObject({ u: 'Undid Claude’s edit.', nebula: ['n1', 'n2'] });
   });
 
-  it('F3: a refused Delete of n1 (connected to n2); Claude deletes n2: Claude\'s Undo brings n2 back with its connection', async () => {
+  it('a refused Delete of n1 (connected to n2); Claude deletes n2: Claude\'s Undo brings n2 back with its connection', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }], [wire('n1', 'n2')]);
     refuseDelete('n1');
     nebula().holdAnswers = true;
@@ -315,7 +315,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     expect(out[1]).toMatchObject({ u: 'Undid Claude’s edit.', nebula: ['n1', 'n2'], w: ['n1>n2'] });
   });
 
-  it('X1: a refused rename, a refused Delete, and two agent edits: Nebula never gets the refused name, through any Undo or Redo', async () => {
+  it('a refused rename, a refused Delete, and two agent edits: Nebula never gets the refused name, through any Undo or Redo', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
     fake.override = (path, init) => {
       if (init?.method === 'DELETE' && path === '/api/graph/node/n1') return nebula().later('refused n1', () => new Response(JSON.stringify({ detail: 'It is running.' }), { status: 409 }));
@@ -339,7 +339,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     expect(values).toEqual(['CODEX', 'v0', 'CODEX', 'GEMINI']);
   });
 
-  it('X2 (GM r16 item 4): an agent clears the canvas while the person\'s Delete of n1 is on its way and Codex edited n1: the clear\'s Undo brings n1 back as Nebula had it', async () => {
+  it('an agent clears the canvas while the person\'s Delete of n1 is on its way and Codex edited n1: the clear\'s Undo brings n1 back as Nebula had it', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
     refuseDelete('n1');
     nebula().holdAnswers = true;
@@ -422,7 +422,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     }
     return null;
   };
-  it('L1a: the refused Delete answers before the rename\'s refusal: no trace of the name in the canvas, Nebula, or Codex\'s Undo and Redo', async () => {
+  it('the refused Delete answers before the rename\'s refusal: no trace of the name in the canvas, Nebula, or Codex\'s Undo and Redo', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
     const lab = renameRefusal(500);
     fake.override = (path, init) => {
@@ -443,7 +443,7 @@ describe("PR #205 round 8: the held Undo after review 7", () => {
     await redo(); sameAsNebula(); expect(nebula().nodes.get('n1')?.label).toBe('n1');
   });
 
-  it('L1b: a restore hold, the rename on its way at Codex\'s sync, the restore answers, then the rename is refused: Codex\'s Redo never writes it', async () => {
+  it('a restore hold, the rename on its way at Codex\'s sync, the restore answers, then the rename is refused: Codex\'s Redo never writes it', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
     await restoreHeld();
     fake.override = renameRefusal(500);

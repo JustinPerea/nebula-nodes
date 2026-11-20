@@ -1,5 +1,5 @@
 /**
- * Review r3 LOW-4: OrbitControls attach their listeners when they are made.
+ * OrbitControls attach their listeners when they are made.
  * Made in a memo, StrictMode's second render left a discarded copy on the
  * canvas, so every wheel zoomed twice. Here the real OrbitControls run under
  * StrictMode: one wheel event zooms once.
@@ -75,7 +75,7 @@ function frame() {
   for (const callback of [...harness.frames]) callback({}, 1 / 60);
 }
 
-describe('the orbit viewer under StrictMode (review r3 LOW-4)', () => {
+describe('the orbit viewer under StrictMode', () => {
   afterEach(() => {
     harness.state = null;
     harness.frames.clear();

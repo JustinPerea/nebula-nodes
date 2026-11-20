@@ -180,7 +180,7 @@ describe('asset studio workspace continuity', () => {
     expect(useUIStore.getState().moodboardEditorId).toBe('board-b');
   });
 
-  // GM on #210 review 5 (answer 1): New never drops a paste. A new board
+  // Design on #210: New never drops a paste. A new board
   // with an upload on its way counts as content: it is saved first, the
   // upload lands on it, and the fresh draft stays empty.
   it('New with a Moodboard upload on its way saves that board first; the upload lands there, not on the fresh draft', async () => {
@@ -242,7 +242,7 @@ describe('asset studio workspace continuity', () => {
   it('keeps a failed asset load behind explicit Try again instead of authoring an accidental replacement', async () => {
     api.characters.mockRejectedValue(new Error('Offline fixture'));
     useUIStore.getState().enterCharacterEditor('character-a'); render(<CharacterStudioView />); await settle();
-    // error-copy round 2 (GM): the heading and a written reason, never the
+    // error-copy (design): the heading and a written reason, never the
     // error's own text.
     expect(screen.getByRole('alert')).toHaveTextContent('Nebula couldn’t load the character because the server didn’t accept it. Try again.');
     expect(screen.getByRole('alert')).not.toHaveTextContent('Offline fixture');

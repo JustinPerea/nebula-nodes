@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 
 /**
- * error-copy (GM - Design, reviewing #165, 2026-10-22): with a dropped
+ * error-copy (design, reviewing #165, 2026-10-22): with a dropped
  * connection the leave popover's second line and the red banner above Blind
  * labeling both read the browser's "Failed to fetch". "That is a TypeError
- * message, not copy." A failed Commons request now says GM's line:
+ * message, not copy." A failed Commons request now says design's line:
  *   lost connection          -> "Nebula's server isn't answering. Make sure it's running, then try again."
  *   408, 429 or any 5xx      -> "Nebula didn't respond. Try again."
  *   any other 4xx            -> the backend's detail (written copy), as before.
@@ -91,7 +91,7 @@ describe('the red banner above Blind labeling', () => {
     await waitFor(() => expect(document.querySelector('.commons-notice--error[role="alert"]')).not.toBeNull());
     return document.querySelector('.commons-notice--error[role="alert"]')!;
   };
-  it.each(cases)('after %s says the heading and GM\'s line, not the raw message', async (_name, failure, line) => {
+  it.each(cases)('after %s says the heading and design\'s line, not the raw message', async (_name, failure, line) => {
     state.labels = failure;
     render(<CommonsEvaluation />);
     fireEvent.click(await screen.findByText('Set neutral'));

@@ -239,7 +239,7 @@ describe('Cinema motion handoff', () => {
     expect(useGraphStore.getState().runHistory).toEqual([]); expect(useGraphStore.getState().activeRuns).toEqual([]);
   });
 
-  it('"View video node" during an import says its own line (GM PR #205 r5 item 3)', async () => {
+  it('"View video node" during an import says its own line (design, PR #205)', async () => {
     mocks.fetch.mockResolvedValueOnce(response()); const view = render(panel());
     fireEvent.click(screen.getByRole('button', { name: 'Send to motion' }));
     await screen.findByRole('button', { name: 'View video node' });
@@ -257,7 +257,7 @@ describe('Cinema motion handoff', () => {
     expect(screen.getByRole('button', { name: 'Send to motion' })).not.toHaveAttribute('title');
     act(() => useGraphStore.setState({ nodes: [source()], isImportingGraph: true })); view.rerender(panel());
     expect(screen.getByRole('button', { name: 'Send to motion' })).toBeDisabled();
-    // GM PR #205 r4 item 5: the import's line.
+    // Design (PR #205): the import's line.
     expect(screen.getByRole('button', { name: 'Send to motion' })).toHaveAttribute('title', 'You can send it to motion when the import finishes.');
     await sendCinemaShotToMotion('n1', 'a'); expect(mocks.fetch).not.toHaveBeenCalled();
   });

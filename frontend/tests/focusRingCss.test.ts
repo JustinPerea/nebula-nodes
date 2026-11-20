@@ -3,7 +3,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { tabIndexSites } from './helpers/tabIndexSites';
 
-// GM - Design (sf, after #157): "Yes, fix the focus ring at the token,
+// Design (after #157): "Yes, fix the focus ring at the token,
 // app-wide. But make it a light neutral, not --sr-accent. Orange already means
 // two things in Nebula: the agent (its cursor, and the orange outline on the
 // cards its notes name) and the primary action (Add, Start, Generate) ... A
@@ -109,12 +109,12 @@ function token(name: string): string {
   return match![1].trim();
 }
 
-describe('the focus ring token (GM: a light neutral, 2px at a 2px offset)', () => {
+describe('the focus ring token (a light neutral, 2px at a 2px offset)', () => {
   it('draws 2px solid in the primary text colour token, offset 2px', () => {
     expect(token('--sr-focus-outline')).toBe('2px solid var(--sr-ink)');
     expect(token('--sr-focus-offset')).toBe('2px');
     // --sr-ink is the primary type colour (white at 92 %: #EBEBEB on the
-    // canvas, next to GM's #E8E6E1).
+    // canvas, next to design's #E8E6E1).
     expect(tokenBlock()).toMatch(/--sr-ink: rgba\(255, 255, 255, 0\.92\);\s*\/\* primary type \*\//);
   });
 
@@ -246,24 +246,24 @@ const NO_OUTLINE: Record<string, string> = {
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-card:focus-visible': 'ring on the inner card',
   // Projects home: a target the page moves focus to (tabindex -1: the heading
   // after a notice's ×, the held edits' saved line) is not a control; it never
-  // shows a ring, from the keyboard either (GM - Design r6, bug 4).
-  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus': 'programmatic focus target, not a control (GM r6)',
-  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus-visible': 'programmatic focus target, not a control (GM r6)',
+  // shows a ring, from the keyboard either (design).
+  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus': 'programmatic focus target, not a control (design)',
+  'styles/project-home.css::body.app-slava-restraint .project-home [tabindex="-1"]:focus-visible': 'programmatic focus target, not a control (design)',
   // The canvas root takes focus after Projects > Open returns to the canvas
-  // (PR #199 review 19, item 6), so focus doesn't fall to <body>. It is not in
+  // (PR #199), so focus doesn't fall to <body>. It is not in
   // the Tab order and not a control; a ring around the whole canvas would
   // read as a selection. Its nodes and controls keep their own rings.
   "App.css::.react-flow[tabindex='-1']:focus": 'programmatic focus target (the canvas root), not a control',
-  // PR #204 round 18g (GM r36): a heading or a line focused from code (see the describe below).
+  // PR #204 (design): a heading or a line focused from code (see the describe below).
   'styles/slava-restraint.css::body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible': 'focused only from code: no ring',
-  // PR #204 round 18h (GM r38 3d): the start of the page a leaving notice hands focus to.
+  // PR #204 (design): the start of the page a leaving notice hands focus to.
   'styles/slava-restraint.css::body.app-slava-restraint [data-focus-start]:not([data-focus-decided]):focus-visible': 'focused only from code: no ring',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus': 'ring on the inner placeholder',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus-visible': 'ring on the inner placeholder',
   // The proposal card's scrolling body: its fade mask would clip its own ring,
   // so the wrapper draws the token ring instead (pinned below).
   'styles/canvasProposals.css::.proposal-bar__body:focus-visible': 'ring on the scroll wrapper',
-  // #208 GM r23: the palette's "Extracting colors…" line, given focus by
+  // Design (#208): the palette's "Extracting colors…" line, given focus by
   // code when it replaces the row a control had it in; a line, not a control.
   'styles/panels.css::body:not(.app-slava-restraint) .inspector__palette-pending:focus': 'code-moved focus on a line',
   'styles/panels.css::body.app-slava-restraint .inspector__palette-pending:focus': 'code-moved focus on a line',
@@ -303,7 +303,7 @@ describe('every focus rule uses the token (the sweep)', () => {
     expect(bad).toEqual([]);
   });
 
-  it('#216 round 3l (GM r69 Q2): the canvas draws the token ring inside its edge, on Tab arrival and after a keyboard decision', () => {
+  it('#216: the canvas draws the token ring inside its edge, on Tab arrival and after a keyboard decision', () => {
     // It fills the window, so the baseline's ring (outside its box, offset
     // 2px) was clipped away: Tab arrival showed nothing.
     for (const selector of ['body.app-slava-restraint .canvas-wrapper:focus-visible', 'body.app-slava-restraint .canvas-wrapper[data-focus-decided]:focus']) {
@@ -384,7 +384,7 @@ describe('a field that clears its outline gets the token ring back on focus', ()
   });
 });
 
-// GM: the ring "stays clear of orange and the lime unread ring". The Updates
+// Design: the ring "stays clear of orange and the lime unread ring". The Updates
 // chip draws its unread ring outside itself (::after at a negative inset), so
 // a 2px ring at the 2px offset painted over half of it (review of sf). While
 // the unread ring shows, the focus ring sits outside it with a 1px gap.
@@ -410,7 +410,7 @@ describe('the focus ring clears the Updates chip\'s unread ring', () => {
   });
 });
 
-// ── PR #204 round 18g (GM r36): focus from code draws no ring ────────────────
+// ── PR #204 (design): focus from code draws no ring ────────────────
 // A handover (a demote, going offline, the Commons turning off, Try again's line going, the off
 // view opening into the Commons) moves focus to a heading, or to the line that says why, so a
 // screen reader announces it. A person never Tabs there (tabindex -1), so the ring would only mark
@@ -421,7 +421,7 @@ const CODE_FOCUS_RULE = 'body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [d
 /** What the rule covers: a heading, or a line (a focus line, a line box, a status or alert line). */
 const CODE_FOCUS_TARGET = /(^|[\s>+~(,])h[1-6](?![\w-])|\[data-focus-line\]|\[data-line-box\]|\[role="(status|alert)"\]|__title\b|-heading\b|\.line-box\b|\.person-lock-line\b/;
 
-describe('a heading or a line focused from code draws no ring (GM r36)', () => {
+describe('a heading or a line focused from code draws no ring', () => {
   it('one rule takes the ring off them, important, after the baseline ring', () => {
     const rule = rules.find((r) => r.selectors.includes(CODE_FOCUS_RULE));
     expect(rule, 'the code-focus rule').toBeTruthy();
@@ -455,40 +455,40 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
 
   // Every element the app gives tabindex -1 is either a heading or a line (the rule covers it and
   // code focuses it), a roving tab stop (a control moved to with the arrow keys), or listed here
-  // with why it keeps the ring. Round 18h (review 16 focus LOW-1): counted per file, so a new
+  // with why it keeps the ring. Counted per file, so a new
   // element in a listed file still has to be placed; found from the syntax tree in .ts and .tsx
   // (helpers/tabIndexSites), whatever the spelling.
   const KEEPS_RING: Record<string, { count: number; why: string }> = {
     'components/create-studio/ResultCard.tsx': { count: 1, why: 'a button: a control keeps its ring' },
-    'components/create-studio/ResultComparison.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (:focus-visible, GM r37)' },
-    'components/create-studio/Lightbox.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (GM r37)' },
-    'components/create-studio/ModelPicker.tsx': { count: 1, why: 'a picker panel focused on open: a ring only from the keyboard (GM r37)' },
-    'components/nodes/SceneUnsavedMark.tsx': { count: 1, why: 'a popover focused on open: a ring only from the keyboard (GM r37)' },
+    'components/create-studio/ResultComparison.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (:focus-visible, design)' },
+    'components/create-studio/Lightbox.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (design)' },
+    'components/create-studio/ModelPicker.tsx': { count: 1, why: 'a picker panel focused on open: a ring only from the keyboard (design)' },
+    'components/nodes/SceneUnsavedMark.tsx': { count: 1, why: 'a popover focused on open: a ring only from the keyboard (design)' },
     'components/nodes/ProviderSwitcher.tsx': { count: 3, why: 'menu items, moved through with the arrow keys' },
-    'components/nodes/MeshPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
-    'components/nodes/WorldSplatPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37), as WorldPreview' },
-    'components/nodes/WorldPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (GM r37)' },
-    'components/commons/CommonsLeavePopover.tsx': { count: 1, why: 'an alertdialog focused on open: a ring only from the keyboard (GM r37)' },
+    'components/nodes/MeshPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (design)' },
+    'components/nodes/WorldSplatPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (design), as WorldPreview' },
+    'components/nodes/WorldPreview.tsx': { count: 1, why: 'a modal focused on open: a ring only from the keyboard (design)' },
+    'components/commons/CommonsLeavePopover.tsx': { count: 1, why: 'an alertdialog focused on open: a ring only from the keyboard (design)' },
     'components/commons/CommonsView.tsx': { count: 1, why: 'a section tab folded into More: a control keeps its ring' },
-    'components/projects/ProjectSizePanel.tsx': { count: 1, why: 'a panel focused on open: a ring only from the keyboard (GM r37)' },
-    'components/panels/ChatModelPicker.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (GM r37)' },
+    'components/projects/ProjectSizePanel.tsx': { count: 1, why: 'a panel focused on open: a ring only from the keyboard (design)' },
+    'components/panels/ChatModelPicker.tsx': { count: 1, why: 'a dialog focused on open: a ring only from the keyboard (design)' },
     'components/panels/settings/ServiceAccountInput.tsx': { count: 1, why: 'a hidden file input, never focused' },
-    'components/panels/settings/ProviderRow.tsx': { count: 1, why: 'a provider row a setup link moves focus to: keeps its :focus-visible ring (GM r38 3d)' },
-    'components/canvas/ProposalBar.tsx': { count: 2, why: 'Review focuses the card, and a keyboard decision focuses the Undo notice it raised: the neutral ring from the keyboard (#161, GM r57)' },
-    'components/moodboard-studio/BoardCanvas.tsx': { count: 1, why: 'the board itself, where focus rests when no tile can take it: the token ring from the keyboard (moodboard-board.css, GM #210 r4)' },
+    'components/panels/settings/ProviderRow.tsx': { count: 1, why: 'a provider row a setup link moves focus to: keeps its :focus-visible ring (design)' },
+    'components/canvas/ProposalBar.tsx': { count: 2, why: 'Review focuses the card, and a keyboard decision focuses the Undo notice it raised: the neutral ring from the keyboard (#161, design)' },
+    'components/moodboard-studio/BoardCanvas.tsx': { count: 1, why: 'the board itself, where focus rests when no tile can take it: the token ring from the keyboard (moodboard-board.css, design, #210)' },
     'components/moodboard-studio/MoodboardStudioView.tsx': { count: 1, why: "the screen's <main>, focused from code with focusVisible: false, so it draws no ring" },
     'lib/threadOpen.ts': { count: 1, why: 'a thread row an Update opened, focused from code: its ring from the keyboard, and the tabindex goes on its blur (messageBox.css [data-focus-target])' },
-    'components/agent-notes/AgentNotesList.tsx': { count: 1, why: 'the Updates list, focused on open: a ring only from the keyboard (GM r37)' },
-    'components/onboarding/OnboardingOverlay.tsx': { count: 1, why: 'the onboarding panel, focused on open: a ring only from the keyboard (GM r37)' },
+    'components/agent-notes/AgentNotesList.tsx': { count: 1, why: 'the Updates list, focused on open: a ring only from the keyboard (design)' },
+    'components/onboarding/OnboardingOverlay.tsx': { count: 1, why: 'the onboarding panel, focused on open: a ring only from the keyboard (design)' },
     'components/proposals/AssetProposalStrip.tsx': { count: 2, why: 'Review focuses it: the neutral ring from the keyboard (#161)' },
     'components/asset-move/AssetMoveMenu.tsx': { count: 1, why: 'menu items, moved through with the arrow keys' },
     'components/panels/Inspector.tsx': { count: 1, why: 'the palette\'s "Extracting colors…" line, focused from code: its own :focus rule draws no ring (#208, panels.css)' },
-    'lib/canvasFocus.ts': { count: 1, why: 'the canvas root, focused after Projects > Open returns to it: no ring around the whole canvas (App.css .react-flow[tabindex="-1"]:focus, review 19 item 6 of PR #199)' },
-    'lib/noticeLeave.ts': { count: 1, why: 'a notice with no ×, or the start of the page: a notice is a status or alert line; the start draws no ring (data-focus-start, GM r38 3d)' },
+    'lib/canvasFocus.ts': { count: 1, why: 'the canvas root, focused after Projects > Open returns to it: no ring around the whole canvas (App.css .react-flow[tabindex="-1"]:focus, PR #199)' },
+    'lib/noticeLeave.ts': { count: 1, why: 'a notice with no ×, or the start of the page: a notice is a status or alert line; the start draws no ring (data-focus-start, design)' },
   };
 
   /** The code-focus rule's :is() list, read from the sheet: what it covers is what the scan
-   * counts as covered, so the two can't drift (round 18h, review 16 focus LOW-1 R9/R10). */
+   * counts as covered, so the two can't drift. */
   const coveredBy = (): Array<(tag: string, element: string) => boolean> => {
     const rule = rules.find((r) => r.file === 'styles/slava-restraint.css'
       && r.selectors.some((sel) => /^body\.app-slava-restraint :is\(.*\)\[tabindex="-1"\]:focus-visible$/.test(sel)));
@@ -563,7 +563,7 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
   it('the handover only ever focuses a heading or a line', () => {
     const hook = readFileSync(join(SRC, 'hooks/useFocusHandover.ts'), 'utf8');
     // Its targets: the control come back (the person's own, ring kept), a line, or the heading.
-    // Round 18h: a line in its place, else the heading at once (never <body>).
+    // A line in its place, else the heading at once (never <body>).
     expect(hook).toMatch(/const line = inPlace \|\| origin \? null : nearestLine\(was, scope\);/);
     expect(hook).toMatch(/const head = heading\(\);/);
     expect(hook.match(/\.focus\(/g)).toHaveLength(2);

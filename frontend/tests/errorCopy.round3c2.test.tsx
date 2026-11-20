@@ -1,7 +1,7 @@
 /**
- * Error copy round 3c, part 2 (GM - Design): every place a node's run error
+ * Error copy, part 2 (design): every place a node's run error
  * reaches the person reads it through nodeErrorCopy, as the node card does.
- * GM's guard: "provider run errors often carry the one fact the person needs
+ * Design's guard: "provider run errors often carry the one fact the person needs
  * ... Don't let the general fallback hide them. On a node with no written
  * line yet, show "Couldn't run the node." with the general line, and put the
  * raw provider text behind the same collapsed "Details" toggle used for
@@ -10,7 +10,7 @@
  * Before this part the Batch card printed `nodeData.error` raw, and the
  * Cinema shot panel printed the shot's error text (the classifier's cut of
  * the raw text) with no heading and no Details. The handoff to motion and
- * the next-step popup said "Could not …" (GM, round 2: never "Could not").
+ * the next-step popup said "Could not …" (design: never "Could not").
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -36,8 +36,8 @@ import { ConnectionLostError } from '../src/lib/errorCopy';
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => resetDeletedSceneEditsForTests());
 
-// Round 3f (GM): "The Cinema shot panel heading: yes, "Couldn't generate the shot."".
-// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// Design: "The Cinema shot panel heading: yes, "Couldn't generate the shot."".
+// Design: a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
 const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
@@ -78,7 +78,7 @@ describe('the Batch card reads its run error like every node card', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(MASK);
   });
 
-  it("shows GM's general line over a closed Details for raw provider text", () => {
+  it("shows design's general line over a closed Details for raw provider text", () => {
     const { container } = render(<BatchNode {...batch({ error: RAW, errorCategory: 'unknown',
       errorFriendly: RAW.slice(0, 140) })} />);
     expect(heading(container)).toBeNull(); // one line, no separate heading
@@ -120,12 +120,12 @@ describe('the Cinema shot panel reads a failed shot like the node card', () => {
     expect(error.querySelector('details')).toBeNull();
   });
 
-  it("shows GM's general line with the full raw text behind a closed Details", () => {
+  it("shows design's general line with the full raw text behind a closed Details", () => {
     const { container } = shotPanel({ status: 'error', error: RAW.slice(0, 40), errorCategory: 'unknown',
       errorFriendly: RAW.slice(0, 40), errorRaw: RAW });
     const error = container.querySelector('.cinema-shot-panel__error')!;
     expect(heading(error)).toBeNull(); // one line, no separate heading
-    // Round 3g (GM): the shot panel's own wording.
+    // Design: the shot panel's own wording.
     expect(reason(error)).toBe('Nebula couldn’t generate the shot. Generate it again. If it keeps failing, open “Details”.');
     const details = error.querySelector('details')!;
     expect(details.open).toBe(false);
@@ -175,7 +175,7 @@ describe('the motion handoff says "Couldn\'t …" and leaves the retry to its bu
   it('a request with no answer', async () => {
     // As apiFetch throws it (typeerror, 2026-10-24: a bare TypeError is not no-answer).
     const alert = await send(async () => { throw new ConnectionLostError(new TypeError('Failed to fetch')); });
-    // Round 3f (GM): "don't stack two "Couldn't"s, and Nebula is local".
+    // Design: "don't stack two "Couldn't"s, and Nebula is local".
     expect(alert.textContent).toBe("Nebula couldn’t confirm the video connection because the server isn’t answering. Try again.");
   });
 

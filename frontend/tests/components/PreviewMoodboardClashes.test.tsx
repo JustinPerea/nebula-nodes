@@ -28,7 +28,7 @@ const DIRECTION = 'Direction: silver tonalist palette';
 const MODE_OFF = 'Measured colors are off for this board';
 
 // Entries as services/moodboard_brief.compose writes them (captured from a
-// real compose() run on the GM board: Direction "silver tonalist palette,
+// real compose() run on the design board: Direction "silver tonalist palette,
 // blue cornflowers", Avoid "red, orange or pink flowers", pin #d03030).
 const BRICK = { hex: '#a6392d', role: 'accent', share: 0.0015, level: 'conflict', reason: AVOID,
   reasons: [AVOID, DIRECTION], foundBy: ['words'], why: 'check' };
@@ -269,7 +269,7 @@ describe('Preview of a Moodboard bundle saved before #90', () => {
   });
 });
 
-// #208 review 2: the node showed only warnings[0], so a too-transparent image's
+// #208: the node showed only warnings[0], so a too-transparent image's
 // line hid the run's own "analyzed it again" (or the other way round).
 describe('the warnings of a run that analyzed the board again', () => {
   const RERUN = 'The board’s saved colors counted transparent areas as dark, so this run analyzed it again. '

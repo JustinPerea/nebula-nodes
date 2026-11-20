@@ -2,17 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 4: review 3 of the agent's step under a Delete, and GM r6.
-// - Review 3, MEDIUM-1: an agent's rename after the person's own rename
+// PR #205: a review of the agent's step under a Delete, and design.
+// - An agent's rename after the person's own rename
 //   landed is kept through a Delete and its Undo (A3, A3b; both orders).
-// - GM r6 item 1 (review 3 LOW-1): each agent edit during a Delete is its
+// - Design: each agent edit during a Delete is its
 //   own step with its own line, newest first, never merged across agents,
 //   on a Delete that goes through and on one Nebula refuses.
-// - GM r6 items 2-3: what Paste, Undo or Redo brings back is the one
+// - Design: what Paste, Undo or Redo brings back is the one
 //   selection (the UI's selected node too), whoever's step it was.
-// - Review 3 LOW-2: this tab's connections in flight keep its way (U6p,
-//   U7p), and the agent's step takes only its node's connections (U17).
-// The harness is review 3's probe file (round 18's fake Nebula).
+// - This tab's connections in flight keep its way, and the agent's step
+//   takes only its node's connections.
+// The harness is the fake Nebula in tests/helpers/undoFakeBackend.ts.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -71,7 +71,7 @@ const wire = (source: string, target: string): FakeWire => ({ id: `w-${source}-$
 const ORDERS = [['gone sync first', true], ['answer first', false]] as const;
 let clock = Date.now();
 
-describe('PR #205 round 4: the agent edits under a Delete', () => {
+describe('PR #205: the agent edits under a Delete', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -127,7 +127,7 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
     emit({ nodes: FakeNebula.syncNodes({ nodes: [n1, ...others], edges: [] }), edges, empty: false, ...extra, edit: { ...who, id } });
   };
 
-  describe('GM r6 item 1: each agent edit is its own step, newest first', () => {
+  describe('each agent edit is its own step, newest first', () => {
     it.each(ORDERS)('%s: Codex, then Claude, edit n1 during the Delete: Undo brings back both, then "Undid Claude’s edit.", then "Undid Codex’s edit.", each its own', async (_label, goneFirst) => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await deleteHeld();
@@ -209,7 +209,7 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
     });
   });
 
-  describe('review 3 MEDIUM-1: an agent\'s rename after the person\'s own rename landed', () => {
+  describe('an agent\'s rename after the person\'s own rename landed', () => {
     it.each(ORDERS)('%s: a sync while the rename was on its way, then its echo and answer, then Codex\'s rename: Undo brings back Codex\'s name', async (_label, goneFirst) => {
       start([{ ...textFakeNode('n1'), label: 'Old' }, textFakeNode('n2')]);
       nebula().holdAnswers = true;
@@ -273,12 +273,12 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
     });
   });
 
-  describe('review 3 LOW-2: connections', () => {
-    it('U7p: the person takes a connection off, then deletes n1 at once; Codex\'s sync still has it: Undo leaves it off', async () => {
+  describe('connections', () => {
+    it('the person takes a connection off, then deletes n1 at once; Codex\'s sync still has it: Undo leaves it off', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [wire('n1', 'n2')]);
       // Codex's sync still has the connection: Nebula read it before the
       // person's writes, so it had Codex's value when it read their echoes
-      // (one socket brings them in the order read; PR #205 round 9).
+      // (one socket brings them in the order read; PR #205).
       nebula().nodes.get('n1')!.params = { value: 'AGENT' };
       nebula().holdAnswers = true;
       nebula().holdEchoes = true;
@@ -294,7 +294,7 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
       expect(wires()).toEqual([]);
     });
 
-    it('U6p: the person connects n1 to n2, then deletes n1 at once; Codex\'s sync lacks it: Undo brings the connection back', async () => {
+    it('the person connects n1 to n2, then deletes n1 at once; Codex\'s sync lacks it: Undo brings the connection back', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       // As U7p: Nebula read Codex's sync before the person's writes.
       nebula().nodes.get('n1')!.params = { value: 'AGENT' };
@@ -312,7 +312,7 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
       expect(wires()).toEqual(['n1>n2']);
     });
 
-    it('U17: the agent\'s step holds only its node\'s connections: Undo, then Redo of it, leaves the others as they are', async () => {
+    it('the agent\'s step holds only its node\'s connections: Undo, then Redo of it, leaves the others as they are', async () => {
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')], [wire('n2', 'n3')]);
       await deleteHeld();
       agentEdits(codex, { ...textFakeNode('n1'), params: { value: 'AGENT' } }, 'ed_u17000000000001', [wire('n1', 'n2'), wire('n2', 'n3')]);
@@ -329,7 +329,7 @@ describe('PR #205 round 4: the agent edits under a Delete', () => {
     });
   });
 
-  describe('GM r6 items 2-3: one selection', () => {
+  describe('one selection (design)', () => {
     it('Undo of an agent\'s delete brings the node back selected, alone, in the UI\'s selection too', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [], ['n1']);
       useUIStore.getState().selectNode('n1');

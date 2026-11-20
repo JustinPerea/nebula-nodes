@@ -155,14 +155,14 @@ describe('ChatModelPicker', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Local model discovery timed out');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     view.rerender(<ChatModelPicker {...state} error={null} catalog={{ ...catalog, models: [] }} />);
-    // A retry can list them again, so the line ends in "Try again." with the button beside it (design r160 answer 5).
+    // A retry can list them again, so the line ends in "Try again." with the button beside it (design).
     expect(screen.getByRole('status').textContent).toBe('Nebula couldn’t find any models in Claude Code. Try again.');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again to load models' }));
     expect(state.onRetry).toHaveBeenCalledOnce();
   });
 
-  it('error-copy round 2: beside its Retry the line is in the because form and ends in "Try again."', () => {
+  it('error-copy: beside its Retry the line is in the because form and ends in "Try again."', () => {
     render(<ChatModelPicker {...props({ error: 'Nebula couldn’t load the models because the server didn’t respond. Try again.' })} />);
     open();
     expect(screen.getByRole('status').textContent).toBe('Nebula couldn’t load the models because the server didn’t respond. Try again.');

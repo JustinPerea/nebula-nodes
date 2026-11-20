@@ -6,7 +6,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import { resolvedStyle } from '../helpers/cssCascade';
 
-// GM r23 on #208: the Add / Extract row fits inside the Inspector. jsdom has
+// Design on #208: the Add / Extract row fits inside the Inspector. jsdom has
 // no layout, so this lays the row out from the app's own stylesheets
 // (helpers/cssCascade): the floating Inspector at its minimum width, less
 // every padding and border down to the row, shared by the two buttons as
@@ -79,7 +79,7 @@ function show() {
   );
 }
 
-describe.each([['the default skin', ''], ['Slava', 'app-slava-restraint']])('the Add / Extract row fits the Inspector at its minimum width (GM r23), %s', (_, skin) => {
+describe.each([['the default skin', ''], ['Slava', 'app-slava-restraint']])('the Add / Extract row fits the Inspector at its minimum width, %s', (_, skin) => {
   it('keeps both buttons inside the panel content box', () => {
     document.body.className = skin;
     const { container } = show();

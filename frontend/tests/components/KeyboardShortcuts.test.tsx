@@ -37,7 +37,7 @@ describe('KeyboardShortcuts', () => {
     field.remove();
   });
 
-  it('GM r94.2: "/" names the agent as the Message box does', () => {
+  it('"/" names the agent as the Message box does (design)', () => {
     render(<KeyboardShortcuts />);
     fireEvent.keyDown(document.body, { key: '?', shiftKey: true });
     const row = () => screen.getByText((_, el) => el?.tagName === 'DT' && /^Message /.test(el.textContent ?? ''));

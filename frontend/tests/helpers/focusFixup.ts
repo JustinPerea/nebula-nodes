@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18l (review 17 MEDIUM-1): jsdom has no focus fixup. Chrome, when the focused
+ * PR #204: jsdom has no focus fixup. Chrome, when the focused
  * element becomes disabled or lands under [inert], blurs it at the next rendering update and focus
  * falls to <body>. jsdom leaves focus on the disabled control, so a test can pass while the real
  * page drops focus. This helper copies Chrome: a MutationObserver on `disabled` and `inert` that

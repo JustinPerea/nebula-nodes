@@ -1,6 +1,6 @@
 /**
- * Error copy round 3e, item 3 (GM - Design): the last "Could not" and
- * developer-worded lines. GM: "Write 'Couldn't {verb} {object}.' then the
+ * Error copy (design): the last "Could not" and
+ * developer-worded lines. Design: "Write 'Couldn't {verb} {object}.' then the
  * reason, never 'Could not'"; no "failed:", no internal words ("backend
  * status", "durably", "Run remains locked").
  *
@@ -47,7 +47,7 @@ describe('provider readiness', () => {
 
 describe('a step written in the browser', () => {
   // Plain Errors with written lines ("The project didn't open. Try again.")
-  // read GM's general line once their catch went through failureMessage; a
+  // read design's general line once their catch went through failureMessage; a
   // writtenLine keeps its words and takes no heading.
   it('reads word for word under any catch', () => {
     expect(failureMessage(writtenLine("The project didn't open. Try again."), "Couldn't update the note."))

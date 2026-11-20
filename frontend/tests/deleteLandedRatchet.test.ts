@@ -1,18 +1,18 @@
 // fix/ci-flakes-rename-fix16: a fake backend's "deleted" flag flips when the
 // DELETE arrives, before it answers. Until the answer the product drops an
-// Undo ("Nothing was undone. Your last change was still saving.", GM r18
-// option (c)) and holds a sync that brings the node back, so a test that
+// Undo ("Nothing was undone. Your last change was still saving.", design)
+// and holds a sync that brings the node back, so a test that
 // waits on the flag and then presses Undo (or restores from another window)
 // races the answer. graphStore.fix16 "nothing unsaved" lost that race on a
 // busy CI runner (run 41591009433, attempt 1), and the scene edit it left
 // aside failed the next test too; graphStore.fix18 "asked again (the
 // person's delete and Undo): Codex's edit to another field…" lost it on #219
 // (Undo dropped, its waitFor timed out at 3 s). A fixed sleep between the
-// delete and the Undo is the same race with a deadline (PR #221 review 1
-// MEDIUM-2: fix24 and fix21stops A2 failed with the answer stalled 350 ms).
+// delete and the Undo is the same race with a deadline (PR #221:
+// fix24 and fix21stops A2 failed with the answer stalled 350 ms).
 // Tests wait on helpers/deleteLanded.ts instead.
 //
-// The check, read from each test file's syntax tree (review 1 LOW-2), so
+// The check, read from each test file's syntax tree, so
 // comments and strings never count as code:
 // - Flag: a waitFor or waitUntil (vi's, RTL's, any receiver) whose
 //   callback, expression or block, reads a `deleted` property (`x.deleted`,
@@ -21,10 +21,10 @@
 //   not.toBe(true), not.toBeTruthy()); in a waitUntil, `!x.deleted` and
 //   `x.deleted === false` wait for false too. A `{ deleted: true }` in the
 //   callback (toMatchObject, objectContaining) counts as a read of true
-//   (PR #221 review 2 LOW-1). So toBe(true), toBeTruthy(), toEqual(true),
+//   (PR #221). So toBe(true), toBeTruthy(), toEqual(true),
 //   `if (!x.deleted) throw …`, `expect(x.deleted === true)` and
 //   `waitUntil(() => x.deleted)` are all caught.
-// - Wait before Undo (review 2 LOW-1 inverted it: it names what makes a wait
+// - Wait before Undo (inverted: it names what makes a wait
 //   safe, not the waits that aren't): in one block, a delete, then any wait,
 //   then an Undo, with no landing between the delete and the Undo.
 //   - A delete: deleteNode, deleteNodes, deleteSelected, or the Delete or
@@ -121,7 +121,7 @@ function untilFalse(read: ts.Node): boolean {
   return assertsFalse(read);
 }
 
-/** `{ deleted: true }` (toMatchObject, objectContaining): the flag by shape (review 2 LOW-1). */
+/** `{ deleted: true }` (toMatchObject, objectContaining): the flag by shape. */
 const isDeletedTrue = (node: ts.Node) => ts.isPropertyAssignment(node) && (ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name))
   && node.name.text === 'deleted' && node.initializer.kind === ts.SyntaxKind.TrueKeyword;
 
@@ -154,7 +154,7 @@ function expectsNotice(literal: ts.Node): boolean {
 /**
  * The delete has landed: an awaited deleteLanded, an awaited waitFor or
  * waitUntil whose callback expects the notice, or an awaited findBy… of the
- * notice. Review 2 LOW-1: the notice text anywhere else (a negated matcher,
+ * notice. The notice text anywhere else (a negated matcher,
  * a plain expect, a string) is no landing.
  */
 function isLanding(node: ts.Node): boolean {
@@ -231,7 +231,7 @@ const within = (root: ts.Node, from: number, to: number, test: (node: ts.Node) =
 
 /**
  * From a delete at statement i of a block: whether an Undo follows with a
- * wait between them and no landing (review 2 LOW-1: the rule names what
+ * wait between them and no landing (the rule names what
  * makes a wait safe, not the waits that aren't). Positions, not statements,
  * so `await act(async () => { del(); await sleep(300); })` then Undo counts.
  */
@@ -288,7 +288,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
   const caught: Array<[string, string]> = [
     ['the flag wait the harnesses used', `${H}await vi.waitFor(() => expect(h.state.deleted).toBe(true), { timeout: 3000, interval: 5 });`],
     ['a flag on a map entry', "await vi.waitFor(() => expect(h.scenes.get('n7')!.deleted).toBe(true), { timeout: 2000 });"],
-    // Review 1 LOW-2: equivalent forms.
+    // Equivalent forms.
     ['a block body', `${H}await vi.waitFor(() => { expect(h.state.deleted).toBe(true); });`],
     ['toBeTruthy', `${H}await vi.waitFor(() => expect(h.state.deleted).toBeTruthy());`],
     ['toEqual(true)', `${H}await vi.waitFor(() => expect(h.state.deleted).toEqual(true));`],
@@ -299,7 +299,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
     ['an element access', `${H}await vi.waitFor(() => expect(h.state['deleted']).toBe(true));`],
     ['RTL waitFor', `${H}await waitFor(() => expect(h.state.deleted).toBe(true));`],
     ['a function expression', `${H}await vi.waitFor(function () { expect(h.state.deleted).toBe(true); });`],
-    // Review 1 MEDIUM-2: a fixed sleep between the delete and its Undo.
+    // A fixed sleep between the delete and its Undo.
     ['sleep then Undo', `${DEL}\nawait sleep(300);\n${UNDO_CALL}`],
     ['sleep, release, sleep, Undo', `${DEL}\nawait sleep(60);\nrelease();\nawait sleep(100);\n${UNDO_CALL}`],
     ['a setTimeout promise then Undo', `${DEL}\nawait new Promise((r) => setTimeout(r, 100));\n${UNDO_CALL}`],
@@ -307,7 +307,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
     ['deleteSelected then sleep then Undo', `useGraphStore.getState().deleteSelected();\nawait sleep(50);\n${UNDO_CALL}`],
     ['deleteLanded only in a comment', `${DEL}\n// await deleteLanded(useGraphStore);\nawait sleep(300);\n${UNDO_CALL}`],
     ['an opt-out with no reason', `// delete-landed-ratchet: off\n${DEL}\nawait sleep(300);\n${UNDO_CALL}`],
-    // Review 2 LOW-1: the planted forms that were missed.
+    // The planted forms that were missed.
     ['a sleep inside act()', `${DEL}\nawait act(async () => { await sleep(300); });\n${UNDO_CALL}`],
     ['act() around a setTimeout promise', `${DEL}\nawait act(() => new Promise((r) => setTimeout(r, 300)));\n${UNDO_CALL}`],
     ['the delete and the sleep in one act(), Undo after', `await act(async () => { ${DEL} await sleep(300); });\n${UNDO_CALL}`],

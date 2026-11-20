@@ -1,6 +1,6 @@
 /**
- * PR #203 round 12, review 11 copy LOW-3: the Inspector's Krea notice says
- * GM r21's one verb, "Sign in to Krea in Settings" (mutant F15 put the old
+ * PR #203: the Inspector's Krea notice says
+ * design's one verb, "Sign in to Krea in Settings" (a mutant put the old
  * "Connect or check Krea in Settings." back and every test passed).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';

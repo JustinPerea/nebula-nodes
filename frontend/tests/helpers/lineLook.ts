@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18 (GM r28 1): a Commons line's look as the app's stylesheets give it
+ * PR #204 (design): a Commons line's look as the app's stylesheets give it
  * (tests/helpers/cssCascade): its ink, and that it draws no left bar.
  */
 import { cascaded } from './cssCascade';
@@ -27,7 +27,7 @@ export function leftBar(box: Element): boolean {
   });
 }
 const LEFT_BAR_PROPS = ['border-left', 'border-left-width', 'border-inline-start', 'border-inline-start-width', 'border-width', 'box-shadow'];
-/** Round 18c (GM r30 1): the box's fill, the winner of `background` and `background-color`. */
+/** Design: the box's fill, the winner of `background` and `background-color`. */
 export function lineFill(box: Element): string {
   const won = cascaded(box);
   const rank = (w?: { important: boolean; specificity: [number, number, number]; order: number }) =>

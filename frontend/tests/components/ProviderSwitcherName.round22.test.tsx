@@ -8,7 +8,7 @@ import type { ModelNodeDefinition } from '../../src/types';
 
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
 
-// GM's open flag (PR #203 r20 item 3): the switcher's accessible description still named the node's
+// Design's open flag (PR #203): the switcher's accessible description still named the node's
 // type ("FLUX 3 Image") on a node the person renamed. Its stop line already named the node's own name.
 const FLUX3 = NODE_DEFINITIONS['flux-3-image'] as ModelNodeDefinition;
 beforeEach(() => usePricingStore.setState({ table: (pricingCases as unknown as { pricing: never }).pricing, loading: false }));

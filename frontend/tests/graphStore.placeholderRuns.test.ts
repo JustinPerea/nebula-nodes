@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Q133 (Justin, 2026-10-25, option b) on every way the canvas runs the
- * person's direct run (review 3, findings 1 and 7): a Cinema shot (the panel's
+ * Justin, 2026-10-25: on every way the canvas runs the
+ * person's direct run, a Cinema shot (the panel's
  * Generate) and a replay of a node run or a shot from Run history make the
- * placeholders feeding them run, so a paid one asks first in GM's dialog and
+ * placeholders feeding them run, so a paid one asks first in design's dialog and
  * the run carries what the person confirmed. A shot is priced as the one shot
  * it generates, times its variations, as the backend checks it.
  */
@@ -17,7 +17,7 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 }));
 const askMock = vi.hoisted(() => vi.fn());
 vi.mock('../src/components/askPlaceholderRun', () => ({ askPlaceholderRun: askMock }));
-/** The person clicks Run on the words the dialog showed (it hands them back: review 5, L6). */
+/** The person clicks Run on the words the dialog showed (it hands them back). */
 const yes = async (model: unknown) => model;
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() } }));
 
@@ -74,7 +74,7 @@ describe('the person\'s direct runs over a paid placeholder', () => {
     vi.restoreAllMocks();
   });
 
-  describe('a Cinema shot (finding 1)', () => {
+  describe('a Cinema shot', () => {
     it('asks first, and Cancel generates nothing and leaves the shot as it was', async () => {
       askMock.mockResolvedValue(null);
       const shot = vi.spyOn(api, 'generateCinemaShot');
@@ -83,7 +83,7 @@ describe('the person\'s direct runs over a paid placeholder', () => {
       expect(askMock.mock.calls[0][0]).toMatchObject({
         heading: 'Run 1 node Codex is still setting up?', confirmIds: ['a'],
         // One shot of the base model plus the placeholder, twice (two variations).
-        // From Cinema the button says Generate (GM - Design, round 6, item 3).
+        // From Cinema the button says Generate (design).
         totalLine: 'This run could cost up to $2.40 at list prices.', runLabel: 'Generate for $2.40',
       });
       expect(shot).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('the person\'s direct runs over a paid placeholder', () => {
     });
   });
 
-  describe('a replay from Run history (finding 7)', () => {
+  describe('a replay from Run history', () => {
     const snapshotNodes = [
       { id: 'a', definitionId: 'nano-banana', params: {}, outputs: {} },
       { id: 'b', definitionId: 'nano-banana', params: {}, outputs: {} },

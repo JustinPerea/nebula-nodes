@@ -1,7 +1,7 @@
 /**
- * Error copy round 3b, item 2: every retry button redoes the failure it sits
- * beside (GM: "A Retry that does something else is a defect."), and the
- * reason is GM's short line only where it does.
+ * Error copy: every retry button redoes the failure it sits
+ * beside (design: "A Retry that does something else is a defect."), and the
+ * reason is design's short line only where it does.
  *
  * - A Studio with no project open said "No project is open. Open one from
  *   Projects to use its assets." beside "Retry loading", which only checked

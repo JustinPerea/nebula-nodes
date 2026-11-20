@@ -1,12 +1,12 @@
 /**
- * PR #204 round 18h (GM r38 3a): every Commons line that ends "Try again." ends in a Try again
+ * PR #204 (design): every Commons line that ends "Try again." ends in a Try again
  * button that does it, the loaded-state lines too (Agent review's 5 s re-read keeps polling; the
  * button reads at once). Every Commons line goes through CommonsErrorLine, which renders the
  * button for a load's line when it is given `onRetry` (errorCopy retryStem). So:
  *
  * 1. Every <CommonsErrorLine> in src passes `onRetry`, except the few below, each with why.
  * 2. With `onRetry` a load line ending "Try again." has the button (the full stop after it, outside
- *    it); without `onRetry` it has none and ends at its reason instead (round 18i, GM r39 1c:
+ *    it); without `onRetry` it has none and ends at its reason instead (design:
  *    "Try again." always means a button); an action's line has none.
  */
 import { cleanup, render, screen } from '@testing-library/react';
@@ -28,7 +28,7 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
 /** file → how many of its CommonsErrorLine may go without `onRetry`, and why. */
 const NO_RETRY: Record<string, { count: number; why: string }> = {
   'components/commons/CommonsOffView.tsx': { count: 1, why: 'shows only the Commons-off line, which says to restart Nebula and never ends "Try again."' },
-  'components/commons/CommonsCloseBatch.tsx': { count: 1, why: 'an action’s line only: a button there would send the close again. Its "Try again." points at the Close button right beside it (round 18i, GM r39 1b, measured live: the same row in Blind labeling, the next row in Agent review, nothing between)' },
+  'components/commons/CommonsCloseBatch.tsx': { count: 1, why: 'an action’s line only: a button there would send the close again. Its "Try again." points at the Close button right beside it (measured live: the same row in Blind labeling, the next row in Agent review, nothing between)' },
 };
 
 function linesWithoutRetry(source: string, name: string): number {
@@ -44,7 +44,7 @@ function linesWithoutRetry(source: string, name: string): number {
   return count;
 }
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 afterEach(() => { cleanup(); resetLinesForTests(); });
 
@@ -72,7 +72,7 @@ describe('every Commons line ending "Try again." has the button', () => {
     expect(button.nextSibling?.textContent).toBe('.');
   });
 
-  it('without onRetry the same line has no button, and no "Try again." either (GM r39 1c)', () => {
+  it('without onRetry the same line has no button, and no "Try again." either', () => {
     render(<CommonsErrorLine line={LOAD} />);
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(document.querySelector('[data-commons-line]')?.textContent).toBe('Nebula couldn’t load Agent review because the server hit an error.');
@@ -84,7 +84,7 @@ describe('every Commons line ending "Try again." has the button', () => {
   });
 });
 
-describe('the Try again hand-off when its line goes (review 16 NIT-2 N6, N7)', () => {
+describe('the Try again hand-off when its line goes', () => {
   const LINE = 'Nebula couldn’t load the collections because the server didn’t respond. Try again.';
   const Page = ({ line }: { line: string | null }) => (
     <div className="commons-view">
@@ -94,7 +94,7 @@ describe('the Try again hand-off when its line goes (review 16 NIT-2 N6, N7)', (
     </div>
   );
 
-  it('N6: a button without focus hands nothing on: focus that was elsewhere stays put', async () => {
+  it('a button without focus hands nothing on: focus that was elsewhere stays put', async () => {
     const view = render(<Page line={LINE} />);
     expect(document.activeElement).toBe(document.body);
     view.rerender(<Page line={null} />);
@@ -102,7 +102,7 @@ describe('the Try again hand-off when its line goes (review 16 NIT-2 N6, N7)', (
     expect(document.activeElement).toBe(document.body);
   });
 
-  it('N7: focus moved on before the hand-off runs is left where it went', async () => {
+  it('focus moved on before the hand-off runs is left where it went', async () => {
     const view = render(<Page line={LINE} />);
     screen.getByRole('button', { name: 'Try again' }).focus();
     view.rerender(<Page line={null} />);

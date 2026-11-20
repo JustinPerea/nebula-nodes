@@ -17,7 +17,7 @@ interface FakeGraph {
   authorGenerationCluster: (...args: unknown[]) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
   executeClusterConcurrent: (...args: unknown[]) => Promise<void>;
   cancelCreateGeneration: () => void; cancelRun: () => Promise<void>; deleteGeneration: () => void;
-  // GM r8 (3), #204 r7: Generate's lines go to the app's notice region.
+  // Design (#204): Generate's lines go to the app's notice region.
   messageNotice: { text: string } | null; undoNotice: null; notify: (text: string) => void;
 }
 const mocks = vi.hoisted(() => ({
@@ -169,7 +169,7 @@ describe('Create draft integration', () => {
     await act(async () => { await beforeAttach(); });
     expect(mocks.author).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
     await act(async () => { finish({ ok: false, status: 413, json: async () => ({ detail: 'Image exceeds 20 MB limit' }) }); });
-    // error-copy round 2 (GM): "Couldn't upload {filename}." then the reason.
+    // error-copy (design): "Couldn't upload {filename}." then the reason.
     expect(await view.findByText('Nebula couldn’t upload “slow.png” because it’s over the 20 MB limit.')).toBeInTheDocument();
     expect(view.getByRole('button', { name: 'Generate' })).toBeDisabled();
     await act(async () => { await mocks.directGenerate!(); });
@@ -185,7 +185,7 @@ describe('Create draft integration', () => {
     mocks.fetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'Upload storage unavailable' }) });
     const view = render(<CreateView />);
     fireEvent.change(view.getByLabelText('Attach reference'), { target: { files: [image('retry.png')] } });
-    // A 503 says GM's line, short beside the chip's Retry (WRAP rule).
+    // A 503 says design's line, short beside the chip's Retry (WRAP rule).
     expect(await view.findByText('Nebula couldn’t upload “retry.png” because the server didn’t respond. Try again.')).toBeInTheDocument();
     fireEvent.change(view.getByRole('textbox', { name: 'Create prompt' }), { target: { value: 'Newer draft while uploading' } });
     fireEvent.click(view.getByRole('button', { name: 'Try again to upload “retry.png”' }));

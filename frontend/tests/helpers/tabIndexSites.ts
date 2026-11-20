@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18h (review 16 focus LOW-1): every place src gives an element tabindex -1, found
+ * PR #204: every place src gives an element tabindex -1, found
  * from the syntax tree rather than one spelling: `tabIndex={-1}`, `tabIndex="-1"`,
  * `tabIndex={ -1 }`, `tabIndex={cond ? -1 : undefined}`, `{ tabIndex: -1 }` in a spread,
  * `el.tabIndex = -1` and `setAttribute('tabindex', '-1')`, in .ts and .tsx alike.

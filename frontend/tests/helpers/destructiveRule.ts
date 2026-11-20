@@ -6,12 +6,11 @@ import selectorParser from 'postcss-selector-parser';
 import { cascaded } from './cssCascade';
 
 /**
- * GM r13 and r14's rule for red, enforced by what controls say and do, not
- * how they're named (fix rounds 9 and 10 of PR #200, reviews 8 LOW-2 and 9
- * LOW-4):
+ * Design's rule for red, enforced by what controls say and do, not
+ * how they're named (PR #200):
  * - Red: it deletes a standalone thing (project, node, asset, result, agent, API key, app token), or wipes a whole surface (Clear, Purge, Discard). Undo doesn't change this (node Delete stays red).
  * - Neutral: it takes an item out of a list inside the thing you're editing (chips, swatches, tags, a shot in a scene, an item on a board, a character view).
- * GM r16: Krea Disconnect is red; an agent's Sign out, Resets and Erase are neutral.
+ * Design: Krea Disconnect is red; an agent's Sign out, Resets and Erase are neutral.
  *
  * A control is found by its words (aria-label, title, visible text, an
  * input's value; any case, anywhere in the label; i18n keys read as words)
@@ -35,7 +34,7 @@ export const ACTION_WORD = /\b(?:delet(?:e|es|ed|ing)|clear(?:s|ed|ing)?|discard
 const RED_SAYS = /\b(?:delet(?:e|es|ed|ing)|clear(?:s|ed|ing)?|discard(?:s|ed|ing)?|purg(?:e|es|ed|ing)|trash(?:es|ed|ing)?|empty|revok(?:e|es|ed|ing)|forget|wip(?:e|es|ed|ing)|uninstall(?:s|ed|ing)?|disconnect(?:s|ed|ing)?)\b/i;
 const NEUTRAL_SAYS = /\b(?:reset(?:s|ting)?|eras(?:e|es|ed|ing)|sign out)\b/i;
 /**
- * Red words on a control GM's rule makes neutral (GM r14: an edit inside the
+ * Red words on a control design's rule makes neutral (design: an edit inside the
  * thing): a search or a filter cleared, and the comparison emptied. Each was
  * reviewed; a new one is a finding until it is added here.
  */
@@ -46,15 +45,15 @@ export const REVIEWED_NEUTRAL: Array<{ file?: string; name: RegExp }> = [
   // PR #199: the restore notice's "Open Recently deleted" opens that list on
   // the Projects home; it deletes nothing.
   { file: 'components/projects/ProjectHome.tsx', name: /^Open Recently deleted$/ },
-  // PR #199 round 25 (GM r24): the kept notice's [Choose a project to delete]
+  // PR #199 (design): the kept notice's [Choose a project to delete]
   // opens the chooser; it deletes nothing (each Delete in it is red).
   { file: 'components/projects/KeptEditsNotice.tsx', name: /^Choose a project to delete$/ },
-  // Round 23 moved the notice into its own lazy file (the first-load split).
+  // moved the notice into its own lazy file (the first-load split).
   { file: 'components/projects/ProjectHomeNotices.tsx', name: /^Open Recently deleted$/ },
 ];
 
 const RED_WORDS = 'danger|destructive|delete|purge|trash|discard|clear|wipe|revoke|forget|bin|disconnect|uninstall';
-// `--neutral` declares the kind where no word fits (an agent's Sign out, GM r16 answer 1).
+// `--neutral` declares the kind where no word fits (an agent's Sign out, design).
 const NEUTRAL_WORDS = 'remove|reset|erase|neutral';
 const RED_CLASS = new RegExp(`(?:^|[_-])(?:${RED_WORDS})$`, 'i');
 const NEUTRAL_CLASS = new RegExp(`(?:^|[_-])(?:${NEUTRAL_WORDS})$`, 'i');
@@ -76,7 +75,7 @@ export function wordKind(name: string, file?: string): Kind | null {
   return null;
 }
 
-/** A control whose class kind contradicts its words (review 9 LOW-4: `<button className="x__remove">Delete project</button>`). */
+/** A control whose class kind contradicts its words (`<button className="x__remove">Delete project</button>`). */
 export function wordFindings(control: Control): string[] {
   const says = wordKind(control.name, control.file);
   if (!says || !control.kind || says === control.kind) return [];
@@ -198,9 +197,9 @@ export function badColours(value: string, kind: Kind, vars: Vars, depth = 0): st
   return bad;
 }
 
-/** Every property that can paint a colour (review 9 LOW-4: logical borders, accent-color, -webkit-text-fill-color …). */
+/** Every property that can paint a colour (logical borders, accent-color, -webkit-text-fill-color …). */
 const COLOUR_PROPERTY = /color|background|border|outline|shadow|fill|stroke|filter/;
-/** A focus ring: the only colour a focus rule may give a control of any kind (the keyboard ring, r17). */
+/** A focus ring: the only colour a focus rule may give a control of any kind (the keyboard ring). */
 const FOCUS_RING = /^(outline|box-shadow)/;
 
 // ---------------------------------------------------------------- stylesheets
@@ -330,8 +329,7 @@ export interface Control {
   toggle?: boolean;
   /** The JSX elements around it, outermost first: [tag, classes]. */
   ancestors: Array<[string, string[]]>;
-  /** The other JSX elements inside its parent, with what they hold (GM r22
-   * Q2, PR #200 fix round 14: a frame near a red control, not only round it). */
+  /** The other JSX elements inside its parent, with what they hold (design, PR #200: a frame near a red control, not only round it). */
   near?: JsxTree[];
 }
 
@@ -345,25 +343,25 @@ function strings(node: ts.Node, source: ts.SourceFile, calls = true): string[] {
   const visit = (n: ts.Node): void => {
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
       out.push(n.text);
-      // A key read as words: 'actions.delete', and camelCase too (review 11 NIT-4: t("deleteProject")).
+      // A key read as words: 'actions.delete', and camelCase too (t("deleteProject")).
       if (KEY_LIKE.test(n.text) || CAMEL_KEY.test(n.text)) out.push(keyWords(n.text));
     }
     else if (ts.isTemplateExpression(n)) out.push(n.head.text + n.templateSpans.map((span) => `…${span.literal.text}`).join(''));
     else if (ts.isJsxText(n)) { if (n.text.trim()) out.push(n.text.trim()); }
     // A nested element's attributes (its className, its own label) aren't the control's words.
     else if (ts.isJsxAttributes(n)) return;
-    // i18n read as words: strings.deleteProject, messages.actions.clear (review 9 LOW-4).
+    // i18n read as words: strings.deleteProject, messages.actions.clear.
     else if ((ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) && !ts.isCallExpression(n.parent)
       && (ts.isJsxExpression(n.parent) || ts.isPropertyAccessExpression(n.parent) || ts.isElementAccessExpression(n.parent))) {
       const path = accessPath(n);
       if (path.length) out.push(camelWords(path[path.length - 1]));
-      // An object's property (review 10 NIT-4): const L = { del: 'Delete' }; {L.del}; nested and
-      // bracketed too (review 11 NIT-4): {L.a.del}, {L["del"]}. Only the whole access, once.
+      // An object's property: const L = { del: 'Delete' }; {L.del}; nested and
+      // bracketed too: {L.a.del}, {L["del"]}. Only the whole access, once.
       if (path.length > 1 && !ts.isPropertyAccessExpression(n.parent) && !ts.isElementAccessExpression(n.parent)) {
         out.push(...objectStrings(path[0], path.slice(1), source));
       }
     }
-    // A label from a function (review 10 NIT-4): {label()}, {labelFor(x)}; its arguments too (t('actions.delete')).
+    // A label from a function: {label()}, {labelFor(x)}; its arguments too (t('actions.delete')).
     // Only a call that is the label itself (its arguments are data, not the
     // label), and only on a button: a clickable card's text is content.
     else if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
@@ -371,7 +369,7 @@ function strings(node: ts.Node, source: ts.SourceFile, calls = true): string[] {
       n.arguments.forEach((arg) => out.push(...strings(arg, source, false)));
     }
     else if (ts.isIdentifier(n) && ts.isJsxExpression(n.parent)) out.push(...constStrings(n.text, source));
-    // Markup from a variable (review 11 NIT-4): dangerouslySetInnerHTML={{ __html: html }}.
+    // Markup from a variable: dangerouslySetInnerHTML={{ __html: html }}.
     else if (ts.isIdentifier(n) && ts.isPropertyAssignment(n.parent) && n.parent.initializer === n
       && n.parent.name.getText(source) === '__html') out.push(...constStrings(n.text, source));
     else ts.forEachChild(n, visit);
@@ -412,9 +410,9 @@ function constStrings(name: string, source: ts.SourceFile, depth = 0): string[] 
 
 /** A string that reads as an i18n key ('actions.delete', 'btn.rm', 'delete_project'). */
 const KEY_LIKE = /^[a-z][\w-]*(?:[._][\w-]+)+$/i;
-/** A camelCase key ('deleteProject'), review 11 NIT-4. */
+/** A camelCase key ('deleteProject'). */
 const CAMEL_KEY = /^[a-z]+(?:[A-Z][a-z0-9]+)+$/;
-/** Short forms a key uses for an action word (review 10 NIT-4: t("btn.rm")). */
+/** Short forms a key uses for an action word (t("btn.rm")). */
 const SHORT_FORMS: Record<string, string> = { rm: 'remove', del: 'delete', rmv: 'remove', clr: 'clear', disc: 'disconnect' };
 /** A key's words: split on dots, underscores, dashes and case, short forms spelled out. */
 function keyWords(key: string): string {
@@ -491,10 +489,10 @@ function functionStrings(name: string, source: ts.SourceFile): string[] {
 
 /**
  * What an icon-only control (no words at all) does, read from its code
- * (review 10 NIT-4): its icons (<Trash2 /> is "Trash") and the handlers it
+ * Its icons (<Trash2 /> is "Trash") and the handlers it
  * calls (onClick={() => deleteProject(id)} is "delete Project").
  */
-/** Icons named for a tool, not its action (review 11 NIT-4: <Eraser /> erases). */
+/** Icons named for a tool, not its action (<Eraser /> erases). */
 const ICON_WORDS: Record<string, string> = { Eraser: 'Erase', Trash: 'Trash', Delete: 'Delete', Remove: 'Remove' };
 
 function codeWords(open: Opening, source: ts.SourceFile): string[] {
@@ -594,7 +592,7 @@ function childrenOf(open: Opening): readonly ts.JsxChild[] {
 function wordsOf(open: Opening, source: ts.SourceFile, direct = false): string[] {
   const children = childrenOf(open).filter((child) => !direct || ts.isJsxText(child) || ts.isJsxExpression(child) || ts.isJsxFragment(child));
   const texts = children.flatMap((child) => strings(child, source, !direct));
-  // Markup set as HTML (review 10 NIT-4): its text, tags dropped.
+  // Markup set as HTML: its text, tags dropped.
   const html = attrStrings(open, 'dangerouslySetInnerHTML', source).map((h) => h.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
   return [...attrStrings(open, 'aria-label', source), ...attrStrings(open, 'title', source), ...attrStrings(open, 'value', source),
     ...attrStrings(open, 'label', source), ...html, texts.join(' ').replace(/\s+/g, ' ').trim(), texts.join(''), ...texts];
@@ -733,7 +731,7 @@ function callsOf(forwarder: Forwarder, source: ts.SourceFile, file: string): Con
  */
 export function controlsInFiles(files: Record<string, string>): Control[] {
   const scanned = Object.entries(files).map(([file, tsx]) => ({ file, ...scan(tsx, file) }));
-  // A component imported from a file outside the set (review 10 NIT-4): read
+  // A component imported from a file outside the set: read
   // from disk for its forwarders, so a label passed to it is still seen.
   const outside = new Map<string, Forwarder[]>();
   for (const { source } of scanned) {
@@ -803,7 +801,7 @@ function built(control: Control, classes: readonly string[] = control.classes, p
   }
   const el = document.createElement('button');
   el.className = classes.join(' ');
-  // A toggle carries its state (review 11 NIT-4: [aria-pressed="false"]:hover),
+  // A toggle carries its state ([aria-pressed="false"]:hover),
   // and every control an icon (`:hover svg { fill }`).
   if (pressed) el.setAttribute('aria-pressed', pressed);
   el.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
@@ -824,7 +822,7 @@ const INHERITS = /^(color|caret-color|accent-color|-webkit-text-fill-color|text-
 export function cascadeFindings(control: Control, vars: Vars, extraCss?: string): string[] {
   if (!control.kind) return [];
   if (!control.toggle) return stateFindings(control, control.classes, vars, extraCss, false, '');
-  // A toggle (review 10 LOW-1, GM r17 item 1): on, its accent marks its
+  // A toggle (design): on, its accent marks its
   // state, so a neutral one may take it; off (its state class gone), it may
   // not, at rest or on hover, so hovering never looks like "on".
   const off = control.classes.filter((name) => !TOGGLE_STATE.test(name));
@@ -835,7 +833,7 @@ export function cascadeFindings(control: Control, vars: Vars, extraCss?: string)
 }
 
 /** A class that says a toggle is on. */
-// Review 11 NIT-4: `is-on` and `--fav` too.
+// `is-on` and `--fav` too.
 export const TOGGLE_STATE = /(?:--(?:active|on|selected|pressed|checked|current|starred|fav|favorite|favourite)|^is-(?:on|active|selected|pressed|checked))$/;
 
 function stateFindings(control: Control, classes: readonly string[], vars: Vars, extraCss: string | undefined,
@@ -865,7 +863,7 @@ function stateFindings(control: Control, classes: readonly string[], vars: Vars,
         .filter((b) => !(accentAllowed && control.kind === 'neutral' && /^(?:[\w-]+: )*var\(--sr-accent[\w-]*[,)]/.test(b)));
       if (bad.length) found.push(`${control.file}:${control.line} "${control.name}"${label} ${state || 'rest'} ${prop}: ${bad.join(' ')} (from ${from}, ${control.kind})`);
     }
-    // Its icon (review 11 NIT-4: `.x:hover svg { fill: accent }`): what a rule
+    // Its icon (`.x:hover svg { fill: accent }`): what a rule
     // gives the svg inside it, in each state, keeps its kind too.
     const icon = el.querySelector('svg');
     if (icon) {
@@ -886,7 +884,7 @@ function stateFindings(control: Control, classes: readonly string[], vars: Vars,
   return [...new Set(found)];
 }
 
-/** The warning amber: a frame colour as loud as the accent (GM r18). */
+/** The warning amber: a frame colour as loud as the accent (design). */
 const WARNING_VAR = /^--sr-warning(?:-[\w-]+)?$/;
 /** Amber and yellow-orange hues the warm check leaves out (#f5c518 is 48 degrees). */
 function amberRgb(red: number, green: number, blue: number): boolean {
@@ -899,13 +897,13 @@ function amberRgb(red: number, green: number, blue: number): boolean {
 }
 function amberColours(value: string): string[] {
   const out: string[] = [];
-  // Review 13 NIT-4: the 8- and 4-digit forms too (#f5c518cc, #fc1c).
+  // The 8- and 4-digit forms too (#f5c518cc, #fc1c).
   for (const match of value.matchAll(/#([0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b/gi)) {
     const short = match[1].length <= 4;
     const hex = short ? [...match[1].slice(0, 3)].map((c) => c + c).join('') : match[1].slice(0, 6);
     if (amberRgb(...([0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]))) out.push(match[0]);
   }
-  // Review 12 NIT-2: rgb() and rgba() too (a gradient of rgba(245,197,24,.2)).
+  // rgb() and rgba() too (a gradient of rgba(245,197,24,.2)).
   for (const match of value.matchAll(/rgba?\(([^)]*)\)/gi)) {
     const [r, g, b] = parts(match[1]).slice(0, 3).map((part) => (part.endsWith('%') ? parseFloat(part) * 2.55 : Number(part)));
     if (amberRgb(r, g, b)) out.push(match[0]);
@@ -914,7 +912,7 @@ function amberColours(value: string): string[] {
 }
 
 /**
- * GM r18 (PR #200 fix round 12): orange never frames a destructive action.
+ * Design (PR #200): orange never frames a destructive action.
  * Every element around a red control (its JSX ancestors, in the app's
  * theme) draws its edge, outline, shadow and fill, at rest and on hover,
  * without the accent, the warning amber, the error orange or any warm or
@@ -924,12 +922,12 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
   if (control.kind !== 'red' || !control.ancestors.length) return [];
   const [el, ancestors, done] = built(control);
   const found: string[] = [];
-  // Review 12 NIT-2: a colour the test's own sheet aliases (--box-edge: var(--sr-accent)) resolves too.
+  // A colour the test's own sheet aliases (--box-edge: var(--sr-accent)) resolves too.
   const allVars: Vars = new Map(vars);
   if (extraCss) for (const [name, values] of customProperties([{ css: extraCss }])) allVars.set(name, [...(allVars.get(name) ?? []), ...values]);
   const check = (element: Element, pseudoOnly: boolean) => {
     // Every state an ancestor can take (focus, pressed, [data-*] …) and
-    // every pseudo-element it draws, not only rest and hover (review 12 NIT-2).
+    // every pseudo-element it draws, not only rest and hover.
     const styles = cascaded(element, extraCss, { loose: true });
     // Its `color` in a state, its own or the one it inherits.
     const colourOf = (state: string): string => {
@@ -947,7 +945,7 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
       // An ancestor's own keyboard ring (:focus, :focus-visible) is the ring
       // rule's to judge; :focus-within, drawn round the focused control, is a frame.
       if (/^:focus(?:-visible)?$/.test(state) && FOCUS_RING.test(prop)) continue;
-      // Review 13 NIT-4: currentColor is the element's own colour in that state.
+      // currentColor is the element's own colour in that state.
       const value = /currentcolor/i.test(winner.value) ? `${winner.value} ${colourOf(state)}` : winner.value;
       const bad = [
         ...badColours(value, 'red', allVars),
@@ -961,7 +959,7 @@ export function frameFindings(control: Control, vars: Vars, extraCss?: string): 
     ancestors.forEach((ancestor) => check(ancestor, false));
     // The control's own ::before and ::after can draw a frame round it too.
     check(el, true);
-    // What sits beside it in its parent, and what that holds (GM r22 Q2:
+    // What sits beside it in its parent, and what that holds (design:
     // amber anywhere near a red control, elsewhere on the pin card too).
     const add = (tree: JsxTree, parent: Element): void => {
       const made = document.createElement(tree[0]);
@@ -999,7 +997,7 @@ export function notRedFindings(control: Control): string[] {
 }
 
 /**
- * Pressed, a red control's text goes to the lighter red (review 9 NIT-2: the
+ * Pressed, a red control's text goes to the lighter red (the
  * Remotion Delete stayed #ff887d): when its text is red on hover, the colour
  * that wins pressed is --sr-danger-ink-hover (or the fill's hover).
  */
@@ -1029,8 +1027,8 @@ export function menuItemFindings(tsx: string, file: string): string[] {
   const visit = (node: ts.Node): void => {
     if (ts.isObjectLiteralExpression(node)) {
       const prop = (name: string) => node.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && p.name.getText(source) === name);
-      // Any label form strings() reads (a const, an object's property, a function), review 10 NIT-4;
-      // label, title or text, each of them (review 11 NIT-4: a `text:` beside a plain `title:`).
+      // Any label form strings() reads (a const, an object's property, a function);
+      // label, title or text, each of them (a `text:` beside a plain `title:`).
       const labels = ['label', 'title', 'text'].map(prop).filter((p): p is ts.PropertyAssignment => Boolean(p));
       const text = labels.flatMap((label) => strings(label.initializer, source)).find((t) => wordKind(t, file) === 'red') ?? null;
       const acts = ['action', 'onSelect', 'onClick', 'run', 'handler', 'perform'].some((name) => prop(name))

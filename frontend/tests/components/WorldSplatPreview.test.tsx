@@ -111,7 +111,7 @@ describe('World v2 splat preview', () => {
     expect(viewer).toHaveAttribute('data-up', '-y');
     expect(viewer).toHaveAttribute('data-forward', 'x');
     expect(viewer).toHaveAttribute('data-framing', 'object');
-    // Orbit only: Fly is for World Labs scenes (GM, PR #203 r1).
+    // Orbit only: Fly is for World Labs scenes (design, PR #203).
     expect(viewer).toHaveAttribute('data-navigation', 'orbit');
     expect(screen.queryByRole('button', { name: 'Fly' })).not.toBeInTheDocument();
     const status = within(dialog).getByRole('status');
@@ -148,7 +148,7 @@ describe('World v2 splat preview', () => {
     ['missing', IDOL_SPLAT_GONE_LINE, false],
     ['webgl', SPLAT_NO_WEBGL_LINE, true],
     ['load', SPLAT_LOAD_LINE, false],
-  ] as const)('a %s failure: its line alone, centred in the stage; status empty, no reset; a download only where GM keeps one', async (
+  ] as const)('a %s failure: its line alone, centred in the stage; status empty, no reset; a download only where design keeps one', async (
     failure, line, downloadable,
   ) => {
     render(<RepresentationViewer type="World" value={idolWorld} />);
@@ -163,11 +163,11 @@ describe('World v2 splat preview', () => {
     expect(message).toHaveClass('world-modal__failure');
     expect(message).toHaveAttribute('data-splat-failure', failure);
     expect(message.querySelector('p')).toHaveTextContent(new RegExp(`^${line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
-    // The specific line replaces the generic one, never both (GM r2).
+    // The specific line replaces the generic one, never both (design).
     expect(dialog).not.toHaveTextContent('Interactive preview unavailable');
     expect(within(dialog).getByRole('status')).toBeEmptyDOMElement();
     expect(dialog).not.toHaveTextContent(SPLAT_ORBIT_HINT);
-    // Announced once, by the alert (review r3 NIT-2): not the dialog's description too.
+    // Announced once, by the alert: not the dialog's description too.
     expect(dialog).not.toHaveAttribute('aria-describedby');
     expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1);
     expect(within(dialog).queryByRole('button', { name: 'Reset camera' })).not.toBeInTheDocument();
@@ -175,7 +175,7 @@ describe('World v2 splat preview', () => {
     expect(within(dialog).queryByRole('button', { name: 'Try again' }) !== null).toBe(failure === 'load');
   });
 
-  it('names another node\'s gone splat without Idol (GM r3, k)', async () => {
+  it('names another node\'s gone splat without Idol', async () => {
     const other = { ...idolWorld, session: { ...idolWorld.session, model: 'other-model' } };
     render(<RepresentationViewer type="World" value={other} />);
     await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
@@ -208,7 +208,7 @@ describe('World v2 splat preview', () => {
     expect(within(dialog).getByRole('button', { name: 'Download splat' })).toBeInTheDocument();
   });
 
-  it('names nothing but the download button itself in its footer (GM r3: no "Splat download" label)', async () => {
+  it('names nothing but the download button itself in its footer (no "Splat download" label)', async () => {
     render(<RepresentationViewer type="World" value={idolWorld} />);
     await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
@@ -217,7 +217,7 @@ describe('World v2 splat preview', () => {
     expect(dialog.querySelector('[aria-label="Splat download"]')).toBeNull();
   });
 
-  it('Tab from the dialog itself goes to the first control, Shift+Tab to the last (review MEDIUM 1)', async () => {
+  it('Tab from the dialog itself goes to the first control, Shift+Tab to the last', async () => {
     render(<RepresentationViewer type="World" value={idolWorld} />);
     await waitFor(() => expect(screen.getByRole('button', { name: EXPLORE })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: EXPLORE }));
@@ -236,7 +236,7 @@ describe('World v2 splat preview', () => {
   it.each([
     ['an answered failure', () => new FailureNotice('Nebula couldn’t download the splat.', 'The file is gone.')],
     ['no answer', () => new TypeError('Failed to fetch')],
-  ])('says GM\'s one download line, whatever the reason (%s; PR #203 r6 item 10)', async (_name, failure) => {
+  ])('says design\'s one download line, whatever the reason (%s; PR #203)', async (_name, failure) => {
     downloads.fail = failure();
     try {
       render(<RepresentationViewer type="World" value={idolWorld} />);
@@ -252,7 +252,7 @@ describe('World v2 splat preview', () => {
     }
   });
 
-  // GM, PR #203 r13 item 1: the 3D viewer isolates the page behind it (the
+  // Design (PR #203): the 3D viewer isolates the page behind it (the
   // proposal bar's slot with it) and keeps the notices usable; on close the
   // page is back and focus returns to "Explore in 3D".
   it('isolates the page and the proposal bar behind it, a notice already shown under its scrim; on close both are back and focus returns', async () => {
@@ -274,7 +274,7 @@ describe('World v2 splat preview', () => {
       const slot = region.querySelector('[data-notice-slot="proposal"]')!;
       expect(slot).toHaveAttribute('inert', '');
       expect(slot).toHaveAttribute('aria-hidden', 'true');
-      // A notice already on the page goes under the scrim with it (GM r25 (4) on PR #199: lib/modalFocus holdNoticesUnderModal).
+      // A notice already on the page goes under the scrim with it (design, PR #199: lib/modalFocus holdNoticesUnderModal).
       const undoNotice = region.querySelector('[data-notice-slot="notice"] button')!;
       expect(undoNotice.closest('[inert]')).toBe(undoNotice);
       fireEvent.click(within(dialog).getByRole('button', { name: 'Close 3D viewer' }));
@@ -303,8 +303,8 @@ describe('World v2 splat preview', () => {
     expect(close).toHaveFocus();
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
     expect(download).toHaveFocus();
-    // The page behind is inert while the viewer is open (ModalPortal, GM PR
-    // #203 r13 item 1): focus can't land there. Focus that fell out anyway
+    // The page behind is inert while the viewer is open (ModalPortal, design, PR
+    // #203): focus can't land there. Focus that fell out anyway
     // (a button that disabled itself) comes back in on Tab.
     const behind = screen.getByText('behind');
     expect(behind.closest('[inert]')).not.toBeNull();
@@ -318,7 +318,7 @@ describe('World v2 splat preview', () => {
   it.each([
     ['a collider', { colliderMesh: { id: 'collider', uri: '/api/outputs/run/collider.glb', mediaType: 'model/gltf-binary' } }],
     ['a panorama', { panorama: { id: 'pano', uri: '/api/outputs/run/pano.png', mediaType: 'image/png' } }],
-  ])('keeps the full summary for a splat with %s, the maker spelled as the maker does (review LOW 4, M4)', async (
+  ])('keeps the full summary for a splat with %s, the maker spelled as the maker does', async (
     _name, extra,
   ) => {
     const richer = { ...idolWorld, assets: { ...idolWorld.assets, ...extra } };

@@ -1,5 +1,5 @@
 /**
- * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
+ * Justin, 2026-10-23: "Download your edits" plus "Continue
  * without them"." The question's option: "Offer "Download your edits" (saves
  * them as a .nebula file you can open later) …".
  *
@@ -76,7 +76,7 @@ describe('the unsaved edits file', () => {
     (window as unknown as { showSaveFilePicker: unknown }).showSaveFilePicker = picker;
     await expect(saveEditsToFile(snapshot, 'Glass campaign')).resolves.toEqual({ name: 'Glass campaign edits.nebula', reopens: true });
     expect(picker).toHaveBeenCalledWith(expect.objectContaining({ suggestedName: 'Glass campaign - unsaved edits.nebula' }));
-    // GM PR #205 r9 item 2: every picker says "Nebula canvas".
+    // Design (PR #205): every picker says "Nebula canvas".
     expect(picker).toHaveBeenCalledWith(expect.objectContaining({
       types: [{ description: 'Nebula canvas', accept: { 'application/json': ['.nebula'] } }] }));
     expect(written).toHaveLength(1);
@@ -152,7 +152,7 @@ describe('an edits file Load graph cannot open', () => {
       .toBe(false);
     const values = { ...node, data: { ...node.data, params: { list: new Array(GRAPH_MAX_VALUES).fill(0) } } };
     expect(check({ ...snapshot, nodes: [values] })).toBe(false);
-    // Q118: past 16 MiB alone it still reopens (Load graph opens files up to
+    // Past 16 MiB alone it still reopens (Load graph opens files up to
     // the bundle ceiling, then pauses saving until the project is trimmed).
     const big = { ...node, data: { ...node.data, params: { value: 'x'.repeat(PROJECT_SAVE_LIMIT_BYTES) } } };
     expect(check({ ...snapshot, nodes: [big] })).toBe(true);
@@ -175,7 +175,7 @@ describe('an edits file Load graph cannot open', () => {
   });
 });
 
-/** GM - Design, 2026-10-23 (Q116 a, line 2): a download that couldn't be
+/** Design, 2026-10-23: a download that couldn't be
  * written says so. A write that fails after the person picked where the file
  * goes (a full disk, say) is that: it rejects, and isn't swapped for a plain
  * download that could fail just as silently and still be reported as saved. */

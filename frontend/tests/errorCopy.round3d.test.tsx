@@ -1,13 +1,13 @@
 /**
- * Error copy round 3d (GM - Design): a line written for a provider's answer
- * keeps the provider's own words behind Details. GM: "Raw provider text stays
+ * Error copy (design): a line written for a provider's answer
+ * keeps the provider's own words behind Details. Design: "Raw provider text stays
  * behind Details in every case."
  *
  * The backend's ErrorEvent says so with `providerText` (node data
  * `errorProviderText`, a shot's `errorProviderText`): the status table's
  * lines ("Meshy is busy. …"), an empty answer's line, and a handler's line
  * around the provider's words (Krea's refused input). A line Nebula wrote
- * from its own words still shows no Details (round 3c: the specific text is
+ * from its own words still shows no Details (the specific text is
  * for agents).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -5,7 +5,7 @@ import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 
 /**
- * GM - Design, 2026-10-23: the Inspector's "Run / Duplicate / Delete row is
+ * Design, 2026-10-23: the Inspector's "Run / Duplicate / Delete row is
  * cut off ... so its foot row is always whole". The row was the last thing in
  * the Inspector's scrolling body: with more fields than the popover's 300 px
  * it scrolled out of sight and the body's fade covered what was left. It is

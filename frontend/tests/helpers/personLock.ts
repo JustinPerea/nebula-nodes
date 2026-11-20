@@ -1,5 +1,5 @@
 /**
- * PR #204 round 10 (GM r15): a person-only control locks in place (aria-disabled, focusable) with
+ * PR #204 (design): a person-only control locks in place (aria-disabled, focusable) with
  * its line in the page (aria-describedby), never a tooltip. What a test reads from one.
  */
 /** The lock line this control points at, or null. */
