@@ -3,6 +3,7 @@ import { PromptDialog, type PromptRequest } from '../PromptDialog';
 import { KEPT_FEWER, KEPT_SHOWN, keptMoreLabel, keptNoteDisplay, keptNoteLine, MAX_PIN_TEXT, noteIsEmpty, noteLength, NOTE_KEPT_COPY, PIN_REFUSAL_COPY,
   onPinTextLoaded, pinDisplayText, pinTextSettled, pinTextSettling, type KeptNote } from '../../lib/canvasPins';
 import { nodeCardTitle, useGraphStore } from '../../store/graphStore';
+import { canvasFocusTarget } from '../../lib/noticeFocus';
 import { personBannerShown, subscribePersonBanner } from '../../lib/personSession';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { useCurrentProjectId } from '../../lib/currentProject';
@@ -336,6 +337,7 @@ export function PinComposer() {
           heading={heading}
           headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
           confirmLabel="Send note"
+          focusFallback={canvasFocusTarget}
           onChange={setDraft}
           confirm={{ ...lock.act({ offline: 'send notes', kept: 'note', ...(targetGone ? { disabled: true, title: PIN_REFUSAL_COPY.nodeGone }
             : gateBanner ? {}

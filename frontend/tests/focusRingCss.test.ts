@@ -248,7 +248,7 @@ const NO_OUTLINE: Record<string, string> = {
   // PR #204 round 18g (GM r36): a heading or a line focused from code (see the describe below).
   'styles/slava-restraint.css::body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-line-box], [role="status"], [role="alert"])[tabindex="-1"]:focus-visible': 'focused only from code: no ring',
   // PR #204 round 18h (GM r38 3d): the start of the page a leaving notice hands focus to.
-  'styles/slava-restraint.css::body.app-slava-restraint [data-focus-start]:focus-visible': 'focused only from code: no ring',
+  'styles/slava-restraint.css::body.app-slava-restraint [data-focus-start]:not([data-focus-decided]):focus-visible': 'focused only from code: no ring',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus': 'ring on the inner placeholder',
   'styles/moodboard-board.css::.moodboard-board__flow .react-flow__node-placeholder:focus-visible': 'ring on the inner placeholder',
   // The proposal card's scrolling body: its fade mask would clip its own ring,
@@ -535,9 +535,9 @@ describe('a heading or a line focused from code draws no ring (GM r36)', () => {
   });
 
   it('the start of the page a leaving notice hands focus to draws no ring', () => {
-    const rule = rules.find((r) => r.selectors.includes('body.app-slava-restraint [data-focus-start]:focus-visible'));
+    const rule = rules.find((r) => r.selectors.includes('body.app-slava-restraint [data-focus-start]:not([data-focus-decided]):focus-visible'));
     expect(rule, 'the focus-start rule').toBeTruthy();
-    const raw = slava.slice(slava.indexOf('body.app-slava-restraint [data-focus-start]:focus-visible'));
+    const raw = slava.slice(slava.indexOf('body.app-slava-restraint [data-focus-start]:not([data-focus-decided]):focus-visible'));
     expect(raw.slice(0, raw.indexOf('}'))).toMatch(/outline:\s*none\s*!important;/);
   });
 

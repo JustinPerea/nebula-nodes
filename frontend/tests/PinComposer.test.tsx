@@ -101,4 +101,48 @@ describe('PinComposer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('status')).toBeNull();
   });
+
+  it('a note sent from a pointer-opened composer (body active when it opened) leaves focus on the canvas, never <body>', async () => {
+    const canvas = document.createElement('div');
+    canvas.className = 'canvas-wrapper';
+    canvas.tabIndex = 0;
+    document.body.appendChild(canvas);
+    try {
+      expect(document.activeElement).toBe(document.body);
+      useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
+      api.createPin.mockResolvedValue(pin('warmer'));
+      render(<><NoticeRegion /><PinComposer /></>);
+      fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'warmer' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
+      });
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(document.activeElement).toBe(canvas);
+    } finally {
+      canvas.remove();
+    }
+  });
+
+  it('a keyboard-opened composer still returns focus to the element that opened it', async () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    const canvas = document.createElement('div');
+    canvas.className = 'canvas-wrapper';
+    canvas.tabIndex = 0;
+    document.body.appendChild(canvas);
+    try {
+      opener.focus();
+      useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
+      api.createPin.mockResolvedValue(pin('warmer'));
+      render(<><NoticeRegion /><PinComposer /></>);
+      fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: 'warmer' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
+      });
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      opener.remove();
+      canvas.remove();
+    }
+  });
 });

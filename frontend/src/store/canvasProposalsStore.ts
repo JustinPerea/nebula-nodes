@@ -107,6 +107,10 @@ interface CanvasProposalsState {
   pending: Record<string, 'accept' | 'reject'>;
   errors: Record<string, string>;
   focusedId: string | null;
+  /** The proposal the bar is showing right now (the bar writes it); null while
+   *  the bar is closed. The Updates corner reads it so it never drops a card
+   *  for a proposal the person already sees (design). */
+  barShownId: string | null;
   /** The held run the notice shows (the oldest), and those waiting behind it
    * in the order they were accepted (review 16, L-2): each runs once. */
   deferredRun: DeferredRun | null;
@@ -117,6 +121,7 @@ interface CanvasProposalsState {
   clear: () => void;
   pruneExpired: (now?: number) => void;
   focus: (id: string | null) => void;
+  setBarShownId: (id: string | null) => void;
   moveGhost: (id: string, ref: string, position: Point) => void;
   accept: (id: string) => Promise<void>;
   reject: (id: string, reason?: string) => Promise<void>;
@@ -247,6 +252,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   pending: {},
   errors: {},
   focusedId: null,
+  barShownId: null,
   deferredRun: null,
   deferredQueue: [],
 
@@ -315,6 +321,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
   },
 
   focus: (id) => set({ focusedId: id }),
+
+  setBarShownId: (id) => set((state) => (state.barShownId === id ? state : { barShownId: id })),
 
   moveGhost: (id, ref, position) => {
     if (!get().proposals[id] || !finitePoint(position)) return;

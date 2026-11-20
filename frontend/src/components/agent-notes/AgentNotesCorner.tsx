@@ -5,6 +5,7 @@ import {
   DEFAULT_AGENT_COLOR,
   isUnread,
   READER_COLOR,
+  suppressedByBar,
   surfaceKey,
   type AgentNote,
   type AgentNoteAction,
@@ -387,6 +388,27 @@ function liveNote(sections: AgentNotesCornerSection[], id: string): AgentNote | 
   return null;
 }
 
+/** The note is a proposal Update for the proposal the bar shows now (design). */
+function hiddenByBar(sections: AgentNotesCornerSection[], id: string): boolean {
+  const found = liveNote(sections, id);
+  return Boolean(found && suppressedByBar(found, useCanvasProposalsStore.getState().barShownId));
+}
+
+/** Marks these Updates read, each in its own list, so the chip never counts a card nobody saw. */
+function markSeenElsewhere(sections: AgentNotesCornerSection[], ids: string[]): void {
+  const { lists, markReadIds } = useAgentNotesStore.getState();
+  for (const section of sections) {
+    const mine = ids.filter((id) => (lists[section.listKey] ?? section.list).notes.some((n) => n.id === id && isUnread(n)));
+    if (mine.length > 0) void markReadIds(section.surface, mine);
+  }
+}
+
+/** An Update that lands while the list is open is read as it arrives: one read up to the newest of these, in their list. */
+function markArrivedRead(surface: AgentNotesSurface, ids: string[]): void {
+  if (ids.length === 0) return;
+  void useAgentNotesStore.getState().markRead(surface, ids[ids.length - 1]);
+}
+
 /** Lists that are each newest first, merged newest first by time; each list keeps its own order. */
 function mergeNewestFirst(lists: AgentNote[][]): AgentNote[] {
   const filled = lists.filter((notes) => notes.length > 0);
@@ -464,16 +486,29 @@ export function AgentNotesCorner({ sections, agents = null }: {
   // For a step that fails after the render it started in (see `fail`).
   const openListRef = useRef<() => void>(() => {});
 
+  // Proposal Updates the bar showed while the window was hidden: nobody saw
+  // the bar, so they stay unread until the window is visible again (design).
+  const heldRef = useRef<string[]>([]);
+
   // New updates: into the open list (read as they arrive), or queued to drop.
   useEffect(() => {
+    const isHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
     const handle = () => {
       const store = useAgentNotesStore.getState();
+      const hidden = isHidden();
       const arrived: string[] = [];
       for (const section of sectionsRef.current) {
-        const ids = store.takeArrivals(section.listKey);
+        const taken = store.takeArrivals(section.listKey);
+        if (taken.length === 0) continue;
+        // A proposal the bar already shows drops no card; it is read once
+        // the window is visible (design).
+        const seen = taken.filter((id) => hiddenByBar(sectionsRef.current, id));
+        if (hidden) heldRef.current.push(...seen);
+        else if (seen.length > 0) markSeenElsewhere(sectionsRef.current, seen);
+        const ids = taken.filter((id) => !seen.includes(id));
         if (ids.length === 0) continue;
         arrived.push(...ids);
-        if (openRef.current) void store.markRead(section.surface, ids[ids.length - 1]);
+        if (openRef.current) markArrivedRead(section.surface, ids);
       }
       if (arrived.length === 0) return;
       setPop((value) => value + 1);
@@ -482,13 +517,40 @@ export function AgentNotesCorner({ sections, agents = null }: {
         return;
       }
       // Nobody is looking: no drop. The count still rises.
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (hidden) return;
       setQueue((current) => [...current, ...arrived]);
     };
+    // The window is visible again: a held Update is read if the bar still
+    // shows its proposal, else it counts and follows the corner's usual rules.
+    const onVisible = () => {
+      if (isHidden() || heldRef.current.length === 0) return;
+      const held = heldRef.current;
+      heldRef.current = [];
+      const still = held.filter((id) => hiddenByBar(sectionsRef.current, id));
+      if (still.length > 0) markSeenElsewhere(sectionsRef.current, still);
+      const missed = held.filter((id) => {
+        const found = liveNote(sectionsRef.current, id);
+        return !still.includes(id) && Boolean(found && isUnread(found));
+      });
+      if (missed.length === 0) return;
+      setPop((value) => value + 1);
+      if (openRef.current) {
+        // Same as a live arrival while the list is open: read, and counted.
+        const { lists } = useAgentNotesStore.getState();
+        for (const section of sectionsRef.current) {
+          const mine = missed.filter((id) => (lists[section.listKey] ?? section.list).notes.some((n) => n.id === id));
+          markArrivedRead(section.surface, mine);
+        }
+        setNewCount((value) => value + missed.length);
+      }
+      else setQueue((current) => [...current, ...missed]);
+    };
     const unsubscribe = useAgentNotesStore.subscribe(handle);
+    document.addEventListener('visibilitychange', onVisible);
     const first = window.setTimeout(handle, 0);
     return () => {
       unsubscribe();
+      document.removeEventListener('visibilitychange', onVisible);
       window.clearTimeout(first);
     };
   }, [listKeys]);
@@ -499,7 +561,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
     if (queue.length === 0) gatherFrom.current = null;
     const unread = (id: string) => {
       const found = liveNote(sectionsRef.current, id);
-      return Boolean(found && isUnread(found));
+      return Boolean(found && isUnread(found) && !hiddenByBar(sectionsRef.current, id));
     };
     // A slower burst (an MCP agent's posts land 1 to 3 s apart): the card up
     // and those waiting behind it fold into one summary card once they reach
@@ -535,6 +597,19 @@ export function AgentNotesCorner({ sections, agents = null }: {
     return () => window.clearTimeout(timer);
   }, [card, leaving, queue]);
 
+  // A proposal opening in the bar closes its card, queued or dropped (design).
+  const shownProposalId = useCanvasProposalsStore((s) => s.barShownId);
+  useEffect(() => {
+    if (!shownProposalId) return;
+    const sectionsNow = sectionsRef.current;
+    const queued = queue.filter((id) => hiddenByBar(sectionsNow, id));
+    const cardHidden = card?.kind === 'note' && hiddenByBar(sectionsNow, card.id);
+    if (queued.length === 0 && !cardHidden) return;
+    markSeenElsewhere(sectionsNow, [...queued, ...(cardHidden ? [card.id] : [])]);
+    if (queued.length > 0) setQueue((current) => current.filter((id) => !queued.includes(id)));
+    if (cardHidden && !leaving) setLeaving(true);
+  }, [shownProposalId, card, queue, leaving]);
+
   // The card leaves by itself after its hold, unless hovered or focused.
   useEffect(() => {
     if (!card || leaving) return;
@@ -543,6 +618,11 @@ export function AgentNotesCorner({ sections, agents = null }: {
       // Its list left the corner (the Studio closed), or the update left its list.
       if (card.kind === 'note' && !liveNote(sectionsRef.current, card.id)) {
         setCard(null);
+        return;
+      }
+      if (card.kind === 'note' && hiddenByBar(sectionsRef.current, card.id)) {
+        markSeenElsewhere(sectionsRef.current, [card.id]);
+        setLeaving(true);
         return;
       }
       if (holdRef.current) return;

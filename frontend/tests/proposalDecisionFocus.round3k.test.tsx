@@ -171,16 +171,16 @@ describe('focus after a keyboard decision (review 3 LOW-6, GM r57)', () => {
     expect(document.activeElement).toBe(document.querySelector('.proposal-bar'));
   });
 
-  it('a mouse click moves no focus', async () => {
+  it('a mouse click puts focus on the next card, never <body>, and shows no ring', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     useCanvasProposalsStore.getState().open(proposal('p_b', 2), 'key-b');
     net.apiFetch.mockResolvedValue(respond(200, { status: 'rejected' }));
     render(<ProposalBar />);
     const reject = screen.getByRole('button', { name: 'Reject' });
     await act(async () => { fireEvent.click(reject, { detail: 1 }); });
-    await wait(50);
-    expect(document.activeElement).not.toBe(document.querySelector('.proposal-bar'));
-    expect(document.activeElement).not.toBe(canvas);
+    await focusOverTime();
+    expect(document.activeElement).toBe(document.querySelector('.proposal-bar'));
+    expect(canvas.hasAttribute(DECISION_FOCUS_ATTR)).toBe(false);
   });
 
   it('the canvas after a decision shows the ring Tab arrival shows, inside its edge (GM r69 Q2; slava-restraint.css)', () => {

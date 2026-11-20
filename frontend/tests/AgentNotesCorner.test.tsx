@@ -47,6 +47,7 @@ const { useAgentNotesStore } = await import('../src/store/agentNotesStore');
 const { useUIStore } = await import('../src/store/uiStore');
 const { useProjectStore } = await import('../src/store/projectStore');
 const { useAssetProposalsStore } = await import('../src/store/assetProposalsStore');
+const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
 
 const CLAUDE = { kind: 'agent', id: 'claude', name: 'Claude', color: '#E8825A' } as const;
 const CODEX = { kind: 'agent', id: 'codex', name: 'Codex', color: '#5AA9E8' } as const;
@@ -100,6 +101,7 @@ beforeEach(() => {
     ['n4', { id: 'n4', measured: { width: 240, height: 160 }, internals: { positionAbsolute: { x: 2000, y: 1500 } } }],
   ]);
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  useCanvasProposalsStore.setState({ barShownId: null });
 });
 
 afterEach(() => {
@@ -514,5 +516,182 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
     const entry = openEntry();
     expect(entry.textContent).toContain('Withdrawn by Claude');
     expect(within(entry).queryByRole('button', { name: 'Review' })).toBeNull();
+  });
+});
+
+describe('no card for a proposal the bar already shows (design)', () => {
+  const proposalNote = (id: string, proposalId: string) => note(id, {
+    about: 'proposal', text: 'Claude proposes 1 change on the canvas', parts: [{ text: 'Claude proposes 1 change on the canvas' }],
+    actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId, target: 'canvas' } }],
+  });
+  const card = () => screen.queryByRole('status', { name: /Update from Claude/ });
+
+  it('the same proposal: no card, and the Update is marked read', () => {
+    vi.useFakeTimers();
+    useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeNull();
+    expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_1']);
+  });
+
+  it('a different proposal drops its card as usual', () => {
+    vi.useFakeTimers();
+    useCanvasProposalsStore.setState({ barShownId: 'cp_other' });
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeTruthy();
+    expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+  });
+
+  it('with the bar closed it drops its card as usual', () => {
+    vi.useFakeTimers();
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeTruthy();
+  });
+
+  it('a card already dropped closes when its proposal becomes the one the bar shows', () => {
+    vi.useFakeTimers();
+    render(<AppAgentNotes />);
+    sync([]);
+    added(proposalNote('an_1', 'cp_1'), 1);
+    tick(1000);
+    expect(card()).toBeTruthy();
+    act(() => { useCanvasProposalsStore.setState({ barShownId: 'cp_1' }); });
+    tick(1500);
+    expect(card()).toBeNull();
+    expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_1']);
+  });
+
+  it('a queued card is dropped from the queue when its proposal opens in the bar', () => {
+    vi.useFakeTimers();
+    render(<AppAgentNotes />);
+    sync([]);
+    added(note('an_1'), 1);
+    tick(1000);
+    added(proposalNote('an_2', 'cp_1'), 2);
+    act(() => { useCanvasProposalsStore.setState({ barShownId: 'cp_1' }); });
+    tick(12000);
+    expect(card()).toBeNull();
+    expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_2']);
+  });
+
+  describe('with the window hidden', () => {
+    const setVisibility = (value: 'hidden' | 'visible') => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    };
+
+    it('the bar shows that proposal but nobody sees it: the Update stays unread', () => {
+      vi.useFakeTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+      render(<AppAgentNotes />);
+      sync([]);
+      added(proposalNote('an_1', 'cp_1'), 1);
+      tick(1000);
+      expect(card()).toBeNull();
+      expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+    });
+
+    it('becoming visible with the bar still showing it marks it read', () => {
+      vi.useFakeTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+      render(<AppAgentNotes />);
+      sync([]);
+      added(proposalNote('an_1', 'cp_1'), 1);
+      tick(1000);
+      setVisibility('visible');
+      tick(1000);
+      expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_1']);
+      expect(card()).toBeNull();
+    });
+
+    it('becoming visible after the proposal expired leaves it unread and counted', () => {
+      vi.useFakeTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+      render(<AppAgentNotes />);
+      sync([]);
+      added(proposalNote('an_1', 'cp_1'), 1);
+      tick(1000);
+      act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+      setVisibility('visible');
+      tick(100);
+      expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+      expect(chip().querySelector('.agent-notes-chip__count')!.textContent).toBe('1');
+    });
+
+    describe('with the list open', () => {
+      const hold = async (ids: string[], proposal = 'cp_1') => {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+        useCanvasProposalsStore.setState({ barShownId: proposal });
+        render(<AppAgentNotes />);
+        sync([]);
+        ids.forEach((id, i) => added(proposalNote(id, proposal), i + 1));
+        tick(1000);
+        fireEvent.click(chip());
+        // Let the open's own read answer, so a later read is not folded into it.
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        api.markAgentNotesRead.mockClear();
+        // The server answers a read as it does: the ids it read, and the count left.
+        api.markAgentNotesRead.mockImplementation(async (_surface: unknown, upTo?: string, ids?: string[]) => {
+          const read = ids ?? (upTo ? [upTo] : []);
+          act(() => { emit({ type: 'agentNotes', surface: 'canvas', op: 'read', projectId: 'p1', ids: read, unread: 0, at: 9 }); });
+          return { ids: read, unread: 0, projectId: 'p1' };
+        });
+      };
+      const header = () => screen.getByRole('dialog', { name: 'Updates' }).textContent ?? '';
+
+      it('visible after the proposal expired: read as a live arrival would be, and counted', async () => {
+        vi.useFakeTimers();
+        await hold(['an_1']);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        setVisibility('visible');
+        tick(100);
+        expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_1');
+        expect(header()).toContain('1 new');
+      });
+
+      it('several hidden/visible flips: no held id is lost or counted twice', async () => {
+        vi.useFakeTimers();
+        await hold(['an_1']);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        setVisibility('visible');
+        tick(100);
+        setVisibility('hidden');
+        useCanvasProposalsStore.setState({ barShownId: 'cp_2' });
+        added(proposalNote('an_2', 'cp_2'), 2);
+        tick(100);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        setVisibility('visible');
+        tick(100);
+        setVisibility('hidden');
+        setVisibility('visible');
+        tick(100);
+        const reads = api.markAgentNotesRead.mock.calls.map((call) => call[1]);
+        expect(reads).toEqual(['an_1', 'an_2']);
+        expect(header()).toContain('2 new');
+      });
+
+      it('a note deleted while held is neither counted nor marked', async () => {
+        vi.useFakeTimers();
+        await hold(['an_1']);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        emit({ type: 'agentNotes', surface: 'canvas', op: 'dismissed', projectId: 'p1', ids: ['an_1'], unread: 0, at: 5 });
+        setVisibility('visible');
+        tick(100);
+        expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+        expect(header()).not.toContain('1 new');
+      });
+    });
   });
 });
