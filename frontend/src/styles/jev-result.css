@@ -111,29 +111,27 @@ body.app-slava-restraint .jev-result__question {
   overflow-wrap: anywhere;
 }
 
-/* A quoted question reads as one line of text with its closing quote right after the last word.
-   Only when the text is cut (data-clamped, set from a measurement; data-measure forces the same
-   layout for that read) does it clamp its text alone, with the quote after the ellipsis. */
+/* A quoted question is one inline run, "Asked", the opening quote, the text, the closing quote, so a
+   wrapped second line starts at the left edge. The component cuts the text to two lines (cutToFit);
+   no line clamp is involved. The accessible copy of the whole question is the visually hidden span. */
 body.app-slava-restraint .jev-result__question--quoted {
+  position: relative;
   display: block;
+  overflow: visible;
   -webkit-line-clamp: unset;
 }
 
-body.app-slava-restraint .jev-result__question--quoted:is([data-clamped], [data-measure]) {
-  display: flex;
-  white-space: pre;
-}
-
-body.app-slava-restraint .jev-result__question--quoted:is([data-clamped], [data-measure]) .jev-result__question-text {
-  display: -webkit-box;
-  min-width: 0;
+body.app-slava-restraint .jev-result__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
   overflow: hidden;
-  white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
-
-body.app-slava-restraint .jev-result__question--quoted:is([data-clamped], [data-measure]) .jev-result__question-close { align-self: flex-end; }
 
 body.app-slava-restraint .jev-result__muted { color: var(--sr-ink-meta); }
 

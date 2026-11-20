@@ -152,51 +152,62 @@ describe('Jev result under the card field', () => {
     expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked \u201CJudge this product photo/);
   });
 
-  it('keeps the closing quote after a long question, outside the clamped text', () => {
+  const FULL = 'Judge this product photo against the full brief';
+  const renderCut = () => {
     const s = sample(fixture.decide, 'longer than the report line');
     renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
     fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
     const asked = screen.getByTestId('jev-asked');
-    // The clamp sits on the question text alone; the quotes are siblings outside it.
-    const text = asked.querySelector('.jev-result__question-text');
-    expect(text?.textContent?.length).toBeGreaterThan(100);
-    expect(text?.textContent).not.toContain('\u201D');
-    expect(asked.title).toBe(`\u201C${text?.textContent}\u201D`);
-    expect(asked.lastElementChild?.textContent).toBe('\u201D');
-  });
+    // The result echoes the report's copy of the question (whitespace collapsed, cut at 300).
+    const echoed = asked.title.slice(1, -1);
+    return { asked, full: echoed };
+  };
+  const visibleOf = (asked: HTMLElement) => asked.querySelector('[data-testid="jev-asked-visible"]') as HTMLElement;
+  const closingQuotes = (root: HTMLElement) => (root.textContent?.match(/\u201D/g) ?? []).length;
 
-  const closingQuotes = (root: HTMLElement) =>
-    [...root.querySelectorAll('span')].filter((node) => node.children.length === 0 && node.textContent === '\u201D');
-
-  it('puts the closing quote inline right after the text when the question is not cut', () => {
-    const s = sample(fixture.decide, 'longer than the report line');
-    renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
-    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
-    const asked = screen.getByTestId('jev-asked');
+  it('renders the uncut question inline with one closing quote right after the text', () => {
+    const { asked, full } = renderCut();
+    const visible = visibleOf(asked);
+    expect(visible.textContent).toBe(`Asked \u201C${full}\u201D`);
+    expect(visible).toHaveAttribute('aria-hidden', 'true');
+    expect(visible.lastChild?.textContent).toBe('\u201D');
+    expect(visible.querySelectorAll('span')).toHaveLength(2);
     expect(asked).not.toHaveAttribute('data-clamped');
-    const text = asked.querySelector('.jev-result__question-text');
-    expect(closingQuotes(asked)).toHaveLength(1);
-    expect(text?.nextElementSibling?.textContent).toBe('\u201D');
-    expect(text?.nextElementSibling).toBe(asked.lastElementChild);
   });
 
-  it('renders the separate quote after the clamp when the text is cut, and only one quote', () => {
-    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(80);
-    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(40);
+  it('cuts at a word with U+2026 and the closing quote right after it when the full text does not fit', () => {
+    const lineHeight = vi.spyOn(window, 'getComputedStyle').mockReturnValue({ lineHeight: '20px' } as CSSStyleDeclaration);
+    // A paragraph that holds 40 characters a line: its height follows its text.
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      const visible = this.querySelector('[data-testid="jev-asked-visible"]');
+      return Math.ceil((visible?.textContent?.length ?? 0) / 40) * 20;
+    });
     try {
-      const s = sample(fixture.decide, 'longer than the report line');
-      renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
-      fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
-      const asked = screen.getByTestId('jev-asked');
-      expect(asked).toHaveAttribute('data-clamped', 'true');
-      expect(asked).not.toHaveAttribute('data-measure');
-      expect(closingQuotes(asked)).toHaveLength(1);
-      expect(asked.lastElementChild?.className).toContain('jev-result__question-close');
-      expect(asked.title).toMatch(/\u201D$/);
+      const { asked, full } = renderCut();
+      const visible = visibleOf(asked);
+      expect(visible.textContent?.length).toBeLessThanOrEqual(80);
+      expect(visible.textContent).toMatch(/^Asked \u201CJudge this product photo\b.*[^ ,;:]\u2026\u201D$/);
+      expect(visible.textContent).not.toContain('...');
+      expect(closingQuotes(visible)).toBe(1);
+      const kept = visible.textContent!.slice('Asked \u201C'.length, -2);
+      expect(full.startsWith(kept)).toBe(true);
+      expect(/\s/.test(full[kept.length])).toBe(true);
+      // The title and the accessible text keep the whole question.
+      expect(asked.title).toBe(`\u201C${full}\u201D`);
+      expect(asked.querySelector('.jev-result__sr-only')?.textContent).toBe(`Asked \u201C${full}\u201D`);
     } finally {
-      scrollHeight.mockRestore();
-      clientHeight.mockRestore();
+      lineHeight.mockRestore();
+      height.mockRestore();
     }
+  });
+
+  it('holds the whole question in a visually hidden span and in the title', () => {
+    const { asked, full } = renderCut();
+    expect(full.length).toBeGreaterThan(FULL.length);
+    const hidden = asked.querySelector('.jev-result__sr-only');
+    expect(hidden).not.toHaveAttribute('aria-hidden');
+    expect(hidden?.textContent).toBe(`Asked \u201C${full}\u201D`);
+    expect(asked.title).toBe(`\u201C${full}\u201D`);
   });
 
   it('treats a blank Pick Best question as its default, which is what it asked', () => {
