@@ -1,11 +1,11 @@
 /**
- * PR #204 round 15, GM r24 b: a list's empty state says it was read and held nothing, so it shows
+ * Design (PR #204): a list's empty state says it was read and held nothing, so it shows
  * only when its read answered. A failed load shows its failure line and nothing else in that list;
  * a real search with no results keeps "No matches. Drop images or videos here, or use Add."; a
  * tab that isn't connected as you shows neither (the page line says why).
  * The lists: the references grid (All and Inbox), the Add to menu's "No collections", and
  * Settings' linked folders and vocabulary candidates.
- * Round 17 (review 13 MEDIUM-1, GM r27 1): Agent review and Blind labeling too. After a failed load
+ * Design: Agent review and Blind labeling too. After a failed load
  * each shows only its eyebrow, its heading and the failure line: no "0 / 15 reviewed", no "Prepare
  * the reference set in Blind labeling first.", no held-out set form. A read that answered "no batch"
  * shows the setup state.
@@ -42,7 +42,7 @@ const NO_TERMS = 'No new terms proposed yet.';
 const TOKEN = 'a'.repeat(43);
 type Load = 'status' | 'collections' | 'search' | 'folders' | 'settings' | 'candidates' | 'review' | 'evaluation';
 const fails: Partial<Record<Load, number>> = {};
-/** Round 18c: the backend runs without the Commons (every route answers 404 "Commons is disabled"). */
+/** The backend runs without the Commons (every route "Commons is disabled"). */
 const commonsOff = { on: false };
 /** A load the test holds until it lets it answer. */
 const held: Partial<Record<Load, Promise<void>>> = {};
@@ -93,9 +93,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the references grid (GM r24 b)', () => {
+describe('the references grid (design)', () => {
   it('a failed search: only its failure line, never "No matches"', async () => {
-    fails.search = 503; // round 18c: a 500 is "hit an error" (GM r30 3)
+    fails.search = 503; // A 500 is "hit an error" (design)
     render(<CommonsView />);
     await tick(1000);
     expect(commonsLines()).toEqual(['Nebula couldn’t load the references because the server didn’t respond. Try again.']);
@@ -158,16 +158,16 @@ describe('the references grid (GM r24 b)', () => {
   });
 });
 
-describe('the Add to menu\'s collections (GM r24 b)', () => {
+describe('the Add to menu\'s collections (design)', () => {
   it('a failed load: no "No collections"', async () => {
     fails.collections = 503;
     render(<CommonsView />);
     await tick(1000);
-    // GM r24 c's shape for the collections.
+    // Design's shape for the collections.
     expect(commonsLines()).toEqual(['Nebula couldn’t load the collections because the server didn’t respond. Try again.']);
     expect(noCollectionsOption()).toBeNull();
   });
-  // Round 18d (GM r32 2): a failed re-read keeps the last good list, "No collections" included.
+  // Design: a failed re-read keeps the last good list, "No collections" included.
   it('read, then a later read failed (back online): "No collections" stays, beside the line', async () => {
     // A failed search, so the reconnect reads the page's loads again (useOfflineHiddenNotice).
     fails.search = 500;
@@ -189,7 +189,7 @@ describe('the Add to menu\'s collections (GM r24 b)', () => {
   });
 });
 
-describe('a tab that isn\'t connected as you (GM r24 b)', () => {
+describe('a tab that isn\'t connected as you (design)', () => {
   it('neither an empty state nor a load\'s own line: the page line only', async () => {
     transport.token = null;
     act(() => reportPersonRequired());
@@ -198,8 +198,8 @@ describe('a tab that isn\'t connected as you (GM r24 b)', () => {
     expect(commonsLines()).toHaveLength(1);
     expect(commonsLines()[0]).toMatch(/^Nebula couldn’t load Commons because this tab isn’t connected as you\./);
     expect(seen).not.toContain(NO_MATCHES);
-    // PR #204 round 18 (GM r28 3): the Add to select isn't left empty, in the one disabled look
-    // (the person lock's). Round 18d (GM r31 2): it says "Not loaded", with the reason.
+    // Design (PR #204): the Add to select isn't left empty, in the one disabled look
+    // (the person lock's). Design: it says "Not loaded", with the reason.
     const select = screen.getByRole('combobox', { name: ADD_TO_NAME }) as HTMLSelectElement;
     expect([...select.options].map((o) => o.textContent)).toEqual(['Not loaded']);
     expect(select).toHaveAttribute('aria-label', 'Add to, not loaded. It works once this tab is connected as you.');
@@ -210,7 +210,7 @@ describe('a tab that isn\'t connected as you (GM r24 b)', () => {
     expect(transport.fetch).not.toHaveBeenCalled();
   });
 
-  it('the header keeps the status\'s place, held empty (GM r28 3)', async () => {
+  it('the header keeps the status\'s place, held empty (design)', async () => {
     transport.token = TOKEN;
     act(() => notePersonPromoted());
     render(<CommonsView />);
@@ -230,13 +230,13 @@ describe('a tab that isn\'t connected as you (GM r24 b)', () => {
   });
 });
 
-describe('Settings\' lists (GM r24 b)', () => {
+describe('Settings\' lists (design)', () => {
   const settings = () => render(<CommonsSettings status={null} onOpenAsset={() => {}} onChanged={() => {}} />);
   it('a failed load: neither "No folders linked" nor "No new terms"', async () => {
     fails.folders = 503;
     settings();
     await tick(1000);
-    // GM r25: the pane's own words, whichever of its reads failed.
+    // Design: the pane's own words, whichever of its reads failed.
     expect(text()).toContain('Nebula couldn’t load Commons settings because the server didn’t respond. Try again.');
     expect(seen).not.toContain(NO_FOLDERS);
     expect(seen).not.toContain(NO_TERMS);
@@ -255,7 +255,7 @@ describe('Settings\' lists (GM r24 b)', () => {
   });
 });
 
-describe('Agent review and Blind labeling (review 13 MEDIUM-1, GM r27 1)', () => {
+describe('Agent review and Blind labeling (design)', () => {
   const REVIEW_LINE = 'Nebula couldn’t load Agent review because the server didn’t respond. Try again.';
   const LABELING_LINE = 'Nebula couldn’t load Blind labeling because the server didn’t respond. Try again.';
   const PREPARE_FIRST = 'Prepare the reference set in Blind labeling first.';
@@ -315,7 +315,7 @@ describe('Agent review and Blind labeling (review 13 MEDIUM-1, GM r27 1)', () =>
   });
 });
 
-describe('Add to and Add while the collections haven\'t loaded (round 18c, GM r30 2)', () => {
+describe('Add to and Add while the collections haven\'t loaded (design)', () => {
   const TABS = ['All', 'Inbox', 'Agent review', 'Blind labeling', 'Settings'];
   const select = () => document.querySelector<HTMLSelectElement>('.commons-field--inline select')!;
   const add = () => document.querySelector<HTMLButtonElement>('.commons-add > button')!;
@@ -352,14 +352,14 @@ describe('Add to and Add while the collections haven\'t loaded (round 18c, GM r3
   });
 });
 
-describe('the Commons turned off (round 18c, GM r30 wording batch; round 18d, GM r31 layout M)', () => {
+describe('the Commons turned off (design)', () => {
   it('one page line in place of every tab\'s content: "Commons is turned off for this Nebula.", and no sections to pick', async () => {
     commonsOff.on = true;
     render(<CommonsView />);
     await tick(2000);
     expect(commonsLines()).toEqual(['Commons is turned off for this Nebula.']);
     expect(document.querySelector('.commons-main, .commons-filters, .commons-panel-slot, .commons-settings')).toBeNull();
-    // Round 18d (GM r31 layout M, GM r32 1): no tabs, Add to, Add, status, Start or Stop.
+    // Design: no tabs, Add to, Add, status, Start or Stop.
     expect(screen.queryByRole('tab')).toBeNull();
     expect(document.querySelector('.commons-tabs, .commons-field--inline, .commons-add, .commons-status')).toBeNull();
     expect(seen).not.toContain('Commons is disabled');

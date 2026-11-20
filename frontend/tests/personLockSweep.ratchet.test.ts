@@ -1,5 +1,5 @@
 /**
- * PR #204 round 10 (GM r15, r17): every control that sends a route only the person may use locks
+ * Design (PR #204): every control that sends a route only the person may use locks
  * through the one lock (src/hooks/usePersonLock + components/PersonLock): aria-disabled, its line
  * "You can <verb> when this tab is connected as you." under it, no tooltip, unlocked on the
  * promote. The route set is personGateRoutes.py's `personOnly` (require_person, person_only, the
@@ -7,9 +7,9 @@
  * (tests/personGatedCallers callersOf) is mapped here to the component that holds its control and
  * the verb it locks with; a new caller with no entry fails, and so does an entry nothing sends.
  * A read the person alone may make (the agent apps and personal agents lists, and the Commons)
- * switches to the never-connected view on a demote instead (GM r17 item 6): those name the hook.
+ * switches to the never-connected view on a demote instead (design): those name the hook.
  *
- * Round 11 (review 9 lock-sweep LOW-3): controls, not files. From each locked entry's sends
+ * Controls, not files. From each locked entry's sends
  * (callersOf's points) the trace walks to every JSX handler that reaches them
  * (personGatedCallers lockReach: through callers, props handed to components, a hook's returned
  * members), and each must hold a lock: `<lock>.guard(…)` around the call, an early
@@ -75,21 +75,21 @@ const CALLERS: Record<string, Entry> = {
   'store/projectFlows.ts#purge': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
   'store/projectFlows.ts#emptyTrashOf': { lock: 'delete projects for good', in: ['components/projects/ProjectHome.tsx'] },
   'components/asset-trash/AssetTrash.tsx#RecentlyDeletedAssets': { lock: 'delete items for good', in: ['components/asset-trash/AssetTrash.tsx'] },
-  // Round 11 (review 9 MEDIUM-2, LOW-7): these reach PUT /api/settings only through
+  // These reach PUT /api/settings only through
   // lib/runCostConfirm's run-cost carry-over after a settings read, which now runs only on a tab
   // connected as the person (lib/personWork whenPerson) and waits for the promote otherwise. No
   // control sends it.
   'App.tsx#App': { not: 'the run-cost carry-over after the settings read on load (lib/runCostConfirm): sent only from a tab connected as the person (lib/personWork whenPerson), else it waits for the promote' },
   'App.tsx#handleSettingsSaved': { not: 'the run-cost carry-over after the read that follows a save (lib/runCostConfirm): sent only from a tab connected as the person (lib/personWork whenPerson), else it waits for the promote' },
   'components/panels/Settings.tsx#Settings': { not: 'the run-cost carry-over after the read on open (lib/runCostConfirm): sent only from a tab connected as the person (lib/personWork whenPerson), else it waits for the promote' },
-  // Round 11 (review 9 LOW-2): lib/agentNotes' composed paths trace now (they were UNTRACED).
+  // lib/agentNotes' composed paths trace now (they were UNTRACED).
   'store/agentNotesStore.ts#dismiss': { lock: 'dismiss updates', in: ['components/agent-notes/AgentNoteCard.tsx'] },
-  // Round 13 (review 10 MEDIUM-1): markRead and markReadIds send through sendRead, which sends
+  // markRead and markReadIds send through sendRead, which sends
   // nothing on a tab that isn't connected as the person (one read per list waits for the promote).
-  'store/agentNotesStore.ts#sendRead': { not: 'marks Updates read when the person opens or reads them (the corner, a card): opening and reading stay live; on a tab not connected as the person nothing is sent and one read per list waits for the promote (lib/personWork whenPerson); one refused in flight shows nothing and re-joins that wait (GM r23 item 5)' },
+  'store/agentNotesStore.ts#sendRead': { not: 'marks Updates read when the person opens or reads them (the corner, a card): opening and reading stay live; on a tab not connected as the person nothing is sent and one read per list waits for the promote (lib/personWork whenPerson); one refused in flight shows nothing and re-joins that wait' },
 };
 
-/** Round 11: controls lockReach reaches that send nothing person-only, by `file attribute={handler}`
+/** Controls lockReach reaches that send nothing person-only, by `file attribute={handler}`
  * (no line number), with why. One that no longer reaches a locked sender fails. */
 const NOT_SENDING: Record<string, string> = {
   'components/PromptDialog.tsx onKeyDown': 'its only call of onDone is Escape\'s onDone(null), which PinComposer reads as cancel',
@@ -101,7 +101,7 @@ const siteKey = (site: ControlSite) => `${site.file} ${site.attribute}${site.att
 const SAVE_FIELD_VERBS: Record<string, string> = {
   [`${SETTINGS}AgentSpendSection.tsx`]: 'change limits',
   [`${SETTINGS}StorageTab.tsx`]: 'change storage settings',
-  // Round 11 (GM r18 a): the Krea sign-in row locks with the providers' one lock (its `lock` prop).
+  // Design: the Krea sign-in row locks with the providers' one lock (its `lock` prop).
   [`${SETTINGS}ProvidersTab.tsx`]: 'change provider settings',
 };
 
@@ -123,7 +123,7 @@ const key = (route: { method: string; path: string }) => `${route.method} ${rout
 function checkEntry(entry: Entry, where: string, problems: string[]) {
   if ('not' in entry) return;
   if ('demoted' in entry) {
-    // Round 11: usePersonView also reads only on a tab connected as the person (useReadAsPerson).
+    // usePersonView also reads only on a tab connected as the person (useReadAsPerson).
     if (!/use(?:DemotedView|PersonView)\(\)/.test(source(entry.demoted))) problems.push(`${where}: ${entry.demoted} doesn't switch on a demote (useDemotedView or usePersonView)`);
     return;
   }
@@ -139,7 +139,7 @@ function checkEntry(entry: Entry, where: string, problems: string[]) {
   }
 }
 
-/** Round 11: every control that reaches a locked entry's sends holds a lock (lockReach), and
+/** Every control that reaches a locked entry's sends holds a lock (lockReach), and
  * every send is reached from a control or held behind a lock on the way. */
 function checkControls(caller: string, points: { file: string; node: ts.Node }[], problems: string[], used: Set<string>) {
   const reach = lockReach(points);
@@ -156,15 +156,15 @@ function checkControls(caller: string, points: { file: string; node: ts.Node }[]
 const COMMONS = '/api/commons';
 const routes = personOnlyRoutes();
 
-describe('person-only controls lock (PR #204 round 10)', () => {
+describe('person-only controls lock (PR #204)', () => {
   it('reads the person-only routes from the backend, Commons included', () => {
     expect(routes.length).toBeGreaterThan(40);
     expect(routes.some((r) => r.path.startsWith(COMMONS))).toBe(true);
-    // Conditional routes stay live (GM r17 item 7): a spend limit, an approval, a pinned cover.
+    // Conditional routes stay live (design): a spend limit, an approval, a pinned cover.
     for (const live of ['POST /api/execute', 'PUT /api/projects/{project_id}/cover', 'PUT /api/moodboards/{moodboard_id}']) {
       expect(routes.map(key)).not.toContain(live);
     }
-    // Round 11 (review 9 NIT-2): the asset trash's Empty validates its filters first (an `if` that
+    // The asset trash's Empty validates its filters first (an `if` that
     // only raises), then require_person: person-only.
     for (const personOnly of ['POST /api/trash/empty', 'DELETE /api/trash/{kind}/{item_id}', 'POST /api/projects/trash/empty']) {
       expect(routes.map(key)).toContain(personOnly);
@@ -188,7 +188,7 @@ describe('person-only controls lock (PR #204 round 10)', () => {
       }
     }
     for (const caller of Object.keys(CALLERS)) if (!seen.has(caller)) problems.push(`${caller}: in CALLERS but sends no person-only route`);
-    // Round 11 (LOW-3): the controls themselves.
+    // The controls themselves.
     const used = new Set<string>();
     for (const [caller, at] of points) checkControls(caller, at, problems, used);
     for (const site of Object.keys(NOT_SENDING)) if (!used.has(site)) problems.push(`${site}: in NOT_SENDING but no longer reaches a locked sender unlocked`);
@@ -198,13 +198,13 @@ describe('person-only controls lock (PR #204 round 10)', () => {
   it('the Commons: every person-only route goes through commonsApi, which holds them all on a demote', () => {
     const api = source('lib/commonsApi.ts');
     // The one sender, and its first statement answers as with no token while a demote holds
-    // (round 11: the session's own settled demote too; round 13: any settled hold, promoted on
+    // (the session's own settled demote too; any settled hold, promoted on
     // this page or not). Comments may sit above it.
     expect(api).toMatch(/async function send\([^)]*\): Promise<Response> \{\n(?:\s*\/\/.*\n)*\s+if \(commonsCallsHeld\(\) \|\| personHeldSettled\(\)\) throw sessionLost\(heading, sentAt\);/);
     const view = source('components/commons/CommonsView.tsx');
-    // The view holds the calls while it renders demoted (round 11: the parts that matter, not
-    // their adjacency), and its data starts again on the demote and the promote's epoch. Round 13
-    // (review 10 MEDIUM-2): the body takes the view and empties its data (the controls stay), and
+    // The view holds the calls while it renders demoted (the parts that matter, not
+    // their adjacency), and its data starts again on the demote and the promote's epoch.
+    // The body takes the view and empties its data (the controls stay), and
     // the panes that load their own are keyed on it.
     const viewFn = view.slice(view.indexOf('= useDemotedView();') - 40);
     expect(viewFn).toMatch(/^[^]*?const \{ demoted, epoch \} = useDemotedView\(\);\n(?:\s*\/\/.*\n)*\s*holdCommonsCalls\(demoted\);/);
@@ -226,7 +226,7 @@ describe('person-only controls lock (PR #204 round 10)', () => {
         const full = join(dir, name);
         if (statSync(full).isDirectory()) { walk(full); continue; }
         if (!/\.tsx?$/.test(name) || /\.test\./.test(name) || full.endsWith('lib/commonsApi.ts')) continue;
-        // Round 11: the strings and templates it writes, not its comments.
+        // The strings and templates it writes, not its comments.
         if (writtenTexts(readFileSync(full, 'utf8')).some((text) => /\/api\/commons(?!\/blobs\/)/.test(text))) others.push(rel(full));
       }
     };

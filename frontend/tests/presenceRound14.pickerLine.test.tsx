@@ -1,5 +1,5 @@
 /**
- * PR #204 round 14 (GM r23 answers 6 and 3):
+ * Design (PR #204):
  * - The chat's agent picker, on a tab that isn't connected as the person (held, demoted, or a
  *   stored token the backend no longer takes), says under its heading "You can pick your agents
  *   when this tab is connected as you.", and lists none of the person's agents. A connected tab
@@ -50,7 +50,7 @@ const CATALOG = { agent: 'claude', status: 'ready', auth: { mode: 'claudeai' }, 
 const flush = () => act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); });
 const pastFirstMoment = () => act(() => new Promise<void>((resolve) => { setTimeout(resolve, HELD_LOOK_DELAY_MS + 20); }));
 /** Holds the tab and waits for what the views wait on: the hold settled (the held rule's 150 ms,
- * personHeldSettled) and its render committed. Round 18b (CI): a fixed wait raced the settle. */
+ * personHeldSettled) and its render committed. A fixed wait raced the settle (CI). */
 const hold = async () => {
   act(() => session.reportPersonRequired());
   await pastFirstMoment();
@@ -98,7 +98,7 @@ afterEach(() => {
   act(() => connection.noteBackendConnection('online'));
 });
 
-describe('the chat agent picker on a tab not connected as the person (GM r23 answer 6)', () => {
+describe('the chat agent picker on a tab not connected as the person (design)', () => {
   it('a connected tab: no line, the agents listed', async () => {
     act(() => session.notePersonPromoted());
     openPicker();
@@ -166,7 +166,7 @@ describe('the chat agent picker on a tab not connected as the person (GM r23 ans
   });
 });
 
-describe('offline comes first in Settings too (GM r23 answer 3)', () => {
+describe('offline comes first in Settings too (design)', () => {
   const initialDraft = useSettingsDraftStore.getState();
   const SAVED = {
     apiKeys: {}, routing: {}, kreaConnectionMode: 'mcp', outputPath: '/out', exportFolder: '/exports',

@@ -110,7 +110,7 @@ describe('Cinema reference ownership', () => {
   it('keeps per-file HTTP errors actionable, retains successful references and retries explicitly', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({ detail: 'Unavailable' }) }).mockResolvedValueOnce(response());
     attachCinemaReferences(nodeId, 'a', [image('bad.png'), image('good.png')]); await waitFor(() => expect(uploads()).toHaveLength(1));
-    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: 'Nebula couldn’t upload “bad.png” because the server didn’t respond. Try again.', canRetry: true }); // GM 2026-11 copy sweep: the because form, ending as its Try again does
+    expect(uploads()[0]).toMatchObject({ name: 'bad.png', status: 'error', error: 'Nebula couldn’t upload “bad.png” because the server didn’t respond. Try again.', canRetry: true }); // Design 2026-11 copy sweep: the because form, ending as its Try again does
     expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']); expect(getCinemaUploadIssue(nodeId, 'a')).toBe('You can generate after you try “bad.png” again or remove it.');
     fetchMock.mockResolvedValueOnce(response()); retryCinemaReferenceUpload(uploads()[0].id); expect(uploads()[0].status).toBe('uploading');
     await waitFor(() => expect(uploads()).toEqual([])); expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/uploaded.png']);
@@ -125,7 +125,7 @@ describe('Cinema reference ownership', () => {
     fetchMock.mockResolvedValueOnce(response('retry.png')); retryCinemaReferenceUpload(id);
     await waitFor(() => expect(current().shots[0].refImageUrls).toEqual(['/api/outputs/retry.png']));
   });
-  it('GM PR #205 r14 item 4: a stopped upload is neutral until its Try again fails, then a problem again', async () => {
+  it('a stopped upload is neutral until its Try again fails, then a problem again (design, PR #205)', async () => {
     const pending = deferred<ReturnType<typeof response>>(); fetchMock.mockReturnValueOnce(pending.promise);
     attachCinemaReferences(nodeId, 'a', [image()]); const id = uploads()[0].id;
     expect(useGraphStore.getState().reserveGraphImport()).toBe(true);
@@ -235,7 +235,7 @@ describe('Cinema current-recipe admission', () => {
   });
 });
 
-describe('GM 2026-11 copy sweep item 20: the upload row\'s failure lines, in the because form', () => {
+describe('2026-11 copy sweep: the upload row\'s failure lines, in the because form (design)', () => {
   const failed = (status: number, detail?: string) => new RequestFailedError("Couldn't upload photo.png.", status, { detail });
   it.each([
     ['the server is not answering', new ConnectionLostError(new TypeError('Failed to fetch')),
@@ -264,7 +264,7 @@ describe('GM 2026-11 copy sweep item 20: the upload row\'s failure lines, in the
     expect(line.endsWith('Try again.')).toBe(retryable);
   });
 
-  // Design r160 answer 4: the status reasons are errorCopy's, not a table of the row's own.
+  // Design: the status reasons are errorCopy's, not a table of the row's own.
   it.each([0, 408, 429, 500, 502, 503, 504, 401, 403])('a status %s reads as errorCopy’s own action line does', (status) => {
     const error = status === 0 ? new ConnectionLostError(new TypeError('Failed to fetch')) : failed(status);
     expect(uploadFailure('photo.png', error)).toEqual(actionFailedLine('upload “photo.png”', error));

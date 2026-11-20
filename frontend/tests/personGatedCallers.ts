@@ -1,8 +1,8 @@
 /**
- * PR #204 round 5 (review 3 MEDIUM-1): the structural half of the "clears on promote" ratchet.
+ * PR #204: the structural half of the "clears on promote" ratchet.
  * It finds, without a hand-written map:
  *
- * 1. Every backend route behind the person gate: a route anywhere in backend/ (round 7)
+ * 1. Every backend route behind the person gate: a route anywhere in backend/
  *    whose handler reaches a gate form (`require_person(`, `_person_only_refusal(`,
  *    `stop_refusal(`, `person_only`, PersonGateError or PERSON_REQUIRED written inline, or a
  *    `Depends(person_only)` route, parameter or router) directly or through any helper in
@@ -36,8 +36,8 @@ const walk = (dir: string, ext: RegExp): string[] => readdirSync(dir).flatMap((n
 export interface GatedRoute { method: string; path: string; handler: string }
 
 /**
- * Every backend route behind the person gate, read with Python's ast (tests/personGateRoutes.py,
- * review 4 LOW-2, round 6): multi-line decorators, either quote, api_route, helpers in services/
+ * Every backend route behind the person gate, read with Python's ast (tests/personGateRoutes.py):
+ * multi-line decorators, either quote, api_route, helpers in services/
  * and other modules, aliases, a class's static method, PersonGateError or PERSON_REQUIRED written
  * inline, Depends(person_only) in a parameter or a router's dependencies=. `files` (tests): a
  * backend given as {path: source} in place of the real one.
@@ -47,7 +47,7 @@ export function gatedRoutes(files?: Record<string, string>): GatedRoute[] {
 }
 
 /**
- * PR #204 round 10: the routes that refuse anyone but the person every time (personGateRoutes.py
+ * PR #204: the routes that refuse anyone but the person every time (personGateRoutes.py
  * personOnly: require_person, person_only or the Commons' human_dep, reached unconditionally),
  * the set whose controls lock (tests/personLockSweep.ratchet.test.ts).
  */
@@ -55,7 +55,7 @@ export function personOnlyRoutes(files?: Record<string, string>): GatedRoute[] {
   return [...readGateRoutes(files).personOnly].sort((a, b) => `${a.path} ${a.method}`.localeCompare(`${b.path} ${b.method}`));
 }
 
-/** A route form personGateRoutes.py can't read (round 7): it is listed, never skipped. */
+/** A route form personGateRoutes.py can't read: it is listed, never skipped. */
 export interface UnreadableRouteForm {
   file: string; line: number; form: string;
   handler: string | null; method: string | null; path: string | null;
@@ -89,12 +89,12 @@ function readGateRoutes(files?: Record<string, string>): GateScan {
 
 export interface Unit {
   file: string; name: string; wide: boolean; node: ts.Node; via?: string; constant?: boolean;
-  /** Round 6 (review 4 MEDIUM-1): what the catch on this call does with a refusal, at the worst
+  /** What the catch on this call does with a refusal, at the worst
    * of the unit's calls on the route: 'keeps' (registers), 'drops' (must be declared). */
   outcome?: Outcome;
-  /** It hands a Response back to its callers (round 7): their `!res.ok` handling is what's read. */
+  /** It hands a Response back to its callers: their `!res.ok` handling is what's read. */
   responds?: boolean;
-  /** Round 11: where in the unit the route is reached (callersOf's result): the calls or paths
+  /** Where in the unit the route is reached (callersOf's result): the calls or paths
    * lockReach follows to the controls. */
   points?: ts.Node[];
 }
@@ -102,8 +102,7 @@ export interface Unit {
 const isFunctionLike = (node: ts.Node | undefined): boolean => !!node && (ts.isArrowFunction(node) || ts.isFunctionExpression(node));
 
 /** The nearest named function around `node`: a declaration, a const bound to a function (or a
- * call that wraps one: a hook, useCallback), an object's method or function property, or (round 6,
- * review 4 LOW-1) a top-level const that holds the path itself, traced through its references. */
+ * call that wraps one: a hook, useCallback), an object's method or function property, or a top-level const that holds the path itself, traced through its references. */
 function unitOf(file: string, node: ts.Node): Unit | null {
   for (let n: ts.Node | undefined = node; n; n = n.parent) {
     if (ts.isFunctionDeclaration(n) && n.name) return { file, name: n.name.text, wide: ts.isSourceFile(n.parent), node: n };
@@ -129,8 +128,7 @@ function pathRoot(node: ts.Node): ts.Node {
   return n;
 }
 
-/** A top-level `const NAME = '…'` of the node's file, by name: what a placeholder holds. Round 11
- * (review 9 LOW-3): also one imported by name (`import { PRESETS_PATH } from '../lib/paths'`, an
+/** A top-level `const NAME = '…'` of the node's file, by name: what a placeholder holds. Also one imported by name (`import { PRESETS_PATH } from '../lib/paths'`, an
  * alias, a re-export) or read off a namespace import (`paths.PRESETS_PATH`). */
 function constantText(node: ts.Node): string | null {
   if (ts.isPropertyAccessExpression(node)) return namespaceConstText(node);
@@ -206,7 +204,7 @@ function namespaceConstText(node: ts.PropertyAccessExpression): string | null {
 }
 
 /**
- * Round 10 (review 8 LOW-1): the `const` a name refers to when it is declared in a block around
+ * The `const` a name refers to when it is declared in a block around
  * the name inside a function (a top-level one is constantText's). Null for anything else: a
  * declaration, a property's name, a parameter, a top-level name.
  */
@@ -251,8 +249,7 @@ function readableTexts(node: ts.Node, depth = 0): string[] | null {
   const texts = literalTexts(e);
   return texts.length > 0 ? texts : null;
 }
-/** The texts of the function-local `const` a name refers to (null: not one, or not read). Round 11
- * (review 9 NIT-1): a const read while it is being read (`const u = \`${u}/api/…\``, TDZ code) is
+/** The texts of the function-local `const` a name refers to (null: not one, or not read). A const read while it is being read (`const u = \`${u}/api/…\``, TDZ code) is
  * null there, so no cycle runs away. */
 const reading = new Set<ts.VariableDeclaration>();
 function localConstTexts(node: ts.Node, depth = 0): string[] | null {
@@ -270,8 +267,8 @@ function nameText(node: ts.Node): string | null {
 }
 
 /** A literal's texts: one, or, for a template whose placeholder picks between two strings
- * (`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/…`), one per choice (round 7).
- * Round 10: a name that refers to a function-local `const` path is that path, written here. */
+ * (`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/…`), one per choice.
+ * A name that refers to a function-local `const` path is that path, written here. */
 function literalTexts(node: ts.Node): string[] {
   if (ts.isIdentifier(node)) return localConstTexts(node) ?? [];
   if (ts.isTemplateExpression(node)) {
@@ -297,11 +294,11 @@ function spanChoices(expression: ts.Expression): string[] {
 
 function literalText(node: ts.Node): string | null {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-  // Round 7 (gates-security LOW-1): a placeholder that names a top-level string const is its text
+  // A placeholder that names a top-level string const is its text
   // (`${API}presets` with `const API = '/api/'`).
   if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map((span) => `${nameText(span.expression) ?? '\uE000'}${span.literal.text}`).join('');
   if (ts.isParenthesizedExpression(node)) return literalText(node.expression);
-  // Round 6 (review 4 LOW-1): '/api/' + 'presets', `${BASE}/api/…` + id.
+  // '/api/' + 'presets', `${BASE}/api/…` + id.
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
     const left = literalText(node.left) ?? nameText(node.left);
     const right = literalText(node.right) ?? nameText(node.right);
@@ -312,7 +309,7 @@ function literalText(node: ts.Node): string | null {
 }
 
 /** A literal's path as a route reads it: a base before /api/ (`${BASE}/api/…`) and a written
- * ?query dropped (review 4 LOW-1). Null when it holds no /api/ path. */
+ * ?query dropped. Null when it holds no /api/ path. */
 function apiPath(text: string): string | null {
   const at = text.indexOf('/api/');
   if (at < 0) return null;
@@ -382,19 +379,19 @@ interface Frontend {
   references: Map<string, { file: string; node: ts.Identifier }[]>;
   imports: Map<string, Map<string, Taken>>;
   /** Every /api/ literal in a function, read once. `wrapped`: handed to a same-file function
-   * that returns the transport's Response (round 11). */
+   * that returns the transport's Response. */
   literals: Literal[];
-  /** /api/ text the trace can't follow (round 6, fail closed), with why (round 11). */
+  /** /api/ text the trace can't follow (fail closed), with why. */
   untraced: Untraced[];
   /** A module's default export: the name of the function it is. */
   defaults: Map<string, string>;
-  /** Functions that return an /api/ path, by `file#name`, with each path they return (round 9). */
+  /** Functions that return an /api/ path, by `file#name`, with each path they return. */
   helpers: Map<string, string[]>;
-  /** Helper references whose call is read as part of a longer path (round 11). */
+  /** Helper references whose call is read as part of a longer path. */
   composed: Set<ts.Node>;
-  /** Path const references the trace reads at the local they're held in, or lists (round 11). */
+  /** Path const references the trace reads at the local they're held in, or lists. */
   heldConsts: Set<ts.Node>;
-  /** Round 13 (review 10 LOW-3): a path const's or helper's reference handed to a function that
+  /** A path const's or helper's reference handed to a function that
    * returns the transport's Response, with that function's call (its `!res.ok` is what's read). */
   wrappedRefs: Map<ts.Node, ts.CallExpression>;
   byFile: Map<string, ts.SourceFile>;
@@ -445,7 +442,7 @@ function build(files: Parsed[]): Frontend {
   const references = new Map<string, { file: string; node: ts.Identifier }[]>();
   for (const { file, source } of files) {
     const visit = (node: ts.Node) => {
-      // `getState()['save']()`: the string names the action (review 5 LOW-7, round 7).
+      // `getState()['save']()`: the string names the action.
       if (ts.isStringLiteral(node) && ts.isElementAccessExpression(node.parent) && node.parent.argumentExpression === node) {
         references.set(node.text, [...(references.get(node.text) ?? []), { file, node: node as unknown as ts.Identifier }]);
       }
@@ -528,18 +525,18 @@ function build(files: Parsed[]): Frontend {
   const take = (file: string, node: ts.Node, text: string) => {
     const path = apiPath(text);
     const unit = unitOf(file, node);
-    // Round 7 (gates-security LOW-1): a path whose first segment is a placeholder
+    // A path whose first segment is a placeholder
     // (`/api/${kind}/…`) could be any route, and a string that is only the /api/ prefix is
     // joined to one somewhere the trace can't read: both are listed, never skipped.
     const unplaced = path !== null && (/^\/api\/\uE000/.test(path) || /^\/api\/?$/.test(path));
     // `new OfflineRefusal('POST', '/api/…')` names the request a refusal stands for; it
-    // sends nothing (round 7: no longer a caller to follow).
+    // sends nothing (no longer a caller to follow).
     if (describesOnly(node)) return;
     const held = heldPath(node);
     if (held === 'followed') return;
-    // Round 11 (review 9 LOW-3): a path handed to a same-file function that sends it
+    // A path handed to a same-file function that sends it
     // (`const post = (u) => apiFetch(u, …); post('/api/x')`) is that function's request.
-    // Round 13 (review 10 LOW-3): an imported one, or an object's member, too (calledFunction).
+    // An imported one, or an object's member, too (calledFunction).
     const wrapper = paramWrapper(node);
     const reason = path === null ? 'no /api/ path at its start' : !unit ? 'not in a function' : unplaced ? 'its first segment isn\'t written'
       : held === 'unread' ? 'held in a name or object the trace doesn\'t read' : unreadUse(node, false) ? 'used where the trace can\'t read it'
@@ -555,7 +552,7 @@ function build(files: Parsed[]): Frontend {
         for (const text of texts) take(file, node, text);
         return; // the parts of a `+` are read with it
       }
-      // Round 11 (review 9 LOW-3): '/api' joined to something the trace can't read
+      // '/api' joined to something the trace can't read
       // (`'/api' + path`, `${API}${path}`) could be any route: listed. A top-level const that
       // holds it is checked at each use instead.
       if (texts.some((text) => /^\uE000*\/api(?:\uE000|$)/.test(text)) && !describesOnly(node)) {
@@ -571,8 +568,8 @@ function build(files: Parsed[]): Frontend {
     visit(source);
   }
   const reachable = (reference: { file: string }, file: string) => reference.file === file || !!imports.get(reference.file)?.has(file);
-  // Round 9 (review 7 LOW-2): each call of a path helper whose use can't be read is untraced too.
-  // Round 11 (review 9 LOW-2): a helper's call inside a longer path (`${base(s)}/${id}/dismiss`,
+  // Each call of a path helper whose use can't be read is untraced too.
+  // A helper's call inside a longer path (`${base(s)}/${id}/dismiss`,
   // `base(s) + '/read'`) is read with the rest of it, the helper's every path in its place: that
   // is the path sent, not the helper's own.
   const helpers = pathHelpers(literals);
@@ -595,7 +592,7 @@ function build(files: Parsed[]): Frontend {
         }
         continue;
       }
-      // Round 13 (review 10 LOW-3): its call handed to a function that sends it (paramWrapper).
+      // Its call handed to a function that sends it (paramWrapper).
       const wrapper = call === reference.node ? null : paramWrapper(call);
       if (wrapper === 'responds') wrappedRefs.set(reference.node, climbPath(call).parent as ts.CallExpression);
       if (wrapper === 'unread' || wrapper === 'unknown') {
@@ -610,7 +607,7 @@ function build(files: Parsed[]): Frontend {
         reason: helperPassed(reference.node) ? 'a path helper handed on uncalled' : 'a path helper\'s call used where the trace can\'t read it' });
     }
   }
-  // Round 11 (review 9 LOW-3): a path const used by name. Held in a function-local const that is
+  // A path const used by name. Held in a function-local const that is
   // read at its uses (literalTexts): those uses are the request. Held where the trace can't read
   // it (a `let`, an object): listed. Written into a longer path read as one: that path is.
   const heldConsts = new Set<ts.Node>();
@@ -625,7 +622,7 @@ function build(files: Parsed[]): Frontend {
       if (whole !== named && literalTexts(whole).some((t) => t.includes('/api/'))) { heldConsts.add(reference.node); continue; }
       const held = heldPath(named);
       if (held === null) {
-        // Round 13 (review 10 LOW-3): handed to a function that sends it (`post(PRESETS)`).
+        // Handed to a function that sends it (`post(PRESETS)`).
         const wrapper = paramWrapper(named);
         if (wrapper === 'responds') wrappedRefs.set(reference.node, climbPath(named).parent as ts.CallExpression);
         if (wrapper === 'unread' || wrapper === 'unknown') {
@@ -640,7 +637,7 @@ function build(files: Parsed[]): Frontend {
       if (held === 'unread') untraced.push({ file: reference.file, line: lineOf(reference.node), text: shown(text), reason: 'a path const held in a name or object the trace doesn\'t read' });
     }
   }
-  // Round 11 (review 9 LOW-3): a top-level const that is only '/api' is joined to a path at each
+  // A top-level const that is only '/api' is joined to a path at each
   // use; a use the trace doesn't read as one /api/ path is listed.
   for (const { file, source } of files) {
     for (const statement of source.statements) {
@@ -665,7 +662,7 @@ function constHolding(node: ts.Node): ts.VariableDeclaration | null {
   return declaration && ts.isVariableDeclaration(declaration) && declaration.initializer === climbPath(node)
     && ts.isIdentifier(declaration.name) && isConstList(declaration) ? declaration : null;
 }
-/** Round 11: whether a use of a '/api' prefix (a name for it) is read as one /api/ path: written
+/** Whether a use of a '/api' prefix (a name for it) is read as one /api/ path: written
  * into a template or `+` that is one, or held in a local const each of whose uses is. */
 function prefixUseRead(use: ts.Node, depth = 0): boolean {
   const whole = climbPath(helperName(use));
@@ -723,12 +720,12 @@ function composedTexts(node: ts.Node, call: ts.Node, texts: string[]): string[] 
 }
 
 /**
- * Round 11 (review 9 LOW-3): a path handed to a same-file function (`const post = (u) =>
+ * A path handed to a same-file function (`const post = (u) =>
  * apiFetch(u, …)`, a function declaration) whose parameter at that place is a transport's path:
  * 'responds' when the function returns that transport's Response (its caller's `!res.ok` is
  * what's read); null when it throws on every failure answer (a throwing call, as before) or for
  * any other call; 'unread' when it reads the answer some other way (listed).
- * Round 13 (review 10 LOW-3): the function is also found through an import (by name, an alias, a
+ * The function is also found through an import (by name, an alias, a
  * re-export, a namespace) and as a member of a top-level object (`http.post(…)`, same file or
  * imported). 'unknown': the callee is one of the trace's own files' functions or objects, but
  * the trace can't read which function it is (listed, never decided by the catch around it).
@@ -743,8 +740,7 @@ function paramWrapper(at: ts.Node): 'responds' | 'unread' | 'unknown' | null {
   return found ? wrapperOutcome(found, call.arguments.indexOf(top as ts.Expression)) : null;
 }
 
-/** What a wrapper does with the path its parameter `index` takes: as paramWrapper. Round 14
- * (review 11 LOW-4, P3): a body that hands the parameter on to another of the trace's functions
+/** What a wrapper does with the path its parameter `index` takes: as paramWrapper. A body that hands the parameter on to another of the trace's functions
  * (`post = (u) => send(u)`) is followed there; one the trace can't read is 'unknown'. */
 function wrapperOutcome(fn: ts.FunctionLikeDeclaration, index: number, depth = 0): 'responds' | 'unread' | 'unknown' | null {
   const param = fn.parameters[index]?.name;
@@ -898,7 +894,7 @@ function defaultExport(source: ts.SourceFile): ts.FunctionLikeDeclaration | ts.O
   return null;
 }
 /**
- * Round 13 (review 10 LOW-3): the function a call's callee names, where the trace can read it:
+ * The function a call's callee names, where the trace can read it:
  * a same-file function (runnerNamed), one imported by name (an alias, a re-export), a namespace
  * import's member, or a member of a top-level object literal, in this file or imported
  * (`http.post(…)`). 'unknown': the callee is one of the trace's files' own (an import of them, a
@@ -915,12 +911,12 @@ function calledFunction(call: ts.CallExpression): ts.FunctionLikeDeclaration | '
     if (own) return own;
     const bound = importOf(source, callee.text);
     if (bound) return bound.name === null ? 'unknown' : asFunction(exportedValue(bound.module, bound.name));
-    // Round 14 (review 11 LOW-4, P1): `import post from '…'`, through its `export default`.
+    // `import post from '…'`, through its `export default`.
     const module = defaultImportOf(source, callee.text);
     if (module) return asFunction(exportedValue(module, 'default'));
     return null;
   }
-  // Round 14 (P13): a function a call returns (`usePost()(…)`): when that call is the trace's own,
+  // A function a call returns (`usePost()(…)`): when that call is the trace's own,
   // which function it returns isn't read.
   if (ts.isCallExpression(callee)) return calledFunction(callee) === null ? null : 'unknown';
   if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)) return null;
@@ -939,7 +935,7 @@ function calledFunction(call: ts.CallExpression): ts.FunctionLikeDeclaration | '
 }
 
 /** Functions that return an /api/ path (`const presetsPath = () => '/api/presets'`), by
- * `file#name`, with each path (round 11: a helper that picks between two keeps both). */
+ * `file#name`, with each path (a helper that picks between two keeps both). */
 function pathHelpers(literals: Frontend['literals']): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const { text, unit, node } of literals) {
@@ -960,7 +956,7 @@ function enclosingFunction(node: ts.Node): ts.Node | undefined {
 }
 
 /** Constructors and functions whose /api/ argument only names a request (nothing is sent):
- * graphStore's describeSaves turns a path into the settings GM's lines name. */
+ * graphStore's describeSaves turns a path into the settings design's lines name. */
 const DESCRIBES = new Set(['OfflineRefusal', 'describeSaves']);
 function describesOnly(node: ts.Node): boolean {
   let n: ts.Node = node;
@@ -972,8 +968,7 @@ function describesOnly(node: ts.Node): boolean {
 const COMPARES = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
   ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken]);
 /** Climbs from a path literal through what still names the same request: parentheses, a concat,
- * a template, and either branch of a conditional (`want ? '/a' : '/b'`). Round 9 (review 7
- * LOW-2): also the whole template, and await, `as`, `satisfies`, `!` and `<T>x`. */
+ * a template, and either branch of a conditional (`want ? '/a' : '/b'`). Also the whole template, and await, `as`, `satisfies`, `!` and `<T>x`. */
 function climbPath(at: ts.Node): ts.Node {
   let n: ts.Node = at;
   while (n.parent && (ts.isParenthesizedExpression(n.parent) || ts.isBinaryExpression(n.parent) || ts.isTemplateSpan(n.parent)
@@ -991,7 +986,7 @@ const calleeName = (call: ts.CallExpression): string => ts.isIdentifier(call.exp
   : ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : '';
 
 /** The expression a helper's reference makes its path with: `helper()`, `paths.helper()`, and
- * (round 10, review 8 LOW-1) `paths['helper']()`. */
+ * `paths['helper']()`. */
 function helperCall(at: ts.Node): ts.Node {
   const n = helperName(at);
   return n.parent && ts.isCallExpression(n.parent) && n.parent.expression === n ? n.parent : at;
@@ -1002,7 +997,7 @@ function helperName(at: ts.Node): ts.Node {
   if (at.parent && ts.isElementAccessExpression(at.parent) && at.parent.argumentExpression === at) return at.parent;
   return at;
 }
-/** Round 10 (review 8 LOW-1, fail closed): a path helper handed to a call uncalled
+/** Fail closed: a path helper handed to a call uncalled
  * (`send(presetsPath)`): the call that makes its path isn't read, so it is listed. */
 function helperPassed(at: ts.Node): boolean {
   let n = helperName(at);
@@ -1011,7 +1006,7 @@ function helperPassed(at: ts.Node): boolean {
 }
 
 /**
- * Round 9 (review 7 LOW-2, fail closed): a path, or a path helper's call, whose use the trace
+ * Fail closed: a path, or a path helper's call, whose use the trace
  * can't read once it went through await, `as`, `!`, a template or a URL wrapper (or, for a
  * helper, at all): not a transport's path, not a call's argument, not returned, not a const that
  * is followed as its own function. It is listed as untraced; no catch decides it.
@@ -1042,7 +1037,7 @@ const isAssignment = (node: ts.Node): boolean => ts.isBinaryExpression(node)
   && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
 
 /**
- * Round 10 (review 8 LOW-1, fail closed): a path held in a name or an object inside a function.
+ * Fail closed: a path held in a name or an object inside a function.
  * - 'followed': the whole value of a function-local `const` (read through a conditional whose
  *   branches are both read), used by name: each use is read as the path written there
  *   (literalTexts), so this one isn't.
@@ -1075,12 +1070,12 @@ function heldPath(node: ts.Node): 'followed' | 'unread' | null {
   return null;
 }
 
-/** /api/ text the trace can't follow to a function: each must be declared (round 6, fail closed). */
+/** /api/ text the trace can't follow to a function: each must be declared (fail closed). */
 export function untracedApiText(): Untraced[] {
   return frontend().untraced;
 }
 
-/** What happens to a refusal at a call in a unit (review 4 MEDIUM-1, round 6): the catch around
+/** What happens to a refusal at a call in a unit: the catch around
  * this call registers its line ('keeps'), throws it on to the unit's callers ('passes'), or
  * neither ('drops', which must be declared). */
 export type Outcome = 'keeps' | 'passes' | 'drops';
@@ -1157,13 +1152,12 @@ function answersWithResponse(at: ts.Node): boolean {
   return transportAround(at) !== null;
 }
 
-/** The fetch, apiFetch or graphMutationFetch call `at` is the path of: the path itself, or (round 8,
- * review 6 gates LOW-4) a call that makes it (`apiFetch(presetsPath(), …)`), whose Response is the
+/** The fetch, apiFetch or graphMutationFetch call `at` is the path of: the path itself, or a call that makes it (`apiFetch(presetsPath(), …)`), whose Response is the
  * transport's, not the helper's. */
 function transportAround(at: ts.Node): ts.CallExpression | null {
-  // Round 9 (review 7 LOW-2): a method helper (`paths.presets()`), and a call around the path
+  // A method helper (`paths.presets()`), and a call around the path
   // that isn't a transport (`String(x)`, `backendUrl(x)`): the transport's path is what counts.
-  // Round 11 (review 9 LOW-3): a const read off a namespace (`apiFetch(paths.PRESETS_PATH)`) is
+  // A const read off a namespace (`apiFetch(paths.PRESETS_PATH)`) is
   // the property access.
   const start = climbPath(at);
   const called = helperCall(start);
@@ -1295,8 +1289,7 @@ function failureBranches(name: string, scope: ts.Node): ts.Node[][] {
 }
 
 /**
- * What happens to a refusal at a call in a unit (review 4 MEDIUM-1, round 6; review 5 MEDIUM-1
- * and gates-security LOW-1, round 7):
+ * What happens to a refusal at a call in a unit:
  * - A call that answers with a Response (fetch, apiFetch, graphMutationFetch, or a function that
  *   returns one): the unit returns it to its callers ('passes'), or each failure branch on it
  *   (`!res.ok`) registers its line there (a marker, or a direct call to a function whose own
@@ -1355,7 +1348,7 @@ function catchOutcome(unit: Unit, at: ts.Node, throwing = false): Outcome {
 }
 
 /** Whether `at` sits in a callback handed to a same-file runner (`run(async () => …)`) that
- * awaits that callback inside a try whose catch registers the line (round 7). */
+ * awaits that callback inside a try whose catch registers the line. */
 function runnerKeeps(unit: Unit, at: ts.Node): boolean {
   const body = unitBody(unit);
   for (let n: ts.Node = at; n.parent && n !== body; n = n.parent) {
@@ -1480,7 +1473,7 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
   };
   const reach = (unit: Unit, at: ts.Node, responds = false) => {
     const id = `${unit.file}#${unit.name}`;
-    // A function that hands back a Response it got: its callers read `!res.ok` (round 7).
+    // A function that hands back a Response it got: its callers read `!res.ok`.
     const call = callAround(at);
     const handsBack = !!call && (responds || answersWithResponse(at)) && returnsCall(unit, call) && !throwsOnFailure(call);
     // A lib helper the ratchet declares as where its route's answer stops (stopAt).
@@ -1524,7 +1517,7 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
     seen.add(id);
     let followed = 0;
     const named = [unit.name];
-    // A local name is followed only inside the scope that declares it (round 7: `refused` in
+    // A local name is followed only inside the scope that declares it (`refused` in
     // one function isn't `refused` in another).
     const scope = unit.wide ? null : declaringScope(unit.node);
     for (const name of named) for (const reference of references.get(name) ?? []) {
@@ -1533,7 +1526,7 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       const parent = reference.node.parent;
       // `typeof helper` in a type names it; it sends nothing.
       if (ts.isTypeQueryNode(parent)) { followed += 1; continue; }
-      // Round 11: a helper's call read as part of a longer path, or a path const read at the
+      // A helper's call read as part of a longer path, or a path const read at the
       // local that holds it (or listed): that path, or the local's uses, are the request.
       if ((helpers.has(id) && composed.has(reference.node) || unit.constant && heldConsts.has(reference.node))
         && (reference.file === unit.file || imports.get(reference.file)?.has(unit.file))) { followed += 1; continue; }
@@ -1551,7 +1544,7 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       }
       if (reference.file !== unit.file && !reachesThroughImport(imports.get(reference.file)?.get(unit.file), reference.node, isStoreAction(unit))
         && !(isStoreAction(unit) && reachesStoreThroughAlias(imports.get(reference.file), unit.file, imports))) continue;
-      // `const { action } = useStore.getState()` (review 5 LOW-7, round 7): the local name is
+      // `const { action } = useStore.getState()`: the local name is
       // followed to its calls in that file.
       if (ts.isBindingElement(parent) && ((parent.propertyName ?? parent.name) === reference.node) && ts.isIdentifier(parent.name)) {
         queue.push({ file: reference.file, name: parent.name.text, wide: false, node: parent, responds: unit.responds });
@@ -1573,13 +1566,13 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
       const caller = unitOf(reference.file, reference.node);
       if (!caller || (caller.file === unit.file && caller.name === unit.name)) continue;
       followed += 1;
-      // Round 9: a path helper's call whose use can't be read (listed as untraced) drops here;
-      // round 10, so does a helper handed to a call uncalled (`send(presetsPath)`).
+      // A path helper's call whose use can't be read (listed as untraced) drops here;
+      // So does a helper handed to a call uncalled (`send(presetsPath)`).
       if (helpers.has(id) && (helperPassed(reference.node) || helperCall(reference.node) !== reference.node && unreadUse(reference.node, true))) {
         keep(`${caller.file}#${caller.name}`, caller, 'drops', reference.node);
         continue;
       }
-      // Round 13 (review 10 LOW-3): handed to a function that returns the transport's Response:
+      // Handed to a function that returns the transport's Response:
       // what that call's answer is read as decides it.
       const wrapperCall = wrappedRefs.get(reference.node);
       reach({ ...caller, via: id }, wrapperCall ?? reference.node, unit.responds || !!wrapperCall);
@@ -1591,7 +1584,7 @@ export function callersOf(route: { method: string; path: string }, extraStarts: 
         followed += 1;
       }
     }
-    // Fail closed (round 6; round 7, every unit): a function the trace reached and must follow
+    // Fail closed (every unit): a function the trace reached and must follow
     // (a lib helper, one whose catch throws on, a store action, a destructured name) but can't
     // follow to any caller (a class built with `new`, a helper passed as a value) is returned,
     // so it must be declared.
@@ -1615,7 +1608,7 @@ const passedCache = new Set<string>();
 export function passedThrough(): Set<string> { return passedCache; }
 
 /** A store reached through modules that import it (`export const useAlias = useA` in b.ts, and
- * round 8, review 6 gates NIT-1: `export const useC = useB` in c.ts), any number of hops. */
+ * `export const useC = useB` in c.ts), any number of hops. */
 function reachesStoreThroughAlias(from: Map<string, Taken> | undefined, store: string, imports: Map<string, Map<string, Taken>>,
   seen = new Set<string>()): boolean {
   if (!from) return false;
@@ -1633,7 +1626,7 @@ function reachesThroughImport(taken: Taken | undefined, node: ts.Identifier, sto
   if (taken.dynamic) return true;
   const parent = node.parent;
   if (ts.isElementAccessExpression(parent) && storeAction) return true; // `getState()['action']()`
-  // `const { action } = useStore.getState()` (round 8, review 6 gates NIT-1: round 7's follow of the
+  // `const { action } = useStore.getState()` (an earlier version's follow of the
   // destructured name never ran, as the store's file was only reached through a property).
   if (storeAction && ts.isBindingElement(parent) && (parent.propertyName ?? parent.name) === node) return true;
   if (ts.isPropertyAccessExpression(parent) && parent.name === node) {
@@ -1647,9 +1640,8 @@ function reachesThroughImport(taken: Taken | undefined, node: ts.Identifier, sto
 const MARKED = /^\/\/ clears-on-promote: [\w.-]+/;
 /**
  * The `//` comments a marker on a node may be: those inside it and the one that ends its last
- * line. Round 7: never its leading trivia, which holds the line before it (a marker there belongs
- * to the statement it ends, and counted for the next function or branch too). Round 8 (review 6
- * held LOW-5, gates LOW-4): read from the scanner's comment ranges, never the node's text, so a
+ * line. Never its leading trivia, which holds the line before it (a marker there belongs
+ * to the statement it ends, and counted for the next function or branch too). Read from the scanner's comment ranges, never the node's text, so a
  * marker's words in a string, a template, a block comment or a JSX comment (`{/* … *\/}`) aren't
  * one. JSX text isn't trivia either: no comment is read at or after it.
  */
@@ -1695,7 +1687,7 @@ function keepersIn(file: string): Set<string> {
     ts.forEachChild(node, visit);
   };
   visit(parsed.source);
-  // Review 5 MEDIUM-1 (round 7): a keeper registers in its own body. A function that calls one
+  // A keeper registers in its own body. A function that calls one
   // anywhere isn't (the call may be on another path); one whose body always makes that call, as
   // a statement of its own body or as an arrow's whole body, is, when every function of that
   // name in the file does.
@@ -1739,7 +1731,7 @@ export function registersInBody(unit: Unit): boolean {
 }
 
 /**
- * Round 9 (review 7 NIT-2): what a socket's person-only refusal lacks in `file`, read from the
+ * What a socket's person-only refusal lacks in `file`, read from the
  * syntax tree. None when the file opens a WebSocket whose URL ends in `path` (written there, or
  * made by a call written with it: `backendWebSocketUrl('/ws/chat').then((url) => …)`), and in
  * that socket's message handler a branch on `<event>.code === PERSON_REQUIRED_CODE` (or a const
@@ -1844,7 +1836,7 @@ function socketUrlEndsIn(node: ts.Expression, path: string): boolean {
   return false;
 }
 
-// ---------- round 11: from a sending unit to the controls that reach it ----------
+// ---------- from a sending unit to the controls that reach it ----------
 
 /** A JSX attribute whose handler reaches a person-only request, and how it is locked (null: it
  * isn't). */
@@ -1994,7 +1986,7 @@ function controlCall(expression: ts.Expression): string | null {
     && isLock(e.expression.expression)) return `${e.expression.expression.getText()}.control()`;
   return null;
 }
-/** Round 11: a lock taken only while a condition holds (`{...(cond ? lock.control() : {})}`
+/** A lock taken only while a condition holds (`{...(cond ? lock.control() : {})}`
  * with `onClick={cond ? lock.guard(f) : () => f()}`): the spread's branch is `<lock>.control()`,
  * and a handler on the same element is a conditional on the same condition whose branch on the
  * same side is `<lock>.guard(…)` of the same lock. What the other side sends is the code's own
@@ -2132,7 +2124,7 @@ function storeRead(reference: ts.Identifier, store: string, imports: Map<string,
 }
 
 /**
- * Round 11 (review 9 lock-sweep LOW-3): from the points where units send a person-only route
+ * From the points where units send a person-only route
  * (callersOf's `points`) to every JSX attribute whose handler reaches them, through each
  * function's callers (by name, imports, store actions and selectors, as callersOf follows them),
  * a prop handed to a component (into that component's use of it), and a member a hook returns

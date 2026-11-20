@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { ModalPortal } from '../src/components/ModalPortal';
 
 /**
- * Review 9, M-1: modals portalled from inside a node card (the Mesh and World
+ * Modals portalled from inside a node card (the Mesh and World
  * previews) bubbled their React events to the node: arrows on the preview's
  * Close moved the node, Enter selected it, Escape deselected it. Every modal
  * in the app now renders through one ModalPortal: on document.body, with
@@ -49,7 +49,7 @@ describe('every modal in the app renders through ModalPortal', () => {
     },
   );
 
-  it('the command palette is one of them (review 9, L-1)', () => {
+  it('the command palette is one of them', () => {
     expect(readFileSync(join(SRC, 'components/CommandPalette.tsx'), 'utf8')).toMatch(/\saria-modal="true"/);
   });
 });

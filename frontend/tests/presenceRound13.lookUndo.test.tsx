@@ -1,10 +1,10 @@
 /**
- * PR #204 round 13, review 10 lock-look-ui:
- * - LOW-3 (GM r17 item 1: "no section shows the same line twice"): the key-added Undo locks with
+ * PR #204:
+ * - Design ("no section shows the same line twice"): the key-added Undo locks with
  *   the Providers group's words. With the Providers tab open its line is already under the
  *   group's heading, so Undo points at that line and shows no second copy, and nothing new is
  *   said inside the notice's live region. Off the Providers tab Undo keeps its own line under it.
- * - LOW-4, mutant L13: a click on the locked Undo removes nothing (no DELETE); after the promote
+ * - A click on the locked Undo removes nothing (no DELETE); after the promote
  *   it does.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -81,7 +81,7 @@ afterEach(() => {
   useSettingsDraftStore.setState(initialDraft, true);
 });
 
-describe('the key-added Undo, locked (review 10 LOW-3)', () => {
+describe('the key-added Undo, locked', () => {
   it('on the Providers tab: one line, the group\'s, under its heading; Undo points at it; nothing in the live region', async () => {
     render(<Panel providers />);
     addedKeyNotice();
@@ -151,7 +151,7 @@ describe('the group line coming and going under the notice (the panel is watched
   });
 });
 
-describe('a click on the locked Undo removes nothing (review 10 LOW-4, mutant L13)', () => {
+describe('a click on the locked Undo removes nothing', () => {
   it('held: no undo, no DELETE; promoted: the same click undoes the key', async () => {
     render(<Panel providers />);
     addedKeyNotice();

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ModalPortal } from '../src/components/ModalPortal';
 
-// GM, PR #203 r13 item 1 (round 6 review, stacking LOW-1): one isolation for
+// Design (PR #203): one isolation for
 // every modal, in the portal. While it holds an aria-modal dialog, every
 // other child of <body> is inert and aria-hidden (the notice region stays
 // usable, and so does a modal opened over it); on close each element's own

@@ -58,7 +58,7 @@ describe('disposeSparkQuietly', () => {
   });
 });
 
-describe('stopSparkSorting (review r4 NIT-3)', () => {
+describe('stopSparkSorting', () => {
   it('cancels the pending sort and leaves nothing dirty, so no sort starts after the dispose', () => {
     vi.useFakeTimers();
     try {
@@ -79,7 +79,7 @@ describe('stopSparkSorting (review r4 NIT-3)', () => {
   });
 });
 
-describe('disposeSparkWhenSettled (review r5 LOW-1)', () => {
+describe('disposeSparkWhenSettled', () => {
   function renderer(sorting: boolean) {
     const state = { sorting, sortDirty: true, sortTimeoutId: -1 as number, disposedWhileSorting: null as boolean | null };
     return Object.assign(state, { dispose: vi.fn(() => { state.disposedWhileSorting = state.sorting; }) });

@@ -5,14 +5,14 @@ import { GLIDE_MS, LOG_HELD_ATTR, LOG_SETTLING_ATTR } from '../src/lib/noticeSta
 import { regionNoticesReady } from './helpers/regionNoticesReady';
 
 /**
- * PR #216 round 3l.
- * GM r69 Q3 (review 4 logic LOW-3): a drag that starts from the docked log
+ * PR #216.
+ * Design: a drag that starts from the docked log
  * freezes the card's sides for the whole drag, as a floating drag does. The
  * log leaving the dock clears its clearance on the root at once (AgentLog),
  * which the region's own CSS right edge reads; frozen inline, the card
  * neither re-centres nor widens mid-drag. At the drop it places once, on the
  * layout spring.
- * GM r69 Q5 (review 4 layout NIT-1): from the drop, the log stays above the
+ * Design: from the drop, the log stays above the
  * card (`data-agent-log-settling`, layouts.css) until the card's glide
  * rests; then the stacking drops back.
  *
@@ -48,7 +48,7 @@ function regionBox(region: HTMLElement) {
 }
 
 // The region's notices are a deferred chunk: load it before any render
-// (helpers/regionNoticesReady.ts; main's ratchet, merged in round 3l).
+// (helpers/regionNoticesReady.ts; main's ratchet).
 beforeAll(regionNoticesReady);
 
 beforeEach(() => {
@@ -109,7 +109,7 @@ function card(): HTMLElement {
   return slot.firstElementChild as HTMLElement;
 }
 
-describe('GM r69 Q3: a drag from the docked log freezes the card\'s sides', () => {
+describe('a drag from the docked log freezes the card\'s sides (design)', () => {
   it('the card\'s rect is constant through the whole drag off the dock, and settles once at the drop', async () => {
     dock(true);
     render(<NoticeRegion screen="home" />);
@@ -184,7 +184,7 @@ describe('GM r69 Q3: a drag from the docked log freezes the card\'s sides', () =
   });
 });
 
-describe('GM r69 Q5: at the drop the log stays above the card until its glide rests', () => {
+describe('at the drop the log stays above the card until its glide rests (design)', () => {
   it('the raise holds from the drop through the glide, and drops back when it rests', async () => {
     setFloat({ top: 150, bottom: 330, left: 65, right: 405 });
     render(<NoticeRegion screen="home" />);

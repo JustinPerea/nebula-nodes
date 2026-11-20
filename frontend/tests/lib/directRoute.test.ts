@@ -63,7 +63,7 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
       if (hasRoutes(definition)) {
         expect({ ...route, block: blockFields(route.block) }).toEqual(testCase.expected);
         // The router's facts, with the card's line as its message (error
-        // copy round 3e): node_route.route_unavailable_line, word for word.
+        // copy): node_route.route_unavailable_line, word for word.
         expect(routeUnavailable(definition, params, testCase.apiKeys)).toEqual(
           testCase.unavailable ? { ...testCase.unavailable, message: testCase.unavailableLine } : testCase.unavailable);
         // Plan billing reads the same routed values the router does.

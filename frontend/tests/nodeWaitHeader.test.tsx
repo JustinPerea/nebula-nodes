@@ -15,7 +15,7 @@ import type { ProposalView, ProposalWait } from '../src/lib/wsClient';
 import type { NodeData } from '../src/types';
 
 /**
- * A run the daily total holds, PR #212 round 3 (GM - Design's round 2 item 1):
+ * A run the daily total holds, PR #212 (design):
  * the waiting state lives in the node card's header and the node never changes
  * size. The tint, the label that replaces the model chip, the accessible
  * description, and the crossfade on the spring.
@@ -122,7 +122,7 @@ describe('the waiting state in the node card\'s header', () => {
     expect(label(other.container)).toBeNull();
   });
 
-  it('draws one label for one proposal or several: no count, so the node never changes width (GM r3 item 1)', () => {
+  it('draws one label for one proposal or several: no count, so the node never changes width (design)', () => {
     const { container } = card();
     open(view('p_one', ['n1'], CLAUDE, 1));
     const one = fullText(container);
@@ -193,7 +193,7 @@ describe('the waiting state in the node card\'s header', () => {
     expect(container.querySelector('.node-wait-band')).toBeNull();
     // The label itself is announced politely as the state starts.
     expect(label(container)!.getAttribute('role')).toBe('status');
-    // With two proposals the description carries the count (GM r3 item 1) and both reasons.
+    // With two proposals the description carries the count (design) and both reasons.
     open(view('p_two', ['n1'], CODEX, 2));
     expect(document.getElementById(header(container).getAttribute('aria-describedby')!)!.textContent)
       .toBe(`2 proposals are waiting for your OK. ${BAR} ${BAR_TWO}`);

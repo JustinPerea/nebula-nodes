@@ -13,7 +13,7 @@ import type { ProposalView } from '../src/lib/wsClient';
 import type { NodeData } from '../src/types';
 
 /**
- * GM - Design, PR #212 round 3, item 6: every card kind that can be the
+ * Design (PR #212): every card kind that can be the
  * subject of a held (paid) run gets the header wait. The paid kinds are the
  * ones whose definition has a list price: the model and dynamic cards (and
  * the Video QC card, which draws a model card) and the Cinema scene, which

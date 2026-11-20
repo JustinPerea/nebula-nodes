@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as bottomBar from '../src/lib/bottomBar';
 
 /**
- * GM - Design, 2026-10-23, answers 1 and 5:
+ * Design, 2026-10-23:
  * "Floating panels stop above a reserved notice band, whether or not a notice
  * is showing. The band is the region's height for one notice plus its gap,
  * measured like the bottom line. The panels never move when a notice comes or
@@ -95,7 +95,7 @@ describe('the measured top line', () => {
     expect(bottomBar.floatingTopLimit(16)).toBe(72);
   });
 
-  // Round 3 (GM, answer 5): "While it's open, use the lower of the two top
+  // Design: "While it's open, use the lower of the two top
   // lines (the toolbar's) whether or not the toolbar is showing." The
   // toolbar's empty Panel keeps its height and has no width.
   it("the toolbar's empty Panel (no width, the toolbar's height) still sets the line", () => {
@@ -115,10 +115,10 @@ describe('the measured top line', () => {
   });
 });
 
-// GM r72 on #226: the unpinned Inspector beside a node grows to the band's
+// Design (PR #226): the unpinned Inspector beside a node grows to the band's
 // line with a 12 px gap ("Cap to the BAND line, not the bar"), under one
 // toolbar+12 top line that a resize reaching up to the chrome reuses.
-describe('the content-fit lines (GM r72)', () => {
+describe('the content-fit lines (design)', () => {
   it('a clearance keeps the panel that much further above the band, not above the bar', () => {
     bar();
     band();

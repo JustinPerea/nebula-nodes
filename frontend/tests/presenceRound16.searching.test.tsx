@@ -1,8 +1,8 @@
 /**
- * PR #204 round 16 (GM r26): a search can't succeed while the page says why this tab can't load,
+ * Design (PR #204): a search can't succeed while the page says why this tab can't load,
  * so "Searching…" clears in the same frame (the same commit) as the page's because line. Every
  * commit of the line row and the results area is recorded; none shows both. Deterministic: fake
- * time, and the page's loads answer only when the test lets them (section 0's harness).
+ * time, and the page's loads answer only when the test lets them (the harness above).
  */
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,7 @@ vi.mock('../src/lib/personSession', async (importOriginal) => ({
   personToken: async () => transport.token,
 }));
 /**
- * Round 15 (CI on d2040a0f): the test says when the page's loads answer, so the one-shift test
+ * (CI on d2040a0f): the test says when the page's loads answer, so the one-shift test
  * reads the same on any machine. While `gate.hold` is set, the view's three loads wait for it
  * before they go to the real API (which still answers a held tab unsent).
  */
@@ -98,14 +98,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Round 15 (CI on d2040a0f): fake time moves only when the test moves it, so a line's arrival
+/** Fake time moves only when the test moves it (CI on d2040a0f), so a line's arrival
  * doesn't depend on the machine's speed. `until` moves it 50 ms at a time, up to `max` ms. */
 const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
 /** The real Commons under a loaded machine: well past the default 5 s. */
 const VIEW_TIMEOUT = 20_000;
 
-describe('GM r26: “Searching…” goes with the because line', () => {
+describe('“Searching…” goes with the because line (design)', () => {
   let release: () => void = () => {};
   let releaseSearch: () => void = () => {};
   afterEach(() => { gate.hold = null; gate.search = null; release(); releaseSearch(); });
@@ -126,7 +126,7 @@ describe('GM r26: “Searching…” goes with the because line', () => {
     expect(searchingShown()).toBe(false);
     const landed = frames.findIndex((frame) => frame.includes(PAGE));
     expect(landed).toBeGreaterThan(0);
-    // The new view showed Searching… before the line (the case GM saw)…
+    // The new view showed Searching… before the line (the case design saw)…
     expect(frames.slice(0, landed).some((frame) => frame.includes(SEARCHING))).toBe(true);
     // …and no commit shows the because line with it.
     expect(frames.filter((frame) => frame.includes(PAGE) && frame.includes(SEARCHING))).toEqual([]);
@@ -147,7 +147,7 @@ describe('GM r26: “Searching…” goes with the because line', () => {
     expect(searchingShown()).toBe(false);
   }, VIEW_TIMEOUT);
 
-  // Round 17 (review 13 NIT-1, mutant M26): only a because line clears "Searching…". Another
+  // Only a because line clears "Searching…". Another
   // line (the status poll got no answer) says nothing of the search, which can still succeed.
   it('a connected tab whose status got no answer keeps Searching… while its search is out', async () => {
     vi.useFakeTimers();

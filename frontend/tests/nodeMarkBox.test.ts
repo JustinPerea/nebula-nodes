@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 /**
- * Where the agent's pill anchors (Q125 item 3). GM - Design, 2026-10-25:
+ * Where the agent's pill anchors. design, 2026-10-25:
  * "a 6 px gap above the node's top edge". The node's React Flow box starts
  * about 38 px above the drawn card (room for the floating settings bar), so
  * the live check showed a 40 px gap: the pill anchors on the card. When the

@@ -5,7 +5,7 @@ import { placeholderRefusalOf, placeholderRunConfirm, withRunEstimate } from '..
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 import { ExecutionStartRejectedError } from '../../src/lib/api';
 
-// Review 4 and GM - Design's round-5 answers (2026-10-25), verbatim:
+// Design's answers (2026-10-25), verbatim:
 // "a dollar amount shows only when it covers every paid row; Krea-plan rows
 // cost nothing extra and don't count as missing."
 
@@ -20,12 +20,12 @@ const line = (nodeId: string, name: string, low: number, high: number) => ({ nod
 const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 2, paid: ['Hero still'], cost: {
   low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], ...cost } });
 
-// i (Codex's) feeds o; k (Codex's) feeds o too. o is free (round 6 gives a
-// paid one its own row, which these cases don't price).
+// i (Codex's) feeds o; k (Codex's) feeds o too. o is free (a paid one
+// has its own row, which these cases don't price).
 const nodes = [node('i', 'Hero still', codex), node('k', 'Krea still', codex), node('o', 'Final', undefined, 'image-compare')];
 const edges = [wire('i', 'o'), wire('k', 'o')];
 
-describe("GM round 5: the placeholder dialog's $0 lines", () => {
+describe("the placeholder dialog's $0 lines (design)", () => {
   it('only Krea-plan rows: no total line, and the button reads "Run"', () => {
     const model = placeholderRunConfirm(nodes.slice(0, 2), [], 'i', summaryOf({ plan: ['Hero still', 'Krea still'] }))!;
     const one = placeholderRunConfirm([node('k', 'Krea still', codex)], [], 'k', summaryOf({ plan: ['Krea still'] }))!;
@@ -66,8 +66,8 @@ describe("GM round 5: the placeholder dialog's $0 lines", () => {
   });
 });
 
-describe('review 4, L1: the total the run sends', () => {
-  // Superseded by review 6, L-e (GM - Design, round 7): the amount sent is
+describe('the total the run sends', () => {
+  // Superseded (design): the amount sent is
   // the one shown, in cents rounded up ("$0.01" for anything under a cent).
   it('is the amount shown, rounded up to the cent', () => {
     const model = placeholderRunConfirm([node('i', 'Hero still', codex)], [], 'i', summaryOf({
@@ -82,7 +82,7 @@ describe('review 4, L1: the total the run sends', () => {
   });
 });
 
-describe("review 4, M1: Nebula's own estimate from its refusal", () => {
+describe("Nebula's own estimate from its refusal", () => {
   const refusal = new ExecutionStartRejectedError('Nothing ran.', 409, { detail: {
     code: 'placeholder_confirm_required', message: 'Nothing ran.', placeholders: ['i'],
     agents: { i: codex },

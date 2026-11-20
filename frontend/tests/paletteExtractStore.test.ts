@@ -4,8 +4,8 @@ import {
   resetPaletteExtractsForTests, startPaletteExtract,
 } from '../src/components/panels/usePaletteExtracts';
 
-// Round 8e of #208: the extract store, outside any Inspector (GM r22 Q2),
-// and its own guard (review 8 NIT): a result from an earlier Extract for a
+// PR #208: the extract store, outside any Inspector (design),
+// and its own guard: a result from an earlier Extract for a
 // key that a later one took over never lands, even when it isn't null.
 
 beforeEach(() => {

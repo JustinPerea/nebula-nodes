@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { placeOutside } from '../src/components/asset-move/anchoredPopover';
 
 /**
- * GM (commons-leave): asked from the Updates corner, the leave popover opens
+ * Design (commons-leave): asked from the Updates corner, the leave popover opens
  * to the left of the Updates list or card, so the list stays readable while
  * the person decides; with no room there it falls back to the usual place.
  */

@@ -170,7 +170,7 @@ describe('canvas selection context', () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.stubGlobal('fetch', vi.fn(answer));
       const error = await failure();
-      // Round 2: the Download button's title is one line in the because form.
+      // The Download button's title is one line in the because form.
       expect(error.message).toBe(`Nebula couldn’t download the outputs ${line}`);
       expect(error.message).not.toMatch(/Failed to fetch|n1|image|\d{3}/);
     });
@@ -184,7 +184,7 @@ describe('canvas selection context', () => {
     });
   });
 
-  // Round 2 (GM): "{Node's display name} is too large for the ZIP. Download
+  // Design: "{Node's display name} is too large for the ZIP. Download
   // it on its own." The name shown on the canvas, never n1:image; with no
   // name, its type ("This image…"). And: "Those outputs are too large for one
   // ZIP. Download fewer at a time."

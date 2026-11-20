@@ -1,15 +1,15 @@
 /**
- * PR #204 round 14, review 11 held-calls (lib: store/agentNotesStore sendRead, holdRead, sendHeldRead):
- * - LOW-1 (A1): a held read keeps the unread updates its `upTo` covered. When that `upTo` leaves the
+ * PR #204 held-calls (lib: store/agentNotesStore sendRead, holdRead, sendHeldRead):
+ * - A held read keeps the unread updates its `upTo` covered. When that `upTo` leaves the
  *   list before the promote (an agent's next "since its last turn" update replaces it), the promote
  *   still reads what the person saw, by id, and never the newer update they didn't.
- * - GM r23 item 5 (A3, A8): a mark-read refused in flight shows nothing. It is never the person's
+ * - Design: a mark-read refused in flight shows nothing. It is never the person's
  *   own press (the Updates corner reads on open, on an arrival into the open list, or as a card is
  *   used; there is no "Mark all read" control), so the updates stay unread with nothing marked read
  *   in the tab, and every refusal re-joins the list's one wait, however many times it is refused.
- * - LOW-5 N4 (A7): a read held on p1 never goes out once p2 is open.
- * - LOW-5 N10: an id held for the promote that the person's other tab reads meanwhile isn't sent.
- * - NIT-3 (A4): the promote's read on its way, and the list opened again at once: one read, not two.
+ * - A read held on p1 never goes out once p2 is open.
+ * - An id held for the promote that the person's other tab reads meanwhile isn't sent.
+ * - The promote's read on its way, and the list opened again at once: one read, not two.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentNote } from '../src/lib/agentNotes';
@@ -57,8 +57,8 @@ afterEach(() => {
   store().reset();
 });
 
-describe('review 11 LOW-1: the held read keeps what its upTo covered', () => {
-  it('A1: the upTo is replaced before the promote; the promote reads the updates it covered, by id, and not the new one', async () => {
+describe('the held read keeps what its upTo covered', () => {
+  it('the upTo is replaced before the promote; the promote reads the updates it covered, by id, and not the new one', async () => {
     session.reportPersonRequired();
     sync([note('s1', 2, 'sinceLastTurn'), note('an_1', 1), note('an_0', 0)]);
     await store().markRead(CANVAS, 's1'); // the list opened while held, then closed
@@ -92,7 +92,7 @@ describe('review 11 LOW-1: the held read keeps what its upTo covered', () => {
   });
 });
 
-describe('GM r23 item 5: a mark-read refused in flight shows nothing and re-joins the one wait', () => {
+describe('a mark-read refused in flight shows nothing and re-joins the one wait (design)', () => {
   it('the updates stay unread, nothing is marked read in the tab, no line, no retry of its own', async () => {
     sync([note('an_1', 1), note('an_0', 0)]);
     api.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
@@ -107,7 +107,7 @@ describe('GM r23 item 5: a mark-read refused in flight shows nothing and re-join
     expect(api.fetchAgentNotes).not.toHaveBeenCalled(); // nothing changed, so nothing to read again
   });
 
-  it('A3: a demote between the promote\'s send and its answer: held again with no line, sent once on the next promote, never twice', async () => {
+  it('a demote between the promote\'s send and its answer: held again with no line, sent once on the next promote, never twice', async () => {
     session.reportPersonRequired();
     sync([note('an_1', 1)]);
     await store().markRead(CANVAS, 'an_1');
@@ -126,7 +126,7 @@ describe('GM r23 item 5: a mark-read refused in flight shows nothing and re-join
     expect(sent()).toHaveLength(2);
   });
 
-  it('A8: refused in flight, then refused again on its promote: still held, sent on the next promote', async () => {
+  it('refused in flight, then refused again on its promote: still held, sent on the next promote', async () => {
     sync([note('an_1', 1)]);
     api.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     await store().markRead(CANVAS, 'an_1');
@@ -167,8 +167,8 @@ describe('GM r23 item 5: a mark-read refused in flight shows nothing and re-join
   });
 });
 
-describe('review 11 LOW-5: the held read\'s guards', () => {
-  it('A7 (N4): held on p1, then p2 opens and the promote comes: p1\'s read is dropped, p2 isn\'t read', async () => {
+describe('the held read\'s guards', () => {
+  it('held on p1, then p2 opens and the promote comes: p1\'s read is dropped, p2 isn\'t read', async () => {
     session.reportPersonRequired();
     sync([note('an_1', 1)]);
     await store().markRead(CANVAS, 'an_1');
@@ -178,7 +178,7 @@ describe('review 11 LOW-5: the held read\'s guards', () => {
     expect(sent()).toEqual([]);
   });
 
-  it('N10: a card read held for the promote, read meanwhile by the person\'s other tab, isn\'t sent', async () => {
+  it('a card read held for the promote, read meanwhile by the person\'s other tab, isn\'t sent', async () => {
     session.reportPersonRequired();
     sync([note('an_2', 2), note('an_1', 1)]);
     await store().markReadIds(CANVAS, ['an_1']);
@@ -189,8 +189,8 @@ describe('review 11 LOW-5: the held read\'s guards', () => {
   });
 });
 
-describe('review 11 NIT-3: no second read right after the promote', () => {
-  it('A4: the promote\'s read on its way, the list opened again at once: one read', async () => {
+describe('no second read right after the promote', () => {
+  it('the promote\'s read on its way, the list opened again at once: one read', async () => {
     session.reportPersonRequired();
     sync([note('an_1', 1)]);
     await store().markRead(CANVAS, 'an_1');

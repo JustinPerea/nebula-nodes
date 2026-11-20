@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * PR #198 fix round 21 (GM r30), rendered: every notice button held while
+ * Design (PR #198): rendered: every notice button held while
  * its action is on its way (a [Try again], a clash answer being sent) is
  * aria-disabled at once, label unchanged, no reason tooltip; it greys with
  * the shared disabled style only after ~150 ms (data-held-look), so a fast
@@ -58,14 +58,14 @@ async function stoppedLine(retry = vi.fn()) {
   return retry;
 }
 const startTry = () => set({ stoppedScenes: {}, sceneTries: { n1: { cause: 'server' } } });
-/** Review 21 NIT-6: lets pending renders land (microtasks only: the fake
+/** Lets pending renders land (microtasks only: the fake
  * clock doesn't move, so "no grey before 150 ms" still holds) until `ready`. */
 async function flushUntil(ready: () => boolean) {
   for (let i = 0; i < 50 && !ready(); i += 1) await act(async () => { await Promise.resolve(); });
 }
 const backStopped = () => set({ stoppedScenes: { n1: true }, sceneTries: {} });
 
-describe('GM r30: a held [Try again] in the state slot', () => {
+describe('a held [Try again] in the state slot (design)', () => {
   it('aria-disabled and the line aria-busy at once; no grey before 150 ms, grey after; no reason tooltip; the label as it is', async () => {
     await stoppedLine();
     startTry();
@@ -112,7 +112,7 @@ describe('GM r30: a held [Try again] in the state slot', () => {
   });
 });
 
-describe('GM r30: the "Unsaved" popover’s [Try again]', () => {
+describe('the "Unsaved" popover’s [Try again] (design)', () => {
   it('held with the same delayed grey; the popover aria-busy while the try runs', () => {
     useGraphStore.setState({ nodes: [scene('n1', 'Opening', 0)], stoppedScenes: { n1: true }, sceneStops: { n1: { cause: 'server' } },
       sceneTries: {}, retrySceneSave: vi.fn() } as never);
@@ -135,7 +135,7 @@ describe('GM r30: the "Unsaved" popover’s [Try again]', () => {
   });
 });
 
-describe('GM r30: a clash answer being sent', () => {
+describe('a clash answer being sent (design)', () => {
   it('the prompt stays aria-busy; Keep mine and Use Codex’s held at once, grey after 150 ms, labels as they are; presses send nothing', async () => {
     const resolve = vi.fn();
     useGraphStore.setState({ nodes: [scene('n1', 'Opening', 0)], stoppedScenes: {}, sceneStops: {}, sceneTries: {}, undoNotice: null,
@@ -165,7 +165,7 @@ describe('GM r30: a clash answer being sent', () => {
   });
 });
 
-describe('GM r30: the shared disabled style, keyed on aria-disabled', () => {
+describe('the shared disabled style, keyed on aria-disabled (design)', () => {
   const css = readFileSync(join(__dirname, '../src/styles/canvasProposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rule = (selector: string) => {
     for (const match of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
@@ -174,11 +174,11 @@ describe('GM r30: the shared disabled style, keyed on aria-disabled', () => {
     return '';
   };
 
-  it('a held notice button takes the disabled look once its first 150 ms pass (GM r33: the token set, no whole-control opacity)', () => {
+  it('a held notice button takes the disabled look once its first 150 ms pass (design: the token set, no whole-control opacity)', () => {
     const held = rule("body.app-slava-restraint .canvas-undo-notice button[aria-disabled='true'][data-held-look]");
     expect(held).toMatch(/opacity:\s*1\s*;/);
     expect(held).not.toMatch(/--sr-disabled-opacity/);
-    // PR #198 round 25 (GM r37 option c): the look is the app's one shared
+    // Design (PR #198): the look is the app's one shared
     // rule's, which passes over a hold still pending (data-held-pending).
     const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const filled = [...shared.matchAll(/([^{}]+)\{([^}]*)\}/g)].find((m) => /\.canvas-undo-notice__action,/.test(m[1]))!;
@@ -190,7 +190,7 @@ describe('GM r30: the shared disabled style, keyed on aria-disabled', () => {
   });
 });
 
-describe('review 19 NIT-1: the card’s "Unsaved" mark during a try', () => {
+describe('the card’s "Unsaved" mark during a try', () => {
   it('stays a button (its popover’s [Try again] held) while the try runs, and is a plain label for a save that isn’t stopped', () => {
     const props = { id: 'n1', selected: false, type: 'cinemaSceneNode', dragging: false, zIndex: 0, isConnectable: true,
       positionAbsoluteX: 0, positionAbsoluteY: 0, selectable: true, deletable: true, draggable: true,
@@ -208,7 +208,7 @@ describe('review 19 NIT-1: the card’s "Unsaved" mark during a try', () => {
   });
 });
 
-describe('round 21 (coordinator): focus when an answered clash prompt goes never drops to the page', () => {
+describe('focus when an answered clash prompt goes never drops to the page', () => {
   const OTHER_STOP = 'Nebula can’t save your changes to “Ref scene”.';
   const canvas = () => {
     const el = document.createElement('div');

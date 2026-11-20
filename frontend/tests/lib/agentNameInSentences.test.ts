@@ -8,7 +8,7 @@ import { sceneOutpacedLine } from '../../src/lib/sceneSaveCopy';
 import { handoffFailedLine, savingCutOffLine } from '../../src/lib/savingCutOff';
 import { noteKeptLine } from '../../src/lib/canvasPins';
 
-// GM: "Your Claude" at the start of a label, "your Claude" inside a sentence;
+// Design: "Your Claude" at the start of a label, "your Claude" inside a sentence;
 // any other name passes through.
 const NAMES: Array<[string, string]> = [
   ['Your Claude', 'your Claude'],

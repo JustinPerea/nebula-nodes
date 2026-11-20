@@ -1,10 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 
-// Review 7, L3: a notice that arrives while the canvas notice offers an
+// A notice that arrives while the canvas notice offers an
 // agent's Undo ("Codex changed the canvas · Undo") never replaces it. It
 // shows as its own written line in the region's stack, above the notice with
-// the button, so that one stays nearest the bar (GM - Design, round 4, for
+// the button, so that one stays nearest the bar (design, for
 // the late count: "put the late line above the newer one, so the notice with
 // a button stays nearest the bar"). Same region, same springs.
 

@@ -1,5 +1,5 @@
 /**
- * PR #204 round 11 (the control-level sweep ratchet's two finds): a control that reaches a
+ * PR #204 (the control-level sweep ratchet's two finds): a control that reaches a
  * person-only route only on one path locks on that path.
  *
  * - The held run's Run, with every one of its nodes deleted since Accept, only releases the

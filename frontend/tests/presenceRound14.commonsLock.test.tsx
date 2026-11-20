@@ -1,5 +1,5 @@
 /**
- * PR #204 round 14, GM r23 answers 1, 3 and 4 in the Commons.
+ * Design (PR #204): the Commons.
  * 1. One shift on a demote: Add locks at once; only its line waits for the page's because line,
  *    and both land in the same frame. Past ADD_LINE_HOLD_MS (1.5 s) with no because line, Add's
  *    line shows alone (components/commons/useLockLineHold).
@@ -22,7 +22,7 @@ vi.mock('../src/lib/personSession', async (importOriginal) => ({
   personToken: async () => transport.token,
 }));
 /**
- * Round 15 (CI on d2040a0f): the test says when the page's loads answer, so the one-shift test
+ * (CI on d2040a0f): the test says when the page's loads answer, so the one-shift test
  * reads the same on any machine. While `gate.hold` is set, the view's three loads wait for it
  * before they go to the real API (which still answers a held tab unsent).
  */
@@ -83,7 +83,7 @@ const addButton = () => screen.getByRole('button', { name: ADD_NAME });
 let frames: string[][] = [];
 let watcher: MutationObserver | null = null;
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useRealTimers();
@@ -108,7 +108,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Round 15 (CI on d2040a0f): fake time moves only when the test moves it, so a line's arrival
+/** Fake time moves only when the test moves it (CI on d2040a0f), so a line's arrival
  * doesn't depend on the machine's speed. `until` moves it 50 ms at a time, up to `max` ms. */
 const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 async function until(check: () => void, max = 3000): Promise<void> {
@@ -123,7 +123,7 @@ const VIEW_TIMEOUT = 20_000;
 
 // ── 1. One shift ────────────────────────────────────────────────────────────
 
-describe('a demote: one shift (GM r23 1)', () => {
+describe('a demote: one shift (design)', () => {
   let release: () => void = () => {};
 
   /** A connected tab first, so the hold starts at the demote (not at the mount's unconfirmed
@@ -197,7 +197,7 @@ function fakeLock(locked: boolean, shown: boolean): PersonLock {
   };
 }
 
-describe('useLockLineHold: the hold and its cap (GM r23 1)', () => {
+describe('useLockLineHold: the hold and its cap (design)', () => {
   beforeEach(() => { vi.useFakeTimers(); });
 
   it('the cap is 1.5 s, a named constant', () => {
@@ -274,7 +274,7 @@ function Locked() {
   return <><button type="button" {...lock.control()}>Change</button><PersonLockLine lock={lock} place="control" /></>;
 }
 
-describe('offline comes first (GM r23 3)', () => {
+describe('offline comes first (design)', () => {
   it('usePersonLock: while offline the control stays locked and no line shows; back online it does', async () => {
     vi.useFakeTimers();
     act(() => reportPersonRequired());
@@ -312,7 +312,7 @@ describe('offline comes first (GM r23 3)', () => {
   }, VIEW_TIMEOUT);
 });
 
-describe('a Commons pane\'s because line, offline (GM r23 3)', () => {
+describe('a Commons pane\'s because line, offline (design)', () => {
   it('hides while offline and comes back online; another failure\'s line stays offline', () => {
     const because = 'Nebula couldn’t load this reference because this tab isn’t connected as you. Open the link Nebula printed when it started.';
     const other = 'Couldn’t load this reference. The file is missing.';
@@ -328,7 +328,7 @@ describe('a Commons pane\'s because line, offline (GM r23 3)', () => {
 
 // ── 4. The New collection prompt stays ──────────────────────────────────────
 
-describe('the New collection prompt at a demote (GM r23 4)', () => {
+describe('the New collection prompt at a demote (design)', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   const openPrompt = async () => {
     fireEvent.change(screen.getByRole('combobox', { name: ADD_TO_NAME }), { target: { value: '__new__' } });

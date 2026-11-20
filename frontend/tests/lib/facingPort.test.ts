@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { facingPortEdge } from '../../src/lib/facingPort';
 
 /**
- * GM r114 (#226 review 5): the panel stands at the farthest of the dot's edge
+ * Design (PR #226): the panel stands at the farthest of the dot's edge
  * + 8, the hit target's edge + 2 and the hover circle's edge + 2, each read
  * from the boxes the skin draws (jsdom has no layout, so the page's answers
  * are given here).
@@ -46,7 +46,7 @@ afterEach(() => {
 
 const HOUSE: Skin = { dot: 9, circle: 20, border: 1, rest: 4 };
 
-describe('the panel stands clear of the facing port at every zoom (GM r114)', () => {
+describe('the panel stands clear of the facing port at every zoom (design)', () => {
   for (const zoom of [1, 2, 4]) {
     it(`right at ${zoom * 100} %: past the hit target and the hover circle by 2 px, never under either`, () => {
       const node = portAt('right', 600, zoom, HOUSE);

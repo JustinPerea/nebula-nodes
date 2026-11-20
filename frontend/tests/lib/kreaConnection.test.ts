@@ -74,7 +74,7 @@ describe('Krea connection contract', () => {
   });
 
   it('keeps transport and response errors out of the visible error message', async () => {
-    // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason;
+    // Error copy design: "Couldn't {verb} {object}." then the reason;
     // never "Could not", and still never the error's own text (it can hold
     // credential-bearing URLs).
     const GENERAL = 'because the server didn’t accept it. Try again, or reload if it keeps happening.';
@@ -84,7 +84,7 @@ describe('Krea connection contract', () => {
     // No answer, as apiFetch throws it: the connection line (typeerror, 2026-10-24).
     apiFetchMock.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch https://private.test/?token=fixture-secret')));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} because the server isn’t answering. Check that Nebula is running, then try again.`);
-    // A TypeError that isn't fetch's no-answer (a bug in the browser) is GM's general line, not "isn't answering".
+    // A TypeError that isn't fetch's no-answer (a bug in the browser) is design's general line, not "isn't answering".
     apiFetchMock.mockRejectedValueOnce(new TypeError('Do not know how to serialize a BigInt https://private.test/?token=fixture-secret'));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);
     apiFetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: vi.fn() });
@@ -131,7 +131,7 @@ describe('Krea connection contract', () => {
   });
 });
 
-describe('PR #204 round 4: a person-only refusal keeps its code', () => {
+describe('a person-only refusal keeps its code (PR #204)', () => {
   beforeEach(() => apiFetchMock.mockReset());
 
   it('a Krea connect, check or disconnect the gate refused carries person_required, so its line clears on the promote', async () => {

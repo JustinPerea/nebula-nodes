@@ -1,8 +1,8 @@
 /**
- * PR #204 round 18h (review 16 logic LOW-4): the capability is asked again when the backend's boot
+ * PR #204: the capability is asked again when the backend's boot
  * id changes, a restart health never saw as offline, as well as on reconnect. Still no polling.
  * And a tab without the Commons (a canvas tab that loaded while it was off) asks the same way, so
- * its Commons entry appears without a reload. Probes PD/PE from review 16, as assertions.
+ * its Commons entry appears without a reload. Probes PD/PE as assertions.
  */
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -115,7 +115,7 @@ it('PE: flapping three times while each read is slow still opens the Commons', a
   expect(useUIStore.getState().commonsOffShown).toBe(false);
 });
 
-it('N8: going offline alone asks nothing; only coming back does', async () => {
+it('going offline alone asks nothing; only coming back does', async () => {
   history.replaceState({}, '', '/#commons');
   render(<Probe />);
   await flush();
@@ -127,7 +127,7 @@ it('N8: going offline alone asks nothing; only coming back does', async () => {
   expect(reads()).toBe(2);
 });
 
-it('N9: the person leaving the off view while the project opens: the Commons doesn\'t open after all', async () => {
+it('the person leaving the off view while the project opens: the Commons doesn\'t open after all', async () => {
   history.replaceState({}, '', '/#commons');
   let finish = () => {};
   const opened = new Promise<void>((resolve) => { finish = resolve; });
@@ -147,7 +147,7 @@ it('N9: the person leaving the off view while the project opens: the Commons doe
   expect(useUIStore.getState().viewMode).not.toBe('commons');
 });
 
-it('N13: an answer that comes after the hook went sets nothing', async () => {
+it('an answer that comes after the hook went sets nothing', async () => {
   const view = render(<Probe />);
   await flush();
   cap.on = true;

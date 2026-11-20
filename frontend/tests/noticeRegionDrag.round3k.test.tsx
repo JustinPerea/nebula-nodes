@@ -9,17 +9,17 @@ import { useUIStore } from '../src/store/uiStore';
 import { regionNoticesReady } from './helpers/regionNoticesReady';
 
 /**
- * PR #216 review 3 MEDIUM-3: after the card leaves, notices still showing
+ * PR #216: after the card leaves, notices still showing
  * place clear of a floating log: their column is read from the layout (the
  * region with no inset, the stack centred in it), never from the boxes they
  * draw mid-glide, and the region places again when a glide ends.
  *
- * GM r57 Q1: while the person holds a floating log in a drag, it rises above
+ * Design: while the person holds a floating log in a drag, it rises above
  * the card and the card holds still (no glide, no chasing); at the drop it
  * places once, on the layout spring.
  *
  * The layout is mocked: a 1024x640 window, the region's line 81 px up, a
- * floating log at 200-540 x 400-554 (review 3's p4/p5 repro).
+ * floating log at 200-540 x 400-554 (a reviewer's p4/p5 repro).
  */
 const root = () => document.documentElement;
 const FLOAT = ['top', 'bottom', 'left', 'right'] as const;
@@ -33,7 +33,7 @@ const layout = { drawnLeft: 560, noticeW: 243, regionLeft: 64 };
 let moves: Array<{ element: Element; finish: () => void }> = [];
 
 // The region's notices are a deferred chunk: load it before any render
-// (helpers/regionNoticesReady.ts; main's ratchet, merged in round 3l).
+// (helpers/regionNoticesReady.ts; main's ratchet).
 beforeAll(regionNoticesReady);
 
 beforeEach(() => {
@@ -104,7 +104,7 @@ async function notices(count: number): Promise<HTMLElement[]> {
   return items;
 }
 
-describe('review 3 MEDIUM-3: the card gone, notices mid-glide still clear a floating log', () => {
+describe('the card gone, notices mid-glide still clear a floating log', () => {
   it('reads the column from the layout: the notices drawn beside the log mid-glide still lift clear of it', async () => {
     setFloat({ top: 400, bottom: 554, left: 200, right: 540 });
     render(<NoticeRegion screen="home" />);
@@ -126,7 +126,7 @@ describe('review 3 MEDIUM-3: the card gone, notices mid-glide still clear a floa
     render(<NoticeRegion screen="home" />);
     await notices(2);
     expect(lift()).toBe('167px');
-    // A drop places with a glide (GM r57 Q1); the rows were drawn elsewhere,
+    // A drop places with a glide (design); the rows were drawn elsewhere,
     // so they glide.
     act(() => { root().setAttribute(LOG_HELD_ATTR, ''); });
     await flush();
@@ -147,7 +147,7 @@ describe('review 3 MEDIUM-3: the card gone, notices mid-glide still clear a floa
   });
 });
 
-describe('GM r57 Q1: the person\'s hand wins', () => {
+describe('the person\'s hand wins (design)', () => {
   const card = () => {
     const slot = document.querySelector<HTMLElement>('[data-notice-slot="proposal"]')!;
     slot.innerHTML = `<div class="card" data-notice-shrinks="">

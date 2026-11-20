@@ -16,14 +16,14 @@ import { useAgentLogStore } from '../src/store/agentLogStore';
 import { cascade } from './helpers/logCascade';
 
 /**
- * GM - Design r70 on #225 (round 2b): the Agent log's resize ceiling is the
+ * Design (PR #225): the Agent log's resize ceiling is the
  * selection toolbar slot's bottom + 12 px whenever the log's span overlaps
  * the slot, shown or not, else the top bar + 12 px (at 1440x900 about 153
  * px, not 72); the handle is a focusable separator (24 px a key, Enter does
  * what a double-click does); the fold is one bordered chip working and
  * settled; the describedby lines wrap pretty; the header's meta keeps the
- * cursor label's case. Geometry is the live app's at 1440x900 (round 2b's
- * probe): the workspace header 463-977 x 24-64, the toolbar's slot centred
+ * cursor label's case. Geometry is the live app's at 1440x900, as
+ * measured: the workspace header 463-977 x 24-64, the toolbar's slot centred
  * at 720, 92-142 (0 px wide empty, 896 px with a model node selected), the
  * docked log 1050-1424, its bottom at 820.
  */
@@ -101,7 +101,7 @@ function dragUp(handle: HTMLElement, by: number) {
   fireEvent.pointerUp(handle, { clientY: 600 - by, pointerId: 1 });
 }
 
-describe('r70 2: the resize ceiling', () => {
+describe('the resize ceiling', () => {
   it('the slot reserves its width centred on itself, shown or not', () => {
     expect(toolbarSlotSpan(slot, slotBox)).toEqual({ left: 240, right: 1200 });
     // Shown, a model node selected: still the reserved span.
@@ -123,7 +123,7 @@ describe('r70 2: the resize ceiling', () => {
     expect(chromeTopLimit({ left: 1050, right: 1424 })).toBe(142 + 12);
     // Clear of it: the top bar + 12.
     expect(chromeTopLimit({ left: 1210, right: 1424 })).toBe(64 + 12);
-    // No span (the r68 popover's rule): the slot counts across the width.
+    // No span (the popover's rule): the slot counts across the width.
     expect(chromeTopLimit()).toBe(142 + 12);
     expect(chromeTopLimit({ left: 1210, right: 1424 }, 8)).toBe(64 + 8);
   });
@@ -160,7 +160,7 @@ describe('r70 2: the resize ceiling', () => {
   });
 });
 
-describe('r70: the handle is a focusable separator', () => {
+describe('the handle is a focusable separator', () => {
   it('named "Resize the Agent log", with its value and bounds, focusable; the tooltip lists the keys', () => {
     logOffset = 300;
     const { handle } = mount();
@@ -174,7 +174,7 @@ describe('r70: the handle is a focusable separator', () => {
     expect(Number(h.getAttribute('aria-valuemin'))).toBeGreaterThan(0);
     expect(h.getAttribute('aria-valuemax')).toBe(String(820 - 154));
     expect(h.getAttribute('title')).toBe(RESIZE_HANDLE_TITLE);
-    // GM r73, verbatim.
+    // Design's words, verbatim.
     expect(RESIZE_HANDLE_TITLE).toBe('Drag or use the arrow keys to resize. Double-click or press Enter to fit the content.');
   });
 
@@ -193,7 +193,7 @@ describe('r70: the handle is a focusable separator', () => {
   });
 });
 
-describe('r70 LOW: the header’s meta keeps the cursor label’s case', () => {
+describe('the header’s meta keeps the cursor label’s case', () => {
   it('"Claude · 2" in its own case; the state words stay lowercase', () => {
     useAgentLogStore.getState().add({ ts: Date.now(), source: 'agent', agent: { id: 'a1', name: 'Claude · 2', color: '#E8825A' }, message: 'Cooler sky' });
     const { log } = mount();
@@ -208,7 +208,7 @@ describe('r70 LOW: the header’s meta keeps the cursor label’s case', () => {
   });
 });
 
-describe('r70 CSS', () => {
+describe('CSS', () => {
   it('the fold is one bordered chip: no rule tells the working fold from the settled one', () => {
     expect(css.rules.filter((r) => r.selectors.some((s) => /message-box__fold--/.test(s)))).toEqual([]);
     expect(css.ruleValue('.message-box__fold', 'border')).toMatch(/^1px solid/);

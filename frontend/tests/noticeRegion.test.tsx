@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * GM - Design, 2026-10-23: "move the notice out of the canvas layer ... Put
+ * Design, 2026-10-23: "move the notice out of the canvas layer ... Put
  * notices in one app-level region above every panel (above layer 10),
  * bottom-centre, sitting just above the bottom bar. Proposal-bar notices and
  * every 3g canvas notice go there."
@@ -107,8 +107,8 @@ function expectInRegion(element: HTMLElement, root: HTMLElement) {
   expect(element.closest('.react-flow')).toBeNull();
   expect(element.closest('[data-testid="studio"]')).toBeNull();
   expect(element.closest('.panel')).toBeNull();
-  // Mounted by App itself, beside the screens, never inside one; GM r25
-  // (PR #200 fix round 16): portalled to <body>, outside the app's root, so
+  // Mounted by App itself, beside the screens, never inside one; design
+  // (PR #200): portalled to <body>, outside the app's root, so
   // a modal that makes the page inert never hides it.
   expect(root.contains(region)).toBe(false);
   expect(region!.parentElement).toBe(document.body);
@@ -154,7 +154,7 @@ describe('one app-level notice region', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   }, SLOW);
 
-  it('the proposal bar\'s own notice (the deferred run\'s state line, GM r40 item 3) lands there', async () => {
+  it('the proposal bar\'s own notice (the deferred run\'s state line, design) lands there', async () => {
     const { container } = render(<App />);
     await screen.findByTestId('canvas');
     act(() => useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Claude Code', nodeIds: ['n7'] } as never }));
@@ -185,7 +185,7 @@ describe('one app-level notice region', () => {
 });
 
 /**
- * GM: "the region never takes pointer events outside its notices." jsdom does
+ * Design: "the region never takes pointer events outside its notices." jsdom does
  * no hit testing, so `topmostAt` applies the browser's rule to the real
  * stylesheet's computed values: the topmost box at a point gets the click
  * unless its pointer-events is none, and then the box under it does. The
@@ -195,7 +195,7 @@ describe('clicks around the region', () => {
   let sheet: HTMLStyleElement;
   beforeEach(() => {
     sheet = document.createElement('style');
-    // The region's own rules (round 2: in the entry) and the notices'.
+    // The region's own rules (in the entry) and the notices'.
     sheet.textContent = ['noticeRegion.css', 'canvasProposals.css']
       .map((file) => readFileSync(join(__dirname, '../src/styles', file), 'utf8')).join('\n');
     document.head.append(sheet);

@@ -6,11 +6,11 @@ import { ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * PR #198 fix round 5:
- * - Review 5, N2: the selection toolbar's run-lock tooltip is GM's sentence,
- *   with its period; GM r39 item 2 made it each control's own verb
+ * PR #198:
+ * - the selection toolbar's run-lock tooltip is design's sentence,
+ *   with its period; design made it each control's own verb
  *   (lib/runLock): "You can duplicate it when the run finishes."
- * - GM r7 item 2: one selection style. The Cinema scene card drops #FF5A1F
+ * - Design: one selection style. The Cinema scene card drops #FF5A1F
  *   and takes the selected style every model card has, in its category's
  *   colour (--node-category-color, set on the card as ModelNode sets it),
  *   with the same breathing ring.
@@ -29,13 +29,13 @@ afterEach(() => resetDeletedSceneEditsForTests());
 
 afterEach(() => { cleanup(); useGraphStore.setState({ nodes: [], isExecuting: false }); });
 
-describe('N2: the toolbar\'s run-lock tooltip', () => {
-  it('Run, Duplicate, Arrange and Delete each say their own verb while this tab runs (GM r39 item 2)', () => {
+describe('the toolbar\'s run-lock tooltip', () => {
+  it('Run, Duplicate, Arrange and Delete each say their own verb while this tab runs (design)', () => {
     const node = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, selected: true,
       data: { label: 'Text', definitionId: 'text-input', params: {}, outputs: {}, state: 'idle' } } as unknown as Node<NodeData>;
     useGraphStore.setState({ nodes: [node], edges: [], isExecuting: true });
     render(<SelectionToolbar />);
-    // Round 6 (GM r8 merge check): Run and Arrange, which the run also
+    // Design (merge check): Run and Arrange, which the run also
     // locks, say so too. One node: "it" (Arrange needs two, so "them").
     for (const line of ['You can run it when the run finishes.', 'You can duplicate it when the run finishes.',
       'You can arrange them when the run finishes.', 'You can delete it when the run finishes.']) {
@@ -45,7 +45,7 @@ describe('N2: the toolbar\'s run-lock tooltip', () => {
   });
 });
 
-describe('GM r7 item 2: the scene card\'s selected style', () => {
+describe('the scene card\'s selected style (design)', () => {
   const props = (selected: boolean) => ({ id: 'n4', selected, type: 'cinemaSceneNode', dragging: false,
     zIndex: 0, isConnectable: true, positionAbsoluteX: 0, positionAbsoluteY: 0, selectable: true, deletable: true, draggable: true,
     data: { label: 'Opening', definitionId: 'cinema-scene', state: 'idle', outputs: {},

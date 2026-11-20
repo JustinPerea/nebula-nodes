@@ -1,9 +1,9 @@
 /**
- * PR #204 round 14, GM r23 answer 3: offline comes first. While Nebula is offline only the offline
+ * Design (PR #204): offline comes first. While Nebula is offline only the offline
  * notice shows: a not-connected line (a lock's line, a because line, the general notice) waits,
  * since connecting the tab wouldn't be enough. Back online and still not connected, it shows.
  * The Commons and the lock lines are pinned in presenceRound14.commonsLock and .pickerLine; this
- * file pins the rest of the places listed in the round 14 notes.
+ * file pins the rest of the places listed in the notes.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,7 +32,7 @@ afterEach(() => {
   useGraphStore.getState().dismissUndoNotice?.();
 });
 
-describe('offline comes first (GM r23 3)', () => {
+describe('offline comes first (design)', () => {
   it('the general notice waits while offline and comes back online', async () => {
     render(<PersonRequiredBanner />);
     act(() => { session.reportPersonRequired(); });

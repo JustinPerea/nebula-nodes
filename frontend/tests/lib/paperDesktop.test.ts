@@ -18,7 +18,7 @@ describe('Paper desktop artwork links', () => {
   it('detects older Electron shells so their app window never navigates to the external protocol', async () => {
     setBridge({ shell: 'electron' });
     expect(isDesktopMode()).toBe(true);
-    // Error copy round 3e (GM): a written line, never "Could not".
+    // Error copy design: a written line, never "Could not".
     await expect(openExternalUrl('paper://file/a/b/c')).rejects
       .toThrow("Nebula couldn’t open the Paper artwork because this version of the desktop app can’t open Paper. Update it, then try again.");
   });

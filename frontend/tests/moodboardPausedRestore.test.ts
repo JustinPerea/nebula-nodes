@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cascaded } from './helpers/cssCascade';
 
 /**
- * #210 round 6q (GM r95): offline, the project line's Restore project is
+ * Design (PR #210): offline, the project line's Restore project is
  * aria-disabled (it keeps focus, a press pulses the banner). It takes the
  * paused look every other paused control has (styles/disabled-buttons.css,
  * the outline list: grey label, faint edge, no fill, no extra opacity, and no
@@ -32,7 +32,7 @@ const look = (element: Element) => {
 
 afterEach(() => { document.body.innerHTML = ''; document.body.className = ''; });
 
-describe('Restore project offline looks paused (GM r95)', () => {
+describe('Restore project offline looks paused (design)', () => {
   const RESTORE = 'moodboard-studio-toolbar__button moodboard-studio__notice-action';
 
   it('the same look as another paused outline button (the proposal card\'s), at rest and on hover', () => {

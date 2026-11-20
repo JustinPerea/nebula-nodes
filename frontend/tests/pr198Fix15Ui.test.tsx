@@ -4,13 +4,13 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 15 (GM r24), rendered: the saved-as notice's × rings by
+ * Design (PR #198): rendered: the saved-as notice's × rings by
  * the input that pressed Try again. A mouse click moves focus to × with no
  * ring; Enter or Space rings it. That is the mechanism every other notice
- * uses (GM r17): a plain `focus()` left to the browser's :focus-visible
+ * uses (design): a plain `focus()` left to the browser's :focus-visible
  * heuristic, never forced either way (no `focusVisible` option), and a ring
  * drawn from :focus-visible only. jsdom has no :focus-visible heuristic, so
- * the ring itself is checked live (fix15_live.mjs, both ways).
+ * the ring itself is checked live (in the live app, both ways).
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(),
@@ -29,7 +29,7 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
 const savedAs = { line: editsSavedAsProjectLine('Recovered canvas (recovered)'), restore: null,
   open: { id: 'p9', name: 'Recovered canvas (recovered)' } };
 
-describe('GM r24: the saved-as notice’s × rings by the input, through the shared :focus-visible mechanism', () => {
+describe('the saved-as notice’s × rings by the input, through the shared :focus-visible mechanism (design)', () => {
   it.each([
     ['a mouse click', (button: HTMLElement) => { fireEvent.mouseDown(button); button.focus(); fireEvent.mouseUp(button); fireEvent.click(button); }],
     ['Enter', (button: HTMLElement) => { button.focus(); fireEvent.keyDown(button, { key: 'Enter' }); fireEvent.click(button); }],

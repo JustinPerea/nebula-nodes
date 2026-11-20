@@ -1,12 +1,12 @@
 /**
- * PR #204 round 13, review 10 lock-look-ui:
- * - MEDIUM-2 (GM r19 item 2: "A demote must never pull focus from a control that is still
+ * PR #204:
+ * - Design: "A demote must never pull focus from a control that is still
  *   there"): CommonsView keyed its whole body on the demote, so every filter remounted and focus
  *   on an unlabelled one (the Media select, a range, a checkbox) jumped to Add's line, and an IME
  *   composition in the search was cut. Now only the data panes start again: each control is the
  *   same element across the demote and the promote, still focused, and a composition goes on.
- * - NIT-2: a held and a demoted Commons showed different because lines (the last refusal won).
- *   Round 14 (GM r22): both show one line for the page, with no ranking between loads.
+ * - A held and a demoted Commons showed different because lines (the last refusal won).
+ *   Design: both show one line for the page, with no ranking between loads.
  *   One line by state: the status's.
  * - The promote reads each load once: the loads' own retry on the promote and the new view land
  *   in one render (the old remount's retry ran on the unmounted body and did nothing).
@@ -23,7 +23,7 @@ vi.mock('../src/lib/backend', async (original) => {
     ...real,
     apiFetch: (path: string, init?: RequestInit) => {
       net.sent.push(`${String(init?.method ?? 'GET').toUpperCase()} ${path.split('?')[0]}`);
-      // Round 18c (GM r30 2): the collections answer (none), so Add and Add to are live once
+      // Design: the collections answer (none), so Add and Add to are live once
       // connected; with them pending both are disabled ("Not loaded").
       if (path.split('?')[0] === '/api/commons/collections' && String(init?.method ?? 'GET').toUpperCase() === 'GET') {
         return Promise.resolve(new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }));
@@ -57,7 +57,7 @@ const promote = async () => {
   await settle(50);
 };
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
@@ -92,7 +92,7 @@ const CONTROLS: Array<[string, () => HTMLElement]> = [
   ['Add itself (it locks in place)', () => screen.getByRole('button', { name: ADD_NAME })],
 ];
 
-describe('a demote keeps focus on a Commons control that is still there (review 10 MEDIUM-2)', () => {
+describe('a demote keeps focus on a Commons control that is still there', () => {
   for (const [name, find] of CONTROLS) {
     it(`${name}: the same element, still focused, through the demote and the promote`, async () => {
       render(<CommonsView />);
@@ -188,7 +188,7 @@ describe('the data still starts again on a demote and the promote', () => {
   });
 });
 
-describe('one page line on a held tab, never a load\'s own (review 10 NIT-2, GM r22)', () => {
+describe('one page line on a held tab, never a load\'s own (design)', () => {
   const STATUS_LINE = 'Nebula couldn’t load Commons because this tab isn’t connected as you. Open the link Nebula printed when it started.';
   const lineText = () => document.querySelector('[data-commons-line="not-connected"]')?.textContent;
 

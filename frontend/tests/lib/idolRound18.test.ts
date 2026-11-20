@@ -1,4 +1,4 @@
-// PR #203 round 18, GM r34 item 2: the switcher's Auto row drops the colon.
+// Design (PR #203): the switcher's Auto row drops the colon.
 // "Auto · fal.ai doesn’t take “Resolution” set to 1.5K": every Auto reason
 // kind reads as a fragment after "Auto · ", names the provider that can't
 // take the run, and never says "can’t run:".
@@ -48,14 +48,14 @@ const CASES: [string, string, string][] = [
   ['hidden', autoLabel(NODE_DEFINITIONS['flux-3-image-klein'], { seed: 7 }, { OPENROUTER_API_KEY: KEY }),
     'Auto · OpenRouter doesn’t take “Seed”'],
   ['no key', autoLabel(oneRoute({}), {}, {}), 'Auto · needs a key'],
-  // GM r35 item 2: the providers' own noun, from providerCatalog.credentialNoun.
+  // Design: the providers' own noun, from providerCatalog.credentialNoun.
   ['no Replicate token', autoLabel(oneRoute({}, ['REPLICATE_API_TOKEN']), {}, {}), 'Auto · needs a token'],
   ['no Hugging Face token', autoLabel(oneRoute({}, ['HF_TOKEN']), {}, {}), 'Auto · needs a token'],
   ['a key or a token', autoLabel(twoRoutes(['FAL_KEY'], ['REPLICATE_API_TOKEN']), {}, {}), 'Auto · needs a key'],
 ];
 
-describe('the Auto row has no colon and leads with the provider (GM r34 item 2, r35 item 2)', () => {
-  it('GM’s line, word for word', () => {
+describe('the Auto row has no colon and leads with the provider (design)', () => {
+  it('the line (design), word for word', () => {
     expect(autoLabel(NODE_DEFINITIONS['flux-3-image'], { resolution: '1.5K' }, { FAL_KEY: KEY }))
       .toBe('Auto · fal.ai doesn’t take “Resolution” set to 1.5K');
   });
@@ -63,7 +63,7 @@ describe('the Auto row has no colon and leads with the provider (GM r34 item 2, 
   it.each(CASES)('every reason kind reads as a fragment after "Auto · " (%s)', (_kind, label, expected) => {
     expect(label).toBe(expected);
     expect(label).not.toMatch(/can.t run|:\s/);
-    // Subject first (GM r35 item 2): the provider leads, or "needs a key/token" when none can.
+    // Subject first (design): the provider leads, or "needs a key/token" when none can.
     expect(label).toMatch(/^Auto · (?:(?:fal\.ai|OpenRouter|Black Forest Labs|Replicate|Krea) |needs a (?:key|token)$)/);
   });
 
@@ -84,7 +84,7 @@ describe('the Auto row has no colon and leads with the provider (GM r34 item 2, 
   });
 });
 
-describe('the bar: r24 for the summary, the per-reason count inside the list (GM r35 item 1)', () => {
+describe('the bar: the summary line, the per-reason count inside the list (design)', () => {
   const KEY_REASON = { one: 'needs your OpenAI API key. Add it in Settings.', many: 'need your OpenAI API key. Add it in Settings.' };
   const ROUTE_REASON = { one: 'is set to Replicate, which needs your Replicate token. Add it in Settings.',
     many: 'are set to Replicate, which needs your Replicate token. Add it in Settings.' };
@@ -109,8 +109,8 @@ describe('the bar: r24 for the summary, the per-reason count inside the list (GM
   });
 });
 
-// Round 18, section 2: review 17's copy findings and GM r36 B4.
-describe('Krea’s sign-in line never names a provider that can’t take the run (review 17 LOW-3)', () => {
+// Design's copy findings.
+describe('Krea’s sign-in line never names a provider that can’t take the run', () => {
   const krea3 = () => NODE_DEFINITIONS['krea-3'];
   const plan = { _provider: 'krea', _kreaAuth: 'mcp' };
   const line = (params: Record<string, unknown>) => providerSwitchState(krea3(), { ...plan, ...params },
@@ -126,7 +126,7 @@ describe('Krea’s sign-in line never names a provider that can’t take the run
   });
 });
 
-describe('the switcher row’s size note (review 17 LOW-4)', () => {
+describe('the switcher row’s size note', () => {
   it('reads “Can’t make that size.” with a curly apostrophe', () => {
     const definition = oneRoute({ size: { param: 'resolution', unsupported: ['4k'] } });
     const state = providerSwitchState(definition, { resolution: '4k' }, { apiKeys: { FAL_KEY: KEY }, kreaSignedIn: false,
@@ -135,10 +135,10 @@ describe('the switcher row’s size note (review 17 LOW-4)', () => {
   });
 });
 
-describe('two actions take a comma when either holds its own "or" (GM r36 B4)', () => {
+describe('two actions take a comma when either holds its own "or" (design)', () => {
   it.each([
     [{ text: 'Pick 1K', options: 1 }, ['fal.ai', 'Replicate'], 'Pick 1K, or switch to fal.ai or Replicate.'],
-    // GM r37 item 1 since: every second action takes the comma (idolRound19.test.ts).
+    // Design's later rule: every second action takes the comma (idolRound19.test.ts).
     [{ text: 'Pick 1K', options: 1 }, ['fal.ai'], 'Pick 1K, or switch to fal.ai.'],
     [{ text: 'Pick 1K or 2K', options: 2 }, ['fal.ai'], 'Pick 1K or 2K, or switch to fal.ai.'],
     [{ text: 'Turn “Raw” off', options: 1 }, ['fal.ai', 'Replicate'], 'Turn “Raw” off, or switch to fal.ai or Replicate.'],

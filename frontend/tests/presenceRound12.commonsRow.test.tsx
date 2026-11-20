@@ -1,5 +1,5 @@
 /**
- * PR #204 round 12, GM r20 1: the Commons has one row for page-level lines, just below its header
+ * Design (PR #204): the Commons has one row for page-level lines, just below its header
  * (components/commons/CommonsPageLines). On a held tab the because line comes first and Add's lock
  * line ("You can add references when this tab is connected as you.") sits under it as its own
  * sentence; with no banner the lock line takes the row alone. Add points at it. Nothing of the
@@ -39,7 +39,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the Commons banner row (GM r20 1)', () => {
+describe('the Commons banner row (design)', () => {
   it('on a held tab: the because line, then Add\'s line under it; Add points at it; nothing in the header', async () => {
     act(() => session.reportPersonRequired());
     render(<CommonsView />);

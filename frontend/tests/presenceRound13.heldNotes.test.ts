@@ -1,5 +1,5 @@
 /**
- * PR #204 round 13 (review 10 held-calls MEDIUM-1): the Updates' mark-read (POST
+ * PR #204: the Updates' mark-read (POST
  * /api/canvas/agent-notes/read and the board's, require_person) is never sent by a tab that isn't
  * connected as the person: held, demoted, or before the socket's first answer. Opening the list
  * and each update that arrives while it is open ask for a read; one read per list waits, with the
@@ -49,7 +49,7 @@ afterEach(() => {
   store().reset();
 });
 
-describe('a held tab sends no mark-read (review 10 MEDIUM-1)', () => {
+describe('a held tab sends no mark-read', () => {
   it('opening the list and an arrival while it is open: nothing sent, no line; the promote sends one read, the newest', async () => {
     session.reportPersonRequired();
     sync([note('an_1', 0)]);

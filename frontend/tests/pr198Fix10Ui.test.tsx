@@ -2,19 +2,19 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 10 (review 9; GM r14, r15), rendered:
- * - GM r14 item 1: the recovered copy's notice is not a toast. It is the
+ * Design (PR #198): rendered:
+ * - Design: the recovered copy's notice is not a toast. It is the
  *   inline notice at the top of Projects home, first in a real stack of
  *   notices (then the held edits or where they went, then the error).
- * - GM r15 answer 2, as GM pr200 r16 #2 changed it: closing a notice moves
+ * - Design (PR #200): closing a notice moves
  *   focus to the next notice in the stack, onto its × (never one of its
  *   actions; a notice with no × takes focus itself); if it was the last, to
  *   the one before; with the stack empty, to the "Recent projects" heading
- *   (tabindex -1). Never to the body. GM r17: it rings from :focus-visible
+ *   (tabindex -1). Never to the body. Design: it rings from :focus-visible
  *   like any target.
- * - GM r15 answer 3: a click on the "Unsaved" mark opens the popover and does
+ * - Design: a click on the "Unsaved" mark opens the popover and does
  *   nothing else: no selection, no drag start.
- * - Review 9 M-3 (GM r14: the bar follows the card): the project bar says
+ * - Design (the bar follows the card): the project bar says
  *   "Unsaved changes" while a scene card is unsaved, though the project saved.
  */
 
@@ -50,7 +50,7 @@ const copyNotice = (restore = true) => ({ line: restore ? IN_TRASH : GONE,
 const stackOrder = (container: HTMLElement) => Array.from(container.querySelectorAll('.project-home__notices > [data-notice]'))
   .map((element) => element.getAttribute('data-notice'));
 
-describe('GM r14 item 1: the recovered copy’s notice, inline and first in the stack', () => {
+describe('the recovered copy’s notice, inline and first in the stack (design)', () => {
   it('under the header in the notice slot, neutral, with [Restore] and ×; never a toast', () => {
     const { container } = render(<Home {...props({ copyNotice: copyNotice() })} />);
     const notice = container.querySelector('[data-copy-notice]') as HTMLElement;
@@ -88,8 +88,8 @@ describe('GM r14 item 1: the recovered copy’s notice, inline and first in the 
   });
 });
 
-describe('GM r15 answer 2 (GM pr200 r16 #2): where focus goes when a notice closes', () => {
-  // GM pr200 r16 #2 replaced "its first control" (which was [Try again]
+describe('where focus goes when a notice closes (design, PR #200)', () => {
+  // Design (PR #200) replaced "its first control" (which was [Try again]
   // here): the error has no ×, so the error box itself, never its action.
   it('the next notice: closing the copy’s notice moves focus to the error box, never its [Try again]', async () => {
     const view = render(<Home {...props({ copyNotice: copyNotice(), error: 'Couldn’t load your projects.' })} />);
@@ -125,7 +125,7 @@ describe('GM r15 answer 2 (GM pr200 r16 #2): where focus goes when a notice clos
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('alert')));
   });
 
-  // GM pr200 r16 #2 replaced "first control: [Restore]": onto its ×.
+  // Design (PR #200) replaced "first control: [Restore]": onto its ×.
   it('the last one: focus goes to the one before, onto its ×, never [Restore]', async () => {
     const view = render(<Home {...props({ copyNotice: copyNotice(), unsavedEdits: { reason: TOO_LARGE } })} />);
     fireEvent.click(screen.getByRole('button', { name: 'Continue without them' }));
@@ -168,16 +168,16 @@ describe('GM r15 answer 2 (GM pr200 r16 #2): where focus goes when a notice clos
     expect(document.activeElement).toBe(elsewhere);
   });
 
-  // GM r17: focus moved by a keyboard action rings, by a click or by nothing
+  // Design: focus moved by a keyboard action rings, by a click or by nothing
   // doesn't; that is :focus-visible, the browser's heuristic, never forced
   // either way. jsdom has no heuristic, so this pins the two halves it can
   // see: the move is a plain focus() (no focusVisible option, no class) and
   // every target rings from :focus-visible only. The ring itself is checked
-  // live in Chrome (notes, fix round 11).
+  // live in Chrome (notes).
   it.each([
     ['from the keyboard', (button: HTMLElement) => { fireEvent.keyDown(button, { key: 'Enter' }); }],
     ['with a click', (button: HTMLElement) => { fireEvent.pointerDown(button); fireEvent.click(button); }],
-  ])('closing a notice %s moves focus with a plain focus(); the browser decides the ring (GM r17)', async (_how, press) => {
+  ])('closing a notice %s moves focus with a plain focus(); the browser decides the ring (design)', async (_how, press) => {
     const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
     try {
       for (const [next, target] of [
@@ -203,7 +203,7 @@ describe('GM r15 answer 2 (GM pr200 r16 #2): where focus goes when a notice clos
     }
   });
 
-  it('every focus target rings from :focus-visible only: the saved line, the error box, the heading, the buttons (GM r17)', () => {
+  it('every focus target rings from :focus-visible only: the saved line, the error box, the heading, the buttons (design)', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/project-home.css'), 'utf8');
     expect(css).toMatch(/\.project-home__notice:focus-visible,\s*body\.app-slava-restraint \.project-home__error:focus-visible,\s*body\.app-slava-restraint \.project-home #recent-projects-title:focus-visible \{ outline: var\(--sr-focus-outline\)/);
     expect(css).toMatch(/\.project-home__notice-restore:focus-visible,\s*body\.app-slava-restraint \.project-home__notice-close:focus-visible \{ outline: var\(--sr-focus-outline\)/);
@@ -214,7 +214,7 @@ describe('GM r15 answer 2 (GM pr200 r16 #2): where focus goes when a notice clos
 
 const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 
-describe('GM r15 answer 3: a click on the "Unsaved" mark does nothing else', () => {
+describe('a click on the "Unsaved" mark does nothing else (design)', () => {
   it('the press and the click never reach the card (no selection, no drag start); the popover opens', () => {
     const card = { pointerDown: vi.fn(), mouseDown: vi.fn(), click: vi.fn(), doubleClick: vi.fn() };
     render(
@@ -248,7 +248,7 @@ describe('GM r15 answer 3: a click on the "Unsaved" mark does nothing else', () 
     expect(card.click).not.toHaveBeenCalled();
   });
 
-  it('review 10, N-1: a press on the mark released off it does nothing: the card never gets that click; a later click does', async () => {
+  it('a press on the mark released off it does nothing: the card never gets that click; a later click does', async () => {
     const card = { click: vi.fn() };
     render(<div data-testid="card" onClick={card.click}><span data-testid="title">Opening</span><SceneUnsavedMark nodeId="n1" line={STOPPED} stopped /></div>);
     const mark = screen.getByRole('button', { name: 'Unsaved' });
@@ -285,7 +285,7 @@ describe('GM r15 answer 3: a click on the "Unsaved" mark does nothing else', () 
     expect(keyDown).toHaveBeenCalledTimes(1);
   });
 
-  it('the popover’s [Try again] rings from :focus-visible only, never a forced ring (GM r14 FOCUS)', () => {
+  it('the popover’s [Try again] rings from :focus-visible only, never a forced ring (design)', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
     expect(css).toMatch(/\.scene-unsaved-popover \.canvas-undo-notice__action:focus-visible \{/);
     // No rule clears it on :focus: the browser rings :focus-visible only.
@@ -293,7 +293,7 @@ describe('GM r15 answer 3: a click on the "Unsaved" mark does nothing else', () 
   });
 });
 
-describe('review 9, M-3: the project bar follows the card', () => {
+describe('the project bar follows the card', () => {
   const initialProject = useProjectStore.getState();
   const project = { id: 'alpha', name: 'Glass campaign', createdAt: '', updatedAt: '', lastOpenedAt: null, nodeCount: 1,
     edgeCount: 0, thumbnail: null };

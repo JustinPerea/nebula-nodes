@@ -1,5 +1,5 @@
-// PR #203 round 19, GM r37: the comma before every second action (item 1)
-// and sizes from the option's own label, "768 × 768" (item 3), on the card
+// Design (PR #203): the comma before every second action
+// and sizes from the option's own label, "768 × 768", on the card
 // and in the switcher, which read the same builder (directRoute).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,7 +12,7 @@ import type { ModelNodeDefinition } from '../../src/types';
 const KEY = 'fixture-only';
 const FLUX3 = NODE_DEFINITIONS['flux-3-image'] as ModelNodeDefinition;
 
-describe('every second action takes the comma (GM r37 item 1)', () => {
+describe('every second action takes the comma (design)', () => {
   it.each([
     [{ text: 'Pick 1K', options: 1 }, ['fal.ai'], 'Pick 1K, or switch to fal.ai.'],
     ['Add it in Settings', ['fal.ai'], 'Add it in Settings, or switch to fal.ai.'],
@@ -34,7 +34,7 @@ const SIZE_LINE = '“FLUX 3 Image” can’t run on fal.ai with “Resolution�
   + 'or switch to Black Forest Labs or Replicate.';
 const KEYS = { FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY, BFL_API_KEY: KEY };
 
-describe('sizes read the option’s own label, "768 × 768" (GM r37 item 3)', () => {
+describe('sizes read the option’s own label, "768 × 768" (design)', () => {
   it('the card’s line', () => {
     expect(routeUnavailable(FLUX3, { _provider: 'fal', resolution: '1.5k' }, KEYS)?.message).toBe(SIZE_LINE);
   });

@@ -128,7 +128,7 @@ describe('the left-edge check fails on', () => {
     '.a { box-shadow: -2px 0 0 0 #5b9dff; }',
     '.a { box-shadow: -2px 0 0 #444; }',
     '.a { box-shadow: 0 8px 24px rgb(0 0 0 / 0.4), -4px 0 0 red; }',
-    // (i) round 2c: a stripe whose width can't be read, a vw width at 1440 px, and a split stripe
+    // A stripe whose width can't be read, a vw width at 1440 px, and a split stripe
     '.a { position: absolute; left: 0; top: 0; bottom: 0; width: var(--bar); background: red; }',
     '.a { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--bar) + 1px); background: red; }',
     '.a { position: absolute; left: 0; top: 0; bottom: 0; width: calc(1px + 1ch); background: red; }',
@@ -354,7 +354,7 @@ describe('the left-edge check passes', () => {
   });
 });
 
-describe('round 2c readers', () => {
+describe('readers', () => {
   const stripe = '.a { position: absolute; left: 0; top: 0; bottom: 0; width: 0.2vw; background: red; }';
   it('names the reason for a stripe it can\'t read, and not for a stripe it can', () => {
     expect(found('.a { position: absolute; left: 0; top: 0; bottom: 0; width: var(--bar); background: red; }')[0].reason).toMatch(/a stripe whose width this check can't read/);

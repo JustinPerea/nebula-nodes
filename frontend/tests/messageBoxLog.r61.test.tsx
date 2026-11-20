@@ -13,7 +13,7 @@ import { usePersonThreadStore } from '../src/store/personThreadStore';
 import { cascade } from './helpers/logCascade';
 
 /**
- * GM - Design r61 on #225, answer 1 and fix B, with #216's round 3k rules:
+ * Design (PR #225), with PR #216's rules:
  * the person keeps a resize handle. The open log follows its content up to
  * 50vh until the person drags; then their height wins (at least the header,
  * one row and the composer; at most the viewport less the top chrome); a
@@ -96,7 +96,7 @@ describe('the pure parts', () => {
     expect(readStoredHeight(null)).toBeNull();
   });
 
-  it('the top chrome is the Updates chip’s row and 12 px under it (GM r70)', () => {
+  it('the top chrome is the Updates chip’s row and 12 px under it (design)', () => {
     const probe = document.createElement('div');
     document.body.appendChild(probe);
     expect(css.px(probe, 'var(--agent-log-top-chrome)')).toBe(24 + 40 + 12);
@@ -104,7 +104,7 @@ describe('the pure parts', () => {
   });
 });
 
-describe('r61 answer 1: the person’s height beats the content’s', () => {
+describe('the person’s height beats the content’s', () => {
   it('following its content it is capped at 50vh; resized, the person’s height wins over the content', () => {
     const { log, handle } = mount();
     expect(log.hasAttribute('data-sized')).toBe(false);
@@ -129,7 +129,7 @@ describe('r61 answer 1: the person’s height beats the content’s', () => {
   it('stays within the viewport less the top chrome', () => {
     const { log, handle } = mount();
     act(() => drag(handle()!, 600, -2000));
-    // The log's bottom is at 784; the chrome takes 76 (r70: the top bar + 12;
+    // The log's bottom is at 784; the chrome takes 76 (the top bar + 12;
     // no selection toolbar slot here: tests/messageBoxLog.r70.test.tsx).
     expect(log.style.height).toBe(`${784 - 76}px`);
   });
@@ -156,7 +156,7 @@ describe('r61 answer 1: the person’s height beats the content’s', () => {
   it('the arrow keys move the handle; the height is kept across a remount', () => {
     const first = mount();
     act(() => { fireEvent.keyDown(first.handle()!, { key: 'ArrowUp' }); });
-    // r70: 24 px a key.
+    // 24 px a key.
     expect(first.log.style.height).toBe('224px');
     cleanup();
     const second = mount();
@@ -164,7 +164,7 @@ describe('r61 answer 1: the person’s height beats the content’s', () => {
   });
 });
 
-describe('#216 round 3k still holds with the person’s height', () => {
+describe('still holds with the person’s height (PR #216)', () => {
   it('folded for the card: its header’s height; it reopens at the person’s height', () => {
     const { log, handle } = mount();
     act(() => drag(handle()!, 600, 200));
@@ -231,7 +231,7 @@ describe('#216 round 3k still holds with the person’s height', () => {
   });
 });
 
-describe('r61 B: the locked composer’s chrome dims, its line doesn’t', () => {
+describe('the locked composer’s chrome dims, its line doesn’t', () => {
   it('the border and the placeholder take the disabled opacity; the field keeps its focus ring', () => {
     expect(css.ruleValue('.message-box__field-row[data-locked]::before', 'opacity')).toBe('var(--sr-disabled-opacity)');
     expect(css.ruleValue('.message-box__field-row[data-locked]', 'border-color')).toBe('transparent');
@@ -242,7 +242,7 @@ describe('r61 B: the locked composer’s chrome dims, its line doesn’t', () =>
       && r.decls.some((d) => d.prop === 'opacity'))).toEqual([]);
   });
 
-  it('the shared token is GM’s 0.48', () => {
+  it('the shared token is design’s 0.48', () => {
     const tokens = cascade(['styles/slava-restraint.css'], VIEW_H);
     expect(tokens.ruleValue(':root', '--sr-disabled-opacity') ?? tokens.rules.flatMap((r) => r.decls)
       .find((d) => d.prop === '--sr-disabled-opacity')?.value).toBe('0.48');

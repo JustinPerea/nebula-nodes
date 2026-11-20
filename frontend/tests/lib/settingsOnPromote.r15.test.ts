@@ -1,4 +1,4 @@
-// PR #203 round 15: the backend sends `settingsChanged` only to a socket it
+// PR #203: the backend sends `settingsChanged` only to a socket it
 // has promoted (a verified hello), so a key change made between a tab's
 // connect and its promote reached nothing in that tab, which kept showing the
 // old key state until a reload. The promote now reads the settings again.

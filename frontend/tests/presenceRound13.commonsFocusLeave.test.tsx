@@ -1,9 +1,9 @@
 /**
- * PR #204 round 13 (review 10 MEDIUM-2): the Commons no longer remounts on a demote, and two
+ * PR #204: the Commons no longer remounts on a demote, and two
  * things the remount used to end now end on their own:
  * - the leave popover the person was asking from: the panes it asked about start again, so it
  *   closes (focus goes on to a control still there);
- * - the New collection prompt: round 14 (GM r23 4) keeps it on screen instead, its name kept and
+ * - the New collection prompt: design keeps it on screen instead, its name kept and
  *   OK locked (tests/presenceRound14.commonsLock pins the rest).
  */
 import { useEffect, useState } from 'react';
@@ -84,7 +84,7 @@ describe('what the old remount ended', () => {
     expect(screen.getByRole('button', { name: 'Back to Canvas' })).toBeTruthy();
   });
 
-  it('the New collection prompt stays through the demote and the promote, the same field (GM r23 4)', async () => {
+  it('the New collection prompt stays through the demote and the promote, the same field (design)', async () => {
     render(<CommonsView />);
     await flush();
     fireEvent.change(screen.getByRole('combobox', { name: ADD_TO_NAME }), { target: { value: '__new__' } });

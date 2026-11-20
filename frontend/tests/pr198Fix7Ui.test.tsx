@@ -6,13 +6,13 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * PR #198 fix round 7, rendered:
- * - M2 / N1 / N2: one run lock in lib/canvasLock, ordered run, then follow,
+ * PR #198: rendered:
+ * - One run lock in lib/canvasLock, ordered run, then follow,
  *   then offline. Where the run's line wins, the control carries no
  *   following mark (data-following-disabled), so it never looks like the
  *   follow lock's.
- * - GM r9 bug 1: no toolbar tooltip starts with a "Delete:"-style prefix.
- * - L7 (GM r9 answer 5): the notice region keeps clear of the docked log.
+ * - Design: no toolbar tooltip starts with a "Delete:"-style prefix.
+ * - Design: the notice region keeps clear of the docked log.
  * - The Delete key and Cmd+Z during this tab's run say the run's line, also
  *   while following.
  */
@@ -58,10 +58,10 @@ const follow = () => act(() => setFollowingSwitch({ projectName: 'Second canvas'
 const button = (name: RegExp) => screen.getAllByRole('button')
   .find((b) => name.test(b.getAttribute('aria-label') ?? b.textContent ?? ''));
 
-describe('M2: the run lock comes first, and carries no following mark', () => {
+describe('the run lock comes first, and carries no following mark', () => {
   it('canvasLockOf: run, then follow, then offline', () => {
     const lock = canvasLockOf({ projectName: 'Second canvas', agent: 'Codex' }, true);
-    // GM r39 item 2: no shared default; the control's own line wins.
+    // Design: no shared default; the control's own line wins.
     expect(lock.act(undefined, { run: true, runTitle: 'You can run it when the run finishes.' }))
       .toEqual({ disabled: true, title: 'You can run it when the run finishes.' });
     expect(lock.act(undefined, { run: true, runTitle: 'Wait for the graph import to finish.' }).title)
@@ -88,7 +88,7 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     render(<Toolbar />);
     fireEvent.click(screen.getByRole('button', { name: 'Canvas actions' }));
-    // GM r39 item 2: Load, Import, Clear and Auto-layout, each in GM's words.
+    // Design: Load, Import, Clear and Auto-layout, each in design's words.
     for (const [name, line] of [['Load canvas', 'You can load a canvas when the run finishes.'],
       ['Import CLI canvas', 'You can import a canvas when the run finishes.'],
       ['Clear canvas', 'You can clear the canvas when the run finishes.'],
@@ -115,7 +115,7 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     follow();
     act(() => useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n4', null));
     render(<ContextMenu />);
-    // GM r39 item 2: the row's verb plus "it".
+    // Design: the row's verb plus "it".
     for (const [name, verb] of [[/^Run this node/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Delete/i, 'delete']] as const) {
       const b = button(name)!;
       expect(b, String(name)).toBeDefined();
@@ -138,7 +138,7 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
   });
 });
 
-describe('GM r9 bug 1: no tooltip starts with a "Delete:"-style prefix', () => {
+describe('no tooltip starts with a "Delete:"-style prefix (design)', () => {
   const PREFIX = /^[A-Z][A-Za-z ]{1,24}:\s/;
   it('every SelectionToolbar button, in each lock state', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief'), textNode('n2', 'Note')], edges: [] });
@@ -162,7 +162,7 @@ describe('GM r9 bug 1: no tooltip starts with a "Delete:"-style prefix', () => {
   });
 });
 
-describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLock\'s order', () => {
+describe('the last run-locked buttons read canvasLock\'s order', () => {
   it('DeferredRunNotice\'s Run: the run line, no following mark, while running and following', async () => {
     const { DeferredRunNotice } = await import('../src/components/canvas/DeferredRunNotice');
     const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsStore');
@@ -172,8 +172,8 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
     render(<DeferredRunNotice />);
     const run = screen.getByRole('button', { name: /Run/ });
     expect(run).toBeDisabled();
-    // GM r40 item 3: the notice's own line, read live (no node n1 on this canvas: "it").
-    // GM PR #205 r1: the line is beside [Run], so no tooltip; [Run] points at it.
+    // Design: the notice's own line, read live (no node n1 on this canvas: "it").
+    // Design (PR #205): the line is beside [Run], so no tooltip; [Run] points at it.
     expect(run.hasAttribute('title')).toBe(false);
     expect(run).toHaveAccessibleDescription('You can run it when the current run finishes.');
     expect(run.hasAttribute(FOLLOWING_MARK)).toBe(false);
@@ -197,7 +197,7 @@ describe('fix round 8, L5 (review 7): the last run-locked buttons read canvasLoc
   });
 });
 
-describe('L7: the notice region keeps clear of the docked Agent log', () => {
+describe('the notice region keeps clear of the docked Agent log', () => {
   const rect = (left: number, right: number, top: number, bottom: number) =>
     ({ left, right, top, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
 
@@ -208,9 +208,9 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true } as never);
     const { unmount } = render(<AgentLog />);
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe(`${1180 - 820 + 8}px`);
-    // Its top edge plus the gap, for a proposal card that sits above it (PR #216 r1).
+    // Its top edge plus the gap, for a proposal card that sits above it (PR #216).
     expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe(`${800 - 440 + 8}px`);
-    // Hidden: both go (review 1 LOW-6 of PR #216: the notice stack reads them).
+    // Hidden: both go (PR #216: the notice stack reads them).
     act(() => { useUIStore.setState({ agentLogEnabled: false } as never); });
     expect(document.documentElement.style.getPropertyValue('--agent-log-clearance')).toBe('');
     expect(document.documentElement.style.getPropertyValue('--agent-log-top')).toBe('');
@@ -222,7 +222,7 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     spy.mockRestore();
   });
 
-  it('giving way to the card (GM r6) never moves the line it writes: its top is the one it has with no give', () => {
+  it('giving way to the card (design) never moves the line it writes: its top is the one it has with no give', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1180 });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
     // Squeezed to 200 of its own 344 (the person's resize, inline).
@@ -254,12 +254,12 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
     spy.mockRestore();
   });
 
-  it('the log\'s body gives way on the spring, held at its foot, down to its floor (GM r6)', () => {
+  it('the log\'s body gives way on the spring, held at its foot, down to its floor (design)', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const block = /\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(block).toMatch(/--agent-log-give: var\(--agent-log-squeeze, 0px\);/);
     expect(block).toMatch(/--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);/);
-    // Bounded by the shown height while a give is in force (review 3 MEDIUM-2).
+    // Bounded by the shown height while a give is in force.
     expect(block).toMatch(/max-height:\s*max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* 10000000\)\)/);
     expect(block).toMatch(/transition:\s*--agent-log-give 420ms var\(--agent-log-spring\)/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\] \.agent-log__body,/);
@@ -279,7 +279,7 @@ describe('L7: the notice region keeps clear of the docked Agent log', () => {
 
   it('the region reads it', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/noticeRegion.css'), 'utf8');
-    // Round 18 (GM r28 2): the right inset is the larger of the gutter, the log and a right side panel.
+    // Design: the right inset is the larger of the gutter, the log and a right side panel.
     expect(css).toMatch(/--notice-r:\s*max\(var\(--page-gutter, 16px\), var\(--agent-log-clearance, 0px\), var\(--notice-right-clearance, 0px\)\)/);
     expect(css).toMatch(/\bright:\s*max\(var\(--notice-r\),/);
     expect(css).toMatch(/bottom:\s*var\(--notice-region-bottom\)/);

@@ -1,5 +1,5 @@
 /**
- * PR #204 round 10 (review 8 LOW-1): the runtime ratchet (tests/helpers/bareLines.ts, run after
+ * PR #204: the runtime ratchet (tests/helpers/bareLines.ts, run after
  * every test by tests/setup.ts) catches each form the source scan missed, F1-F6, and passes the
  * same words rendered through <LineText>, the notice's own words and an agent's quoting them.
  */
@@ -30,7 +30,7 @@ function Setter() {
   return <p>{line}</p>;
 }
 
-describe('review 8 LOW-1: each bypass form is caught at run time', () => {
+describe('each bypass form is caught at run time', () => {
   const line = notConnectedBecause('save', false);
   const forms: [string, () => React.ReactElement][] = [
     ['F1 a local const', () => { const msg = line; return <p>{msg}</p>; }],

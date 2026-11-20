@@ -1,10 +1,10 @@
 /**
- * PR #199 round 23 (review 21 LOW-1, the entry chunk's budget, part 2): the
+ * PR #199 (the entry chunk's budget, part 2): the
  * held reopen's table of lines (lib/reopenHoldLines) is its own chunk. It
  * loads when a hold first arrives, not when the store is imported; nothing
  * says a line before it is here; a chunk that fails to load says nothing
  * (never a wrong line) and the press answers with the open's heading and a
- * real Try again (round 24, GM r23 1); and a line waiting on
+ * real Try again (design); and a line waiting on
  * the chunk is said only if its project is still the one open, and only
  * while its hold still holds.
  *
@@ -193,7 +193,7 @@ describe('the reopen-hold lines load on first need, not with the store', () => {
   });
 });
 
-describe('a lines chunk that fails to load (GM r23, 1: a press always answers)', () => {
+describe('a lines chunk that fails to load (design: a press always answers)', () => {
   // The failure is one sentence in the because form: it opens with the action, then says why.
   const HEADING_LEAD = 'Nebula couldn’t open the project because';
   const failFirstLoad = async () => {
@@ -213,7 +213,7 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     const state = store.useProjectStore.getState();
     expect(state.screen).toBe('home');
     expect(state.error?.startsWith(HEADING_LEAD)).toBe(true);
-    // GM's general line under the heading (the chunk's failure is no request's); only the kept form never says reload.
+    // The general line (design) under the heading (the chunk's failure is no request's); only the kept form never says reload.
     expect(state.error).toBe('Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.');
     expect(state.errorRetry).toEqual({ action: 'open', id: 'alpha' });
     expect(said()).toEqual([]);

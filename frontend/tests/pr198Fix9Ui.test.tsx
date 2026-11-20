@@ -2,13 +2,13 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 9 (GM r12, r13), rendered and in copy:
- * - GM r12 item 1 / r13 answer 3: a stopped save's "Unsaved" mark opens a
+ * Design (PR #198): rendered and in copy:
+ * - Design: a stopped save's "Unsaved" mark opens a
  *   popover with its line and [Try again]; the tooltip stays.
- * - GM r12 item 2: "Use Codex’s", curly.
- * - GM r12 item 3: plurals in active voice, one name-list helper (up to
+ * - Design: "Use Codex’s", curly.
+ * - Design: plurals in active voice, one name-list helper (up to
  *   three names, a count from four).
- * - GM r12 item 5: the recovered copy's notices are neutral toasts with ×;
+ * - Design: the recovered copy's notices are neutral toasts with ×;
  *   the Recently deleted one keeps [Restore].
  */
 
@@ -30,7 +30,7 @@ afterEach(cleanup);
 
 const STOPPED = "Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.";
 
-describe('GM r12 item 1: the stopped save\'s popover on the "Unsaved" mark', () => {
+describe('the stopped save\'s popover on the "Unsaved" mark (design)', () => {
   it('before it stops: the mark is text with its tooltip, no button', () => {
     render(<SceneUnsavedMark nodeId="n1" line={STOPPED} stopped={false} />);
     expect(screen.queryByRole('button')).toBeNull();
@@ -65,13 +65,13 @@ describe('GM r12 item 1: the stopped save\'s popover on the "Unsaved" mark', () 
 });
 
 const CODEX = { kind: 'agent', name: 'Codex' } as const;
-describe('GM r12 items 2 and 3: the button and the plurals', () => {
+describe('the button and the plurals (design)', () => {
   it('"Use Codex’s" with a curly apostrophe; every clash line one sentence', () => {
     expect(theirsLabel('Codex')).toBe('Use Codex’s');
     expect(sceneClashLine('Shot 2', CODEX)).toBe('Codex changed “Shot 2” while you were editing it.');
   });
 
-  it('GM\'s three lines, verbatim', () => {
+  it('the three lines (design), verbatim', () => {
     expect(shotsRemovedLine(['Shot 2', 'Shot 3'], CODEX)).toBe('Codex removed “Shot 2” and “Shot 3” while you were editing them.');
     expect(shotBackWithoutLine(['Shot 2'], ['Edit A', 'Edit B'])).toBe('“Shot 2” is back without its connections to “Edit A” and “Edit B”.');
     expect(shotBackWithoutLine(['Shot 2', 'Shot 3'], ['Edit A'])).toBe('“Shot 2” and “Shot 3” are back without their connections to “Edit A”.');
@@ -91,8 +91,8 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(), ...overrides,
 });
 
-describe('GM r12 item 5: the recovered copy\'s notices', () => {
-  it('in Recently deleted: GM\'s line, [Restore] and ×, never the error box', () => {
+describe('the recovered copy\'s notices (design)', () => {
+  it('in Recently deleted: design\'s line, [Restore] and ×, never the error box', () => {
     const line = copyDeletedAfterUpdateLine('Alpha (recovered)', false);
     expect(line).toBe("Nebula couldn’t save some changes before it updated. They were kept in “Alpha (recovered)”, which is in Recently deleted.");
     const onRestoreCopy = vi.fn();
@@ -101,7 +101,7 @@ describe('GM r12 item 5: the recovered copy\'s notices', () => {
       onRestoreCopy, onDismissCopy })} />);
     expect(container.querySelector('.project-home__error')).toBeNull();
     const notice = container.querySelector('[data-copy-notice]') as HTMLElement;
-    // GM r14 item 1: not a toast; the inline notice in the notice stack.
+    // Design: not a toast; the inline notice in the notice stack.
     expect(notice.classList.contains('project-home__notice')).toBe(true);
     expect(notice.classList.contains('project-home__toast')).toBe(false);
     expect(notice.closest('.project-home__notices')).toBeTruthy();
@@ -113,7 +113,7 @@ describe('GM r12 item 5: the recovered copy\'s notices', () => {
     expect(onDismissCopy).toHaveBeenCalledTimes(1);
   });
 
-  it('deleted for good: GM\'s line and × only', () => {
+  it('deleted for good: design\'s line and × only', () => {
     const line = copyDeletedAfterUpdateLine('Alpha (recovered 2)', true);
     expect(line).toBe("Nebula couldn’t save some changes before it updated. They were kept in “Alpha (recovered 2)”, which was permanently deleted, so they can’t be brought back.");
     const { container } = render(<ProjectHome {...props({ copyNotice: { line, restore: null } })} />);

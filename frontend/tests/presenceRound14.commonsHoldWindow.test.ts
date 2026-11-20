@@ -1,10 +1,10 @@
 /**
- * PR #204 round 14, review 11 held-calls LOW-5 (mutants C3 and C4 survived): lib/commonsApi send holds
+ * PR #204 survived): lib/commonsApi send holds
  * a Commons call only on a hold that has lasted the held rule's 150 ms (personHeldSettled), never at
  * once and never while the tab is still starting. Two windows where a call must still go out, with
  * the stored token, and reach apiFetch:
- * - C4: before the socket's first answer (a tab still starting, unconfirmed but not held).
- * - C3: inside the first 150 ms of a hold (a quick reconnect).
+ * - Before the socket's first answer (a tab still starting, unconfirmed but not held).
+ * - Inside the first 150 ms of a hold (a quick reconnect).
  * The desktop shell relies on both: a 401 there re-resolves the token and retries (commonsApi call).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -44,8 +44,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('review 11 LOW-5: the Commons isn\'t held while starting or inside the first 150 ms of a hold', () => {
-  it('C4: before the socket\'s first answer a Commons call goes out with the stored token', async () => {
+describe('the Commons isn\'t held while starting or inside the first 150 ms of a hold', () => {
+  it('before the socket\'s first answer a Commons call goes out with the stored token', async () => {
     session.resetPersonSessionForTests({ unanswered: true });
     expect(session.personUnconfirmed()).toBe(true);
     expect(session.personGateHeld()).toBe(false);
@@ -55,7 +55,7 @@ describe('review 11 LOW-5: the Commons isn\'t held while starting or inside the 
     expect(net.auth).toEqual([`Bearer ${TOKEN}`]);
   });
 
-  it('C3: 100 ms into a hold a Commons call still goes out with the stored token', async () => {
+  it('100 ms into a hold a Commons call still goes out with the stored token', async () => {
     session.reportPersonRequired();
     vi.advanceTimersByTime(100);
     expect(session.personGateHeld()).toBe(true);

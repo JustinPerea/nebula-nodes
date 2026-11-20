@@ -8,7 +8,7 @@ import { cancelExecution } from '../../src/lib/api';
 import { cancelRenderJob } from '../../src/lib/renderJobs';
 
 /**
- * Round 16 of PR #114, M1: Stop gets through the offline gate. Every request
+ * PR #114: Stop gets through the offline gate. Every request
  * that only reduces work or spend is on one named allowlist and is sent while
  * the tab thinks Nebula is offline (a false offline must never trap a paid run
  * the person wants stopped). Nothing that starts work or spends is on it.
@@ -86,7 +86,7 @@ describe('the cancel allowlist', () => {
   });
 });
 
-describe('view-state reports while offline (L1: allowed, no pulse)', () => {
+describe('view-state reports while offline (allowed, no pulse)', () => {
   it('lists the background reports that are not edits', () => {
     expect(OFFLINE_QUIET_WRITES.map(({ method, pattern }) => `${method} ${pattern.source}`)).toEqual([
       'POST ^\\/api\\/canvas\\/selection$',

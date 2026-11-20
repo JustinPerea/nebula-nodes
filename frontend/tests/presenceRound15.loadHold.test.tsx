@@ -1,5 +1,5 @@
 /**
- * PR #204 round 15 (GM r25 1): on a connected tab, a failed load's own line waits until the page's
+ * Design (PR #204): on a connected tab, a failed load's own line waits until the page's
  * other loads have answered or failed, capped at 1.5 s, the same as Add's line. So loads failing
  * for one reason show one line (the page line), never a load's own line swapped for it. Past the
  * cap the load's line shows on its own, and the page line joins when the others fail.
@@ -82,7 +82,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('a connected tab whose loads fail for one reason (GM r25 1)', () => {
+describe('a connected tab whose loads fail for one reason (design)', () => {
   it('the hold is Add\'s, 1.5 s', () => {
     expect(LOAD_LINE_HOLD_MS).toBe(ADD_LINE_HOLD_MS);
     expect(LOAD_LINE_HOLD_MS).toBe(1500);
@@ -104,7 +104,7 @@ describe('a connected tab whose loads fail for one reason (GM r25 1)', () => {
     expect(frames).toEqual([[PAGE]]); // one line, one change: no load's own line before it
   });
 
-  // Round 18 (GM r28 1): the page's lines, and each load's own, are neutral: nothing was destroyed.
+  // Design: the page's lines, and each load's own, are neutral: nothing was destroyed.
   it('the page line and each load\'s own line are neutral, in the because line\'s look', async () => {
     document.body.className = 'app-slava-restraint';
     try {
@@ -255,10 +255,10 @@ describe('useCommonsLoadLines\' hold', () => {
   });
 });
 
-// Round 17 (review 13 LOW-1): a search cancelled before it answered will never answer. On the
+// A search cancelled before it answered will never answer. On the
 // tabs that search nothing (Settings, Blind labeling, Agent review) nothing settles it later, so it
 // must not stay "on its way": a later failure there shows at once, not after the 1.5 s hold.
-describe('a load cancelled before it answered (review 13 LOW-1)', () => {
+describe('a load cancelled before it answered', () => {
   const statusCalls = () => transport.fetch.mock.calls.filter((call) => String(call[0]).endsWith('/status')).length;
   for (const cancelled of [true, false]) it(`a later status failure on Settings shows at once (search ${cancelled ? 'cancelled' : 'answered'} first)`, async () => {
     gates = { status: gate(false), collections: gate(false), search: gate(false) };

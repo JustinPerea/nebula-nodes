@@ -2,12 +2,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * PR #198 fix round 20, rendered.
- * - GM r29 call 2: while a scene's [Try again] is on its way, its stop line
+ * PR #198: rendered.
+ * - Design: while a scene's [Try again] is on its way, its stop line
  *   stays and the button is disabled (aria-disabled, so focus stays on it)
  *   with its label unchanged, in the state slot and in the "Unsaved" mark's
  *   popover, so a double press can't queue two tries.
- * - Review 18 LOW-1 (GM r29): focus on a stop line never drops to the page.
+ * - Design: focus on a stop line never drops to the page.
  *   A line that comes back after its try gives focus to its [Try again]; a
  *   focused line that goes hands focus on by the × rule: another stop line
  *   (the notice, never its [Try again]), else the next notice's ×, else a
@@ -43,7 +43,7 @@ const scene = (id: string, label: string, x: number) => ({ id, type: 'cinemaScen
   data: { label, definitionId: 'cinema-scene', params: {}, state: 'idle', outputs: {} } });
 const LINE = 'Nebula couldn’t save your changes to “Opening” and “Ref scene”. They’re kept, and Nebula will try again with your next change.';
 
-describe('GM r29 call 2: [Try again] disabled while its try is on its way', () => {
+describe('[Try again] disabled while its try is on its way (design)', () => {
   it('the state slot: the line stays, [Try again] disabled with its label; pressing it retries nothing', async () => {
     const retry = vi.fn();
     // Opening's try is on its way (out of the stopped state); Ref is still stopped.
@@ -89,7 +89,7 @@ const lineEl = (text: string) => screen.getByText(text).closest('[data-scene-sto
 const tryOf = (text: string) => lineEl(text).querySelector('button') as HTMLButtonElement;
 const set = (state: Record<string, unknown>) => act(() => { useGraphStore.setState(state as never); });
 
-describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page', () => {
+describe('focus on a stop line never drops to the page (design)', () => {
   const canvas = () => {
     const el = document.createElement('div');
     el.className = 'canvas-wrapper';

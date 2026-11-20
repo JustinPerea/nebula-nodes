@@ -1,9 +1,9 @@
 /**
- * A late restore count is never lost (GM - Design, 2026-10-23, answer 2):
+ * A late restore count is never lost (design, 2026-10-23):
  * "Yes, show it as a plain notice with no button, using the standard
  * timeout ... Losing that count silently is the one thing to avoid."
  *
- * Round 4 (GM - Design, replying to #180's "For GM"): "LATE LINES: drop the
+ * Design, replying to #180's "For design": "LATE LINES: drop the
  * node word, which fixes the mismatch for good. "After the restore, 1
  * proposal couldn't be reopened." / "…{n} proposals couldn't be reopened."
  * "After the restore, Nebula couldn’t reattach 1 pin." / "…{n} pins couldn't
@@ -12,7 +12,7 @@
  * With two notices showing, put the late line above the newer one, so the
  * notice with a button stays nearest the bar."
  *
- * Before round 3: when the person moved on (a new step, a quick delete)
+ * Before: when the person moved on (a new step, a quick delete)
  * before a restore's answer arrived, the "Restored the node. 1 proposal
  * couldn't be reopened." line no longer applied (its Redo would do nothing),
  * so it stayed away and the count went with it. Now the count shows on its
@@ -123,7 +123,7 @@ afterEach(async () => {
   useGraphStore.setState(initialGraph, true);
 });
 
-describe("GM's lines for a late count", () => {
+describe("the lines for a late count (design)", () => {
   const lateText = (deleteNotice as unknown as {
     lateRestoreText?: (notReopened: number, notReattached: number) => string;
   }).lateRestoreText;
@@ -134,12 +134,12 @@ describe("GM's lines for a late count", () => {
     expect(lateText?.(7, 0)).toBe("After the restore, Nebula couldn’t reopen 7 proposals.");
   });
 
-  it("pins on another model, GM's round 4 lines verbatim", () => {
+  it("pins on another model, design's lines verbatim", () => {
     expect(lateText?.(0, 1)).toBe("After the restore, Nebula couldn’t reattach 1 pin.");
     expect(lateText?.(0, 3)).toBe("After the restore, Nebula couldn’t reattach 3 pins.");
   });
 
-  it("both counts on GM's one line when both apply, each noun following its count", () => {
+  it("both counts on design's one line when both apply, each noun following its count", () => {
     expect(lateText?.(2, 1)).toBe("After the restore, Nebula couldn’t restore 1 pin and 2 proposals.");
     expect(lateText?.(1, 2)).toBe("After the restore, Nebula couldn’t restore 2 pins and 1 proposal.");
     expect(lateText?.(1, 1)).toBe("After the restore, Nebula couldn’t restore 1 pin and 1 proposal.");
@@ -155,9 +155,9 @@ describe('a late restore count', () => {
     await restoreWithAnswerHeld();
     useGraphStore.getState().deleteNode('n2');
     await settle();
-    // Round 17: the delete reaches Nebula after the restore (the order the
+    // The delete reaches Nebula after the restore (the order the
     // person made them), so its line comes once the restore has answered.
-    // Round 18 (GM option (c)): the card leaves the canvas at once, though its DELETE waits for the restore.
+    // Design: the card leaves the canvas at once, though its DELETE waits for the restore.
     expect(useGraphStore.getState().nodes.map((node) => node.id)).not.toContain('n2');
     await release();
     expect(useGraphStore.getState().nodes.map((node) => node.id)).not.toContain('n2');
@@ -263,10 +263,10 @@ describe('in the region', () => {
 
   it('nothing else in the stack order moves (top to bottom)', () => {
     expect([...NOTICE_SLOTS]).toEqual([
-      // PR #199 review 11 (GM r15): the kept-edits line sits under the project switch.
+      // Design (PR #199): the kept-edits line sits under the project switch.
       'proposal', 'run-later', 'person-required', 'project-switch', 'kept-edits', 'save-paused', 'project-home',
-      // Review 7, L3: a line beside an Undo has its own slot above the late count.
-      // GM r28 (PR #198 round 19): the scenes' stop lines, a state above every event.
+      // A line beside an Undo has its own slot above the late count.
+      // Design (PR #198): the scenes' stop lines, a state above every event.
       'pin', 'board', 'asset-trash', 'scene-clash', 'scene-stop', 'message', 'late', 'notice',
     ]);
   });
@@ -288,7 +288,7 @@ describe('in the region', () => {
     expect(newerItem.compareDocumentPosition(lateItem) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(lateItem).toHaveAttribute('role', 'status');
     expect(within(lateItem).queryByRole('button', { name: /undo|redo/i })).toBeNull();
-    // GM: "Keep the × Dismiss."
+    // Design: "Keep the × Dismiss."
     expect(within(lateItem).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Dismiss']);
     // The newer notice keeps its Undo.
     expect(within(newerItem).getByRole('button', { name: 'Undo' })).toBeInTheDocument();

@@ -2,16 +2,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 12 (review 11), rendered:
- * - L-3: Escape on the focused "Unsaved" mark never reaches the card (React
+ * PR #198: rendered:
+ * - Escape on the focused "Unsaved" mark never reaches the card (React
  *   Flow's node selects on it). With the popover open, Escape closes it and
  *   focus stays on the mark.
- * - Nit N-5 (GM r17): the keyboard-versus-click ring difference, pinned. jsdom
+ * - Design: the keyboard-versus-click ring difference, pinned. jsdom
  *   has no :focus-visible heuristic, so the browser's is simulated (a key
  *   press makes the next focus keyboard focus, a pointer press makes it not;
  *   the input-modality polyfill's rule), with project-home.css's
  *   :focus-visible read as that attribute.
- * - GM pr200 r16 #2 (the coordinator, for this round): a notice closed with ×
+ * - Design (PR #200): a notice closed with ×
  *   moves focus to the next notice's ×, never onto a primary or destructive
  *   action; a notice with no × takes focus itself; an empty stack, the
  *   "Recent projects" heading. In #200 a second Enter ran the next notice's
@@ -32,7 +32,7 @@ afterEach(cleanup);
 
 const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
 
-describe('review 11, L-3: Escape on the "Unsaved" mark', () => {
+describe('Escape on the "Unsaved" mark', () => {
   it('with no popover open: Escape stays with the mark (the card isn’t selected)', () => {
     const keyDown = vi.fn();
     render(<div onKeyDown={keyDown}><SceneUnsavedMark nodeId="n1" line={STOPPED} stopped /></div>);
@@ -70,7 +70,7 @@ describe('review 11, L-3: Escape on the "Unsaved" mark', () => {
   });
 });
 
-describe('GM r17 (review 11, N-5): a keyboard close rings the next target, a click close doesn’t', () => {
+describe('a keyboard close rings the next target, a click close doesn’t (design)', () => {
   let style: HTMLStyleElement;
   let modality: 'keyboard' | 'pointer' = 'pointer';
   const onKey = () => { modality = 'keyboard'; };
@@ -148,7 +148,7 @@ describe('GM r17 (review 11, N-5): a keyboard close rings the next target, a cli
   });
 });
 
-describe('GM pr200 r16 #2: two Enters on × never trigger an action', () => {
+describe('two Enters on × never trigger an action (design, PR #200)', () => {
   // Enter on a focused button activates it (the browser's default, which
   // jsdom lacks): keydown, then a click unless the keydown was prevented. On
   // anything else Enter does only what a keydown handler does with it.

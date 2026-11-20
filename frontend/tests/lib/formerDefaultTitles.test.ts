@@ -1,7 +1,6 @@
 /**
  * A node saved before the copy sweep carries a Title Case default label
- * ("Video Edit"). It is still the default title, not a name the person chose
- * (final review LOW-4). The table is pinned to the backend's through
+ * ("Video Edit"). It is still the default title, not a name the person chose. The table is pinned to the backend's through
  * contracts/fixtures/former-default-titles.json (backend/tests/test_former_default_titles.py).
  */
 import { readFileSync } from 'node:fs';
@@ -39,7 +38,7 @@ describe('former default titles', () => {
   });
 });
 
-// Design r160 flag D: a saved canvas shows the new default name where it holds the old default, and keeps a name the person changed.
+// Design: a saved canvas shows the new default name where it holds the old default, and keeps a name the person changed.
 describe('a loaded canvas takes the new default name', () => {
   const node = (id: string, definitionId: string, label: string) => ({
     id, type: 'model', position: { x: 0, y: 0 }, data: { definitionId, label, params: {} },

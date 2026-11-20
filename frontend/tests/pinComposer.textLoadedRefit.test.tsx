@@ -1,9 +1,9 @@
-// PR #218 review 1 LOW-1: the Unicode chunk failed at startup, so PinComposer
+// PR #218: the Unicode chunk failed at startup, so PinComposer
 // was already counting with the strict fallbacks. The dialog opening loads it
 // again; when it lands, the open dialog's "N left" and the kept-note notices
 // redraw in the full form at once, with no keystroke and no store change.
 //
-// GM's sign-off on #220 rests on three conditions, pinned here:
+// Design's sign-off on #220 rests on three conditions, pinned here:
 // 1. The refit leaves the person where they were: same field focused, same
 //    selection, same text.
 // 2. It is silent: the polite region says nothing. PromptDialog speaks only
@@ -57,7 +57,7 @@ const CASES: Case[] = [
   { name: 'revealed by a note_too_long refusal', draft: 'a'.repeat(200) + FAMILY, reveal: true, before: '77 left', after: '79 left' },
 ];
 
-describe('PR #218 review 1 LOW-1: the chunk loaded again refits what PinComposer shows', () => {
+describe('the chunk loaded again refits what PinComposer shows (PR #218)', () => {
   it.each(CASES)('$name: the count and the kept note refit; focus, selection and text stay; nothing is spoken', async ({ draft, reveal, before, after }) => {
     const { chunk, pins, useCanvasPinsStore, PinComposer } = await freshModules();
     await pins.pinTextReady;
@@ -95,13 +95,13 @@ describe('PR #218 review 1 LOW-1: the chunk loaded again refits what PinComposer
     expect(pins.pinTextIsLoaded()).toBe(true);
     // Both surfaces, so a fix that reaches only one of them shows which.
     expect({ counter: counter(), kept: keptNote() }).toEqual({ counter: after, kept: KEPT_TEXT });
-    // GM condition 1: where the person was.
+    // Design: where the person was.
     const now = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
     expect(now).toBe(field);
     expect(document.activeElement).toBe(field);
     expect(field.value).toBe(draft);
     expect([field.selectionStart, field.selectionEnd]).toEqual([3, 7]);
-    // GM condition 2: silent (the count only went up; see the header).
+    // Design: silent (the count only went up; see the header).
     expect(spoken()).toBe('');
   });
 });

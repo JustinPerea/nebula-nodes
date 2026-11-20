@@ -3,7 +3,7 @@ import { apiFetch, getBackendBaseUrl } from '../../src/lib/backend';
 import { ConnectionLostError } from '../../src/lib/errorCopy';
 
 /**
- * error-copy (GM - Design, 2026-10-22): a request with no answer at all is
+ * error-copy (design, 2026-10-22): a request with no answer at all is
  * turned into words where every request is made, so no screen can show the
  * browser's own "Failed to fetch". The original stays as the error's cause;
  * it is still a TypeError, so code that tells a lost answer from a refusal
@@ -45,7 +45,7 @@ describe('apiFetch with no answer', () => {
   });
 });
 
-describe('round 2: apiRequest names its action', () => {
+describe('apiRequest names its action', () => {
   it('no answer: a ConnectionLostError under the heading, still a TypeError', async () => {
     const backend = await import('../../src/lib/apiRequest');
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
@@ -54,7 +54,7 @@ describe('round 2: apiRequest names its action', () => {
     expect((error as Error).message).toBe('Nebula couldn’t load your API keys because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
-  it('a 503: heading + GM\'s line, the status kept; an allowed status comes back as it is', async () => {
+  it('a 503: heading + design\'s line, the status kept; an allowed status comes back as it is', async () => {
     const backend = await import('../../src/lib/apiRequest');
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 503 })));

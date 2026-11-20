@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 5, GM - Design's offline ruling: a control disabled
+ * PR #198: Design's offline ruling: a control disabled
  * because Nebula is offline says "You can <verb> when Nebula reconnects."
  * ("You can generate when Nebula reconnects."), or the generic "This works
  * again when Nebula reconnects." The Cinema studio is locked offline: Generate
@@ -56,7 +56,7 @@ afterEach(() => {
   useGraphStore.setState({ activeRuns: [] } as never);
 });
 
-describe('GM: the offline reason for a disabled action', () => {
+describe('the offline reason for a disabled action (design)', () => {
   it('"You can <verb> when Nebula reconnects.", the generic line without a verb', () => {
     expect(offlineReason('generate')).toBe('You can generate when Nebula reconnects.');
     expect(offlineReason()).toBe('This works again when Nebula reconnects.');
@@ -65,7 +65,7 @@ describe('GM: the offline reason for a disabled action', () => {
     expect(offlineTitle(false, 'generate', 'Own title')).toBe('Own title');
   });
 
-  it('GM\'s verbs (PR #200 r2 item 4) are named constants', () => {
+  it('the verbs (design, PR #200) are named constants', () => {
     expect(Object.values(OFFLINE_VERBS).map((verb) => offlineReason(verb))).toEqual([
       'You can generate when Nebula reconnects.',
       'You can send it to motion when Nebula reconnects.',
@@ -77,9 +77,9 @@ describe('GM: the offline reason for a disabled action', () => {
       'You can delete nodes when Nebula reconnects.',
       'You can create projects when Nebula reconnects.',
       'You can see run history when Nebula reconnects.',
-      // GM, PR #200 r4 item 2 (PR #198 round 6).
+      // Design (PR #200, PR #198).
       'You can rerun it when Nebula reconnects.',
-      // Run history's Retry and Recover (PR #200 fix round 3, GM's round 3
+      // Run history's Retry and Recover (PR #200, design's
       // answers), one list since the merge with #200.
       'You can run its failed nodes again when Nebula reconnects.',
       'You can recover it when Nebula reconnects.',
@@ -107,7 +107,7 @@ function lockOf(label: string): HTMLFieldSetElement {
   return lock!;
 }
 
-describe('GM: the Cinema studio is locked offline, and each control says why', () => {
+describe('the Cinema studio is locked offline, and each control says why (design)', () => {
   it('Generate shot, Generate 2 and Generate all: "You can generate when Nebula reconnects."', () => {
     offline();
     renderStudio();
@@ -202,10 +202,10 @@ describe('GM: the Cinema studio is locked offline, and each control says why', (
   });
 });
 
-describe('GM\'s merge check: each locked Cinema control looks locked', () => {
-  // PR #198 round 25 (review 23 MEDIUM-1, GM r37 option c): a locked
+describe('the merge check (design): each locked Cinema control looks locked', () => {
+  // Design (PR #198): a locked
   // Cinema button looks the same offline as following, the app's one shared
-  // rule on GM r33's tokens (the orange Generate shot the grey fill with its
+  // rule on design's tokens (the orange Generate shot the grey fill with its
   // dark label, the rest the grey label). Only the text fields keep a
   // Cinema rule: the grey label, the disabled edge, no fill.
   it('the buttons take the shared rule; one Cinema rule for the text fields: the grey label, the disabled edge, no fill, no dimming on top', () => {
@@ -231,7 +231,7 @@ describe('GM\'s merge check: each locked Cinema control looks locked', () => {
     }
   });
 
-  it('every control GM checks carries the mark the rule reads', () => {
+  it('every control design checks carries the mark the rule reads', () => {
     offline();
     renderStudio();
     for (const name of ['Generate shot', 'Generate 2', 'Generate all', '+ Add shot', 'Send to motion',

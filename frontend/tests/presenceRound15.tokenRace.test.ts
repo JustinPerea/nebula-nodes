@@ -1,5 +1,5 @@
 /**
- * PR #204 round 15 (review 12): the token drop reads one answer per hello.
+ * PR #204: the token drop reads one answer per hello.
  *
  * A canvas socket can carry two hellos: a person link taken in the tab while the first hello's
  * answer is on its way says hello again on the same open socket. The server answers hellos in
@@ -97,7 +97,7 @@ afterEach(() => {
 });
 
 
-describe('round 15: one answer per hello', () => {
+describe('one answer per hello', () => {
   it('a new link taken while the old hello is answered keeps the new, valid token', async () => {
     const f = await fresh();
     healthSettles(f);
@@ -177,7 +177,7 @@ describe('round 15: one answer per hello', () => {
   });
 });
 
-describe('round 15: the Commons drop compares the token the refused call carried', () => {
+describe('the Commons drop compares the token the refused call carried', () => {
   it('a Commons 401 for the old token, answered after a new link was taken, keeps the new token', async () => {
     const f = await fresh();
     healthSettles(f);
@@ -193,7 +193,7 @@ describe('round 15: the Commons drop compares the token the refused call carried
   });
 });
 
-describe('round 15: after a restart (current behaviour, a question for Justin)', () => {
+describe('after a restart (current behaviour, a question for Justin)', () => {
   it('a reconnect refused while the last health answer is offline keeps the old token, even once online returns', async () => {
     const f = await fresh();
     healthSettles(f);

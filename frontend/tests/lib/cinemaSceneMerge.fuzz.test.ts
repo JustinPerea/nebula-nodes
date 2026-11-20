@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { mergeScenes, withFields, ORDER, PRESENCE, WHOLE } from '../../src/lib/cinemaSceneMerge';
 
 /**
- * PR #198 fix round 8, H1 (review 7): the ORDER branch of withFields moved
- * its index inside find's callback and emptied every shot. Review 7's
+ * PR #198: the ORDER branch of withFields moved
+ * its index inside find's callback and emptied every shot. A
  * property fuzz, kept as a test, with reorders on both sides; and the cases
  * it found, by name.
  */
@@ -34,7 +34,7 @@ function mutate(r: () => number, scene: Scene, side: string, counter: { n: numbe
   return out;
 }
 
-describe('mergeScenes: a property fuzz with reorders (review 7 H1, I6)', () => {
+describe('mergeScenes: a property fuzz with reorders', () => {
   it('20000 seeds: no invariant fails, no empty shot, Use theirs leaves no clash', () => {
     const fails: Record<string, { seed: number; base: Scene; mine: Scene; theirs: Scene; result: unknown; clashes: unknown; back: unknown }[]> = {};
     const fail = (k: string, d: (typeof fails)[string][number]) => { if ((fails[k] ??= []).length < 3) fails[k].push(d); };
@@ -86,7 +86,7 @@ describe('mergeScenes: a property fuzz with reorders (review 7 H1, I6)', () => {
       const rel = (s: Scene) => s.shots.map((x) => x.id).filter((id) => B.has(id) && ids.includes(id) && mine.shots.some((y) => y.id === id) && theirs.shots.some((y) => y.id === id));
       const bo = rel(base);
       if (same(rel(mine), bo) && same(rel(theirs), bo) && !same(res.shots.map((x) => x.id).filter((id) => bo.includes(id)), bo)) fail('I7 order changed with no reorder', d);
-      // I6: take theirs for the clashes, merge again against theirs: nothing left to clash
+      // Take theirs for the clashes, merge again against theirs: nothing left to clash
       const taken = withFields(res as never, m.clashes, theirs as never) as unknown as Scene;
       if (taken.shots.some((x) => !x)) { fail('W withFields(Use theirs) makes an undefined shot', { ...d, result: { res, taken } }); continue; }
       const keptProbe = withFields(res as never, m.clashes, mine as never) as unknown as Scene;
@@ -122,12 +122,12 @@ describe('mergeScenes: a property fuzz with reorders (review 7 H1, I6)', () => {
     // The fuzz reaches every kind of clash, order clashes included.
     expect(counts['clash ORDER'] ?? 0).toBeGreaterThan(0);
     expect(counts['clash PRESENCE'] ?? 0).toBeGreaterThan(50);
-    // Review 8, N-4: 20000 seeds take seconds; under a loaded full run the
+    // 20000 seeds take seconds; under a loaded full run the
     // default 5 s ran out.
   }, 60_000);
 });
 
-describe('order clashes, by name (review 7 seed 8332)', () => {
+describe('order clashes, by name (seed 8332)', () => {
   const scene = (...ids: string[]) => ({ version: 1, aspectRatio: '16:9', shots: ids.map((id) => ({ id, prompt: id })) });
   const base = scene('s1', 's2', 's3');
   const mine = scene('s2', 's1', 's3');

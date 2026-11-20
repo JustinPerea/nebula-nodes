@@ -46,17 +46,17 @@ describe('chat cancellation truth state', () => {
       state: 'failed',
       busy: false,
     });
-    // error-copy round 2 (GM): "Couldn't {verb} {object}." then the reason,
+    // error-copy design: "Couldn't {verb} {object}." then the reason,
     // never "failed:".
     expect(chatCancellationDisconnectNotice('requested')).toEqual({
-      // GM, round 3, verbatim: "People need to know it might still be spending."
+      // Design's words, verbatim: "People need to know it might still be spending."
       text: "Nebula couldn’t stop the reply because the connection dropped before Nebula confirmed the stop. The reply may still be running.",
       tone: 'error',
     });
     expect(chatCancellationDisconnectNotice('idle')).toBeNull();
   });
 
-  it('a failed stop names the action and a written reason (error-copy round 2)', () => {
+  it('a failed stop names the action and a written reason (error-copy)', () => {
     expect(chatCancellationNotice('failed', "Nebula's server isn't answering. Make sure it's running, then try again.")).toEqual({
       text: "Nebula couldn’t stop the reply because the server isn’t answering. Check that Nebula is running, then try again.",
       tone: 'error',

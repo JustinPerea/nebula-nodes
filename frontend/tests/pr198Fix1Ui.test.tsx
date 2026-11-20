@@ -6,14 +6,14 @@ import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 
 /**
- * PR #198 fix round 1, GM's rulings (gm-pr198-r1.md) and review 1's lows:
- * - (4) Commons: a reference's image or the batch replaced in another window
+ * PR #198: design's rulings:
+ * - Commons: a reference's image or the batch replaced in another window
  *   gets its own line.
- * - (5) One banner rule: under the topmost header of whatever screen shows.
+ * - One banner rule: under the topmost header of whatever screen shows.
  *   The canvas keeps its place; every studio's banner goes under its own
  *   header, measured from that header.
- * - (6) The price chip: "$0" only ever means free; sub-cent is "<$0.01".
- * - (7) A universal node's settings: sentence case; the Agent log never
+ * - The price chip: "$0" only ever means free; sub-cent is "<$0.01".
+ * - A universal node's settings: sentence case; the Agent log never
  *   drops an agent's action (MCP-SETUP.md's promise).
  */
 
@@ -62,7 +62,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('GM (4): Commons, a replaced image or batch gets its own line', () => {
+describe('Commons, a replaced image or batch gets its own line', () => {
   const batch = (revision: number, { image = 'image-a', manifest = 'manifest-1' } = {}): EvaluationBatch => ({
     revision, state: 'open', denominator: 150, tuning_count: 30, manifest_hash: manifest, sealed: null, seal_hash: null,
     closed: null, close_hash: null, fields: { type_style: ['none'] }, axes: ['quiet_loud'], roles: ['accent'],
@@ -110,7 +110,7 @@ describe('GM (4): Commons, a replaced image or batch gets its own line', () => {
   });
 });
 
-describe('GM (5): the banner sits right under the topmost header of whatever screen shows', () => {
+describe('the banner sits right under the topmost header of whatever screen shows', () => {
   const STUDIOS: [string, string][] = [
     ['cinema-studio/CinemaStudioView.tsx', 'Cinema'],
     ['character-studio/CharacterStudioToolbar.tsx', 'Character'],
@@ -131,7 +131,7 @@ describe('GM (5): the banner sits right under the topmost header of whatever scr
     expect(source('App.tsx')).toMatch(/placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\}/);
   });
 
-  it('a studio shows no floating banner: its row under the header has it (GM, PR #198 r2; pr198Fix2Ui)', () => {
+  it('a studio shows no floating banner: its row under the header has it (design, PR #198; pr198Fix2Ui)', () => {
     noteBackendConnection('offline');
     render(<BackendConnectionStatus placement="studio" />);
     expect(document.querySelector('.backend-connection')).toBeNull();
@@ -140,19 +140,19 @@ describe('GM (5): the banner sits right under the topmost header of whatever scr
   });
 });
 
-describe('GM (6): the price chip, "$0" only ever means free', () => {
+describe('the price chip, "$0" only ever means free', () => {
   const summary = (cost: Partial<NonNullable<RunScopeSummary['cost']>>): RunScopeSummary => ({ total: 1, paid: ['GPT Image 2.5'],
     cost: { low: 0.067, high: 0.067, lines: [{ name: 'GPT Image 2.5', low: 0.067, high: 0.067, runs: [1, 1] }],
       unpriced: [], plan: [], plus: [], awaitingInput: [], ...cost } });
 
-  it('"$0 + unpriced": the known part really is $0 (GM, PR #198 r6 and r7 item 3)', () => {
+  it('"$0 + unpriced": the known part really is $0 (design, PR #198)', () => {
     const zero = summary({ low: 0, high: 0, unpriced: ['Kling'] });
     expect(runChipLabel(zero)).toBe('$0 + unpriced');
-    // GM r8: no line for the free part ($0 is a price, not unpriced).
+    // Design: no line for the free part ($0 is a price, not unpriced).
     expect(runChipTitle(zero)).toBe('“GPT Image 2.5” calls a paid provider.\n“Kling” has no listed price.');
   });
 
-  it('a range from $0: "Up to $0.43" (GM, PR #198 r6 item 2), with or without " + unpriced"', () => {
+  it('a range from $0: "Up to $0.43" (design, PR #198), with or without " + unpriced"', () => {
     expect(runChipLabel(summary({ low: 0, high: 0.43, unpriced: ['Kling'] }))).toBe('Up to $0.43 + unpriced');
     expect(runChipTitle(summary({ low: 0, high: 0.43, unpriced: ['Kling'] })))
       .toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs up to $0.43.\n“Kling” has no listed price.');
@@ -161,14 +161,14 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
   });
 
   it('a non-zero amount under a cent is never "$0" or a sub-cent figure: "<$0.01"', () => {
-    // GM r4 (fix round 4): a range from under a cent is "Up to $Y" on the chip too.
+    // Design: a range from under a cent is "Up to $Y" on the chip too.
     expect(runChipLabel(summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }))).toBe('Up to $0.43 + unpriced');
     expect(runChipLabel(summary({ low: 0.0047, high: 0.0047 }))).toBe('<$0.01');
     expect(runChipLabel(summary({ low: 0.0047, high: 0.0047, unpriced: ['Kling'] }))).toBe('<$0.01 + unpriced');
     expect(runChipLabel(summary({ low: 0.0001, high: 0.0049 }))).toBe('<$0.01');
     for (const shape of [summary({ low: 0.0047, high: 0.43, unpriced: ['Kling'] }), summary({ low: 0.0047, high: 0.0047 }),
       summary({ low: 0.0047, high: 0.0047, unpriced: ['Kling'] })]) {
-      // GM, PR #198 r2 ask 1: "under $0.01" on its own; r3 item 6: a range
+      // Design (PR #198): "under $0.01" on its own; a range
       // from under a cent is "Up to $Y.".
       expect(runChipTitle(shape)).toMatch(/[Uu]nder \$0\.01|provider\. Up to \$0\.43|costs up to \$0\.43/);
       expect(runChipTitle(shape)).not.toMatch(/\$0(?![.\d])/);
@@ -179,7 +179,7 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
     const view = (low: number, high: number, open = false) => ({ run: ['n1'], cost: { estimate: { low, high, open } } }) as never;
     expect(proposalEstimateLabel(view(0.0047, 0.43, true))).toBe('Up to $0.43 + unpriced');
     expect(proposalEstimateLabel(view(0.0047, 0.0047))).toBe('<$0.01');
-    // GM r4: chips never show sub-cent precision.
+    // Design: chips never show sub-cent precision.
     expect(proposalEstimateLabel(view(0.067, 0.067))).toBe('~$0.07');
     expect(proposalEstimateLabel(view(0, 0.43, true))).toBe('Up to $0.43 + unpriced');
   });
@@ -194,7 +194,7 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
     }
   });
 
-  it('r18\'s forms above a cent, with every range in the range form (GM, PR #198 r2 ask 2)', () => {
+  it('the chip titles above a cent, with every range in the range form (design, PR #198)', () => {
     expect(runChipTitle(summary({}))).toBe('“GPT Image 2.5” calls a paid provider. Estimated cost $0.07.');
     expect(runChipTitle(summary({ unpriced: ['Kling'] })))
       .toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs about $0.07.\n“Kling” has no listed price.');
@@ -204,7 +204,7 @@ describe('GM (6): the price chip, "$0" only ever means free', () => {
   });
 });
 
-describe('GM (7): a universal node\'s settings, and the Agent log', () => {
+describe('a universal node\'s settings, and the Agent log', () => {
   it('a provider setting\'s label is its key in sentence case', () => {
     expect(universalSettingLabel('guidance_scale')).toBe('Guidance scale');
     expect(universalSettingLabel('seed')).toBe('Seed');

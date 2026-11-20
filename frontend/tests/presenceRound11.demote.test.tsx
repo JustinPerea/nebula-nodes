@@ -1,9 +1,9 @@
 /**
- * PR #204 round 11, review 9:
- * - gates-trace MEDIUM-1: the held rule's 150 ms run from the demote itself (personSession), so a
+ * PR #204:
+ * - the held rule's 150 ms run from the demote itself (personSession), so a
  *   Commons opened on a tab demoted long ago sends nothing and shows the never-connected lines
  *   from its first frame (f93f2968 sent its reads with the stale token, then switched).
- * - lock-sweep-ui MEDIUM-3 (GM r19 item 2): a demote and the promote keep what the person typed
+ * - Design: a demote and the promote keep what the person typed
  *   in the Commons, and focus that a demote takes away moves to the section's line (tabIndex -1),
  *   back to the same control on the promote, and never away from a control that is still there.
  */
@@ -19,7 +19,7 @@ vi.mock('../src/lib/backend', async (original) => {
     ...real,
     apiFetch: (path: string, init?: RequestInit) => {
       net.sent.push(`${String(init?.method ?? 'GET').toUpperCase()} ${path.split('?')[0]}`);
-      // Round 18c (GM r30 2): the collections answer (none), so Add and Add to are live once
+      // Design: the collections answer (none), so Add and Add to are live once
       // connected; with them pending both are disabled ("Not loaded").
       if (path.split('?')[0] === '/api/commons/collections' && String(init?.method ?? 'GET').toUpperCase() === 'GET') {
         return Promise.resolve(new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }));
@@ -43,7 +43,7 @@ const commonsSent = () => net.sent.filter((request) => request.includes('/api/co
 const settle = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); await Promise.resolve(); }); };
 const flush = async () => { await act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); }); };
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
@@ -59,7 +59,7 @@ afterEach(() => {
 
 const demote = () => act(() => { session.notePersonPromoted(); session.reportPersonRequired(); });
 
-describe('a Commons opened on a tab demoted long ago (review 9 gates-trace MEDIUM-1)', () => {
+describe('a Commons opened on a tab demoted long ago', () => {
   it('sends nothing and shows the never-connected line from the first frame', async () => {
     demote();
     await settle(1000);
@@ -72,7 +72,7 @@ describe('a Commons opened on a tab demoted long ago (review 9 gates-trace MEDIU
     expect(commonsSent()).toEqual([]);
     expect(document.querySelector('[data-commons-line="not-connected"]')?.textContent)
       .toMatch(/^Nebula couldn’t .* because this tab isn’t connected as you\./);
-    // GM r18 c: every because line sits in the shared box.
+    // Design: every because line sits in the shared box.
     const lines = [...document.querySelectorAll('[data-line-because]')];
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.filter((line) => !line.closest('[data-line-box]')).map((line) => line.textContent)).toEqual([]);
@@ -97,7 +97,7 @@ describe('a Commons opened on a tab demoted long ago (review 9 gates-trace MEDIU
   });
 });
 
-describe('drafts and focus across a demote and the promote (GM r19 item 2)', () => {
+describe('drafts and focus across a demote and the promote (design)', () => {
   it('keeps the search and the URL draft; focus goes to the line, then back to the field', async () => {
     render(<CommonsView />);
     await flush();
@@ -149,13 +149,13 @@ describe('drafts and focus across a demote and the promote (GM r19 item 2)', () 
   });
 });
 
-describe('"New collection…" locks with Add (GM r19 follow-up)', () => {
+describe('"New collection…" locks with Add (design follow-up)', () => {
   it('disabled and inert on a held tab; the rest of the select stays live; works after the promote', async () => {
     act(() => session.reportPersonRequired());
     render(<CommonsView />);
     await settle(200);
     const select = screen.getByRole('combobox', { name: ADD_TO_NAME });
-    // Round 18d (GM r31 2): a held tab reads no collections, so the select holds one option, "Not
+    // Design: a held tab reads no collections, so the select holds one option, "Not
     // loaded", with the reason, in the one disabled look, the person lock's, with Add's line;
     // "New collection…" isn't offered at all.
     expect([...select.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Not loaded']);
@@ -168,7 +168,7 @@ describe('"New collection…" locks with Add (GM r19 follow-up)', () => {
     expect(commonsSent().filter((r) => r.startsWith('POST'))).toEqual([]);
     act(() => session.notePersonPromoted());
     await flush();
-    // Round 18c (GM r30 2): until the promote's collections read answers, "Not loaded" (disabled).
+    // Design: until the promote's collections read answers, "Not loaded" (disabled).
     await settle(50);
     await flush();
     const live = [...select.querySelectorAll('option')].find((o) => o.textContent === 'New collection…')!;
@@ -180,7 +180,7 @@ describe('"New collection…" locks with Add (GM r19 follow-up)', () => {
   });
 });
 
-describe('Add on a held tab (GM r18)', () => {
+describe('Add on a held tab (design)', () => {
   it('Add is locked with its line in the banner row, no empty-state line, and a drop is taken and sends nothing', async () => {
     act(() => session.reportPersonRequired());
     render(<CommonsView />);
@@ -190,7 +190,7 @@ describe('Add on a held tab (GM r18)', () => {
     expect(add).toHaveAttribute('aria-disabled', 'true');
     const line = document.getElementById(add.getAttribute('aria-describedby')!.split(' ').pop()!)!;
     expect(line.textContent).toBe('You can add references when this tab is connected as you.');
-    // Round 12 (GM r20 1): in the banner row below the header, under the because line.
+    // Design: in the banner row below the header, under the because line.
     expect(line.parentElement?.hasAttribute('data-page-lines')).toBe(true);
     // Any because line in the row comes before it (tests/presenceRound12.commonsRow).
     for (let at = line.nextElementSibling; at; at = at.nextElementSibling) expect(at.hasAttribute('data-commons-line')).toBe(false);

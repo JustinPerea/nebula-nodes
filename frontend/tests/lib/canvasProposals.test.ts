@@ -45,7 +45,7 @@ describe('proposalChanges', () => {
     named.nodes[0] = { ...named.nodes[0], name: 'Lake hero', model: 'Krea 2' };
     expect(proposalChanges(named)[0].title).toBe('New “Lake hero” · Krea 2');
     // An unnamed node's name is already the model's. No ref anywhere a person
-    // reads (GM - Design, 2026-11-01).
+    // reads (design, 2026-11-01).
     expect(proposalChanges(view())[0].title).toBe('New “Krea 2”');
   });
 
@@ -57,7 +57,7 @@ describe('proposalChanges', () => {
     expect(proposalChanges(titled)[1].title).toBe('“Krea 2”');
   });
 
-  it('counts operations, one per node group and one per wire, never field lines (GM - Design, PR #216 r2)', () => {
+  it('counts operations, one per node group and one per wire, never field lines (design, PR #216)', () => {
     const groups = proposalChanges(view(), {
       nodes: { '+k': { _provider: 'replicate', prompt: 'x', seed: 2 } },
       params: { n1: { _provider: { from: null, to: 'bfl' } } },
@@ -67,7 +67,7 @@ describe('proposalChanges', () => {
     expect(changeCountLabel(1)).toBe('1 change');
   });
 
-  it("reads the backend's changeCount, the Update's and MCP's number (GM - Design, PR #216 r3)", () => {
+  it("reads the backend's changeCount, the Update's and MCP's number (design, PR #216)", () => {
     const counted = { ...view(), changeCount: 7 };
     expect(proposalChangeCount(counted, proposalChanges(counted))).toBe(7);
   });
@@ -90,13 +90,13 @@ describe('proposalChanges', () => {
   });
 });
 
-describe('round 3b (GM - Design, PR #216 r4; review 2 L4)', () => {
+describe('card names and model labels in a proposal (design, PR #216)', () => {
   it('quotes a name once, whatever quotes it carries (the plan line\'s rule)', () => {
     expect(cardQuoted('Hero')).toBe('“Hero”');
     expect(cardQuoted('“Hero”')).toBe('“Hero”');
     expect(cardQuoted('"Hero" ')).toBe('“Hero”');
     expect(cardQuoted("'Hero'")).toBe('“Hero”');
-    // Review 3 NIT-3: only quotes that wrap the name; its own apostrophe stays.
+    // Only quotes that wrap the name; its own apostrophe stays.
     expect(cardQuoted("Artists'")).toBe('“Artists\'”');
     expect(cardQuoted("'90s look")).toBe('“\'90s look”');
     expect(cardQuoted("“Artists'”")).toBe('“Artists\'”');
@@ -115,11 +115,11 @@ describe('round 3b (GM - Design, PR #216 r4; review 2 L4)', () => {
     expect(groups[3].wires?.[0]).toMatchObject({ from: '“Photo”', to: '“Hero shot”' });
   });
 
-  it('reads "GPT-4o · inputs updated" for the same model set again (GM r4 8)', () => {
+  it('reads "GPT-4o · inputs updated" for the same model set again (design)', () => {
     const again: ProposalView = {
       ...view(),
       // The backend names a universal node by the model it runs
-      // (canvas_proposals.model_label), never its provider (GM r5).
+      // (canvas_proposals.model_label), never its provider (design).
       params: [{ nodeId: 'n4', name: 'Second take (n4)', title: 'Second take', model: 'GPT-4o',
         inputsUpdated: { key: 'model', name: 'GPT-4o' },
         changes: { model: { from: 'openai/gpt-4o', to: 'openai/gpt-4o' }, temperature: { from: 1, to: 0.3 } } }],
@@ -142,7 +142,7 @@ describe('proposalEstimateLabel', () => {
     ...view(), run: ['+k'], cost: { ...view().cost, estimate: { low, high, open } },
   }) as unknown as ProposalView;
 
-  it('an estimate is the paid part only: one that rounds to zero is "~$0" (round 6 review NIT-1; a sourced $0 is free, never priced: GM, PR #203 r18 item 1)', () => {
+  it('an estimate is the paid part only: one that rounds to zero is "~$0" (a sourced $0 is free, never priced; design, PR #203)', () => {
     expect(proposalEstimateLabel(priced(0, 0))).toBe('~$0');
     expect(proposalEstimateLabel(priced(0.07, 0.07))).toBe('~$0.07');
     // An open run is an estimate: the shared formatter's form (PR #198).

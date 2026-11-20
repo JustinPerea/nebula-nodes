@@ -1,5 +1,5 @@
 /**
- * An agent's placeholder on every kind of card (Q125 item 3). GM - Design,
+ * An agent's placeholder on every kind of card. Design,
  * 2026-10-25, verbatim: "The placeholder line “Codex is setting this up.” on
  * EVERY node type that has a preview area or body: Edit, Remotion,
  * Character, CinemaScene, Moodboard, VideoQc, PaperSource, Batch, Reroute,
@@ -147,7 +147,7 @@ describe('a placeholder dims only its preview area', () => {
   });
 
   it('wins over the Skipped style: the header, the text and the Skipped badge stay at full contrast', () => {
-    // GM, 2026-10-25: "The placeholder rule wins over the Skipped style: dim only the preview area."
+    // Design, 2026-10-25: "The placeholder rule wins over the Skipped style: dim only the preview area."
     const undim = ruleBodies(gatingCss, (selector) => selector.includes('.model-node--skipped')
       && selector.includes("[data-pending='true']") && selector.endsWith(':not(.node-skip)'));
     expect(undim.join('')).toMatch(/opacity:\s*1/);

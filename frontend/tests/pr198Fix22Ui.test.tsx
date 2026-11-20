@@ -4,12 +4,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * PR #198 fix round 22 (GM r32), rendered:
- * - Answers 1 and 3: the run-lock line is a state line in the state slot,
+ * Design (PR #198): rendered:
+ * - The run-lock line is a state line in the state slot,
  *   with no × and no [Try again] (it clears when the run ends).
- * - Answers 2 and 3: the "other" line is a stop line with [Try again] (one
+ * - The "other" line is a stop line with [Try again] (one
  *   try) and no ×.
- * - GM r33 answer 2 (replacing round 22's single opacity): every notice
+ * - Design (replacing an earlier version's single opacity): every notice
  *   button held or disabled by the canvas lock (following, offline) reads
  *   the one disabled token set, by kind (a filled button's grey fill, a
  *   ghost or × button's grey label), with no whole-control opacity; a
@@ -54,7 +54,7 @@ const OTHER_ONE = `Nebula couldn’t save your changes to “Opening”. ${REASO
 const lineOf = (text: string) => screen.getByText(text).closest('[data-scene-stop]') as HTMLElement;
 const base = { stoppedScenes: {}, sceneTries: {}, scenePopover: null, undoNotice: null, messageNotice: null, sceneClashes: {} };
 
-describe('GM r32: the run-lock and "other" lines are state lines with no ×', () => {
+describe('the run-lock and "other" lines are state lines with no × (design)', () => {
   it('the run-lock line, one scene and merged: in the state slot, no ×, no [Try again]', async () => {
     useGraphStore.setState({ ...base, nodes: [scene('n1', 'Opening', 0)], sceneStops: { n1: { cause: 'run-lock' } } } as never);
     render(<NoticeRegion screen="canvas" />);
@@ -64,7 +64,7 @@ describe('GM r32: the run-lock and "other" lines are state lines with no ×', ()
     expect(line.querySelectorAll('button')).toHaveLength(0);
     act(() => { useGraphStore.setState({ nodes: [scene('n1', 'Opening', 0), scene('n2', 'Ref scene', 300)],
       sceneStops: { n1: { cause: 'run-lock' }, n2: { cause: 'run-lock' } } } as never); });
-    // Review 21 NIT-6: wait for the merged line before reading the single one gone.
+    // Wait for the merged line before reading the single one gone.
     await screen.findByText(RUN_TWO, {}, LAZY);
     expect(screen.queryByText(RUN_ONE)).toBeNull();
     expect(lineOf(RUN_TWO).querySelectorAll('button')).toHaveLength(0);
@@ -72,7 +72,7 @@ describe('GM r32: the run-lock and "other" lines are state lines with no ×', ()
     expect(document.querySelector('[aria-label="Dismiss"]')).toBeNull();
   });
 
-  it('the "other" line: GM’s wording, [Try again] (one try for each scene it names), no ×', async () => {
+  it('the "other" line: design’s wording, [Try again] (one try for each scene it names), no ×', async () => {
     const retry = vi.fn();
     useGraphStore.setState({ ...base, nodes: [scene('n1', 'Opening', 0)], stoppedScenes: { n1: true },
       sceneStops: { n1: { cause: 'other', reason: REASON, nebula: true, line: OTHER_ONE } }, retrySceneSave: retry } as never);
@@ -104,13 +104,13 @@ const PROPOSALS = readFileSync(join(__dirname, '../src/styles/canvasProposals.cs
 const SKIN = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
 const P = 'body.app-slava-restraint .canvas-undo-notice';
 const SHARED_CSS = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
-/** PR #198 round 25 (GM r37 option c): the notice's buttons take the app's
- * one shared rule (disabled-buttons.css) on GM r33's tokens. A held button
+/** Design (PR #198): the notice's buttons take the app's
+ * one shared rule (disabled-buttons.css) on design's tokens. A held button
  * is in it once its first ~150 ms pass (useHeldLook's data-held-pending). */
 const STATES = ":is(:disabled, [aria-disabled='true']:not([data-held-pending]))";
 const FILLED = { background: 'var(--disabled-fill, rgb(255 255 255 / 0.42))', 'border-color': 'var(--disabled-fill, rgb(255 255 255 / 0.42))',
   color: 'var(--disabled-fill-label, rgb(17 17 17 / 0.62))' };
-/** The quiet choice held: a ghost that keeps its own enabled edge (GM r33,
+/** The quiet choice held: a ghost that keeps its own enabled edge (design,
  * "its enabled edge, never brighter"; live clashsend21). */
 const QUIET = { background: 'transparent', 'border-color': 'rgb(255 255 255 / 0.28)', color: 'var(--disabled-label, rgba(255, 255, 255, 0.55))' };
 /** The shared rules for `className` in the disabled states, in file order,
@@ -136,7 +136,7 @@ function sharedRulesFor(className: string): Array<{ decls: Record<string, string
 const sharedLook = (...classes: string[]) => Object.assign({}, ...classes.flatMap((name) => sharedRulesFor(name)).map((rule) => rule.decls));
 const pick = (decls: Record<string, string>, keys: string[]) => Object.fromEntries(keys.map((key) => [key, decls[key]]));
 
-describe('GM r33: notice buttons read the one disabled token set', () => {
+describe('notice buttons read the one disabled token set (design)', () => {
   it('the tokens: one definition each, in the shared stylesheet', () => {
     const tokens = declsFor(SKIN, 'body.app-slava-restraint');
     expect(tokens['--sr-ink-light']).toBe('rgba(255, 255, 255, 0.55)');
@@ -148,7 +148,7 @@ describe('GM r33: notice buttons read the one disabled token set', () => {
   });
 
   it('filled, ghost and × buttons, held or locked: one look from the shared rule, no whole-control opacity, hover the same, no pointer', () => {
-    // GM r37 option c: the filled actions (Try again, Keep mine, Undo, Redo,
+    // Design: the filled actions (Try again, Keep mine, Undo, Redo,
     // Open copy, Save paused) the grey fill with its dark label; the quiet
     // choice a ghost (after the filled rule, so it stays unfilled).
     const filled = sharedRulesFor('canvas-undo-notice__action');
@@ -199,7 +199,7 @@ describe('GM r33: notice buttons read the one disabled token set', () => {
     reads(lineOf(OTHER_ONE).querySelector('button'), 'stop line');
     for (const button of document.querySelectorAll<HTMLButtonElement>('[data-scene-clash="n2"] button')) reads(button, 'clash prompt');
     reads(screen.getByRole('button', { name: 'Undo' }) as HTMLButtonElement, 'canvas notice');
-    // The popover leaves its scene out of the line while it is open (GM r28).
+    // The popover leaves its scene out of the line while it is open (design).
     fireEvent.click(screen.getByRole('button', { name: 'Unsaved' }));
     reads(document.querySelector('[data-scene-unsaved-popover="n1"] button'), 'popover');
     expect(seen).toEqual(['stop line: Try again (filled)', 'clash prompt: Keep mine (filled)', 'clash prompt: Use Codex’s (ghost)',
@@ -208,7 +208,7 @@ describe('GM r33: notice buttons read the one disabled token set', () => {
 });
 
 /**
- * GM r33's ratchet: no new literal disabled opacity (a number, or a number
+ * Design's ratchet: no new literal disabled opacity (a number, or a number
  * as a var() fallback, in a rule for a disabled, locked or held control) in
  * the style files PR #198 touches. KNOWN is what was already there; the
  * pressed-state sweep moves them to the tokens and deletes them here. The
@@ -220,7 +220,7 @@ const TOUCHED = ['App.css', 'components/editor/EditorView.css', 'styles/asset-tr
   'styles/slava-restraint.css', 'styles/workspace-header.css'];
 const KNOWN = [
   // PR #199: the kept canvas's controls share the lock's look.
-  // PR #199 round 18: and Ask and Note on a tab-local node (GM r26, 4).
+  // PR #199: and Ask and Note on a tab-local node (design).
   'App.css | [data-offline-disabled], [data-following-disabled], [data-kept-disabled], [data-tab-local-disabled] | 0.6',
   'App.css | .provider-recovery-status button:disabled | 0.62',
   'styles/canvasProposals.css | .proposal-bar__button:disabled | 0.5',
@@ -249,7 +249,7 @@ function literalDisabledOpacities(rel: string, text: string): string[] {
   return found;
 }
 
-describe('GM r33: a ratchet on literal disabled opacities', () => {
+describe('a ratchet on literal disabled opacities (design)', () => {
   it('the files this PR touches add none; the known ones are the sweep’s list', () => {
     const found = TOUCHED.flatMap((rel) => literalDisabledOpacities(rel, readFileSync(join(__dirname, '../src', rel), 'utf8')));
     expect(found.filter((line) => !KNOWN.includes(line)), 'new literal disabled opacities').toEqual([]);

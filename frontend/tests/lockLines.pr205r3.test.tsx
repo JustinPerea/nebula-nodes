@@ -29,19 +29,18 @@ import { join } from 'node:path';
 import postcss from 'postcss';
 
 /**
- * GM on PR #205, round 3 and round 4 (and review 2's lines-palette-keys):
- * - r3 item 1: one name per command everywhere: the "Canvas" heading, "Save
+ * Design (PR #205): the palette's names, lock lines and keys.
+ * - One name per command everywhere: the "Canvas" heading, "Save
  *   canvas", "Load canvas", "Import CLI canvas", the shortcuts sheet's "Run
  *   canvas", "Fit view" (palette, sheet and toolbar), the palette's panel
- *   rows in sentence case, and "run the canvas" in its lock line (review 2
- *   LOW-3; NIT-2: also while a run is starting).
- * - r3 item 2: palette rows an import or Create's launch locks say that
+ *   rows in sentence case, and "run the canvas" in its lock line (also while a run is starting).
+ * - Palette rows an import or Create's launch locks say that
  *   wait's line, from the same table.
- * - r3 item 3 and review 2 LOW-1: the palette is a combobox and listbox; the
+ * - The palette is a combobox and listbox; the
  *   arrows reach locked rows (aria-disabled), whose line is their description
  *   (read through aria-activedescendant), Enter on one does nothing, and the
  *   keyboard highlight is a selected-row surface, on locked rows too.
- * - r4 item 4: Cmd+Enter, Cmd+S and Cmd+O during a run say the palette's
+ * - Cmd+Enter, Cmd+S and Cmd+O during a run say the palette's
  *   lines in the key presses' place (Cmd+Enter: canvasKeys.pr205r3).
  */
 
@@ -66,7 +65,7 @@ const WAITS = [
 ] as const;
 const openPalette = () => act(() => { fireEvent.keyDown(document, { key: 'k', metaKey: true }); });
 
-describe('GM r3 item 1: one name per command', () => {
+describe('one name per command (design)', () => {
   it('Canvas actions: the "Canvas" heading over Save canvas, Load canvas and Import CLI canvas', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief')] });
     render(<Toolbar />);
@@ -99,7 +98,7 @@ describe('GM r3 item 1: one name per command', () => {
     expect(screen.getByRole('button', { name: 'Fit view' })).toBeInTheDocument();
   });
 
-  it('the canvas Run: "Run canvas." as its tooltip; "run the canvas" while a run starts and during an import (review 2 LOW-3, NIT-2)', () => {
+  it('the canvas Run: "Run canvas." as its tooltip; "run the canvas" while a run starts and during an import', () => {
     expect(Object.keys(RUN_LOCK_VERBS)).not.toContain('runGraph');
     expect(Object.values(RUN_LOCK_VERBS).join(' ')).not.toMatch(/graph/);
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief')] });
@@ -114,7 +113,7 @@ describe('GM r3 item 1: one name per command', () => {
   });
 });
 
-describe('GM r3 item 2: the palette\'s locked rows say their wait', () => {
+describe('the palette\'s locked rows say their wait (design)', () => {
   it.each(WAITS)('locked by %s: Run (when it waits), Save and Load each say its line, as their own text', (_label, state, when) => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], ...state } as never);
     render(<CommandPalette />);
@@ -140,7 +139,7 @@ describe('GM r3 item 2: the palette\'s locked rows say their wait', () => {
   });
 });
 
-describe('review 2 LOW-1 and GM r3 item 3: the palette from the keyboard', () => {
+describe('the palette from the keyboard (design)', () => {
   it('a combobox over a listbox: the field\'s active descendant is the highlighted option; the arrows reach a locked one, whose line is its description', async () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], isExecuting: true });
     render(<CommandPalette />);
@@ -200,7 +199,7 @@ describe('review 2 LOW-1 and GM r3 item 3: the palette from the keyboard', () =>
   });
 });
 
-describe('GM r4 item 4: Cmd+S and Cmd+O while a wait holds the files', () => {
+describe('Cmd+S and Cmd+O while a wait holds the files (design)', () => {
   it.each(WAITS)('during %s: each key says the palette\'s line where the key presses\' lines show, and nothing opens', (_label, state, when) => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], undoNotice: null, messageNotice: null, ...state } as never);
     const events = vi.fn();
@@ -233,9 +232,9 @@ describe('GM r4 item 4: Cmd+S and Cmd+O while a wait holds the files', () => {
   });
 });
 
-// GM PR #205 r6 item 4 (round 4): the highlight's 1 px inset edge, at 3:1 or
+// Design (PR #205): the highlight's 1 px inset edge, at 3:1 or
 // better against the panel, on every highlighted row, locked or not.
-describe('GM r6 item 4: the highlighted row\'s edge', () => {
+describe('the highlighted row\'s edge (design)', () => {
   const token = (name: string): string => {
     const decl = appRules().filter((rule) => rule.file === 'styles/slava-restraint.css')
       .flatMap((rule) => rule.decls).find((each) => each.prop === name);
@@ -266,7 +265,7 @@ describe('GM r6 item 4: the highlighted row\'s edge', () => {
   });
 });
 
-describe('GM PR #205 r8 item 4: forced colours', () => {
+describe('forced colours (design, PR #205)', () => {
   /** The palette's forced-colors blocks, read on their own (the cascade helper reads the normal mode). */
   const forcedRules = () => {
     const rules: Array<{ selectors: string[]; decls: Record<string, string> }> = [];
@@ -304,8 +303,8 @@ describe('GM PR #205 r8 item 4: forced colours', () => {
     act(() => { fireEvent.keyDown(field, { key: 'ArrowDown' }); });
     const row = screen.getByRole('option', { name: 'Save canvas' });
     for (const rule of forcedRules()) expect(rule.selectors.some((sel) => row.matches(sel) || row.querySelector(sel) !== null)).toBe(true);
-    // The title and the lock line each match the GrayText rule (review 5,
-    // NIT-1): forced colours replace the line's own colour, so it doesn't
+    // The title and the lock line each match the GrayText rule:
+    // forced colours replace the line's own colour, so it doesn't
     // take the row's.
     const locked = forcedRules().find((rule) => rule.decls.color === 'GrayText !important')!;
     const line = row.querySelector('.command-palette__item-sub');

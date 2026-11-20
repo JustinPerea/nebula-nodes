@@ -1,10 +1,10 @@
 /**
- * PR #204 round 11 (review 9 lock-sweep LOW-6): the runtime ratchet (tests/helpers/bareLines.ts)
+ * PR #204: the runtime ratchet (tests/helpers/bareLines.ts)
  * closes the three bypasses the review found, each caught here, beside controls that still pass.
- * - P1: a bare "connected as you" text beside a <LineText> in the same parent (before or after
+ * - A bare "connected as you" text beside a <LineText> in the same parent (before or after
  *   it, or in a child element) passed because the parent was registered.
- * - P2: data-agent-text on any element exempted it; only the two Update texts are an agent's.
- * - P3: a line in a `title` (a tooltip) or an `aria-label` was never read.
+ * - data-agent-text on any element exempted it; only the two Update texts are an agent's.
+ * - A line in a `title` (a tooltip) or an `aria-label` was never read.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
@@ -26,7 +26,7 @@ async function seen(ui: React.ReactElement): Promise<string[]> {
 const line = notConnectedBecause('save', false);
 const other = notConnectedBecause('delete this', false);
 
-describe('review 9 LOW-6: each bypass is caught', () => {
+describe('each bypass is caught', () => {
   const forms: [string, () => React.ReactElement][] = [
     ['P1 a bare line before a LineText in the same parent', () => <p>{other} <LineText text={line} /></p>],
     ['P1 a bare line after a LineText in the same parent', () => <p><LineText text={line} /> {other}</p>],
@@ -54,7 +54,7 @@ describe('review 9 LOW-6: each bypass is caught', () => {
   });
 });
 
-describe('review 9 LOW-6: the registered forms still pass', () => {
+describe('the registered forms still pass', () => {
   it('LineText alone, its own-span form, its children form, the notice and an Update\'s quote', async () => {
     expect(await seen(<>
       <p>Couldn’t save. <LineText text={line} /></p>

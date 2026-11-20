@@ -7,7 +7,7 @@ import { getNoticeMore, setNoticeMore, setNoticeMoreToggle } from '../src/lib/no
 import { MORE_SLOT_ATTR } from '../src/lib/noticeStackPlace';
 
 /**
- * GM - Design, PR #216 r8 2: "Moved “Hero shot” · Undo · 3 more". The
+ * Design (PR #216): "Moved “Hero shot” · Undo · 3 more". The
  * count is a trailing text button after Undo, in the Undo notice's own row,
  * that opens the stack; the keyboard goes name, Undo, "3 more".
  */
@@ -36,7 +36,7 @@ describe('"3 more" in the Undo notice\'s row', () => {
     expect(screen.queryByRole('button', { name: /more/ })).toBeNull();
     act(() => setNoticeMore({ host: screen.getByTestId('b'), count: 3, expanded: false }));
     const more = screen.getByRole('button', { name: '3 more notices' });
-    // GM's words exactly (review 3 NIT-1, F19): not a substring.
+    // Design's words exactly: not a substring.
     expect(more).toHaveTextContent(/^3 more$/);
     expect(more).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('b').contains(more)).toBe(true);
@@ -77,10 +77,10 @@ describe('wired into the canvas notice and the region', () => {
   });
   it('the name gives way with an ellipsis so Undo and the count fit on one line', () => {
     const css = read('styles/canvasProposals.css');
-    // (GM r76: one rule with the Undo notice kept to one line, data-notice-clipped.)
+    // One rule with the Undo notice kept to one line, data-notice-clipped (design).
     expect(css).toMatch(/\.canvas-undo-notice\[data-notice-more-host\] \.canvas-undo-notice__text(?:,\s*[^{,]+)*\s*\{[^}]*overflow: hidden;[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis;/);
     expect(css).toMatch(/\.canvas-undo-notice__more-button \{[^}]*white-space: nowrap;/);
-    // Its one unbroken line never widens it past the region (round 3f, live
+    // Its one unbroken line never widens it past the region (live
     // at 420: 388 px wide in a 340 px column): held to its slot.
     expect(css).toMatch(/\.canvas-undo-notice\[data-notice-more-host\](?:,\s*[^{,]+)*\s*\{\s*max-width: min\(var\(--notice-max-w, 560px\), 100%\);\s*\}/);
   });

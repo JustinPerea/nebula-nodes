@@ -1,9 +1,9 @@
 /**
- * PR #199 round 23, lane C (review 21 lines-ui).
- * - LOW-1: a live region is painted empty before its text arrives. The text
+ * PR #199 (lines-ui):
+ * - A live region is painted empty before its text arrives. The text
  *   comes from the second animation frame after the commit; a change or an
  *   unmount cancels a pending set.
- * - GM r36 4: the unlock's tooltip is GM's sentence, built from nothing.
+ * - Design: the unlock's tooltip is design's sentence, built from nothing.
  */
 import { render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,7 +16,7 @@ function Probe({ text }: { text: string | null }) {
   return <p data-testid="p">{shown}</p>;
 }
 
-describe('review 21 LOW-1: useAnnounced paints the region empty first', () => {
+describe('useAnnounced paints the region empty first', () => {
   const clock = frames();
   beforeEach(() => clock.install());
   afterEach(() => clock.uninstall());
@@ -72,8 +72,8 @@ describe('review 21 LOW-1: useAnnounced paints the region empty first', () => {
   });
 });
 
-describe('GM r36 4: the unlock’s tooltip', () => {
-  it('is GM’s sentence, curly, and is not built from the word unlock', () => {
+describe('the unlock’s tooltip (design)', () => {
+  it('is design’s sentence, curly, and is not built from the word unlock', () => {
     expect(UNLOCK_TITLE).toBe('Press this only after you’ve checked the run in Marble.');
     expect(UNLOCK_TITLE).not.toMatch(/unlock/i);
   });

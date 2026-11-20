@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * GM - Design, PR #212 round 3, the contrast defect: "Waiting for your OK" is
+ * Design (PR #212): the contrast defect: "Waiting for your OK" is
  * one ink at 4.5:1 or better on the header's tint in every state, selected or
  * not (the app has one skin, Slava Restraint). The ratio is worked out from
  * the real CSS: the tokens are read from node-wait.css and slava-restraint.css,
@@ -74,7 +74,7 @@ describe('the waiting label\'s contrast', () => {
     expect(wait).toMatch(/background-image:\s*none/);
   });
 
-  it('is the same ratio on the pill over media (GM r5 ruling 2): the pill is the same opaque tint, the ink the same white', () => {
+  it('is the same ratio on the pill over media (design): the pill is the same opaque tint, the ink the same white', () => {
     const pill = /node-wait-swap__label::before \{[^}]*background-color:\s*([^;]+);/.exec(wait)![1];
     expect(pill).toBe('color-mix(in srgb, var(--agent-color) var(--sr-wait-tint), var(--sr-wait-base))');
     // The pill is an opaque base mixed with the accent, so nothing of the preview shows through it.

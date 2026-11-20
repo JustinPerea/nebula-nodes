@@ -1,16 +1,16 @@
 /**
- * PR #204 round 13, review 10 lock-look-ui LOW-4: a test that fails without each guard review 10's
+ * PR #204: a test that fails without each guard 's
  * mutants removed and no test caught.
- * - L7: lockPlacementProblems' "not directly under a heading" check (lib/lockPlacement).
- * - L10: the Commons' empty-state hint ("No matches. Drop images or videos here, or use Add.")
- *   stays away while adding is locked, with the search finished (review 10: the old test's grid
+ * - lockPlacementProblems' "not directly under a heading" check (lib/lockPlacement).
+ * - The Commons' empty-state hint ("No matches. Drop images or videos here, or use Add.")
+ *   stays away while adding is locked, with the search finished (the old test's grid
  *   never left "Searching…", so the absence proved nothing).
- * - The data starts again on a demote though the controls stay (round 13, review 10 MEDIUM-2):
+ * - The data starts again on a demote though the controls stay:
  *   a reference loaded before the demote isn't shown on the demoted tab, and comes back on the
  *   promote.
  * The others are elsewhere: L4 and L20 in tests/presenceRound13.lookCascade, L13 in
  * tests/presenceRound13.lookUndo. L9 is equivalent (upload() returns while Add is locked too),
- * and L18's code (the toolbar ratchet's lock-line allowance) is gone since round 12.
+ * and L18's code (the toolbar ratchet's lock-line allowance) is gone.
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { ADD_NAME } from './helpers/commonsAddNames';
@@ -49,7 +49,7 @@ const settle = async (ms: number) => { await act(async () => { vi.advanceTimersB
 const flush = async () => { await act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); }); };
 const HINT = /No matches\. Drop images or videos here, or use Add\./;
 
-describe('a heading line that isn\'t under its heading fails the placement check (mutant L7)', () => {
+describe('a heading line that isn\'t under its heading fails the placement check', () => {
   afterEach(() => { document.body.innerHTML = ''; });
   const fixture = (before: string) => `<section>${before}
     <p id="l" class="person-lock-line" data-lock-place="heading">Locked line</p>
@@ -70,7 +70,7 @@ describe('a heading line that isn\'t under its heading fails the placement check
   });
 });
 
-describe('the Commons\' empty hint stays away while adding is locked, the search finished (mutant L10)', () => {
+describe('the Commons\' empty hint stays away while adding is locked, the search finished', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
     session.resetPersonSessionForTests();

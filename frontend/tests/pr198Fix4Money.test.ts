@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { chipEstimate, chipLabel, chipTitle, formatChipEstimate, formatSpentUsd, formatUsd, formatUsdRange } from '../src/lib/pricing';
 
 /**
- * PR #198 fix round 4: review 4's L2 and GM's money ruling (gm-pr198-r4.md):
+ * PR #198 and design's money ruling:
  * "chips never show sub-cent precision. A range whose low end is under $0.01
  * → chip "Up to $0.01" with tooltip "Up to $0.01." ("Up to $0.01+" when some
  * costs unknown). Every other range: same decimals both ends ("$9.50–12.00",
@@ -20,14 +20,14 @@ const FUZZ = JSON.parse(readFileSync(resolve(__dirname, '../../contracts/fixture
   rows: { amount: number; text: string; spent: string }[];
 };
 
-// Fix round 5 (GM, PR #198 r6 and r7 item 3): an open chip reads
+// Design (PR #198): an open chip reads
 // " + unpriced", and its tooltip leads with the priced part; a range from $0
-// reads "Up to $Y" (r6 item 2); a detail line writes each end in full (r6 item 3).
+// reads "Up to $Y"; a detail line writes each end in full.
 const U = ' + unpriced';
 const LEAD = 'The priced part of this run costs';
 
 const CHIPS: [number, number, boolean, string, string][] = [
-  // Review 4, L2: the chip and its tooltip agree.
+  // The chip and its tooltip agree.
   [0.0049, 0.0101, true, `Up to $0.01${U}`, `${LEAD} up to $0.01.`],
   [0.0049, 0.0101, false, 'Up to $0.01', 'Up to $0.01.'],
   [0.0099, 0.0101, true, `Up to $0.01${U}`, `${LEAD} up to $0.01.`],
@@ -58,7 +58,7 @@ const CHIPS: [number, number, boolean, string, string][] = [
   [0.0049, Number.NaN, false, `<$0.01${U}`, `${LEAD} under $0.01.`],
 ];
 
-describe('GM r4: the chips and their tooltips', () => {
+describe('the chips and their tooltips (design)', () => {
   it.each(CHIPS)('%s–%s open=%s: "%s", titled "%s"', (low, high, open, label, title) => {
     expect(formatChipEstimate(low, high, open)).toBe(label);
     expect(chipTitle(chipEstimate(low, high, open))).toBe(title);
@@ -103,7 +103,7 @@ describe('as properties', () => {
       // At most two decimals on any figure ("<$0.01" included).
       for (const match of label.matchAll(/\d+\.(\d+)/g)) expect(match[1].length, where).toBeLessThanOrEqual(2);
       const ends = label.replace(/^~|^Up to /, '').replace(/ \+ unpriced$/, '').split('–');
-      // A range from $0 reads "Up to $Y" (GM r6 item 2), so no end is "$0".
+      // A range from $0 reads "Up to $Y" (design), so no end is "$0".
       if (ends.length === 2) expect(ends[0], where).not.toBe('$0');
       if (ends.length === 2) {
         const decimals = (text: string) => text.split('.')[1]?.length ?? 0;
@@ -118,7 +118,7 @@ describe('as properties', () => {
   }, 60_000);
 });
 
-describe('L2: formatUsdRange with an end that isn\'t a number', () => {
+describe('formatUsdRange with an end that isn\'t a number', () => {
   it.each([
     [0.02, Number.NaN, '$0.02'],
     [0.02, Number.POSITIVE_INFINITY, '$0.02'],

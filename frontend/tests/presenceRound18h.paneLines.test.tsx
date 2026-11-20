@@ -1,9 +1,9 @@
 /**
- * PR #204 round 18h: the Commons panes' load lines.
- * - GM r38 3c: a pane's load line reads again quietly on reconnect, as the page row does: back
+ * PR #204: the Commons panes' load lines.
+ * - Design: a pane's load line reads again quietly on reconnect, as the page row does: back
  *   online, no stale "didn’t respond" shows while the load reads again (Settings, the detail,
  *   Blind labeling).
- * - Review 16 NIT-2 (N15, N16, N17): a Try again that succeeds clears the line, in Blind labeling,
+ * - A Try again that succeeds clears the line, in Blind labeling,
  *   Agent review's image and Blind labeling's image (Settings' was pinned in 18f).
  * These run the real Commons API and apiFetch; only the browser's fetch is stubbed.
  */
@@ -78,13 +78,13 @@ async function tryAgainClears(failing: string) {
 }
 
 describe('a Try again that succeeds clears the line', () => {
-  it('Blind labeling (N15)', async () => {
+  it('Blind labeling', async () => {
     state.failing.add('/api/commons/evaluation');
     render(<CommonsEvaluation />);
     await tryAgainClears('/api/commons/evaluation');
   });
 
-  it('Agent review’s image (N16)', async () => {
+  it('Agent review’s image', async () => {
     state.review = reviewBatch();
     state.failing.add('/api/commons/evaluation/items/0/image');
     render(<CommonsReview />);
@@ -92,7 +92,7 @@ describe('a Try again that succeeds clears the line', () => {
     expect(document.querySelector('img.review-reference')).not.toBeNull();
   });
 
-  it('Blind labeling’s image (N17)', async () => {
+  it('Blind labeling’s image', async () => {
     state.evaluation = evaluationBatch();
     state.failing.add('/api/commons/evaluation/items/0/image');
     render(<CommonsEvaluation />);
@@ -100,7 +100,7 @@ describe('a Try again that succeeds clears the line', () => {
   });
 });
 
-describe('GM r38 3c: a pane load line reads again quietly on reconnect', () => {
+describe('a pane load line reads again quietly on reconnect (design)', () => {
   async function quietOnReconnect(failing: string) {
     await waitFor(() => expect(line()?.textContent).toMatch(NO_ANSWER), { timeout: 10_000 });
     act(() => noteBackendConnection('offline'));

@@ -2,8 +2,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * PR #198 fix round 22, review 20 NIT-1, rendered: where focus goes when an
- * answered clash prompt leaves the region, for the branches round 21's tests
+ * PR #198: rendered: where focus goes when an
+ * answered clash prompt leaves the region, for the branches the earlier tests
  * left untested:
  * - asked again: the new prompt itself, ahead of the × rule (a toast below);
  * - focus the person moved meanwhile stays where they put it;
@@ -70,13 +70,13 @@ async function answer(state: Record<string, unknown>) {
   return calls;
 }
 
-describe('review 20 NIT-1: focus when an answered clash prompt goes', () => {
+describe('focus when an answered clash prompt goes', () => {
   it('asked again, with a toast below: focus goes to the new prompt itself (never its Keep mine), ahead of the toast’s ×, ringed', async () => {
     canvas();
     const calls = await answer(asked({ undoNotice: { id: 9, text: 'Codex changed the canvas.', offer: null } }));
     // Codex changed it again during the answer's save: a new prompt for the same scene.
     set({ sceneClashes: { n1: { id: 72, line: CLASH, agent: 'Codex' } } });
-    // Review 21 NIT-6: the new prompt mounts, then takes focus.
+    // The new prompt mounts, then takes focus.
     await vi.waitFor(() => expect(document.activeElement?.getAttribute('data-scene-clash')).toBe('n1'), { timeout: 5000, interval: 5 });
     const active = document.activeElement as HTMLElement;
     expect(active.getAttribute('data-scene-clash')).toBe('n1');

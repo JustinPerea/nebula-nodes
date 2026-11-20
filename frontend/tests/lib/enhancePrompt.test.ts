@@ -15,13 +15,13 @@ describe('enhancePrompt errors', () => {
     await expect(enhancePrompt('x')).rejects.toThrow('Prompt is too long for Enhance (5000 characters; the limit is 4000).');
   });
 
-  it('a validation list says GM\'s fallback line, not [object Object] (error-copy round 2)', async () => {
+  it('a validation list says design\'s fallback line, not [object Object] (error-copy)', async () => {
     apiFetch.mockResolvedValue(json({ detail: [{ loc: ['body', 'prompt'], msg: 'Field required', type: 'missing' }] }, 422));
     await expect(enhancePrompt('x')).rejects.toThrow(
       "Nebula couldn’t enhance the prompt because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 
-  it("shows the person gate refusal as GM's line (Q116 a: every person-only refusal)", async () => {
+  it("shows the person gate refusal as design's line (every person-only refusal)", async () => {
     apiFetch.mockResolvedValue(json({ detail: 'Only the person can do this', code: 'person_required' }, 403));
     await expect(enhancePrompt('x')).rejects.toThrow("Nebula couldn’t enhance the prompt because this tab isn’t connected as you. Open the link Nebula printed when it started.");
   });

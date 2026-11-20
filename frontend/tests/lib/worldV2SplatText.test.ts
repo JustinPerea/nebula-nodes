@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gaussianCountText, splatAssetLabel, splatSourceLine } from '../../src/lib/worldV2Splat';
 import type { WorldSplatRepresentation, WorldValueV2 } from '../../src/types/spatial';
 
-describe('World v2 splat card text (GM, PR #203 r1)', () => {
+describe('World v2 splat card text (design, PR #203)', () => {
   it('counts Gaussians with a plural only past one', () => {
     expect(gaussianCountText(262_144)).toBe('262,144 Gaussians');
     expect(gaussianCountText(1)).toBe('1 Gaussian');

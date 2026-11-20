@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18h (review 16 MEDIUM-1): Settings' own handovers, AgentSpendSection and
+ * PR #204: Settings' own handovers, AgentSpendSection and
  * PersonalAgentsSection, the same way as the Commons: a save or other work in flight disables the
  * focused control in place (Chrome then drops focus to <body>), so focus goes to the section's
  * heading, and back to that control once the work answers, unless the person moved it meanwhile.
@@ -100,7 +100,7 @@ describe('a control disabled in place while work runs hands focus to the heading
     act(() => toggle.focus());
     fireEvent.click(toggle);
     await flush();
-    // GM, PR #205 r1 answer 6: a switch saving its own change is held (aria-disabled), not
+    // Design (PR #205): a switch saving its own change is held (aria-disabled), not
     // disabled, so it keeps its focus and needs no handover.
     expect((toggle as HTMLInputElement).disabled).toBe(false);
     expect(toggle.getAttribute('aria-disabled')).toBe('true');

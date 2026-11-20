@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cascaded } from './helpers/cssCascade';
 
 /**
- * GM r9 item 1 of PR #203: Run history's Rerun and "Retry failed", and the
+ * Design (PR #203): Run history's Rerun and "Retry failed", and the
  * deferred "Run now", locked by a missing key (aria-disabled), take the
- * shared disabled label (styles/disabled-buttons.css, GM r33's tokens since
+ * shared disabled label (styles/disabled-buttons.css, design's tokens since
  * PR #198: a ghost's grey --disabled-label, a filled button's dark
  * --disabled-fill-label on the grey fill), and keep it while focused, the
  * focus ring drawn on top. Read from the app's real stylesheets the way the
- * browser cascades them (tests/helpers/cssCascade.ts). Before round 6 Run
+ * browser cascades them (tests/helpers/cssCascade.ts). Before this, Run
  * History's buttons weren't in the shared rule, so their own sheet's enabled
  * white (--sr-ink) won.
  */
@@ -66,7 +66,7 @@ const BUTTONS: Record<string, { label: RegExp; html: string }> = {
     aria-disabled="true" data-key-locked="">Run now</button></div></div></div></div></div>` },
 };
 
-describe('locked text buttons take the shared grey label, focused too (GM r9 item 1)', () => {
+describe('locked text buttons take the shared grey label, focused too (design)', () => {
   for (const [name, { label, html }] of Object.entries(BUTTONS)) {
     it(`${name}: locked, its label is the shared disabled label`, () => {
       const { rest } = labelColours(mount(html));
