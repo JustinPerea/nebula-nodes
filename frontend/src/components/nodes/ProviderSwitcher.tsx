@@ -272,7 +272,7 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
       <button ref={triggerRef} type="button" className={className}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
         aria-describedby={hintId}
-        title={state.blocked ? state.message ?? undefined : `Runs on ${state.chipName}. Change provider`}
+        title={state.title}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}
         onKeyDown={(event) => {
