@@ -39,7 +39,13 @@ const catalog = (agent: 'claude' | 'codex') => ({
 class ChatTestSocket extends WebSocket {
   static instances: ChatTestSocket[] = [];
   constructor(url: string | URL) { super(url); ChatTestSocket.instances.push(this); }
-  send() {}
+  sent: Record<string, unknown>[] = [];
+  open() {
+    Object.defineProperty(this, 'readyState', { value: WebSocket.OPEN, writable: true, configurable: true });
+    this.onopen?.call(this, new Event('open'));
+  }
+  send(data: string) { this.sent.push(JSON.parse(data)); }
+  receive(event: unknown) { this.onmessage?.call(this, new MessageEvent('message', { data: JSON.stringify(event) })); }
 }
 
 beforeEach(() => {
@@ -94,5 +100,41 @@ describe('the chat panel meta line', () => {
     apiMocks.fetchClaudeStatus.mockRejectedValue(new Error('boom'));
     render(<ChatPanel />);
     await waitFor(() => expect(meta().textContent).toBe('Nebula couldn’t check Claude'));
+  });
+});
+
+describe('the meta line hover title', () => {
+  const title = () => meta().querySelector('span')!.getAttribute('title');
+
+  it('has none for Claude with no sign-in and no session (the status message is only the method word)', async () => {
+    apiMocks.fetchClaudeStatus.mockResolvedValue(claude({ loggedIn: false, authMethod: 'none', subscriptionType: null, message: 'none' }));
+    render(<ChatPanel />);
+    await waitFor(() => expect(meta().textContent).toBe('Claude needs a sign-in'));
+    expect(meta().querySelector('span')).not.toHaveAttribute('title');
+  });
+
+  it('shows only the session for Claude once a session starts', async () => {
+    apiMocks.fetchClaudeStatus.mockResolvedValue(claude({ message: 'claude.ai' }));
+    render(<ChatPanel />);
+    await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
+    const socket = ChatTestSocket.instances[0];
+    await act(async () => socket.open());
+    await waitFor(() => expect(meta().textContent).toBe('Claude · Max plan'));
+    expect(meta().querySelector('span')).not.toHaveAttribute('title');
+    const input = screen.getByPlaceholderText('Message…');
+    fireEvent.change(input, { target: { value: 'Hello' } });
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
+    await act(async () => socket.receive({ type: 'session', sessionId: 'abc123' }));
+    expect(title()).toBe('Session abc123');
+  });
+
+  it('keeps the CLI’s own message in Codex’s title', async () => {
+    apiMocks.fetchClaudeStatus.mockResolvedValue(claude());
+    apiMocks.fetchCodexStatus.mockResolvedValue(codex());
+    render(<ChatPanel />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Choose chat model' })); });
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Codex' })); });
+    await waitFor(() => expect(meta().textContent).toBe('Codex · your ChatGPT plan'));
+    expect(title()).toBe('Codex says hi.');
   });
 });

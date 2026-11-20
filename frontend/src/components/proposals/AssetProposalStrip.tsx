@@ -263,7 +263,7 @@ function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused
 
 /**
  * An agent's proposal for this project, board or Commons reference, where the
- * person works on it: on its card on the Projects screen, beside Send notes in
+ * person works on it: on its card on the Projects screen, beside “Moodboard notes to generators” in
  * Moodboard Studio, on the reference's detail in the Commons. Nothing changes
  * until they accept (backend /api/asset-proposals).
  */

@@ -57,11 +57,11 @@ Call start_here first: the canvas, open pins and proposals, every moodboard, the
 
 The loop:
 1. describe_node: a node type's ports, params and prices (find_nodes searches them).
-2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
+2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes it back.
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person decides in Nebula; agents cannot accept.
-Off the canvas (a pinned cover, a board's Send notes, Commons curation): propose_asset_change.
+Off the canvas (a pinned cover, “Moodboard notes to generators”, Commons curation): propose_asset_change.
 A decision only the person makes: ask_person; get_answers waits.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
@@ -1400,8 +1400,8 @@ def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A
       The proposal's `change.cover.auto` is the image the automatic cover
       shows now (null when the project has none).
     - kind "moodboard", `id` a board's id or name, change {"sendNotes": true}:
-      send the board's notes to generators, which only the person may turn
-      on. Decided in Moodboard Studio. Turning it off needs no proposal
+      turn on “Moodboard notes to generators”; only the person may.
+      Decided in Moodboard Studio. Turning it off needs no proposal
       (moodboard_update(send_notes=false)).
     - kind "commons", `id` a reference's id (commons_search / commons_get),
       `brand` the brand you work on: curate the Commons, which only the

@@ -127,6 +127,21 @@ FIELD_KEPT_CLAUSES = {
     "would undo a colour choice made since": "a color was chosen after that",
 }
 
+
+def in_quotes(text: Any) -> str:
+    """A name or step label inside a line's own quotes: its inner double quotes
+    turn single (\u2018\u2019), so a line never nests the same mark. The twin of
+    ``inQuotes`` in moodboard-studio/undoLines.ts (shared cases:
+    tests/fixtures/moodboard_undo_lines.json)."""
+    return "\u201c" + str(text).replace("\u201c", "\u2018").replace("\u201d", "\u2019") + "\u201d"
+
+
+def join_words(words: list[str]) -> str:
+    """Words joined as "a", "a and b" or "a, b and c", as the Studio's ``joined`` does."""
+    if len(words) < 2:
+        return "".join(words)
+    return ", ".join(words[:-1]) + " and " + words[-1]
+
 _FRAME_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _WXH_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*$")
@@ -265,7 +280,7 @@ class _Batch:
         found = next((f for f in self.frames if f.get("id") == text), None)
         found = found or next((f for f in self.frames if str(f.get("name", "")).casefold() == text.casefold()), None)
         if found is None and not missing_ok:
-            raise EditError(f"no frame “{text[:60]}” on this board")
+            raise EditError(f"no frame {in_quotes(text[:60])} on this board")
         return found
 
     def frame_label(self, frame_id: Any) -> str:
@@ -836,7 +851,7 @@ class _Batch:
                 if img.get(key) != value and key not in stale}
         if stale:
             report = self._skip_report(item)
-            words = " and ".join(SETTING_LABELS[key] for key in stale)
+            words = join_words([SETTING_LABELS[key] for key in stale])
             report.update({"settings": stale, "message": (
                 f"Nebula couldn’t undo the change to image {report['number']} because image {report['number']}\u2019s {words} changed after that."
                 if "number" in report else f"Nebula couldn’t undo the change to an image because an image’s {words} changed after that.")})
@@ -850,7 +865,7 @@ class _Batch:
         """Put back the board's own fields, each on its own, as a PUT sets
         them (moodboard_store.apply_fields): one that changed since is left
         as it is, and so is one only the person may set this way (turning
-        Send notes on, the person's own brief) when an agent undoes. Each is
+        “Moodboard notes to generators” on, the person's own brief) when an agent undoes. Each is
         judged by the board as the restore found it, and one whose going
         back would also undo a colour choice made since (a pin back on
         drops a Keep anyway colour) is left as is too."""
@@ -917,7 +932,7 @@ class _Batch:
         else:
             clause = FIELD_KEPT_CLAUSES.get(reason, reason)
         return {"part": "fields", "field": key, "reason": reason,
-                "message": f"Nebula couldn’t undo \u201c{step}\u201d because {clause}."}
+                "message": f"Nebula couldn’t undo {in_quotes(step)} because {clause}."}
 
     def _skip_report(self, item: dict[str, Any], reason: str = "changed since") -> dict[str, Any]:
         report: dict[str, Any] = {"part": item["part"]}
@@ -939,7 +954,7 @@ class _Batch:
             label = self.frame_label(item.get("frame"))
         report["reason"] = reason
         # An image is "image 3" mid-sentence; a look is its name, quoted.
-        subject = f"{label[0].lower()}{label[1:]}" if item.get("image") is not None else f"\u201c{label}\u201d"
+        subject = f"{label[0].lower()}{label[1:]}" if item.get("image") is not None else in_quotes(label)
         if reason == "can’t go back there":
             report["message"] = f"Nebula couldn’t undo the change to {subject} because its place on the moodboard was taken or removed after that."
         elif reason == "isn’t one of Nebula’s own files":
@@ -1334,7 +1349,7 @@ MAX_BOARD_NAME_CHARS = 60
 def quoted(name: str) -> str:
     """A name inside a sentence, in curly quotes: “Dusk”. The one place a
     board, a project or a field is quoted, so a line never says "board Dusk"."""
-    return f"\u201c{name}\u201d"
+    return in_quotes(name)
 
 
 def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] | None) -> str:

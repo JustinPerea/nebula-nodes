@@ -239,7 +239,7 @@ from services.canvas_proposals import (
     place_new_nodes,
     summarize_cost,
 )
-# Proposals outside the graph: a project's cover, a board's Send notes (U16).
+# Proposals outside the graph: a project's cover, a board's “Moodboard notes to generators” (U16).
 from services.asset_proposals import AssetProposal, asset_proposals
 from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
 from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_outcome_line,
@@ -9736,7 +9736,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
         pins = []
     await _sweep_proposals()
     briefs = [_proposal_brief(p) for p in canvas_proposals.open_list()]
-    # Asset proposals too (a cover, Send notes, Commons curation), with the
+    # Asset proposals too (a cover, “Moodboard notes to generators”, Commons curation), with the
     # Update each posted; a commons one only where the caller sees it.
     await _sweep_asset_proposals()
     briefs += [asset_proposals.brief(p) for p in asset_proposals.open_list()
@@ -12520,7 +12520,7 @@ async def dismiss_agent_questions(set_id: str) -> dict[str, Any]:
 # ---------- Asset proposals: changes outside the graph (U16) ----------
 #
 # The canvas proposals' life cycle and accept gate for a project's cover and
-# a board's Send notes (services/asset_proposals.py). Accept applies the
+# a board's “Moodboard notes to generators” (services/asset_proposals.py). Accept applies the
 # change through the route the person's own click uses (the cover route, the
 # board PUT), as the person.
 
@@ -13172,7 +13172,7 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
 async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
     """An agent proposes a change outside the graph; the person decides where
     they work on that thing (a project's cover on the Projects screen, a
-    board's Send notes in Moodboard Studio). Nothing changes until they accept.
+    board's “Moodboard notes to generators” in Moodboard Studio). Nothing changes until they accept.
 
     Body: {kind: "project" | "moodboard", id, change, note}. ``change`` is
     {"cover": url | null} for a project, {"sendNotes": true} for a board."""

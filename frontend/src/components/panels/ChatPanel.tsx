@@ -1799,6 +1799,10 @@ export function ChatPanel() {
   const panelState = agentCanRun && (busy || cancelState === 'requested' || cancelState === 'failed') ? status : null;
   // The session's id means nothing to a person on the line itself: it rides in the hover title.
   const sessionTitle = sessionId ? `Session ${sessionId}` : undefined;
+  // The status call's `message` is the sign-in method's own word ("claude.ai", "none") when the CLI says nothing else, which
+  // is no sentence for a hover title: Claude's title keeps it only when it is something else. Codex's is the CLI's own message.
+  const claudeMessage = claudeStatus?.message && claudeStatus.message !== claudeStatus.authMethod && claudeStatus.message !== 'none'
+    ? claudeStatus.message : undefined;
 
   // Generic drag-to-resize helper. The `edges` string encodes which panel
   // edges the user is dragging: any combination of 'l', 'r', 't', 'b'. We
@@ -2028,7 +2032,7 @@ export function ChatPanel() {
                 {agentDisplayName}
               </span>
             ) : (
-              <span title={[agent === 'claude' ? claudeStatus?.message || claudeStatusError : codexStatus?.message || codexStatusError, sessionTitle].filter(Boolean).join(' · ') || undefined}>
+              <span title={[agent === 'claude' ? claudeMessage || claudeStatusError : codexStatus?.message || codexStatusError, sessionTitle].filter(Boolean).join(' · ') || undefined}>
                 {agent === 'claude' ? claudeStatusLabel : codexStatusLabel}
               </span>
             )}

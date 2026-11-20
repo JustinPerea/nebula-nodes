@@ -872,7 +872,7 @@ nebula moodboard delete <board>
   "<board id>", "change": {"sendNotes": true}, "note": "..."}`, or
   `propose_asset_change` over MCP), which the person decides in Moodboard
   Studio; `nebula proposal <id> --wait --timeout 60` follows it. Every such
-  proposal (a cover, Send notes, Commons curation) also posts an Update in
+  proposal (a cover, “Moodboard notes to generators”, Commons curation) also posts an Update in
   the person's Updates corner ("<you> asks to ...", with Review); a new one
   on the same target replaces it, and `nebula notes` shows how it ended
   (an expired one says "Expired" on time; one that was open when Nebula
@@ -897,7 +897,7 @@ nebula moodboard delete <board>
 - Every board write is journaled in its writer's name, so `nebula watch
   --kinds board` sees the person's edits too: an image, card or frame
   change is `board.added`, `board.moved`, ...; a change to the board's own
-  fields (Direction, Avoid, pinned colours, its notes, Send notes, strength,
+  fields (Direction, Avoid, pinned colours, its notes, “Moodboard notes to generators”, strength,
   a rename...) is `board.fields`, whose `fields` lists the names that
   changed. It never carries their values: read the board (`show`) for them.
 - Without `--project` a board is Global: it belongs to no project, so every

@@ -799,9 +799,9 @@ def add_parser(sub) -> None:
                               "send every measured colour")
     notes_g = clash_g.add_mutually_exclusive_group()
     notes_g.add_argument("--send-notes", dest="send_notes", action="store_const", const=True, default=None,
-                         help="Send the board's notes to generators (only the person can turn this on)")
+                         help="Turn on “Moodboard notes to generators”: the board's notes go to generators (only the person can turn this on)")
     notes_g.add_argument("--no-send-notes", dest="send_notes", action="store_const", const=False,
-                         help="Keep the board's notes for people and agents only (the default)")
+                         help="Turn off “Moodboard notes to generators”: the notes stay for people and agents (the default)")
     set_p.add_argument("--restore", metavar="FILE",
                        help="Undo a change: the `previous` from `set --json` (or its whole output), "
                             "as a file or - for stdin. What someone changed since is left as they set it, "

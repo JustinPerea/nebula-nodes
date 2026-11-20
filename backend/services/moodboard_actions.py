@@ -36,7 +36,7 @@ def _field_words(changes: Mapping[str, Any], entry: Mapping[str, Any] | None,
                  after: Mapping[str, Any], before: Mapping[str, Any] | None = None) -> list[str]:
     """The board fields the change set, from its ``fields`` slice, in the
     words of the ``board.fields`` journal event (moodboard_edits.fields_entry),
-    except that the Agent log line also says which way Send notes went (an
+    except that the Agent log line also says which way “Moodboard notes to generators” went (an
     agent can only turn it off)."""
     fields = next((item for item in changes.get("slices") or [] if item.get("part") == "fields"), None)
     if not fields:

@@ -1237,7 +1237,8 @@ def test_its_accepted_asset_proposals_board_write_never_gates_its_next_push():
     state.run_ended({"runId": "run_o", "status": "finished", "nodesExecuted": 1}, now=60.0)
     pushes = drain(state, 40.0, 200.0)
     assert [(at, p.wake, p.gate) for at, p in pushes] == [(40.0, "proposal", False), (70.0, "run", False)]
-    assert all("Send notes" not in p.content and "the person" not in p.content.lower() for _, p in pushes)
+    assert all("Send notes" not in p.content and "Moodboard notes to generators" not in p.content
+               and "the person" not in p.content.lower() for _, p in pushes)
     assert state.tool_started("run_nodes", {}, now=71.0) is None
 
 

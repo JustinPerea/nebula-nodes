@@ -8,8 +8,8 @@ Some of the person's calls live on an asset or a project instead:
   an agent sets the cover directly (``PUT /api/projects/{id}/cover``); a
   proposal is how it asks to change the person's own pick. Decided on the
   Projects screen.
-- ``moodboard`` ``{"sendNotes": true}``: send the board's notes to
-  generators, which only the person may turn on (moodboard_store
+- ``moodboard`` ``{"sendNotes": true}``: turn on “Moodboard notes to
+  generators”, which only the person may (moodboard_store
   ``NotesOptInProtected``). Decided in Moodboard Studio.
 - ``commons`` (a reference's asset id) ``{"correction" | "region" |
   "membership": {...}}`` or ``{"edits": [...]}``: curating the Commons,
