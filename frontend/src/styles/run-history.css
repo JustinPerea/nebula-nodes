@@ -129,8 +129,6 @@ body.app-slava-restraint .run-history__paper-stale { color: var(--sr-ink, #1a1a1
 /* Design: a link is light ink with an underline, and full ink on hover. */
 body.app-slava-restraint .run-history__paper-snapshot a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
 body.app-slava-restraint .run-history__paper-snapshot a:hover { color: var(--sr-ink); }
-body:not(.app-slava-restraint) .run-history__paper-stale { color: #e8c99e; }
-body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; }
 
 .run-history__safeguards {
   margin: 2px 0 12px;
@@ -192,7 +190,6 @@ body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; 
 }
 .run-history__safeguards button:disabled {
   cursor: progress;
-  opacity: 0.45;
 }
 
 /* ---- status dot colors (semantic, skin-agnostic) ---- */
@@ -276,47 +273,6 @@ body.app-slava-restraint .run-history__stop:not(:disabled) {
   opacity: 1;
   color: var(--sr-ink, rgba(255, 255, 255, 0.92));
 }
-
-/* ---- legacy (non-Slava) visual treatment ---- */
-body:not(.app-slava-restraint) .run-history__item {
-  border: 1px solid #2a2a2a;
-  background: #1a1a1a;
-}
-body:not(.app-slava-restraint) .run-history__trigger {
-  color: #e0e0e0;
-}
-body:not(.app-slava-restraint) .run-history__sub {
-  color: #888;
-}
-body:not(.app-slava-restraint) .run-history__status-note {
-  color: #fca5a5;
-}
-body:not(.app-slava-restraint) .run-history__empty {
-  color: #777;
-}
-body:not(.app-slava-restraint) .run-history__safeguards {
-  border: 1px solid #383838;
-  background: #1e1e1e;
-  color: #d6d6d6;
-}
-body:not(.app-slava-restraint) .run-history__safeguards button {
-  border: 1px solid #383838;
-  background: #242424;
-  color: #d6d6d6;
-}
-body:not(.app-slava-restraint) .run-history__replay {
-  border: 1px solid #383838;
-  color: #d6d6d6;
-  background: #242424;
-}
-body:not(.app-slava-restraint) .run-history__replay:not(:disabled):hover {
-  background: #303030;
-}
-body:not(.app-slava-restraint) .run-history__action:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
 
 .run-history__batch-details {
   margin-top: 6px;

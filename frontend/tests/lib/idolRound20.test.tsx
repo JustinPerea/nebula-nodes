@@ -77,8 +77,6 @@ describe('the agent stop card (GM r39 item 1, r40 item 5)', () => {
     const skin = rule(css('slava-restraint.css'), 'body.app-slava-restraint .model-node__error--waiting');
     expect(skin).toContain('color: var(--sr-ink-light)');
     expect(skin).not.toMatch(/--sr-(danger|error|red)/);
-    const plain = rule(css('nodes.css'), 'body:not(.app-slava-restraint) .model-node__error--waiting');
-    expect(plain).toContain('color: #a3a3a3');
   });
 });
 

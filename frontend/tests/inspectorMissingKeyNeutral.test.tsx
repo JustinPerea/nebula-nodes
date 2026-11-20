@@ -46,12 +46,6 @@ describe("the Inspector's missing-key line", () => {
     expect(notice.classList.contains('inspector__notice--warning')).toBe(false);
   });
 
-  it('draws neutral in the default skin: grey, not amber', () => {
-    const key = rule('panels.css', 'body:not(.app-slava-restraint) .inspector__notice--key');
-    expect(key).toMatch(/color:\s*#a9a9b0/);
-    expect(key).not.toMatch(/c58b3a|197,\s*139,\s*58/i);
-  });
-
   it('draws neutral in the Slava skin: the card\'s ink, not the accent box', () => {
     const key = rule('slava-restraint.css', 'body.app-slava-restraint .inspector__notice--key');
     expect(key).toMatch(/color:\s*var\(--sr-ink-light\)/);

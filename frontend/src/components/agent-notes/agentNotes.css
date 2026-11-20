@@ -11,21 +11,6 @@
 
   --an-top-chip: var(--agent-notes-chip-top, 24px);
   --an-top: calc(var(--an-top-chip) + var(--agent-notes-chip-h, 40px) + var(--stack-gap-sm, 8px));
-  --an-panel: rgba(20, 20, 20, 0.94);
-  --an-raised: rgba(32, 32, 32, 0.96);
-  --an-edge: #2a2a2a;
-  --an-edge-strong: #3a3a3a;
-  --an-ink: #e8e8e6;
-  --an-ink-bold: #ffffff;
-  --an-muted: #a8aaae;
-  --an-faint: #6e7075;
-  --an-hover: rgba(255, 255, 255, 0.04);
-  --an-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --an-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --an-radius: 12px;
-  --an-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
-  --an-blur: blur(8px);
-  --an-on-dot: #111111;
 }
 
 body.app-slava-restraint .agent-notes-root {

@@ -187,7 +187,7 @@ describe("the palette's read-only × and Extract (GM r22, folded)", () => {
     const fade = disabled.find((r) => r.selector.includes(":is(.inspector__palette-remove):is(:disabled, [aria-disabled='true'])") && /transition:\s*none\s*!important/.test(r.body));
     expect(fade).toBeDefined();
     // Its hovers skip the read-only one.
-    for (const name of ['panels.css', 'slava-restraint.css']) {
+    for (const name of ['slava-restraint.css']) {
       const hovers = rules(css(name)).filter((r) => /\.inspector__palette-remove:hover/.test(r.selector));
       expect(hovers.length).toBeGreaterThan(0);
       for (const hover of hovers) expect(hover.selector).toContain("[aria-disabled='true']");
@@ -196,7 +196,7 @@ describe("the palette's read-only × and Extract (GM r22, folded)", () => {
 
   it('shows no ring on the pending line, which gets focus by code (GM r23)', () => {
     const panels = rules(css('panels.css'));
-    for (const skin of ['body:not(.app-slava-restraint)', 'body.app-slava-restraint']) {
+    for (const skin of ['body.app-slava-restraint']) {
       const rule = panels.find((r) => r.selector.split(',').map((s) => s.trim()).includes(`${skin} .inspector__palette-pending:focus`));
       expect(rule?.body, skin).toMatch(/outline:\s*none/);
     }

@@ -7,35 +7,11 @@
  * otherwise cut a name like "FLUX 3 Image Klein Base" to "FLUX 3 Image...". */
 .model-node.model-node--switchable { max-width: 300px; }
 
-body:not(.app-slava-restraint) .model-node {
-  background: #1c1c1c;
-  border: 1px solid #333;
-  border-radius: 6px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: #ccc;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-body:not(.app-slava-restraint) .model-node--selected {
-  border-color: #555;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-}
-
 .model-node--idle { }
-body:not(.app-slava-restraint) .model-node--queued { border-color: #555; }
 .model-node--complete { }
-body:not(.app-slava-restraint) .model-node--error { border-color: #F44336; }
 
 .model-node__header {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-}
-
-body:not(.app-slava-restraint) .model-node__header {
-  border-bottom: 1px solid #2a2a2a;
 }
 
 .model-node__category-dot {
@@ -47,56 +23,25 @@ body:not(.app-slava-restraint) .model-node__header {
 
 .model-node__label {
   flex: 1;
-  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-body:not(.app-slava-restraint) .model-node__label {
-  color: #eee;
-}
-
 .model-node__label-input {
   min-width: 0;
   margin: 0;
-  padding: 0 4px;
   border: none;
-  border-radius: 4px;
   font: inherit;
-  color: inherit;
   outline: none;
 }
 
-body:not(.app-slava-restraint) .model-node__label-input {
-  background: rgba(0, 0, 0, 0.4);
-}
-
 .model-node__badge { font-size: 11px; flex-shrink: 0; }
-body:not(.app-slava-restraint) .model-node__badge--warning { color: #FFC107; }
 
 .model-node__id-chip {
   flex-shrink: 0;
   cursor: grab;
   user-select: none;
-}
-
-body:not(.app-slava-restraint) .model-node__id-chip {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
-  font-weight: 500;
-  color: #777;
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 3px;
-  padding: 1px 5px;
-  transition: color 0.1s, background 0.1s, border-color 0.1s;
-}
-
-body:not(.app-slava-restraint) .model-node__id-chip:hover {
-  color: #d8e8f5;
-  background: #2a3b4f;
-  border-color: #3a5070;
 }
 
 .model-node__id-chip:active { cursor: grabbing; }
@@ -112,20 +57,15 @@ body:not(.app-slava-restraint) .model-node__id-chip:hover {
 
 .model-node__id-chip--pending::before { content: 'n00'; }
 
-.model-node__ports { padding: 6px 0; }
-
 .model-node__port-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 10px;
   position: relative;
 }
 
 .model-node__port-row--output { justify-content: flex-end; }
 
-.model-node__port-label { font-size: 11px; }
-body:not(.app-slava-restraint) .model-node__port-label { color: #888; }
 
 /* What a wired moodboard does on this node (MoodboardAdapterRow): one line
  * under the ports. The empty line drawn while it loads keeps the same box.
@@ -135,7 +75,6 @@ body:not(.app-slava-restraint) .model-node__port-label { color: #888; }
 .model-node__file-name {
   min-height: calc(11px * 1.35);
   padding: 0 10px 6px;
-  font-size: 11px;
   line-height: 1.35;
 }
 .model-node__file-name {
@@ -143,8 +82,6 @@ body:not(.app-slava-restraint) .model-node__port-label { color: #888; }
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-body:not(.app-slava-restraint) .model-node__board-line,
-body:not(.app-slava-restraint) .model-node__file-name { color: #888; }
 body.app-slava-restraint .model-node__board-line,
 body.app-slava-restraint .model-node__file-name { color: var(--sr-ink-light); font-size: var(--sr-type-label); }
 
@@ -157,20 +94,6 @@ body.app-slava-restraint .model-node__file-name { color: var(--sr-ink-light); fo
   height: 8px;
   border-radius: 50%;
   flex: 0 0 auto;
-}
-
-body:not(.app-slava-restraint) .model-node__handle {
-  width: 10px !important;
-  height: 10px !important;
-  border: 2px solid rgba(255, 255, 255, 0.3) !important;
-  border-radius: 50% !important;
-  transition: transform 0.15s ease;
-}
-
-body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4); }
-
-.model-node__preview {
-  position: relative;
 }
 
 .model-node__mask-composite .model-node__preview-image,
@@ -189,108 +112,7 @@ body:not(.app-slava-restraint) .model-node__handle:hover { transform: scale(1.4)
   mix-blend-mode: screen;
 }
 
-body:not(.app-slava-restraint) .model-node__preview {
-  padding: 6px 10px;
-  border-top: 1px solid #2a2a2a;
-}
-
-body:not(.app-slava-restraint) .model-node__download {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: rgba(20, 20, 20, 0.85);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  color: #ccc;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s, background 0.12s, color 0.12s;
-  z-index: 2;
-}
-
-body:not(.app-slava-restraint) .model-node__preview:hover .model-node__download {
-  opacity: 1;
-}
-
-body:not(.app-slava-restraint) .model-node__download:hover {
-  background: rgba(40, 40, 40, 0.95);
-  color: #fff;
-}
-
-body:not(.app-slava-restraint) .model-node__loop-toggle {
-  position: absolute;
-  top: 12px;
-  right: 48px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: rgba(20, 20, 20, 0.85);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  color: #ccc;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s, background 0.12s, color 0.12s, border-color 0.12s;
-  z-index: 2;
-}
-
-body:not(.app-slava-restraint) .model-node__preview:hover .model-node__loop-toggle {
-  opacity: 1;
-}
-
-body:not(.app-slava-restraint) .model-node__loop-toggle:hover {
-  background: rgba(40, 40, 40, 0.95);
-  color: #fff;
-}
-
-body:not(.app-slava-restraint) .model-node__loop-toggle--on {
-  color: #6ee7b7;
-  border-color: rgba(110, 231, 183, 0.45);
-}
-
-body:not(.app-slava-restraint) .model-node__loop-toggle--on:hover {
-  color: #a7f3d0;
-  border-color: rgba(110, 231, 183, 0.65);
-}
-
-body:not(.app-slava-restraint) .model-node__error {
-  padding: 4px 10px;
-  font-size: 10px;
-  color: #F44336;
-  background: rgba(244, 67, 54, 0.1);
-  border-top: 1px solid #2a2a2a;
-}
-
-/* Safety/moderation blocks: calmer amber treatment — still an error state, but
-   not a red "failure" (the request was understood and declined). */
-body:not(.app-slava-restraint) .model-node__error--blocked {
-  color: #E0A030;
-  background: rgba(224, 160, 48, 0.12);
-}
-
-/* A stop that waits for the person, not a failure (GM, PR #203 r39 item 1):
-   muted text on a neutral surface, never the error colour. */
-body:not(.app-slava-restraint) .model-node__error--waiting {
-  color: #a3a3a3;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-/* Structural bits shared across skins (color comes from the skin rules above). */
+/* Structural bits (color comes from the skin rules). */
 .model-node__error-message {
   display: block;
 }
@@ -358,31 +180,10 @@ body:not(.app-slava-restraint) .model-node__error--waiting {
   border-radius: 50%;
 }
 /* visual (skin-scoped) */
-body:not(.app-slava-restraint) .before-after__divider { background: rgba(255, 255, 255, 0.9); }
-body:not(.app-slava-restraint) .before-after__handle {
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
-}
 body.app-slava-restraint .before-after__divider { background: var(--sr-accent); }
 body.app-slava-restraint .before-after__handle {
   background: var(--sr-accent);
   box-shadow: 0 0 0 2px var(--sr-canvas, #f4f1ea);
-}
-
-body:not(.app-slava-restraint) .model-node__preview-image {
-  max-width: 100%;
-  height: auto;
-  border-radius: 4px;
-  display: block;
-}
-
-body:not(.app-slava-restraint) .model-node__preview-image--streaming {
-  max-width: 100%;
-  height: auto;
-  border-radius: 4px;
-  display: block;
-  opacity: 0.85;
-  outline: 1px dashed var(--accent, #888);
 }
 
 .model-node__preview-image[draggable='true'] {
@@ -393,91 +194,8 @@ body:not(.app-slava-restraint) .model-node__preview-image--streaming {
   cursor: grabbing;
 }
 
-body:not(.app-slava-restraint) .model-node__preview-video {
-  display: block;
-  width: 100%;
-  border-radius: 4px;
-}
-
-body:not(.app-slava-restraint) .model-node__preview-audio {
-  width: 100%;
-  border-radius: 4px;
-}
-
-/* Loading indicator */
-body:not(.app-slava-restraint) .model-node__loading {
-  padding: 8px 10px;
-  border-top: 1px solid #2a2a2a;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-body:not(.app-slava-restraint) .model-node__loading-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #333;
-  border-top-color: #2196F3;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-body:not(.app-slava-restraint) .model-node__loading-text {
-  font-size: 11px;
-  color: #888;
-  flex: 1;
-}
-
-body:not(.app-slava-restraint) .model-node__loading .model-node__progress {
-  width: 100%;
-  padding: 0;
-  border-top: none;
-}
-
-body:not(.app-slava-restraint) .model-node__progress {
-  padding: 4px 10px;
-  border-top: 1px solid #2a2a2a;
-}
-
-body:not(.app-slava-restraint) .model-node__progress-bar {
-  height: 2px;
-  background: #2196F3;
-  border-radius: 1px;
-  transition: width 0.3s ease;
-}
-
-body:not(.app-slava-restraint) .model-node__preview-text {
-  background: #161616;
-  border: 1px solid #2a2a2a;
-  border-radius: 4px;
-  padding: 8px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: #aaa;
-  max-height: 120px;
-  overflow-y: auto;
-  white-space: break-spaces;
-  word-break: break-word;
-  scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
-}
-
-body:not(.app-slava-restraint) .model-node__preview-text--streaming {
-  border-color: #2196F3;
-  color: #ccc;
-}
-
-body:not(.app-slava-restraint) .model-node__preview-text--streaming::after {
-  content: '\25AE';
-  animation: blink-cursor 0.8s step-end infinite;
-  color: #2196F3;
-  margin-left: 1px;
 }
 
 @keyframes blink-cursor {
@@ -485,83 +203,7 @@ body:not(.app-slava-restraint) .model-node__preview-text--streaming::after {
   50% { opacity: 0; }
 }
 
-/* ---------- Inline textarea (text-input nodes) ---------- */
-
-body:not(.app-slava-restraint) .model-node__inline-textarea {
-  padding: 6px 8px;
-  border-top: 1px solid #2a2a2a;
-}
-
-body:not(.app-slava-restraint) .model-node__textarea {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  min-height: 72px;
-  max-height: 200px;
-  background: #161616;
-  border: 1px solid #2a2a2a;
-  border-radius: 4px;
-  padding: 6px 8px;
-  color: #ccc;
-  font-size: 11px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  resize: vertical;
-  outline: none;
-  box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
-}
-
-body:not(.app-slava-restraint) .model-node__textarea:focus {
-  outline: none;
-  border-color: #555;
-  box-shadow: none;
-}
-
-body:not(.app-slava-restraint) .model-node__textarea::placeholder {
-  color: #444;
-}
-
-body:not(.app-slava-restraint) .model-node__enhance {
-  margin-top: 6px;
-  width: 100%;
-  padding: 5px 0;
-  background: #1e1e1e;
-  border: 1px solid #2a2a2a;
-  border-radius: 4px;
-  color: #999;
-  font-size: 10px;
-  font-family: inherit;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.1s, color 0.1s, border-color 0.1s;
-}
-
-body:not(.app-slava-restraint) .model-node__enhance:hover:not(:disabled) {
-  background: #242424;
-  border-color: #3a3a3a;
-  color: #ddd;
-}
-
 /* ---------- Reroute node (minimal dot) ---------- */
-
-body:not(.app-slava-restraint) .reroute-node {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #444;
-  border: 2px solid #666;
-  position: relative;
-  cursor: crosshair;
-}
-
-body:not(.app-slava-restraint) .reroute-node:hover {
-  background: #555;
-  border-color: #888;
-}
 
 /* The reroute dot's run error (error copy round 3e): the dot has no body,
    so the shared error block hangs centred below it at a card's width. */
@@ -584,78 +226,9 @@ body:not(.app-slava-restraint) .reroute-node:hover {
   min-height: 8px !important;
 }
 
-body:not(.app-slava-restraint) .dynamic-node__model-badge {
-  padding: 2px 8px;
-  margin: 0 8px 4px;
-  font-size: 10px;
-  color: #aaa;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: 'SF Mono', 'Menlo', monospace;
-}
-
 /* Mesh 3D Preview */
 .mesh-preview {
-  position: relative;
-  cursor: pointer;
   overflow: hidden;
-}
-
-body:not(.app-slava-restraint) .mesh-preview {
-  min-height: 150px;
-  border-radius: 4px;
-  background: #161616;
-}
-
-body:not(.app-slava-restraint) .mesh-preview__viewer {
-  width: 100%;
-  height: 150px;
-  background: #161616;
-}
-
-body:not(.app-slava-restraint) .mesh-preview__placeholder {
-  position: absolute;
-  inset: 0;
-  display: none;
-  place-items: center;
-  pointer-events: none;
-}
-
-body:not(.app-slava-restraint) .mesh-preview--idle .mesh-preview__placeholder,
-body:not(.app-slava-restraint) .mesh-preview--loading .mesh-preview__placeholder,
-body:not(.app-slava-restraint) .mesh-preview--error .mesh-preview__placeholder,
-body:not(.app-slava-restraint) .mesh-preview--file .mesh-preview__placeholder {
-  display: grid;
-}
-
-body:not(.app-slava-restraint) .mesh-preview__mesh {
-  width: 76px;
-  height: 50px;
-  border-radius: 3px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.20) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.20) 1px, transparent 1px);
-  background-size: 10px 10px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
-  opacity: 0.72;
-  transform: perspective(150px) rotateX(58deg) rotateZ(-12deg);
-}
-
-body:not(.app-slava-restraint) .mesh-preview__hud {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 7px;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: #aaa;
-  font-family: monospace;
-  font-size: 10px;
-  text-transform: uppercase;
 }
 
 /* Full-screen modal overlay */
@@ -670,11 +243,6 @@ body:not(.app-slava-restraint) .mesh-preview__hud {
   justify-content: center;
 }
 
-body:not(.app-slava-restraint) .mesh-modal-overlay {
-  background: rgba(0, 0, 0, 0.85);
-  z-index: 10000;
-}
-
 .mesh-modal {
   position: relative;
   width: 80vw;
@@ -682,19 +250,9 @@ body:not(.app-slava-restraint) .mesh-modal-overlay {
   overflow: hidden;
 }
 
-body:not(.app-slava-restraint) .mesh-modal {
-  background: #1a1a1a;
-  border-radius: 8px;
-  border: 1px solid #333;
-}
-
 .mesh-modal__viewer {
   width: 100%;
   height: 100%;
-}
-
-body:not(.app-slava-restraint) .mesh-modal__viewer {
-  background: #161616;
 }
 
 .mesh-modal__fallback {
@@ -711,22 +269,8 @@ body:not(.app-slava-restraint) .mesh-modal__viewer {
   letter-spacing: 0.02em;
 }
 
-body:not(.app-slava-restraint) .mesh-modal__fallback-copy {
-  color: #94a3b8;
-}
-
 body.app-slava-restraint .mesh-modal__fallback-copy {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.55));
-}
-
-body:not(.app-slava-restraint) .mesh-modal__fallback {
-  background: #161616;
-}
-
-body:not(.app-slava-restraint) .mesh-modal__fallback .mesh-preview__mesh {
-  width: 180px;
-  height: 118px;
-  background-size: 18px 18px;
 }
 
 .mesh-modal__close {
@@ -743,18 +287,6 @@ body:not(.app-slava-restraint) .mesh-modal__fallback .mesh-preview__mesh {
   line-height: 1;
 }
 
-body:not(.app-slava-restraint) .mesh-modal__close {
-  z-index: 10001;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid #555;
-  border-radius: 50%;
-  color: #fff;
-}
-
-body:not(.app-slava-restraint) .mesh-modal__close:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
 .mesh-modal__info {
   position: absolute;
   bottom: 0;
@@ -764,16 +296,6 @@ body:not(.app-slava-restraint) .mesh-modal__close:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-body:not(.app-slava-restraint) .mesh-modal__info {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-body:not(.app-slava-restraint) .mesh-modal__format {
-  color: #999;
-  font-size: 13px;
-  font-family: monospace;
 }
 
 .mesh-modal__download {
@@ -792,52 +314,26 @@ body:not(.app-slava-restraint) .mesh-modal__format {
   line-height: 1.25;
 }
 
-body:not(.app-slava-restraint) .mesh-modal__download-error {
-  color: var(--line-warning, #ff9d87);
-}
-
 body.app-slava-restraint .mesh-modal__download-error {
   color: var(--line-warning, var(--sr-error));
-}
-
-body:not(.app-slava-restraint) .mesh-modal__download {
-  background: #00BCD4;
-  color: #000;
-  border: none;
-  border-radius: 4px;
-}
-
-body:not(.app-slava-restraint) .mesh-modal__download:hover {
-  background: #00E5FF;
 }
 
 /* ---------- New structural wrappers (Flora-paradigm shells) ----------
  * Added 2026-05-04 alongside the Slava — Restraint skin exploration.
  * These elements are present on every node but invisible by default —
- * skins that want them (currently slava-restraint) opt into rendering
- * them. The .model-node__card wrapper exists so a skin can move the
- * card visual onto a child element instead of .model-node directly,
- * letting the settings bar float OUTSIDE the card.
- *
- * Default + Hermes skins are unchanged: the settings bar
- * stays hidden, .model-node__card is transparent (the existing .model-node
- * background still paints the card). */
-.model-node__settings-bar,
+ * the skin opts into rendering them. The .model-node__card wrapper exists
+ * so the skin can move the card visual onto a child element instead of
+ * .model-node directly, letting the settings bar float OUTSIDE the card. */
 .model-node__media-toolbar {
   display: none;
 }
 
-.model-node__card {
-  display: contents;  /* skipped in layout — children participate in .model-node's flow */
-}
 /* Source freshness is separate from execution state; retained output stays visible. */
 .model-node__source-stale { display: grid; gap: 5px; padding: 10px; font-size: 10px; line-height: 1.4; }
 .model-node__source-stale button { padding: 5px 7px; width: fit-content; border-radius: 4px; font: inherit; cursor: pointer; }
 .model-node__source-stale button:disabled { opacity: 0.45; cursor: default; }
 body.app-slava-restraint .model-node__source-stale { color: var(--sr-ink, #1a1a1a); background: color-mix(in srgb, var(--sr-warning) 10%, transparent); }
 body.app-slava-restraint .model-node__source-stale button { color: var(--sr-ink, rgba(255, 255, 255, 0.92)); border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12)); background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78)); }
-body:not(.app-slava-restraint) .model-node__source-stale { color: #e8c99e; background: #2a2116; }
-body:not(.app-slava-restraint) .model-node__source-stale button { color: inherit; border: 1px solid #765a35; background: #342819; }
 
 /* An agent's placeholder (Q125 item 3, GM - Design 2026-10-25): only the
    preview area dims; the header and the line stay at full contrast. Every
@@ -889,11 +385,6 @@ body.app-slava-restraint .model-node__pending {
   color: var(--sr-ink-light);
 }
 
-body:not(.app-slava-restraint) .model-node__pending {
-  color: #b9bbbf;
-}
-
-body.app-slava-restraint .model-node__pending::before,
-body:not(.app-slava-restraint) .model-node__pending::before {
+body.app-slava-restraint .model-node__pending::before {
   background: var(--pending-color);
 }

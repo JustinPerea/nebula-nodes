@@ -214,14 +214,6 @@
 
 .prompt-dialog__node-id {
   flex-shrink: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
-  font-weight: 500;
-  color: #777;
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 3px;
-  padding: 1px 5px;
 }
 
 body.app-slava-restraint .prompt-dialog__node-id {

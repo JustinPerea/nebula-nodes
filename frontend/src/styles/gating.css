@@ -38,16 +38,6 @@ body.app-slava-restraint .node-skip__dot {
   background: transparent;
 }
 
-body:not(.app-slava-restraint) .node-skip {
-  color: #9a9a9a;
-  background: #262626;
-  border: 1px solid #3a3a3a;
-}
-
-body:not(.app-slava-restraint) .node-skip__dot {
-  border: 1px solid currentColor;
-}
-
 /* Everything on the card except the chip recedes. */
 .model-node--skipped .model-node__card > :not(.node-skip) {
   opacity: 0.42;
@@ -93,8 +83,7 @@ body.app-slava-restraint .model-node--skipped[data-pending='true'] .model-node__
 /* A wire from a withheld port (or a skipped node): thin, dotted and faint.
  * animation: none also stops the draw-in, whose forwards fill would
  * otherwise keep stroke-dasharray at none. */
-body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive,
-body:not(.app-slava-restraint) .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
+body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
   opacity: 0.28;
   stroke-dasharray: 2 6;
   stroke-linecap: round;
@@ -109,8 +98,7 @@ body:not(.app-slava-restraint) .react-flow__edge .react-flow__edge-path.typed-ed
   }
 
   .model-node--skipped .model-node__card > :not(.node-skip),
-  body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive,
-  body:not(.app-slava-restraint) .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
+  body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
     transition: none;
   }
 }

@@ -1156,24 +1156,21 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
   });
 });
 
-describe('the name pill edge (GM - Design, PR #211 r9 item 4)', () => {
-  it('pins the rule: under 3:1 on the canvas, Slava #000 and classic #111', () => {
-    expect(AGENT_CURSOR_PILL_EDGE).toEqual({ minContrast: 3, slavaCanvas: '#000000', classicCanvas: '#111111' });
+describe('the name pill edge (design)', () => {
+  it('pins the rule: under 3:1 on the canvas, #000', () => {
+    expect(AGENT_CURSOR_PILL_EDGE).toEqual({ minContrast: 3, slavaCanvas: '#000000' });
   });
 
-  it('takes the edge just under 3:1 and not at 3:1 or over, on each canvas', () => {
+  it('takes the edge just under 3:1 and not at 3:1 or over', () => {
     // On #000: #595959 is 2.998:1, #5a5a5a 3.045:1.
     expect(contrastRatio('#595959', '#000000')).toBeLessThan(3);
     expect(pillEdge('#595959')).toBe('both');
     expect(contrastRatio('#5a5a5a', '#000000')).toBeGreaterThanOrEqual(3);
-    // On #111: #5f5f5f is 2.957:1, #606060 3.003:1.
-    expect(pillEdge('#5a5a5a')).toBe('classic');
-    expect(pillEdge('#5f5f5f')).toBe('classic');
-    expect(contrastRatio('#606060', '#111111')).toBeGreaterThanOrEqual(3);
+    expect(pillEdge('#5a5a5a')).toBeNull();
     expect(pillEdge('#606060')).toBeNull();
   });
 
-  it('black keeps L 0.35, and its pills take the edge in both skins; Claude and white need none', () => {
+  it('black keeps L 0.35, and its first two pills take the edge; Claude and white need none', () => {
     const black = [1, 2, 3, 4, 5].map((ordinal) => sessionFill('#000000', { key: 'k', ordinal }));
     expect(black[0]).toBe('#3a3a3a');
     expect(black.map(pillEdge)).toEqual(['both', 'both', null, null, null]);
@@ -1181,15 +1178,12 @@ describe('the name pill edge (GM - Design, PR #211 r9 item 4)', () => {
     expect(pillEdge(sessionFill('#ffffff', { key: 'k', ordinal: 1 }))).toBeNull();
   });
 
-  it('the edge is a 1 px white 0.4 ring outside the pill, on #000 in both skins and on #111 in the classic one only', () => {
+  it('the edge is a 1 px white 0.4 ring outside the pill, on the pills marked both', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const rule = css.match(/([^{}]+)\{\s*box-shadow:\s*0 0 0 1px rgb\(255 255 255 \/ 0\.4\)[^}]*\}/);
     expect(rule).not.toBeNull();
     const selectors = rule![1].split(',').map((part) => part.trim().replace(/\s+/g, ' '));
-    expect(selectors).toEqual([
-      ".agent-cursor[data-edge='both'] .agent-cursor__name",
-      "body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor__name",
-    ]);
+    expect(selectors).toEqual([".agent-cursor[data-edge='both'] .agent-cursor__name"]);
   });
 });
 

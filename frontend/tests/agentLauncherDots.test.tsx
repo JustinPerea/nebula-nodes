@@ -225,12 +225,11 @@ describe('the badge ring takes the launcher\'s own surface colour', () => {
       const block = [...css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].find(([, sel]) => sel.trim() === selector);
       return /--agent-launcher-surface:\s*([^;]+);/.exec(block?.[2] ?? '')?.[1].trim();
     };
-    const rail = value(read('workspace-rail.css'), '.workspace-rail__shell');
-    const dock = value(read('panels.css'), '.panel');
+    const rail = value(read('workspace-rail.css'), 'body.app-slava-restraint .workspace-rail__shell');
+    const dock = value(read('slava-restraint.css'), 'body.app-slava-restraint .panel');
     expect(rail).toBeTruthy();
     expect(dock).toBeTruthy();
     expect(dock).not.toBe(rail);
-    expect(value(read('workspace-rail.css'), 'body.app-slava-restraint .workspace-rail__shell')).not.toBe(value(read('slava-restraint.css'), 'body.app-slava-restraint .panel'));
     // The dots layer reads the ring from the variable it sets, never a literal beside the host's.
     const dots = read('agentCursorAnywhere.css');
     expect(dots).toMatch(/box-shadow:\s*0 0 0 1\.5px var\(--agent-badge-ring\)/);
