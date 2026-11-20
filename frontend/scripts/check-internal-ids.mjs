@@ -575,6 +575,9 @@ export function main(argv) {
       return 1;
     }
   }
+  // Once every pair is applied, a gone old path has nothing left to move: drop its leftover so a
+  // recreated file at that path starts from zero.
+  for (const [oldPath] of moves) if (!(oldPath in counts)) delete baseline[oldPath];
 
   const { failures, notes } = compareToBaseline(counts, matches, baseline);
   let code = 0;

@@ -485,4 +485,14 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     expect(both.code).toBe(0);
     expect(baseline()).toEqual({ 'frontend/src/b.ts': 2, 'frontend/src/c.ts': 3 });
   });
+
+  it('--move drops what a gone file had left after a split', () => {
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 7 }));
+    rmSync(join(root, 'frontend/src/a.ts'));
+    write('frontend/src/b.ts', '// GM 1\n// GM 2\n');
+    write('frontend/src/c.ts', '// GM 1\n// GM 2\n// GM 3\n');
+    const r = run('--move', 'frontend/src/a.ts', 'frontend/src/b.ts', '--move', 'frontend/src/a.ts', 'frontend/src/c.ts');
+    expect(r.code).toBe(0);
+    expect(baseline()).toEqual({ 'frontend/src/b.ts': 2, 'frontend/src/c.ts': 3 });
+  });
 });
