@@ -489,7 +489,7 @@ describe('Moodboard Studio: what generators get', () => {
     await openStudio('g1', 'global', 'Global board');
     const toggle = screen.getByRole('switch', { name: 'Moodboard notes to generators' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByText('Off: notes are for you, your team and agents.')).toBeTruthy();
+    expect(screen.getByText('When it’s off, notes are for you, your team and agents.')).toBeTruthy();
     expect(screen.getByPlaceholderText('Anything about the moodboard, in your words.')).toBeTruthy();
     fireEvent.click(toggle);
     await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)?.[1].sendNotes).toBe(true), { timeout: 3000 });

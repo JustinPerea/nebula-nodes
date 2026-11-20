@@ -3583,7 +3583,7 @@ function NotesSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) =>
         <span className="moodboard-switch__label">Moodboard notes to generators</span>
       </button>
       <span id={hintId} className="moodboard-switch__hint">
-        {on ? 'On: generators get these notes with the brief.' : 'Off: notes are for you, your team and agents.'}
+        {on ? 'When it’s on, generators get these notes with the brief.' : 'When it’s off, notes are for you, your team and agents.'}
       </span>
     </div>
   );

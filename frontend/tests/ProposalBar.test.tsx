@@ -119,7 +119,7 @@ describe('ProposalBar', () => {
     render(<ProposalBar />);
     const name = screen.getByText('Portable Agent - Brand');
     expect(name.getAttribute('title')).toBe('Portable Agent - Brand');
-    expect(name.closest('.proposal-bar__head')?.textContent).toMatch(/proposes.*Expires in \d+:\d\d$/);
+    expect(name.closest('.proposal-bar__head')?.textContent).toMatch(/proposes.*Expires in \d+ min$/);
     expect(screen.getByText('Generate the warm take')).toBeTruthy();
     expect(screen.getByText(plan).className).toBe('proposal-bar__plan');
     // Nothing above the disclosure names a node by id (the details fall back

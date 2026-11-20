@@ -314,10 +314,11 @@ export function acceptCountChip(view: ProposalView): string | null {
     mayCost: view.cost.mayCostRuns ?? 0 }));
 }
 
-/** "3:05" until the proposal expires. */
+/** "15 min" until the proposal expires: whole minutes rounded up, never below
+ * "1 min" while the proposal is live (design). */
 export function countdown(expiresAt: number, now = Date.now()): string {
-  const seconds = Math.max(0, Math.round((expiresAt - now) / 1000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  const seconds = Math.max(0, (expiresAt - now) / 1000);
+  return `${Math.max(1, Math.ceil(seconds / 60))} min`;
 }
 
 /** Short text for a proposed param value. */

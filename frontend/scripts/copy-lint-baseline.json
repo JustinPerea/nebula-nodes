@@ -61,18 +61,6 @@
       "text": "moodboard off: connected nodes get none of it"
     },
     {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "sentence-punctuation",
-      "text": "Off: notes are for you, your team and agents."
-    },
-    {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "sentence-punctuation",
-      "text": "On: generators get these notes with the brief."
-    },
-    {
       "family": "em-dashes",
       "file": "frontend/src/components/nodes/BatchCarousel.tsx",
       "rule": "em-dash",

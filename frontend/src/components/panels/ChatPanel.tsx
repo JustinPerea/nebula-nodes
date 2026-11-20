@@ -755,7 +755,7 @@ export function ChatPanel() {
     if (!claudeStatus) return 'Checking Claude…';
     if (!claudeStatus.installed) return 'Claude isn’t installed';
     if (!claudeStatus.loggedIn) return 'Claude needs a sign-in';
-    if (activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)) return /api|bearer/i.test(activeCatalog.auth.mode || '') ? 'Claude Code · billed to your API key' : 'Claude Code · billed to your provider';
+    if (activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)) return /api|bearer/i.test(activeCatalog.auth.mode || '') ? 'Claude Code · billed to your API key' : 'Claude Code · billed to your cloud account';
     if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType.charAt(0).toUpperCase()}${claudeStatus.subscriptionType.slice(1)} plan`;
     if (claudeStatus.authMethod) return `Claude · ${claudeStatus.authMethod}`;
     return 'Claude · signed in';

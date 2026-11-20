@@ -91,7 +91,7 @@ describe('an unsaved draft', () => {
   it('carries no anchor and publishes nothing', async () => {
     act(() => { useUIStore.getState().enterCharacterEditor('new', 'global'); });
     render(<CharacterStudioView />);
-    await screen.findByPlaceholderText('e.g. Captain Vega');
+    await screen.findByPlaceholderText('A name, such as Captain Vega');
     const panel = document.querySelector('.character-def')!;
     expect(ownAnchors().filter(Boolean)).toEqual([]);
     expect(panel.querySelector('[data-agent-anchor]')).toBeNull();

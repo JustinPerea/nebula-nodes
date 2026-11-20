@@ -215,7 +215,7 @@
    "rules": []
   },
   {
-   "text": "e.g. Captain Vega",
+   "text": "A name, such as Captain Vega",
    "kind": "text",
    "rules": []
   },
@@ -623,6 +623,25 @@
   },
   {
    "text": "Cancellation requested…",
+   "kind": "text",
+   "rules": []
+  },
+  {
+   "text": "Search providers or models (e.g. “Veo”)",
+   "kind": "text",
+   "rules": [
+    "latin-abbreviation"
+   ]
+  },
+  {
+   "text": "Pick a model, i.e. the one you use most.",
+   "kind": "text",
+   "rules": [
+    "latin-abbreviation"
+   ]
+  },
+  {
+   "text": "Search providers or models, such as Veo",
    "kind": "text",
    "rules": []
   }

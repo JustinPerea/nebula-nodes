@@ -108,7 +108,7 @@ export function CharacterDefinitionPanel({
             <input
               type="text"
               className="character-def__input"
-              placeholder="e.g. Captain Vega"
+              placeholder="A name, such as Captain Vega"
               value={draft.name}
               onChange={(e) => onChange({ ...draft, name: e.target.value })}
             />
@@ -202,7 +202,7 @@ export function CharacterDefinitionPanel({
           <textarea
             className="character-def__textarea"
             rows={4}
-            placeholder="e.g. a tall woman, copper-red undercut, hexagonal scar over left brow, matte-black flight jacket…"
+            placeholder="A look, such as a tall woman, copper-red undercut, hexagonal scar over left brow, matte-black flight jacket…"
             value={draft.frozenTraitString}
             onChange={(e) =>
               onChange({ ...draft, frozenTraitString: e.target.value })

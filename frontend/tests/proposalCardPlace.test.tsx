@@ -1888,7 +1888,7 @@ describe('GM r10 (round 3h)', () => {
     document.body.innerHTML = `
       <div data-notice-region=""><div class="notice-region__stack">
         <div data-notice-slot="proposal"><div class="card" data-notice-shrinks="">
-          <div class="head" data-notice-shrink-head=""><span class="name" data-notice-shrink-name="">Claude</span><span>Expires in 14:55</span></div>
+          <div class="head" data-notice-shrink-head=""><span class="name" data-notice-shrink-name="">Claude</span><span>Expires in 15 min</span></div>
           <div class="scroll" data-notice-shrink-body=""><div class="body"><p class="plan" data-notice-keep="">Plan</p></div></div>
           <div class="foot" data-notice-shrink-foot="">Accept</div>
         </div></div>

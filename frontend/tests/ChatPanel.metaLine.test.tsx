@@ -30,8 +30,8 @@ import { useUIStore } from '../src/store/uiStore';
 
 const initialUI = useUIStore.getState();
 
-const catalog = (agent: 'claude' | 'codex') => ({
-  agent, status: 'ready', auth: { mode: agent === 'claude' ? 'claudeai' : 'chatgpt' },
+const catalog = (agent: 'claude' | 'codex', claudeMode = 'claudeai') => ({
+  agent, status: 'ready', auth: { mode: agent === 'claude' ? claudeMode : 'chatgpt' },
   catalog: { source: 'test', runtimeVersion: 'test', fetchedAt: '2026-10-22T12:00:00Z' },
   models: [{ id: `${agent}-m`, label: `${agent} model`, isDefault: true, defaultEffort: 'medium', supportedEfforts: [{ id: 'medium', label: 'Medium' }] }],
 });
@@ -93,6 +93,18 @@ describe('the chat panel meta line', () => {
     render(<ChatPanel />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Choose chat model' })); });
     await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Codex' })); });
+    await waitFor(() => expect(meta().textContent).toBe(line));
+  });
+
+  it.each([
+    ['apiKey', 'Claude Code · billed to your API key'],
+    ['bedrock', 'Claude Code · billed to your cloud account'],
+    ['vertex', 'Claude Code · billed to your cloud account'],
+    ['foundry', 'Claude Code · billed to your cloud account'],
+  ])('says Claude Code in %s mode as "%s"', async (mode, line) => {
+    apiMocks.fetchClaudeStatus.mockResolvedValue(claude());
+    apiMocks.fetchChatModels.mockImplementation(async (agent: 'claude' | 'codex') => catalog(agent, mode));
+    render(<ChatPanel />);
     await waitFor(() => expect(meta().textContent).toBe(line));
   });
 

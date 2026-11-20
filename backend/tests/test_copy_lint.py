@@ -134,6 +134,7 @@ class Context:
                        bool(g.get("inParens")), bool(g.get("beforeLowerCase"))) for g in rules["gatedNames"]]
         self.retry = re.compile(rules["retryPattern"])
         self.british = re.compile(rules["britishSpellingPattern"])
+        self.latin = re.compile(rules["latinAbbreviationPattern"])
         self.units = set(rules["units"])
 
 
@@ -282,6 +283,8 @@ def _check_line(text: str, kind: str, ctx: Context) -> list[str]:
         hits.append("em-dash")
     if ctx.british.search(no_code):
         hits.append("us-spelling")
+    if ctx.latin.search(no_code):
+        hits.append("latin-abbreviation")
     if is_sentence(t, ctx.rules):
         plain = _strip_unit_parens(
             RATIO_RE.sub(" ", TIME_RE.sub(" ", CURLY_SPAN_RE.sub(" ", no_url))), ctx.units)
