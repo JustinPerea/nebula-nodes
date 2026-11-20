@@ -18,7 +18,7 @@ import {
 // 3:1 and .40 clears it). Hierarchy between two text lines is carried by size and weight.
 //
 // What fails: a TEXT declaration that resolves to meta ink. TEXT properties are `color` (a
-// ::placeholder rule's color included), `-webkit-text-fill-color`, `caret-color`, and `fill` on a
+// ::placeholder rule's color included), `-webkit-text-fill-color`, `-webkit-text-stroke-color`, `caret-color`, and `fill` on a
 // rule whose selector targets an SVG `text` or `tspan`. "Resolves to meta ink" means:
 //   - var(--sr-ink-meta, ...);
 //   - var(--x) for any custom property that any rule in src defines as meta ink or as another such
@@ -28,10 +28,12 @@ import {
 // A fallback counts only when the variable is defined nowhere in src: var(--undefined, <meta>) fails.
 //
 // Exempt:
-//   - a rule whose selector scopes to :disabled, [disabled] or [aria-disabled="true"]; every part of
-//     a comma list must be scoped, so one live part in the list still fails;
+//   - a rule whose selector scopes to :disabled, [disabled] or [aria-disabled="true"] on the element
+//     itself; every part of a comma list must be scoped, and every :is()/:where() alternative must be a
+//     disabled state; :has() and :not() never scope; a disabled ancestor or earlier sibling does not
+//     (DISABLED_SIBLING names the one sibling form that is allowed);
 //   - the icon-only controls in ICON_ONLY, by exact selector (the part after `body.app-slava-restraint `).
-// Inline TSX: a `style={{ color: ... }}` (or a `const x = { color: ... }` style object) in src whose
+// Inline TSX (comments are skipped): a `style={{ color: ... }}` (or a `const x = { color: ... }` style object) in src whose
 // color is meta ink or the literal fails too.
 //
 // Rules with an unprefixed form and a `body.app-slava-restraint` twin are checked as written, both
@@ -46,12 +48,16 @@ import {
 //     read by background, so it passes);
 //   - TSX: only `color:` on an object literal in a style prop or a style-named object is read; a colour
 //     built at run time (a template string, a function result) is not seen;
-//   - a canvas or library colour passed as a prop (WaveformAudio's waveColor) is shape, not text.
+//   - a canvas or library colour passed as a prop (WaveformAudio's waveColor) is shape, not text;
+//   - not seen: a colour held in a const (`color: META`), JSX colour props (`<Icon color=... />`),
+//     `el.style.color = ...`, `style.setProperty(...)`, SVG `<text fill=...>` attributes, an inline
+//     custom property that a CSS rule reads as a colour, `fill` on a class that sits on an SVG `<text>`
+//     (only a selector ending in text/tspan is read), and `textPath`.
 
 const SRC = join(import.meta.dirname, '..', 'src');
 const PREFIX = 'body.app-slava-restraint';
 
-export const TEXT_PROPS = new Set(['color', '-webkit-text-fill-color', 'caret-color']);
+export const TEXT_PROPS = new Set(['color', '-webkit-text-fill-color', '-webkit-text-stroke-color', 'caret-color']);
 
 // icon-only: colour tints an svg; non-text, 3:1. Exact selectors, without the body.app-slava-restraint prefix.
 export const ICON_ONLY = new Set([
@@ -72,6 +78,7 @@ export const ICON_ONLY = new Set([
   '.connection-popup__category-chevron',
   '.connection-popup__close',
   '.chat__tool-icon',
+  '.model-node__loop-toggle',
 ]);
 
 const META_TOKEN = '--sr-ink-meta';
@@ -170,10 +177,70 @@ export function splitList(selector) {
 
 const DISABLED = [/:disabled\b/, /\[disabled\]/, /\[aria-disabled\s*=\s*["']?true["']?\]/];
 
-/** Whether one selector part applies only to a disabled control (a `:not(:disabled)` does not count). */
+// A disabled state on an earlier element (`.f[aria-disabled] ~ .key`) styles that other element, so it
+// does not scope. This one is the exception: the field is aria-disabled and the "/" key hint beside it
+// dims with it (design). Exact selector, without the body prefix.
+export const DISABLED_SIBLING = new Set([".message-box__field[aria-disabled='true'] ~ .message-box__key"]);
+
+/** The index of the `)` that closes the `(` at `open`. */
+function closingParen(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    if (text[i] === '(') depth += 1;
+    else if (text[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return text.length - 1;
+}
+
+/** Drop every `:not(...)` and `:has(...)` argument: neither one scopes a rule to a disabled control. */
+function dropNonScoping(part) {
+  let out = part;
+  for (;;) {
+    const match = /:(?:not|has)\(/.exec(out);
+    if (!match) return out;
+    const open = match.index + match[0].length - 1;
+    out = out.slice(0, match.index) + out.slice(closingParen(out, open) + 1);
+  }
+}
+
+/** Expand :is(...) / :where(...) into one selector per alternative, until none is left. */
+function expandAlternatives(part) {
+  const match = /:(?:is|where)\(/.exec(part);
+  if (!match) return [part];
+  const open = match.index + match[0].length - 1;
+  const close = closingParen(part, open);
+  const head = part.slice(0, match.index);
+  const tail = part.slice(close + 1);
+  return splitTopLevel(part.slice(open + 1, close)).flatMap((alt) => expandAlternatives(`${head}${alt}${tail}`));
+}
+
+/** The last compound selector: the part after the final combinator outside brackets and parentheses. */
+function lastCompound(part) {
+  let depth = 0;
+  let cut = 0;
+  for (let i = 0; i < part.length; i += 1) {
+    const c = part[i];
+    if (c === '(' || c === '[') depth += 1;
+    else if (c === ')' || c === ']') depth -= 1;
+    else if (depth === 0 && (c === ' ' || c === '>' || c === '+' || c === '~')) cut = i + 1;
+  }
+  return part.slice(cut);
+}
+
+/**
+ * Whether one selector part applies only to a disabled control. Every :is()/:where() alternative must
+ * be a disabled state; :not() and :has() never scope; the disabled state must sit on the subject itself
+ * (the last compound), not on an ancestor or an earlier sibling, except the DISABLED_SIBLING selector.
+ */
 export function isDisabledScoped(part) {
-  const withoutNot = part.replace(/:not\((?:[^()]|\([^()]*\))*\)/g, '');
-  return DISABLED.some((pattern) => pattern.test(withoutNot));
+  if (DISABLED_SIBLING.has(stripPrefix(part))) return true;
+  return expandAlternatives(part).every((alt) => {
+    const subject = lastCompound(dropNonScoping(alt));
+    return DISABLED.some((pattern) => pattern.test(subject));
+  });
 }
 
 function stripPrefix(part) {
@@ -226,15 +293,49 @@ export function findCssTextInk(files, metaVars, definedVars) {
 }
 
 /**
+ * Blank out `//` and block comments, keeping newlines so line numbers hold. A small tokenizer: it skips
+ * string and template literals, so a `//` inside a string or a URL is left alone.
+ */
+export function stripJsComments(source) {
+  let out = '';
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    const next = source[i + 1];
+    if (c === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i += 1;
+    } else if (c === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      out += source.slice(i, stop).replace(/[^\n]/g, ' ');
+      i = stop;
+    } else if (c === '"' || c === "'" || c === '`') {
+      let j = i + 1;
+      while (j < source.length && source[j] !== c) {
+        if (source[j] === '\\') j += 1;
+        else if (c !== '`' && source[j] === '\n') break;
+        j += 1;
+      }
+      out += source.slice(i, j + 1);
+      i = j + 1;
+    } else {
+      out += c;
+      i += 1;
+    }
+  }
+  return out;
+}
+
+/**
  * Inline TSX: an object literal key `color:` whose value is meta ink. A line scan: the value runs to the
  * next `,` or `}` outside parentheses and quotes. A var() read is checked against the same alias set.
  */
 export function findTsxTextInk(files, metaVars, definedVars) {
   const hits = [];
   for (const { file, source } of files) {
-    const lines = source.split('\n');
+    const lines = stripJsComments(source).split('\n');
     lines.forEach((text, index) => {
-      for (const match of text.matchAll(/(?<![\w-])(?:color|caretColor|WebkitTextFillColor)\s*:\s*(['"`])([^'"`]*)\1/g)) {
+      for (const match of text.matchAll(/(?<![\w-])(?:color|caretColor|WebkitTextFillColor|WebkitTextStrokeColor)\s*:\s*(['"`])([^'"`]*)\1/g)) {
         if (resolvesToMeta(match[2], metaVars, definedVars)) {
           hits.push({ file, line: index + 1, selector: 'inline style', prop: 'color', value: match[2] });
         }

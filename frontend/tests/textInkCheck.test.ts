@@ -22,6 +22,7 @@ describe('check-text-ink: text properties', () => {
     ['the prefixed twin', 'body.app-slava-restraint .a { color: var(--sr-ink-meta); }'],
     ['the var() fallback form', '.a { color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4)); }'],
     ['!important', '.a { color: var(--sr-ink-meta) !important; }'],
+    ['-webkit-text-stroke-color', '.a { -webkit-text-stroke-color: var(--sr-ink-meta); }'],
   ])('fails %s', (_name, rules) => {
     const found = css(rules);
     expect(found).toHaveLength(1);
@@ -93,7 +94,8 @@ describe('check-text-ink: disabled controls', () => {
     ".a[aria-disabled='true'] { color: var(--sr-ink-meta); }",
     '.a[aria-disabled=true]::placeholder { color: var(--sr-ink-meta); }',
     '.a:disabled, .b[disabled] { color: var(--sr-ink-meta); }',
-    '.field[aria-disabled="true"] ~ .key { color: var(--sr-ink-meta); }',
+    ":is(:disabled, [aria-disabled='true']) { color: var(--sr-ink-meta); }",
+    ".message-box__field[aria-disabled='true'] ~ .message-box__key { color: var(--sr-ink-meta); }",
   ])('passes a disabled-scoped rule: %s', (rules) => {
     expect(css(rules)).toEqual([]);
   });
@@ -104,6 +106,17 @@ describe('check-text-ink: disabled controls', () => {
     expect(found[0].selector).toBe('.b');
   });
 
+  it.each([
+    '.a:is(:disabled, :hover) { color: var(--sr-ink-meta); }',
+    '.a:where(:disabled, .x) { color: var(--sr-ink-meta); }',
+    '.row:has(:disabled) .label { color: var(--sr-ink-meta); }',
+    '.a:disabled .b { color: var(--sr-ink-meta); }',
+    '.f:disabled ~ .label { color: var(--sr-ink-meta); }',
+    ".field[aria-disabled='true'] ~ .key { color: var(--sr-ink-meta); }",
+  ])('fails a selector that is not disabled-only: %s', (rules) => {
+    expect(css(rules)).toHaveLength(1);
+  });
+
   it('does not count :not(:disabled) or an aria-disabled false as disabled', () => {
     expect(isDisabledScoped('.a:not(:disabled)')).toBe(false);
     expect(isDisabledScoped('.a[aria-disabled="false"]')).toBe(false);
@@ -112,6 +125,10 @@ describe('check-text-ink: disabled controls', () => {
 });
 
 describe('check-text-ink: icon-only controls', () => {
+  it('lists the loop toggle, which renders only an icon', () => {
+    expect(ICON_ONLY.has('.model-node__loop-toggle')).toBe(true);
+  });
+
   it('passes the named icon-only controls, with or without the body prefix and inside :is()', () => {
     expect(ICON_ONLY.has('.project-home__rename')).toBe(true);
     expect(css('body.app-slava-restraint .project-home__rename { color: var(--sr-ink-meta); }')).toEqual([]);
@@ -145,6 +162,12 @@ describe('check-text-ink: inline TSX', () => {
 });
 
 describe('check-text-ink: comments', () => {
+  it('ignores meta ink named in a TSX comment, and still reads a string with // in it', () => {
+    expect(tsx("// color: 'var(--sr-ink-meta)' is retired\nconst a = 1;")).toEqual([]);
+    expect(tsx("/* style={{ color: 'var(--sr-ink-meta)' }} */\nconst a = 1;")).toEqual([]);
+    expect(tsx("const u = 'https://x.test'; const s = { color: 'var(--sr-ink-meta)' };")).toHaveLength(1);
+  });
+
   it('ignores a commented-out rule', () => {
     expect(css('/* .a { color: var(--sr-ink-meta); } */\n.b { color: var(--sr-ink-light); }')).toEqual([]);
   });

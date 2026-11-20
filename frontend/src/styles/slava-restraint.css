@@ -2871,6 +2871,7 @@ body.app-slava-restraint .agent-log__entry:last-child {
 
 body.app-slava-restraint .agent-log__entry--graph {
   --agent-log-source-color: var(--sr-success);
+  --agent-log-name-color: var(--sr-success);
 }
 
 body.app-slava-restraint .agent-log__entry--system {
@@ -4109,7 +4110,7 @@ body.app-slava-restraint .model-node__loop-toggle {
   border: 1px solid transparent;
   border-radius: var(--sr-radius-pill);
   background: rgba(0, 0, 0, 0.46);
-  color: var(--sr-ink-light);
+  color: var(--sr-ink-meta);
   cursor: pointer;
   opacity: 0;
   transition:

@@ -7,7 +7,7 @@
  *   --sr-bg-chrome  → --sr-glass         (translucent dark glass for header)
  *   --sr-bg-deep    → --sr-glass-strong  (darkest glass for timeline tray)
  *   --sr-text-primary → --sr-ink         (primary type)
- *   --sr-text-muted   → --sr-ink-meta    (metadata / secondary)
+ *   --sr-text-muted   → --sr-ink-light   (secondary text; --sr-ink-meta is non-text)
  *   --sr-edge-soft    → --sr-edge        (low-alpha hairline)
  * --sr-edge-strong and --sr-accent exist verbatim.
  */

@@ -11,7 +11,7 @@
  *
  * Tokens reused from slava-restraint.css:
  *   --sr-canvas / --sr-glass / --sr-glass-strong  → surfaces
- *   --sr-ink / --sr-ink-meta / --sr-ink-faint     → type
+ *   --sr-ink / --sr-ink-light                      → text (--sr-ink-meta is non-text)
  *   --sr-edge / --sr-edge-strong                   → hairlines
  *   --sr-accent                                     → accent
  */
