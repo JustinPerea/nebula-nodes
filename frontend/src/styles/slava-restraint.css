@@ -1241,6 +1241,8 @@ body.app-slava-restraint .code-span {
   max-width: 100%;
   vertical-align: baseline;
   font-family: var(--sr-mono);
+  /* A command is typed as shown: no ligatures ("--" stays two hyphens). */
+  font-variant-ligatures: none;
   overflow-wrap: anywhere;
 }
 
