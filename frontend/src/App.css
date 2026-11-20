@@ -12,6 +12,15 @@
   padding: 0;
 }
 
+/* Controls take the face and size of the page around them; the browser gives them Arial at 13.33px.
+   Zero specificity: any class that sets its own size, weight or family still wins (design). */
+:where(button, input, select, textarea) {
+  font: inherit;
+}
+
+/* The app face comes from the skin on body (body.app-slava-restraint, slava-restraint.css); this
+   group sets none, because a family on #root would sit between body and everything inside it and
+   hide the skin's face from every surface that sets none of its own (design). */
 html,
 body,
 #root {
@@ -20,7 +29,6 @@ body,
   overflow: hidden;
   background: #111;
   color: #ccc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* The notice region is portalled to <body>, absolute (never fixed: a fixed element is a stacking
@@ -247,7 +255,7 @@ button[data-offline-neutral]:hover {
   box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
   background: var(--notice-neutral-fill, #1a1a1a);
   color: var(--notice-neutral-ink, #d8d8d8);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--sr-ui);
   font-size: 12px;
   line-height: 1.35;
   letter-spacing: 0.01em;
