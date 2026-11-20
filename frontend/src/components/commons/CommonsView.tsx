@@ -233,7 +233,7 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
       const budget = status.worker.budget ?? '∞';
       return (
         <span className="commons-status commons-status--stopped">
-          <StatusText text={`Stopped · call budget used (${groupedCount(status.worker.budget_used)}/${groupedCount(budget)})`}
+          <StatusText text={`Stopped · call budget used, ${groupedCount(status.worker.budget_used)} of ${groupedCount(budget)}`}
             title={`Library analysis is stopped because it used ${groupedCount(status.worker.budget_used)} of this run’s ${groupedCount(budget)} calls. Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
         </span>
       );
@@ -274,7 +274,7 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
   let title: string;
   if (state === 'budget_exhausted') {
     const budget = status.worker.budget ?? '∞';
-    text = `Stopped · call budget used (${groupedCount(status.worker.budget_used)}/${groupedCount(budget)})`;
+    text = `Stopped · call budget used, ${groupedCount(status.worker.budget_used)} of ${groupedCount(budget)}`;
     title = `Library analysis is stopped because it used ${groupedCount(status.worker.budget_used)} of this run’s ${groupedCount(budget)} calls. Restart Nebula to reset it.`;
   } else if (state === 'cap_reached' || status.meter.remaining === 0) {
     // Settings takes a cap from 0: a cap of 0 never resets, and a cap lowered
@@ -285,13 +285,13 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
       title = 'Library analysis is paused. Settings has “Analysis calls per day” at 0, so it reads nothing. Raise it to resume.';
     } else {
       const resets = clockTime(new Date(status.meter.resets_at));
-      text = `Paused until ${resets} · daily cap`;
-      title = `Library analysis is paused. It made ${groupedCount(calls)} analysis calls today, and Settings has “Analysis calls per day” at ${groupedCount(cap)}. It resumes on its own at ${resets}.`;
+      text = 'Paused · daily cap';
+      title = `Library analysis is paused. It made ${groupedCount(calls)} analysis calls today, and Settings has “Analysis calls per day” at ${groupedCount(cap)}. Resumes at ${resets}, when the daily cap resets.`;
     }
   } else if (state === 'paused_load') {
-    text = `Paused · computer busy (${status.load}/${status.load_threshold})`;
-    // GM, round 3f: drop "load average".
-    title = `Library analysis is paused while this computer is busy. Its load is ${status.load}, above the ${status.load_threshold} set in “Pause above load” in Settings. It resumes on its own when the load drops.`;
+    // Design: the reading lives in the tooltip so the line fits beside Stop.
+    text = 'Paused · computer busy';
+    title = `Library analysis is paused while this computer is busy. Load ${status.load} is above your pause limit of ${status.load_threshold} (“Pause above load”, under Meter in Settings). Analysis resumes on its own when the load drops.`;
   } else if (waiting || state === 'analyzing') {
     text = `Analyzing${waiting ? ` · ${groupedCount(waiting)} queued` : ''}`;
     title = `Library analysis is reading references${waiting ? `: ${groupedCount(waiting)} waiting` : ''}.`;
