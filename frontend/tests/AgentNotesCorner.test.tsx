@@ -582,4 +582,52 @@ describe('no card for a proposal the bar already shows (design)', () => {
     expect(card()).toBeNull();
     expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_2']);
   });
+
+  describe('with the window hidden', () => {
+    const setVisibility = (value: 'hidden' | 'visible') => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+      act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    };
+
+    it('the bar shows that proposal but nobody sees it: the Update stays unread', () => {
+      vi.useFakeTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+      render(<AppAgentNotes />);
+      sync([]);
+      added(proposalNote('an_1', 'cp_1'), 1);
+      tick(1000);
+      expect(card()).toBeNull();
+      expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+    });
+
+    it('becoming visible with the bar still showing it marks it read', () => {
+      vi.useFakeTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+      render(<AppAgentNotes />);
+      sync([]);
+      added(proposalNote('an_1', 'cp_1'), 1);
+      tick(1000);
+      setVisibility('visible');
+      tick(1000);
+      expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, undefined, ['an_1']);
+      expect(card()).toBeNull();
+    });
+
+    it('becoming visible after the proposal expired leaves it unread and counted', () => {
+      vi.useFakeTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      useCanvasProposalsStore.setState({ barShownId: 'cp_1' });
+      render(<AppAgentNotes />);
+      sync([]);
+      added(proposalNote('an_1', 'cp_1'), 1);
+      tick(1000);
+      act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+      setVisibility('visible');
+      tick(100);
+      expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+      expect(chip().querySelector('.agent-notes-chip__count')!.textContent).toBe('1');
+    });
+  });
 });

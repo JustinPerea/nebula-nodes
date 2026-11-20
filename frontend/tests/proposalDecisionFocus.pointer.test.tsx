@@ -81,6 +81,14 @@ async function click(name: string): Promise<void> {
   await act(async () => { fireEvent.click(button, { detail: 1 }); });
 }
 
+/** A mouse click that leaves <body> active, as when the card closes under the pointer: blur, then detail 1. */
+async function clickFromBody(name: string): Promise<void> {
+  const button = screen.getByRole('button', { name });
+  act(() => { (document.activeElement as HTMLElement | null)?.blur(); });
+  expect(document.activeElement).toBe(document.body);
+  await act(async () => { fireEvent.click(button, { detail: 1 }); });
+}
+
 async function settle(): Promise<void> {
   for (const ms of [100, 300, 600, 900]) await wait(ms);
 }
@@ -104,6 +112,26 @@ describe('focus after a pointer decision', () => {
     net.apiFetch.mockResolvedValue(respond(200, ACCEPTED));
     render(<ProposalBar />);
     await click('Accept');
+    await settle();
+    expect(document.activeElement).toBe(canvas);
+    expect(canvas.hasAttribute(DECISION_FOCUS_ATTR)).toBe(false);
+  });
+
+  it('mouse Reject with <body> active when the proposal closes: focus still lands on the canvas, no ring mark', async () => {
+    useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
+    net.apiFetch.mockResolvedValue(respond(200, { status: 'rejected' }));
+    render(<ProposalBar />);
+    await clickFromBody('Reject');
+    await settle();
+    expect(document.activeElement).toBe(canvas);
+    expect(canvas.hasAttribute(DECISION_FOCUS_ATTR)).toBe(false);
+  });
+
+  it('mouse Accept with <body> active when the proposal closes: focus still lands on the canvas, no ring mark', async () => {
+    useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
+    net.apiFetch.mockResolvedValue(respond(200, ACCEPTED));
+    render(<ProposalBar />);
+    await clickFromBody('Accept');
     await settle();
     expect(document.activeElement).toBe(canvas);
     expect(canvas.hasAttribute(DECISION_FOCUS_ATTR)).toBe(false);

@@ -480,17 +480,25 @@ export function AgentNotesCorner({ sections, agents = null }: {
   // For a step that fails after the render it started in (see `fail`).
   const openListRef = useRef<() => void>(() => {});
 
+  // Proposal Updates the bar showed while the window was hidden: nobody saw
+  // the bar, so they stay unread until the window is visible again (design).
+  const heldRef = useRef<string[]>([]);
+
   // New updates: into the open list (read as they arrive), or queued to drop.
   useEffect(() => {
+    const isHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
     const handle = () => {
       const store = useAgentNotesStore.getState();
+      const hidden = isHidden();
       const arrived: string[] = [];
       for (const section of sectionsRef.current) {
         const taken = store.takeArrivals(section.listKey);
         if (taken.length === 0) continue;
-        // A proposal the bar already shows drops no card; it is read (design).
+        // A proposal the bar already shows drops no card; it is read once
+        // the window is visible (design).
         const seen = taken.filter((id) => hiddenByBar(sectionsRef.current, id));
-        if (seen.length > 0) markSeenElsewhere(sectionsRef.current, seen);
+        if (hidden) heldRef.current.push(...seen);
+        else if (seen.length > 0) markSeenElsewhere(sectionsRef.current, seen);
         const ids = taken.filter((id) => !seen.includes(id));
         if (ids.length === 0) continue;
         arrived.push(...ids);
@@ -503,13 +511,32 @@ export function AgentNotesCorner({ sections, agents = null }: {
         return;
       }
       // Nobody is looking: no drop. The count still rises.
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (hidden) return;
       setQueue((current) => [...current, ...arrived]);
     };
+    // The window is visible again: a held Update is read if the bar still
+    // shows its proposal, else it counts and follows the corner's usual rules.
+    const onVisible = () => {
+      if (isHidden() || heldRef.current.length === 0) return;
+      const held = heldRef.current;
+      heldRef.current = [];
+      const still = held.filter((id) => hiddenByBar(sectionsRef.current, id));
+      if (still.length > 0) markSeenElsewhere(sectionsRef.current, still);
+      const missed = held.filter((id) => {
+        const found = liveNote(sectionsRef.current, id);
+        return !still.includes(id) && Boolean(found && isUnread(found));
+      });
+      if (missed.length === 0) return;
+      setPop((value) => value + 1);
+      if (openRef.current) setNewCount((value) => value + missed.length);
+      else setQueue((current) => [...current, ...missed]);
+    };
     const unsubscribe = useAgentNotesStore.subscribe(handle);
+    document.addEventListener('visibilitychange', onVisible);
     const first = window.setTimeout(handle, 0);
     return () => {
       unsubscribe();
+      document.removeEventListener('visibilitychange', onVisible);
       window.clearTimeout(first);
     };
   }, [listKeys]);
