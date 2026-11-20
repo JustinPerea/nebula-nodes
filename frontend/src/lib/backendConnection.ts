@@ -55,8 +55,7 @@ const probeAnswerListeners = new Set<() => void>();
  * that got no answer may be one dropped request, or the backend gone. This asks
  * for a probe now (requestHealthProbe) and resolves when one answers, or the
  * tab goes offline, or after `timeoutMs` (with no banner mounted to probe),
- * with
- * whether the tab is offline then.
+ * with whether the tab is offline then.
  */
 export function probeOffline(timeoutMs = 5_000): Promise<boolean> {
   if (isBackendOffline()) return Promise.resolve(true);

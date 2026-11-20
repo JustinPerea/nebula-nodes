@@ -221,8 +221,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // "The view is fitted" travels with the kept camera (design): List and back
   // isn't a pan, so the flag comes back with it. A whole-board fit reopens
   // fitted (above); a Show's or the chip's framing reopens where it was and
-  // frames its cards again if they changed while the view was away
-  // (reframeOnOpen).
+  // frames its cards again if they changed while the view
+  // was away (reframeOnOpen).
   const savedPlaced = useRef(savedViewport ? useBoardCanvasStore.getState().placed[boardKey] ?? null : null).current;
   const startsFitted = useRef(!savedViewport || useBoardCanvasStore.getState().fitted[boardKey] === true
     || savedPlaced?.kind === 'board').current;

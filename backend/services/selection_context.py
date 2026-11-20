@@ -97,8 +97,8 @@ class SelectionContextStore:
         self._updated_at = _utc_now()
         # While this says so, every read answers no selection (design): the
         # person's tab keeps edits Nebula couldn't save, so what it published
-        # before is no longer what the person has selected, and a kept tab
-        # publishes nothing.
+        # before is no longer what the person has selected, and a kept
+        # tab publishes nothing.
         # main sets it to ConnectionManager.kept_in_tab.
         self.hidden: Callable[[], bool] | None = None
 

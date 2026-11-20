@@ -152,8 +152,8 @@ def settings_writable() -> bool:
 
 # The OSErrors that say there is no settings file: not found, and a folder
 # on the way that is a file (ENOTDIR: nothing can be there, and before the fix
-# exists() said False for it; design). Every other OSError is a file Nebula
-# can't read.
+# exists() said False for it; design). Every other OSError is a file
+# Nebula can't read.
 _NO_FILE_ERRORS = (FileNotFoundError, NotADirectoryError)
 
 
@@ -302,8 +302,8 @@ def load_settings() -> dict[str, Any]:
         # Keys Nebula can't read (an `apiKeys` that isn't an object): no key
         # is set, for every reader, as a key that is empty once trimmed
         # isn't. The file keeps them as saved: a write starts from
-        # load_saved_settings and never replaces them with a guess (design;
-        # main.KEYS_UNREADABLE).
+        # load_saved_settings and never replaces them with
+        # a guess (design; main.KEYS_UNREADABLE).
         settings["apiKeys"] = {}
 
     return settings

@@ -679,8 +679,8 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
  * attribute that only mentions the lock (`className`, `title`, `aria-label`,
  * `data-*`, `key`, `disabled={!lock.locked}`) puts it in none. */
 /** Input types readOnly applies to (HTML: text-like and date/number fields); a
- * checkbox, radio, range, colour or file input ignores it (design). No `type`
- * is text. */
+ * checkbox, radio, range, colour or file input ignores it (design). No
+ * `type` is text. */
 const READONLY_TYPES = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'month', 'week', 'time', 'datetime-local']);
 function inputType(attributes: ts.NodeArray<ts.JsxAttributeLike> | undefined, scope: Scope): string | null {
   const type = attributes?.find((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(scope.root) === 'type') as ts.JsxAttribute | undefined;

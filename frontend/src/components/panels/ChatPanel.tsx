@@ -1598,8 +1598,8 @@ export function ChatPanel() {
       setSessionId(null);
       // Also wipe Nebula's graph, under one undo step (lib/chatCanvasClear.ts).
       // The chat clears now, as before; the line comes with the canvas
-      // clear's answer, appended, so a message sent meanwhile stays (round
-      // 12 of PR #114: it used to replace the list when the answer came).
+      // clear's answer, appended, so a message sent meanwhile stays
+      // (design: it used to replace the list when the answer came).
       setMessages([]);
       const said = (text: string) => setMessages((prev) => [
         ...prev, { role: 'assistant', id: newId(), streaming: false, parts: [{ kind: 'system', text }] },

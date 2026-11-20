@@ -11756,8 +11756,8 @@ async def _open_canvas_proposal(
                             detail=exc.detail) from exc
     # An agent can't propose a canvas the person's Save couldn't save: the
     # staged canvas is measured as its own edits are, shape and size (design).
-    # Proposing is agent-only (identity above), so the person's skip never
-    # applies.
+    # Proposing is agent-only (identity above), so the
+    # person's skip never applies.
     _refuse_agent_growth_past_save_limit(candidate)
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)

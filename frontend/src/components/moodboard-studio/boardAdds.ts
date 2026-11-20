@@ -144,8 +144,8 @@ function writePending(list: PendingAdd[]) {
  * draft key: a create is a background send now that it carries its id (a resend
  * can't make a second board). Cut off with Nebula then offline, it waits with
  * no line (the banner says so) and goes again once on reconnect; if that resend
- * fails too, the board says the neutral line. The Studio's createWaits keeps
- * it.
+ * fails too, the board says the neutral line. The Studio's
+ * createWaits keeps it.
  */
 export const createsWaited = new Set<string>();
 // Adds on boards not saved yet, by board, until the board has an id.

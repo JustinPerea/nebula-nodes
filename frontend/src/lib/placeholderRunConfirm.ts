@@ -97,8 +97,8 @@ export interface PlaceholderRunConfirm {
   costNotes: string[];
   /** "Run for $0.12" (a fixed total), "Run for up to $0.86" (a range), or "Run"
    * when a row's price isn't listed or no price table loaded (design);
-   * "Generate…" from Cinema. The amount is in cents, rounded up, never whole
-   * dollars (formatConfirmUsd). */
+   * "Generate…" from Cinema. The amount is in cents, rounded up, never
+   * whole dollars (formatConfirmUsd). */
   runLabel: string;
   /** The paid placeholders the person confirms; the run sends them. */
   confirmIds: string[];

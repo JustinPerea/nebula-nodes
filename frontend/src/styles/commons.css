@@ -405,8 +405,8 @@ body.app-slava-restraint .commons-heading {
  * display line, so the h2 sits one step above its 13 px section titles (design:
  * "about 20px against their 14"), at the Commons' existing step size and weight
  * (commons-evaluation.css `.evaluation-step`, 22px / 450), not a new size.
- * Blind labeling and Agent review set their h2 as the eyebrow line instead
- * (`.commons-eyebrow`). */
+ * Blind labeling and Agent review set their h2 as the eyebrow line
+ * instead (`.commons-eyebrow`). */
 body.app-slava-restraint .commons-settings > .commons-panel-title {
   font-size: 22px;
   font-weight: 450;

@@ -300,8 +300,8 @@ export function keyNoun(key: string) {
  * else: another window, the desktop app, a script with the person token (the
  * CLI only reads keys; design), with each provider's own noun: "Replicate token
  * saved." / "Replicate token removed."; never "in another window", which may be
- * false. Its own save's notice reads the same, with "Checking it now." after
- * it. */
+ * false. Its own save's notice reads the same, with
+ * "Checking it now." after it. */
 export function keyChangedLine(key: string, set: boolean): string {
   return `${keyNoun(key)} ${set ? 'saved' : 'removed'}.`;
 }

@@ -32,9 +32,9 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const executeShot = useGraphStore((s) => s.executeShot);
   const promoteShotVariation = useGraphStore((s) => s.promoteShotVariation);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
-  // Offline or following an agent's switch: one read-only state (GM round
-  // 22, A; review 21 L-d: Send to motion is an edit of the canvas). Round 23
-  // (review 22, L-3): every control here that acts takes it (lock.act):
+  // Offline or following an agent's switch: one read-only state (Send to
+  // motion is an edit of the canvas; design). Every control here that acts
+  // takes it (lock.act):
   // Generate shot, the variation stepper and Generate N, a variation, the
   // prompt, the references and the art direction. Stop shot never does
   // (it stops spend), nor does an upload's Remove (it only drops a file

@@ -545,8 +545,8 @@ const SavedToast = lazy(() => import('./ProjectHomeNotices').then((m) => ({ defa
  * catalogRestoreCopy). Its status region is in the page from the start and
  * filled after it mounts, so screen readers announce it (a live region
  * reads changes, not what it held when it appeared: review 1 of PR #199,
- * L8). × closes it, and focus follows the notice stack's rule (PR #200 GM
- * r16; review 13 of PR #199, MEDIUM-1): the notice now in its place, else
+ * L8). × closes it, and focus follows the notice stack's rule (design): the
+ * notice now in its place, else
  * "Recent projects". */
 function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted }: {
   /** The restore copy, once loaded (restoreCopyLoader): empty until then. */
