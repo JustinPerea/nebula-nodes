@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
-import { DECORATION, FAILURE_MESSAGE, ICON_ONLY, isDisabledScoped, isDimLiteral, normaliseCombinators, scan } from '../scripts/check-text-ink.mjs';
+import { DECORATION, FAILURE_MESSAGE, ICON_ONLY, dropNonScoping, expandAlternatives, isDisabledScoped, isDimLiteral, lastCompound, normaliseCombinators, scan, splitTopLevel } from '../scripts/check-text-ink.mjs';
 
 /**
  * scripts/check-text-ink.mjs runs in `npm run lint` (design: text takes the light ink; white at .40
@@ -22,6 +22,9 @@ describe('check-text-ink: text properties', () => {
     ['a ::placeholder rule', '.a::placeholder { color: var(--sr-ink-meta); }'],
     ['fill on svg text', 'svg text { fill: var(--sr-ink-meta); }'],
     ['fill on tspan', '.chart tspan { fill: var(--sr-ink-meta); }'],
+    ['fill on svg text inside :is()', ':is(svg text, .b) { fill: var(--sr-ink-meta); }'],
+    ['fill on svg text after a :not() holding a combinator', '.chart:not(.a .b) text { fill: var(--sr-ink-meta); }'],
+    ['fill on svg text with a :not() holding a combinator', 'text:not(.a .b) { fill: var(--sr-ink-meta); }'],
     ['the prefixed twin', 'body.app-slava-restraint .a { color: var(--sr-ink-meta); }'],
     ['the var() fallback form', '.a { color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4)); }'],
     ['!important', '.a { color: var(--sr-ink-meta) !important; }'],
@@ -382,15 +385,24 @@ describe('check-text-ink: decoration is hidden from assistive tech', () => {
     return jsxElements().filter((element) => pattern.test(element.classes));
   }
 
-  /** Every rule in every stylesheet whose selector list has a part whose last compound is `selector`'s (a more specific rule counts) and that sets `content`: the LAST content declaration of each. */
+  /**
+   * Every rule in every stylesheet with a selector part whose subject is the decoration element: the same
+   * class as a whole token (directly or inside :is()/:where(), not inside :not()) and the same
+   * pseudo-element (`:before` counts as `::before`), however many other classes, attributes or
+   * pseudo-classes sit on the compound. Sets `content`: the LAST content declaration of each.
+   */
   function lastContents(sources: string[], selector: string): { selector: string; content: string }[] {
-    const lastCompound = (part: string) => part.split(/\s*[>+~]\s*|\s+/).pop() ?? '';
-    const subject = lastCompound(normaliseCombinators(selector));
+    const [base, pseudo] = lastCompound(normaliseCombinators(selector)).split('::');
+    const classToken = new RegExp(`\\${base}(?![\\w-])`);
+    const targets = (part: string) =>
+      expandAlternatives(normaliseCombinators(part)).some((alt) => {
+        const subject = lastCompound(dropNonScoping(normaliseCombinators(alt)));
+        return classToken.test(subject) && new RegExp(`::?${pseudo}$`).test(subject);
+      });
     const found: { selector: string; content: string }[] = [];
     for (const source of sources) {
       for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const parts = match[1].split(',').map((part) => normaliseCombinators(part.trim()));
-        if (!parts.some((part) => lastCompound(part) === subject)) continue;
+        if (!splitTopLevel(match[1]).some(targets)) continue;
         const contents = [...match[2].matchAll(/(?:^|;|\s)content\s*:\s*([^;]*)/g)].map((m) => m[1].trim());
         if (contents.length > 0) found.push({ selector: match[1].trim(), content: contents[contents.length - 1] });
       }
@@ -420,6 +432,36 @@ describe('check-text-ink: decoration is hidden from assistive tech', () => {
     const rules = lastContents([good, later], DECORATED);
     expect(rules).toHaveLength(2);
     expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toHaveLength(1);
+  });
+
+  const DECORATED_CLASS = '.project-workspace-controls__count';
+  const bad = (rules: string[]) => rules.filter((rule) => !hasEmptyAlt(rule));
+  const contentsOf = (selectorList: string, content: string) =>
+    lastContents([`${selectorList} { content: ${content}; }`], DECORATED).map((rule) => rule.content);
+
+  it.each([
+    [':is() holding the class', `:is(.a, ${DECORATED_CLASS})::before`],
+    [':where() holding the class', `:where(${DECORATED_CLASS})::before`],
+    ['an extra class', `${DECORATED_CLASS}.is-x::before`],
+    ['a pseudo-class', `${DECORATED_CLASS}:hover::before`],
+    ['the legacy single-colon pseudo-element', `${DECORATED_CLASS}:before`],
+    ['a comma list with the element second', `.other::before, ${DECORATED}`],
+    ['an ancestor and :is() together', `.a :is(.b, ${DECORATED_CLASS}:hover)::before`],
+  ])('mutation: plain content fails, alt text passes (%s)', (_name, selector) => {
+    expect(bad(contentsOf(selector, "'·'"))).toHaveLength(1);
+    expect(bad(contentsOf(selector, "'·' / ''"))).toEqual([]);
+  });
+
+  it.each([
+    ['a class that only shares the prefix', `${DECORATED_CLASS}-x::before`],
+    ['a class that extends the name', `${DECORATED_CLASS}x::before`],
+    ['a class that is a prefix of the name', `.project-workspace-controls::before`],
+    ['a different pseudo-element', `${DECORATED_CLASS}::after`],
+    ['a class inside :not()', `.a:not(${DECORATED_CLASS})::before`],
+    ['a child element', `${DECORATED_CLASS} .child::before`],
+    ['the element itself without the pseudo-element', `${DECORATED_CLASS}`],
+  ])('mutation: a rule for another element is not matched (%s)', (_name, selector) => {
+    expect(contentsOf(selector, "'·'")).toEqual([]);
   });
 
   it('the shipped order (plain, then alt text) passes', () => {
