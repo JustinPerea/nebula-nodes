@@ -1182,7 +1182,9 @@ is logged as the Message box's working line shows it: one node names up to
 three settings ("Changed “Prompt”, “Seed” and “Size” on “Hero shot”", from
 four "Changed 4 settings on “Hero shot”"); several nodes are named without
 their settings ("Changed “Hero shot” and “Sky”", from four "Changed 4
-nodes"), with the verb they share, else "Changed". Moodboard writes are listed there too
+nodes"), with the verb they share, else "Changed". A `nebula move` of several nodes
+names each one that moved ("Moved “A” and “B”", from four "Moved 4 nodes").
+Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside image 1 on
 “Dusk”"; "Analyzed “Dusk”"), and so is a run of the
 whole canvas ("Running 4 nodes"). A run of the whole canvas has no one place
@@ -1211,6 +1213,33 @@ is still cut at 600). Your reply is unchanged: `error` and `errors` name
 every node by id.
 The log is in the browser's memory only: the last 50 entries, gone on
 reload.
+
+One row per action, the agent's own. An action is one row under the name of the
+agent that did it, in canvas words: a node by its name in curly quotes, never
+its id or its definition's id, and no counts of things the person can't see. The
+in-app chat no longer adds a second line to the log for an action (a runner
+word such as "claude", with ids), and the person's own edits in their canvas
+make no row. A row of one sentence has no period; a row of two or more ends
+every sentence with one. Besides the cursor's words above, an agent's action
+that has no cursor says: "Cleared the canvas"; "Loaded a saved canvas"
+(`nebula import`); "Grouped “A”, “B” and “C”" (a cluster; from four "Grouped 4
+nodes"); "Opened “Spring campaign”" or "Made “Spring campaign”" (a project
+switch); "Undid its edit" or "Undid its edit except “Brief”, which changed
+after that" (an undo); and a run's end: "Ran
+“Hero shot” and “Sky” in 12 s", with a failure "Ran 4 nodes in 12 s. “Hero shot”
+failed.", and a stopped run "Stopped after “Hero shot” ran" (nodes by name up to
+three, from four "4 nodes"; seconds rounded to whole seconds, "under 1 s" below
+half a second; a node a gate skipped: "“Sky” was skipped by a gate."). When the
+person accepts an agent's asset proposal, the row is under the agent that
+proposed it: "You accepted its proposal to make another image the cover of
+“Hero shots”". A caller with no agent name has no row to put these under, so it
+shows none.
+
+The presence event that makes a row also carries `nodeIds`, the canvas ids of
+the nodes the action touched, beside the words (added, connected, disconnected,
+changed, renamed, removed, run, a failed run's nodes). It is a structured field
+for readers that need the nodes (the demo zoom manifest reads it); no row's
+words hold an id. It is absent when the action names no node.
 
 ### Beyond the canvas: pointing at a moodboard, a Character or a Style
 
@@ -5224,13 +5253,15 @@ or, for a Cinema scene, "Nebula left “Scene” as it is because “Shot 2” i
 still running as run ‹run id›." (several: "…because “Shot 2” and “Shot 3” are
 still running as runs ‹a› and ‹b›."); any other refusal reads "Nebula left
 “Brief” as it is. ‹the refusal, with ids replaced by names›". The
-person's activity line is "Codex undid its edit." when nothing was kept, else
-"Codex undid its edit except “Hero” and “Brief”, which ran after that.", "…
-except “Notes”, which changed after that." (every kept part reads "changed":
+person's Agent log row, under the agent's name, is "Undid its edit" when nothing was
+kept, else "Undid its edit except “Hero” and “Brief”, which ran after that", "…
+except “Notes”, which changed after that" (every kept part reads "changed":
 a part of a node, or a connection that couldn’t go back, counts once for the
 node it names) or both ("…except “Hero”, which ran
-after that, and “Notes”, which changed after that."); from 4 parts they are
-counted ("…except 4 parts that ran or changed after that."). The person's own
+after that, and “Notes”, which changed after that"); from 4 parts they are
+counted ("…except 4 parts that ran or changed after that"). The toast on the
+person's canvas reads "Codex undid its edit." when nothing was kept and "Codex
+undid part of its edit." when something was. The person's own
 Cmd+Z on a node that became something else is refused with "Nebula couldn’t
 undo this step because “Brief” is a different node now. Reload the canvas to
 see the current version.". The rest is one restore through the
@@ -5333,9 +5364,11 @@ answered) or one they just deleted stays as they have it until the backend
 answers.
 
 How it works: a graphSync caused by an edit request carries `edit` =
-`{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
+`{actor, tab?, id?, undoes?, kept?}`. `id` names an agent's apply or undo (its
 `undo.editId`), and `undoes` says the sync is an agent undoing that edit
-(the notice then reads "Claude undid its edit."). `actor` is the request's journal actor (a named agent, the
+(the notice then reads "Claude undid its edit."; with `kept: true`, set when
+the undo left a node as it was because it ran or changed since, "Claude undid
+part of its edit."). `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
 edit. Only the person's canvas (this launch's person token) gets a `tab`:

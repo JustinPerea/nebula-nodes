@@ -70,6 +70,16 @@ describe('agent log store', () => {
     expect(useAgentPresenceStore.getState().agents).toEqual({});
   });
 
+  it('keeps the nodes an action touched as a field of its row, apart from its words (design)', () => {
+    emit(action('Connecting “Hero prompt” to “GPT Image 2.5”', { nodeIds: ['n1', 'n2'], at: 1_000 }));
+    emit(action('Cleared the canvas', { target: undefined, at: 2_000 }));
+    emit(action('Set “Seed”', { nodeIds: ['n3', '', 7 as unknown as string], at: 3_000 }));
+    const entries = useAgentLogStore.getState().entries;
+    expect(entries.map((entry) => entry.nodeIds)).toEqual([['n1', 'n2'], undefined, ['n3']]);
+    // The words name the nodes by their canvas names: no id in a row.
+    expect(entries.every((entry) => !/\bn\d+\b/.test(entry.message))).toBe(true);
+  });
+
   it('skips events with nothing to say and cleans an unsafe colour', () => {
     emit(action(''));
     emit(action('   '));

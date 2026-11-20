@@ -588,6 +588,34 @@ def test_the_picker_route_configures_the_node_and_prunes_its_wires(api):
     assert "PUT /api/graph/node" in unnamed.json()["detail"]
 
 
+def test_the_picker_routes_agent_row_names_the_node_and_the_model_and_the_person_makes_none(api, monkeypatch):
+    """The row is the acting agent's own (design): "Set “Eye”’s model to Claude
+    Sonnet 4.5", the model by its catalog name, never its provider or id. Only
+    the person reaches this route today, so no agent row shows; with the gate
+    lifted (below) the row is the agent's, and the person's own pick makes none."""
+    import main as main_module
+
+    _warm_openrouter()
+    eye = api.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"})
+    api.graph.set_label(eye, "Eye")
+
+    def rows():
+        return [(event["agent"]["name"], event.get("say")) for event in api.sent
+                if event.get("type") == "agentPresence" and event.get("say")]
+
+    lines: list[str] = []
+    monkeypatch.setattr(main_module, "publish_action", lines.append)
+    assert api.client.post(f"/api/graph/node/{eye}/model", headers=PERSON,
+                           json={"model": "openai/gpt-4o"}).status_code == 200
+    assert rows() == [] and lines == []
+    monkeypatch.setattr(main_module, "require_person", lambda *args, **kwargs: None)
+    assert api.client.post(f"/api/graph/node/{eye}/model", headers=AGENT,
+                           json={"model": "anthropic/claude-sonnet-4.5"}).status_code == 200
+    assert rows() == [("Claude Desktop", "Set “Eye”’s model to Claude Sonnet 4.5")]
+    assert [event["nodeIds"] for event in api.sent if event.get("type") == "agentPresence"] == [[eye]]
+    assert lines == []
+
+
 def test_the_picker_route_for_replicate_returns_the_inspectors_controls(api):
     _warm_replicate()
     node = api.graph.add_node("replicate-universal", {"model_id": "black-forest-labs/flux-kontext-pro"})

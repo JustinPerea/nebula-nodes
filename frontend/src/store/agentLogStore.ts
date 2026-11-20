@@ -16,6 +16,9 @@ export interface AgentLogEntry {
    *  the dot) and that shade's readable tone (`ink`, the name text). Absent on the chat's thinking lines. */
   agent?: { id: string; name: string; color: string; ink?: string };
   message: string;
+  /** The canvas nodes the action touched (an event's `nodeIds`): what a reader
+   *  that needs the nodes uses, since the words name them by canvas name. */
+  nodeIds?: string[];
   /** Shown neutral, in the muted colour (an event's `tone`). */
   tone?: 'muted';
 }
@@ -56,6 +59,9 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
   if (!message) return null;
   const session = cleanSession(event.session);
   const tones = agentLogTones(SAFE_COLOR.test(agent.color) ? agent.color : AGENT_FALLBACK_COLOR, session);
+  const nodeIds = Array.isArray(event.nodeIds)
+    ? event.nodeIds.filter((id): id is string => typeof id === 'string' && id !== '')
+    : [];
   return {
     ts: Number.isFinite(event.at) && event.at > 0 ? event.at : now,
     source: 'agent',
@@ -66,6 +72,7 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
     // the log (GM - Design, PR #211 r20).
     agent: { id: agent.id, name: cursorLabel(agent.name, session), color: tones.dot, ink: tones.name },
     message,
+    ...(nodeIds.length > 0 ? { nodeIds } : {}),
     ...(event.tone === 'muted' ? { tone: 'muted' as const } : {}),
   };
 }

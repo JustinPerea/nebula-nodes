@@ -49,6 +49,9 @@ export interface EditOrigin {
   tab?: string;
   id?: string;
   undoes?: string;
+  /** On an agent's undo: it kept parts (a node run or changed since), so the
+   * toast says it undid part of its edit. */
+  kept?: boolean;
   /** The nodes the edit deleted, with the pins and proposals each delete
    * removed (lib/deleteNotice.ts), so undoing it here puts those back too. */
   removals?: unknown;
@@ -71,6 +74,8 @@ export interface ForeignEdit {
   editId?: string;
   /** Set when the edit is an agent undoing its own earlier edit. */
   undoes?: string;
+  /** Set when that undo kept parts of the edit (the backend's `kept`). */
+  kept?: boolean;
   /** What the edit's deletes removed (from its graphSync), or what this
    * step's last redo removed: undo names them in its restore. */
   removals?: RemovalRecord[];
@@ -776,7 +781,10 @@ export function foreignSource(origin: EditOrigin): ForeignEdit['source'] {
  * Undo. A sentence, so it ends with its period (GM #198 r22 note 1). */
 export function editArrivedText(edit: ForeignEdit): string | null {
   if (edit.source !== 'agent' || !edit.agentName) return null;
-  return edit.undoes ? `${edit.agentName} undid its edit.` : `${edit.agentName} changed the canvas.`;
+  if (!edit.undoes) return `${edit.agentName} changed the canvas.`;
+  // When it kept parts, "undid its edit" says more than happened; the Agent
+  // log carries which parts (design).
+  return edit.kept ? `${edit.agentName} undid part of its edit.` : `${edit.agentName} undid its edit.`;
 }
 
 /** "Undid Claude’s edit.", "Redid an edit from another window.": a

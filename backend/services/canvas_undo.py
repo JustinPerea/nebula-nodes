@@ -700,7 +700,7 @@ def kept_lines(skipped: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def activity_line(agent: str, skipped: list[dict[str, Any]], name_of: Callable[[str], str] | None = None) -> str:
+def activity_line(agent: str | None, skipped: list[dict[str, Any]], name_of: Callable[[str], str] | None = None) -> str:
     """The person's activity line for an agent's undo (design), no counts in
     the short forms, no colon, no parens. Nothing kept: "Codex undid its
     edit." Parts kept (a part is a node, counted once): "Codex undid its edit
@@ -714,7 +714,12 @@ def activity_line(agent: str, skipped: list[dict[str, Any]], name_of: Callable[[
     A skip names its node in ``name`` (else ``name_of`` gives it from
     ``nodeId``). A wire skip counts as a kept part of the node in its
     ``nodeId``: the end that is gone, or the target that no longer takes the
-    connection."""
+    connection.
+
+    With ``agent`` None the line is the agent's own row in the Agent log
+    (design): its name is the row's label, so the words leave it out ("Undid
+    its edit", "Undid its edit except “Brief”, which changed after that"),
+    and a row of one sentence has no period."""
     ran: dict[str, str] = {}
     kept: dict[str, str] = {}
     for item in skipped:
@@ -727,19 +732,21 @@ def activity_line(agent: str, skipped: list[dict[str, Any]], name_of: Callable[[
         else:
             kept[node_id] = shown
     kept = {node_id: shown for node_id, shown in kept.items() if node_id not in ran}
+    start = f"{agent} undid its edit" if agent else "Undid its edit"
+    end = "." if agent else ""
     if not ran and not kept:
-        return f"{agent} undid its edit."
+        return f"{start}{end}"
     total = len(ran) + len(kept)
     if total >= 4:
         what = (f"{total} parts that ran or changed" if ran and kept else f"{total} nodes that ran" if ran
                 else f"{total} parts that changed")
-        return f"{agent} undid its edit except {what} after that."
+        return f"{start} except {what} after that{end}"
     clauses = []
     if ran:
         clauses.append(f"{node_name_list(list(ran.values()))}, which ran after that")
     if kept:
         clauses.append(f"{node_name_list(list(kept.values()))}, which changed after that")
-    return f"{agent} undid its edit except {', and '.join(clauses)}."
+    return f"{start} except {', and '.join(clauses)}{end}"
 
 
 def nothing_went_back(skipped: list[dict[str, Any]], left: str = "") -> str:

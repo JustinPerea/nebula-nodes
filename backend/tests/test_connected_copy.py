@@ -4,9 +4,9 @@ The agent's cursor bubbles name nodes by their label in curly quotes, as the
 Agents panel does, falling back to the node type's name when a node has no
 label: Connecting “A” to “B”, Added “X” and connected it, Disconnected “A”
 from “B”, and the same quotes on Added, Renamed, Moved, Removed, Running and
-Updated. The Agent log (publish_action) is the technical record: it keeps
-port ids and the arrow and swaps only the verb (Connected a:b → c:d,
-Disconnected a:b → c:d). Neither ever says wired.
+Updated. The Agent log has one row per action, the agent's own (design): the
+runner-labelled ids-and-arrow line (publish_action) is gone, and the nodes an
+action touched ride the row as ``nodeIds``. Neither ever says wired.
 """
 from __future__ import annotations
 
@@ -52,7 +52,8 @@ def test_connecting_names_both_nodes_in_quotes_and_the_log_says_connected(logged
     assert response.status_code == 200, response.text
     # The unlabeled image node falls back to its type's name.
     assert _says(sent)[-1] == "Connecting “Hero prompt” to “GPT Image 2.5”"
-    assert lines[-1] == f"Connected {text}:text → {image}:prompt"
+    assert _presence_events(sent)[-1]["nodeIds"] == [text, image]
+    assert lines == []  # no second, runner-labelled row
     _no_wired(sent, lines)
 
 
@@ -72,7 +73,8 @@ def test_disconnecting_names_both_nodes_and_the_log_says_disconnected(logged):
         "source": text, "sourceHandle": "text", "target": image, "targetHandle": "prompt"})
     assert response.json()["status"] == "deleted"
     assert _says(sent)[-1] == "Disconnected “Hero prompt” from “GPT Image 2.5”"
-    assert lines[-1] == f"Disconnected {text}:text → {image}:prompt"
+    assert _presence_events(sent)[-1]["nodeIds"] == [text, image]
+    assert lines == []
     _no_wired(sent, lines)
 
 
@@ -86,7 +88,8 @@ def test_adding_and_connecting_in_one_call_says_connected(logged):
     assert response.status_code == 200, response.text
     new_id = response.json()["id"]
     assert _says(sent)[-1] == "Added “GPT Image 2.5” and connected it"
-    assert lines[-1] == f"Connected {text}:text → {new_id}:prompt"
+    assert _presence_events(sent)[-1]["nodeIds"] == [text, new_id]
+    assert lines == []
     _no_wired(sent, lines)
 
 

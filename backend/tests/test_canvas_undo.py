@@ -111,6 +111,13 @@ def _undo(api, token, headers=AGENT):
     return api.client.post("/api/graph/apply/undo", headers=headers, json={"token": token})
 
 
+def _agent_rows(api) -> list[tuple[str, str]]:
+    """The Agent log's rows an agent's actions made so far: (the agent's name,
+    the row's words), from the presence events the log lists."""
+    return [(event["agent"]["name"], str(event.get("log") or event.get("say")))
+            for event in api.sent if event.get("type") == "agentPresence" and (event.get("log") or event.get("say"))]
+
+
 def _undone(api, token, headers=AGENT) -> dict:
     response = _undo(api, token, headers)
     assert response.status_code == 200, response.text
@@ -482,6 +489,9 @@ def test_an_agents_undo_says_what_it_undid(api):
     assert "undid its own edit" in summary["summary"]
     sync = _syncs(api)[-1]["edit"]
     assert sync["undoes"] == edit_id and sync["actor"]["name"] == "Claude Code"
+    # Nothing was kept, so the toast stays "Claude Code undid its edit." (no `kept` key).
+    assert "kept" not in sync
+    assert _agent_rows(api)[-1] == ("Claude Code", "Undid its edit")
 
 
 def test_the_persons_cmd_z_of_an_agent_edit_is_linked_and_the_agent_sees_it(api):
@@ -1342,6 +1352,22 @@ def test_the_activity_line_has_no_counts_colon_or_parens_in_all_its_forms():
         assert ":" not in line and "(" not in line
 
 
+def test_the_agents_own_row_leaves_out_its_name_and_a_one_sentence_row_has_no_period():
+    """In the Agent log the agent's name is the row's label (design), so the
+    words start at the verb, and a row of one sentence has no period."""
+    ran = _ran_skip
+    kept = _kept_skip
+    assert activity_line(None, []) == "Undid its edit"
+    assert activity_line(None, [kept("Brief")]) == "Undid its edit except “Brief”, which changed after that"
+    assert activity_line(None, [ran("Hero"), kept("Notes")]) == (
+        "Undid its edit except “Hero”, which ran after that, and “Notes”, which changed after that")
+    assert activity_line(None, [ran(n) for n in "ABCD"]) == "Undid its edit except 4 nodes that ran after that"
+    # The wording lives in one place: with a name, the same words in a sentence.
+    for skipped in ([], [kept("Brief")], [ran("Hero"), kept("Notes")], [ran(n) for n in "ABCD"]):
+        assert activity_line("Codex", skipped) == f"Codex {activity_line(None, skipped)[:1].lower()}" \
+            f"{activity_line(None, skipped)[1:]}."
+
+
 def test_a_removed_node_is_named_by_its_skip_and_a_nameless_one_by_the_fallback():
     skip = {"nodeId": "n7", "part": "params", "reason": "removed since", "message": ""}
     assert activity_line("Codex", [skip], lambda _id: "Mixer") == (
@@ -1402,11 +1428,7 @@ def test_a_name_with_a_closing_curly_quote_keeps_its_whole_name():
     assert activity_line("Codex", [kept]) == "Codex undid its edit except “Say “hi” now”, which changed after that."
 
 
-def test_the_routes_refused_wire_names_its_target_and_reads_changed(api, monkeypatch):
-    import main as main_module
-
-    lines: list[str] = []
-    monkeypatch.setattr(main_module, "publish_action", lines.append)
+def test_the_routes_refused_wire_names_its_target_and_reads_changed(api):
     prompt, image = _seed(api)
     api.graph.set_label(image, "Brief")
     other = api.graph.add_node("text-input", {"value": "b"})
@@ -1416,34 +1438,28 @@ def test_the_routes_refused_wire_names_its_target_and_reads_changed(api, monkeyp
     result = _undone(api, token)
     [skip] = [item for item in result["skipped"] if item["reason"] == "can't be wired now"]
     assert skip["nodeId"] == image and skip["name"] == "Brief"
-    assert lines[-1] == "Claude Code undid its edit except “Brief”, which changed after that."
+    assert _agent_rows(api)[-1] == ("Claude Code", "Undid its edit except “Brief”, which changed after that")
 
 
-def test_the_routes_activity_line_names_the_nodes_that_ran(api, monkeypatch):
-    import main as main_module
-
-    lines: list[str] = []
-    monkeypatch.setattr(main_module, "publish_action", lines.append)
+def test_the_routes_activity_line_names_the_nodes_that_ran(api):
     source, combined, rerouted, applied = _added_chain(api)
     api.graph.set_label(combined, "Mixer")
     _person_runs(api, combined)
     result = _undone(api, applied["undo"]["token"])
     assert result["status"] == "undone"
-    assert lines[-1] == "Claude Code undid its edit except “Mixer”, which ran after that."
-    assert not _NODE_ID.search(lines[-1])
+    assert _agent_rows(api)[-1] == ("Claude Code", "Undid its edit except “Mixer”, which ran after that")
+    assert not _NODE_ID.search(_agent_rows(api)[-1][1])
+    # The undo's sync says it kept parts, so the toast reads "undid part of its edit".
+    assert _syncs(api)[-1]["edit"]["kept"] is True and _syncs(api)[-1]["edit"]["undoes"] == applied["undo"]["editId"]
 
 
-def test_the_routes_activity_line_counts_four_or_more_nodes(api, monkeypatch):
-    import main as main_module
-
-    lines: list[str] = []
-    monkeypatch.setattr(main_module, "publish_action", lines.append)
+def test_the_routes_activity_line_counts_four_or_more_nodes(api):
     applied = _apply(api, {"nodes": [{"ref": f"+{i}", "definitionId": "text-input", "params": {"value": str(i)}}
                                      for i in range(5)]})
     for ref in ("+0", "+1", "+2", "+3"):
         _person_runs(api, applied["idMap"][ref])
     assert _undone(api, applied["undo"]["token"])["status"] == "undone"
-    assert lines[-1] == "Claude Code undid its edit except 4 nodes that ran after that."
+    assert _agent_rows(api)[-1] == ("Claude Code", "Undid its edit except 4 nodes that ran after that")
 
 
 def test_the_cli_and_the_reply_carry_the_same_named_lines(api):

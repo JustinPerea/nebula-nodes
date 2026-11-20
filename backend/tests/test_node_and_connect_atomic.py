@@ -84,7 +84,8 @@ def test_success_confirms_canonical_pair_retains_raw_node_and_preserves_history(
     reloaded.load(path)
     assert reloaded.get_state() == graph.get_state()
     broadcast.assert_awaited_once_with(edit=True)
-    assert actions.call_count == 2
+    # The person's call leaves no Agent log row: the runner-labelled lines are gone (design).
+    actions.assert_not_called()
 
 
 @pytest.mark.parametrize("connect", [None, {}])

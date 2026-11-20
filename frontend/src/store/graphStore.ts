@@ -9185,6 +9185,7 @@ function foreignEditStep(
     source,
     ...(origin.id ? { editId: origin.id } : {}),
     ...(origin.undoes ? { undoes: origin.undoes } : {}),
+    ...(origin.undoes && origin.kept === true ? { kept: true } : {}),
     // What its deletes removed, so undoing it here puts those back too.
     ...(cleanRemovals(origin.removals).length > 0 ? { removals: cleanRemovals(origin.removals) } : {}),
     at: Date.now(),

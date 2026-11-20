@@ -23,6 +23,7 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 import { useGraphStore } from '../src/store/graphStore';
+import { editArrivedText } from '../src/lib/canvasUndo';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { TAB_ID } from '../src/lib/tabId';
@@ -381,5 +382,16 @@ describe('the canvas names the edit its undo step came from (U1)', () => {
     sync([...nodes, textNode('n3', 'fog', {}, 800)], edges,
       { edit: { ...CLAUDE, id: 'ed_00000000000000b2', undoes: 'ed_00000000000000a1' } });
     expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Claude undid its edit.', offer: 'undo' });
+  });
+
+  it('an undo that kept parts says it undid part of its edit; one that kept nothing does not (design)', () => {
+    const { nodes, edges } = start();
+    sync([...nodes, textNode('n3', 'fog', {}, 800)], edges,
+      { edit: { ...CLAUDE, id: 'ed_00000000000000b3', undoes: 'ed_00000000000000a1', kept: true } });
+    expect(useGraphStore.getState().undoNotice).toMatchObject({ text: 'Claude undid part of its edit.', offer: 'undo' });
+    // `kept` on an edit that undoes nothing is not an undo: it stays "changed the canvas".
+    expect(editArrivedText({ source: 'agent', agentName: 'Claude', kept: true } as never)).toBe('Claude changed the canvas.');
+    expect(editArrivedText({ source: 'agent', agentName: 'Claude', undoes: 'ed_x', kept: false } as never))
+      .toBe('Claude undid its edit.');
   });
 });
