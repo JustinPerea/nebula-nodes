@@ -43,8 +43,9 @@ body.app-slava-restraint .project-home h1 { font-size: clamp(27px, 3vw, 36px); f
 body.app-slava-restraint .project-home__intro { margin-top: 14px; color: var(--sr-ink-light); font-size: 14px; line-height: 1.6; }
 body.app-slava-restraint .project-home button { font-family: var(--sr-ui); cursor: pointer; }
 body.app-slava-restraint .project-home button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
+/* Design: the search field is bare inside its box, so the box takes the ring (below); every other input keeps its own. */
 body.app-slava-restraint .project-home button:focus-visible,
-body.app-slava-restraint .project-home input:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
+body.app-slava-restraint .project-home input:not(.project-home__search input):focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 body.app-slava-restraint .project-home__new { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 8px; min-height: 44px; padding: 0 18px; border: 1px solid var(--sr-ink); border-radius: var(--sr-node-media-radius); background: var(--sr-ink); color: var(--sr-canvas); font-size: 13px; font-weight: 600; transition: background var(--sr-motion-fast), border-color var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__new:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-ink-bold); border-color: var(--sr-ink-bold); }
 body.app-slava-restraint .project-home__new svg,
