@@ -1,4 +1,5 @@
 .spatial-preview {
+  /* palette-exempt: the category tint of a node card, not a status (palette map F14) */
   --spatial-preview-accent: var(--node-category-color, #65a9ff);
   display: grid;
   gap: 8px;
@@ -248,6 +249,7 @@ body.app-slava-restraint .spatial-preview__metric dd {
   color: #e4e0da;
 }
 
+/* palette-exempt: a warm neutral of the Slava card, not a status; left for the neutral sweep (palette map F14) */
 body.app-slava-restraint .spatial-preview__subtitle,
 body.app-slava-restraint .spatial-preview__eyebrow,
 body.app-slava-restraint .spatial-preview__assets-label,
@@ -262,6 +264,7 @@ body.app-slava-restraint .spatial-preview__asset {
   background: rgb(255 255 255 / 4%);
 }
 
+/* palette-exempt: a warm neutral of the Slava card, not a status; left for the neutral sweep (palette map F14) */
 body.app-slava-restraint .spatial-preview__asset {
   color: #d8d0c7;
 }

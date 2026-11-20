@@ -14,6 +14,7 @@ import {
 } from './lib/css-scan.mjs';
 import { CALM_STATE, ERROR_STATE, NOT_GROUP, flattenNested, lastCompound } from './check-error-tokens.mjs';
 import { ALLOWLIST, TS_ALLOWLIST } from './status-literals-allowlist.mjs';
+import { PINNED_SELECTORS } from './status-literals-pinned.mjs';
 
 // Design: a status is a token, not a colour. Something that went wrong is --sr-error, needs
 // attention is --sr-warning, done is --sr-success, current or selected is --sr-accent, and a
@@ -21,7 +22,7 @@ import { ALLOWLIST, TS_ALLOWLIST } from './status-literals-allowlist.mjs';
 // the colours here (a salmon error, an amber warning, a blue Save) did not match the first.
 //
 // This reads every stylesheet and .ts/.tsx file under src and fails on:
-//   1. a status selector (the last compound holds error, fail, invalid, refused, warn, blocked,
+//   1. a status selector (any compound of it, an ancestor included, holds error, fail, invalid, refused, warn, blocked,
 //      denied, rejected, running, pass, done, ok, success, complete, ready, found, selected,
 //      active, current, saved, unsaved, dirty, stale, outdated, paused, offline, pending,
 //      loading, conflict, paid, expired or recording, or [aria-current], [aria-selected] or
@@ -33,6 +34,8 @@ import { ALLOWLIST, TS_ALLOWLIST } from './status-literals-allowlist.mjs';
 //      outside a token definition. A token's own value is written once, as the token.
 //   4. var(--sr-*, <chromatic literal>) anywhere but the exact danger pair on a destructive
 //      control; and a chromatic fallback on a custom property declared nowhere.
+//   6. a pinned selector (status-literals-pinned.mjs: the rules the palette change moved onto
+//      tokens) with any chromatic literal, whatever its hue.
 //   5. the hue guard: a literal that is red, orange, yellow or green (hue 345-70 or 80-170,
 //      saturation above 25%) in any selector, so a new pill painted amber is caught though its
 //      name has no state word. Blue, cyan, violet and pink are not guarded (category, port and
@@ -49,7 +52,7 @@ import { ALLOWLIST, TS_ALLOWLIST } from './status-literals-allowlist.mjs';
 // reason, by file and selector. A `whole: true` file entry exempts the hue guard (rule 5) only;
 // rules 1-4 still run on that file.
 
-const SRC = join(process.cwd(), 'src');
+const SRC = join(import.meta.dirname, '..', 'src');
 
 const STATUS_NEW = /(?<![a-z0-9])(?:selected|active|current|saved|unsaved|dirty|stale|outdated|paused|offline|pending|loading|conflict|paid|expired|recording|pressed)(?![a-z0-9-])/i;
 const STATUS_ARIA = /aria-(?:current|selected|pressed)/i;
@@ -261,9 +264,20 @@ const isStatusPart = (part) => {
     .replace(NOT_GROUP, '')
     .replace(/:(?:is|where)\(((?:[^()]|\([^()]*\))*)\)/g, ' $1 ')
     .replace(/::?[\w-]+(?:\((?:[^()]|\([^()]*\))*\))?/g, '');
-  const state = lastCompound(plain.trim()).replace(/\.[\w-]*?__/g, '.');
-  return ERROR_STATE.test(state) || CALM_STATE.test(state) || STATUS_NEW.test(state) || STATUS_ARIA.test(state);
+  // Design: every compound counts, so `.x--selected .x__label` is a status rule like `.x--selected`.
+  return plain
+    .trim()
+    .split(/[\s>+~]+/)
+    .filter(Boolean)
+    .some((compound) => {
+      const state = compound.replace(/\.[\w-]*?__/g, '.');
+      return ERROR_STATE.test(state) || CALM_STATE.test(state) || STATUS_NEW.test(state) || STATUS_ARIA.test(state);
+    });
 };
+
+/** A selector part without its body.app-slava-restraint prefix, for the pinned list. */
+const pinKey = (part) => part.trim().replace(/^body\.app-slava-restraint\s+/, '');
+const pinnedSet = (file, pins) => new Set(pins[file] ?? []);
 
 const selectorMatches = (entry, selector) =>
   entry.selector instanceof RegExp ? entry.selector.test(selector) : selector.includes(entry.selector);
@@ -294,7 +308,7 @@ const stripStrings = (value) => value.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)
  * Every violation across { css: [{ file, source }], ts: [{ file, source }] }:
  * { file, line, selector, decl, rules: [n...], reason }.
  */
-export function findStatusLiteralHits({ css = [], ts = [] }, allowlist = ALLOWLIST, tsAllowlist = TS_ALLOWLIST) {
+export function findStatusLiteralHits({ css = [], ts = [] }, allowlist = ALLOWLIST, tsAllowlist = TS_ALLOWLIST, pins = PINNED_SELECTORS) {
   const sheets = css.map(({ file, source }) => {
     const stripped = stripComments(source);
     const rules = walkRules(stripped).flatMap((rule) => flattenNested(rule));
@@ -325,6 +339,7 @@ export function findStatusLiteralHits({ css = [], ts = [] }, allowlist = ALLOWLI
         statusText !== null
           ? statusText.split(/[-_]+/).some((word) => ERROR_STATE.test(word) || CALM_STATE.test(word) || STATUS_NEW.test(word))
           : parts.some(isStatusPart);
+      const pinned = statusText === null && parts.some((part) => pinnedSet(sheet.file, pins).has(pinKey(part)));
       const label = statusText !== null ? `@keyframes ${statusText} ${selector}` : selector;
       const braceLine = lineForOffset(sheet.lineStarts, rule.bodyStart - 1);
       const selectorLine = braceLine - (rule.selector.match(/\n/g)?.length ?? 0);
@@ -348,6 +363,10 @@ export function findStatusLiteralHits({ css = [], ts = [] }, allowlist = ALLOWLI
             if (status && colourBearing) {
               rules.push(1);
               reasons.push('a status rule paints a literal colour: read a --sr-* token');
+            }
+            if (pinned) {
+              rules.push(6);
+              reasons.push('this selector was moved onto a --sr-* token: read the token, not a literal of any hue');
             }
             if (f.family) {
               rules.push(3);

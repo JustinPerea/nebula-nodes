@@ -31,8 +31,26 @@ describe('readToken', () => {
     expect(readToken('--sr-accent')).toBe('#abcdef');
   });
 
-  it('mixes a share of the colour for a canvas fill', () => {
-    document.body.style.setProperty('--sr-accent', '#abcdef');
-    expect(tokenAtAlpha('--sr-accent', 0.6)).toBe('color-mix(in srgb, #abcdef 60%, transparent)');
+  describe('tokenAtAlpha returns a plain rgba() string', () => {
+    const at = (value: string, alpha = 0.6) => {
+      document.body.style.setProperty('--sr-accent', value);
+      return tokenAtAlpha('--sr-accent', alpha);
+    };
+    it('reads #rrggbb', () => expect(at('#abcdef')).toBe('rgba(171, 205, 239, 0.6)'));
+    it('reads #rgb', () => expect(at('#fa0')).toBe('rgba(255, 170, 0, 0.6)'));
+    it('reads #rrggbbaa and multiplies its own alpha', () => expect(at('#ff000080', 0.5)).toBe('rgba(255, 0, 0, 0.251)'));
+    it('reads rgb()', () => expect(at('rgb(10, 20, 30)')).toBe('rgba(10, 20, 30, 0.6)'));
+    it('reads rgb() in space syntax', () => expect(at('rgb(10 20 30 / 50%)', 0.5)).toBe('rgba(10, 20, 30, 0.25)'));
+    it('reads rgba() and multiplies its own alpha', () => expect(at('rgba(110, 231, 183, 0.90)', 0.5)).toBe('rgba(110, 231, 183, 0.45)'));
+    it('never returns color-mix', () => expect(at('#abcdef')).not.toContain('color-mix'));
+    it('falls back to the token fallback when the value cannot be parsed', () => {
+      expect(at('var(--nope)')).toBe('rgba(255, 90, 31, 0.6)');
+      expect(at('hsl(10 50% 50%)')).toBe('rgba(255, 90, 31, 0.6)');
+    });
+    it('parses the other fallbacks too', () => {
+      document.body.style.removeProperty('--sr-accent');
+      expect(tokenAtAlpha('--sr-error', 1)).toBe('rgba(245, 197, 24, 1)');
+      expect(tokenAtAlpha('--sr-success', 0.5)).toBe('rgba(110, 231, 183, 0.45)');
+    });
   });
 });

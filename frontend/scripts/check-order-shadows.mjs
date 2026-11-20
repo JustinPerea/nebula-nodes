@@ -16,13 +16,17 @@ import {
 // later in the file wins. A base rule written after its modifier silently cancels the modifier.
 // This reads every stylesheet under src and fails when a rule whose selector ends in a BEM
 // modifier class sets a property that a LATER rule in the same file sets on the same selector
-// without the modifier. Each selector of a comma list counts on its own. Rules inside an
-// @media/@supports block are compared only with rules in that same block. Shorthand families
-// (border and border-color, background and background-color) count as one property.
-// Exempt a deliberate case with `order-shadow-exempt: <reason>` on the modifier rule's line.
+// without the modifier. Each selector of a comma list counts on its own. A modifier inside an
+// @media/@supports block is shadowed by a later base in the same block or in an enclosing one
+// (the top level); a base inside a block never shadows a modifier outside it. A modifier compound
+// with a trailing pseudo-class or attribute (`.a--m:hover`) is compared with a base that has the
+// same trailing part (`.a:hover`). A modifier declaration marked !important is not shadowed.
+// Shorthand families (border and border-color, background and background-color) count as one
+// property. Exempt a deliberate case with `order-shadow-exempt: <reason>` on the modifier rule's
+// line or the line above its selector.
 
 const SRC = join(import.meta.dirname, '..', 'src');
-const MODIFIER = /^(.*)\.([\w-]+?)--[\w-]+$/;
+const MODIFIER = /^(.*)\.([\w-]+?)--[\w-]+((?:[:[].*)?)$/;
 
 const family = (prop) => {
   if (prop === 'border' || prop === 'border-color') return 'border';
@@ -57,10 +61,14 @@ export function findOrderShadows(source, file) {
     .map((rule) => {
       const line = lineForOffset(starts, rule.bodyStart - 1);
       const span = rule.selector.split('\n').length;
-      const exempt = rawLines.slice(Math.max(0, line - span), line).some((text) => text.includes('order-shadow-exempt:'));
+      const exempt = rawLines.slice(Math.max(0, line - span - 1), line).some((text) => text.includes('order-shadow-exempt:'));
       const props = new Map();
-      for (const decl of parseDeclarations(rule.body, rule.bodyStart)) props.set(family(decl.prop), decl.prop);
-      return { ...rule, line, exempt, props, selectors: splitList(rule.selector) };
+      const important = new Set();
+      for (const decl of parseDeclarations(rule.body, rule.bodyStart)) {
+        props.set(family(decl.prop), decl.prop);
+        if (/!\s*important\s*$/i.test(decl.value)) important.add(family(decl.prop));
+      }
+      return { ...rule, line, exempt, props, important, selectors: splitList(rule.selector) };
     });
   const hits = [];
   rules.forEach((rule, i) => {
@@ -68,9 +76,10 @@ export function findOrderShadows(source, file) {
     for (const selector of rule.selectors) {
       const match = MODIFIER.exec(selector);
       if (!match) continue;
-      const base = `${match[1]}.${match[2]}`;
+      const base = `${match[1]}.${match[2]}${match[3]}`;
       for (const [fam, prop] of rule.props) {
-        const later = rules.slice(i + 1).find((other) => other.group === rule.group && other.props.has(fam) && other.selectors.includes(base));
+        if (rule.important.has(fam)) continue;
+        const later = rules.slice(i + 1).find((other) => rule.group.startsWith(other.group) && other.props.has(fam) && other.selectors.includes(base));
         if (later) hits.push({ file, prop, modifier: { line: rule.line, selector }, base: { line: later.line, selector: base } });
       }
     }

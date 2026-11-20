@@ -16,14 +16,14 @@ describe('WaveformAudio', () => {
     document.body.style.setProperty('--sr-accent', '#abcdef');
     render(<WaveformAudio sourceUrl="/a.wav" />);
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ progressColor: 'color-mix(in srgb, #abcdef 60%, transparent)' }),
+      expect.objectContaining({ progressColor: 'rgba(171, 205, 239, 0.6)' }),
     );
   });
 
   it('uses the accent value when the page defines no token', () => {
     render(<WaveformAudio sourceUrl="/a.wav" />);
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ progressColor: 'color-mix(in srgb, #FF5A1F 60%, transparent)' }),
+      expect.objectContaining({ progressColor: 'rgba(255, 90, 31, 0.6)' }),
     );
   });
 });

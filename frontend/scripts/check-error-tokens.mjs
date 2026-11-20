@@ -52,7 +52,7 @@ import {
 // file (`--x: var(--sr-accent)` in one rule, `var(--x)` in an error rule of that file). A chain
 // of two local properties, or a property declared in another file, is not followed.
 
-const SRC = join(process.cwd(), 'src');
+const SRC = join(import.meta.dirname, '..', 'src');
 const TOKEN_NAME = /^--(?:sr-(?:error|danger)|jev-fail)(?![\w])/;
 const ACCENT_VAR = /var\(\s*(--sr-accent(?![\w])[\w-]*)/gi;
 const VAR_REF = /var\(\s*(--[\w-]+)/g;

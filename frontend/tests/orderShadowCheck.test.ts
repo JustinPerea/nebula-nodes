@@ -50,7 +50,8 @@ describe('check-order-shadows', () => {
   });
 
   it('compares inside one @media block only', () => {
-    expect(hits('@media (min-width: 600px) { .a--x { color: red; } }\n.a { color: grey; }')).toEqual([]);
+    // A modifier inside a block is shadowed by a later base at the top level (an enclosing block).
+    expect(hits('@media (min-width: 600px) { .a--x { color: red; } }\n.a { color: grey; }')).toHaveLength(1);
     expect(hits('.a--x { color: red; }\n@media (min-width: 600px) { .a { color: grey; } }')).toEqual([]);
     expect(hits('@media (min-width: 600px) { .a--x { color: red; }\n.a { color: grey; } }')).toHaveLength(1);
     expect(hits('@media (min-width: 600px) { .a--x { color: red; } }\n@media (min-width: 600px) { .a { color: grey; } }')).toEqual([]);
@@ -58,5 +59,29 @@ describe('check-order-shadows', () => {
 
   it('ignores a comment that mentions a selector', () => {
     expect(hits('/* .a--x { color: red; } */\n.a { color: grey; }')).toEqual([]);
+  });
+
+  it('skips a modifier declaration marked !important', () => {
+    expect(hits('.a--x { color: red !important; }\n.a { color: grey; }')).toEqual([]);
+    expect(hits('.a--x { color: red !important; margin: 0; }\n.a { color: grey; margin: 1px; }')).toHaveLength(1);
+  });
+
+  it('honours order-shadow-exempt on the line above the selector', () => {
+    expect(hits('/* order-shadow-exempt: the base is the fallback */\n.a--x { color: red; }\n.a { color: grey; }')).toEqual([]);
+    expect(hits('/* order-shadow-exempt: reason */\n.c--y,\n.a--x { color: red; }\n.a { color: grey; }')).toEqual([]);
+    expect(hits('/* order-shadow-exempt: reason */\n.z { margin: 0; }\n.a--x { color: red; }\n.a { color: grey; }')).toHaveLength(1);
+  });
+
+  it('fails a modifier in a block when its base comes later at the top level', () => {
+    const found = hits('@media (min-width: 600px) {\n  .a--x { color: red; }\n}\n.a { color: grey; }');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ modifier: { line: 2 }, base: { line: 4 } });
+  });
+
+  it('compares a modifier with a trailing pseudo-class or attribute against the same trailing part', () => {
+    expect(hits('.a--m:hover { color: red; }\n.a:hover { color: grey; }')).toHaveLength(1);
+    expect(hits('.a--m[aria-x] { color: red; }\n.a[aria-x] { color: grey; }')).toHaveLength(1);
+    expect(hits('.a--m:hover { color: red; }\n.a { color: grey; }')).toEqual([]);
+    expect(hits('.a--m { color: red; }\n.a:hover { color: grey; }')).toEqual([]);
   });
 });

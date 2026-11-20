@@ -8,7 +8,9 @@ import { findStatusLiteralHits } from '../scripts/check-status-literals.mjs';
  */
 const css = (...sources: string[]) => ({ css: sources.map((source, i) => ({ file: `fixture${i}.css`, source })), ts: [] });
 const script = (source: string, file = 'fixture.ts') => ({ css: [], ts: [{ file, source }] });
-const run = (input: ReturnType<typeof css>, allowlist: unknown[] = []) => findStatusLiteralHits(input, allowlist, allowlist);
+const run = (input: ReturnType<typeof css>, allowlist: unknown[] = []) => findStatusLiteralHits(input, allowlist, allowlist, {});
+const PINS = { 'fixture0.css': ['.mask-painter__save', '.world-environment-viewer__spinner'] };
+const runPinned = (input: ReturnType<typeof css>) => findStatusLiteralHits(input, [], [], PINS);
 
 describe('check-status-literals: bad', () => {
   const bad: Array<[string, number, ReturnType<typeof css>]> = [
@@ -23,6 +25,8 @@ describe('check-status-literals: bad', () => {
     ['a status selector with a color-mix literal', 1, css('.chip--stale { background: color-mix(in srgb, #5d70cc 20%, transparent); }')],
     ['a status selector with a named colour', 1, css('.chip--failed { color: red; }')],
     ['a custom property named for a colour in a status rule', 1, css('.row--done { --row-ink: #34d399; }')],
+    ['a state word on an ancestor compound', 1, css('.x--selected .x__label { color: #66bbff; }')],
+    ['a state word on an ancestor with a child combinator', 1, css('.tool--active > .tool__icon { background: rgba(102, 187, 255, 0.14); }')],
     // Rule 2: --line-warning falls back to a literal.
     ['line-warning falls back to a literal', 2, css('.x { color: var(--line-warning, #fff000); }')],
     ['line-warning-soft falls back to a literal', 2, css('.x { background: var(--line-warning-soft, rgb(255 0 0 / 10%)); }')],
@@ -50,6 +54,16 @@ describe('check-status-literals: bad', () => {
     ['a red in a script string', 5, script("const row = { color: '#F44336' };")],
     ['a yellow in a script string', 5, script("const row = { color: '#FFC107' };", 'lib/other.ts')],
   ];
+  const pinned: Array<[string, ReturnType<typeof css>]> = [
+    ['a pinned selector with a blue background', css('.mask-painter__save { background: #4da3ff; }')],
+    ['a pinned selector with a cyan border-top-color', css('.world-environment-viewer__spinner { border-top-color: #67e8f9; }')],
+    ['a pinned selector under the body.app-slava-restraint prefix', css('body.app-slava-restraint .mask-painter__save { color: #4da3ff; }')],
+  ];
+  for (const [name, input] of pinned) {
+    it(`fails rule 6: ${name}`, () => {
+      expect(runPinned(input).some((hit: { rules: number[] }) => hit.rules.includes(6))).toBe(true);
+    });
+  }
   for (const [name, rule, input] of bad) {
     it(`fails rule ${rule}: ${name}`, () => {
       const hits = run(input);
@@ -81,6 +95,14 @@ describe('check-status-literals: fine', () => {
     it(`passes: ${name}`, () => expect(run(input)).toEqual([]));
   }
 
+  it('passes a pinned selector that reads a token, and an unpinned one with a blue', () => {
+    expect(runPinned(css('.mask-painter__save { background: var(--sr-accent); color: var(--sr-on-accent); }'))).toEqual([]);
+    expect(runPinned(css('.mask-painter__other { background: #4da3ff; }'))).toEqual([]);
+  });
+  it('passes an ancestor state word on a non-colour property', () => {
+    expect(run(css('.x--selected .x__label { padding: 4px; font-weight: 600; }'))).toEqual([]);
+    expect(run(css('.x--selected .x__label { color: var(--sr-ink); }'))).toEqual([]);
+  });
   it('passes a script PR number and a comment', () => {
     expect(run(script("// fixes #203 and #E8825A\nconst label = 'PR #203';"))).toEqual([]);
   });
