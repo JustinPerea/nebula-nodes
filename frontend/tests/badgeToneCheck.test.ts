@@ -149,7 +149,7 @@ describe('check-badge-tone: eyebrows', () => {
   ];
   for (const css of failing) it(`fails: ${css}`, () => expect(eyebrows(css)).toHaveLength(1));
   const passing = [
-    'body.app-slava-restraint .world-modal__eyebrow { color: var(--sr-ink-meta); }',
+    'body.app-slava-restraint .world-modal__eyebrow { color: var(--sr-ink-light); }',
     '.world-modal__eyebrow { font-weight: 700; text-transform: uppercase; }',
     '.eyebrowish { color: var(--sr-accent); }',
     '.world-modal__title { color: var(--sr-accent); }',
