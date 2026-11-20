@@ -42,6 +42,7 @@ describe('check-badge-tone', () => {
     '.moodboard-color__flag { background: rgba(255, 90, 31, 0.1); }',
     'body.app-slava-restraint .cinema-shots-rail__badge--running { background: var(--sr-accent); }',
     '.edit-node__speed-badge { color: var(--sr-accent); }',
+    '.commons-badge--inbox { -webkit-text-fill-color: var(--sr-accent); }',
     'body.app-slava-restraint .edit-node__speed-badge { border-color: #FF5A1F; }',
   );
   for (const css of accented) {
@@ -146,6 +147,10 @@ describe('check-badge-tone: eyebrows', () => {
     '.panel__eyebrow:hover { color: var(--sr-accent-hover); }',
     '.page-kicker { color: #FF5A1F; }',
     '.x__overline { border-bottom: 1px solid rgba(255, 90, 31, 0.4); }',
+    '.x__eyebrow { -webkit-text-fill-color: var(--sr-accent); }',
+    '.a { .a__eyebrow { color: var(--sr-accent); } }',
+    '.a { .b { .a__kicker { color: #FF5A1F; } } }',
+    '.a__eyebrow { &:hover { color: var(--sr-ink-light); } }',
   ];
   for (const css of failing) it(`fails: ${css}`, () => expect(eyebrows(css)).toHaveLength(1));
   const passing = [
@@ -153,6 +158,8 @@ describe('check-badge-tone: eyebrows', () => {
     '.world-modal__eyebrow { font-weight: 700; text-transform: uppercase; }',
     '.eyebrowish { color: var(--sr-accent); }',
     '.world-modal__title { color: var(--sr-accent); }',
+    '.a { .a__eyebrow { color: var(--sr-ink-light); } }',
+    '.a { .a__title { color: var(--sr-accent); } }',
   ];
   for (const css of passing) it(`passes: ${css}`, () => expect(eyebrows(css)).toHaveLength(0));
 });
