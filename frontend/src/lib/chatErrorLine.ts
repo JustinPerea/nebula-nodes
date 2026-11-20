@@ -14,7 +14,7 @@ import { PROVIDER_LABELS } from './directRoute';
  * A single line of whole sentences (capital to . ! or ?) reads as it is at any length: a long refusal
  * written for the person keeps its reason and its fix in view, drawn with the error tone. A message with
  * line breaks, or a long line that is not whole sentences (a stack trace, a long stderr), reads "<Agent> stopped
- * because its command failed." with the raw text behind the line's Details. becauseLine() is not used: it opens with "Nebula couldn’t …", and design's line names the agent.
+ * because its command failed." with the raw text behind the line's Details. A fragment joins "because" only when it opens with a subject (a name, a pronoun, a determiner); any other fragment is a sentence of its own: "Claude stopped. Couldn’t read the file." becauseLine() is not used: it opens with "Nebula couldn’t …", and design's line names the agent.
  */
 
 /** Codes whose message the backend wrote as a whole line for the person. */
@@ -46,11 +46,18 @@ function cleaned(message: string): string {
 /** The provider names the app shows (directRoute.PROVIDER_LABELS), except the local-tools stand-in, which is not a name. */
 const PROVIDER_NAMES: readonly string[] = Object.entries(PROVIDER_LABELS).filter(([key]) => key !== 'utility').map(([, label]) => label);
 
-/** What follows a provider's label when it is used as a verb or a common word ("Replicate the prompt", "Fal that"), not as a name. */
+/** The provider names that are also ordinary English verbs: "Replicate it again", "Google the error". Only these
+ * can open a reason as a word instead of a name; every other provider's name is a name whatever follows it
+ * ("Krea this morning failed" is about Krea). The rest of PROVIDER_NAMES (OpenAI, Anthropic, Runway, Kling,
+ * ElevenLabs, ByteDance, MiniMax, Luma, xAI, Recraft, Ideogram, OpenRouter, Black Forest Labs, Higgsfield,
+ * Meshy, QuiverAI, Krea, World Labs, Nous, TypeSafe, Speridlabs, Hugging Face, fal.ai) are not verbs. */
+const VERB_PROVIDERS = new Set(['Replicate', 'Google']);
+
+/** What follows a verb provider's label when it is used as the verb ("Replicate the prompt"), not as a name. */
 const NOT_A_NAME_AFTER = /^\s+(?:the|a|an|this|that|these|those|your|my|it|them)(?![\w-])/i;
 
 /** The provider label (as the app spells it) the text opens with, alone or as a possessive ("Krea’s reader"), compared
- * without case. Null when none does, or when the label is followed by a determiner or pronoun: then it is a word, not a name. */
+ * without case. Null when none does, or when a verb provider's label is followed by a determiner or pronoun: then it is a word, not a name. */
 function openingProviderLabel(text: string): string | null {
   const lower = text.toLowerCase();
   for (const label of [...PROVIDER_NAMES].sort((a, b) => b.length - a.length)) {
@@ -58,7 +65,7 @@ function openingProviderLabel(text: string): string | null {
     if (!lower.startsWith(own)) continue;
     const after = text.slice(own.length);
     if (after !== '' && !/^(?:[’']s)?(?![\w-])/.test(after)) continue;
-    return NOT_A_NAME_AFTER.test(after) ? null : label;
+    return VERB_PROVIDERS.has(label) && NOT_A_NAME_AFTER.test(after) ? null : label;
   }
   return null;
 }
@@ -81,7 +88,16 @@ function lowerFirst(text: string, names: readonly string[]): string {
   if (label !== null) return label + text.slice(label.length);
   const kept = KEPT_WORDS.has(first.toLowerCase()) || names.some((name) => name.toLowerCase().split(' ')[0] === first.toLowerCase())
     || opensWithAgentName(text, names);
-  return !first || kept || /[A-Z]/.test(first.slice(1)) || /^I[’']/.test(first) ? text : text.charAt(0).toLowerCase() + text.slice(1);
+  return !first || kept || /[A-Z]/.test(first.slice(1)) || /^I(?:[’'].*)?$/.test(first) ? text : text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+/** Pronouns and determiners that open a subject ("It isn’t there", "The file is gone", "Its host is down"), also as a contraction. */
+const SUBJECT_WORD = /^(?:I|You|He|She|It|We|They|The|A|An|This|That|Your|Its|Their)(?:[’'](?:m|d|ll|s|re|ve))?(?![\w/-])/i;
+
+/** True when the reason opens with a subject (design): a provider or agent name, also as a possessive ("Krea’s reader"),
+ * a pronoun or one of the determiners above. Anything else ("Couldn’t read …", "No key", "Missing file") is not one. */
+function opensWithSubject(text: string, names: readonly string[]): boolean {
+  return openingProviderLabel(text) !== null || opensWithAgentName(text, names) || SUBJECT_WORD.test(text);
 }
 
 /** A whole line starts with a capital, unless its first word is an identifier ("claude_cli", "v2.0"): a plain lower-case word is capitalised. */
@@ -95,6 +111,15 @@ function withoutAgentName(text: string, names: readonly string[]): string {
   const escaped = [...names].sort((a, b) => b.length - a.length).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const lead = new RegExp(`^(?:${escaped.join('|')})(?![\\w-])(?![’']s(?![\\w-]))\\s*[:\\-–—]?\\s*`, 'i');
   return text.replace(lead, '').trim();
+}
+
+/** True when the text opens with the agent's own name as its subject ("Claude hit a rate limit"): the name, a space and
+ * a lower-case word. A label separator (":", "-", "–", "—") is a log prefix ("codex: out of credits"), and a capital
+ * after the name is more of a name ("Claude Code crashed" for an agent called Claude), so neither is a subject. */
+function agentIsSubject(text: string, names: readonly string[]): boolean {
+  const escaped = [...names].sort((a, b) => b.length - a.length).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const lead = new RegExp(`^(?:${escaped.join('|')})\\s+`, 'i').exec(text);
+  return lead !== null && /^\p{Ll}/u.test(text.slice(lead[0].length));
 }
 
 export type ChatErrorLine = {
@@ -134,7 +159,11 @@ export function chatErrorLine({ message, code, source, agentName: given }: {
   if (!rest || bare) return because(`its ${bare?.[1]?.toLowerCase() ?? 'turn'} failed`);
   // A fragment whose subject is the agent's own command, process, turn or request takes "its".
   if (OWN_SUBJECT.test(rest)) return because(`its ${lowerFirst(rest, names)}`);
-  return because(lowerFirst(rest, names));
+  // The agent's own name was the subject ("Claude hit a rate limit"): it is "it", as in "it exited with code 1".
+  if (agentIsSubject(text, names)) return because(`it ${lowerFirst(rest, names)}`);
+  // A reason that opens with a subject joins the agent's name with "because"; any other reads as a sentence of its own.
+  if (opensWithSubject(rest, names)) return because(lowerFirst(rest, names));
+  return { text: `${agentName} stopped. ${curlApostrophes(endedSentence(upperFirst(rest)))}`, because: true };
 }
 
 /** The agent's status hover: the CLI's own message (prose, curled where it shows) and the session (a name, kept as it is). */

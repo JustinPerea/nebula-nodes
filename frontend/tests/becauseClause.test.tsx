@@ -597,8 +597,30 @@ describe('becauseLine: ellipses, abbreviations, trailing links and colons', () =
     expect(text).toBe('Nebula couldn’t read... the file because it is gone.');
     expect(line("Couldn't read the file… and the rest. It is gone")).toBe('Nebula couldn’t read the file… and the rest because it is gone.');
   });
-  it('an ellipsis at the end of the text closes the sentence', () => {
-    expect(line("Couldn't read the file...")).toBe('Nebula couldn’t read the file.');
+  it('a trailing ellipsis stays, with no full stop after it', () => {
+    expect(line("Couldn't read the file...")).toBe('Nebula couldn’t read the file...');
+    expect(line("Couldn't read the file…")).toBe('Nebula couldn’t read the file…');
+    expect(line("Couldn't read the file . . .")).toBe('Nebula couldn’t read the file…');
+  });
+  it('spaced dots read as an ellipsis', () => {
+    expect(line("Couldn't read the file . . . It is gone.")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line("Couldn't read the file . . . it is gone")).toBe('Nebula couldn’t read the file . . . it is gone.');
+  });
+  it('a.m., p.m. and etc. before a capital end the sentence and keep their own dot', () => {
+    expect(line("Couldn't connect at 3 p.m. It is down.")).toBe('Nebula couldn’t connect at 3 p.m. because it is down.');
+    expect(line("Couldn't connect at 3 P.M. It is down.")).toBe('Nebula couldn’t connect at 3 P.M. because it is down.');
+    expect(line("Couldn't connect at 9 a.m. It is down.")).toBe('Nebula couldn’t connect at 9 a.m. because it is down.');
+    expect(line("Couldn't read the files, fonts, etc. It is gone.")).toBe('Nebula couldn’t read the files, fonts, etc. because it is gone.');
+    expect(line("Couldn't connect at 3 p.m.")).toBe('Nebula couldn’t connect at 3 p.m.');
+  });
+  it('e.g., i.e., vs. and U.S. before a capital stay one sentence, as before', () => {
+    expect(line("Couldn't reach the U.S. It is down.")).toBe('Nebula couldn’t reach the U.S. It is down.');
+    expect(line("Couldn't read the file, e.g. It is gone.")).toBe('Nebula couldn’t read the file, e.g. It is gone.');
+  });
+  it('endedSentence trims trailing whitespace first', () => {
+    expect(endedSentence('x. ')).toBe('x.');
+    expect(endedSentence('x  ')).toBe('x.');
+    expect(endedSentence('x. . . ')).toBe('x. . .');
   });
 
   it('abbreviations do not end a sentence', () => {

@@ -30,9 +30,9 @@ describe('the chat stream error line', () => {
   });
 
   it('keeps an unknown fragment as the reason, cleaned of its colon form', () => {
-    expect(line('Something odd happened:')).toBe('Claude stopped because something odd happened.');
-    expect(line('API quota exhausted')).toBe('Claude stopped because API quota exhausted.');
-    expect(line('exit code 2 :')).toBe('Claude stopped because exit code 2.');
+    expect(line('Something odd happened:')).toBe('Claude stopped. Something odd happened.');
+    expect(line('API quota exhausted')).toBe('Claude stopped. API quota exhausted.');
+    expect(line('exit code 2 :')).toBe('Claude stopped. Exit code 2.');
   });
 
   it('says an unknown error when there is no message', () => {
@@ -56,26 +56,26 @@ describe('the chat stream error line', () => {
     expect(full('connection refused').because).toBe(true);
     expect(full('Opus is no longer offered.', { code: 'model_unsupported' }).because).toBe(false);
     const hermes = chatErrorLine({ message: 'boom', agentName: 'Hermes v2.0' });
-    expect(hermes).toEqual({ text: 'Hermes v2.0 stopped because boom.', because: true });
+    expect(hermes).toEqual({ text: 'Hermes v2.0 stopped. Boom.', because: true });
     expect(chatErrorLine({ message: 'boom', agentName: `A${'x'.repeat(70)}` }).because).toBe(true);
   });
 
   it('drops the agent\'s own name from the reason and keeps names and acronyms capitalised', () => {
     expect(line('Codex turn failed', { agentName: 'Codex' })).toBe('Codex stopped because its turn failed.');
     expect(line('Hermes: request failed', { agentName: 'Hermes' })).toBe('Hermes stopped because its request failed.');
-    expect(line('codex: out of credits', { agentName: 'Codex' })).toBe('Codex stopped because out of credits.');
-    expect(line('Claude hit a rate limit')).toBe('Claude stopped because hit a rate limit.');
-    expect(line('Gemini quota exhausted')).toBe('Claude stopped because Gemini quota exhausted.');
-    expect(line('MCP server crashed')).toBe('Claude stopped because MCP server crashed.');
-    expect(line('JSON parse failed')).toBe('Claude stopped because JSON parse failed.');
+    expect(line('codex: out of credits', { agentName: 'Codex' })).toBe('Codex stopped. Out of credits.');
+    expect(line('Claude hit a rate limit')).toBe('Claude stopped because it hit a rate limit.');
+    expect(line('Gemini quota exhausted')).toBe('Claude stopped. Gemini quota exhausted.');
+    expect(line('MCP server crashed')).toBe('Claude stopped. MCP server crashed.');
+    expect(line('JSON parse failed')).toBe('Claude stopped. JSON parse failed.');
   });
 
   it('keeps the words of a timeout that is not a connection fault', () => {
     expect(line('Command timed out after 120s')).toBe('Claude stopped because its command timed out after 120s.');
     expect(line('Process exited unexpectedly')).toBe('Claude stopped because its process exited unexpectedly.');
     expect(line('Request was rejected')).toBe('Claude stopped because its request was rejected.');
-    expect(line('Commander lost the thread')).toBe('Claude stopped because commander lost the thread.');
-    expect(line('MCP tool call timed out')).toBe('Claude stopped because MCP tool call timed out.');
+    expect(line('Commander lost the thread')).toBe('Claude stopped. Commander lost the thread.');
+    expect(line('MCP tool call timed out')).toBe('Claude stopped. MCP tool call timed out.');
     expect(line('connection timed out')).toBe('Claude stopped because the connection timed out.');
   });
 
@@ -121,18 +121,62 @@ describe('the chat stream error line', () => {
     expect(line('Black Forest Labs can’t read the file')).toBe('Claude stopped because Black Forest Labs can’t read the file.');
     expect(line('Hugging Face’s Space is asleep')).toBe('Claude stopped because Hugging Face’s Space is asleep.');
     expect(line('Your Codex’s session is gone', { agentName: 'Your Codex' })).toBe('Your Codex stopped because Your Codex’s session is gone.');
-    expect(line('Atlas’s host is gone', { agentName: 'Nova' })).toBe('Nova stopped because atlas’s host is gone.');
+    expect(line('Atlas’s host is gone', { agentName: 'Nova' })).toBe('Nova stopped. Atlas’s host is gone.');
     expect(line('The file is too large')).toBe('Claude stopped because the file is too large.');
-    expect(line('Kreator can’t help')).toBe('Claude stopped because kreator can’t help.');
+    expect(line('Kreator can’t help')).toBe('Claude stopped. Kreator can’t help.');
   });
 
-  it('lower-cases a provider label used as a verb or a common word, and keeps it as a name otherwise', () => {
-    expect(line('Replicate the prompt and retry')).toBe('Claude stopped because replicate the prompt and retry.');
+  it('lower-cases only a provider name that is a verb, and then it is not a subject (item 1 and 7)', () => {
+    // Replicate and Google are ordinary verbs: "Replicate it again" opens no subject, so it is a sentence of its own.
+    expect(line('Replicate the prompt and retry')).toBe('Claude stopped. Replicate the prompt and retry.');
+    expect(line('Replicate it again')).toBe('Claude stopped. Replicate it again.');
+    expect(line('Google the error code')).toBe('Claude stopped. Google the error code.');
+    // Replicate as a name: followed by "its", a possessive, a verb.
+    expect(line('Replicate its queue is down')).toBe('Claude stopped because Replicate its queue is down.');
+    expect(line('Replicate’s queue is down')).toBe('Claude stopped because Replicate’s queue is down.');
+    // Every other provider keeps its name whatever follows.
     for (const after of ['a', 'an', 'this', 'that', 'these', 'those', 'your', 'my', 'it', 'them']) {
-      expect(line(`Runway ${after} thing`)).toBe(`Claude stopped because runway ${after} thing.`);
+      expect(line(`Runway ${after} thing`)).toBe(`Claude stopped because Runway ${after} thing.`);
     }
+    expect(line('Krea this morning failed')).toBe('Claude stopped because Krea this morning failed.');
     expect(line('Runway returned an error')).toBe('Claude stopped because Runway returned an error.');
     expect(line('Krea’s reader can’t open it')).toBe('Claude stopped because Krea’s reader can’t open it.');
+  });
+  it('joins with "because" only when the reason opens with a subject (item 7)', () => {
+    // Not a subject: two sentences, the second keeping its capital.
+    expect(line("Couldn't read `~/it's/file.png` because it isn't there")).toBe('Claude stopped. Couldn’t read `~/it\'s/file.png` because it isn’t there.');
+    expect(line("Couldn't read `~/it's/file.png` because it isn't there.")).toBe('Couldn’t read `~/it\'s/file.png` because it isn’t there.');
+    expect(line('No API key')).toBe('Claude stopped. No API key.');
+    expect(line('Cannot open the file')).toBe('Claude stopped. Cannot open the file.');
+    expect(line('Missing file')).toBe('Claude stopped. Missing file.');
+    // Already ended by an ellipsis, a URL or a colon-free stop.
+    expect(line('Waiting for the host…')).toBe('Claude stopped. Waiting for the host…');
+    expect(line('See https://fal.ai/docs')).toBe('Claude stopped. See https://fal.ai/docs');
+    // A reason that is already a whole sentence with its stop reads as it is (the whole-line rule), with no "stopped" lead.
+    expect(line('Missing file.')).toBe('Missing file.');
+    // Pronouns and determiners are subjects.
+    for (const word of ['I', 'You', 'He', 'She', 'It', 'We', 'They']) {
+      expect(line(`${word} could not finish`)).toBe(`Claude stopped because ${word === 'I' ? 'I' : word.toLowerCase()} could not finish.`);
+    }
+    for (const word of ['The', 'A', 'An', 'This', 'That', 'Your', 'Its', 'Their']) {
+      expect(line(`${word} host is gone`)).toBe(`Claude stopped because ${word.toLowerCase()} host is gone.`);
+    }
+    // A provider name, a possessive name and the agent's own name are subjects; the agent name stands in for "Claude".
+    expect(line('OpenAI is down')).toBe('Claude stopped because OpenAI is down.');
+    expect(line('Hugging Face’s Space is asleep')).toBe('Claude stopped because Hugging Face’s Space is asleep.');
+    expect(line('Atlas’s host is gone', { agentName: 'Atlas' })).toBe('Atlas stopped because Atlas’s host is gone.');
+    expect(line('Hermes lost the thread', { agentName: 'Hermes v2.0' })).toBe('Hermes v2.0 stopped. Hermes lost the thread.');
+    // The agent's own name at the front is dropped first (it is the line's subject already), leaving no subject.
+    expect(line('Nova lost the thread', { agentName: 'Nova' })).toBe('Nova stopped because it lost the thread.');
+    // A log label (the name, then a separator) is not a subject: the reason is a sentence of its own.
+    expect(line('Nova: lost the thread', { agentName: 'Nova' })).toBe('Nova stopped. Lost the thread.');
+    expect(line('Nova - couldn’t read the file', { agentName: 'Nova' })).toBe('Nova stopped. Couldn’t read the file.');
+    expect(line('claude couldn’t read the file')).toBe('Claude stopped because it couldn’t read the file.');
+    // A capital after the name is more of a name, not a verb.
+    expect(line('Claude Code crashed')).toBe('Claude stopped. Code crashed.');
+    // No reason at all.
+    expect(line('')).toBe('Claude stopped because of an unknown error.');
+    expect(line('Error:')).toBe('Claude stopped because of an unknown error.');
   });
   it('writes a kept provider name as the app spells it', () => {
     expect(line('Fal.ai/x.png missing')).toBe('Claude stopped because fal.ai/x.png missing.');
@@ -144,7 +188,7 @@ describe('the chat stream error line', () => {
   });
   it('names an agent with no name "Your agent"', () => {
     expect(line('connection refused', { agentName: '' })).toBe('Your agent stopped because the connection was refused.');
-    expect(line('boom', { agentName: '   ' })).toBe('Your agent stopped because boom.');
+    expect(line('boom', { agentName: '   ' })).toBe('Your agent stopped. Boom.');
     expect(line(null, { agentName: '' })).toBe('Your agent stopped because of an unknown error.');
   });
 });

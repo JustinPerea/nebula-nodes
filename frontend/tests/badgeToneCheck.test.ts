@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { findAccentBadges, findAccentEyebrows, findCapsBadges } from '../scripts/check-badge-tone.mjs';
+import { findAccentBadges, findAccentEyebrows, findCapsBadges, resetsTagCase } from '../scripts/check-badge-tone.mjs';
 
 /**
  * scripts/check-badge-tone.mjs runs in `npm run lint`: no state badge or source tag is painted
@@ -155,6 +155,19 @@ describe('check-badge-tone: capitals', () => {
   it('lets nested CSS that touches no badge capitals pass', () => {
     expect(caps('.card { .x__label { text-transform: uppercase; } }')).toHaveLength(0);
     expect(caps('.card { .x__badge { color: red; } }')).toHaveLength(0);
+  });
+
+  it('reads the tag reset across stylesheets, not per file', () => {
+    const forced = '.permission-card { text-transform: lowercase; }';
+    const reset = '.permission-card__kind { text-transform: none; }';
+    const sheets = [forced, reset];
+    const anywhere = sheets.some(resetsTagCase);
+    expect(anywhere).toBe(true);
+    expect(sheets.flatMap((css) => findCapsBadges(css, 'fixture.css', anywhere))).toHaveLength(0);
+    // No reset in any stylesheet: the forced case fails.
+    const none = [forced, '.permission-card { color: red; }'];
+    const found = none.flatMap((css) => findCapsBadges(css, 'fixture.css', none.some(resetsTagCase)));
+    expect(found).toHaveLength(1);
   });
 
   it('reports the line and the selector', () => {

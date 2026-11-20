@@ -693,12 +693,18 @@ export function curlApostrophes(text: string): string {
  * whitespace or the end of the text, or at an ellipsis followed by whitespace and a capital (or the end);
  * the ellipsis is then one unit and is not kept in the action. */
 const ELLIPSIS_OPENS_SENTENCE = '(?=\\s+[A-Z“"‘\'`]|$)';
+/** An ellipsis: two or more dots, "…", or three or more dots spaced out (". . ."). */
+const ELLIPSIS = `(?:${['\\.{2,}', '\\.(?:[ \\t]?\\.){2,}', '\\u2026'].join('|')})`;
+// "a.m." and "p.m." before whitespace and a capital end the sentence (see SENTENCE_END), so the letter-dot run
+// leaves them alone there. By design "U.S.", "e.g.", "i.e." keep today's behaviour: a letter-dot run is read as
+// part of the sentence even before a capital ("Couldn't reach the U.S. Try again." stays one sentence).
 const SENTENCE_UNIT = '`[^`]*`|“[^”]*”|`(?![^`]*`)|“(?![^”]*”)'
-  + '|(?:\\.{2,}|…)(?!\\.|\\s+[A-Z“"‘\'`]|$)'
-  + '|(?<![\\w.])(?:[A-Za-z](?:\\.[A-Za-z])+\\.(?!$)|vs\\.(?!$)|etc\\.(?=\\s+[a-z]))'
+  + `|${ELLIPSIS}(?!\\.|\\s+[A-Z“"‘'\`]|$)`
+  + '|(?<![\\w.])(?:(?![Aa]\\.[Mm]\\.\\s+[A-Z“"‘\'`]|[Pp]\\.[Mm]\\.\\s+[A-Z“"‘\'`])[A-Za-z](?:\\.[A-Za-z])+\\.(?!$)|vs\\.(?!$)|etc\\.(?=\\s+[a-z]))'
   + '|(?<!\\.)\\.(?![.\\s]|$)|[^.…`“]';
-/** What closes a sentence: a dot before whitespace or the end, or an ellipsis that opens a new sentence. */
-const SENTENCE_END = `(?:(?<!\\.)\\.(?=\\s|$)|(?:\\.{2,}|…)${ELLIPSIS_OPENS_SENTENCE})`;
+/** What closes a sentence: a dot before whitespace or the end (the dot of "p.m." or "etc." before a capital included:
+ * the abbreviation keeps it, see failedWhat), or an ellipsis that opens a new sentence. */
+const SENTENCE_END = `(?:${ELLIPSIS}${ELLIPSIS_OPENS_SENTENCE}|(?<!\\.)\\.(?=\\s|$))`;
 
 /** A heading of the form "Couldn’t ‹x›." (or "Nebula couldn’t ‹x›."), either apostrophe. The period
  * inside a file name or a quoted name is not the sentence's end. */
@@ -712,7 +718,10 @@ const FAILED_HEADING = new RegExp(`^(?:Nebula )?[Cc]ouldn['’]t ((?:${SENTENCE_
  */
 export function failedWhat(heading: string): string | null {
   const match = FAILED_HEADING.exec(heading.trim());
-  return match ? curlApostrophes(match[1]) : null;
+  if (!match) return null;
+  // The dot of "p.m." or "etc." is the abbreviation's own as well as the sentence's: the action keeps it.
+  const abbreviation = /(?<![\w.])(?:[AaPp]\.[Mm]|etc)$/.test(match[1]);
+  return curlApostrophes(match[1]) + (abbreviation ? '.' : '');
 }
 
 /** The status rows: a reason Nebula words for an answer or for no answer at all. */
@@ -819,17 +828,22 @@ export function clauseFor(source: unknown, beside: 'alone' | 'button' = 'alone')
 /** A reason that is a whole line of Nebula's, already in the because form. */
 const FULL_BECAUSE = new RegExp(`${NEBULA_COULDNT.source}.+ because `);
 const OWN_FAILURE = NEBULA_COULDNT;
-const FIRST_SENTENCE = new RegExp(`^((?:${SENTENCE_UNIT})+)(?:${SENTENCE_END}\\s*([\\s\\S]*)|$)`);
+const FIRST_SENTENCE = new RegExp(`^((?:${SENTENCE_UNIT})+)(?:(${SENTENCE_END})\\s*([\\s\\S]*)|$)`);
 
 /** A reason's first sentence (with its full stop) and what follows it. By design the end of the text closes a
  * sentence like a full stop does: a reason with none is one sentence, read as it would be with one. Null when
  * the text ends in other closing punctuation ("?", "!", a closing quote after a stop) and holds no sentence end. */
-function firstSentence(reason: string): { sentence: string; rest: string } | null {
+function firstSentence(reason: string): { sentence: string; rest: string; ellipsis?: string } | null {
   const match = FIRST_SENTENCE.exec(reason);
   if (!match) return null;
   const closed = match[0].length > match[1].length;
   if (!closed && ENDS_A_SENTENCE.test(match[1])) return null;
-  return { sentence: `${match[1]}.`, rest: match[2] ?? '' };
+  const text = match[1].trimEnd();
+  const rest = match[3] ?? '';
+  // A reason that ends in an ellipsis keeps it ("Couldn’t read the file…"); spaced dots are written as one.
+  const end = match[2] ?? '';
+  const ellipsis = rest === '' && /^(?:\.{2,}|\.(?:[ \t]?\.){2,}|…)$/.test(end) ? (/\s/.test(end) ? '…' : end) : undefined;
+  return { sentence: `${text}.`, rest, ...(ellipsis ? { ellipsis } : {}) };
 }
 
 /** A reason that is a line of its own ("Couldn’t download the result. Its link may have expired. Run the node
@@ -842,11 +856,13 @@ function namedLine(reason: string, beside: 'alone' | 'button'): string {
   const rest = (split?.rest ?? '').trim();
   const clause = rest ? clauseFor(rest, beside) : null;
   if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
-  return rest ? `Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(rest))}` : `Nebula couldn’t ${what}.`;
+  if (rest) return `Nebula couldn’t ${what}${what.endsWith('.') ? '' : '.'} ${endedSentence(curlApostrophes(rest))}`;
+  return `Nebula couldn’t ${what}${split?.ellipsis ?? (what.endsWith('.') ? '' : '.')}`;
 }
 
 /** A sentence with its closing punctuation: a reason with none ("File exceeds 500 MB limit") gets a full stop. */
-export function endedSentence(text: string): string {
+export function endedSentence(input: string): string {
+  const text = input.trimEnd();
   // By design no full stop goes after a trailing link (a person copies it, and the stop would go with it) or
   // after a trailing colon (the reason is cut off there): both read as they came. A code span still gets one.
   return ENDS_A_SENTENCE.test(text) || /:$/.test(text) || /\bhttps?:\/\/[^\s`]+$/i.test(text) ? text : `${text}.`;

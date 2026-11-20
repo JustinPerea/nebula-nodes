@@ -50,10 +50,12 @@ function main() {
   const hits = [];
   const capsHits = [];
   const eyebrowHits = [];
-  for (const file of files) {
-    const source = readFileSync(file, 'utf8');
+  const sources = files.map((file) => [file, readFileSync(file, 'utf8')]);
+  // The tag's text-transform reset counts wherever it is written: CSS cascades across files.
+  const tagResetAnywhere = sources.some(([, source]) => resetsTagCase(source));
+  for (const [file, source] of sources) {
     hits.push(...findAccentBadges(source, relative(SRC, file)));
-    capsHits.push(...findCapsBadges(source, relative(SRC, file)));
+    capsHits.push(...findCapsBadges(source, relative(SRC, file), tagResetAnywhere));
     eyebrowHits.push(...findAccentEyebrows(source, relative(SRC, file)));
   }
   if (eyebrowHits.length > 0) {
@@ -210,17 +212,23 @@ function nestedCapsUnderBadge(body) {
 }
 const CAPS_TEXT = /(?:text-transform|font-variant(?:-caps)?)\s*:\s*[^;}]*(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)/i;
 
-/** Every declaration that capitalises a badge or tag: { file, line, selector, decl }. */
-export function findCapsBadges(source, file) {
+/** True when this stylesheet resets the tag's inherited case itself: `.permission-card__kind { text-transform: none }`.
+ * CSS cascades across files, so the caller reads every stylesheet and passes the result to findCapsBadges. */
+export function resetsTagCase(source) {
+  return parseRules(stripComments(source)).some((rule) => !rule.nested && rule.selector.split(',').some((part) => {
+    const last = part.trim().split(/[\s>+~]+/).pop() ?? '';
+    return [...last.matchAll(CLASS)].some((m) => writtenCaseTag(m[1]));
+  }) && parseDeclarations(rule.body, rule.bodyStart).some((d) => d.prop.toLowerCase() === 'text-transform' && /^\s*none\s*(?:!important)?\s*$/i.test(d.value)));
+}
+
+/** Every declaration that capitalises a badge or tag: { file, line, selector, decl }. `resetElsewhere` is true when
+ * any stylesheet of the app resets the tag's case (resetsTagCase); this file's own rules count too. */
+export function findCapsBadges(source, file, resetElsewhere = false) {
   const css = stripComments(source);
   const lineStarts = computeLineStarts(css);
   const hits = [];
   const rules = parseRules(css);
-  // The tag resets the inherited case itself: `.permission-card__kind { text-transform: none }`.
-  const tagResets = rules.some((rule) => !rule.nested && rule.selector.split(',').some((part) => {
-    const last = part.trim().split(/[\s>+~]+/).pop() ?? '';
-    return [...last.matchAll(CLASS)].some((m) => writtenCaseTag(m[1]));
-  }) && parseDeclarations(rule.body, rule.bodyStart).some((d) => d.prop.toLowerCase() === 'text-transform' && /^\s*none\s*(?:!important)?\s*$/i.test(d.value)));
+  const tagResets = resetElsewhere || resetsTagCase(source);
   for (const rule of rules) {
     const selector = compact(rule.selector);
     const badgeParts = selector.split(',').filter((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));

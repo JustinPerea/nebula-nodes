@@ -51,11 +51,11 @@ export function withCodeSpans(text: string): ReactNode {
   return out;
 }
 
+const MASK = '\uE000';
 /**
  * A line in `code` mode: code spans are found first, on the words as they came, and only the prose between them is curled,
  * so a span (`cmd's`) is never changed whichever way curlApostrophes would have paired the backticks.
  */
-const MASK = '\uE000';
 export function curledWithCodeSpans(text: string): ReactNode {
   const node = withCodeSpans(text);
   if (typeof node === 'string') return curlApostrophes(node);
