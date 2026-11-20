@@ -39,12 +39,14 @@ export function readRecord(model = 'claude-opus-5-5', corrections: Correction[] 
       measured: {
         palette: [
           { index: 0, hex: '#f6f4ee', share: 0.7, is_accent: false },
+          // palette-exempt: a colour measured from a test image, data the page shows as a swatch, not a UI colour
           { index: 1, hex: '#f06e1e', share: 0.01, is_accent: true },
         ],
         value_range: { low: 10, high: 95 },
         aspect: 1.6,
         lightness: 200,
         saturation: 20,
+        // palette-exempt: the same measured image colour, inside a region
         region_measures: { r2: { box_px: [96, 410, 200, 56], palette: [{ index: 0, hex: '#f06e1e', share: 1, is_accent: true }], origin: 'code', from_model_box: true } },
         region_gaps: [{ between: ['r1', 'r2'], axis: 'y', px: 338, origin: 'code' }],
       },

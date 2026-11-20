@@ -14,7 +14,11 @@ body { background: #111; }
   --ex-fill-selected: #272727;
   --ex-line: #262626;
   --ex-notice: #2a1d1d;
-  --ex-notice-text: #e3b4b4;
+  --ex-notice-text: var(--ex-warning);
+  /* palette-exempt: the app's --sr-warning, copied once; the app's tokens live under body.app-slava-restraint (slava-restraint.css), which this standalone page doesn't load */
+  --ex-warning: #F5C518;
+  /* palette-exempt: the app's --sr-accent, copied once, for the selected region box; same reason as --ex-warning */
+  --ex-accent: #FF5A1F;
   --ex-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --ex-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -271,8 +275,8 @@ body { background: #111; }
   background: #000;
   color: #fff;
 }
-.ex-box-on { background: rgba(143, 180, 255, 0.16); z-index: 1; }
-.ex-box-selected { background: rgba(143, 180, 255, 0.24); }
+.ex-box-on { background: color-mix(in srgb, var(--ex-accent) 16%, transparent); z-index: 1; }
+.ex-box-selected { background: color-mix(in srgb, var(--ex-accent) 24%, transparent); }
 
 /* Read section and rows */
 .ex-read-line { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; flex-wrap: wrap; }
