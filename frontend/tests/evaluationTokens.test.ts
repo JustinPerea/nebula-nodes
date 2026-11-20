@@ -61,7 +61,7 @@ describe('the evaluation panes\' look is one rule (design: every colour reads a 
   });
 
   it('catches an rgba track', () => {
-    expect(check('.review-grade meter { background:rgba(255,255,255,.08); }')).toHaveLength(1);
+    expect(check('.review-axis-meter { background:rgba(255,255,255,.08); }')).toHaveLength(1);
   });
 
   it('catches a named colour', () => {

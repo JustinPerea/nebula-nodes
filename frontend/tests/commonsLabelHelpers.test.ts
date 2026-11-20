@@ -52,7 +52,9 @@ describe('Commons label helpers with a missing value', () => {
 describe('axisValue', () => {
   it('uses a true minus for a negative and no sign for zero', () => {
     expect(axisValue(-0.4)).toBe('−0.40');
-    expect(axisValue(0.25)).toBe('0.25');
+    expect(axisValue(0.25)).toBe('+0.25');
+    expect(axisValue(1)).toBe('+1.00');
+    expect(axisValue(0.001)).toBe('0.00');
     expect(axisValue(0)).toBe('0.00');
     expect(axisValue(-0)).toBe('0.00');
     expect(axisValue(-0.001)).toBe('0.00');

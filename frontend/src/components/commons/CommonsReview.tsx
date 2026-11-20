@@ -15,6 +15,7 @@ import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
+import { ReviewAxisMeter } from './ReviewAxisMeter';
 import { axisLabel, axisValue, enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 import { isLoadLine } from '../../lib/errorCopy';
@@ -347,7 +348,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
         <label>{axisLabel(key)} <strong>{axisValue(labels.axes[key])}</strong>
           {editing ? <input aria-label={axisLabel(key)} type="range" min={-1} max={1} step={0.05} value={labels.axes[key]}
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} />
-            : <meter aria-label={axisLabel(key)} min={-1} max={1} value={labels.axes[key]} />}
+            : <ReviewAxisMeter axis={key} value={labels.axes[key]} />}
         </label><div className="review-axis-ends"><span>−1 {key.split('_')[0]}</span><span>+1 {key.split('_')[1]}</span></div>
         <p className="review-reason">Agent: {fields.axes[key].why}</p>
       </div>)}
