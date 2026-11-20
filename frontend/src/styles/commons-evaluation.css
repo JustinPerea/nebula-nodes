@@ -8,44 +8,52 @@
   color:var(--evaluation-ink);
   padding:28px;
   font-size:13px;
-  /* Design: this page's palette is a token layer of its own (olive), defined once here and read
-   * by every rule in the two evaluation stylesheets. A different treatment redefines these. */
+  /* Design: the two evaluation panes read the app's tokens through these --evaluation-* tokens,
+   * defined once here and read by every rule in the two evaluation stylesheets. A different
+   * treatment is a change to this one rule. */
   /* Ground and ink */
-  --evaluation-ground:#1c211d;
-  --evaluation-ink:#e5e9df;
-  --evaluation-body-ink:#a8b4a0;
-  --evaluation-eyebrow-ink:#a0b28f;
-  --evaluation-unsaved-ink:#6d7a63;
-  /* Panels, rows and reference buttons on the ground */
-  --evaluation-panel-edge:#495443;
-  --evaluation-row-rule:#46543f;
-  --evaluation-dialog-edge:#a9b99a;
-  --evaluation-nav-edge:#485440;
-  --evaluation-nav-ink:#cbd5c1;
-  --evaluation-current-fill:#3b4b2e;
-  --evaluation-current-edge:#afcc85;
-  /* The labeling form and review card, and what sits on it */
-  --evaluation-card-fill:#eff1e8;
-  --evaluation-card-ink:#293822;
-  --evaluation-card-muted-ink:#6d7a63;
-  --evaluation-card-rule:#ced7c4;
-  --evaluation-field-fill:#f9faf5;
-  --evaluation-field-ink:#2b3824;
-  --evaluation-field-edge:#adb99e;
-  --evaluation-button-fill:#d9e1cf;
-  --evaluation-button-ink:#314529;
-  --evaluation-button-edge:#a9b99a;
-  --evaluation-primary-fill:#41582f;
-  --evaluation-primary-ink:white;
-  --evaluation-control-accent:#5d7842;
-  --evaluation-chip-edge:#a9b99a;
-  --evaluation-swatch-edge:#0002;
-  /* The reference image's markers */
-  --evaluation-marker-fill:#fff;
-  --evaluation-marker-ink:#222;
-  --evaluation-marker-edge:#222;
-  --evaluation-crosshair-ink:white;
-  --evaluation-crosshair-shadow:#000;
+  --evaluation-ground:var(--sr-canvas-elevated);
+  --evaluation-ink:var(--sr-ink);
+  --evaluation-body-ink:var(--sr-ink-light);
+  --evaluation-eyebrow-ink:var(--sr-ink-meta);
+  --evaluation-unsaved-ink:var(--sr-warning);
+  /* Panels, rows and reference buttons on the ground; the current reference in the accent */
+  --evaluation-panel-edge:var(--sr-edge-strong);
+  --evaluation-row-rule:var(--sr-edge);
+  --evaluation-dialog-edge:var(--sr-edge-strong);
+  --evaluation-nav-edge:var(--sr-edge-strong);
+  --evaluation-nav-ink:var(--sr-ink);
+  --evaluation-current-fill:var(--sr-accent-soft);
+  --evaluation-current-edge:var(--sr-accent-border-strong);
+  /* The labeling form and review card on the Commons panel surface, and what sits on it */
+  --evaluation-card-fill:var(--sr-glass-strong);
+  --evaluation-card-ink:var(--sr-ink);
+  --evaluation-card-body-ink:var(--sr-ink-light);
+  --evaluation-card-muted-ink:var(--sr-ink-meta);
+  --evaluation-card-rule:var(--sr-edge);
+  --evaluation-field-fill:var(--sr-surface-control-focus);
+  --evaluation-field-ink:var(--sr-ink);
+  --evaluation-field-edge:var(--sr-edge-strong);
+  --evaluation-button-fill:var(--sr-surface-control-active);
+  --evaluation-button-ink:var(--sr-ink);
+  --evaluation-button-edge:var(--sr-edge-strong);
+  --evaluation-primary-fill:var(--sr-accent-soft);
+  --evaluation-primary-ink:var(--sr-accent);
+  --evaluation-primary-edge:var(--sr-accent-border);
+  --evaluation-control-accent:var(--sr-accent);
+  --evaluation-meter-track:var(--sr-node-progress-track);
+  /* The review meters fill in ink, not the accent: they share the form card with the red Discard
+   * changes, and nothing on a red control's card takes the accent (design). */
+  --evaluation-meter-fill:var(--sr-ink-light);
+  --evaluation-chip-edge:var(--sr-edge-strong);
+  /* --sr-ink-faint (white at .20) used as an edge, the only token at that strength */
+  --evaluation-swatch-edge:var(--sr-ink-faint);
+  /* The reference image's markers sit on the image, not on a surface */
+  --evaluation-marker-fill:var(--sr-ink-bold);
+  --evaluation-marker-ink:var(--sr-canvas);
+  --evaluation-marker-edge:var(--sr-canvas);
+  --evaluation-crosshair-ink:var(--sr-ink-bold);
+  --evaluation-crosshair-shadow:var(--sr-canvas);
 }
 .evaluation-heading {
   display:flex;
@@ -194,7 +202,7 @@
   border-radius:8px;
 }
 .evaluation-form p {
-  color:var(--evaluation-card-muted-ink);
+  color:var(--evaluation-card-body-ink);
 }
 .evaluation-form small {
   color:var(--evaluation-card-muted-ink);
@@ -275,15 +283,14 @@
 .evaluation-hash {
   overflow-wrap:anywhere;
 }
-/* Focus: the app's neutral ring on the green-black panel. The form is a
- * light card, where the light ring would not show (1.1:1), so it
- * takes the token's dark twin. Both beat the Commons view's own focus rule. */
+/* Focus: the app's neutral ring, on the page and on the form card alike. Both rules beat the
+ * Commons view's own focus rule. */
 body.app-slava-restraint .commons-view .commons-evaluation :focus-visible {
   outline:var(--sr-focus-outline);
   outline-offset:3px;
 }
 body.app-slava-restraint .commons-view .commons-evaluation .evaluation-form :focus-visible {
-  outline:var(--sr-focus-outline-on-light);
+  outline:var(--sr-focus-outline);
   outline-offset:3px;
 }
 @media(max-width:1000px) {
@@ -334,6 +341,7 @@ body.app-slava-restraint .evaluation-form .commons-button {
 body.app-slava-restraint .evaluation-form .commons-button--primary {
   background:var(--evaluation-primary-fill);
   color:var(--evaluation-primary-ink);
+  border-color:var(--evaluation-primary-edge);
   margin:20px 0 0;
 }
 .evaluation-heading {
