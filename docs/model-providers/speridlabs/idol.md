@@ -449,7 +449,7 @@ A run is:
    token refused.
 2. `GET /gradio_api/info`: the signature. Inputs, outputs and the two enums
    must match the pinned fixture exactly, or the run stops with "Idol changed
-   on Hugging Face, and this version of Nebula can’t run it. Update Nebula,
+   on Hugging Face and this version of Nebula can’t run it. Update Nebula,
    then try again." (the agent text: "The Idol Space's API changed (…)").
 3. The image: Nebula reads it itself (`load_media`, which fetches a public
    HTTPS URL through `fetch_public_media` and refuses loopback and private
@@ -609,7 +609,7 @@ token-not-applied lines only follow a run with one.
 | Space missing (deleted, private, gated or disabled; with or without a token) | "Idol isn’t on Hugging Face anymore. Use another 3D node." |
 | Signature changed | "Idol changed on Hugging Face and this version of Nebula can’t run it. Update Nebula, then try again." |
 | Token refused (with a token, a 401 or 403 from the Hub, `/gradio_api/info`, the upload, `/call/run` or its stream) | "Hugging Face rejected your token. Check your Hugging Face token in Settings." |
-| Token with a character tokens can't have (leading and trailing spaces and line breaks are trimmed first) | "The token has a character Hugging Face tokens can’t have. Copy it again from Hugging Face, then paste it in Settings." (the Settings field, and the settings check, which then sends nothing: "…then paste it here.") |
+| Token with a character tokens can't have (leading and trailing spaces and line breaks are trimmed first) | "The token has a character Hugging Face tokens can’t have. Copy it again from Hugging Face, then paste it in Settings." (the Settings field and the settings check, which then send nothing, say "This token has a character Hugging Face tokens can’t have. Copy it again from Hugging Face, then paste it here.") |
 | The image was empty | "The image Idol got is empty. Check the node that makes it, then run Idol again." |
 | The model couldn't make an object | "Idol couldn’t make a 3D object from this image. Try another image, or open Details to see why." |
 | The Space stopped with no message | "Idol stopped without saying why. Try again in a minute." |
