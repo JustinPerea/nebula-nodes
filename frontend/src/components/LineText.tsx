@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
 import { isBecauseFailure } from '../lib/errorCopy';
+import { withCodeSpans } from '../lib/codeSpans';
 import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
 
@@ -35,7 +36,7 @@ export type LineTone = 'failure' | 'because';
  * surface's element is hidden too when the line is all it holds (a `role="alert"` paragraph, a
  * toast's span), so no empty box is left; with one, the span is. Any other line is unchanged.
  */
-export function LineText({ text, className, children, tone }: { text: string | null | undefined; className?: string; children?: ReactNode; tone?: LineTone }) {
+export function LineText({ text, className, children, tone, code }: { text: string | null | undefined; className?: string; children?: ReactNode; tone?: LineTone; code?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const own = className !== undefined;
   const registration = useRef<LineRegistration | null>(null);
@@ -79,6 +80,6 @@ export function LineText({ text, className, children, tone }: { text: string | n
     return () => { element.hidden = false; };
   }, [own, hide]);
   if (!text) return null;
-  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? text}</span>;
-  return <>{hide ? null : children ?? text}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
+  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? (code ? withCodeSpans(text) : text)}</span>;
+  return <>{hide ? null : children ?? (code ? withCodeSpans(text) : text)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
 }
