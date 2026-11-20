@@ -575,7 +575,8 @@ def plan_undo(
         wire.append(wire_body(edge))
 
     for entry, node_id in kept_entries:
-        went_back = any(key in items.get(node_id, {}) for key in ("params", "label", "position", "pending"))
+        went_back = (any(key in items.get(node_id, {}) for key in ("params", "label", "position", "pending"))
+                     or any(node_id in (edge["source"], edge["target"]) for edge in wire + unwire))
         entry["message"] = kept_line(node_id, went_back)
 
     ran_skips = [{"nodeId": node_id, "part": "node", "reason": "ran since", "left": parts,
@@ -644,10 +645,22 @@ def _listed(parts: list[str]) -> str:
 
 
 def _noun(label: str) -> str:
-    """A param's label as a sentence noun: "Aspect Ratio" gives "aspect ratio",
-    an acronym ("URL") keeps its capitals. A note after " · " is left out."""
-    words = label.split(" \u00b7 ")[0].split()
-    return " ".join(word if len(word) > 1 and word.isupper() else word.lower() for word in words)
+    """A param's label as a sentence noun: "Aspect ratio" and "Max Tokens" give
+    "aspect ratio" and "max tokens". Only ordinary capitalised words (one
+    capital, then lower-case letters) are lower-cased; acronyms and mixed-case
+    words stay as the label has them ("Image URLs", "LoRAs", "HD texture"), and
+    so does a provider name the label starts with ("Krea connection", "Hugging
+    Face token"). A note after " \u00b7 " is left out."""
+    from services.node_route import PROVIDER_LABELS  # design: the names errors and readiness call providers
+
+    text = label.split(" \u00b7 ")[0].strip()
+    words = text.split()
+    if not words:
+        return ""
+    names = [name for key, name in PROVIDER_LABELS.items() if key != "utility"]
+    kept = max((len(name.split()) for name in names if text == name or text.startswith(name + " ")), default=0)
+    return " ".join(word if index < kept or not re.fullmatch(r"[A-Z][a-z]+", word) else word.lower()
+                    for index, word in enumerate(words))
 
 
 def _runners(actors: list[dict[str, Any]]) -> str:

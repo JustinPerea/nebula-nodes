@@ -1011,8 +1011,42 @@ def test_a_node_where_nothing_went_back_keeps_the_whole_node_sentence(api):
 def test_a_param_word_is_its_label_in_lower_case_else_its_key():
     from services.canvas_undo import _noun
 
-    assert _noun("Aspect Ratio · shape") == "aspect ratio"
+    assert _noun("Aspect ratio · shape") == "aspect ratio"
     assert _noun("Image URL") == "image URL"
+    assert _noun("Image URLs") == "image URLs"
+    assert _noun("Krea connection") == "Krea connection"
+    assert _noun("Hugging Face token") == "Hugging Face token"
+    assert _noun("LoRAs") == "LoRAs"
+    assert _noun("IDs") == "IDs"
+    assert _noun("Model") == "model"
+    assert _noun("Aspect ratio") == "aspect ratio"
+    assert _noun("Max Tokens") == "max tokens"
+    assert _noun("Batch Size Cap") == "batch size cap"
+    assert _noun("HD Texture (4K)") == "HD texture (4K)"
+    assert _noun("Existing World ID") == "existing world ID"
+    assert _noun("World size") == "world size"
+
+
+def test_a_key_with_no_label_reads_as_lower_case_words(api):
+    import main as main_module
+
+    assert main_module._undo_param_label("no-such-node", "filePath") == "file path"
+    assert main_module._undo_param_label("no-such-node", "image_size") == "image size"
+    assert main_module._undo_param_label("no-such-node", "imageSize") == "image size"
+
+
+def test_a_wire_that_went_back_counts_as_something_on_the_node_going_back(api):
+    prompt, image = _seed(api)
+    other = api.graph.add_node("text-input", {"value": "b"})
+    token = _apply(api, {"edges": [{"source": other, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}],
+                         "unwire": [{"source": prompt, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}],
+                         "params": [{"nodeId": image, "params": {"model": "gemini-3-pro-image"}}]})["undo"]["token"]
+    assert api.client.put(f"/api/graph/node/{image}", headers=PERSON,
+                          json={"params": {"model": "gemini-2.5-flash-image"}}).status_code == 200
+    result = _undone(api, token)
+    assert _wires(api) == {(prompt, "text", image, "prompt")}
+    [item] = result["skipped"]
+    assert item["message"] == "“Nano Banana”’s model changed after that step, so Nebula left it as it is."
 
 
 def test_the_replys_kept_lines_join_with_a_space_and_one_stop(api):

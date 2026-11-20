@@ -19978,7 +19978,12 @@ def _undo_param_label(definition_id: str, key: str) -> str:
     (the kept lines name the setting that stayed)."""
     param = next((p for p in (node_registry.get_all().get(definition_id) or {}).get("params") or []
                   if isinstance(p, dict) and p.get("key") == key), None)
-    return str((param or {}).get("label") or "").split(" \u00b7 ")[0].strip() or key.replace("_", " ")
+    return str((param or {}).get("label") or "").split(" \u00b7 ")[0].strip() or _undo_key_words(key)
+
+
+def _undo_key_words(key: str) -> str:
+    """A param key in lower-case words: filePath and file_path both give "file path"."""
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key).replace("_", " ").lower()
 
 
 def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
