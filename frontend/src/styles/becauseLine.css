@@ -83,10 +83,10 @@
 .line-box {
   margin: 6px 0 0;
   padding: 8px 10px;
-  border: 1px solid var(--sr-danger-border);
+  border: none;
   border-radius: var(--sr-radius-control);
   background: var(--sr-warning-soft);
-  color: var(--sr-danger);
+  color: var(--sr-warning);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-label);
   line-height: 1.4;

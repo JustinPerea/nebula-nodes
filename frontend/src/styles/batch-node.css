@@ -43,8 +43,8 @@ body.app-slava-restraint .batch-node__warning {
   padding: 7px;
   /* Design: a fill, never a bar down the edge. */
   border-radius: var(--sr-node-error-radius);
-  background: var(--line-warning-soft, rgba(251, 191, 36, 0.12));
-  color: var(--line-warning, #fbbf24);
+  background: var(--sr-warning-soft);
+  color: var(--sr-warning);
   font-size: 11px;
   line-height: 1.4;
 }

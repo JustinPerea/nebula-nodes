@@ -446,7 +446,7 @@ body.app-slava-restraint .commons-notice--error {
   /* Design: one tint per tone. A failure is the warning tint, never the orange accent; a neutral
      line (data-line-neutral) reads the neutral fill through the same token (styles/becauseLine.css). */
   background: var(--sr-warning-soft);
-  color: var(--sr-error);
+  color: var(--sr-warning);
 }
 
 /* Round 18f (GM r35 4): a load line's "Try again", inline at the end of its sentence, in the

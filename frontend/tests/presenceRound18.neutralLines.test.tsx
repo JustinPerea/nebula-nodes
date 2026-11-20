@@ -8,6 +8,7 @@
  */
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cascaded } from './helpers/cssCascade';
 import { leftBar, lineFill, lineLook, NEUTRAL } from './helpers/lineLook';
 
 const { CommonsErrorLine } = await import('../src/components/commons/CommonsErrorLine');
@@ -125,7 +126,7 @@ describe('every "Nebula couldn’t load …" line resolves to the neutral tokens
     const view = render(<CommonsErrorLine line="Couldn’t save the settings. That setting isn’t available. Reload to get the latest settings." />);
     const box = view.container.querySelector('[data-commons-line]')!;
     expect(box.hasAttribute('data-line-neutral')).toBe(false);
-    expect(lineLook(box).color).toBe('var(--sr-error)');
+    expect(lineLook(box).color).toBe('var(--sr-warning)');
     expect(leftBar(box)).toBe(false);
   });
 });
@@ -162,22 +163,63 @@ describe('one look for every neutral Commons line, wherever it sits (GM r30 1)',
   });
 });
 
-describe('design: one tint per tone, and a note or the current row is no accent fill or bar', () => {
+describe('design: one tint per tone, and a note is no accent fill', () => {
   const fillOf = (className: string) => {
     const box = document.createElement('div'); box.className = className; document.body.appendChild(box);
     const fill = lineFill(box); box.remove(); return fill;
   };
   it('every failure or warning fill is the warning tint (or the neutral one for a note), none the accent tint', () => {
-    for (const cls of ['commons-notice commons-notice--error', 'chat-panel__model-error', 'chat-panel__notice', 'line-box', 'project-home__error', 'inspector__notice--warning']) {
+    for (const cls of ['commons-notice commons-notice--error', 'chat-panel__notice', 'line-box', 'project-home__error']) {
       expect(fillOf(cls), cls).toBe('var(--sr-warning-soft)');
     }
-    for (const cls of ['personal-agents__terms', 'inspector__notice']) expect(fillOf(cls), cls).toMatch(/^var\(--sr-surface-control(?:-hover)?\)$/);
+    for (const cls of ['personal-agents__terms', 'inspector__notice', 'inspector__notice inspector__notice--key']) expect(fillOf(cls), cls).toMatch(/^var\(--sr-surface-control(?:-hover)?\)$/);
   });
-  it('the current row of the model list keeps its active fill and has no bar', () => {
-    const row = document.createElement('button'); row.className = 'chat-panel__model-row chat-panel__model-row--active'; document.body.appendChild(row);
-    expect(leftBar(row)).toBe(false);
-    expect(lineFill(row)).toBe('var(--sr-surface-control-active)');
-    row.remove();
+});
+
+/**
+ * Design: "A notice is fill only, with the tone's tint: neutral fill for neutral lines and a
+ * warning tint for warning lines", and "one tint per tone ... Orange is the brand accent, not a
+ * status colour." Every warning box reads what the node card's run failure reads: the warning
+ * text on the warning tint, no border. They read these through tokens styles/becauseLine.css
+ * overrides, so a because line in the same box reads neutral.
+ */
+describe('design: one look for every warning notice, a fill and no edge', () => {
+  const ACCENT = /--sr-(?:accent|error|danger)|#ff5a1f|rgba?\(\s*255[ ,]+(?:90|180)[ ,]/i;
+  const WARNING_BOXES = [
+    'model-node__error',
+    'commons-notice commons-notice--error',
+    'chat-panel__notice',
+    'line-box',
+    'project-home__error',
+    'provider-recovery-status',
+    'settings-alert',
+    'settings-apps__warnings',
+    'character-studio-view__notice character-studio-view__notice--error',
+    'character-studio-view__notice character-studio-view__notice--guard',
+    'moodboard-studio__notice moodboard-studio__notice--error',
+    'moodboard-studio__notice moodboard-studio__notice--warn',
+    'batch-node__warning',
+  ];
+  const DRAWN = (prop: string, value: string) => /^\|border(?!-radius)/.test(prop) && !/^(?:none|0|0px)$/.test(value.replace(/\s*!important/, '').trim());
+  const boxOf = (className: string) => {
+    const box = document.createElement('div'); box.className = className; box.setAttribute('data-line-box', ''); document.body.appendChild(box); return box;
+  };
+  it.each(WARNING_BOXES)('%s: warning text on the warning tint, no border, no accent, error or orange', (className) => {
+    const box = boxOf(className);
+    const won = cascaded(box);
+    expect(lineLook(box).color, 'text').toBe('var(--sr-warning)');
+    expect(lineFill(box), 'fill').toContain('var(--sr-warning-soft)');
+    expect([...won].filter(([prop, win]) => DRAWN(prop, win.value)).map(([prop]) => prop), 'a border').toEqual([]);
+    const read = [...won].filter(([prop]) => /^\|(?:color|background[\w-]*|border[\w-]*|box-shadow|outline[\w-]*|--mb-notice-fill)$/.test(prop))
+      .filter(([, win]) => ACCENT.test(win.value)).map(([prop, win]) => `${prop}: ${win.value}`);
+    expect(read, 'a status look that is not the warning one').toEqual([]);
+    box.remove();
+  });
+  it.each(['inspector__notice', 'inspector__notice inspector__notice--key', 'personal-agents__terms'])('%s: a neutral note is a fill, no border', (className) => {
+    const box = boxOf(className);
+    expect([...cascaded(box)].filter(([prop, win]) => DRAWN(prop, win.value)).map(([prop]) => prop), 'a border').toEqual([]);
+    expect(lineFill(box)).toMatch(/^var\(--sr-surface-control(?:-hover)?\)$/);
+    box.remove();
   });
 });
 

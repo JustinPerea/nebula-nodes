@@ -444,7 +444,6 @@ body.app-slava-restraint .mesh-modal__download-icon {
 }
 
 body.app-slava-restraint .chat__tool-icon,
-body.app-slava-restraint .chat-panel__model-caret,
 body.app-slava-restraint .chat-panel__chip-close-icon,
 body.app-slava-restraint .connection-popup__category-chevron,
 body.app-slava-restraint .panel__group-chevron,
@@ -1049,9 +1048,6 @@ body.app-slava-restraint .chat-panel__agent-btn:focus-visible,
 body.app-slava-restraint .chat-panel__agent-btn--active:focus-visible,
 body.app-slava-restraint .chat-panel__tone-btn:focus-visible,
 body.app-slava-restraint .chat-panel__tone-btn--active:focus-visible,
-body.app-slava-restraint .chat-panel__model-trigger:focus-visible,
-body.app-slava-restraint .chat-panel__model-search:focus-visible,
-body.app-slava-restraint .chat-panel__model-row:focus-visible,
 body.app-slava-restraint .chat-panel__textarea:focus-visible,
 body.app-slava-restraint .chat-panel__send:focus-visible,
 body.app-slava-restraint .chat__codeblock-apply:focus-visible,
@@ -1068,32 +1064,6 @@ body.app-slava-restraint .chat-panel__session {
   letter-spacing: 0;
 }
 
-body.app-slava-restraint .chat-panel__model-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-right: 4px;
-  padding: 2px 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--sr-ink-light);
-  cursor: pointer;
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-meta);
-  letter-spacing: 0;
-}
-
-body.app-slava-restraint .chat-panel__model-trigger:hover {
-  border-color: var(--sr-edge);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--sr-ink);
-}
-
-body.app-slava-restraint .chat-panel__model-caret {
-  color: var(--sr-ink-faint);
-}
-
 body.app-slava-restraint .chat-panel__model-picker {
   display: flex;
   flex-direction: column;
@@ -1105,91 +1075,6 @@ body.app-slava-restraint .chat-panel__model-picker {
   background: rgba(0, 0, 0, 0.34);
   box-shadow: var(--sr-shadow-popover);
   font-family: var(--sr-ui);
-}
-
-body.app-slava-restraint .chat-panel__model-search {
-  padding: 9px 10px;
-  border: none;
-  border-bottom: 1px solid var(--sr-edge);
-  border-radius: 0;
-  outline: none;
-  background: transparent;
-  color: var(--sr-ink);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-label);
-}
-
-body.app-slava-restraint .chat-panel__model-search::placeholder {
-  color: var(--sr-ink-faint);
-}
-
-body.app-slava-restraint .chat-panel__model-error {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--sr-edge);
-  /* Design: a failure takes the warning tint; orange is the brand accent, not a status colour. */
-  background: var(--sr-warning-soft);
-  color: var(--sr-accent);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-meta);
-  line-height: var(--sr-line-meta);
-}
-
-body.app-slava-restraint .chat-panel__model-list {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-body.app-slava-restraint .chat-panel__model-row {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 8px 10px;
-  border: none;
-  border-bottom: 1px solid var(--sr-edge);
-  background: transparent;
-  color: var(--sr-ink-light);
-  cursor: pointer;
-  font-family: var(--sr-ui);
-  text-align: left;
-}
-
-body.app-slava-restraint .chat-panel__model-row:last-child {
-  border-bottom: none;
-}
-
-body.app-slava-restraint .chat-panel__model-row:hover {
-  background: var(--sr-surface-control-hover);
-  color: var(--sr-ink);
-}
-
-body.app-slava-restraint .chat-panel__model-row--active {
-  /* Design: the current row is the active fill alone, no bar down its edge. */
-  background: var(--sr-surface-control-active);
-}
-
-body.app-slava-restraint .chat-panel__model-row-name {
-  color: var(--sr-ink);
-  font-size: var(--sr-type-body);
-  font-weight: 600;
-  line-height: var(--sr-line-compact);
-}
-
-body.app-slava-restraint .chat-panel__model-row-id {
-  color: var(--sr-ink-meta);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-micro);
-  letter-spacing: 0;
-  text-transform: lowercase;
-}
-
-body.app-slava-restraint .chat-panel__model-empty {
-  padding: 12px 10px;
-  color: var(--sr-ink-meta);
-  font-size: var(--sr-type-body);
-  text-align: center;
 }
 
 body.app-slava-restraint .chat-panel__messages {
@@ -1208,7 +1093,6 @@ body.app-slava-restraint .chat-panel__input {
 }
 
 body.app-slava-restraint .chat-panel__messages::-webkit-scrollbar,
-body.app-slava-restraint .chat-panel__model-list::-webkit-scrollbar,
 body.app-slava-restraint .chat__codeblock-body::-webkit-scrollbar,
 body.app-slava-restraint .chat__tool-input::-webkit-scrollbar,
 body.app-slava-restraint .chat__tool-output::-webkit-scrollbar,
@@ -1217,7 +1101,6 @@ body.app-slava-restraint .chat-panel__thinking-body::-webkit-scrollbar {
 }
 
 body.app-slava-restraint .chat-panel__messages::-webkit-scrollbar-thumb,
-body.app-slava-restraint .chat-panel__model-list::-webkit-scrollbar-thumb,
 body.app-slava-restraint .chat__codeblock-body::-webkit-scrollbar-thumb,
 body.app-slava-restraint .chat__tool-input::-webkit-scrollbar-thumb,
 body.app-slava-restraint .chat__tool-output::-webkit-scrollbar-thumb,
@@ -1514,10 +1397,12 @@ body.app-slava-restraint .chat-panel__chip-close {
 body.app-slava-restraint .chat-panel__notice {
   margin: 0 0 8px;
   padding: 7px 10px;
-  border: 1px solid var(--sr-accent-border-muted);
+  /* Design: a warning notice is the warning text on the warning tint, no border, as the node
+     card's run failure is; a neutral line reads the neutral tokens (styles/becauseLine.css). */
+  border: none;
   border-radius: var(--sr-radius-control);
   background: var(--sr-warning-soft);
-  color: var(--sr-danger);
+  color: var(--sr-warning);
   font-size: var(--sr-type-label);
 }
 
@@ -2160,9 +2045,9 @@ body.app-slava-restraint .inspector__control-stack {
 }
 
 body.app-slava-restraint .inspector__notice {
-  border: 1px solid var(--sr-accent-border);
+  /* Design: a note is the neutral fill alone, no border. */
+  border: none;
   border-radius: var(--sr-radius-control);
-  /* Design: a note is the neutral fill; the warning variant below takes the warning tint. */
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
@@ -2171,15 +2056,10 @@ body.app-slava-restraint .inspector__notice {
   padding: var(--sr-space-2) var(--sr-space-3);
 }
 
-body.app-slava-restraint .inspector__notice--warning {
-  background: var(--sr-warning-soft);
-}
-
-/* A missing key is something to do, not a failure: the neutral treatment the
-   node card gives the same line (.model-node__error--key), never the accent
-   box. */
+/* A missing key, or a missing Krea sign-in, is something to do, not a failure: the
+   neutral treatment the node card gives the same line (.model-node__error--key), never the
+   accent box. */
 body.app-slava-restraint .inspector__notice--key {
-  border-color: var(--sr-edge-strong);
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-light);
 }
