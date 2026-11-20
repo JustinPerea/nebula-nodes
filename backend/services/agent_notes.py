@@ -942,8 +942,8 @@ class AgentNotes:
         proposal's does, and is read. The answers never go on the Update:
         every agent can read it with list_notes. They stay in the set's own
         record (services/agent_questions.py), which no agent route reads.
-        The line goes past tense (GM - Design: "{agent} asked a question." /
-        "{agent} asked {n} questions."), stored, so the person, list_notes
+        The line goes past tense (design: "Asked a question" /
+        "Asked {n} questions"), stored, so the person, list_notes
         and a restart all read the same words."""
         return self._resolve(project_id, note_id, outcome=outcome, by=by, retext=closed_update_text)
 

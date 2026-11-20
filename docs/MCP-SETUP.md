@@ -2852,9 +2852,10 @@ anything that costs money or reworks the person's graph.
 
 **The Update.** Every canvas proposal also posts an Update in the Updates
 corner (Justin's Q112 a, 2026-10-21), so the person hears of it on every
-screen, not only on the canvas: "Claude Code proposes 3 changes on the
-canvas" ("proposes 1 change", or "proposes a run on the canvas" when it
-only runs nodes). Each new node, each connection and each existing node whose
+screen, not only on the canvas: "Proposes 3 changes on the canvas"
+("Proposes 1 change", or "Proposes a run on the canvas" when it only runs
+nodes). The line never starts with the agent's name: the Update's header
+has it. Each new node, each connection and each existing node whose
 params change counts as one change; runs and names don't. Nebula writes it
 from that template, never from the agent's note (the note is the bar's), and
 attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
@@ -3119,14 +3120,14 @@ a proposal instead, and what it noticed is an Update.
   checked like an Update's refs: unknown ones are dropped and listed in
   `dropped`. Needs an open project (the Update is kept with it). The answer
   is `{questions: {id, status, questions, answers, ...}}`.
-- **The person answers:** the set posts one Update from the agent ("Claude
-  Code has 2 questions.", with Answer, and Show on canvas when it names
+- **The person answers:** the set posts one Update from the agent ("Has 2
+  questions", under its name, with Answer, and Show on canvas when it names
   nodes). Its ref is `questions: {id, count, since}`: how many questions
   (as the line says) and when the set was asked (ms, as its `createdAt`),
   never the questions. Answer opens the form in the Updates corner. They may skip any
   question; Send needs at least one answer; Dismiss closes the set with
-  none. When it closes, its line goes past tense ("Claude Code asked 2
-  questions." / "asked a question.", on the stored Update, so `list_notes`
+  none. When it closes, its line goes past tense ("Asked 2
+  questions" / "Asked a question", on the stored Update, so `list_notes`
   shows it too) and it says "Answered.", "Dismissed.",
   "Withdrawn by <agent>." (or "Closed when Nebula restarted." in the rare
   case a kept set can't be read back). The 200-Update cap never prunes the
@@ -3650,10 +3651,10 @@ Commons", "Asks to make 3 changes to an image in the Commons". The proposal's
 **The Update.** Each asset proposal also posts an Update in the Updates
 corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
 Nebula in the strip's words and attributed to the agent (`author` is the
-agent, `source: "nebula"`, `about: "proposal"`): "Claude Code asks to change
-the cover of Dusk", "Claude Code asks to turn on “Moodboard notes to generators” for Dusk board", "Claude Code asks to change a reference in the Commons" (or
-"asks to make 3 changes to a reference in the Commons", "asks to take a
-reference out of the inbox"). Names only: never the agent's note, a board's
+agent, `source: "nebula"`, `about: "proposal"`): "Asks to change
+the cover of “Dusk”", "Asks to turn on “Moodboard notes to generators” for “Dusk board”", "Asks to change a reference in the Commons" (or
+"Asks to make 3 changes to a reference in the Commons", "Asks to take a
+reference out of the inbox"), under the agent's name. Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
 targetId, since}`, where `since` is when that ask was made (ms, as the
 proposal's `createdAt`; after the Update falls back to your older ask on the
@@ -3833,7 +3834,7 @@ The person decides what agents may spend, in **Settings > Preferences**:
   toward the $5 daily total. Proposing it for the person’s OK. Sent as
   proposal <id>. Check it with nebula proposals.", the bar says "“Sketch”
   has no list price, so Nebula can’t count it toward the $5 daily total.",
-  and the Update says "Claude Code wants to run “Sketch”. It has no list
+  and the Update says "Wants to run “Sketch”. It has no list
   price, so Nebula can’t count it toward the $5 daily total." When the
   priced part of the run already passes the total, the line above stays
   ("This would pass the $5 daily total, and “Sketch” has no list price.").

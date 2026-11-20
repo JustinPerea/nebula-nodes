@@ -1,6 +1,6 @@
 """Every canvas proposal posts an Update (Justin's Q112 a, 2026-10-21).
 
-"a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
+"a) Yes, every one: "Proposes 3 changes on the canvas", with
 Review taking you to the canvas and its bar. It settles like the others
 (Accepted, Rejected, Expired, Closed: Nebula restarted)."
 
@@ -86,7 +86,7 @@ def test_an_mcp_proposal_posts_one_update_with_review(canvas, monkeypatch):
                                          params=body["params"], run=body["run"])
     view = response["proposal"]
     (note,) = _updates(canvas)
-    assert note["text"] == "Claude Code proposes 3 changes on the canvas"
+    assert note["text"] == "Proposes 3 changes on the canvas"
     assert note["source"] == "nebula" and note["about"] == "proposal"
     assert note["author"]["kind"] == "agent" and note["author"]["name"] == "Claude Code"
     assert note["author"]["color"] == view["agent"]["color"]
@@ -122,7 +122,7 @@ def test_a_cli_proposal_posts_the_same_update(canvas):
     code = proposals_cmd.run_propose(client, _propose_args(wait=False, agent_name="Codex"), out=out)
     assert code == 0, out.getvalue()
     (note,) = _updates(canvas)
-    assert note["text"] == "Codex proposes 1 change on the canvas"
+    assert note["text"] == "Proposes 1 change on the canvas"
     assert note["author"]["name"] == "Codex"
     (proposal,) = canvas.book.open_list()
     assert _review(note)["proposalId"] == proposal.id
@@ -139,8 +139,8 @@ def test_what_counts_as_a_change(canvas):
                       "rename": {"+t": "Hero line"}})
     _propose(canvas, {"note": "Just run it", "run": [n1]}, headers=CODEX)
     texts = [note["text"] for note in _updates(canvas)]
-    assert texts == ["Claude Code proposes 2 changes on the canvas", "Claude Code proposes 1 change on the canvas",
-                     "Codex proposes a run on the canvas"]
+    assert texts == ["Proposes 2 changes on the canvas", "Proposes 1 change on the canvas",
+                     "Proposes a run on the canvas"]
 
 
 def test_every_proposal_gets_its_own_update(canvas):
@@ -374,7 +374,7 @@ def test_nebula_notes_prints_the_outcome(canvas):
 
     view = _proposed(canvas)
     (note,) = _updates(canvas)
-    assert "waiting for your OK" in format_note(note) and "proposes 2 changes on the canvas" in format_note(note)
+    assert "waiting for your OK" in format_note(note) and "Proposes 2 changes on the canvas" in format_note(note)
     canvas.client.post(f"/api/canvas/proposals/{view['id']}/reject", headers={**PERSON, KEY: _key(canvas, view["id"])})
     line = format_note(_settled(canvas))
     assert "[Rejected]" in line and "waiting for your OK" not in line
@@ -405,10 +405,10 @@ def test_agents_are_told_the_person_sees_an_update_so_they_dont_post_one():
     setup = (root / "docs" / "MCP-SETUP.md").read_text(encoding="utf-8")
     section = setup.split("### Proposals\n", 1)[1].split("\n### ", 1)[0]
     flat = " ".join(section.split())
-    assert "Claude Code proposes 3 changes on the canvas" in flat and "Review" in flat
+    assert "Proposes 3 changes on the canvas" in flat and "Review" in flat
     assert "post_note" in flat and "Closed: Nebula restarted" in flat
     skill = " ".join((root / "skills" / "nebula" / "SKILL.md").read_text(encoding="utf-8").split())
-    assert "proposes 3 changes on the canvas" in skill and "don't also post a `nebula note`" in skill
+    assert "Proposes 3 changes on the canvas" in skill and "don't also post a `nebula note`" in skill
 
 
 # -- review follow-ups ------------------------------------------------------------------

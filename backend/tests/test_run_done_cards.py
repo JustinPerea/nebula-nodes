@@ -186,7 +186,15 @@ def test_a_partial_run_with_several_failures_counts_them(done):
     assert card["text"] == "Claude Code finished 2 of 5 nodes. 3 failed."
 
 
-def test_a_failed_run_gets_a_card_with_no_thumbnail_and_an_agent_log_line(done):
+def _log_lines(api, name: str) -> list[str]:
+    """The Agent log's rows for one agent, as the canvas reads them: an agent cursor event's `log`, else its `say`."""
+    return [m.get("log") or m.get("say") for m in api.sent
+            if m.get("type") == "agentPresence" and m.get("agent", {}).get("name") == name]
+
+
+def test_a_failed_cli_run_gets_a_card_and_one_agent_log_row_the_run_row(done):
+    """A CLI run has its own row, which names the failed nodes, so the card's echo is not a second one
+    (design: one row per action). The card itself stays in Updates."""
     (node,) = _chain(done, labels=("Hero shots",))
     done.fail.add(node)
     _run(done, headers=CODEX, target=node)
@@ -194,8 +202,51 @@ def test_a_failed_run_gets_a_card_with_no_thumbnail_and_an_agent_log_line(done):
     assert card["text"] == "Codex’s run of “Hero shots” failed."
     assert card["run"]["outcome"] == "failure"
     assert card["run"].get("thumbnail") is None
-    lines = [m for m in done.sent if m.get("type") == "agentPresence" and m.get("say") == card["text"]]
-    assert lines and lines[-1]["agent"]["name"] == "Codex" and lines[-1].get("target") is None
+    assert _log_lines(done, "Codex") == ["Running “Hero shots”", "Ran “Hero shots” in under 1 s. “Hero shots” failed."] or (
+        len(_log_lines(done, "Codex")) == 1 and "failed" in _log_lines(done, "Codex")[0])
+    assert card["text"] not in _log_lines(done, "Codex")
+
+
+def test_a_failed_cli_run_of_several_nodes_has_no_echo_and_a_partial_run_neither(done):
+    ids = _chain(done)
+    done.fail.add(ids[2])
+    _run(done, headers=CODEX)
+    (card,) = _cards(done)
+    assert card["run"]["outcome"] == "partial"
+    lines = _log_lines(done, "Codex")
+    assert card["text"] not in lines
+    assert sum("failed" in line for line in lines) == 1, lines
+
+
+def _finish_failed_run(api, *, run_row_follows: bool) -> str:
+    """End one failed agent run the way a route's `finally` does, and return the card's line."""
+    import asyncio
+
+    from services.agent_presence import AgentIdentity
+
+    main = api.main
+    (node,) = _chain(api, labels=("Hero shots",))
+    agent = AgentIdentity(id="ext:codex", name="Codex", color="#F2C14E", verified=False)
+    project_id = main.project_store.workspace()["activeProjectId"]
+    main.agent_runs.start("run_canvas", agent, project_id=project_id, planned=[node])
+    main.agent_runs.node_ended("run_canvas", node, failed=True)
+    asyncio.run(main._finish_agent_run("run_canvas", run_row_follows=run_row_follows))
+    (card,) = _cards(api)
+    return card["text"]
+
+
+def test_a_failed_canvas_run_has_no_run_row_so_the_cards_line_is_its_one_agent_log_row(done):
+    """The canvas routes (execute, execute-node, the cinema shot) say no run row of their own, so the done
+    card's line stays the Agent log's only row for the run."""
+    text = _finish_failed_run(done, run_row_follows=False)
+    assert text == "Codex’s run of “Hero shots” failed."
+    assert _log_lines(done, "Codex") == [text]
+
+
+def test_a_run_that_has_its_own_row_drops_the_cards_echo_but_keeps_the_card(done):
+    text = _finish_failed_run(done, run_row_follows=True)
+    assert text == "Codex’s run of “Hero shots” failed."
+    assert _log_lines(done, "Codex") == []
 
 
 def test_a_failed_run_of_several_nodes(done):

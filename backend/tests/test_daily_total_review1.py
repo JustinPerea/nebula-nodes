@@ -451,7 +451,7 @@ def test_the_in_app_chat_prompt_says_a_waiting_run_was_already_proposed():
 # -- Justin's Q165: the total alone makes an unpriced node ask ---------------------------
 
 SKETCH_BAR = "“Writer” has no list price, so Nebula can’t count it toward the $5 daily total."
-SKETCH_UPDATE = "Claude Code wants to run “Writer”. It has no list price, so Nebula can’t count it toward the $5 daily total."
+SKETCH_UPDATE = "Wants to run “Writer”. It has no list price, so Nebula can’t count it toward the $5 daily total."
 
 
 def _unpriced() -> None:

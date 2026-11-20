@@ -480,7 +480,7 @@ def test_a_proposal_model_swap_lists_the_wires_accept_removes(api):
     import main as main_module
     from services.canvas_proposals import update_text
 
-    assert update_text(main_module.canvas_proposals.get(view["id"])) == "Claude Desktop proposes 3 changes on the canvas"
+    assert update_text(main_module.canvas_proposals.get(view["id"])) == "Proposes 3 changes on the canvas"
     accepted = api.client.post(f"/api/canvas/proposals/{view['id']}/accept",
                                headers={**PERSON, "X-Nebula-Proposal-Key": _proposal_key(api, view["id"])}, json={})
     assert accepted.status_code == 200, accepted.text

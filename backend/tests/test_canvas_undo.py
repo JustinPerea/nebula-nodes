@@ -1453,6 +1453,34 @@ def test_the_routes_activity_line_names_the_nodes_that_ran(api):
     assert _syncs(api)[-1]["edit"]["kept"] is True and _syncs(api)[-1]["edit"]["undoes"] == applied["undo"]["editId"]
 
 
+def test_kept_rides_only_the_undos_own_sync_never_a_later_event_in_its_context(api, monkeypatch):
+    from main import _journal, _reopen_removed_proposals as real
+    import main as main_module
+
+    source, combined, rerouted, applied = _added_chain(api)
+    _person_runs(api, combined)
+
+    async def later(*args, **kwargs):
+        # An event journaled after the undo's sync, in the undo's own context (as a reopened proposal is).
+        _journal("node.moved", data={"nodeIds": [], "count": 0}, summary="a later event of the undo")
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(main_module, "_reopen_removed_proposals", later)
+    cursor = api.journal.latest
+    result = _undone(api, applied["undo"]["token"])
+    assert result["skipped"], "the run since kept a part"
+    events = _events(api, cursor)
+    [late] = [event for event in events if event["summary"] == "a later event of the undo"]
+    assert late["edit"]["id"] == result["undoId"] and late["edit"]["undoes"] == applied["undo"]["editId"]
+    assert "kept" not in late["edit"]
+    assert all("kept" not in (event.get("edit") or {}) for event in events)
+    # The undo's own sync still says it kept parts, and the next, unrelated sync does not.
+    assert _syncs(api)[-1]["edit"]["kept"] is True
+    node = api.graph.add_node("text-input", {"value": "z"})
+    assert api.client.put(f"/api/graph/node/{node}/label", headers=AGENT, json={"label": "Later"}).status_code == 200
+    assert "kept" not in (_syncs(api)[-1].get("edit") or {})
+
+
 def test_the_routes_activity_line_counts_four_or_more_nodes(api):
     applied = _apply(api, {"nodes": [{"ref": f"+{i}", "definitionId": "text-input", "params": {"value": str(i)}}
                                      for i in range(5)]})

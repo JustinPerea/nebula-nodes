@@ -31,6 +31,27 @@ function detail(summary: string): AssetDetail {
   };
 }
 
+describe('CommonsDetail quoted comments', () => {
+  it('writes a comment\'s date out, with the year only when it is not the current one', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 20, 9, 30));
+    try {
+      const withComments = detail('A poster');
+      withComments.memberships[0].comments = [
+        { id: 'c1', actor: 'human:justin', text: 'Keep it', created_at: '2026-11-20T08:00:00Z', source_date: null, region: null },
+        { id: 'c2', actor: 'human:justin', text: 'Older', created_at: '2026-01-01T08:00:00Z', source_date: '2025-11-20T10:00:00Z', region: null },
+      ];
+      asset.mockResolvedValue(withComments);
+      const { container } = render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+      await screen.findByText('Keep it');
+      const dates = [...container.querySelectorAll('.commons-comment .commons-meta')].map((node) => node.textContent);
+      expect(dates).toEqual(['November 20', 'November 20, 2025']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('CommonsDetail and agents\' proposals', () => {
   beforeEach(() => {
     useAssetProposalsStore.getState().clear();

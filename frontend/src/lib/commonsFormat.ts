@@ -44,3 +44,18 @@ export function linkedFolderNotice(path: string): string {
 export function withCollection(list: readonly Collection[], created: Collection): Collection[] {
   return list.some((c) => c.id === created.id) ? [...list] : [...list, created];
 }
+
+const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * A stored date written out (design): "November 20", with the year only when it isn't the current
+ * one ("November 20, 2025"). Reads the stored date part as written (`2026-11-20…`), so the day
+ * doesn't shift with the time zone. A value with no date in front is returned as it came.
+ */
+export function writtenDate(stored: string, now: Date = new Date()): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(stored);
+  const month = match ? LONG_MONTHS[Number(match[2]) - 1] : undefined;
+  if (!match || !month) return stored;
+  const day = Number(match[3]);
+  return Number(match[1]) === now.getFullYear() ? `${month} ${day}` : `${month} ${day}, ${match[1]}`;
+}

@@ -816,9 +816,9 @@ def cap_message(detail: str, rows: Iterable[Mapping[str, Any]]) -> str:
 
 # -- the Update each set posts -------------------------------------------------------
 #
-# GM - Design's copy, verbatim: "{agent} has a question." / "{agent} has {n}
-# questions.", one Answer button, and once it closes the line says "{agent}
-# asked a question." / "{agent} asked {n} questions." with: "Answered."
+# Design's copy: "Has a question" / "Has {n} questions" (the Update's header
+# names the agent, so the line doesn't), one Answer button, and once it closes
+# the line says "Asked a question" / "Asked {n} questions" with: "Answered."
 # "Dismissed." "Withdrawn by {agent}." "Closed when Nebula restarted."
 # (Proposals keep "Closed: Nebula restarted".) Sets are kept with the
 # project now, so a restart closes nothing by itself: the restart line is
@@ -835,24 +835,27 @@ _OUTCOMES = {"answered": "Answered.", "dismissed": "Dismissed."}
 
 def update_text(question_set: QuestionSet) -> str:
     """The Update's line while the set is open, from a fixed template: never
-    the questions (they are the form's)."""
-    agent = question_set.agent.name
+    the questions (they are the form's). Never starts with the agent's name."""
     count = len(question_set.spec.questions)
-    return f"{agent} has a question." if count == 1 else f"{agent} has {count} questions."
+    return "Has a question" if count == 1 else f"Has {count} questions"
 
 
-# GM - Design, 2026-10-24: once a set closes, the line is past tense for every
-# closed outcome: "{agent} asked a question." / "{agent} asked {n} questions."
-_OPEN_LINE = re.compile(r"^(?P<agent>.*) has (?P<count>a question|\d+ questions)\.$", re.DOTALL)
+# Once a set closes, the line is past tense for every closed outcome: "Asked a
+# question" / "Asked {n} questions". Lines saved before the header carried the
+# name ("Codex has a question.") still close to "Codex asked a question.".
+_OPEN_LINE = re.compile(r"^Has (?P<count>a question|\d+ questions)$")
+_LEGACY_OPEN_LINE = re.compile(r"^(?P<agent>.*) has (?P<count>a question|\d+ questions)\.$", re.DOTALL)
 
 
 def closed_update_text(text: str) -> str:
     """The Update's line once its set has closed (agent_notes.resolve_questions
     stores it; note_view applies it to an Update closed before this rule).
-    Only update_text's own end changes, whatever the agent is called; any
-    other line is left as it is."""
+    Only update_text's own line changes; any other line is left as it is."""
     match = _OPEN_LINE.match(text)
-    return f"{match['agent']} asked {match['count']}." if match else text
+    if match:
+        return f"Asked {match['count']}"
+    legacy = _LEGACY_OPEN_LINE.match(text)
+    return f"{legacy['agent']} asked {legacy['count']}." if legacy else text
 
 
 def update_outcome(question_set: QuestionSet) -> str:

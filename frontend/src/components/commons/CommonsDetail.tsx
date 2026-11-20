@@ -9,7 +9,7 @@ import {
   type AssetDetail, type EnumField, type MembershipDetail, type Region, type Role, type Sighting,
 } from '../../lib/commonsTypes';
 import { showConfirm } from '../../lib/commonsFiles';
-import { actorLabel, analysisBadge } from '../../lib/commonsFormat';
+import { actorLabel, analysisBadge, writtenDate } from '../../lib/commonsFormat';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
@@ -137,7 +137,7 @@ function Membership({ assetId, membership, run }: {
         {membership.comments.map((c) => (
           <div key={c.id} className="commons-comment">
             <span className="commons-comment__actor">{actorLabel(c.actor)}</span>
-            <span className="commons-meta">{(c.source_date ?? c.created_at).slice(0, 10)}</span>
+            <span className="commons-meta">{writtenDate(c.source_date ?? c.created_at)}</span>
             <p className="commons-comment__text">{c.text}</p>
           </div>
         ))}

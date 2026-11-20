@@ -16167,7 +16167,10 @@ def _graph_edit_origin() -> dict[str, Any]:
     # undo step knows which edit it holds and its Cmd+Z can say so.
     link = _canvas_edit_link.get()
     if link:
-        origin.update({key: link[key] for key in ("id", "undoes", "redoes", "kept") if key in link})
+        origin.update({key: link[key] for key in ("id", "undoes", "redoes") if key in link})
+        # Only the undo's own sync says it kept parts (the toast), never a journal event of its context.
+        if "undoes" in link and _undo_kept_parts.get():
+            origin["kept"] = True
     # The nodes this edit deleted, with the pins and proposals each delete
     # removed: a canvas that didn't send the edit keeps them in its undo step,
     # so its Cmd+Z puts them back too (_reattach_removed_pins).
@@ -16727,10 +16730,15 @@ async def _observe_agent_run(event: ExecutionEvent, run_id: str | None) -> None:
         await _broadcast_status_events([change])
 
 
-async def _finish_agent_run(run_id: str, *, cancelled: bool = False) -> None:
+async def _finish_agent_run(run_id: str, *, cancelled: bool = False, run_row_follows: bool = False) -> None:
     """The run ended: its marks go, and unless it was stopped, the agent's
     done card goes on the run's project's Updates (GM - Design, 2026-10-25).
-    One per run; never fails the run."""
+    One per run; never fails the run.
+
+    ``run_row_follows``: the run's own Agent log row ("Ran 4 nodes in 12 s.
+    “Hero shot” failed.", _cli_run_line) is about to be said, so the done
+    card's Agent log echo is skipped (design: one row per action). The card
+    itself stays in Updates."""
     run, events = agent_runs.finish(run_id)
     await _broadcast_status_events(events)
     record = execution_runs.get(run_id)
@@ -16741,12 +16749,12 @@ async def _finish_agent_run(run_id: str, *, cancelled: bool = False) -> None:
     if not succeeded and not failed:
         return  # nothing ran (every node skipped): nothing finished or failed
     try:
-        await _post_run_done(run, succeeded, failed)
+        await _post_run_done(run, succeeded, failed, log_echo=not run_row_follows)
     except Exception:  # noqa: BLE001 - the card is a notice; the run's own result stands
         logging.getLogger("nebula.done_cards").exception("could not post the done card for run %s", run_id)
 
 
-async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> None:
+async def _post_run_done(run: Any, succeeded: list[str], failed: list[str], *, log_echo: bool = True) -> None:
     labels = {node_id: _node_label(node_id) for node_id in run.planned}
     text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed,
                               stopped=run.stopped)
@@ -16768,8 +16776,9 @@ async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> N
         await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                     unread=result["unread"], removed=result["removed"]))
         _journal_note(note, "canvas", actor=actor_for_identity(run.agent))
-    if outcome != "success":
-        # GM: "A failed run gets a card, plus the Agent log line."
+    if outcome != "success" and log_echo:
+        # GM: "A failed run gets a card, plus the Agent log line." Not when the
+        # run has its own row (a CLI run): that row names the failed nodes.
         try:
             # A stop for a proposal: the Agent log keeps the whole line, the
             # bubble its whole sentences that fit, never a cut word (GM, PR
@@ -19864,6 +19873,10 @@ if _live_graph_load_failed:
 # The edit the current request makes ({id}, or {id, undoes|redoes, of?}): it
 # tags the request's journal events (_journal) and its graphSync (_graph_edit_origin).
 _canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_link", default=None)
+# True while an undo's own sync is sent after it kept parts (_graph_edit_origin
+# copies it onto that sync only; the edit link, which every journal event of the
+# undo carries, never holds it).
+_undo_kept_parts: ContextVar[bool] = ContextVar("undo_kept_parts", default=False)
 
 
 def _open_project_brief() -> tuple[str | None, str]:
@@ -20181,9 +20194,11 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             # The sync this restore sends carries it (_graph_edit_origin), so
             # the toast says the undo kept parts (design: "Codex undid part
             # of its edit."), when the Agent log's line (activity_line)
-            # names a kept node.
-            link["kept"] = True
+            # names a kept node. A context value, not a key on the edit link: the
+            # link rides every journal event of this undo, `kept` must not.
+            kept_marks.append(_undo_kept_parts.set(True))
 
+    kept_marks: list[Any] = []
     context = _canvas_edit_link.set(link)
     try:
         # The pins and proposals the edit's deletes removed go back with the nodes.
@@ -20192,6 +20207,8 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                                       journal_done=journal_undone)
         skipped, done, left = said["skipped"], said["done"], said["left"]
     finally:
+        for mark in kept_marks:
+            _undo_kept_parts.reset(mark)
         _canvas_edit_link.reset(context)
         if said:
             # The proposals it reopened are journaled after its edit.undone
@@ -26808,6 +26825,8 @@ async def _execute_cli_run(
     # route put agents' placeholders (and what needs them) here already.
     skipped: dict[str, str] = outcome.setdefault("skipped", {})
     gated: set[str] = set()
+    # Set once the run came through whole: its own Agent log row is said below.
+    run_row_follows = False
 
     async def collect_events(event: ExecutionEvent) -> None:
         # The response carries what each node made or why it failed. The
@@ -26849,6 +26868,7 @@ async def _execute_cli_run(
         )
         if _execution_is_cancelling(run_id):
             raise asyncio.CancelledError
+        run_row_follows = True
     except asyncio.CancelledError:
         await _finalize_cancelled_execution(sub_nodes, run_id)
         await _say_agent_action(f"Stopped after {_named_nodes(list(results))} ran" if results
@@ -26863,7 +26883,7 @@ async def _execute_cli_run(
         await _release_paid_worldlabs_starts(run_id)
         _settle_hold(run_id)
         # The agent's done card, before the journal forgets who started the run.
-        await _finish_agent_run(run_id)
+        await _finish_agent_run(run_id, run_row_follows=run_row_follows)
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 

@@ -43,7 +43,7 @@ def test_a_cover_proposal_posts_one_update_with_review(api):
     _pin(api, A, api.person)
     view = _propose(api, {"cover": C}, note="Use the dusk shot please").json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert note["text"] == "Claude Code asks to change the cover of Dusk"
+    assert note["text"] == "Asks to change the cover of “Dusk”"
     assert note["author"]["kind"] == "agent" and note["author"]["name"] == "Claude Code"
     assert note["source"] == "nebula"
     assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk, "cover": "image",
@@ -78,7 +78,7 @@ def test_a_send_notes_proposal_posts_an_update_without_the_boards_text(api):
     assert put.status_code == 200, put.text
     view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert note["text"] == "Claude Code asks to turn on “Moodboard notes to generators” for Dusk board"
+    assert note["text"] == "Asks to turn on “Moodboard notes to generators” for “Dusk board”"
     assert _review(note) == {"kind": "proposal.review", "proposalId": view["id"], "target": "moodboard",
                              "targetId": board["id"]}
     text = json.dumps(note)

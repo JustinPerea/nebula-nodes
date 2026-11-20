@@ -547,7 +547,7 @@ on a `removes` line. The person accepts or rejects it on the canvas; you
 can't accept it. Its output's `card` line is what the person reads under
 your note, word for word (what changes and runs by node name, the model and
 who pays, the price); check it says what you meant. Each proposal also posts an Update the person sees on
-every screen ("Codex proposes 3 changes on the canvas", with Review, which
+every screen ("Proposes 3 changes on the canvas" under your name, with Review, which
 takes them to the canvas and its bar), so don't also post a `nebula note`
 about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,
 `[Withdrawn by <you>]`, `[Expired]`, `[No longer fits]` or

@@ -258,8 +258,8 @@ def test_update_words_follow_gm_copy():
     book = QuestionBook(Clock())
     one = book.create(agent=ME, project_id="p", spec=parse_questions({"questions": [{"text": "Crop?"}]}))
     two = book.create(agent=ME, project_id="p", spec=parse_questions(TWO))
-    assert update_text(one) == "Claude Code has a question."
-    assert update_text(two) == "Claude Code has 2 questions."
+    assert update_text(one) == "Has a question"
+    assert update_text(two) == "Has 2 questions"
     for status, line in (("answered", "Answered."), ("dismissed", "Dismissed."),
                          ("withdrawn", "Withdrawn by Claude Code.")):
         made = book.create(agent=OTHER if status == "withdrawn" else ME, project_id="p",
@@ -291,7 +291,7 @@ def test_asking_posts_one_update_with_answer_and_sends_the_key_to_the_browser_on
     assert view["status"] == "open" and view["id"].startswith("qs_")
     assert view["nodeIds"] == [n1] and body["dropped"] == ["n99"]
     (note,) = _question_updates(asked)
-    assert note["text"] == "Claude Code has 2 questions."
+    assert note["text"] == "Has 2 questions"
     assert note["source"] == "nebula" and note["author"]["name"] == "Claude Code"
     assert note["refs"] == [n1]
     assert note["actions"] == [{"label": "Answer", "op": {"kind": "question.answer", "questionId": view["id"]}}]
@@ -313,7 +313,7 @@ def test_asking_posts_one_update_with_answer_and_sends_the_key_to_the_browser_on
 def test_one_question_says_a_question(asked):
     _ask(asked, {"questions": [{"text": "Square or wide?", "options": ["Square", "Wide"]}]}, headers=CODEX)
     (note,) = _question_updates(asked)
-    assert note["text"] == "Codex has a question."
+    assert note["text"] == "Has a question"
 
 
 def test_only_a_named_agent_asks(asked):

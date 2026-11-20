@@ -37,7 +37,7 @@ def test_a_cover_back_to_automatic_says_automatic(api):
     assert note["proposal"]["cover"] == "automatic"
     assert "changes" not in note["proposal"]
     # The text is as before: the kind is in the ref only.
-    assert note["text"] == "Claude Code asks to change the cover of Dusk"
+    assert note["text"] == "Asks to change the cover of “Dusk”"
 
 
 def test_closing_one_of_two_retargets_the_ref_with_the_other_ones_kind(api):
@@ -144,4 +144,4 @@ def test_an_inbox_ask_with_more_than_its_id_and_accept_is_no_inbox_ask():
 
     assert module.update_detail(ask({"id": "m", "accept": True})) == {"changes": 1, "inbox": True, "since": 1000}
     assert module.update_detail(ask({"id": "m", "accept": True, "role": "avoid"})) == {"changes": 1, "since": 1000}
-    assert module.update_text(ask({"id": "m", "accept": True, "role": "avoid"})) == "Codex asks to change a reference in the Commons"
+    assert module.update_text(ask({"id": "m", "accept": True, "role": "avoid"})) == "Asks to change a reference in the Commons"
