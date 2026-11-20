@@ -7,7 +7,7 @@
  * This scans every stylesheet under src for a `border-left` (or `border-inline-start`) thicker
  * than 1px, and for an inset shadow with a horizontal offset (a bar painted inside the box). A
  * match must be on ALLOWED, each with what it is. A new bar fails here; the fix is a fill, or a
- * decision from design to add it to the list.
+ * decision from design to add it to the list. scripts/check-left-edge.mjs (in `npm run lint`) is the same rule at lint time.
  */
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -20,23 +20,9 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
   return statSync(path).isDirectory() ? files(path) : /\.css$/.test(name) ? [path] : [];
 });
 
-/** Kept by design: a bar that carries who or what (an agent's colour, a quoted comment), not an accent. Allowed by its file, the rule's exact selector list and the declaration, and why it may carry one. */
+/** Shapes that are not a bar: a corner glyph and a CSS triangle. Allowed by file, the rule's exact selector list and the declaration. A bar that carries who or what is not allowed either (design): the dot and the name say it. */
 type Allowed = { file: string; selector: string; decl: string; why: string };
 const ALLOWED: Allowed[] = [
-  { file: 'components/agent-notes/agentNotes.css', selector: '.agent-notes-entry', decl: 'box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent)',
-    why: 'an agent note: the author agent\'s colour (design keeps it: it carries who or what, not an accent)' },
-  { file: 'components/agent-notes/agentNotes.css', selector: '.agent-notes-entry[data-state=\'done\']', decl: 'box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 30%, transparent)',
-    why: 'an agent note: the author agent\'s colour (design keeps it: it carries who or what, not an accent)' },
-  { file: 'components/agent-notes/agentNotes.css', selector: '.agent-questions-form__head', decl: 'box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent)',
-    why: 'an agent\'s question form header: the author agent\'s colour (design keeps it: it carries who or what, not an accent)' },
-  { file: 'components/agent-notes/agentNotes.css', selector: '.agent-note-card[data-about=\'run\']', decl: 'box-shadow: var(--an-shadow), inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent)',
-    why: 'an agent note card about a run: the author agent\'s colour (design keeps it: it carries who or what, not an accent)' },
-  { file: 'styles/asset-proposals.css', selector: '.asset-proposal', decl: 'border-left: 3px solid var(--agent-color)',
-    why: 'an agent proposal card: carries the proposing agent\'s colour (design keeps it: it carries who or what, not an accent)' },
-  { file: 'styles/canvasProposals.css', selector: '.proposal-bar', decl: 'border-left: 3px solid var(--agent-color)',
-    why: 'a canvas proposal bar: carries the proposing agent\'s colour (design keeps it: it carries who or what, not an accent)' },
-  { file: 'styles/commons.css', selector: 'body.app-slava-restraint .commons-comment', decl: 'border-left: 2px solid var(--sr-edge-strong)',
-    why: 'a comment quoted in the reference detail: someone\'s words (design keeps it: it carries who or what, not an accent)' },
   { file: 'styles/moodboard-studio.css', selector: 'body.app-slava-restraint .moodboard-advanced__toggle::before', decl: 'border-left: 4px solid currentColor',
     why: 'a CSS triangle (the disclosure arrow), not a bar' },
   { file: 'styles/panels.css', selector: '.chat-panel__resize-handle--tl::before', decl: 'border-left-width: 2px',
@@ -45,10 +31,6 @@ const ALLOWED: Allowed[] = [
     why: 'the resize handle\'s corner glyph: an L-shaped mark, not a bar' },
   { file: 'styles/panels.css', selector: '.chat-panel__resize-handle--corner::before', decl: 'border-left: 2px solid',
     why: 'the resize handle\'s corner glyph: an L-shaped mark, not a bar' },
-  { file: 'styles/panels.css', selector: 'body:not(.app-slava-restraint) .chat__bubble--assistant', decl: 'border-left: 3px solid var(--chat-accent)',
-    why: 'an agent\'s chat message in the older chat theme: the chat accent colour (design keeps it: it carries who or what, not an accent)' },
-  { file: 'styles/personal-agents.css', selector: '.chat__plan', decl: 'border-left: 2px solid var(--sr-edge-strong, #444)',
-    why: 'an agent\'s plan in a chat message: a quote of the agent\'s words (design keeps it: it carries who or what, not an accent)' },
 ];
 
 interface Hit { file: string; selector: string; decl: string }

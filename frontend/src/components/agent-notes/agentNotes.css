@@ -530,12 +530,12 @@ body.app-slava-restraint .agent-notes-root {
   border-radius: 2px;
 }
 
-/* One update: a 4 px stripe in its author's colour (70%, as in the still). */
+/* One update. The author's dot and name say who wrote it; the row has no
+   coloured edge (design). */
 .agent-notes-entry {
   position: relative;
-  padding: 12px 16px 13px 18px;
+  padding: 12px 16px 13px;
   border-bottom: 1px solid var(--an-edge);
-  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent);
   transition: background-color 160ms var(--spring-soft);
 }
 
@@ -556,14 +556,10 @@ body.app-slava-restraint .agent-notes-root {
   outline-offset: -2px;
 }
 
-/* Dismissed or acted on: greyed. Show stays. */
+/* Dismissed or acted on: greyed (half opacity). Show stays. */
 .agent-notes-entry[data-state='done'] .agent-notes-entry__who,
 .agent-notes-entry[data-state='done'] .agent-notes-entry__text {
   opacity: 0.5;
-}
-
-.agent-notes-entry[data-state='done'] {
-  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 30%, transparent);
 }
 
 .agent-notes-entry__who {
@@ -680,7 +676,6 @@ body.app-slava-restraint .agent-notes-root {
   flex: 0 0 auto;
   padding: 14px 16px 12px;
   border-bottom: 1px solid var(--an-edge);
-  box-shadow: inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent);
 }
 
 .agent-questions-form__head .agent-notes-dot {
@@ -760,8 +755,8 @@ body.app-slava-restraint .agent-notes-root {
 /* An option: the list's button. Once picked, GM - Design's neutral ring for
  * every agent (2026-10-24): "the light ink ring with a faint fill, the same
  * weight as now, just not the agent's color. The pick is the person's
- * choice, not the agent's." The agent's colour stays on the form's left edge
- * and its dot; never the orange accent. */
+ * choice, not the agent's." The agent's colour stays on its dot;
+ * never the orange accent. */
 .agent-questions-form__option {
   max-width: 100%;
   padding: 7px 11px;
@@ -1011,15 +1006,10 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* =============== Done cards (Q125 item 3) ===============
- * GM - Design, 2026-10-25: the agent's colour on the left edge, like the
- * question form (the list's entries have it already); a failure gets the
- * error icon by its message, never a red edge; the thumbnail sits below the
- * message, 96 px tall, natural aspect, never cropped, capped at the card's
- * width; a video's length in mono in its corner. */
-
-.agent-note-card[data-about='run'] {
-  box-shadow: var(--an-shadow), inset 4px 0 0 color-mix(in srgb, var(--an-author) 70%, transparent);
-}
+ * Design: a failure gets the error icon by its message, never a red edge;
+ * the thumbnail sits below the message, 96 px tall, natural aspect, never
+ * cropped, capped at the card's width; a video's length in mono in its
+ * corner. */
 
 .agent-run-icon {
   display: inline-block;

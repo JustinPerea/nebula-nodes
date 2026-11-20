@@ -20,7 +20,7 @@ export interface AgentNotesListSection {
 /**
  * The opened Updates list, as GM's still draws it (stills/updates-open.png):
  * a header with the count, the read state and where the list is kept; every
- * update newest first with its author's stripe, dot, name, label and clock
+ * update newest first with its author's dot, name, label and clock
  * time; each update's own buttons; and a footer that explains Not now and
  * links to the Agent log.
  *

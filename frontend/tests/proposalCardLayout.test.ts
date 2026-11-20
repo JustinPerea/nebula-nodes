@@ -33,6 +33,7 @@ describe('the proposal card is one column', () => {
     expect(card.display).toBe('flex');
     expect(card['flex-direction']).toBe('column');
     expect(card.padding).toBe('0');
+    expect(card['border-left']).toBeUndefined();
     expect(rule('.proposal-bar__content')['flex-direction']).toBe('column');
     // The buttons live in the footer, a sibling of the body, never beside the note.
     const body = BAR.slice(BAR.indexOf('className="proposal-bar__body"'), BAR.indexOf('className="proposal-bar__footer"'));
@@ -41,10 +42,9 @@ describe('the proposal card is one column', () => {
     expect(BAR).not.toContain('proposal-bar__main');
   });
 
-  it('gives the note W - 36 px at every card width from 320 to 600', () => {
+  it('gives the note at least W - 36 px at every card width from 320 to 600', () => {
     const card = rule('.proposal-bar');
     const border = px(card.border.split(' ')[0]);
-    const edge = px(card['border-left'].split(' ')[0]);
     const [, horizontal] = rule('.proposal-bar__body').padding.split(' ').map(px);
     const note = rule('.proposal-bar__note');
     expect(note.margin).toBe('0');
@@ -54,7 +54,7 @@ describe('the proposal card is one column', () => {
     // of the header, GM r10) and the note's 4.
     expect(px(area['margin-top']) + px(rule('.proposal-bar__scroll')['margin-top'])).toBe(8);
     for (let width = 320; width <= 600; width += 10) {
-      const noteWidth = width - border - edge - 2 * horizontal;
+      const noteWidth = width - 2 * border - 2 * horizontal;
       expect(noteWidth).toBeGreaterThanOrEqual(width - 36);
     }
   });

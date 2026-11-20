@@ -223,14 +223,14 @@
    text beside three unshrinkable buttons), which at a ~385 px card left the
    text about 75-100 px: the agent's name wrapped onto three lines and the
    note was cut. As a column nothing squeezes the text: at any card width W
-   the note is W - 36 px wide (16 px of padding a side, the 1 px border and
-   the 3 px agent edge; tests/proposalCardLayout.test.ts).
+   the note is W - 34 px wide (16 px of padding a side and the 1 px border
+   each side; tests/proposalCardLayout.test.ts).
 
    Width: min(600px, the region's width). 600 is the cap so the note keeps a
    reading measure (GM - Design, 2026-11-01); the agent log's room rule
    (layouts.css) reads the same token. Under Restraint the surface, hairline,
-   ink and primary button come from the --sr tokens; the left edge keeps the
-   agent's colour in both skins. */
+   ink and primary button come from the --sr tokens. The agent's dot and name
+   say who it is; the card has no coloured edge (design). */
 .proposal-bar {
   --agent-color: #5b9dff;
   --proposal-bar-max-w: 600px;
@@ -241,7 +241,6 @@
   box-sizing: border-box;
   padding: 0;
   border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.14));
-  border-left: 3px solid var(--agent-color);
   border-radius: var(--sr-node-media-radius, 14px);
   background: var(--sr-glass-strong, rgb(20 20 22 / 0.94));
   color: var(--sr-ink, rgb(255 255 255 / 0.92));
@@ -274,8 +273,7 @@
   flex-direction: row;
   align-items: center;
   gap: 14px;
-  padding: 10px 10px 10px 14px;
-  border-left-color: rgb(255 255 255 / 0.3);
+  padding: 10px;
 }
 
 .proposal-bar--notice .proposal-bar__summary {

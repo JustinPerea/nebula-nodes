@@ -164,14 +164,15 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
       expect(placeholder.querySelector('.asset-proposal__dot')).not.toBeNull();
     });
 
-  it('the stylesheet draws the placeholder\'s dot and name from --agent-color, and only its edge neutral', async () => {
+  it('the stylesheet draws the placeholder\'s dot and name from --agent-color, and gives it no edge of its own', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
     const css = readFileSync(resolve(process.cwd(), 'src/styles/asset-proposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const held = [...css.matchAll(/([^{}]*asset-proposal--held[^{}]*)\{([^}]*)\}/g)];
-    expect(held.map((rule) => rule[1].trim())).toEqual(['.asset-proposal--held']);
-    expect(held[0][2]).not.toMatch(/--agent-color|background/);
-    expect(held[0][2]).toMatch(/border-left-color:\s*var\(--sr-edge-strong/);
+    // No rule of its own: it shares the real card's box, which has a neutral 1px edge all round.
+    expect(held).toEqual([]);
+    expect(css).toMatch(/\.asset-proposal \{[^}]*border: 1px solid var\(--sr-edge-strong/);
+    expect(css).not.toMatch(/\.asset-proposal \{[^}]*border-left/);
     expect(css).toMatch(/\.asset-proposal__dot \{[^}]*background: var\(--agent-color\)/);
     expect(css).toMatch(/\.asset-proposal__agent \{[^}]*color: var\(--agent-color\)/);
   });
