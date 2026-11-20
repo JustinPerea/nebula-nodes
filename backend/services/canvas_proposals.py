@@ -1066,7 +1066,11 @@ def plan_line(view: Mapping[str, Any]) -> str:
             # may-cost nodes (paid, on the plan, or free), so the segment says
             # which node may use the credits; the first segment names them
             # all and can't (design: "Runs “Idol” and “Splat” · “Idol” may use ...").
-            free_runs = max(len(run) - paid - plan_runs - len(may_rows),
+            # may_rows are the distinct nodes (name and account); the runs
+            # are counted by mayCostRuns, so two runs of nodes both named
+            # "Idol" are one row and two runs, and don't read as a free run.
+            may_runs = max(int(cost.get("mayCostRuns") or 0), len(may_rows))
+            free_runs = max(len(run) - paid - plan_runs - may_runs,
                             sum(1 for entry in entries if entry.get("kind") == "free"))
             segments.append(_may_cost_clauses(may_rows, named=bool(paid or plan_runs or free_runs > 0)))
         if not paid and not plan_runs and not may_rows:

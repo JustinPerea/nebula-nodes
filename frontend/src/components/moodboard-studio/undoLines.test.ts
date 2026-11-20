@@ -82,7 +82,7 @@ describe('the undo and redo toasts’ words (design r160 and r161)', () => {
 });
 
 describe('the toast for an undo that put some parts back and kept others (design)', () => {
-  const image = (number: number, extra: Record<string, unknown> = {}) => ({ part: 'image', reason: 'changed since', number, ...extra });
+  const image = (number: number, extra: Record<string, unknown> = {}) => ({ part: 'image', reason: 'changed since', number, numberBefore: number, ...extra });
 
   it('names one image', () => {
     expect(partialUndoLine('undo', 'Changed the weight of image 5', [image(5)]))
@@ -99,12 +99,12 @@ describe('the toast for an undo that put some parts back and kept others (design
   it('counts from four images on', () => {
     expect(partialUndoLine('undo', 'Moved 4 images', [image(1), image(2), image(3), image(4)]))
       .toBe('Undid “Moved 4 images” except 4 images that changed after that.');
-    expect(partialUndoLine('undo', 'x', [1, 2, 3, 4, 5, 6].map((n) => ({ part: 'card', reason: 'changed since', number: n }))))
+    expect(partialUndoLine('undo', 'x', [1, 2, 3, 4, 5, 6].map((n) => ({ part: 'card', reason: 'changed since', number: n, numberBefore: n }))))
       .toBe('Undid “x” except 6 images that changed after that.');
   });
 
   it('counts an image once, whatever the slices it has', () => {
-    expect(partialUndoLine('undo', 'x', [image(5), { part: 'card', reason: 'changed since', number: 5 }]))
+    expect(partialUndoLine('undo', 'x', [image(5), { part: 'card', reason: 'changed since', number: 5, numberBefore: 5 }]))
       .toBe('Undid “x” except image 5, which changed after that.');
     expect(partialUndoLine('undo', 'x', [image(1), image(2), image(3), image(3), image(2)]))
       .toBe('Undid “x” except images 1, 2 and 3, which changed after that.');
@@ -135,7 +135,7 @@ describe('the toast for an undo that put some parts back and kept others (design
   });
 
   it('names one of an image’s settings, and several of one image', () => {
-    const settings = (number: number, keys: string[]) => ({ part: 'settings', reason: 'changed since', number, settings: keys });
+    const settings = (number: number, keys: string[]) => ({ part: 'settings', reason: 'changed since', number, numberBefore: number, settings: keys });
     expect(partialUndoLine('undo', 'x', [settings(5, ['notes'])])).toBe('Undid “x” except image 5’s note, which changed after that.');
     expect(partialUndoLine('undo', 'x', [settings(5, ['notes', 'weight'])])).toBe('Undid “x” except image 5’s note and weight, which changed after that.');
     expect(partialUndoLine('undo', 'x', [settings(5, ['notes']), settings(5, ['weight'])])).toBe('Undid “x” except image 5’s note and weight, which changed after that.');
@@ -164,6 +164,55 @@ describe('the toast for an undo that put some parts back and kept others (design
       .toBe('Undid “x” except the direction, the mode, “Dusk” and image 5, which changed after that.');
     expect(partialUndoLine('undo', 'x', [1, 2, 3, 4].map((n) => image(n)).concat(field('direction') as never)))
       .toBe('Undid “x” except the direction and 4 images, which changed after that.');
+  });
+
+  describe('a kept image is named only when the undo left its number alone', () => {
+    const moved = (number: number, numberBefore: number) => ({ part: 'image', reason: 'changed since', number, numberBefore });
+
+    it('names it when its number is the same before and after, and the label gives that number', () => {
+      expect(partialUndoLine('undo', 'Added images 5, 6 and 7', [moved(5, 5)]))
+        .toBe('Undid “Added images 5, 6 and 7” except image 5, which changed after that.');
+    });
+
+    it('says "one of them" when the undo renumbered it', () => {
+      expect(partialUndoLine('undo', 'Added images 5, 6 and 7', [moved(5, 6)]))
+        .toBe('Undid “Added images 5, 6 and 7” except one of them, which changed after that.');
+    });
+
+    it('drops the number when the label lists another one for it', () => {
+      expect(partialUndoLine('undo', 'Added images 5, 6 and 7', [moved(4, 4)]))
+        .toBe('Undid “Added images 5, 6 and 7” except one of them, which changed after that.');
+      expect(partialUndoLine('undo', 'Added 6 images', [moved(4, 4)])).toBe('Undid “Added 6 images” except image 4, which changed after that.');
+    });
+
+    it('says "2 of them" for two or more, in numerals', () => {
+      expect(partialUndoLine('undo', 'Added images 5, 6 and 7', [moved(5, 6), moved(6, 7)]))
+        .toBe('Undid “Added images 5, 6 and 7” except 2 of them, which changed after that.');
+      expect(partialUndoLine('undo', 'Added 6 images', [moved(1, 2), moved(2, 3), moved(3, 4), moved(4, 5)]))
+        .toBe('Undid “Added 6 images” except 4 of them, which changed after that.');
+    });
+
+    it('never mixes a named image and a count: one renumbered image makes them all a count', () => {
+      expect(partialUndoLine('undo', 'Added images 5, 6 and 7', [moved(5, 5), moved(5, 7)]))
+        .toBe('Undid “Added images 5, 6 and 7” except one of them, which changed after that.');
+      expect(partialUndoLine('undo', 'Added images 5, 6 and 7', [moved(5, 5), moved(6, 8)]))
+        .toBe('Undid “Added images 5, 6 and 7” except 2 of them, which changed after that.');
+    });
+
+    it('takes the count form for a payload without numberBefore', () => {
+      expect(partialUndoLine('undo', 'Added images 5, 6 and 7', [{ part: 'image', reason: 'changed since', number: 5 }]))
+        .toBe('Undid “Added images 5, 6 and 7” except one of them, which changed after that.');
+    });
+
+    it('keeps a removed image’s number, and counts a removed image beside a renumbered one', () => {
+      expect(partialUndoLine('undo', 'x', [moved(5, 6), removedImage(3)]))
+        .toBe('Undid “x” except 2 of them, which changed or were removed after that.');
+    });
+
+    it('keeps "images" beside a field', () => {
+      expect(partialUndoLine('undo', 'x', [moved(5, 6), field('direction')]))
+        .toBe('Undid “x” except the direction and 1 image, which changed after that.');
+    });
   });
 
   it('says changed or were removed when both are kept', () => {
@@ -206,7 +255,7 @@ describe('the toast for an undo that put some parts back and kept others (design
     expect(imageStepWords([4, 5])).toBe('images 4 and 5');
     expect(imageStepWords([4, 5, 6])).toBe('images 4, 5 and 6');
     expect(imageStepWords([4, 5, 6, 7, 8, 9])).toBe('6 images');
-    expect(partialUndoLine('undo', `Added ${imageStepWords([4, 5, 6])}`, [{ part: 'image', reason: 'changed since', number: 5 }]))
+    expect(partialUndoLine('undo', `Added ${imageStepWords([4, 5, 6])}`, [{ part: 'image', reason: 'changed since', number: 5, numberBefore: 5 }]))
       .toBe('Undid “Added images 4, 5 and 6” except image 5, which changed after that.');
   });
 

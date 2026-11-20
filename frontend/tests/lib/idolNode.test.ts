@@ -63,7 +63,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
     expect(signedIn).toEqual({ label: 'Saved', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face token',
-      detail: 'Idol uses your Hugging Face allowance.' });
+      detail: 'Idol uses your Hugging Face allowance.', tokenSaved: true });
     // No allowance numbers and no run counts anywhere (GM r12).
     for (const line of [anonymous?.detail, signedIn?.detail]) expect(line).not.toMatch(/\d/);
   });

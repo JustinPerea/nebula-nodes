@@ -24,9 +24,10 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
     .map((param) => [param.key, param.default]));
   const readiness = modelReadiness(definition,
     params ?? withNewKreaMode(definition, defaults, cache.kreaConnectionMode), cache, health);
-  const manage = readiness.tone === 'success' || readiness.label.startsWith('Configured') || readiness.label === 'Krea signed in';
-  // A saved Hugging Face token (the Space route's "Saved") is changed, not set up (design); "Set up" is for no token.
-  const saved = readiness.label === 'Saved';
+  // A saved Hugging Face token reads "Settings", as every row with a saved key does (design); "Set up" is for no
+  // token. It follows the saved token itself, not the label the token's state is worded with.
+  const manage = readiness.tone === 'success' || readiness.label.startsWith('Configured') || readiness.label === 'Krea signed in'
+    || readiness.tokenSaved === true;
   return (
     // Offline (GM, round 16 of PR #114): the line goes neutral grey, since
     // orange would say "set this up now" while nothing can be set up.
@@ -49,7 +50,7 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
         onClick={() => {
           onSetup?.();
           useUIStore.getState().openProviderSetup(readiness.setupTarget!);
-        }}>{saved ? 'Change' : manage ? 'Settings' : 'Set up'}</button>}
+        }}>{manage ? 'Settings' : 'Set up'}</button>}
     </div>
   );
 }

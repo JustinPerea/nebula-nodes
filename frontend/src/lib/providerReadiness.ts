@@ -35,6 +35,9 @@ export interface ModelReadiness {
   connectionLabel?: string;
   /** Muted words after the connection label ("Optional", GM PR #203 r1). */
   connectionNote?: string;
+  /** A Hugging Face token is saved for the route this row describes (a Space route with a saved key), whatever the
+   *  label says; the library button reads "Settings" then and "Set up" without one (design). */
+  tokenSaved?: boolean;
 }
 
 export const PROVIDER_HEALTH_TTL_MS = 5 * 60 * 1000;
@@ -205,12 +208,12 @@ function spaceReadiness(
     const target: ProviderSetupTarget = { kind: 'api-key', key: route.key };
     const checked = checkedReadiness(PROVIDER_KEY_LABELS[route.key] ?? route.key, target, health);
     const allowance = `${def.displayName} uses your ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance.`;
-    if (checked?.tone === 'success') return { ...checked, label: 'Connected', connectionLabel, detail: allowance };
+    if (checked?.tone === 'success') return { ...checked, label: 'Connected', connectionLabel, detail: allowance, tokenSaved: true };
     if (checked?.tone === 'warning' && checked.label !== 'Check unavailable' && checked.label !== 'Check rate limited') {
-      return { ...checked, label: 'Not connected', connectionLabel };
+      return { ...checked, label: 'Not connected', connectionLabel, tokenSaved: true };
     }
-    if (ready.label === 'Checking connection') return { ...ready, connectionLabel };
-    return { label: 'Saved', tone: 'neutral', setupTarget: target, connectionLabel, detail: allowance };
+    if (ready.label === 'Checking connection') return { ...ready, connectionLabel, tokenSaved: true };
+    return { label: 'Saved', tone: 'neutral', setupTarget: target, connectionLabel, detail: allowance, tokenSaved: true };
   }
   if (!keyless && tokenKey) {
     if (!cache.loaded) return { ...keyReadiness(tokenKey, cache, health), connectionLabel };

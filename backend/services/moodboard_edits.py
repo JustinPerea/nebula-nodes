@@ -1574,21 +1574,35 @@ def parse_ops(raw: Any) -> list[dict[str, Any]]:
     return raw
 
 
-def _renumber_skips(board: dict[str, Any], applied: list[dict[str, Any]]) -> None:
+def _renumber_skips(board: dict[str, Any], applied: list[dict[str, Any]], before: dict[str, Any]) -> None:
     """Number each kept image by its place on the board as the batch leaves it
     (design): the person reads the toast after the undo, and an agent reads
     the board after the line, so both count the images that are there then.
     A slice is judged mid-batch, before later slices add or remove images, so
     its number can be one off. The lines are worded by this module, so "image
-    N" in a message is always the entry's own number."""
+    N" in a message is always the entry's own number.
+
+    A kept image that was on the board before the batch also gets
+    ``numberBefore``, its 1-based place on ``before`` (the board the undo was
+    sent against). The toast names an image only when ``number`` and
+    ``numberBefore`` agree (design: a number in the toast has to match the
+    board, which the undo may have renumbered); an entry without the field is
+    read as "the number may have moved"."""
     places = {str(img.get("id")): n for n, img in enumerate(board["images"], 1)}
+    earlier = {str(img.get("id")): n for n, img in
+               enumerate([i for i in before.get("images") or [] if isinstance(i, dict)], 1)}
     for entry in applied:
         reports = entry.get("skipped")  # an add's is a count of duplicates
         for report in reports if isinstance(reports, list) else []:
             if not isinstance(report, dict) or "number" not in report:
                 continue
-            now = places.get(str(report.get("image")))
-            if now is None or now == report["number"]:
+            image_id = str(report.get("image"))
+            now = places.get(image_id)
+            if now is None:
+                continue
+            if image_id in earlier:
+                report["numberBefore"] = earlier[image_id]
+            if now == report["number"]:
                 continue
             old = report["number"]
             report["message"] = re.sub(rf"\b([Ii]mage ){old}(?!\d)", rf"\g<1>{now}", report["message"])
@@ -1633,7 +1647,7 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
         layout.check_image_placements(staged["images"], {f["id"] for f in staged["frames"]})
     except ValueError as exc:
         raise EditError(f"the board after these ops: {exc}") from None
-    _renumber_skips(staged, applied)
+    _renumber_skips(staged, applied, board)
     # A cover whose image left the board goes (it opens on #1 again), before
     # the diff, so the batch's undo brings the cover back with the image.
     from services.moodboard_store import follow_cover

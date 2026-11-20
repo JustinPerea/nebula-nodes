@@ -317,7 +317,7 @@ describe('a drag on the board', () => {
     await openStudio({ view: 'board' });
     act(() => board.props!.onMove([{ placement: 'c-i2', x: 900, y: 0 }]));
     await waitFor(() => expect(server.edits).toHaveLength(1));
-    server.skip = [{ part: 'card', image: 'i2', number: 2, reason: 'changed since', message: '#2 changed after that step, so Nebula left it as it is.' }];
+    server.skip = [{ part: 'card', image: 'i2', number: 2, numberBefore: 2, reason: 'changed since', message: '#2 changed after that step, so Nebula left it as it is.' }];
     press('z', { metaKey: true });
     // Some of it went back and image 2 stayed: one line, naming it (design), with the Redo.
     expect(await screen.findByText('Undid “Moved image 2” except image 2, which changed after that.')).toBeTruthy();

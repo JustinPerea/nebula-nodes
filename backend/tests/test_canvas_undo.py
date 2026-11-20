@@ -929,3 +929,15 @@ def test_a_node_whose_params_and_name_both_changed_since_is_said_once_to_a_perso
     # The agent's message (HTTP and MCP) and the CLI's lines say it once.
     assert result["message"].count(line) == 1
     assert format_undone(result).splitlines().count(f"  Left as is: {line}") == 1
+
+
+def test_two_nodes_that_share_a_name_each_keep_their_line_and_one_node_says_it_once():
+    from services.canvas_undo import kept_lines
+
+    brief = "“Brief” changed after that step, so Nebula left it as it is."
+    skipped = [
+        {"nodeId": "n1", "part": "params", "message": brief},
+        {"nodeId": "n1", "part": "name", "message": brief},
+        {"nodeId": "n2", "part": "params", "message": brief},
+    ]
+    assert kept_lines(skipped) == [brief, brief]

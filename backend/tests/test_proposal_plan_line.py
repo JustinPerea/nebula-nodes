@@ -538,3 +538,18 @@ def test_the_may_cost_segment_names_its_node_beside_a_free_run():
     # Idol alone: the first segment names it, so the second doesn't repeat it (r189).
     alone = _view(nodes=[{"ref": "n1", "name": "Idol"}], run=["n1"], cost={"mayCostRuns": 1, "mayCost": [_idol()]})
     assert plan_line(alone) == "Adds and runs “Idol” · may use your Hugging Face credits"
+
+
+def test_two_may_cost_runs_of_nodes_with_one_name_do_not_repeat_it():
+    """Design: the may-cost segment is named by the distinct runs, not the
+    distinct names. Two runs of nodes both named “Idol” are the may-cost
+    nodes and nothing else, so the first segment names them and the may-cost
+    segment doesn't say the name again."""
+    cost = {"mayCostRuns": 2, "mayCost": [_idol()],
+            "nodes": [{"ref": "n1", "nodeId": "n1", "kind": "mayCost", "name": "Idol"},
+                      {"ref": "n2", "nodeId": "n2", "kind": "mayCost", "name": "Idol"}]}
+    both = _view(run=["n1", "n2"], cost=cost)
+    assert plan_line(both) == "Runs 2 “Idol” nodes · may use your Hugging Face credits"
+    # Beside a free run the name still leads the segment.
+    beside = _view(run=["n1", "n2", "n3"], cost={**cost, "nodes": [*cost["nodes"], {"ref": "n3", "nodeId": "n3", "kind": "free", "name": "Splat"}]})
+    assert plan_line(beside).endswith("“Idol” may use your Hugging Face credits")

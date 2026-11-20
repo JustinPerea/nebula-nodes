@@ -75,3 +75,29 @@ def test_a_setting_kept_before_a_later_removal_is_numbered_after_it():
     for entry in skipped:
         assert entry["number"] == _place(undone, entry["image"])
         assert _says(entry["message"], entry["number"]) and not _says(entry["message"], 3)
+
+
+def _added_three(before_count: int = 4):
+    board = _board(before_count)
+    after, slices = _step(board, lambda b: b["images"].extend(
+        {"id": f"i{n}", "url": f"/files/{n}.png", "weight": 1.0} for n in range(before_count + 1, before_count + 4)))
+    return after, slices
+
+
+def test_a_kept_image_the_undo_renumbers_says_its_number_before_the_undo():
+    # "Added images 5, 6 and 7", then another actor changes image 6: the undo
+    # takes 5 and 7 off, so the kept card is image 6 before and image 5 after.
+    after, slices = _added_three()
+    after["images"][5]["weight"] = 2.0
+    undone, skipped = _undo(after, slices)
+    assert [(s["image"], s["number"], s["numberBefore"]) for s in skipped] == [("i6", 5, 6)]
+    assert skipped[0]["number"] == _place(undone, "i6")
+
+
+def test_a_kept_image_the_undo_leaves_in_place_has_the_same_number_both_ways():
+    # Image 5 of 5, 6 and 7 changed: nothing before it comes off.
+    after, slices = _added_three()
+    after["images"][4]["weight"] = 2.0
+    undone, skipped = _undo(after, slices)
+    assert [(s["image"], s["number"], s["numberBefore"]) for s in skipped] == [("i5", 5, 5)]
+    assert _place(undone, "i5") == 5

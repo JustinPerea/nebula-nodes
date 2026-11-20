@@ -50,7 +50,16 @@ export function imageStepWords(numbers: readonly number[]): string {
   return `images ${joinedList(numbers.map(String))}`;
 }
 
-interface SkippedSlice { part?: unknown; field?: unknown; reason?: unknown; number?: unknown; settings?: unknown }
+/** `numberBefore` is the kept image's 1-based place just before the undo (the server adds it beside `number`, which is
+ *  its place after); a payload without it can't say whether the undo renumbered the image. */
+interface SkippedSlice { part?: unknown; field?: unknown; reason?: unknown; number?: unknown; numberBefore?: unknown; settings?: unknown }
+
+/** The image numbers a step label lists ("Added images 5, 6 and 7", "Moved image 5"); null when it lists none
+ *  ("Added 6 images", "Changed the direction"). */
+function labelImageNumbers(label: string): number[] | null {
+  const list = /\bimages? (\d+(?:, \d+)*(?: and \d+)?)/.exec(label);
+  return list ? list[1].split(/, | and /).map(Number) : null;
+}
 
 /** "image 5", "images 5 and 6", "images 3, 5 and 6". */
 function imageNumbers(numbers: readonly number[]): string {
@@ -134,8 +143,14 @@ export function keptUndoLine(label: string, skipped: readonly SkippedSlice[]): s
  * verb is "changed", "was/were removed", or "changed or were removed" when both kinds are kept. Any other mix (a
  * reason other than "changed since" / "removed since", a switch only the person turns on, a colour choice made since,
  * a card that can't go back there, a file that isn't Nebula's own, a look whose name isn't known) is null, and the
- * toast keeps "Undid" with the server's line under it. Keyed on `part`, `reason`, `field`, `number` and `settings`,
- * never on the server's sentence.
+ * toast keeps "Undid" with the server's line under it. Keyed on `part`, `reason`, `field`, `number`, `numberBefore` and
+ * `settings`, never on the server's sentence.
+ *
+ * A kept image is named by its number only when the undo left that number alone (design: a number in the toast has to
+ * match the board the person looks at next): its `numberBefore` equals its `number`, and a label that lists image
+ * numbers lists that one. Otherwise no kept image is named, and they read "one of them" or "2 of them" ("... except 2
+ * of them, which changed after that."); never a named image beside a count. A payload without `numberBefore` takes the
+ * count form. An image removed after the step is not on the board, so it keeps its number.
  */
 export function partialUndoLine(
   direction: 'undo' | 'redo',
@@ -151,6 +166,8 @@ export function partialUndoLine(
   const settings = new Map<number, string[]>();
   let unnumberedChanged = 0;
   let unnumberedRemoved = 0;
+  let renumbered = false;
+  const labelNumbers = labelImageNumbers(label);
   for (const slice of skipped) {
     if (slice.part === 'fields') {
       const noun = typeof slice.field === 'string' ? FIELD_IN_SENTENCE[slice.field] : undefined;
@@ -174,24 +191,31 @@ export function partialUndoLine(
     if (typeof slice.number !== 'number') {
       if (isRemoved) unnumberedRemoved += 1; else unnumberedChanged += 1;
     } else if (isRemoved) removed.add(slice.number);
-    else if (words?.length) {
-      const had = settings.get(slice.number) ?? [];
-      settings.set(slice.number, [...had, ...words.filter((word) => !had.includes(word))]);
-    } else changed.add(slice.number);
+    else {
+      const held = slice.numberBefore === slice.number && (labelNumbers === null || labelNumbers.includes(slice.number));
+      if (!held) renumbered = true;
+      if (words?.length) {
+        const had = settings.get(slice.number) ?? [];
+        settings.set(slice.number, [...had, ...words.filter((word) => !had.includes(word))]);
+      } else changed.add(slice.number);
+    }
   }
   // An image removed wins over any change kept for it; a plain change over its settings.
   for (const n of removed) { changed.delete(n); settings.delete(n); }
   for (const n of changed) settings.delete(n);
   const unnumbered = unnumberedChanged + unnumberedRemoved;
   const imageTotal = changed.size + removed.size + settings.size + unnumbered;
-  const named = unnumbered === 0 && imageTotal < 4;
+  const named = unnumbered === 0 && imageTotal < 4 && !renumbered;
   const nums = (set: ReadonlySet<number>) => [...set].sort((a, b) => a - b);
   const imageParts: string[] = [];
   if (named) {
     const plain = nums(new Set([...changed, ...removed]));
     if (plain.length) imageParts.push(imageNumbers(plain));
     for (const n of [...settings.keys()].sort((a, b) => a - b)) imageParts.push(`image ${n}’s ${joined(settings.get(n) ?? [])}`);
-  } else if (imageTotal) imageParts.push(`${imageTotal} ${imageTotal === 1 ? 'image' : 'images'}`);
+  } else if (imageTotal) {
+    const ofThem = renumbered && fields.length + looks.length === 0;
+    imageParts.push(ofThem ? `${imageTotal === 1 ? 'one' : imageTotal} of them` : `${imageTotal} ${imageTotal === 1 ? 'image' : 'images'}`);
+  }
   const subjects = fields.length + looks.length + (named ? changed.size + removed.size + settings.size : imageTotal);
   const hasRemoved = removed.size + unnumberedRemoved > 0;
   const hasChanged = fields.length + looks.length + changed.size + settings.size + unnumberedChanged > 0;
@@ -200,6 +224,6 @@ export function partialUndoLine(
   const done = undoneLine(direction, label);
   const list = [...fields, ...looks, ...imageParts];
   // Four or more images alone are a count with "that"; beside a field or a look the count joins the one comma form.
-  if (!named && imageTotal >= 4 && list.length === 1) return `${done} except ${list[0]} that ${verb} after that.`;
+  if (!named && !renumbered && imageTotal >= 4 && list.length === 1) return `${done} except ${list[0]} that ${verb} after that.`;
   return `${done} except ${joined(list)}, which ${verb} after that.`;
 }

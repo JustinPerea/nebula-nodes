@@ -566,12 +566,17 @@ UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "rese
 def kept_lines(skipped: list[dict[str, Any]]) -> list[str]:
     """What an undo left, one line each, as a person or an agent reads it
     (design): a node whose params and name both changed has two entries (each
-    its own ``part``) that say the same sentence, and it is said once. The
-    entries themselves are not merged."""
+    its own ``part``) that say the same sentence, and it is said once. Two
+    different nodes that share a name each keep their line, so the repeat is
+    judged on the node (``nodeId``) and the sentence together. The entries
+    themselves are not merged."""
     lines: list[str] = []
+    seen: set[tuple[Any, str]] = set()
     for item in skipped:
         line = str(item.get("message") or item.get("reason") or "")
-        if line and line not in lines:
+        key = (item.get("nodeId"), line)
+        if line and key not in seen:
+            seen.add(key)
             lines.append(line)
     return lines
 
