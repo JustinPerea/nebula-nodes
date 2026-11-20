@@ -98,12 +98,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Fetch main and the merge base for the baseline guards
+      - name: Fetch main and the merge base for the baseline guard
         # check-internal-ids compares its baseline with main's copy and with the commit this checkout
         # was merged onto (its first parent), so a hand-raised count fails here. The merge ref can
         # predate the latest main, so main's newer lowerings alone don't fail a pull request.
+        shell: bash
         run: |
-          parent=$(git cat-file commit HEAD | awk '$1 == "parent" && !seen { print $2; seen = 1 }')
+          parent=$(git cat-file commit HEAD | awk 'NF == 0 { body = 1 } !body && $1 == "parent" && !seen { print $2; seen = 1 }')
           git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main ${parent:+"$parent"}
 
       - name: Run frontend lint
