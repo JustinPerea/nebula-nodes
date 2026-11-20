@@ -7,11 +7,11 @@ import { LineText, type LineTone } from '../LineText';
  * line). `retry` is for a surface whose own Try again button shows with the line, so the line ends
  * "Try again." (failureCopy's `button`). A plain string (a line the screen wrote itself) shows as it
  * is. A notice that is not a failure (a node's "Waiting for you to run it") keeps its heading line over the sentence. `tone="failure"` keeps the warning colour for a line that reports a failure to run or a loss
- * (a node card's run failure); every other because line draws neutral (LineText).
+ * (a node card's run failure); every other because line draws neutral (LineText). `code` is LineText's: set it only where the reason is a backend, provider or agent message.
  */
-export function FailureLines({ failure, retry = false, tone }: { failure: FailureCopy | string; retry?: boolean; tone?: LineTone }) {
+export function FailureLines({ failure, retry = false, tone, code }: { failure: FailureCopy | string; retry?: boolean; tone?: LineTone; code?: boolean }) {
   // Through <LineText>, so a not-connected line registers (lib/notConnectedLine).
-  if (typeof failure === 'string') return <LineText text={failure} tone={tone} />;
+  if (typeof failure === 'string') return <LineText text={failure} tone={tone} code={code} />;
   // A heading of the form "Couldn’t ‹x›." over a reason (a failure built by hand, not by failureCopy) is one sentence too.
   const made = failure.heading !== '' && failedWhat(failure.heading) !== null;
   const line = made ? becauseLine({ heading: failure.heading, reason: failure.reason, status: failure.status }, retry ? 'button' : 'alone')
@@ -20,7 +20,7 @@ export function FailureLines({ failure, retry = false, tone }: { failure: Failur
     <span className="failure-lines">
       {failure.heading && !made && <LineText className="failure-lines__heading" text={failure.heading} tone={tone} />}
       {failure.heading && !made && ' '}
-      <LineText className="failure-lines__reason" text={line} tone={tone} />
+      <LineText className="failure-lines__reason" text={line} tone={tone} code={code} />
     </span>
   );
 }

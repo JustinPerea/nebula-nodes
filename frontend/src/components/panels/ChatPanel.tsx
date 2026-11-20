@@ -414,7 +414,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.details ? <><LineText text={part.text} tone={part.because ? 'because' : undefined} /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} tone={part.because ? 'because' : undefined} />}
+              {part.details ? <><LineText text={part.text} tone={part.because ? 'because' : undefined} code /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} tone={part.because ? 'because' : undefined} code />}
             </div>
           );
         }
@@ -2176,7 +2176,7 @@ export function ChatPanel() {
                   <PersonLockLine lock={codexLock} place="control" />
                   {(codexLoginState || codexLoginError) && (
                     <div className="chat-panel__connect-progress">
-                      <LineText text={codexLoginError || codexLoginState?.message} />
+                      <LineText text={codexLoginError || codexLoginState?.message} code />
                       {codexLoginState?.authUrl && (
                         <a
                           className="chat-panel__connect-link"

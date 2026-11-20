@@ -354,7 +354,7 @@ export function ConnectedApps({ view, counted = false, unknown = false, loadErro
           )}
         </div>
       )}
-      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} code /></p>}
     </div>
   );
 }

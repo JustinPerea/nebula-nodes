@@ -53,7 +53,7 @@ function KreaPlans() {
       <>
         <button type="button" className="settings__button settings__button--ghost" disabled={busy}
           onClick={() => void run(async () => setPlans(await getKreaPlans()))}>{busy ? 'Loading plans…' : 'Show plans'}</button>
-        {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
+        {error && <p className="settings-row__error" role="alert"><LineText text={error} code /></p>}
       </>
     );
   }
@@ -78,7 +78,7 @@ function KreaPlans() {
       </div>
       {plans.trialAvailable && !trialUrl && <PersonLockLine lock={trialLock} place="control" />}
       {trialUrl && <p className="settings-hint">Krea asks for a card on its checkout page. The trial converts to Pro unless you cancel.</p>}
-      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} code /></p>}
     </div>
   );
 }

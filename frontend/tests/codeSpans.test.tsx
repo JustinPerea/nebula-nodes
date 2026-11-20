@@ -13,6 +13,7 @@ vi.mock('../src/lib/backend', async (original) => ({
 }));
 import { ChatPanel } from '../src/components/panels/ChatPanel';
 import { resetCommonsSessionForTests } from '../src/lib/commonsApi';
+import { cascaded } from './helpers/cssCascade';
 import { LineText } from '../src/components/LineText';
 import { withCodeSpans } from '../src/lib/codeSpans';
 import { useUIStore } from '../src/store/uiStore';
@@ -114,16 +115,52 @@ describe('withCodeSpans', () => {
   });
 });
 
+describe('quoted names and quote styles', () => {
+  it('leaves a dropped file named a`b`.png literal on a code line', () => {
+    const el = html('Nebula couldn’t add “a`b`.png” because it is too big.');
+    expect(codes(el)).toEqual([]);
+    expect(el.textContent).toBe('Nebula couldn’t add “a`b`.png” because it is too big.');
+  });
+  it('leaves two names that each hold one backtick literal', () => {
+    const text = 'Nebula couldn’t add “a`b.png” or “c`d.png”.';
+    const el = html(text);
+    expect(codes(el)).toEqual([]);
+    expect(el.textContent).toBe(text);
+  });
+  it('still pairs a span outside the quotes', () => {
+    const el = html('“a`b.png” failed: run `codex login`');
+    expect(codes(el)).toEqual(['codex login']);
+  });
+  it('does not pair GNU-style quotes', () => {
+    const text = "cp: cannot stat `a': No such file, see `b'";
+    const el = html(text);
+    expect(codes(el)).toEqual([]);
+    expect(el.textContent).toBe(text);
+  });
+  it('leaves a backslash-escaped backtick literal', () => {
+    const text = 'a \\`b\\` c';
+    const el = html(text);
+    expect(codes(el)).toEqual([]);
+    expect(el.textContent).toBe(text);
+    expect(codes(html('a \\`b` c'))).toEqual([]);
+  });
+});
+
 describe('LineText code spans', () => {
   afterEach(cleanup);
-  it('draws the refusal with three code elements and no backticks', () => {
+  it('is off by default: backticks stay as typed', () => {
     const { container } = render(<p><LineText text={L1} /></p>);
+    expect(codes(container)).toEqual([]);
+    expect(container.textContent).toBe(L1);
+  });
+  it('draws the refusal with three code elements and no backticks', () => {
+    const { container } = render(<p><LineText text={L1} code /></p>);
     expect(codes(container)).toEqual(['codex logout', 'codex login', '--with-api-key']);
     expect(container.textContent).not.toContain('`');
     expect(container.textContent).toBe(L1.replaceAll('`', ''));
   });
   it('inside a className span too', () => {
-    const { container } = render(<LineText text="run `x`" className="w" />);
+    const { container } = render(<LineText text="run `x`" className="w" code />);
     expect(container.querySelector('span.w code')!.textContent).toBe('x');
   });
   it('leaves children as the surface laid them out', () => {
@@ -150,5 +187,21 @@ describe('chat error line code spans', () => {
     });
     expect(codes(line)).toEqual(['codex logout', 'codex login', '--with-api-key']);
     expect(line.textContent).not.toContain('`');
+  });
+});
+
+describe('code span styles', () => {
+  it('in the Connected apps error line the span keeps the code-span rule: its face, no ligatures, no colour of its own', () => {
+    document.body.className = 'app-slava-restraint';
+    const { container } = render(<section className="settings-apps"><p className="settings-row__error"><LineText text="Couldn’t update: run `codex login --x`" code /></p></section>);
+    const span = container.querySelector('code')!;
+    const won = cascaded(span);
+    expect(won.get('|font-variant-ligatures')?.value).toBe('none');
+    expect(won.get('|font-family')?.selector).toMatch(/code-span/);
+    expect(won.get('|color')).toBeUndefined();
+    expect(won.get('|font')).toBeUndefined();
+    // The neighbouring rule still styles a plain code element in that panel.
+    const plain = render(<section className="settings-apps"><code>x</code></section>).container.querySelector('code')!;
+    expect(cascaded(plain).get('|font')?.selector).toMatch(/settings-apps code/);
   });
 });

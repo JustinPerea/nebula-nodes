@@ -282,7 +282,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
           </div>
           <PersonLockLine lock={keyLock} place="heading" />
           <div className="settings-list">{connected.map((entry) => entry.render(moved(entry)))}</div>
-          {health.error && <p className="settings-row__error" role="alert"><LineText text={health.error} /></p>}
+          {health.error && <p className="settings-row__error" role="alert"><LineText text={health.error} code /></p>}
           {desktop?.credentials && <p className="settings-hint settings-list__note">Keys are stored in the macOS Keychain.</p>}
         </section>
       )}
