@@ -314,7 +314,7 @@ async def test_codex_turn_is_refused_when_the_feature_preflight_refuses(monkeypa
     monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", spawned)
     monkeypatch.setattr(codex_session, "_codex_base_args", lambda *a, **k: ["codex", "exec", "--disable", "hooks"])
     events = await _collect(run_codex("hi", None, workdir=tmp_path, agent_token="tok"))
-    assert events == [{"type": "error", "message": "Codex has features on that Nebula hasn't reviewed (browser_use)"},
+    assert events == [{"type": "error", "stop": "error", "message": "Codex has features on that Nebula hasn't reviewed (browser_use)"},
                       {"type": "done"}]
     spawned.assert_not_called()
 

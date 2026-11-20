@@ -1675,11 +1675,8 @@ class TestChatAgentDispatch:
                 rejected = ws.receive_json()
                 assert rejected == {
                     "type": "error",
-                    "message": (
-                        "Another response is active. Stop it and wait for "
-                        "cancellation confirmation before sending again."
-                    ),
-                    "source": "claude",
+                    "message": "A response is still running. Stop it and wait for it to stop, then send again.",
+                    "source": "system",
                 }
                 assert not cleaned_up.is_set()
 

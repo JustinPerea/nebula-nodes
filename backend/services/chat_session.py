@@ -253,7 +253,7 @@ async def run_claude(
     try:
         validate_agent_read_grants(workdir=agent_cwd, extra_dirs=list(extra_dirs or []), protected=protected)
     except GrantOverlapsProtectedDir as exc:
-        yield {"type": "error", "message": str(exc)}
+        yield {"type": "error", "stop": "error", "message": str(exc)}
         yield {"type": "done"}
         return
     from services.agent_knowledge import KnowledgeSnapshotError, snapshot_provider_knowledge
@@ -261,7 +261,7 @@ async def run_claude(
     try:
         snapshot_provider_knowledge(PROJECT_ROOT, agent_cwd)
     except KnowledgeSnapshotError as exc:
-        yield {"type": "error", "message": str(exc)}
+        yield {"type": "error", "stop": "error", "message": str(exc)}
         yield {"type": "done"}
         return
     system_prompt = (
@@ -313,7 +313,7 @@ async def run_claude(
             limit=64 * 1024 * 1024,
         )
     except FileNotFoundError:
-        yield {"type": "error", "message": "`claude` binary not found in PATH"}
+        yield {"type": "error", "stop": "error", "message": "`claude` binary not found in PATH"}
         yield {"type": "done"}
         return
 
@@ -334,7 +334,7 @@ async def run_claude(
                 except Exception:
                     pass
                 yield {
-                    "type": "error",
+                    "type": "error", "stop": "error",
                     "message": "Skipped an oversized stream event (likely a huge tool result). Continuing.",
                 }
                 continue
@@ -413,7 +413,7 @@ async def run_claude(
                     }
                 else:
                     yield {
-                        "type": "error",
+                        "type": "error", "stop": "error",
                         "message": ev.get("result") or f"claude exited with subtype={st}",
                     }
                 continue
@@ -426,7 +426,7 @@ async def run_claude(
         if return_code != 0:
             err_text = stderr_data.decode("utf-8", errors="replace").strip()
             yield {
-                "type": "error",
+                "type": "error", "stop": "error",
                 "message": err_text or f"claude exited with code {return_code}",
             }
     finally:

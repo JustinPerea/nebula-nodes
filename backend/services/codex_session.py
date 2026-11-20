@@ -539,7 +539,7 @@ async def _require_codex_chatgpt_login() -> dict[str, Any] | None:
         mode_label = str(mode or "unknown mode")
 
     return {
-        "type": "error",
+        "type": "error", "stop": "error",
         "message": CODEX_CHATGPT_REQUIRED_MESSAGE.format(mode=mode_label),
     }
 
@@ -556,7 +556,7 @@ def _normalize_codex_event(ev: dict[str, Any]) -> list[dict[str, Any]]:
 
     if event_type in {"error", "turn.failed"}:
         message = ev.get("message") or ev.get("error") or ev.get("reason") or "Codex turn failed"
-        normalized.append({"type": "error", "message": str(message)})
+        normalized.append({"type": "error", "stop": "error", "message": str(message)})
         return normalized
 
     if event_type == "item.started":
@@ -659,12 +659,12 @@ async def run_codex(
     try:
         args = _codex_base_args(effective_model, effective_effort, agent_cwd, backend_url)
     except GrantOverlapsProtectedDir as exc:
-        yield {"type": "error", "message": str(exc)}
+        yield {"type": "error", "stop": "error", "message": str(exc)}
         yield {"type": "done"}
         return
     refusal = await codex_feature_preflight(args, agent_cwd)
     if refusal:
-        yield {"type": "error", "message": refusal}
+        yield {"type": "error", "stop": "error", "message": refusal}
         yield {"type": "done"}
         return
     if session_id:
@@ -686,7 +686,7 @@ async def run_codex(
             limit=64 * 1024 * 1024,
         )
     except FileNotFoundError:
-        yield {"type": "error", "message": "`codex` binary not found in PATH"}
+        yield {"type": "error", "stop": "error", "message": "`codex` binary not found in PATH"}
         yield {"type": "done"}
         return
 
@@ -723,7 +723,7 @@ async def run_codex(
         stderr_text = (await stderr_task).decode("utf-8", errors="replace").strip()
         if return_code != 0:
             yield {
-                "type": "error",
+                "type": "error", "stop": "error",
                 "message": stderr_text or f"codex exited with code {return_code}",
             }
     finally:

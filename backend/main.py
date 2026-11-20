@@ -6378,10 +6378,22 @@ async def chat_websocket(websocket: WebSocket) -> None:
         autonomy: accepted for old clients and ignored by both runners
     }
     Server sends events matching AGENT_RUNNERS' event contract.
+
+    Every {"type": "error"} event is one of two kinds. A stop (the agent ran, then
+    stopped) carries "stop": "error" (the agent's own failure: a failed turn, a
+    crash, an unanswered cancel) or "stop": "ended" (Nebula or a timer ended a
+    personal session), and an "ended" stop also carries "reason": idle,
+    agent_changed, commons_enabled, shutdown or ended (the session is unknown or
+    gone). A refusal (the agent never ran) has no "stop". The person's own Stop
+    sends cancellation events, not an error. The lines are in
+    services/chat_lines.py, services/chat_models.py and services/acp_session.py.
     """
     from services.chat_session import AGENT_RUNNERS
     from services.chat_actions import register_action_handler, unregister_action_handler
-    from services.chat_models import ChatModelSelectionError, validate_chat_model_selection
+    from services.chat_models import ChatModelSelectionError, chat_refusal_message, validate_chat_model_selection
+    from services.chat_lines import (AGENT_UNKNOWN_LINE, COMMONS_ON_LINE, NUMBER_TOO_LARGE_LINE, OLD_REQUEST_LINE,
+                                     RELOAD_LINE, RESPONSE_RUNNING_LINE)
+    from services.acp_session import ENDED_UNKNOWN_LINE
 
     await websocket.accept()
     chat_marked_as_agent = _websocket_has_agent_marker(websocket)
@@ -6410,13 +6422,14 @@ async def chat_websocket(websocket: WebSocket) -> None:
         """One turn on the person's own agent over ACP. The session (process,
         token, workspace) outlives the turn; acp_sessions owns it."""
         agent_id = agent.split(":", 1)[1]
-        ended = {"type": "error", "code": "personal_session_ended",
-                 "message": "This chat's agent has stopped. Send again to start a new conversation."}
+        # A session that is gone or never was: a stop (the agent ran, then ended), reason "ended",
+        # unless the manager remembers a more particular end for this chat's own session.
+        ended = PersonalSessionError("personal_session_ended", ENDED_UNKNOWN_LINE, stop="ended", reason="ended")
         if session_id:
             host = acp_sessions.get(session_id, connection_id)
             if host is None or host.agent_id != agent_id:
-                why = acp_sessions.ended_message(session_id, connection_id) if host is None else None
-                enqueue({**ended, "message": why} if why else ended)
+                why = acp_sessions.ended_error(session_id, connection_id) if host is None else None
+                enqueue((why or ended).event())
                 return {"type": "done"}
         else:
             try:
@@ -6424,7 +6437,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     connection_id, agent_id, state_dir=_STATE_DIR, output_root=OUTPUT_ROOT,
                     backend_url=backend_url, workspace_sessions=workspace_sessions)
             except PersonalSessionError as exc:
-                enqueue({"type": "error", "code": exc.code, "message": exc.message})
+                enqueue(exc.event())
                 return {"type": "done"}
             enqueue({"type": "session", "sessionId": host.id, "agentName": host.display_name, "color": host.color,
                      "agentInfo": {"name": str(host.agent_info.get("name") or "")[:64],
@@ -6436,7 +6449,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
         # a prompt: switched off, removed or changed since it started.
         if host.closed or not acp_sessions.still_allowed(host, _STATE_DIR):
             await acp_sessions.close_stale(_STATE_DIR)
-            enqueue({**ended, "message": host.ended_message()})
+            enqueue(host.ended_error().event())
             return {"type": "done"}
         try:
             with workspace_scope(host.workdir):
@@ -6448,7 +6461,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                             raise asyncio.CancelledError
                         enqueue(event)
         except PersonalSessionError as exc:
-            enqueue({"type": "error", "code": exc.code, "message": exc.message})
+            enqueue(exc.event())
         return {"type": "done"}
 
     async def stream_response(
@@ -6502,10 +6515,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 return
             runner = AGENT_RUNNERS.get(agent)
             if runner is None:
-                enqueue({
-                    "type": "error",
-                    "message": f"Unknown agent '{agent}'. Valid: {sorted(AGENT_RUNNERS.keys())}",
-                })
+                # A refusal: no stop. The id is whatever the client sent, so the line doesn't echo it.
+                enqueue({"type": "error", "code": "agent_invalid", "message": AGENT_UNKNOWN_LINE})
                 enqueue({"type": "done"})
                 return
 
@@ -6564,13 +6575,15 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 task = asyncio.current_task()
                 if task is not None and task.cancelling():
                     raise
-                enqueue({"type": "error", "code": exc.code, "message": str(exc)})
+                # A refusal over the model choice or the CLI's model list: the agent never ran, so no stop.
+                enqueue({"type": "error", "code": exc.code,
+                         "message": chat_refusal_message(exc.code, agent, str(exc))})
                 terminal_done = {"type": "done"}
             except Exception as exc:
                 task = asyncio.current_task()
                 if task is not None and task.cancelling():
                     raise
-                enqueue({"type": "error", "message": str(exc)})
+                enqueue({"type": "error", "stop": "error", "message": str(exc)})
                 terminal_done = {"type": "done"}
         finally:
             if agent_token is not None:
@@ -6594,16 +6607,16 @@ async def chat_websocket(websocket: WebSocket) -> None:
             try:
                 payload = loads_checked(raw)
             except JsonNumberOutOfRange as exc:
-                await send_event({"type": "error", "message": str(exc), "source": "system"})
+                await send_event({"type": "error", "message": NUMBER_TOO_LARGE_LINE, "source": "system"})
                 continue
             except (ValueError, RecursionError):
                 # ValueError, not only JSONDecodeError: an int past 4,300
                 # digits raised out of this loop and ended the socket.
-                await send_event({"type": "error", "message": "invalid JSON", "source": "system"})
+                await send_event({"type": "error", "message": RELOAD_LINE, "source": "system"})
                 continue
 
             if not isinstance(payload, dict):
-                await send_event({"type": "error", "message": "message envelope must be an object", "source": "system"})
+                await send_event({"type": "error", "message": RELOAD_LINE, "source": "system"})
                 continue
 
             msg_type = payload.get("type")
@@ -6687,9 +6700,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     # The person picked a model (or thinking level) for this session.
                     target = acp_sessions.get(payload.get("sessionId"), connection_id)
                     if target is None:
-                        await send_event({"type": "error", "code": "personal_session_ended", "message": (
-                            "This chat's agent has stopped. Send again to start a new conversation."),
-                            "source": "personal"})
+                        await send_event({"type": "error", "code": "personal_session_ended", "stop": "ended",
+                                          "reason": "ended", "message": ENDED_UNKNOWN_LINE, "source": "personal"})
                         continue
                     try:
                         options = await target.set_option(payload.get("configId"), payload.get("value"))
@@ -6728,11 +6740,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 # rejected second send must never emit done for the active one.
                 await send_event({
                     "type": "error",
-                    "message": (
-                        "Another response is active. Stop it and wait for "
-                        "cancellation confirmation before sending again."
-                    ),
-                    "source": _event_source(current_agent or "system"),
+                    "message": RESPONSE_RUNNING_LINE,
+                    "source": "system",
                 })
                 continue
 
@@ -6754,7 +6763,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
             commons_enabled = is_enabled()
             user_message = payload.get("message", "")
             if not isinstance(user_message, str):
-                await send_event({"type": "error", "message": "message must be text.", "source": "system"})
+                await send_event({"type": "error", "message": RELOAD_LINE, "source": "system"})
                 continue
             session_id = payload.get("sessionId") or None
             agent_raw = payload.get("agent")
@@ -6763,14 +6772,14 @@ async def chat_websocket(websocket: WebSocket) -> None:
                     and not personal_agents.ID_RE.fullmatch(agent.split(":", 1)[1]):
                 agent = ""
             if not isinstance(agent, str) or not agent.strip():
-                await send_event({"type": "error", "code": "agent_invalid", "message": "agent must be text and a nonempty agent identifier.", "source": "system"})
+                await send_event({"type": "error", "code": "agent_invalid", "message": AGENT_UNKNOWN_LINE, "source": "system"})
                 await send_event({"type": "done", "source": "system"})
                 continue
             if commons_enabled and agent not in {"claude", "codex"}:
                 if agent.startswith("personal:"):
                     # Commons keeps personal agents off; stop any this socket still has.
                     await acp_sessions.close_owned(connection_id, "commons_enabled")
-                await send_event({"type": "error", "message": "Commons private reference turns support Claude and Codex.", "source": "system"})
+                await send_event({"type": "error", "message": COMMONS_ON_LINE, "source": "system"})
                 await send_event({"type": "done", "source": "system"})
                 continue
             model_raw = payload.get("model")
@@ -6783,7 +6792,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
             if selected_ids_raw is not None and not isinstance(selected_ids_raw, list):
                 await send_event({
                     "type": "error",
-                    "message": "selectedNodeIds must be an array of node IDs.",
+                    "message": RELOAD_LINE,
                     "source": "system",
                 })
                 continue
@@ -6798,7 +6807,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
             effort = payload.get("effort")
             if provider_raw is not None:
-                await send_event({"type": "error", "code": "provider_invalid", "message": "Claude and Codex use their local official CLI provider; provider overrides aren't available.", "source": _event_source(agent)})
+                await send_event({"type": "error", "code": "provider_invalid", "message": OLD_REQUEST_LINE, "source": _event_source(agent)})
                 await send_event({"type": "done", "source": _event_source(agent)})
                 continue
 

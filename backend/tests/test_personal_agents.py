@@ -127,6 +127,7 @@ def test_launch_spec_refuses_what_cannot_start(tmp_path):
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "hermes")
     assert info.value.code == "personal_agent_needs_setup"
+    assert info.value.message.startswith("Hermes needs setup. ")
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "nope")
     assert info.value.code == "personal_agent_unknown"
@@ -213,6 +214,7 @@ def test_gemini_with_a_google_login_is_switched_off_with_the_reason(tmp_path, ge
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "gemini", home=home)
     assert info.value.code == "personal_agent_needs_setup" and "2026-06-18" in info.value.message
+    assert info.value.message.startswith("Your Gemini needs setup. ")
 
 
 def test_gemini_key_choice_is_off_by_default_and_hands_over_the_key_only_when_on(tmp_path, gemini_bin, monkeypatch):

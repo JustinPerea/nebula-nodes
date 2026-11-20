@@ -123,7 +123,7 @@ async def test_claude_nonzero_exit_surfaces_stderr_then_done():
         events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
 
     assert events == [
-        {"type": "error", "message": "authentication failed"},
+        {"type": "error", "stop": "error", "message": "authentication failed"},
         {"type": "done"},
     ]
 
@@ -137,7 +137,7 @@ async def test_claude_missing_binary_surfaces_error_then_done():
         events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
 
     assert events == [
-        {"type": "error", "message": "`claude` binary not found in PATH"},
+        {"type": "error", "stop": "error", "message": "`claude` binary not found in PATH"},
         {"type": "done"},
     ]
 
@@ -192,6 +192,6 @@ async def test_claude_failed_result_is_an_error_not_success_text():
         events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
 
     assert events == [
-        {"type": "error", "message": "turn limit reached"},
+        {"type": "error", "stop": "error", "message": "turn limit reached"},
         {"type": "done"},
     ]

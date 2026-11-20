@@ -37,6 +37,42 @@ _refresh_sequence: dict[str, int] = {}
 CLI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 
 
+# Where the chat's own model and agent menu is, by the name its heading shows
+# (frontend/src/components/panels/ChatModelPicker.tsx: "Model & thinking").
+CHAT_MODEL_MENU = "Model & thinking"
+_CLI_SIGN_IN = {
+    "claude": "Run `claude` in a terminal and sign in",
+    "codex": "Run `codex` in a terminal and sign in with your ChatGPT account",
+}
+_RELOAD = "Nebula couldn\u2019t read that message. Reload the page, then send again."
+
+
+def chat_refusal_message(code: str, agent: str, fallback: str) -> str:
+    """What the chat shows when a send is refused for its model choice or its
+    CLI catalog (the agent never ran). The REST catalog keeps its own wording
+    (``catalog.error.message``); this is the chat event's text. An unknown
+    ``code`` keeps ``fallback``."""
+    cli = CLI_NAMES.get(agent, agent.title())
+    if code in {"model_invalid", "effort_invalid"}:
+        return _RELOAD
+    if code == "model_required":
+        return f"No model is selected. Pick a model in the chat\u2019s {CHAT_MODEL_MENU} menu, then send again."
+    if code == "model_unsupported":
+        return f"That model isn\u2019t offered anymore. Open the {CHAT_MODEL_MENU} menu, pick another, then send again."
+    if code == "effort_unsupported":
+        return (f"This model doesn\u2019t support that effort level. Pick another level in the "
+                f"{CHAT_MODEL_MENU} menu, then send again.")
+    if code == "auth_required":
+        return f"{cli} isn\u2019t signed in, so Nebula can\u2019t list its models. {_CLI_SIGN_IN.get(agent, 'Sign in to it in a terminal')}, then send again."
+    if code in {"catalog_unavailable", "catalog_cleanup_failed"}:
+        return f"Nebula couldn\u2019t get the model list from {cli}. Check that it\u2019s installed and signed in, then send again."
+    if code == "catalog_timeout":
+        return f"{cli} took too long to list its models. Send again in a moment."
+    if code == "cli_not_installed":
+        return f"{cli} isn\u2019t installed. Install it, then send again."
+    return fallback
+
+
 class ChatModelSelectionError(ValueError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
