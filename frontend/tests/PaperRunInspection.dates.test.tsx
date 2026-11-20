@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { PaperRunInspection } from '../src/components/panels/PaperRunInspection';
 import type { RunRecord } from '../src/lib/runHistory';
-import { writtenDateTime } from '../src/lib/writtenDate';
+import { writtenDateTime } from '../src/lib/writtenDateTime';
 
 describe('PaperRunInspection', () => {
   it('writes the snapshot time as a written date and time, not the stored ISO text', () => {

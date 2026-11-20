@@ -1,6 +1,6 @@
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { RunRecord } from '../../lib/runHistory';
-import { writtenDateTime } from '../../lib/writtenDate';
+import { writtenDateTime } from '../../lib/writtenDateTime';
 
 /** Inputs and outputs belong to this historical run, never the current canvas. */
 export function PaperRunInspection({ record }: { record: RunRecord }) {

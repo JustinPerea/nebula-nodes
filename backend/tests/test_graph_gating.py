@@ -287,6 +287,14 @@ def test_split_and_join_round_trip_and_keep_withheld_entries_out_of_port_values(
         withheld("   ")
 
 
+@pytest.mark.parametrize("display_name", ["Jev Decide (judge / classify / yes-no)", "Jev Box · experimental"])
+def test_the_name_in_a_sent_nothing_line_drops_its_aside(display_name):
+    definition = {"displayName": display_name, "outputPorts": [
+        {"id": "pass", "label": "Pass"}, {"id": "on_fail", "label": "On fail", "conditional": True}]}
+    ports, held = split_outputs({"pass": {"type": "Text", "value": "true"}}, definition)
+    assert held == {"on_fail": f"{display_name.split(' ')[0]} {display_name.split(' ')[1]} sent nothing on On fail"}
+
+
 # -- iterators ------------------------------------------------------------------------
 
 

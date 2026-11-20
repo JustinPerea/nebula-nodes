@@ -16,6 +16,7 @@ export const FORMER_DEFAULT_TITLES: Readonly<Record<string, string>> = {
   'reference-set': 'Reference Set',
   'remotion-node': 'Remotion Composition',
   'video-edit': 'Video Edit',
+  'jev-box': 'Jev Box (experimental)',
 };
 
 /** The label is the Title Case default this definition had before the sweep. */

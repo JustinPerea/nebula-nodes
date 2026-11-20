@@ -128,6 +128,15 @@ describe('Commons chat integration', () => {
     expect(ChatSocket.instances).toHaveLength(1);
     expect(socket.sent[0]).toMatchObject({ personToken: token });
   });
+  it('a stream error reads as a because line with the agent named, drawn neutral, with no "Warning:" lead', async () => {
+    const socket = await connected();
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'error', message: 'connection refused:' }); socket.receive({ type: 'done' }); });
+    const line = await screen.findByText('Claude stopped because the connection was refused.');
+    expect(line.closest('.chat__system')).toHaveAttribute('data-line-because');
+    expect(screen.queryByText(/^Warning:/)).toBeNull();
+  });
   it('raises the person banner when the backend refuses a turn as person_required', async () => {
     const seen = vi.fn(); window.addEventListener('nebula:person-required', seen);
     const socket = await connected();

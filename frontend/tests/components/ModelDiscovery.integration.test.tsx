@@ -60,7 +60,7 @@ describe('Model discovery and setup continuity', () => {
     const selected = screen.getByRole('button', { name: 'GPT Image 2 (Krea), Image Generation, Krea' }).parentElement!;
     expect(selected).toHaveTextContent('Krea signed in');
     const original = screen.getByRole('button', { name: 'Krea 2, Image Generation, Krea' }).parentElement!;
-    expect(original).toHaveTextContent('Setup required');
+    expect(original).toHaveTextContent('setup required');
     expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe('api-token');
   });
 
@@ -70,9 +70,9 @@ describe('Model discovery and setup continuity', () => {
     render(<CreateComposer modelDef={model} prompt="Keep this draft" params={params} activeCount={0} maxConcurrent={2} quantity={2}
       onPromptChange={vi.fn()} onSelectModel={onSelectModel} onParamsChange={onParamsChange} onGenerate={onGenerate}
       onAttach={vi.fn()} onQuantityChange={vi.fn()} onOpenStyles={vi.fn()} />);
-    expect(screen.getByText('Setup required')).toBeInTheDocument();
+    expect(screen.getByText('setup required')).toBeInTheDocument();
     act(() => useUIStore.getState().setSettingsCache({ KREA_API_TOKEN: '***configured***' }, 'mcp'));
-    expect(screen.getByText('Configured · not checked')).toBeInTheDocument();
+    expect(screen.getByText('configured · not checked')).toBeInTheDocument();
     expect(params).toEqual({ _kreaAuth: 'api-token', seed: 88 });
     expect(onGenerate).not.toHaveBeenCalled(); expect(onParamsChange).not.toHaveBeenCalled(); expect(onSelectModel).not.toHaveBeenCalled();
   });

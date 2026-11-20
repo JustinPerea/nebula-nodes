@@ -51,6 +51,7 @@ import {
 import { onPersonConnected, personPromotions, personUnconfirmed, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import { agentNameInSentence } from '../../lib/personalAgentName';
+import { chatErrorLine } from '../../lib/chatErrorLine';
 import {
   chatCancellationDisconnectNotice,
   chatCancellationNotice,
@@ -515,6 +516,9 @@ export function ChatPanel() {
   const personalAgent = personal
     ? personalAgents?.agents.find((item) => `personal:${item.id}` === agent && item.status === 'ready') ?? null : null;
   const agentDisplayName = personalAgent?.displayName ?? (agent === 'codex' ? 'Codex' : agent === 'claude' ? 'Claude' : 'Your agent');
+  // The ws handler below outlives a render; it reads the name the chat shows now.
+  const agentNameRef = useRef(agentDisplayName);
+  useEffect(() => { agentNameRef.current = agentDisplayName; }, [agentDisplayName]);
   const [modelCatalog, setModelCatalog] = useState<ChatModelCatalog | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1295,7 +1299,7 @@ export function ChatPanel() {
                 ),
                 personRequired
                   ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText, personGate: true }
-                  : { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
+                  : { kind: 'system', text: chatErrorLine({ message: event.message == null ? null : errText, code: event.code, source: event.source, agentName: agentNameRef.current }), tone: 'error' },
               ],
               streaming: false,
             }));

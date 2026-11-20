@@ -339,7 +339,7 @@ export function BriefFields({
                       onChange={() => onChange({ clashMode: mode.value })} />
                     <span className="moodboard-advanced__label">
                       {mode.label}
-                      {mode.value === 'leave-out' && <span className="moodboard-advanced__default">{ASIDE_DOT} default</span>}
+                      {mode.value === 'leave-out' && <span className="moodboard-advanced__default">{ASIDE_DOT}default</span>}
                     </span>
                     <span className="moodboard-advanced__hint">{mode.hint}</span>
                   </label>

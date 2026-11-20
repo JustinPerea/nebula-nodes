@@ -72,8 +72,8 @@ def split_outputs(
         if not reason:
             raise RuntimeError(f"Withheld output {port_id} has no reason")
         held[port_id] = reason
-    # "Jev Decide (judge / classify / yes-no)" -> "Jev Decide".
-    name = str((definition or {}).get("displayName") or "The node").split(" (")[0]
+    # "Jev Decide (judge / classify / yes-no)" -> "Jev Decide"; "Jev Box · experimental" -> "Jev Box".
+    name = str((definition or {}).get("displayName") or "The node").split(" (")[0].split(" · ")[0]
     for port_id, label in conditional.items():
         if port_id not in ports and port_id not in held:
             held[port_id] = f"{name} sent nothing on {label}"

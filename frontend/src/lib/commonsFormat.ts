@@ -2,7 +2,8 @@ import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
 import { capitalised, type AnalysisState, type Collection } from './commonsTypes';
 import { writtenDay } from './writtenDate';
 
-export { writtenDay, writtenDateTime, writtenTime } from './writtenDate';
+export { writtenDay, writtenTime } from './writtenDate';
+export { writtenDateTime } from './writtenDateTime';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
   held: 'Held', queued: 'Queued', analyzing: 'Analyzing', analysis_failed: 'Failed', ready: 'Ready',

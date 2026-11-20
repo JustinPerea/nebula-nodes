@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, RotateCcw, X } from 'lucide-react';
 import { storedImageView } from '../../lib/storedImage';
-import { writtenDateTime } from '../../lib/writtenDate';
+import { writtenDateTime } from '../../lib/writtenDateTime';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { InNoticeRegion } from '../InNoticeRegion';
 import {

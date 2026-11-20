@@ -92,12 +92,12 @@ describe('shared model discovery', () => {
   });
 
   it('summarizes declared required/optional ports and bounds long rows', () => {
-    expect(modelInputSummary(NODE_DEFINITIONS['nano-banana'])).toBe('Prompt + Images\u00a0· optional + Moodboard\u00a0· optional → Image + Text');
+    expect(modelInputSummary(NODE_DEFINITIONS['nano-banana'])).toBe('Prompt + Images ·\u00a0optional + Moodboard ·\u00a0optional → Image + Text');
     // A port label's aside is left out, so an optional port says so once.
-    expect(modelInputSummary(NODE_DEFINITIONS['ideogram-upscale'])).not.toMatch(/ · |· optional.*· optional\u00a0· optional/);
-    expect(modelInputSummary(NODE_DEFINITIONS['ideogram-upscale'])).toContain('Guidance\u00a0· optional');
+    expect(modelInputSummary(NODE_DEFINITIONS['ideogram-upscale'])).not.toMatch(/ · |· optional.*· optional/);
+    expect(modelInputSummary(NODE_DEFINITIONS['ideogram-upscale'])).toContain('Guidance ·\u00a0optional');
     expect(modelInputSummary(NODE_DEFINITIONS['paper-source'])).toBe('No connected inputs → Image');
-    expect(modelInputSummary(kling)).toBe('Prompt\u00a0· optional + Start image\u00a0· optional + End image\u00a0· optional + 1 more → Video + All videos + All artifacts + 1 more');
+    expect(modelInputSummary(kling)).toBe('Prompt ·\u00a0optional + Start image ·\u00a0optional + End image ·\u00a0optional + 1 more → Video + All videos + All artifacts + 1 more');
   });
 
   it('returns the same eligible node IDs in Library, Create and command searches', () => {

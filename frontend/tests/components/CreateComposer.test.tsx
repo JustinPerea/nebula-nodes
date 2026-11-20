@@ -39,6 +39,6 @@ describe('Create Krea connection control', () => {
       kreaConnection: { status: 'disconnected' } } });
     rerender(composer({}));
     expect(screen.queryByText('Krea sign-in required')).not.toBeInTheDocument();
-    expect(screen.getByText('Setup required')).toBeInTheDocument();
+    expect(screen.getByText('setup required')).toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@ import type { ResultContext } from '../../lib/resultContext';
 import { BILLING_PARAM_LABELS } from '../../lib/billingParams';
 import { allParamDefinitions } from '../../lib/directRoute';
 import { universalSettingLabel } from '../../lib/universalSettingLabel';
-import { writtenDateTime } from '../../lib/writtenDate';
+import { writtenDateTime } from '../../lib/writtenDateTime';
 
 export function ResultMetadata({ context }: { context: ResultContext }) {
   const date = context.timestamp !== undefined ? new Date(context.timestamp) : null;

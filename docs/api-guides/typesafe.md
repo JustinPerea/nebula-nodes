@@ -21,7 +21,7 @@ flowchart LR
 |---|---|---|---|
 | Jev Decide (judge / classify / yes-no) | `jev-decide` | shipped | One question about text and images: yes/no, pick an option, or a score |
 | Jev Pick Best (rank / choose best image) | `jev-pick-best` | shipped | Pick the best of several candidate images |
-| Jev Box (experimental) | `jev-box` | shipped, experimental | Find one thing in an image: box, crop and mask |
+| Jev Box · experimental | `jev-box` | shipped, experimental | Find one thing in an image: box, crop and mask |
 
 All three are `analyzer` nodes, `sync` (one request), and need `TYPESAFE_API_KEY`.
 
@@ -136,7 +136,7 @@ Limits:
 - At most 10 candidates. Each 1024 px candidate costs about 2,780 input tokens (measured, see [Cost](#cost)), so ten come to about 28k, under the 32k per-question limit. Bigger candidates cost more and may not fit. For more than 10, split them across two nodes and pick again between the winners.
 - If TypeSafe answers `max_tokens_exceeded`, Nebula sends the candidates once more at 768 px on the long side and notes it in the report. If that is still too long, the node fails and says to split the set.
 
-## Jev Box (experimental)
+## Jev Box · experimental
 
 Inputs: `image` (Image, required), `target` (Text, optional; overrides the `target` param).
 

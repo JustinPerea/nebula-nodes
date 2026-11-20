@@ -5,6 +5,7 @@ import { useProviderReadinessStore } from '../store/providerReadinessStore';
 import { modelReadiness } from '../lib/providerReadiness';
 import { withNewKreaMode } from '../lib/kreaConnection';
 import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
+import { ASIDE_DOT, afterDot } from '../lib/labelAside';
 import '../styles/provider-readiness.css';
 
 /** Connection feedback never changes model selection, recipe parameters or jobs. */
@@ -37,10 +38,10 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
           <span className="provider-readiness__route">
             {readiness.connectionLabel}
             {readiness.connectionNote && <> <span className="provider-readiness__note">{readiness.connectionNote}</span></>}
-            {' · '}
+            {ASIDE_DOT}
           </span>
         )}
-        <span>{readiness.label}</span>
+        <span>{readiness.connectionLabel ? afterDot(readiness.label) : readiness.label}</span>
       </span>
       {readiness.setupTarget && <button type="button" className="provider-readiness__setup"
         title={readiness.detail}

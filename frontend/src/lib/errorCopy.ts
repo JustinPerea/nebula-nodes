@@ -359,7 +359,7 @@ export function closeBatchFailedLine(error: unknown, held: boolean = personGateH
  * the Commons turned off (round 18k): it destroyed nothing, so its line is neutral
  * (CommonsErrorLine). */
 export function isBecauseFailure(text: string): boolean {
-  return NEBULA_COULDNT.test(text) || /^Commons is turned off because /.test(text);
+  return NEBULA_COULDNT.test(text) || /^(?:Commons is turned off|[^.!?]{1,60} stopped) because /.test(text);
 }
 
 /** GM r41: the close's line says to try again (the close button beside it is the retry), or

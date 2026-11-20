@@ -24,7 +24,7 @@ import '../../styles/paper-source-node.css';
 import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
 import { fixedCardTitle } from '../../lib/cardTitles';
 import { useCanvasLock } from '../../lib/canvasLock';
-import { writtenDateTime } from '../../lib/writtenDate';
+import { writtenDateTime } from '../../lib/writtenDateTime';
 import { LineText } from '../LineText';
 
 function refreshLabel(value?: string): string {

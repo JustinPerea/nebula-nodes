@@ -112,7 +112,10 @@ export function matchesModelSearch(definition: ModelNodeDefinition, query: strin
 
 function concisePorts(ports: PortDefinition[], showOptional: boolean): string {
   // A label's own aside ("Guidance · optional") is left out, so an optional port reads that once, from here.
-  const labels = ports.slice(0, 3).map((port) => showOptional && !port.required ? aside(port.label.split(' · ')[0].trim(), 'optional') : port.label.split(' · ')[0].trim());
+  const labels = ports.slice(0, 3).map((port) => {
+    const name = port.label.split(' · ')[0].trim();
+    return showOptional && !port.required ? aside(name, 'optional') : name;
+  });
   if (ports.length > 3) labels.push(`${ports.length - 3} more`);
   return labels.join(' + ');
 }

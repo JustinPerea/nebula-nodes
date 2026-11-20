@@ -36,7 +36,7 @@ import ts from 'typescript';
 //      The word check ("(optional)" and the rest) also runs on every string in a .ts file under src
 //      (the node definitions' placeholders, the lib's summaries); the trailing-aside shape does
 //      not, outside JSX it is too noisy. A model or provider's own display name that other code
-//      strips or matches ("Jev Box (experimental)") is listed in ALLOWED_NAMES with its reason.
+//      strips or matches is listed in ALLOWED_NAMES with its reason ("Jev Box (experimental)" became "Jev Box · experimental"; the old label stays in FORMER_DEFAULT_TITLES so saved nodes still read as unnamed).
 //      The label shape passes a written-out unit ("Size (pixels)", "Duration (seconds)") and a
 //      count ("Images (3)"); a brand in parentheses ("Claude (Anthropic)") is an aside and fails;
 //   6. a date shown through `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` or
@@ -58,7 +58,7 @@ const SRC = join(process.cwd(), 'src');
 
 /** A model or provider's display name with a parenthesised word, which other code strips or matches. By file and the text. */
 export const ALLOWED_NAMES = [
-  { file: 'constants/nodeDefinitions.ts', value: 'Jev Box (experimental)', why: 'a model\'s display name: tests/lib/jev.test.ts and the backend\'s not-ready lines (fixtures/not_ready_reasons.json) quote it' },
+  { file: 'lib/formerDefaultTitles.ts', value: 'Jev Box (experimental)', why: 'the label nodes saved before the rename still carry ("Jev Box (experimental)"); it is matched, never shown' },
 ];
 
 /** An option that shows its value on purpose. By file (under src) and the value expression, with the reason. */
@@ -214,8 +214,13 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   function parenAsideHit(node) {
     if (!TEXT_NODES.has(node.kind)) return;
     const text = node.text.replace(/\s+/g, ' ').trim();
-    if (!stringsOnly && /(?:^|[^\u00a0]) · (?:optional|required|beta|experimental|deprecated|default|recommended)\b/.test(node.text)) {
-      hits.push({ line: at(node), value: text, reason: `"${text}" builds the aside form with a plain space before the dot: write it with aside(label, note) (lib/labelAside) so the dot wraps with its note` });
+    if (!stringsOnly && /[ \u00a0]·(?!\u00a0) ?(?:optional|required|beta|experimental|deprecated|default|recommended)\b/.test(node.text)) {
+      hits.push({ line: at(node), value: text, reason: `"${text}" builds the aside form without the no-break space after the dot: write it with aside(label, note) (lib/labelAside) so the dot starts the line with its note` });
+    }
+    // A status word after the dot starts lower case ("Google API · setup required", design).
+    const capital = !stringsOnly && /\s·[\s\u00a0](?:Optional|Required|Default|Beta|Experimental|Deprecated|Recommended|Setup|Unavailable|Configured|Not checked)\b/.exec(node.text);
+    if (capital) {
+      hits.push({ line: at(node), value: text, reason: `"${capital[0].trim()}" after a middle dot starts with a capital: the word after the dot is lower case (" · setup required"); lower-case it where the label is joined (afterDot in lib/labelAside)` });
     }
     const flagged = /\((?:optional|required|beta|experimental|deprecated|default|recommended)\)/i.exec(text);
     if (flagged) {
@@ -234,10 +239,21 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   }
   const WRITTEN_UNITS = /^(?:pixels?|seconds?|minutes?|hours?|days?|milliseconds?|frames?|bytes?|kilobytes?|megabytes?|gigabytes?|percent|degrees?|characters?|words?|tokens?)$/i;
   const FORMATTERS = new Set(['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']);
-  // By name: date, when, moment (any case), a camelCase `...At` / `...Date` suffix (`createdAt`),
-  // a snake_case `..._at` / `..._date` (`last_scan_at`). `format` and a duration such as
-  // `elapsedTime` are not dates.
-  const DATE_NAME_CASED = (name) => /^(?:date|when|moment|at)$/i.test(name) || /[a-z](?:At|Date|Moment|When)$/.test(name) || /_(?:at|date)$/i.test(name);
+  // toLocaleDateString and toLocaleTimeString exist only on Date: they are flagged on any receiver.
+  // toLocaleString is also a Number method, so it is flagged only when the receiver is a date by name:
+  // date, when, moment (any case), a camelCase `...At` / `...Date` suffix (`createdAt`), a snake_case
+  // `..._at` / `..._date` (`last_scan_at`), or a time word as a whole word or a camelCase/snake_case
+  // part (time, timestamp, ts, stamp: `resetTime`, `entry.ts`, `row.timestamp`). A duration is a
+  // number (`elapsedTime`, `durationMs`, a Ms/Sec/Seconds suffix) and `format` is not a date.
+  const nameParts = (name) => name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase().split(/_+/).filter(Boolean);
+  const DURATION_PART = new Set(['elapsed', 'duration', 'ms', 'sec', 'secs', 'seconds']);
+  const TIME_PART = new Set(['time', 'timestamp', 'ts', 'stamp']);
+  const DATE_NAME_CASED = (name) => {
+    const parts = nameParts(name);
+    if (parts.some((p) => DURATION_PART.has(p))) return false;
+    return /^(?:date|when|moment|at)$/i.test(name) || /[a-z](?:At|Date|Moment|When)$/.test(name) || /_(?:at|date)$/i.test(name)
+      || parts.some((p) => TIME_PART.has(p));
+  };
   function nameOf(expr) {
     const n = unwrap(expr);
     if (ts.isIdentifier(n)) return n.text;
@@ -252,7 +268,8 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   }
   function dateFormatHit(node) {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
-      && FORMATTERS.has(node.expression.name.text) && isDateReceiver(node.expression.expression)) {
+      && FORMATTERS.has(node.expression.name.text)
+      && (node.expression.name.text !== 'toLocaleString' || isDateReceiver(node.expression.expression))) {
       hits.push({ line: at(node), value: exprText(node, sf), reason: `${node.expression.name.text}() on a date shows the browser's raw format: use writtenDate, writtenDateTime or writtenTime (lib/writtenDate)` });
     }
     // new Intl.DateTimeFormat(...): its output is a date a person reads.

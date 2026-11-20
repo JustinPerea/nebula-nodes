@@ -464,10 +464,10 @@
   {
    "kind": "key",
    "node": "jev-box",
-   "name": "Jev Box (experimental)",
+   "name": "Jev Box · experimental",
    "one": "needs your TypeSafe API key. Add it in Settings.",
    "many": "need your TypeSafe API key. Add it in Settings.",
-   "line": "“Jev Box (experimental)” needs your TypeSafe API key. Add it in Settings.",
+   "line": "“Jev Box · experimental” needs your TypeSafe API key. Add it in Settings.",
    "logOne": "needs your TypeSafe API key. Add it in Settings, then run the node again.",
    "logMany": "need your TypeSafe API key. Add it in Settings, then run the nodes again."
   },
