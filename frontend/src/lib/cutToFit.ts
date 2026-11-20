@@ -27,7 +27,8 @@ function largest(lo: number, hi: number, ok: (n: number) => boolean): number {
  * that ends at a word boundary, trailing spaces and , ; : trimmed, followed by U+2026. A first
  * word too long for the space is cut by characters instead.
  */
-export function cutToFit(text: string, fits: (candidate: string) => boolean): string {
+export function cutToFit(input: string, fits: (candidate: string) => boolean): string {
+  const text = input.trim();
   if (!text || fits(text)) return text;
   const withEllipsis = (prefix: string) => `${trimTail(prefix)}${ELLIPSIS}`;
 
@@ -40,6 +41,11 @@ export function cutToFit(text: string, fits: (candidate: string) => boolean): st
   const wordIndex = largest(0, ends.length - 1, (i) => fits(withEllipsis(text.slice(0, ends[i]))));
   if (wordIndex >= 0) return withEllipsis(text.slice(0, ends[wordIndex]));
 
-  const chars = largest(1, text.length - 1, (n) => fits(withEllipsis(text.slice(0, n))));
-  return chars >= 1 ? withEllipsis(text.slice(0, chars)) : ELLIPSIS;
+  // Never end on half a surrogate pair: step back past a lone high surrogate.
+  const prefix = (n: number) => {
+    const code = text.charCodeAt(n - 1);
+    return text.slice(0, code >= 0xd800 && code <= 0xdbff ? n - 1 : n);
+  };
+  const chars = largest(1, text.length - 1, (n) => fits(withEllipsis(prefix(n))));
+  return chars >= 1 && prefix(chars) ? withEllipsis(prefix(chars)) : ELLIPSIS;
 }

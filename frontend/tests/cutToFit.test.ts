@@ -48,4 +48,20 @@ describe('cutToFit', () => {
     cutToFit(text, (c) => { asked += 1; return c.length <= 100; });
     expect(asked).toBeLessThan(20);
   });
+
+  it('trims the input once at the top', () => {
+    expect(cutToFit('  Is the logo visible?  ', holds(20))).toBe('Is the logo visible?');
+    expect(cutToFit('   ', () => false)).toBe('');
+  });
+
+  it('never ends a character cut on half a surrogate pair', () => {
+    const text = 'ab\u{1F600}\u{1F600}\u{1F600}';
+    for (let n = 2; n <= 7; n += 1) {
+      const out = cutToFit(text, holds(n));
+      const last = out.charCodeAt(out.length - 2);
+      expect(last >= 0xd800 && last <= 0xdbff).toBe(false);
+      expect(out.length).toBeLessThanOrEqual(Math.max(n, 1));
+    }
+    expect(cutToFit(text, holds(5))).toBe('ab\u{1F600}\u2026');
+  });
 });
