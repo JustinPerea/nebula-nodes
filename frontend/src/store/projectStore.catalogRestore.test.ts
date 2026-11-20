@@ -70,7 +70,7 @@ describe('the catalog restore notice', () => {
     relist();
     await vi.advanceTimersByTimeAsync(0);
     expect(useProjectStore.getState().catalogRestore?.id).toBe(RESTORE.id);
-    // GM's sentences, with the path the notice leaves out (round 2).
+    // The design sentences, with the path the notice leaves out.
     expect(logged).toEqual([`Restored the project list from catalog.json.bak. The damaged file was kept at ${RESTORE.damagedFile}. Added back “Dunes”.`]);
 
     relist();
@@ -86,7 +86,7 @@ describe('the catalog restore notice', () => {
     expect(useProjectStore.getState().catalogRestore).toBeNull();
   });
 
-  it('keeps the project limit the listing names (GM r6: a refused restore says it)', async () => {
+  it('keeps the project limit the listing names (design: a refused restore says it)', async () => {
     listProjects.mockResolvedValue({ ...(listing() as object), projectLimit: 3 } as never);
     relist();
     await vi.advanceTimersByTimeAsync(0);
@@ -104,7 +104,7 @@ describe('the catalog restore notice', () => {
   });
 });
 
-describe('the live canvas waiting to be saved (fix round 3, review 3 L-5)', () => {
+describe('the live canvas waiting to be saved', () => {
   const waiting = { reason: 'storage', since: '2026-10-27T10:00:00+00:00', projectLimit: 500, note: 'agents' };
   const saved = { id: 'c'.repeat(32), name: 'Recovered canvas 2', at: '2026-10-27T10:20:00+00:00' };
 

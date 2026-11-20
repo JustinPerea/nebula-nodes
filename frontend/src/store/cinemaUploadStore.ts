@@ -14,12 +14,12 @@ const removeThenAttach = (name: string) => {
   return shown === UPLOADED_FILE ? 'Remove it, then attach the file again.' : `Remove it, then attach “${shown}” again.`;
 };
 const TRY_AGAIN_ENDING = / Try again\.$/;
-/** A canvas import stopped it (GM PR #205 r13 item 3). */
+/** A canvas import stopped it (design, PR #205). */
 export const STOPPED_CINEMA_UPLOAD_MESSAGE = 'The upload stopped because a canvas import started.';
-/** A stopped upload after a reload (GM PR #205 r15 item 2): its file is gone
+/** A stopped upload after a reload (design, PR #205): its file is gone
  * and Try again with it, so the import reason leads nowhere. It is the same
  * state as the interrupted row beside it, so it reads the same, opening with
- * what happened (GM PR #205 r17). */
+ * what happened (design, PR #205). */
 export const RELOADED_STOPPED_CINEMA_UPLOAD_MESSAGE = INTERRUPTED_CINEMA_UPLOAD_MESSAGE;
 
 export interface CinemaReferenceUpload {
@@ -31,7 +31,7 @@ export interface CinemaReferenceUpload {
   status: 'uploading' | 'error';
   error?: string;
   canRetry: boolean;
-  /** Stopped by a canvas import (GM PR #205 r14 item 4): nothing broke and
+  /** Stopped by a canvas import (design, PR #205): nothing broke and
    * nothing was lost, and its Try again and Remove say what to do, so its
    * reason reads neutral, never as a problem. Not kept across a reload (the
    * file is gone then, and the row is a problem to fix). */
@@ -71,7 +71,7 @@ function load(storage: UploadStorage | null): CinemaReferenceUpload[] {
         error: value.status === 'uploading' ? INTERRUPTED_CINEMA_UPLOAD_MESSAGE
           : value.error === STOPPED_CINEMA_UPLOAD_MESSAGE ? RELOADED_STOPPED_CINEMA_UPLOAD_MESSAGE
             // After a reload the file is gone, so a saved line that ends in "Try again." has no button
-            // to offer it: it ends as the interrupted row's line does (LOW-1).
+            // to offer it: it ends as the interrupted row's line does.
             : typeof value.error === 'string' ? value.error.replace(TRY_AGAIN_ENDING, ` ${removeThenAttach(value.name as string)}`)
               : 'Remove this upload, then attach the image again.' }];
     });
@@ -94,7 +94,7 @@ export function createCinemaUploadStore(storage: UploadStorage | null = browserS
       uploads: load(storage),
       setUploads: (change) => save(change(get().uploads)),
       clear: () => save([]),
-      // GM PR #205 r13 item 3: the row's Try again and Remove are the next
+      // PR #205 (design): the row's Try again and Remove are the next
       // step, so the line doesn't repeat them.
       interrupt: () => save(get().uploads.map((upload) => upload.status === 'uploading'
         ? { ...upload, attempt: uuidv4(), status: 'error', error: STOPPED_CINEMA_UPLOAD_MESSAGE, stopped: true }
@@ -114,7 +114,7 @@ export function createCinemaUploadStore(storage: UploadStorage | null = browserS
 
 export const useCinemaUploadStore = createCinemaUploadStore();
 
-/** GM PR #205 r15 item 3: the lock reason for Generate all when another
+/** PR #205 (design): the lock reason for Generate all when another
  * shot's uploads hold it, naming those shots by the name-list rule ("“Shot
  * 2”", "“Shot 2” and “Shot 3”", from 4 "4 shots"): uploads on their way
  * first; otherwise the failed ones. Null when no other shot has any. */
@@ -128,13 +128,13 @@ export function otherShotsUploadLine(nodeId: string, shotId: string, shots: read
   };
   const pending = where(others.filter((upload) => upload.status === 'uploading'));
   if (pending) return `You can generate all when the uploads in ${pending} finish.`;
-  // GM PR #205 r17: what each shot's rows offer, from the same test as their
+  // PR #205 (design): what each shot's rows offer, from the same test as their
   // buttons. A shot with an upload that can be tried again takes the try
   // form; a shot whose uploads can only be removed takes the remove form.
   const retryShots = new Set(others.filter(uploadOffersTryAgain).map((upload) => upload.shotId));
   const tryAgain = where(others.filter((upload) => retryShots.has(upload.shotId)));
   const removeOnly = where(others.filter((upload) => !retryShots.has(upload.shotId)));
-  // GM PR #205 r12 item 3: both kinds make one sentence, joined by "and".
+  // PR #205 (design): both kinds make one sentence, joined by "and".
   const tryPart = tryAgain && `You can generate all after you try the uploads in ${tryAgain} again or remove them`;
   if (tryPart) return removeOnly ? `${tryPart}, and remove the uploads in ${removeOnly}.` : `${tryPart}.`;
   return removeOnly ? `You can generate all after you remove the uploads in ${removeOnly}.` : null;
@@ -142,15 +142,15 @@ export function otherShotsUploadLine(nodeId: string, shotId: string, shots: read
 
 /** Whether an upload row offers Try again: the test its button reads, and
  * the one the lock lines read, so a line never promises an action the row
- * doesn't have (GM PR #205 r17). */
+ * doesn't have (design, PR #205). */
 export function uploadOffersTryAgain(upload: CinemaReferenceUpload): boolean {
   return upload.status === 'error' && upload.canRetry;
 }
 
-/** How an upload row's reason reads (GM PR #205 r14 item 4): a failure the
+/** How an upload row's reason reads (design, PR #205): a failure the
  * person must fix is an alert; one that destroyed nothing (a canvas import
  * stopped it) and the row's progress are a status. Both draw in the row's
- * neutral ink: the failed row's red rules are gone (GM, copy sweep item 19);
+ * neutral ink: the failed row's red rules are gone (design, copy sweep);
  * the role is what a screen reader hears. */
 export function uploadReasonRole(upload: CinemaReferenceUpload): 'alert' | 'status' {
   return upload.status === 'error' && !upload.stopped ? 'alert' : 'status';
@@ -162,15 +162,14 @@ export function getCinemaUploadIssue(nodeId: string, shotId?: string, includeAll
   const uploads = useCinemaUploadStore.getState().uploads.filter((upload) => upload.nodeId === nodeId
     && (includeAllShots || !upload.shotId || upload.shotId === shotId));
   if (uploads.some((upload) => upload.status === 'uploading')) return `You can ${verb} when the reference uploads finish.`;
-  // GM PR #205 r14 item 3: a lock reason, in the lock form, naming the
+  // PR #205 (design): a lock reason, in the lock form, naming the
   // uploads by the shared name-list rule (up to 3 by name, from 4 a count).
-  // GM PR #205 r17: one sentence per kind, from what each row offers. The
-  // Cinema toolbar's Generate all says "generate all" (review 8, item 17:
-  // the default until GM answers).
+  // PR #205 (design): one sentence per kind, from what each row offers. The
+  // Cinema toolbar's Generate all says "generate all" (the default until the design says otherwise).
   const retry = uploads.filter(uploadOffersTryAgain);
   const removeOnly = uploads.filter((upload) => !uploadOffersTryAgain(upload));
   const names = (list: CinemaReferenceUpload[]) => quotedNames(list.map((upload) => upload.name), 'uploads');
-  // GM PR #205 r12 item 3: both kinds make one sentence, joined by "and".
+  // PR #205 (design): both kinds make one sentence, joined by "and".
   const tryPart = retry.length > 0 && `You can ${verb} after you try ${names(retry)} again or remove ${retry.length > 1 ? 'them' : 'it'}`;
   if (tryPart) return removeOnly.length > 0 ? `${tryPart}, and remove ${names(removeOnly)}.` : `${tryPart}.`;
   return removeOnly.length > 0 ? `You can ${verb} after you remove ${names(removeOnly)}.` : null;

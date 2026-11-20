@@ -67,7 +67,7 @@ export function defaultRunHistoryPosition(viewportWidth?: number): { x: number; 
   };
 }
 
-// Every storage read and write here is guarded (review r5 LOW-3 of PR #203):
+// Every storage read and write here is guarded (PR #203):
 // a tab with site data blocked throws on any access, and the store loads
 // with the app, so a throw here would stop the app. Each falls back to a
 // safe default and keeps a choice for the session only.
@@ -132,7 +132,7 @@ function createDefaultPanels(): UIState['panels'] {
   };
 }
 
-// Shown by default (Q38, Justin 2026-10-20: "it can be toggled off to get
+// Shown by default (Justin 2026-10-20: "it can be toggled off to get
 // out of the way"): a missing preference reads as on; an explicit '0' stays off.
 function loadAgentLogEnabled(): boolean {
   if (typeof window === 'undefined') return true;
@@ -242,7 +242,7 @@ interface UIState {
   // Editor view state — Phase 1 video-editor pivot
   viewMode: ViewMode;
   commonsEnabled: boolean;
-  /** PR #204 round 18d (GM r32 1): a tab opened on the Commons while the backend runs without
+  /** PR #204 (design): a tab opened on the Commons while the backend runs without
    * it shows the Commons-off view (components/commons/CommonsView CommonsOffView) over any
    * screen, until the person leaves it. The Commons stays unavailable (commonsEnabled). */
   commonsOffShown: boolean;
@@ -322,7 +322,7 @@ interface UIState {
   /** The Agent log is expanded (not saved; it starts collapsed). The Updates
    * list's "See all actions →" opens it (PR9a). */
   agentLogOpen: boolean;
-  /** GM - Design, PR #216 r7, step 4: the proposal card collapsed the log
+  /** PR #216 (design): the proposal card collapsed the log
    * to its header ('card'; it reopens when the card leaves), or the person
    * reopened it over that while the card shows ('refused'; the card never
    * collapses it again until it leaves). A collapse the person makes is
@@ -347,8 +347,8 @@ interface UIState {
   enterEditor: (sourceNodeId: string) => void;
   /** Open the trim editor on an edit node that exists (EditNode's Open
    * Editor): finds nothing, makes nothing, writes nothing, so it works while
-   * following or offline, read-only there (fix round 2 of PR #200, review 2
-   * L-6); the editor's own edits take the canvas lock. */
+   * following or offline, read-only there (PR #200); the editor's own edits
+   * take the canvas lock. */
   openEditNode: (editNodeId: string) => void;
   setCanvasViewport: (viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => void;
   clearCanvasViewport: () => void;
@@ -387,7 +387,7 @@ interface UIState {
   zoomTimelineOut: () => void;
   resetTimelineZoom: () => void;
 
-  /** `keepPin`: what Paste, Undo or Redo selects (GM PR #205 r8 item 1):
+  /** `keepPin`: what Paste, Undo or Redo selects (design, PR #205):
    * bringing nodes back never unpins the Inspector the person pinned. */
   selectNode: (nodeId: string | null, options?: { keepPin?: boolean }) => void;
   requestCanvasNodeFocus: (nodeId: string) => void;
@@ -416,7 +416,7 @@ interface UIState {
   setKreaConnectionMode: (mode: KreaConnectionMode) => void;
   setAgentLogEnabled: (enabled: boolean) => void;
   setAgentLogOpen: (open: boolean) => void;
-  /** The notice region's ask (step 4): `want` the log collapsed for the
+  /** The notice region's ask: `want` the log collapsed for the
    * card, while `card` shows one. With no card, it reopens a log the card
    * collapsed, and forgets the person's refusal. */
   holdAgentLogForCard: (want: boolean, card: boolean) => void;
@@ -551,7 +551,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
 
   enterEditor: (sourceNodeId) => {
     const editNodeId = useGraphStore.getState().getOrCreateEditNodeDownstream(sourceNodeId);
-    // '' when none could be made (offline is read-only, round 15 of PR #114).
+    // '' when none could be made (offline is read-only, PR #114).
     if (!editNodeId) return;
     set({
       viewMode: 'editor',
@@ -745,7 +745,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
   resetTimelineZoom: () => set({ timelineZoom: 1 }),
 
   selectNode: (nodeId, options) => {
-    // GM PR #205 r12: the Inspector and the rings agree. A node named for the
+    // PR #205 (design): the Inspector and the rings agree. A node named for the
     // Inspector (the command palette, a focus request) while the canvas has
     // others selected is selected alone, as a click on it would. Checked once
     // the event is done: a card's own click names it before the canvas has
@@ -772,7 +772,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
           library: state.panels.library,
           inspector: {
             ...state.panels.inspector,
-            // GM PR #205 r16 item 5: an unpinned Inspector follows the
+            // PR #205 (design): an unpinned Inspector follows the
             // selection too (one node shows it, several read "N nodes
             // selected"), and closes only at none, as on main.
             visible: keep || nodeId !== null ? state.panels.inspector.visible : false,
@@ -829,7 +829,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
       panels: {
         ...state.panels,
         // Unpinning the empty Inspector closes it, as the screen does: the
-        // store and the screen agree (review 6 inspector-pin NIT-1).
+        // store and the screen agree.
         inspector: { ...state.panels.inspector,
           visible: pinned ? true : state.selectedNodeId === null ? false : state.panels.inspector.visible },
       },
@@ -931,7 +931,7 @@ export const useUIStore = create<UIState>(holdCommonsExits(holdCommons, (set, ge
 
   setSettingsCache: (apiKeys, kreaConnectionMode) => {
     // Checks describe credentials, so only a credential change voids them,
-    // and only that credential's (GM, PR #203 r19 item 7): a read that finds
+    // and only that credential's (design, PR #203): a read that finds
     // one key changed (a save here, one made elsewhere, a reconnect's read)
     // clears that provider's check and keeps the rest. A refresh that reads
     // back the same (masked) keys keeps a check that saving a key just started.

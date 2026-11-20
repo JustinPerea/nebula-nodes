@@ -8,7 +8,7 @@ async function loadStore() {
   return mod.useUIStore;
 }
 
-describe('Agent log preference (Q38: shown by default)', () => {
+describe('Agent log preference (shown by default)', () => {
   afterEach(() => {
     window.localStorage.clear();
   });

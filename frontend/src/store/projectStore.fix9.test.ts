@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fix round 9 of PR #199. GM r11, 2: the person's tab says which project its
+// PR #199 (design): the person's tab says which project its
 // canvas shows (the backend ends the protection of a project filed from the
-// person's waiting canvas once their tab is on it). GM r11, 5: a tab whose
+// person's waiting canvas once their tab is on it). Design: a tab whose
 // revision moved because Nebula restored its project list goes to Projects
 // home with no "another window" line, or says the restore where it can't
-// move on by itself. GM r11, 4: an agent's copy stays the agent's in the
+// move on by itself. Design: an agent's copy stays the agent's in the
 // listing's notices.
 
 vi.mock('../lib/wsClient', () => ({
@@ -65,9 +65,9 @@ beforeEach(async () => {
 });
 afterEach(() => unsubscribe());
 
-describe('GM r11, 2 (as GM r13, 1 has it): the tab says the project the person opened there', () => {
+describe('the tab says the project the person opened there (design)', () => {
   it('the person-opened project on the canvas, null on Projects home; a project only loaded is never said', async () => {
-    // Loaded, not opened by the person in this tab (round 10: never said).
+    // Loaded, not opened by the person in this tab (never said).
     expect(vi.mocked(wsClient.setViewing)).toHaveBeenLastCalledWith(null);
     useProjectStore.setState({ screen: 'home' });
     await useProjectStore.getState().open('p1');
@@ -79,7 +79,7 @@ describe('GM r11, 2 (as GM r13, 1 has it): the tab says the project the person o
   });
 });
 
-describe('GM r11, 5: after a restore, no "another tab" line', () => {
+describe('after a restore, no "another tab" line (design)', () => {
   it('a tab with everything saved goes to Projects home with no line', async () => {
     sync('r1', 'restore-old');
     sync('r2', 'restore-new');
@@ -109,7 +109,7 @@ describe('GM r11, 5: after a restore, no "another tab" line', () => {
     expect(RESTORED_LIST_RELOAD).toBe('Nebula restored its project list. Reload projects to continue.');
   });
 
-  it('edits not saved yet: kept where the person is, with the restore line (GM r15)', () => {
+  it('edits not saved yet: kept where the person is, with the restore line (design)', () => {
     sync('r1');
     setPrompt('b');
     sync('r2', 'restore-new');
@@ -125,7 +125,7 @@ describe('GM r11, 5: after a restore, no "another tab" line', () => {
   });
 });
 
-describe("GM r11, 4: an agent's copy stays the agent's", () => {
+describe("an agent's copy stays the agent's (design)", () => {
   it('in the waiting canvases and the toast, deduped against agentCopies', async () => {
     unsubscribe();
     resetProjectStoreForTests();

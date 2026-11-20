@@ -2,7 +2,7 @@ import { useAssetProposalsStore, type ReviewRequest } from './assetProposalsStor
 import type { AssetProposalKind } from '../lib/assetProposals';
 
 /**
- * Review on an asset proposal's Update (Q92 a) asks the strip for that
+ * Review on an asset proposal's Update asks the strip for that
  * target to come into view (lib/assetProposalReview.ts navigates there).
  * The request lives in the eager store (`review`); these two helpers live
  * here so only the deferred chunks that use them carry them.
