@@ -1,22 +1,28 @@
 import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
-import type { AnalysisState, Collection } from './commonsTypes';
+import { capitalised, type AnalysisState, type Collection } from './commonsTypes';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
-  held: 'held', queued: 'queued', analyzing: 'analyzing', analysis_failed: 'failed', ready: 'ready',
+  held: 'Held', queued: 'Queued', analyzing: 'Analyzing', analysis_failed: 'Failed', ready: 'Ready',
 };
 
 /** An asset's analysis badge: its label and `commons-badge--<modifier>`. A
  *  failure that isn't an error (too transparent: nothing broke) wears the
  *  neutral, muted badge and says "Not analyzed", never a red "failed"
  *  (GM r6 on #208, item 2). */
-export function analysisBadge(state: AnalysisState, kind?: string | null): { label: string; modifier: string } {
+export function analysisBadge(state: AnalysisState | null | undefined, kind?: string | null): { label: string; modifier: string } {
   if (state === 'analysis_failed' && analysisFailureIsNeutral(kind)) return { label: 'Not analyzed', modifier: 'not-analyzed' };
-  return { label: STATE_LABELS[state], modifier: state };
+  if (!state) return { label: '', modifier: '' };
+  return { label: Object.hasOwn(STATE_LABELS, state) ? STATE_LABELS[state] : capitalised(state.replaceAll('_', ' ')), modifier: state };
 }
 
-/** Present the local human as "You" while retaining stored actor IDs unchanged. */
-export function actorLabel(actor: string): string {
-  if (actor === 'human:justin') return 'You';
+/**
+ * Present the local human as "You" while retaining stored actor IDs unchanged. "You" leads a
+ * line (a comment's author); mid-sentence ("Added by you") pass `{ midSentence: true }`
+ * (design). Other names read the same either way.
+ */
+export function actorLabel(actor: string | null | undefined, opts: { midSentence?: boolean } = {}): string {
+  if (!actor) return '';
+  if (actor === 'human:justin') return opts.midSentence ? 'you' : 'You';
   if (actor.startsWith('human:')) return actor.slice(6);
   if (actor === 'import:moodboard') return 'moodboard note';
   return actor;

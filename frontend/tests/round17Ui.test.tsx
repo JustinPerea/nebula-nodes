@@ -153,14 +153,14 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
     render(<CommonsEvaluation />);
     await screen.findByText('Set neutral');
     fireEvent.click(screen.getByText('Set neutral'));
-    expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
+    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
     act(() => noteBackendConnection('offline'));
     // Another item's save moved the batch's revision; this reference is the same.
     api.get.mockResolvedValueOnce(batch(5));
     act(() => noteBackendConnection('online'));
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByText('Save labels')).toBeEnabled());
-    expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
+    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
     expect(screen.queryByText(LABELS_CHANGED_ELSEWHERE)).toBeNull();
     api.labels.mockResolvedValue(batch(6));
     fireEvent.click(screen.getByText('Save labels'));
@@ -180,7 +180,7 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
     api.get.mockResolvedValueOnce(saved);
     act(() => noteBackendConnection('online'));
     expect(await screen.findByText(LABELS_CHANGED_ELSEWHERE)).toHaveAttribute('role', 'status');
-    expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).not.toBe('0');
+    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('2.00');
     expect(api.labels).not.toHaveBeenCalled();
   });
 

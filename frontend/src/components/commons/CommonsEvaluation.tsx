@@ -14,6 +14,7 @@ import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
+import { axisLabel, axisValue, enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
@@ -369,13 +370,13 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
           onClick={() => void saveAccents()}>Save accents & reveal labels</button>{unsavedMark}</div>
       </> : <fieldset disabled={readonly}>
         <small>C1 · STRUCTURE & CHARACTER</small><h3 className="evaluation-step">Describe the visual language.</h3>
-        {Object.entries(batch.fields).map(([key, values]) => <label key={key}>{pretty(key)}<select value={labels.tags[key] ?? ''}
+        {Object.entries(batch.fields).map(([key, values]) => <label key={key}>{enumFieldLabel(key)}<select value={labels.tags[key] ?? ''}
           onChange={(e) => { const tags = { ...labels.tags }; if (e.target.value) tags[key] = e.target.value; else delete tags[key]; change({ tags }); }}>
-          <option value="">Choose one…</option>{values.map((value) => <option key={value} value={value}>{pretty(value)}</option>)}
+          <option value="">Choose one…</option>{values.map((value) => <option key={value} value={value}>{enumValueLabel(key as EnumField, value)}</option>)}
         </select></label>)}
         <h4 className="evaluation-subhead">Character</h4>
-        {batch.axes.map((key) => <div className="evaluation-axis" key={key}><label>{pretty(key)} · {labels.axes[key]?.toFixed(2) ?? 'Unanswered'}
-          <input aria-label={pretty(key)} aria-valuetext={labels.axes[key] === undefined ? 'Unanswered' : String(labels.axes[key])} type="range" min={-1} max={1} step={0.05} value={labels.axes[key] ?? 0}
+        {batch.axes.map((key) => <div className="evaluation-axis" key={key}><label>{axisLabel(key)} · {labels.axes[key] == null ? 'unanswered' : axisValue(labels.axes[key])}
+          <input aria-label={axisLabel(key)} aria-valuetext={labels.axes[key] == null ? 'Unanswered' : axisValue(labels.axes[key])} type="range" min={-1} max={1} step={0.05} value={labels.axes[key] ?? 0}
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} /></label>
           <div><span>−1 {key.split('_')[0]}</span><button className="commons-button" onClick={() => change({ axes: { ...labels.axes, [key]: 0 } })}>Set neutral</button><span>+1 {key.split('_')[1]}</span></div>
         </div>)}
@@ -383,7 +384,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
         {item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} />P{p.index}
           <select aria-label={`Role for P${p.index}`} value={labels.palette_roles[p.index] ?? ''} onChange={(e) => {
             const roles = { ...labels.palette_roles }; if (e.target.value) roles[p.index] = e.target.value; else delete roles[p.index]; change({ palette_roles: roles });
-          }}><option value="">Choose a role…</option>{batch.roles.map((role) => <option key={role}>{role}</option>)}</select></label>)}
+          }}><option value="">Choose a role…</option>{batch.roles.map((role) => <option key={role} value={role}>{paletteRoleLabel(role)}</option>)}</select></label>)}
         <h4 className="evaluation-subhead">Keywords · {labels.keywords.length} / 12</h4>
         <div className="evaluation-keywords">{labels.keywords.map((word) => <button className="commons-button commons-button--remove" key={word} aria-label={`Remove ${pretty(word)}`} onClick={() => change({ keywords: labels.keywords.filter((w) => w !== word) })}>{pretty(word)} ×</button>)}</div>
         <input aria-label="Search keywords" placeholder="Search the shared vocabulary…" value={query} onChange={(e) => setQuery(e.target.value)} />

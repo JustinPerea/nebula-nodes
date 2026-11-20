@@ -193,7 +193,7 @@ describe('a reference whose analysis failed', () => {
     const button = await screen.findByRole('button', { name: 'Re-analyze' });
     const badge = document.querySelector('.commons-detail__bar .commons-badge')!;
     expect(badge.className).toBe('commons-badge commons-badge--analysis_failed');
-    expect(badge.textContent).toBe('failed');
+    expect(badge.textContent).toBe('Failed');
     reanalyze.mockResolvedValue({ queued: true });
     fireEvent.click(button);
     await waitFor(() => expect(reanalyze).toHaveBeenCalledWith('ast_1'));
@@ -210,5 +210,69 @@ describe('a reference whose analysis failed', () => {
     });
     expect(block.querySelector('details')).toBeNull();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+});
+
+// Design: "Added by you" mid-sentence, the role and enum selects read words (never a stored
+// value), and the keyword placeholder says what to do. Option values stay the raw values.
+describe('CommonsDetail person-facing words', () => {
+  beforeEach(() => {
+    useAssetProposalsStore.getState().clear();
+    asset.mockReset();
+  });
+  const open = () => render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+
+  it('says "Added by you" for the local person and "Added by <name>" for anyone else', async () => {
+    asset.mockResolvedValue(detail('A poster'));
+    const first = open();
+    expect(await screen.findByText('Added by you')).toBeTruthy();
+    first.unmount();
+    const other = detail('A poster');
+    other.memberships[0].actor = 'human:maria';
+    asset.mockResolvedValue(other);
+    open();
+    expect(await screen.findByText('Added by maria')).toBeTruthy();
+  });
+
+  it('keeps "You" capitalised where the name leads a line (a comment author)', async () => {
+    const withComment = detail('A poster');
+    withComment.memberships[0].comments = [
+      { id: 'c1', actor: 'human:justin', text: 'Keep it', created_at: '2026-11-20T08:00:00Z', source_date: null, region: null },
+    ];
+    asset.mockResolvedValue(withComment);
+    const { container } = open();
+    await screen.findByText('Keep it');
+    expect(container.querySelector('.commons-comment__actor')?.textContent).toBe('You');
+  });
+
+  it('shows the role as "Neutral" with the stored value "neutral"', async () => {
+    asset.mockResolvedValue(detail('A poster'));
+    open();
+    const select = await screen.findByRole('combobox', { name: 'Role' }) as HTMLSelectElement;
+    expect(select.value).toBe('neutral');
+    const options = [...select.options].map((o) => [o.value, o.textContent]);
+    expect(options).toEqual([['attract', 'Attract'], ['avoid', 'Avoid'], ['evidence', 'Evidence'], ['neutral', 'Neutral']]);
+  });
+
+  it('shows enum values as words: n_a reads "Doesn’t apply" and keeps its value', async () => {
+    const withLayout = detail('A poster');
+    withLayout.effective.fields.layout = { value: 'n_a' };
+    withLayout.effective.fields.type_style = { value: 'geometric_sans' };
+    asset.mockResolvedValue(withLayout);
+    open();
+    const layout = await screen.findByRole('combobox', { name: /^Layout/ }) as HTMLSelectElement;
+    expect(layout.value).toBe('n_a');
+    expect(layout.selectedOptions[0].textContent).toBe('Doesn’t apply');
+    const style = screen.getByRole('combobox', { name: /^Type style/ }) as HTMLSelectElement;
+    expect(style.selectedOptions[0].textContent).toBe('Geometric sans');
+    const medium = screen.getByRole('combobox', { name: /^Medium/ }) as HTMLSelectElement;
+    expect([...medium.options].map((o) => o.textContent)).toContain('Type specimen');
+  });
+
+  it('asks for a keyword with "Add a keyword, then press Enter"', async () => {
+    asset.mockResolvedValue(detail('A poster'));
+    open();
+    const input = await screen.findByRole('textbox', { name: 'Add keyword' }) as HTMLInputElement;
+    expect(input.placeholder).toBe('Add a keyword, then press Enter');
   });
 });

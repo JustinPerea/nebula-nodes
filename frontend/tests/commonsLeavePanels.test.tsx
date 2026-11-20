@@ -68,7 +68,7 @@ async function openBlindLabeling() {
 
 /** A label the person sets and doesn't save. */
 function setTypeStyle() {
-  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'humanist_sans' } });
+  fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'humanist_sans' } });
 }
 
 beforeEach(() => {
@@ -106,7 +106,7 @@ describe('Blind labeling keeps its draft across sections', () => {
     expect(commonsUnsaved()).toBe(true);
     fireEvent.click(within(tabs()).getByRole('tab', { name: /^Blind labeling/ }));
     expect(screen.getByText('Describe the visual language.')).toBeVisible();
-    expect((screen.getByLabelText('type style') as HTMLSelectElement).value).toBe('humanist_sans');
+    expect((screen.getByLabelText('Type style') as HTMLSelectElement).value).toBe('humanist_sans');
     // The panel didn't reload its batch over the draft.
     expect(evaluation.get).toHaveBeenCalledTimes(1);
   });
@@ -154,7 +154,7 @@ describe('Blind labeling keeps its draft across sections', () => {
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));
     await waitFor(() => expect(popover()).toHaveTextContent('Nebula couldn’t save your labels because labels changed in another tab. Reload before saving.'));
     expect(useUIStore.getState().viewMode).toBe('commons');
-    expect((screen.getByLabelText('type style') as HTMLSelectElement).value).toBe('humanist_sans');
+    expect((screen.getByLabelText('Type style') as HTMLSelectElement).value).toBe('humanist_sans');
   });
 
   it('Discard and leave drops the draft (nothing saved), then leaves', async () => {
@@ -179,13 +179,13 @@ describe('Agent review', () => {
     render(<CommonsView />);
     await openAgentReview();
     fireEvent.click(await screen.findByText('Edit grades'));
-    fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+    fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
     const saves = screen.getAllByRole('button', { name: 'Save corrections & next' });
     for (const save of saves) expect(save.nextElementSibling).toHaveClass('commons-unsaved');
     fireEvent.click(within(tabs()).getByRole('tab', { name: 'All' }));
     expect(within(tabs()).getByRole('tab', { name: /^Agent review/ })).toHaveAccessibleName(/Unsaved/);
     fireEvent.click(within(tabs()).getByRole('tab', { name: /^Agent review/ }));
-    expect((screen.getByLabelText('type style') as HTMLSelectElement).value).toBe('serif');
+    expect((screen.getByLabelText('Type style') as HTMLSelectElement).value).toBe('serif');
   });
 
   it('Save and leave saves the corrections through Agent review\'s own save, then leaves', async () => {
@@ -193,7 +193,7 @@ describe('Agent review', () => {
     render(<CommonsView />);
     await openAgentReview();
     fireEvent.click(await screen.findByText('Edit grades'));
-    fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+    fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
     await waitFor(() => expect(commonsUnsaved()).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Back to Canvas' }));
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));

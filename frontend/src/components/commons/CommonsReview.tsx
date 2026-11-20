@@ -14,6 +14,7 @@ import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
+import { axisLabel, axisValue, enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 import { isLoadLine } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
@@ -337,22 +338,22 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     <div className="review-actions">{agreement}<button className="commons-button" disabled={disabled} onClick={() => setEditing(!editing)}>{editing ? 'Hide editing controls' : 'Edit grades'}</button></div>
     <fieldset disabled={disabled}>
       <h4 className="evaluation-subhead">Structure</h4>{Object.entries(batch.fields).map(([key, values]) => <div className="review-grade" key={key}>
-        <label>{pretty(key)}{editing ? <select value={labels.tags[key]} onChange={(e) => change({ tags: { ...labels.tags, [key]: e.target.value } })}>
-          {values.map((value) => <option key={value} value={value}>{pretty(value)}</option>)}
-        </select> : <strong>{pretty(labels.tags[key])}</strong>}</label><p className="review-reason">Agent: {reason(key)}</p>
+        <label>{enumFieldLabel(key)}{editing ? <select value={labels.tags[key]} onChange={(e) => change({ tags: { ...labels.tags, [key]: e.target.value } })}>
+          {values.map((value) => <option key={value} value={value}>{enumValueLabel(key as EnumField, value)}</option>)}
+        </select> : <strong>{enumValueLabel(key as EnumField, labels.tags[key])}</strong>}</label><p className="review-reason">Agent: {reason(key)}</p>
       </div>)}
       <h4 className="evaluation-subhead">Character</h4>{batch.axes.map((key) => <div className="review-grade" key={key}>
-        <label>{pretty(key)} <strong>{labels.axes[key].toFixed(2)}</strong>
-          {editing ? <input aria-label={pretty(key)} type="range" min={-1} max={1} step={0.05} value={labels.axes[key]}
+        <label>{axisLabel(key)} <strong>{axisValue(labels.axes[key])}</strong>
+          {editing ? <input aria-label={axisLabel(key)} type="range" min={-1} max={1} step={0.05} value={labels.axes[key]}
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} />
-            : <meter aria-label={pretty(key)} min={-1} max={1} value={labels.axes[key]} />}
+            : <meter aria-label={axisLabel(key)} min={-1} max={1} value={labels.axes[key]} />}
         </label><div className="review-axis-ends"><span>−1 {key.split('_')[0]}</span><span>+1 {key.split('_')[1]}</span></div>
         <p className="review-reason">Agent: {fields.axes[key].why}</p>
       </div>)}
       <h4 className="evaluation-subhead">Color roles</h4>{item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} title={p.hex} />
         <span className="review-swatch-label">P{p.index} · {p.share * 100 < 0.1 ? '<0.1' : (p.share * 100).toFixed(1)}%</span>
         {editing ? <select aria-label={`Role for P${p.index}`} value={labels.palette_roles[p.index]} onChange={(e) => change({ palette_roles: { ...labels.palette_roles, [p.index]: e.target.value } })}>
-          {batch.roles.map((role) => <option key={role}>{role}</option>)}</select> : <strong>{labels.palette_roles[p.index]}</strong>}
+          {batch.roles.map((role) => <option key={role} value={role}>{paletteRoleLabel(role)}</option>)}</select> : <strong>{paletteRoleLabel(labels.palette_roles[p.index])}</strong>}
       </label>)}
       <h4 className="evaluation-subhead">Keywords</h4><div className="evaluation-keywords">{labels.keywords.map((word) => editing ?
         <button className="commons-button commons-button--remove" key={word} aria-label={`Remove ${pretty(word)}`} onClick={() => { const words = labels.keywords.filter((w) => w !== word); change({ keywords: words, no_keywords: !words.length }); }}>{pretty(word)} ×</button>
@@ -365,9 +366,9 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     {dirty && <button className="commons-button commons-button--danger" disabled={disabled} onClick={() => { onDiscarded(); discard(); }}>Discard changes</button>}
     <p role="status" id={statusLineId}>{dirty ? CHANGE_REFERENCE_LINE_REVIEW : item.reviewed_at ? 'Reviewed by you · saved on this computer' : 'Awaiting your review · nothing accepted yet'}</p>
     <details><summary>Original agent grade</summary><dl>
-      {Object.entries(item.proposal.labels.tags).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{pretty(value)}</dd></div>)}
-      {Object.entries(item.proposal.labels.axes).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{value.toFixed(2)}</dd></div>)}
-      {Object.entries(item.proposal.labels.palette_roles).map(([key, value]) => <div key={key}><dt>Color P{key}</dt><dd>{value}</dd></div>)}
+      {Object.entries(item.proposal.labels.tags).map(([key, value]) => <div key={key}><dt>{enumFieldLabel(key)}</dt><dd>{enumValueLabel(key as EnumField, value)}</dd></div>)}
+      {Object.entries(item.proposal.labels.axes).map(([key, value]) => <div key={key}><dt>{axisLabel(key)}</dt><dd>{axisValue(value)}</dd></div>)}
+      {Object.entries(item.proposal.labels.palette_roles).map(([key, value]) => <div key={key}><dt>Color P{key}</dt><dd>{paletteRoleLabel(value)}</dd></div>)}
       <dt>Keywords</dt><dd>{item.proposal.labels.keywords.map(pretty).join(', ') || 'No applicable keywords'}</dd>
     </dl></details>
   </div>;

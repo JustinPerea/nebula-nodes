@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
-import type { CommonsStatus, FolderLink } from '../../lib/commonsTypes';
+import { deviceStateLabel, type CommonsStatus, type FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
 import { linkedFolderNotice } from '../../lib/commonsFormat';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
@@ -61,7 +61,7 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
         <ul className="commons-list">
           {pending.map((d) => (
             <li key={d.path} className="commons-list__item">
-              <span className={`commons-badge commons-badge--${d.state}`}>{d.state}</span>
+              <span className={`commons-badge commons-badge--${d.state}`}>{deviceStateLabel(d.state)}</span>
               <span className="commons-list__text">{d.path.split('/').pop()}</span>
               {d.error && <span className="commons-meta"><LineText text={d.error} /></span>}
             </li>

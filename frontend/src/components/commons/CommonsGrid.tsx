@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { CommonsMedia } from './CommonsMedia';
 import { analysisBadge } from '../../lib/commonsFormat';
-import type { SearchRow } from '../../lib/commonsTypes';
+import { MEDIA_LABELS, ROLE_LABELS, type SearchRow } from '../../lib/commonsTypes';
 
 interface Props {
   rows: SearchRow[];
@@ -26,10 +26,9 @@ function columnCount(grid: HTMLElement | null): number {
 interface TileBadge {
   key: string;
   className: string;
-  /** What the badge shows (the CSS sets it in capitals). */
+  /** What the badge shows (shown as written). */
   text: string;
-  /** How the tile's name reads it, as written, never the capitals Chrome
-   *  would take from the CSS ("NOT ANALYZED"; #208 review 4, N2). */
+  /** How the tile's name reads it, as written (badges are sentence case; the CSS adds no capitals). */
   label: string;
 }
 
@@ -41,13 +40,13 @@ function tileBadges(row: SearchRow, proposed?: ReadonlySet<string>): TileBadge[]
     badges.push({ key: 'analysis', className: `commons-badge--${badge.modifier}`, text: badge.label, label: badge.label });
   }
   if (row.role !== 'neutral') {
-    badges.push({ key: 'role', className: `commons-badge--role-${row.role}`, text: row.role, label: row.role });
+    badges.push({ key: 'role', className: `commons-badge--role-${row.role}`, text: ROLE_LABELS[row.role], label: ROLE_LABELS[row.role] });
   }
-  if (row.in_inbox) badges.push({ key: 'inbox', className: 'commons-badge--inbox', text: 'inbox', label: 'inbox' });
+  if (row.in_inbox) badges.push({ key: 'inbox', className: 'commons-badge--inbox', text: 'Inbox', label: 'Inbox' });
   if (proposed?.has(row.id)) {
-    badges.push({ key: 'proposal', className: 'commons-badge--proposal', text: 'proposal', label: 'An agent proposes changes' });
+    badges.push({ key: 'proposal', className: 'commons-badge--proposal', text: 'Proposal', label: 'An agent proposes changes' });
   }
-  if (row.media === 'video') badges.push({ key: 'video', className: '', text: 'video', label: 'video' });
+  if (row.media === 'video') badges.push({ key: 'video', className: '', text: MEDIA_LABELS.video, label: MEDIA_LABELS.video });
   if (row.comment_count > 0) {
     badges.push({ key: 'count', className: 'commons-badge--count', text: `${row.comment_count} ✎`,
       label: `${row.comment_count} comments` });

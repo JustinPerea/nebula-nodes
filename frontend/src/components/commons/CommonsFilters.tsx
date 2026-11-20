@@ -1,5 +1,5 @@
 import { useCommonsDraft } from './commonsDraftsContext';
-import { AXES, AXIS_LABELS, ROLES, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
+import { AXES, AXIS_LABELS, axisValue, MEDIA_LABELS, ROLES, ROLE_LABELS, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
 
 interface Props {
   filters: FilterState;
@@ -20,7 +20,7 @@ function AxisRange({ axis, range, onChange }: {
     <div className={`commons-axis${range ? ' commons-axis--set' : ''}`}>
       <div className="commons-axis__head">
         <span>{lowLabel}</span>
-        <span className="commons-axis__value">{range ? `${lo.toFixed(2)} … ${hi.toFixed(2)}` : 'any'}</span>
+        <span className="commons-axis__value">{range ? `${axisValue(lo)} … ${axisValue(hi)}` : 'any'}</span>
         <span>{highLabel}</span>
       </div>
       <div className="commons-axis__inputs">
@@ -109,7 +109,7 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
           ))}
         </div>
         <input
-          aria-label="Add keyword" placeholder="Type and press Enter" value={keywordDraft}
+          aria-label="Add keyword" placeholder="Type a keyword, then press Enter" value={keywordDraft}
           onChange={(event) => setKeywordDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -131,15 +131,15 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
         Media
         <select value={filters.media} onChange={(event) => set({ media: event.target.value as FilterState['media'] })}>
           <option value="">Any</option>
-          <option value="image">Image</option>
-          <option value="video">Video</option>
+          <option value="image">{MEDIA_LABELS.image}</option>
+          <option value="video">{MEDIA_LABELS.video}</option>
         </select>
       </label>
       <label className="commons-field">
         Role
         <select value={filters.role} onChange={(event) => set({ role: event.target.value as FilterState['role'] })}>
           <option value="">Any (avoid hidden)</option>
-          {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+          {ROLES.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}
         </select>
       </label>
       <label className="commons-field">

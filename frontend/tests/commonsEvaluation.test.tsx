@@ -41,7 +41,9 @@ it('does not reveal palette until the server accepts accent observations', async
   fireEvent.click(screen.getByText('Save accents & reveal labels'));
   await screen.findByText('Assign color roles');
   expect(api.accents).toHaveBeenCalledWith(0, 0, [], true);
-  expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('Unanswered');
+  expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('Unanswered');
+  // After " · " the state continues the line in lower case (design); the slider's own value text stands alone.
+  expect(screen.getByText(/^Quiet – Loud · unanswered/)).toBeTruthy();
 });
 
 it('preserves unsaved labels when a stale revision is rejected', async () => {
@@ -50,10 +52,10 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   render(<CommonsEvaluation />);
   await screen.findByText('Set neutral');
   fireEvent.click(screen.getByText('Set neutral'));
-  expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
+  expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
   fireEvent.click(screen.getByText('Save labels'));
   await screen.findByRole('alert');
-  expect(screen.getByLabelText('quiet loud').getAttribute('aria-valuetext')).toBe('0');
+  expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
   // Round 18n (GM r44 1, r45 Q1): unsaved labels lock the toggle in place, its own line right under it.
   const toggle = screen.getByText('Review batch · 0 / 15') as HTMLButtonElement;
   act(() => toggle.focus());
@@ -177,4 +179,17 @@ it('error copy round 3b: the intro uses GM\'s words for what Blind labeling pick
     + 'choosing references that look different from each other and spreading them across subfolders. '
     + 'It never uses the 15, or anything that looks like them, as examples.');
   expect(document.body.textContent).not.toMatch(/near-duplicate|clusters|quarantined/);
+});
+
+// Design: a person never reads a stored value. The role select reads "Accent" over the raw value.
+it('shows palette roles as words, with the raw value on each option', async () => {
+  const value = batch(); value.roles = ['background', 'dominant', 'accent', 'text', 'other'];
+  value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
+  api.get.mockResolvedValue(value);
+  render(<CommonsEvaluation />);
+  const select = await screen.findByLabelText('Role for P0') as HTMLSelectElement;
+  expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+    ['', 'Choose a role…'], ['background', 'Background'], ['dominant', 'Dominant'], ['accent', 'Accent'],
+    ['text', 'Text'], ['other', 'Other'],
+  ]);
 });
