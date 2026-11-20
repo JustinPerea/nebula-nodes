@@ -78,6 +78,7 @@ body.app-slava-restraint {
 
   --sr-warning: #F5C518;
   --sr-warning-soft: rgba(245, 197, 24, 0.12);
+  --sr-warning-border: rgba(245, 197, 24, 0.34);
   --sr-error: var(--sr-accent);
   --sr-error-soft: var(--sr-accent-soft);
   --sr-error-border: var(--sr-accent-border);
