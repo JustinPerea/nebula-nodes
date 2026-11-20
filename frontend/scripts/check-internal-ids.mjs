@@ -32,6 +32,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // been fetched, and main otherwise. CI fetches both before lint: GitHub's merge ref sits on main as
 // it stood when the ref was made, which can be older than origin/main by the time lint runs.
 //
+// Runs of comment lines are read as one text. A run is consecutive `//` lines (`#` lines in Python
+// and shell) with only whitespace between them, each continuation line starting with its marker (a
+// line with code before the marker starts a new run; a trailing `// x` after code may itself start a
+// run, since a wrapped trailing comment continues on standalone lines). Each line has its marker
+// stripped, a block comment has its ` * ` line prefixes stripped, and the lines are joined with one
+// space, so an id wrapped across two lines ("round" / "15") counts once, on the line where it starts.
+// The joined text is matched in addition to each comment on its own, never instead of it, so a rule
+// that reads a line end (a review id at the end of a line) keeps working and no count falls.
+//
 // What counts as a comment:
 //   TS, TSX, JS, MJS, CJS: // to end of line, and /* ... */ blocks.
 //   CSS: /* ... */ blocks.
@@ -287,6 +296,103 @@ function hashSpans(text, isPython) {
   return spans;
 }
 
+/** Match the id rules in one comment or title body. `offsetOf(i)` maps a body index to a file offset. */
+function scanBody(body, offsetOf, push) {
+  let chainEnd = -1; // end offset of the last bare round id that counted, for a slash chain
+  for (const m of body.matchAll(ROUND_RE)) {
+    const after = body.slice(m.index + m[0].length, m.index + m[0].length + 16);
+    if (/^[rR]\d/.test(m[0])) {
+      // A bare id counts only in a design-round context, with a lowercase r.
+      if (m[0][0] !== 'r') continue;
+      const before = body.slice(Math.max(0, m.index - 24), m.index);
+      const chained = chainEnd === m.index - 1 && body[m.index - 1] === '/';
+      if (!chained && !ROUND_BEFORE.test(before) && !ROUND_BEFORE_GM.test(before) && !ROUND_AFTER.test(after)) continue;
+      chainEnd = m.index + m[0].length;
+    } else if (ROUND_ARITH_AFTER.test(after)) {
+      continue;
+    }
+    push(offsetOf(m.index), 'round', m[0]);
+  }
+  for (const m of body.matchAll(Q_RE)) {
+    const before = body.slice(Math.max(0, m.index - 40), m.index).split('\n').pop();
+    if (Q_FISCAL_BEFORE.test(before)) continue;
+    push(offsetOf(m.index), 'question', m[0]);
+  }
+  for (const m of body.matchAll(REVIEW_RE)) {
+    if (REVIEW_AFTER.test(body.slice(m.index + m[0].length))) push(offsetOf(m.index), 'review', m[0]);
+  }
+  for (const m of body.matchAll(SEVERITY_RE)) push(offsetOf(m.index), 'review', m[0]);
+  for (const m of body.matchAll(LETTER_SEVERITY_RE)) {
+    const before = body.slice(Math.max(0, m.index - 24), m.index);
+    if (LETTER_SEVERITY_BEFORE.test(before)) push(offsetOf(m.index), 'review', m[0]);
+  }
+}
+
+/**
+ * Comment texts read as runs: [{body, map}] where map[i] is the file offset of body[i]. Only runs
+ * that join at least two lines are returned (a single comment is already scanned on its own). A
+ * `//` (or `#`) line joins the run above it when only whitespace and one newline lie between them;
+ * a block comment is one run of its own lines with the ` * ` prefixes stripped.
+ */
+function commentRuns(path, text, spans) {
+  const ext = path.slice(path.lastIndexOf('.') + 1);
+  const marker = ext === 'py' || ext === 'sh' ? '#' : '//';
+  const runs = [];
+  let lines = []; // [{text, offset}] of the open run of line comments
+  const flush = () => {
+    if (lines.length > 1) runs.push(joinPieces(lines));
+    lines = [];
+  };
+  for (const s of spans) {
+    if (s.kind !== 'comment') continue;
+    const raw = text.slice(s.start, s.end);
+    if (raw.startsWith(marker)) {
+      const strip = /^(?:\/\/+|#+)[ \t]*/.exec(raw)[0].length;
+      const piece = { text: raw.slice(strip).trimEnd(), offset: s.start + strip };
+      const prev = lines.length > 0 ? lines[lines.length - 1] : null;
+      const gap = prev ? text.slice(prev.end, s.start) : '';
+      if (prev && /^\r?\n[ \t]*$/.test(gap)) lines.push({ ...piece, end: s.end });
+      else {
+        flush();
+        lines = [{ ...piece, end: s.end }];
+      }
+      continue;
+    }
+    flush();
+    if (raw.startsWith('/*') && raw.includes('\n')) {
+      const pieces = [];
+      let at = 0;
+      for (const line of raw.split('\n')) {
+        const lead = /^[ \t]*(?:\/\*+|\*+(?!\/))?[ \t]*/.exec(line)[0].length;
+        const body = line.slice(lead).replace(/[ \t]*\*+\/[ \t]*$/, '').trimEnd();
+        if (body !== '') pieces.push({ text: body, offset: s.start + at + lead });
+        at += line.length + 1;
+      }
+      if (pieces.length > 1) runs.push(joinPieces(pieces));
+    }
+  }
+  flush();
+  return runs;
+}
+
+/** Join pieces with one space; the map sends each character, and each joining space, to its file offset. */
+function joinPieces(pieces) {
+  let body = '';
+  const map = [];
+  pieces.forEach((p, k) => {
+    if (k > 0) {
+      body += ' ';
+      map.push(p.offset);
+    }
+    for (let c = 0; c < p.text.length; c++) {
+      body += p.text[c];
+      map.push(p.offset + c);
+    }
+  });
+  map.push(map.length > 0 ? map[map.length - 1] + 1 : 0);
+  return { body, map };
+}
+
 /** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review', match}]. */
 export function scanSource(path, text) {
   const spans = findSpans(path, text);
@@ -309,37 +415,15 @@ export function scanSource(path, text) {
     out.push({ line: idx + 1, text: lineText(idx), kind, match });
   };
   for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
-  for (const s of spans) {
-    const body = text.slice(s.start, s.end);
-    let chainEnd = -1; // end offset of the last bare round id that counted, for a slash chain
-    for (const m of body.matchAll(ROUND_RE)) {
-      const after = body.slice(m.index + m[0].length, m.index + m[0].length + 16);
-      if (/^[rR]\d/.test(m[0])) {
-        // A bare id counts only in a design-round context, with a lowercase r.
-        if (m[0][0] !== 'r') continue;
-        const before = body.slice(Math.max(0, m.index - 24), m.index);
-        const chained = chainEnd === m.index - 1 && body[m.index - 1] === '/';
-        if (!chained && !ROUND_BEFORE.test(before) && !ROUND_BEFORE_GM.test(before) && !ROUND_AFTER.test(after)) continue;
-        chainEnd = m.index + m[0].length;
-      } else if (ROUND_ARITH_AFTER.test(after)) {
-        continue;
-      }
-      push(s.start + m.index, 'round', m[0]);
-    }
-    for (const m of body.matchAll(Q_RE)) {
-      const before = body.slice(Math.max(0, m.index - 40), m.index).split('\n').pop();
-      if (Q_FISCAL_BEFORE.test(before)) continue;
-      push(s.start + m.index, 'question', m[0]);
-    }
-    for (const m of body.matchAll(REVIEW_RE)) {
-      if (REVIEW_AFTER.test(body.slice(m.index + m[0].length))) push(s.start + m.index, 'review', m[0]);
-    }
-    for (const m of body.matchAll(SEVERITY_RE)) push(s.start + m.index, 'review', m[0]);
-    for (const m of body.matchAll(LETTER_SEVERITY_RE)) {
-      const before = body.slice(Math.max(0, m.index - 24), m.index);
-      if (LETTER_SEVERITY_BEFORE.test(before)) push(s.start + m.index, 'review', m[0]);
-    }
-  }
+  const seen = new Set();
+  const add = (offset, kind, match) => {
+    const key = `${kind}:${offset}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    push(offset, kind, match);
+  };
+  for (const s of spans) scanBody(text.slice(s.start, s.end), (i) => s.start + i, add);
+  for (const run of commentRuns(path, text, spans)) scanBody(run.body, (i) => run.map[i], add);
   out.sort((a, b) => a.line - b.line);
   return out;
 }

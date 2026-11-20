@@ -138,8 +138,8 @@ export interface KeptAfterAccept {
   /** A node Accept added, kept whole because it changed since (GM, round 17:
    * named as one item). False for settings kept on a node it didn't add. */
   wholeNode: boolean;
-  /** A list Accept reordered that was reordered again since (PR #198 review
-   * 2, L3): the order now is kept, named as one item ("the shot order"). */
+  /** A list Accept reordered that was reordered again since (design, PR #198):
+   * the order now is kept, named as one item ("the shot order"). */
   order?: 'shots' | 'clips';
   /** Keys kept because a run wrote into the part Accept changed (a shot it
    * added and a run rendered): nobody's edit, so the line names no one

@@ -403,10 +403,10 @@ function unsentOf(draft: MoodboardDraft, fields: Partial<Record<BoardFieldKey, u
 }
 
 /**
- * A kept edit replayed on `board` as the server has it now (round 6i, GM
- * r17): its board fields by the 6g rule (replayKeptFields: a field the board
- * changed since goes to the later edit, and `kept` names those the board
- * won), its queued ops on the board's images. An add whose image the board
+ * A kept edit replayed on `board` as the server has it now (design): its
+ * board fields by the 6g rule (replayKeptFields: a field the board changed
+ * since goes to the later edit, and `kept` names those the board won), its
+ * queued ops on the board's images. An add whose image the board
  * holds already went (a save that landed before the reload); a remove keeps
  * only the images still there; rebaseDraft drops an op on an image that's gone.
  */
@@ -460,10 +460,10 @@ interface KeptReplay { draft: MoodboardDraft; kept: string[]; images: KeptImage[
   stayed: KeptImage[]; stayedBy: string | null }
 
 /**
- * A kept edit replayed on `board` as the server has it now (round 6i, GM
- * r17): its board fields by the 6g rule (replayKeptFields: a field the board
- * changed since goes to the later edit, and `kept` names those the board
- * won), its queued ops on the board's images. An add whose image the board
+ * A kept edit replayed on `board` as the server has it now (design): its
+ * board fields by the 6g rule (replayKeptFields: a field the board changed
+ * since goes to the later edit, and `kept` names those the board won), its
+ * queued ops on the board's images. An add whose image the board
  * holds already went (a save that landed before the reload); a remove keeps
  * only the images still there; rebaseDraft drops an op on an image that's gone.
  *
@@ -732,10 +732,10 @@ function resetBoardDraft(key: string, draft: MoodboardDraft) {
 }
 
 /**
- * The unsaved draft at `key`, now the board `destination` (round 6g, review
- * 9 R9-B): moved there, or, when that board is open in the Studio already
- * (opened from the rail), folded into its draft, which keeps its epoch and
- * Undo; what this one still has to send goes on top and is sent.
+ * The unsaved draft at `key`, now the board `destination` (design): moved there,
+ * or, when that board is open in the Studio already (opened from the rail),
+ * folded into its draft, which keeps its epoch and Undo; what this one still has
+ * to send goes on top and is sent.
  */
 function handOverDraft(key: string, destination: string) {
   // The Board view's camera and its flag go with the draft (#210 round 6t): a new board's first save doesn't refit it,
@@ -1301,8 +1301,8 @@ export function MoodboardStudioView() {
         setRailScope(scope);
         rememberBrief(found);
         const lost = lostAdd();
-        // A kept edit an earlier page load of this tab left (round 6i, GM
-        // r17): replayed on the board as it is now, and sent. It replaces any
+        // A kept edit an earlier page load of this tab left (design): replayed
+        // on the board as it is now, and sent. It replaces any
         // send that waited for Nebula then, which it holds too.
         const kept = takeKeptEdit(found.id);
         if (kept) takeWaitingSend(found.id);

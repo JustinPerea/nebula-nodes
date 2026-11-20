@@ -153,9 +153,9 @@ export function cardTitle(nodes: readonly { id: string; data?: { label?: unknown
   return typeof label === 'string' && label.trim() ? label : nodeId;
 }
 
-/** The recovery line as the canvas's held-delete notice says it (GM, round
- * 15 of PR #114: "Name the button if the line points to one (e.g. 'Forget
- * ID')"). The backend's own line (RECOVERY_ID_SAVED_TAIL) is unchanged. */
+/** The recovery line as the canvas's held-delete notice says it (design,
+ * PR #114: "Name the button if the line points to one (e.g. 'Forget ID')").
+ * The backend's own line (RECOVERY_ID_SAVED_TAIL) is unchanged. */
 export const RECOVERY_ID_FORGET_CLAUSE = 'it has a saved World Labs recovery ID. Check the run in Marble, then use \u201cForget ID\u201d in run history.';
 
 /**
@@ -221,9 +221,9 @@ const isHeldReason = (reason: string) => isUnlockReason(reason) || isForgetReaso
  * ones GM trimmed: when any reason is one, the person reads GM's line
  * (heldDeleteText), the same words the canvas's own refusal uses, and any
  * other reasons follow it, each once, word for word. So a held node among
- * other reasons also reads "Couldn’t delete them. One is waiting …" (round
- * 4b: GM's lines for several nodes all drop the count; one heading for the
- * held sentence wherever it shows). With no held node, `heading` and the
+ * other reasons also reads "Couldn’t delete them. One is waiting …" (design:
+ * the lines for several nodes all drop the count; one heading for the held
+ * sentence wherever it shows). With no held node, `heading` and the
  * backend's reasons as given. An unconfirmed start wins over a recovery
  * record, as on the canvas. The held nodes are counted before duplicates go
  * (two held nodes give the same line twice), so two of them read "They're
@@ -252,11 +252,11 @@ export function deleteRefusalText(heading: string, count: number, reasons: reado
 }
 
 /**
- * The status bar's lines for World Labs work Nebula holds (error copy round
- * 3c, GM - Design: "People never see the word "start"; they ran a World Labs
- * job. Status bar: "Paid start needs review." → "A World Labs run needs your
- * check." In its warnings ..., write "World Labs run" wherever they now say
- * "paid start". Keep the rest of each line.").
+ * The status bar's lines for World Labs work Nebula holds (error copy, design:
+ * "People never see the word "start"; they ran a World Labs job. Status bar:
+ * "Paid start needs review." → "A World Labs run needs your check." In its
+ * warnings ..., write "World Labs run" wherever they now say "paid start". Keep
+ * the rest of each line.").
  */
 export const WORLD_LABS_RUN_NEEDS_CHECK = 'A World Labs run needs your check.';
 export const WORLD_LABS_RUN_STATUS_UNKNOWN = 'Nebula can’t tell if this World Labs run started.';

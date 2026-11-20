@@ -95,10 +95,10 @@ export interface PlaceholderRunConfirm {
    * images."): a run that got cheaper after the click goes ahead without
    * asking again only if it adds none of these unseen (review 6, L-a). */
   costNotes: string[];
-  /** "Run for $0.12" (a fixed total), "Run for up to $0.86" (a range), or
-   * "Run" when a row's price isn't listed or no price table loaded (GM, round
-   * 4); "Generate…" from Cinema (GM, round 6, item 3). The amount is in
-   * cents, rounded up, never whole dollars (GM, round 7: formatConfirmUsd). */
+  /** "Run for $0.12" (a fixed total), "Run for up to $0.86" (a range), or "Run"
+   * when a row's price isn't listed or no price table loaded (design);
+   * "Generate…" from Cinema. The amount is in cents, rounded up, never
+   * whole dollars (formatConfirmUsd). */
   runLabel: string;
   /** The paid placeholders the person confirms; the run sends them. */
   confirmIds: string[];

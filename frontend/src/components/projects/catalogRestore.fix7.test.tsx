@@ -3,9 +3,8 @@
  * saved over the save limit has GM's own line, in the toast and the restore
  * notice alike, never beside the plain one; several named mark only those
  * over it (plural form for GM). The plural waiting line says the real number
- * of deletes (GM's answer 3). The saved toast wraps (GM r8). (Review 7
- * N-2's Restore tooltip is gone: a restore may pass the project limit,
- * Justin 2026-10-29, fix round 12.)
+ * of deletes (design). The saved toast wraps (design). (The Restore tooltip is
+ * gone: a restore may pass the project limit, Justin 2026-10-29; design.)
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';

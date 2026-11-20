@@ -8,9 +8,9 @@ import { OFFLINE_MARK, OFFLINE_NEUTRAL } from './useBackendOffline';
 
 /**
  * A route that can't run without its key says so in its own words
- * (RouteSpec.missingKeyLine: a keyed route without its key, GM PR #203
- * r4): Run is locked with that line as its reason, so a sure-to-fail run is
- * never sent. The backend refuses agent and CLI runs with the same line
+ * (RouteSpec.missingKeyLine: a keyed route without its key; design, PR #203):
+ * Run is locked with that line as its reason, so a sure-to-fail run is never
+ * sent. The backend refuses agent and CLI runs with the same line
  * (node_route.route_unavailable_line). Until Settings load, nothing locks.
  */
 export function routeKeyLockReason(

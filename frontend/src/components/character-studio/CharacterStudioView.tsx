@@ -210,9 +210,9 @@ export function CharacterStudioView() {
   }, [loaded, savedId, key, epoch, follow]);
 
   // A load-failure notice ("Character not found…") is hidden while Nebula is
-  // offline, and the character is checked again on reconnect (GM, PR #198
-  // r2): a failed load is retried, and a not-found one reloaded unless the
-  // person has started a new character here since.
+  // offline, and the character is checked again on reconnect (design, PR #198):
+  // a failed load is retried, and a not-found one reloaded unless the person
+  // has started a new character here since.
   const shownLoadError = useOfflineHiddenNotice(loadError, () => {
     if (!projectReady) return;
     if (!loaded) patch({ loadError: null, revision: revision + 1 });

@@ -668,9 +668,9 @@ export function NodeInspectorPopover() {
           // The frame the card's spring ends in still follows: the card
           // lands at rest there, off the spring's last overshoot, and the
           // panel takes that last step with it, not on a spring of its own.
-          // Only a frame lets go (the re-measure straight after a commit is
-          // the same frame). A card that widens afresh ends it at once (GM
-          // r111): its spring is about to put it back at its old width.
+          // Only a frame lets go (the re-measure straight after a commit is the
+          // same frame). A card that widens afresh ends it at once (design):
+          // its spring is about to put it back at its old width.
           const wasFollowing = followsCardRef.current;
           const follow = following || heldForSpring || (wasFollowing && !freshWiden && (changed || !tick));
           const followChanged = follow !== wasFollowing;

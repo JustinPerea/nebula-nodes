@@ -2,8 +2,8 @@
  * Why the person's reopen in place can't go yet, and the one table of lines
  * for it (review 19 item 1 and GM r32 on PR #199). This file is what the
  * entry chunk needs to read a verdict and place its line; the table of lines
- * itself is lib/reopenHoldLines.ts, loaded when a hold first arrives (review
- * 21 LOW-1, the entry chunk's budget).
+ * itself is lib/reopenHoldLines.ts, loaded when a hold first arrives
+ * (design; the entry chunk's budget).
  *
  * The lock is Nebula's own verdict: the backend's replacement guard
  * (`_graph_replacement_hold`, read at GET /api/projects/open-hold and with

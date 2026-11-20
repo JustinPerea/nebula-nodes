@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 import { refuseEditWhileFollowing, useFollowingSwitch } from '../lib/canvasFollow';
 import { FOLLOWING_MARK } from '../lib/canvasLock';
 
-/** Where the canvas's fields live: its nodes and the Inspector, docked or
- * the popover the canvas opens over a node (portaled into the body; round
- * 21, review 20 L-2). Kept in step with styles/canvas-follow.css. */
+/** Where the canvas's fields live: its nodes and the Inspector, docked or the
+ * popover the canvas opens over a node (portaled into the body; design). Kept
+ * in step with styles/canvas-follow.css. */
 export const EDITABLE_AREA = '.react-flow, .panel--inspector, .node-inspector-popover';
 /** Keys that edit a field (navigation, selection and shortcuts with a
  * modifier pass; the store's own gate refuses any edit they reach). */

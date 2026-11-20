@@ -113,8 +113,8 @@ PURGED_NAME = "catalog-purged.json"
 # capped, refused the person's open once it was full), in two copies:
 # canvas-held/<projectId>.json and its .bak, {version: 2, entry, check},
 # each written whole and fsynced, then the folder. ``check`` is a digest of
-# the entry, so a flip that still parses loses to the other copy (review 7,
-# M-2). The canvas-held.json of fix rounds 5-6 is moved in once
+# the entry, so a flip that still parses loses to the other copy (design).
+# The earlier canvas-held.json is moved in once
 # (_migrate_legacy_held) and kept aside as canvas-held.json.migrated-<UTC>.
 CANVAS_HELD_DIR_NAME = "canvas-held"
 CANVAS_HELD_NAME = "canvas-held.json"
@@ -623,9 +623,9 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
 
 
 # What main keeps in the catalog about the person's canvas once it was
-# filed from waiting (review 8 of PR #199, HIGH-1, GM's rule (a); review 9,
-# M-1: in the same commit as the filing, so no failed write or crash can
-# leave a filed project open and unprotected). ``fresh``: the project filed
+# filed from waiting (PR #199, the design's rule (a); in the same commit
+# as the filing, so no failed write or crash can leave a filed project
+# open and unprotected). ``fresh``: the project filed
 # from the person's waiting canvas, with that canvas's digest; until the
 # canvas changes or one of the person's tabs is open on it (GM r11, 2), an
 # agent's write closes it first and works elsewhere. ``copies``: the copies
@@ -1274,8 +1274,8 @@ class ProjectStore:
         # (catalog_recovery.newer_copy; every change Nebula makes moves one),
         # judged by file order: a date ahead of this restore's clock is left
         # out in .bak.1 and counts as now in .bak, so neither a .bak.1 nor a
-        # .bak written while the clock ran ahead loses the newer copy (review
-        # 4, M-3; review 5, M-2's c1). Never by mtime: a copy made by hand or
+        # .bak written while the clock ran ahead loses the newer copy (design).
+        # Never by mtime: a copy made by hand or
         # a sync tool has a new one. Two signals, so one flipped digit in a
         # valid copy's dates or number never makes the older copy the base.
         clock = datetime.now(timezone.utc)
@@ -1884,8 +1884,8 @@ class ProjectStore:
             if found is not None:
                 return found
             # Which files the person was told were kept is in the note that
-            # didn't read, so every kept file there is now is named (review
-            # 9 of PR #199, L-3): pruning never deletes one of them.
+            # didn't read, so every kept file there is now is named
+            # (design, PR #199): pruning never deletes one of them.
             own = self._keep_held_aside([path])
             kept = [*own, *[name for name in self._held_kept_files() if name not in own]]
             note = {"count": None, "kept": kept, "at": now()}

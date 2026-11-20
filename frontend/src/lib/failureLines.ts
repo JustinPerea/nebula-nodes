@@ -49,8 +49,8 @@ export function modelKeyMissingText(name: string, keys: readonly string[]): stri
 }
 
 /** backend main.MODEL_SETTINGS_FAILURE_HEADER and its values: reading the
- * provider's settings failed, or the provider's key isn't set (review 13,
- * L-5). A malformed model id carries none. */
+ * provider's settings failed, or the provider's key isn't set (design). A
+ * malformed model id carries none. */
 export const MODEL_SETTINGS_FAILURE_HEADER = 'X-Nebula-Failure';
 export const MODEL_SETTINGS_FAILURE = 'model-settings';
 export const MISSING_KEY_FAILURE = 'missing-key';

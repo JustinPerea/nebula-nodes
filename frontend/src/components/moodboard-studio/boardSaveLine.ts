@@ -302,12 +302,12 @@ export function changedAfterRemoveLine(numbers: readonly number[], by: string | 
 }
 
 /**
- * The confirmation once Restore project's replayed edits are saved (round
- * 6n, GM r71), naming the project and, as the purged line does, the boards
- * whose kept edit was sent and saved (one; up to three joined; then a
- * count). With none saved (the boards kept every change), the first
- * sentence alone. The title lists every board, then the project, with no
- * colon (GM r74): "“Rivers”, “Tide”, “Harbor” and “Quiet” in “Coast”".
+ * The confirmation once Restore project's replayed edits are saved (design),
+ * naming the project and, as the purged line does, the boards whose kept edit
+ * was sent and saved (one; up to three joined; then a count). With none saved
+ * (the boards kept every change), the first sentence alone. The title lists
+ * every board, then the project, with no colon (design): "“Rivers”, “Tide”,
+ * “Harbor” and “Quiet” in “Coast”".
  * - "Restored “Coast”. Your change to “Rivers” is saved."
  * - "Restored “Coast”. Your changes to “Rivers” and “Tide” are saved."
  * - "Restored “Coast”. Your changes to 4 moodboards are saved."

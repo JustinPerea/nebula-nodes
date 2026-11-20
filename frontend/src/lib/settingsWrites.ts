@@ -88,20 +88,19 @@ function confirm(update: Partial<SettingsDraft>) {
 /** The codes the backend puts beside a settings write's 409 (main
  * SETTINGS_UNREADABLE_CODE, KEYS_UNREADABLE_CODE, SETTINGS_UNWRITABLE_CODE,
  * SETTINGS_NOT_A_FOLDER_CODE, SETTINGS_BUSY_CODE): the file can't be read,
- * its keys can't, Nebula isn't allowed to change it or its folder (GM, PR
- * #203 r28 item 4, r31 item 1), a file is where its folder must be (r31
- * item 2), or another Nebula is saving the settings (r38 item 3). */
+ * its keys can't, Nebula isn't allowed to change it or its folder (GM,
+ * PR #203 r28 item 4, r31 item 1), a file is where its folder must be
+ * (design), or another Nebula is saving the settings (r38 item 3). */
 export const SETTINGS_BUSY_CODE = 'settings_busy';
 export const SETTINGS_REFUSAL_CODES: readonly string[] = [
   'settings_unreadable', 'keys_unreadable', 'settings_unwritable', 'settings_not_a_folder', 'settings_busy',
 ];
 
 /** The backend's own line for a settings write it refused over the settings
- * file itself (a 409 with one of SETTINGS_REFUSAL_CODES; GM r22 item 3, r28
- * item 4): it names the file by its path and what to do, worded for the
- * person, so the panel says it as it is, not a generic "try again" the
- * person can't act on. Picked by the code, never by the words. Any other
- * failure keeps its own line. */
+ * file itself (a 409 with one of SETTINGS_REFUSAL_CODES; design): it names the
+ * file by its path and what to do, worded for the person, so the panel says it
+ * as it is, not a generic "try again" the person can't act on. Picked by the
+ * code, never by the words. Any other failure keeps its own line. */
 export function unreadableSettingsLine(error: unknown): string | null {
   if (!(error instanceof RequestFailedError) || error.status !== 409) return null;
   return error.code && SETTINGS_REFUSAL_CODES.includes(error.code) && typeof error.detail === 'string' && error.detail
@@ -283,9 +282,9 @@ function labelFor(key: string) {
 
 /** "fal.ai key", and "Krea · API key" as it is: a row label that already
  * ends in "key" ("Krea · API key", "Krea · usage key") takes no second one.
- * Each provider says its own noun, the word its link uses
- * (`credentialNoun`): "Hugging Face token", "Replicate token" (GM, PR #203
- * r23; r25 item 3, every provider). */
+ * Each provider says its own noun, the word its link uses (`credentialNoun`):
+ * "Hugging Face token", "Replicate token" (design, PR #203; every
+ * provider). */
 export function keyNoun(key: string) {
   const label = labelFor(key);
   const spec = PROVIDER_KEY_SPECS[key];
@@ -298,11 +297,11 @@ export function keyNoun(key: string) {
   return /\bkey$/i.test(label) ? label : `${label} key`;
 }
 
-/** What an open panel says, politely, when a key is set or removed
- * somewhere else: another window, the desktop app, a script with the
- * person token (the CLI only reads keys). GM, PR #203 r21 item 4, with r25
- * item 3's noun: "Replicate token saved." / "Replicate token removed.";
- * never "in another window", which may be false. Its own save's notice reads the
+/** What an open panel says, politely, when a key is set or removed somewhere
+ * else: another window, the desktop app, a script with the person token (the
+ * CLI only reads keys; design, PR #203), with each provider's own noun:
+ * "Replicate token saved." / "Replicate token removed."; never
+ * "in another window", which may be false. Its own save's notice reads the
  * same, with "Checking it now." after it. */
 export function keyChangedLine(key: string, set: boolean): string {
   return `${keyNoun(key)} ${set ? 'saved' : 'removed'}.`;

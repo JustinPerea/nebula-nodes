@@ -458,9 +458,9 @@ export function AgentLog() {
       } else {
         delete log.dataset.docked;
         clear(DOCK);
-        // A floating log gives way held at the edge away from the card (GM
-        // r7, r11; the region writes which on the root): layouts.css moves a
-        // log pinned by the other edge by exactly what it gives.
+        // A floating log gives way held at the edge away from the card (design;
+        // the region writes which on the root): layouts.css moves a log pinned
+        // by the other edge by exactly what it gives.
         log.dataset.floating = position?.anchorY === 'bottom' && typeof position.offsetY === 'number' ? 'bottom' : 'top';
         const box = log.getBoundingClientRect();
         if (box.width > 0 && box.height > 0) {

@@ -1170,8 +1170,7 @@ def _cost_line(cost: dict[str, Any]) -> str:
     free_ids = ["local" if entry.get("label") == LOCAL_LABEL else str(entry.get("runsOn") or entry.get("provider") or "local")
                 for entry in entries if entry.get("kind") == "free"]
     # Entries that don't match the count, more or fewer: none is tagged,
-    # not even "(runs locally)", rather than tagging the first few (review
-    # 14, copy NIT-3).
+    # not even "(runs locally)", rather than tagging the first few (design).
     free_unsure = bool(free_ids) and len(free_ids) != free
     if len(free_ids) != free:
         free_ids = []

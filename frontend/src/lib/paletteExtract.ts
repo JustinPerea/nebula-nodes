@@ -447,8 +447,8 @@ function nameAtFullResolution(out: Swatch[], threshold: number, evidence: EdgeEv
     const small = size(c) < EDGE_BLEND_SHARE;
     const big = !c.band && !c.black && !c.mode && !small;
     const pixels = ownPixels(refs, s, c.members, footprint, !c.band && !big);
-    // A big area: the real pixel of its own nearest its cluster's mean (GM
-    // r14), as for a noisy flat; never a lone most-populated tone.
+    // A big area: the real pixel of its own nearest its cluster's mean
+    // (design), as for a noisy flat; never a lone most-populated tone.
     if (big) {
       const shown = nearestTo(mine(pixels).list, c.rgb) ?? c.rgb.map((v) => Math.round(v));
       evidence.onBigCluster?.(c.rgb, shown);

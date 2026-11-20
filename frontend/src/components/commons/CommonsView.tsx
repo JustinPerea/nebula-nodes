@@ -477,10 +477,10 @@ function CommonsViewBody({ view }: {
   // "No collections") shows only then: after a failure, or before the first answer, nothing was
   // read. The references' answer names its tab, so the Inbox's empty state never stands on All's.
   const [answered, setAnswered] = useState<{ references: Tab | null; collections: boolean }>({ references: null, collections: false });
-  // Round 18c (GM r30 2): the collections haven't answered: Add to says "Not loaded" and Add is
-  // disabled, both with the one reason. A tab not connected as you keeps its lock (round 18, GM
-  // r28 3: "No collections", locked, with Add's lock line). Round 18d (GM r32 2): only when they
-  // never loaded in this view; a failed re-read keeps the last good list, live, beside its line.
+  // The collections haven't answered: Add to says "Not loaded" and Add is disabled, both with the
+  // one reason. A tab not connected as you keeps its lock (design: "No collections", locked, with
+  // Add's lock line). Only when they never loaded in this view; a failed re-read keeps the last
+  // good list, live, beside its line.
   const collectionsNotLoaded = !answered.collections && !addLock.locked;
   const noteAnswered = useCallback(<K extends keyof typeof answered>(load: K, value: (typeof answered)[K]) =>
     setAnswered((current) => (current[load] === value ? current : { ...current, [load]: value })), []);

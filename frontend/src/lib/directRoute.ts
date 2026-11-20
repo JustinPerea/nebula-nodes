@@ -948,12 +948,12 @@ export function providerLabel(provider: string | null | undefined): string {
  * on `provider` shows it. A display name that ends by naming its own
  * gateway ("Grok Imagine 2.0 (Krea)", "Nano Banana (FAL)") names the
  * provider the run actually goes through instead, by the label the running
- * card uses for that route ("xAI · 6s": providerLabel). GM - Design, round
- * 16 (b), verbatim: "when the dialog builds the label, no parens: "Grok
- * Imagine 2.0 via xAI", "GPT Image 2.5 Flare via OpenAI"". On the gateway
- * itself it names the gateway the same way ("Grok Imagine 2.0 via Krea": round
- * 19, review 18 L-A) when the route depends on keys; else, or for a name that
- * names no provider, it is the display name (the card's own). A proposal's cost names the same route to agents (backend
+ * card uses for that route ("xAI · 6s": providerLabel). Verbatim from the
+ * design: "when the dialog builds the label, no parens: "Grok Imagine 2.0 via
+ * xAI", "GPT Image 2.5 Flare via OpenAI"". On the gateway itself it names the
+ * gateway the same way ("Grok Imagine 2.0 via Krea") when the route depends on
+ * keys; else, or for a name that names no provider, it is the display name (the
+ * card's own). A proposal's cost names the same route to agents (backend
  * services/canvas_proposals.py cost_for; node_route.name_on_route).
  */
 export function nameOnRoute(definition: RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>,

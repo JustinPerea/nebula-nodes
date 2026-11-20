@@ -88,8 +88,9 @@ _ID = re.compile(r"^[a-f0-9]{32}$")
 # ``\s``, which on a str also matches 0x1c-0x1f, 0x0b, 0x0c, 0x85 and the
 # Unicode spaces: one bit turns "]" (0x5d) into 0x1d, and reading that as a
 # space left a group's bracket open, so every record after it counted one
-# level deep and lost to the copy's older version with no row (review 5 of
-# PR #199, M-1). Every pattern below that means JSON whitespace uses _WS.
+# level deep and lost to the copy's older version with no row
+# (design, PR #199). Every pattern below that means JSON whitespace
+# uses _WS.
 _WS = r"[ \t\n\r]"
 _JSON_SPACE = " \t\n\r"
 # A record's key in a catalog file: a project id, then the record's object.
@@ -1032,12 +1033,12 @@ def _resolve_misfiled(found: Salvage, copy_ids: set[str]) -> list[dict[str, Any]
             found.groups.setdefault(true_id, group)
             found.partial.setdefault(true_id, _scalars(entry))
     found.misfiled = []
-    # A record that failed under a key the copy doesn't have, a single
-    # character off a copy record the damage left unread: the damage hit its
-    # key, and its own id too (else it was misfiled above), as in fix round
-    # 5's gate run of review 4's two-flip set (Old's key "9311…" -> "1311…",
-    # its id field "…9883=1f4…"). It is that copy record, unread: never a
-    # project of its own nor one deleted after the copy (cameBack).
+    # A record that failed under a key the copy doesn't have, a single character
+    # off a copy record the damage left unread: the damage hit its key, and its
+    # own id too (else it was misfiled above), as in the 1,500-set two-flip gate
+    # run behind test_project_catalog_restore_fix5 (Old's key "9311…" ->
+    # "1311…", its id field "…9883=1f4…"). It is that copy record, unread: never
+    # a project of its own nor one deleted after the copy (cameBack).
     for key_id in [key for key in found.failed if key not in copy_ids and key not in found.entries]:
         damaged = _one_off_copy_id(found, {key_id}, copy_ids)
         if damaged is None:
@@ -1237,9 +1238,8 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
                     # before restores were dated, or a copy dated by a clock
                     # that ran ahead, its dates since past): the copy's
                     # stays, and says so. Never by a date from the future in
-                    # the copy; the damaged file's count as now (review 4,
-                    # M-3; review 5, M-2). The damaged file's version is in
-                    # the kept damaged file.
+                    # the copy; the damaged file's count as now (design). The
+                    # damaged file's version is in the kept damaged file.
                     if trashed(current) and not trashed(entry) and found.entry_groups.get(entry_id) != "trash":
                         back_in_trash.append({"id": entry_id, "name": current["name"]})
                     else:

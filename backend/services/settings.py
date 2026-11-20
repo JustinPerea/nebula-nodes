@@ -151,9 +151,9 @@ def settings_writable() -> bool:
 
 
 # The OSErrors that say there is no settings file: not found, and a folder
-# on the way that is a file (ENOTDIR: nothing can be there, and before round
-# 14 exists() said False for it; review 14, settings-gate HIGH-1). Every
-# other OSError is a file Nebula can't read.
+# on the way that is a file (ENOTDIR: nothing can be there, and before this
+# was handled, exists() said False for it; design). Every other OSError is a
+# file Nebula can't read.
 _NO_FILE_ERRORS = (FileNotFoundError, NotADirectoryError)
 
 
@@ -302,8 +302,8 @@ def load_settings() -> dict[str, Any]:
         # Keys Nebula can't read (an `apiKeys` that isn't an object): no key
         # is set, for every reader, as a key that is empty once trimmed
         # isn't. The file keeps them as saved: a write starts from
-        # load_saved_settings and never replaces them with a guess (review
-        # 10 of PR #203, NIT-6; main.KEYS_UNREADABLE).
+        # load_saved_settings and never replaces them with
+        # a guess (design, PR #203; main.KEYS_UNREADABLE).
         settings["apiKeys"] = {}
 
     return settings
@@ -435,24 +435,23 @@ def save_settings(settings: dict[str, Any]) -> None:
         to_write["apiKeys"] = {}
     text = json.dumps(to_write, indent=2) + "\n"
 
-    # Whole or not at all wherever the file can be replaced (PR #203 round
-    # 15; review 16, settings MEDIUM-1): the new settings go to a temp file
-    # beside the old one, which takes the old file's mode, owner, ACL and
-    # extended attributes, then replace it in one rename. Only a file a
-    # rename would break (a second name, another owner Nebula can't give it
-    # back to) or one whose folder takes no temp file, whose metadata can't
-    # be carried, or whose rename is refused, is written in place. That
-    # write isn't atomic, and it is bounded so a failure leaves the old
-    # settings or the new: the file grows first, then the new text goes over
-    # the old, then it is cut to length (_overwrite), with a verified copy of
-    # the old file kept in Nebula's copy folder until it is done (_keep_backup;
-    # restored at the next start when the file doesn't parse,
-    # restore_settings_from_backup). The whole save holds an exclusive lock
-    # where the filesystem supports flock (_save_lock), so two Nebulas never
-    # interleave; PUT and DELETE settings hold it from their read to their
-    # save (settings_transaction). Refused only when neither way can write
-    # (settings_write_block), or when Nebula's own folder takes no copy for
-    # an in-place write; the file is then left as it was.
+    # Whole or not at all wherever the file can be replaced (design, PR #203):
+    # the new settings go to a temp file beside the old one, which takes the
+    # old file's mode, owner, ACL and extended attributes, then replace it in
+    # one rename. Only a file a rename would break (a second name, another
+    # owner Nebula can't give it back to) or one whose folder takes no temp
+    # file, whose metadata can't be carried, or whose rename is refused, is
+    # written in place. That write isn't atomic, and it is bounded so a failure
+    # leaves the old settings or the new: the file grows first, then the new
+    # text goes over the old, then it is cut to length (_overwrite), with a
+    # verified copy of the old file kept in Nebula's copy folder until it is
+    # done (_keep_backup; restored at the next start when the file doesn't
+    # parse, restore_settings_from_backup). The whole save holds an exclusive
+    # lock where the filesystem supports flock (_save_lock), so two Nebulas
+    # never interleave; PUT and DELETE settings hold it from their read to
+    # their save (settings_transaction). Refused only when neither way can
+    # write (settings_write_block), or when Nebula's own folder takes no copy
+    # for an in-place write; the file is then left as it was.
     block = settings_write_block()
     if block is not None:
         raise block

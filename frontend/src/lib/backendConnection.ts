@@ -51,12 +51,11 @@ export function noteProbeAnswer(seq: number, next: BackendConnection): boolean {
 const probeAnswerListeners = new Set<() => void>();
 
 /**
- * Whether the tab is offline once a health probe has answered (PR #210 round
- * 6d, review 8 MEDIUM-2): a write that got no answer may be one dropped
- * request, or the backend gone. This asks for a probe now
- * (requestHealthProbe) and resolves when one answers, or the tab goes
- * offline, or after `timeoutMs` (with no banner mounted to probe), with
- * whether the tab is offline then.
+ * Whether the tab is offline once a health probe has answered
+ * (design, PR #210): a write that got no answer may be one dropped request, or
+ * the backend gone. This asks for a probe now (requestHealthProbe) and resolves
+ * when one answers, or the tab goes offline, or after `timeoutMs` (with no
+ * banner mounted to probe), with whether the tab is offline then.
  */
 export function probeOffline(timeoutMs = 5_000): Promise<boolean> {
   if (isBackendOffline()) return Promise.resolve(true);

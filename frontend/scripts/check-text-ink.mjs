@@ -192,7 +192,7 @@ function matchOutsideQuotes(pattern, text) {
   return null;
 }
 
-function splitTopLevel(text) {
+export function splitTopLevel(text) {
   const mask = quotedMask(text);
   const parts = [];
   let depth = 0;
@@ -296,7 +296,7 @@ function closingParen(text, open) {
 }
 
 /** Drop every `:not(...)` and `:has(...)` argument: neither one scopes a rule to a disabled control. */
-function dropNonScoping(part) {
+export function dropNonScoping(part) {
   let out = part;
   for (;;) {
     const match = matchOutsideQuotes(/:(?:not|has)\(/, out);
@@ -307,7 +307,7 @@ function dropNonScoping(part) {
 }
 
 /** Expand :is(...) / :where(...) into one selector per alternative, until none is left. */
-function expandAlternatives(part) {
+export function expandAlternatives(part) {
   const match = matchOutsideQuotes(/:(?:is|where)\(/, part);
   if (!match) return [part];
   const open = match.index + match[0].length - 1;
@@ -318,7 +318,7 @@ function expandAlternatives(part) {
 }
 
 /** The last compound selector: the part after the final combinator outside brackets and parentheses. */
-function lastCompound(part) {
+export function lastCompound(part) {
   const mask = quotedMask(part);
   let depth = 0;
   let cut = 0;
@@ -349,20 +349,13 @@ function stripPrefix(part) {
   return part.startsWith(`${PREFIX} `) ? part.slice(PREFIX.length + 1) : part;
 }
 
-/** Expand :is(a, b) at the end of a part into its alternatives (the only form the icon list needs). */
-function expandIs(part) {
-  const match = /^(.*?)(?::is|:where)\(([^()]*)\)(.*)$/.exec(part);
-  if (!match) return [part];
-  return splitTopLevel(match[2]).map((alt) => `${match[1]}${alt}${match[3]}`.trim());
-}
-
 /** One space around > + ~ and runs of spaces collapsed, so `.a+.b` and `.a  +  .b` match the listed `.a + .b`. */
 export function normaliseCombinators(selector) {
   return selector.replace(/\s*([>+~])\s*/g, ' $1 ').replace(/\s+/g, ' ').trim();
 }
 
 function isIconOnly(part) {
-  return expandIs(normaliseCombinators(stripPrefix(part))).every((alt) => ICON_ONLY.has(normaliseCombinators(alt)));
+  return expandAlternatives(normaliseCombinators(stripPrefix(part))).every((alt) => ICON_ONLY.has(normaliseCombinators(alt)));
 }
 
 function isDecoration(part) {
@@ -370,8 +363,7 @@ function isDecoration(part) {
 }
 
 function isSvgTextSelector(part) {
-  const lastCompound = part.split(/[\s>+~]+/).filter(Boolean).pop() ?? '';
-  return /^(text|tspan)(?![\w-])/.test(lastCompound);
+  return expandAlternatives(part).some((alt) => /^(text|tspan)(?![\w-])/.test(lastCompound(alt.trim())));
 }
 
 /** The TEXT declarations in one stylesheet that resolve to meta ink and are not exempt. */

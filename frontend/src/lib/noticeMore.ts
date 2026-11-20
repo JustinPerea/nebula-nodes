@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * The fold's count carried in an Undo notice's own row (GM - Design, PR #216
- * r8): "Moved “Hero shot” · Undo · 3 more", where "3 more" is a trailing
- * text button that opens the stack. The notice region decides which notice
- * carries it (lib/noticeStackPlace.ts `moreHost`) and writes it here; the
- * notice renders the button through NoticeMoreInline, after its Undo, so
- * the keyboard reaches the name, Undo, then "3 more".
+ * The fold's count carried in an Undo notice's own row (design, PR #216):
+ * "Moved “Hero shot” · Undo · 3 more", where "3 more" is a trailing text
+ * button that opens the stack. The notice region decides which notice carries
+ * it (lib/noticeStackPlace.ts `moreHost`) and writes it here; the notice
+ * renders the button through NoticeMoreInline, after its Undo, so the keyboard
+ * reaches the name, Undo, then "3 more".
  */
 export interface NoticeMoreState {
   /** The notice carrying it (the region's item), or null. */
