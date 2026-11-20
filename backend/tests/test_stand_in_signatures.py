@@ -1,5 +1,5 @@
 """Stand-ins for live methods take the keywords the real method takes
-(#222 round 3, item 5).
+(#222).
 
 A test that swaps a method of the live graph, the connection manager or
 agent_presence for a local function with ``monkeypatch.setattr`` broke twice

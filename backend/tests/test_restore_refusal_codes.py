@@ -1,4 +1,4 @@
-"""GM PR #205 r11 item 2: a bundle's graph.json refused for its shape.
+"""Design, PR #205: a bundle's graph.json refused for its shape.
 
 The restore's answer keeps ``detail``, the backend's exact words, which agents
 (MCP load_graph_file, ``nebula load``), HTTP callers and the log read. Beside
@@ -183,7 +183,7 @@ def test_an_agent_still_reads_the_backends_exact_words(api, tmp_path, monkeypatc
     assert str(caught.value).endswith(": graph.json is nested too deeply")
 
 
-# -- GM PR #205 r12: graph.json that isn't a Nebula graph, and the zip's own checks ---------
+# -- Design, PR #205: graph.json that isn't a Nebula graph, and the zip's own checks ---------
 
 import stat  # noqa: E402
 

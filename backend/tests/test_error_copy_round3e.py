@@ -1,10 +1,10 @@
-"""Error copy round 3e: a pre-run check's line for two readers (GM - Design).
+"""Error copy: a pre-run check's line for two readers (design).
 
-Round 3c split a node's run error in two: `error` is the specific text for
+An earlier pass split a node's run error in two: `error` is the specific text for
 agents, `person` is the line the canvas card shows. The pre-run check
 (execution/engine.validate_graph) still gave one text to both: "Missing API
 key: OPENAI_API_KEY", "Required input port prompt is not connected",
-"Batch has 3 items, exceeding its batch_size_cap of 2. ...". GM's rules: no
+"Batch has 3 items, exceeding its batch_size_cap of 2. ...". Design's rules: no
 ids, parameter keys or env-var names in what the person reads (a field by its
 label, an input in words); "people get the written line and agents keep the
 specific detail".
@@ -37,12 +37,12 @@ CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 
 KEY_LINE = "Add an OpenAI API key in Settings to run this node."
 PROMPT_LINE = "Connect a prompt to this node, then run it again."
-# A prompt and a key on one node: one line, ending once (GM, PR #203 r38 item 1).
+# A prompt and a key on one node: one line, ending once (design, PR #203).
 BOTH_LINE = "Connect the prompt and add your OpenAI API key in Settings, then run it again."
 OVER_CAP = ("This Batch has 3 items, more than its “Item cap” of 2. Remove items or raise the cap, then run it "
             "again. Nothing was generated.")
 
-# What no person line may say (GM): env-var names, parameter or port keys,
+# What no person line may say (design): env-var names, parameter or port keys,
 # quoted ids, Settings paths, parentheses, internal words.
 FORBIDDEN = re.compile(
     r"[A-Z][A-Z0-9]+_[A-Z0-9_]+|\b[a-z0-9]+_[a-z0-9_]+\b|'[\w./:-]+'|\(|\)|Settings >|recovery-aware|"
@@ -103,7 +103,7 @@ def test_an_unconfigured_universal_node_with_no_key_names_its_provider():
     errors = validate_graph([_node("n1", "fal-universal")], [], {})
     key = next(error for error in errors if error.message.startswith("Missing API key"))
     assert key.message == "Missing API key: FAL_KEY"
-    # With its prompt unwired too: one line, ending once (GM, PR #203 r38 item 1).
+    # With its prompt unwired too: one line, ending once (design, PR #203).
     assert _clean(key.person) == "Connect the prompt and add your fal.ai API key in Settings, then run it again."
 
 
@@ -213,10 +213,10 @@ def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch
     [error] = _for(validate_graph(nodes, [_edge("t", "text", "n1", "prompt")], keys), "n1")
     assert "can't run on Black Forest Labs" in error.message
     line = _clean(error.person)
-    # Round 3f: GM's words, the setting by its label in quotes; GM, PR #203
-    # r32: the node's name in quotes too.
+    # Design's words, the setting by its label in quotes; design, PR #203:
+    # the node's name in quotes too.
     assert line.startswith("“Fixture Image” can’t run on Black Forest Labs with “Safety tolerance” set to 6.")
-    # GM r31 item 3: who can take it is named in the one action sentence.
+    # Design: who can take it is named in the one action sentence.
     assert line.endswith("Change that setting, or switch to fal.ai.")
 
 
@@ -237,7 +237,7 @@ def test_the_gemini_guardrail_shows_as_it_is():
              _node("n1", "gemini-omni-flash", {"task": "edit"})]
     errors = _for(validate_graph(nodes, [_edge("t", "text", "n1", "prompt")], {"GOOGLE_API_KEY": "set"}), "n1")
     [error] = [e for e in errors if e.message == GEMINI_OMNI_EXTENSION_ERROR]
-    # Round 3f: the card's line follows GM's rules; agents keep the text.
+    # The card's line follows design's rules; agents keep the text.
     from services.provider_capabilities import GEMINI_OMNI_EXTENSION_LINE
     assert error.person == GEMINI_OMNI_EXTENSION_LINE
 
@@ -259,7 +259,7 @@ def _contracts(nodes: list[tuple[str, str]], edges: list[tuple[str, str, str, st
 def test_a_wire_of_the_wrong_kind_names_the_input_by_its_label():
     [issue] = _contracts([("a", "image-input"), ("b", "gpt-image-1-generate")], [("a", "image", "b", "prompt")])
     assert issue.message.startswith("Incompatible port types: source 'image' on node a")
-    # Round 3g (GM): the port's label in quotes.
+    # Design: the port's label in quotes.
     assert _clean(issue.person) == ("The connection into “Prompt” brings something it can't take. "
                                     "Remove that connection, then connect a matching output.")
 
@@ -269,7 +269,7 @@ def test_too_many_wires_into_one_input_has_a_line():
                         [("a", "text", "b", "prompt"), ("c", "text", "b", "prompt")])
     [issue] = [i for i in issues if "multiple connections" in i.message]
     assert issue.message == "Input port 'prompt' on node b does not allow multiple connections"
-    # Round 3g (GM): the port's label in quotes.
+    # Design: the port's label in quotes.
     assert _clean(issue.person) == "“Prompt” takes one connection. Remove the extra one, then run the node again."
 
 
@@ -326,7 +326,7 @@ def test_the_canvas_reads_the_person_line_and_agents_the_specific_text(canvas):
     canvas_run = client.post("/api/execute", json={"nodes": nodes, "edges": []}).json()
     assert canvas_run["status"] == "validation_error"
     by_message = {error["message"]: error for error in canvas_run["errors"]}
-    # A prompt and a key: one line, ending once (GM, PR #203 r38 item 1).
+    # A prompt and a key: one line, ending once (design, PR #203).
     assert by_message["Missing API key: OPENAI_API_KEY"]["person"] == BOTH_LINE
     assert by_message["Required input port prompt is not connected"]["person"] == BOTH_LINE
 
@@ -358,7 +358,7 @@ def test_an_agents_refused_run_keeps_its_text_word_for_word(canvas):
     # The agent's cursor on the canvas says the person's line, not the keys.
     [said] = [m["say"] for m in sent if m.get("type") == "agentPresence" and "needs" in str(m.get("say"))]
     assert "OPENAI_API_KEY" not in said and "'prompt'" not in said
-    # GM, PR #203 r39 item 5: the bubble says the needs sentence only (r38 kept the "Connect ..." second sentence).
+    # Design, PR #203: the bubble says the needs sentence only (the earlier version kept the "Connect ..." second sentence).
     assert said.endswith("needs a prompt and your OpenAI API key.")
     assert "Connect the prompt" not in said
 
@@ -408,7 +408,7 @@ def test_a_check_only_agents_reach_reads_the_general_line_after_a_reload():
     errors.record_validation([ValidationErrorDetail(node_id="n1", port_id="",
                                                     message="Duplicate node id 'n1' makes edge endpoints ambiguous")])
     card = errors.card("n1")
-    # No line: the card shows GM's general line with the text behind Details.
+    # No line: the card shows design's general line with the text behind Details.
     assert "errorPerson" not in card and card["errorCategory"] == "unknown"
     assert errors.get("n1") == {"error": "Duplicate node id 'n1' makes edge endpoints ambiguous"}
 

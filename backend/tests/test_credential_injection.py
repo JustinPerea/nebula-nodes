@@ -58,7 +58,7 @@ ALLOWED_PROVIDERS = {
 def _restore_settings_module(monkeypatch):
     """Each test's injected keys are put back after it, by monkeypatch, as
     is NEBULA_SETTINGS_PATH, which services.settings reads at each call.
-    Nothing reloads the module (review 13 of PR #203, LOW-2): a reload made
+    Nothing reloads the module (PR #203): a reload made
     new copies of its classes and dicts that earlier imports didn't see."""
     import services.settings as _s
     monkeypatch.setattr(_s, "_INJECTED_KEYS", dict(_s._INJECTED_KEYS))

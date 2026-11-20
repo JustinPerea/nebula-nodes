@@ -1,23 +1,23 @@
-"""PR #199 review 5: what fix round 5 makes true (2026-10-28).
+"""PR #199: what the fix makes true (2026-10-28).
 
-- M-1. Salvage reads JSON's whitespace only (space, tab, LF, CR), never
+- Salvage reads JSON's whitespace only (space, tab, LF, CR), never
   Python's ``\\s``: one bit turning an earlier record's ``]`` into 0x1d no
   longer hides every record after it. The structural sweep runs with the
   changed record first, in the middle and last.
-- M-2. Future dates are judged by file order: in the newer file a date
+- Future dates are judged by file order: in the newer file a date
   ahead of the clock counts as now, in the older file it is left out. A
   whole record that still loses to the copy by its dates gets a
   ``reverted`` row, and its newer version is in the kept damaged file.
-- M-3. The waiting canvas is held aside (``canvas-held.json``) before
+- The waiting canvas is held aside (``canvas-held.json``) before
   anything replaces it: opening a project works for the person and agents
   while it waits; an agent's clear or graph load at the limit is refused
   (409 ``canvas_waiting``) and below it holds the canvas first. Only the
   held copy is ever filed as the person's canvas.
-- L-1. catalog-purged.json says which commit it is of (``commit``, the
+- catalog-purged.json says which commit it is of (``commit``, the
   catalog's ``commitSeq``): a side file that couldn't be rewritten is older
   than the copies that hold a project made again, and they decide it.
-- L-2. MCP's restore_from_trash says the 413, the limit and its number.
-- L-3. The side file is written before the catalog's rename, so no crash
+- MCP's restore_from_trash says the 413, the limit and its number.
+- The side file is written before the catalog's rename, so no crash
   leaves a landed delete-for-good without it.
 """
 from __future__ import annotations
@@ -71,7 +71,7 @@ def _where(catalog: dict, project_id: str) -> str:
     return "trash" if project_id in (catalog.get("trash") or {}) else "gone"
 
 
-# -- M-1: JSON's whitespace, never Python's \s ------------------------------------------
+# -- JSON's whitespace, never Python's \s ------------------------------------------
 
 
 def test_m1_no_salvage_pattern_uses_pythons_whitespace_class():
@@ -87,7 +87,7 @@ def test_m1_no_salvage_pattern_uses_pythons_whitespace_class():
 
 @pytest.mark.parametrize("bit", range(8))
 def test_m1_a_flipped_bracket_in_an_earlier_record_never_hides_a_later_ones_newest_version(tmp_path, bit):
-    """Review 5's dbg_bracket and live B: Dunes, Middle, Logo; Logo renamed
+    """dbg_bracket and live B: Dunes, Middle, Logo; Logo renamed
     "Logo v2" after the copy; one bit of Middle's ``"nodes":[]``. Bit 6
     turns ``]`` into 0x1d, which ``\\s`` read as a space."""
     store = ProjectStore(tmp_path / "b")
@@ -130,9 +130,9 @@ def test_m1_the_trimmed_text_between_records_is_json_whitespace_only():
 
 
 def _with_logo_at(tmp_path: Path, where: str):
-    """Review 4's fuzz base with Logo's record (the one changed after the
+    """Fuzz base with Logo's record (the one changed after the
     copy) moved first, to the middle, or last, in the copy and catalog.json
-    alike (prepare keeps key order), .bak.1 gone as in review 5's g1."""
+    alike (prepare keeps key order), .bak.1 gone as in the g1 case below."""
     base, ids = _fuzz_base(tmp_path)
     for name in (store_module.BACKUP_NAME, "catalog.json"):
         path = base.root / name
@@ -153,8 +153,8 @@ def _with_logo_at(tmp_path: Path, where: str):
 
 @pytest.mark.parametrize("where", ["middle", "last"])
 def test_m1_every_bit_of_every_structural_byte_with_the_changed_record_anywhere(tmp_path, quick_disk, where):
-    """Review 5's g1 (16 silent reverts with Logo last), for every place the
-    changed record can sit: 0 silent reverts. First is fix round 4's own
+    """g1 (16 silent reverts with Logo last), for every place the
+    changed record can sit: 0 silent reverts. First is test_m2's own
     sweep (test_m2_every_bit_of_every_structural_byte_never_reverts_silently:
     Logo is the first record of _fuzz_base)."""
     base, ids = _with_logo_at(tmp_path, where)
@@ -172,7 +172,7 @@ def test_m1_every_bit_of_every_structural_byte_with_the_changed_record_anywhere(
 
 
 def test_a_record_whose_key_and_unreadable_id_both_changed_is_never_deleted_after_the_copy(tmp_path):
-    """Found by this round's gate run of review 4's 1,500 two-flip set (its
+    """Found by a gate run of the 1,500 two-flip set (its
     ids are random, so a pair lands on new bytes each run): Old's key
     changed to another valid id one character off ("9311…" -> "1311…") and
     its own id field to one that isn't an id ("…9883=1f4…"). The file still
@@ -190,7 +190,7 @@ def test_a_record_whose_key_and_unreadable_id_both_changed_is_never_deleted_afte
     assert _verdict(store, catalog, ids, error) == "ok", store.restore_notice()
 
 
-# -- M-2: future dates by file order ---------------------------------------------------
+# -- Future dates by file order ---------------------------------------------------
 
 
 def _ahead(monkeypatch, hours: float) -> None:
@@ -205,7 +205,7 @@ def _edit(store: ProjectStore, project_id: str, name: str) -> None:
 
 
 def test_m2_the_newest_copy_written_while_ahead_still_wins_and_nothing_is_lost(tmp_path, monkeypatch):
-    """Review 5's c1: .bak.1 with a correct clock, then the clock 3 h ahead
+    """c1: .bak.1 with a correct clock, then the clock 3 h ahead
     (R edited again, Gamma made: only in .bak), then corrected and
     catalog.json zeroed. .bak must win; Gamma survives two more commits."""
     store = ProjectStore(tmp_path / "p")
@@ -247,7 +247,7 @@ def test_m2_the_newest_copy_written_while_ahead_still_wins_and_nothing_is_lost(t
 
 
 def test_m2_a_whole_record_edited_while_ahead_beats_the_copys_older_version(tmp_path, monkeypatch):
-    """Review 5's c2: catalog.json holds Alpha's edit made 3 h ahead, .bak the
+    """c2: catalog.json holds Alpha's edit made 3 h ahead, .bak the
     one before; the clock is corrected; catalog.json is torn by 2 bytes."""
     store = ProjectStore(tmp_path / "p")
     with store.transaction() as catalog:
@@ -272,9 +272,9 @@ def test_m2_a_whole_record_that_loses_by_its_dates_is_reverted_and_still_in_the_
     """The clock ran 3 h ahead when the copy's version was written, and that
     date is now in the past; the damaged file's whole record was written
     later with a corrected clock, so its date is earlier. The copy's
-    version wins by the dates, so the row says it went back, and GM's
+    version wins by the dates, so the row says it went back, and design's
     "went back to its version in the copy" holds only because the newer
-    version is still in the kept damaged file (GM round 5, 1)."""
+    version is still in the kept damaged file (design)."""
     store = ProjectStore(tmp_path / "p")
     monkeypatch.setattr(store_module, "now", lambda: (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat())
     with store.transaction() as catalog:
@@ -326,7 +326,7 @@ def test_m2_the_older_copy_needs_a_later_commit_too(tmp_path, monkeypatch):
     assert beta["id"] in restored["projects"]
 
 
-# -- L-1 / L-3: catalog-purged.json knows its commit -----------------------------------
+# -- catalog-purged.json knows its commit -----------------------------------
 
 
 def _purge_setup(tmp_path: Path):
@@ -365,7 +365,7 @@ def test_l1_every_commit_is_numbered_and_the_side_file_says_which_it_is_of(tmp_p
 
 
 def test_l1_a_side_file_that_cant_be_rewritten_never_drops_a_project_made_again(tmp_path, monkeypatch, capsys):
-    """Review 5's s8: X deleted for good (side file written), then the side
+    """s8: X deleted for good (side file written), then the side
     file can't be rewritten; the recover retry makes X again with its id;
     two commits follow, so .bak holds X live; catalog.json is zeroed."""
     store, _alpha, x = _purge_setup(tmp_path)
@@ -490,11 +490,11 @@ def test_l3_a_crash_before_a_remake_lands_keeps_the_delete_that_did_land(tmp_pat
     assert _where(restored, x) == "gone"
 
 
-# -- L-2: MCP gets the whole refusal ---------------------------------------------------
+# -- MCP gets the whole refusal ---------------------------------------------------
 
 
 def test_l2_mcp_restore_passes_the_limit_and_new_project_says_the_413_and_its_number(app, monkeypatch):
-    """Fix round 12 (Justin, 2026-10-29): an agent's restore_from_trash may
+    """Justin, 2026-10-29: an agent's restore_from_trash may
     pass the limit; its new_project past it is still refused with the
     existing line (and HTTP's 413 body names the limit)."""
     client, store, graph, state = app
@@ -515,7 +515,7 @@ def test_l2_mcp_restore_passes_the_limit_and_new_project_says_the_413_and_its_nu
                               "projectCount": 4, "deletes": 2}
 
 
-# -- M-3: the waiting canvas is held aside --------------------------------------------
+# -- The waiting canvas is held aside --------------------------------------------
 
 
 _real_commit_prepared = ProjectStore.commit_prepared
@@ -524,8 +524,8 @@ _real_commit_prepared = ProjectStore.commit_prepared
 def _waiting(client, store, graph, state, monkeypatch, owner="e" * 32) -> list[str]:
     """Three projects at a limit of 3, the live canvas unfiled and waiting,
     holding a node no project has. Added as the person's (no tab: the person
-    can't reach a waiting canvas from one), since an agent's add at the
-    limit is refused from fix round 6 on (review 6, M-1)."""
+    can't reach a waiting canvas from one), because an agent's add at the
+    limit is refused (409 canvas_waiting)."""
     ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, owner)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasNotFiled"]["reason"] == "projects"
@@ -583,7 +583,7 @@ def test_m3_opening_a_project_while_the_canvas_waits_holds_it_and_opens(app, mon
 
 
 def test_m3_an_agent_can_open_an_existing_project_while_the_canvas_waits(app, monkeypatch):
-    """GM's refusal tells agents to open an existing project: it must work."""
+    """Design's refusal tells agents to open an existing project: it must work."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=client))
@@ -608,7 +608,7 @@ def test_m3_a_clear_or_graph_load_at_the_limit_is_refused_and_changes_nothing(ap
     assert response.status_code == 409, response.text
     body = response.json()
     assert body["code"] == "canvas_waiting" and body["reason"] == "projects"
-    # GM r11 #3 (fix round 9): the person's own lines were dropped as
+    # Design: the person's own lines were dropped as
     # unreachable from the tab; a person request that gets here anyway is
     # still refused, in the one set of lines.
     assert body["detail"] == main_module.CANVAS_WAITING_REFUSAL
@@ -658,12 +658,12 @@ def test_m3_below_the_limit_a_clear_or_load_holds_the_canvas_first(app, monkeypa
     else:
         response = client.request("DELETE", "/api/graph?force=true", headers=AGENT)
     assert response.status_code == 200, response.text
-    # Fix round 8 (GM's rule (a)): filed untouched first, never opened.
+    # Design's rule (a): filed untouched first, never opened.
     assert response.json()["savedCanvas"]["name"] == "Recovered canvas"
     assert _held(store) == []
     events = [call.args[0] for call in sent.call_args_list if call.args and call.args[0].get("type") == "projectsChanged"]
     action = "replaced" if route == "import" else "cleared"
-    # The agent's own row from fix round 6 on (GM r7): its id and colour too.
+    # The agent's own row from then on (design): its id and colour too.
     assert any(event.get("change") == "canvasHeld" and {"action": action, "agent": "Probe", "agentId": "ext:probe",
                                                         "savedAs": "Recovered canvas"}.items()
                <= (event.get("canvasHeld") or {}).items() for event in events)
@@ -691,7 +691,7 @@ def test_m3_the_hold_is_on_disk_before_the_open_writes_the_canvas(app, monkeypat
 
 
 def test_m3_a_failed_open_keeps_its_hold_and_the_next_settle_drops_it_by_digest(app, monkeypatch):
-    """Fix round 6 (review 6, L-2): a failed open never gives its hold back;
+    """A failed open never gives its hold back;
     the next settle drops the copy because the live canvas, on disk too, is
     that canvas, so it is filed once."""
     client, store, graph, state = app
@@ -797,8 +797,8 @@ def test_m3_an_agent_opening_right_after_more_edits_holds_every_edit(app, monkey
 
 
 def test_m3_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch):
-    """Below the limit an agent's apply holds the waiting canvas first (fix
-    round 6, M-1), then lands on the canvas with no project; its undo then
+    """Below the limit an agent's apply holds the waiting canvas first, then
+    lands on the canvas with no project; its undo then
     works there and never reaches the held copy."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
@@ -806,7 +806,7 @@ def test_m3_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch)
     applied = client.post("/api/graph/apply", headers=AGENT,
                           json={"note": "x", "nodes": [{"ref": "+a", "definitionId": "text-input", "params": {"value": "applied"}}]})
     assert applied.status_code == 200, applied.text
-    # Fix round 8 (GM's rule (a)): the person's canvas is filed first, and
+    # Design's rule (a): the person's canvas is filed first, and
     # the apply is on a copy (waiting: the free place went to the canvas).
     assert _held(store) == []
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
@@ -883,5 +883,5 @@ def test_m3_nothing_in_it_is_lost_on_every_path(app, monkeypatch):
     assert _held(store) == []
 
 
-# The route-coverage test (every canvas replacement) became fix round 6's
-# fence-based one: tests/test_project_catalog_restore_fix6.py (review 6, N-6).
+# The route-coverage test (every canvas replacement) became the
+# fence-based one: tests/test_project_catalog_restore_fix6.py.

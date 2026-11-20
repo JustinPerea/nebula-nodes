@@ -71,7 +71,7 @@ def test_an_agent_run_a_node_cannot_start_fails_on_its_card_before_anything_runs
     # The canvas gets the same event a refused click on Run sends, so the card shows it.
     refused = [m for m in sent if m.get("type") == "validationError"]
     assert refused and refused[0]["runId"] == body["runId"]
-    # Error copy round 3e: the event also carries the card's line, beside the agents' text.
+    # Error copy: the event also carries the card's line, beside the agents' text.
     assert {"nodeId": image, "portId": "", "message": "Missing API key: OPENAI_API_KEY",
             "person": "Add an OpenAI API key in Settings to run this node.", "missingKey": True} in refused[0]["errors"]
     # Agents read it too, and the journal says whose run failed where.
@@ -88,7 +88,7 @@ def agent_log(monkeypatch):
     """What the canvas's Agent log lists, from both of its sources: an
     in-app chat turn's lines (publish_action's `thinking` events, shown as
     they are) and each agent cursor event's line, its `log` else its `say`
-    (frontend agentLogStore.agentActionEntry). GM, PR #203 r30 item 1: a
+    (frontend agentLogStore.agentActionEntry). Design, PR #203: a
     refused run is one line there, whoever asked."""
     import main
     from services.chat_actions import register_action_handler, unregister_action_handler
@@ -110,7 +110,7 @@ def agent_log(monkeypatch):
 
 
 def test_a_refused_run_tells_the_agent_log_the_persons_line(canvas, monkeypatch, agent_log):
-    """Error copy round 3e review: the Agent Log is on the person's canvas, so
+    """Error copy review: the Agent Log is on the person's canvas, so
     a refused run reads the card's line there, never the key or the node id.
     The agent's answer keeps both (`error`, `errors`)."""
     client, main, _sent, _prompt, image = canvas
@@ -119,7 +119,7 @@ def test_a_refused_run_tells_the_agent_log_the_persons_line(canvas, monkeypatch,
     body = client.post("/api/graph/run", json={"targetNodeId": image}, headers=CLAUDE).json()
 
     assert "OPENAI_API_KEY" in body["error"] and image in body["error"]
-    # GM, PR #203 r29 item 3: the card's heading and the bar's reason.
+    # Design, PR #203: the card's heading and the bar's reason.
     [line] = [text for text in agent_log if text.startswith("Nebula couldn’t start the run.")]
     assert line == (f"Nebula couldn’t start the run. “{main._node_label(image)}” needs your OpenAI API key. "
                     "Add it in Settings, then run the node again.")

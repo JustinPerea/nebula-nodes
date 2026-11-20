@@ -1,9 +1,9 @@
-"""Nebula says connected, never wired (GM - Design, 2026-10-25), beyond the
+"""Nebula says connected, never wired (design, 2026-10-25), beyond the
 cursor bubbles (test_connected_copy.py): the canvas record (`nebula watch`,
 `nebula history`), edit and undo summaries, refusals, the CLI, the MCP tool
 docs agents read, the docs and the node descriptions.
 
-Second pass (GM - Design's ruling on the leftovers): the verb is "connect"
+Second pass (design's ruling on the leftovers): the verb is "connect"
 everywhere ("Can't connect", "Connect it:", "Connect the audio track ..."), an
 unwired required input is "a required input with nothing connected", and the
 noun is "connection(s)" ("Connections" in project size, CONNECTIONS: in
@@ -15,7 +15,7 @@ and every docstring in mcp_server.py (agents read the MCP tools' docs), with
 `backtick spans` and the --wire / --unwire flags taken out first, and fails on
 "wire", "wires", "wired", "wiring" or "unwired", apart from the field keys,
 reason codes, part names and pricing tokens listed in ALLOWED (code
-identifiers, which GM said to leave alone). Other docstrings are for people
+identifiers, which design said to leave alone). Other docstrings are for people
 reading the code.
 """
 from __future__ import annotations
@@ -225,7 +225,7 @@ def test_the_ratchet_reads_mcp_docstrings_and_skips_backticks_and_flags():
     assert WIRE_WORDS.search(_NOT_PROSE.sub("", "deletes nodes or wires")) is not None
 
 
-# -- second pass: GM - Design's ruling on the leftovers --------------------------------------
+# -- second pass: design's ruling on the leftovers --------------------------------------
 
 def _texts(rel: str) -> str:
     """Every string in a backend file as a person or agent reads it: an
@@ -430,7 +430,7 @@ def test_an_agent_run_with_two_inputs_on_the_sized_port_names_them(api, monkeypa
             "Disconnect all but one, or propose it.") in detail
 
 
-# -- third pass: GM - Design's words for the leftovers, and the review's findings ----------
+# -- third pass: design's words for the leftovers, and the review's findings ----------
 
 def test_arrange_says_each_step_of_connecting_the_nodes():
     from services.canvas_edits import ArrangeRequest
@@ -590,7 +590,7 @@ def test_nebula_delete_keeps_the_id(capsys, ref, label, shown):
     assert capsys.readouterr().out == shown + "\n"
 
 
-# -- the docs agents read: the same ratchet over their prose (review 3, finding 6) -------------
+# -- the docs agents read: the same ratchet over their prose -------------
 
 # Prose the docs ratchet doesn't read: fenced code, `backtick spans`, the
 # --wire / --unwire flags, and the one line that names the old word to say

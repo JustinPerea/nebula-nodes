@@ -736,7 +736,7 @@ const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An
 /** The first words of the provider and app names Nebula's own lines open with ("Krea’s style images …", "Paper
  * can’t find …"): a short copy of the copy lint's proper names (scripts/copy-lint-rules.json), not the whole list,
  * to keep the startup bundle small. tests/nameLeads.guard.test.ts fails when the lint learns a name this list lacks. */
-const NAME_LEADS = /^(?:Gemini|Nano|Veo|Kling|Claude|Codex|Remotion|Hugging|World Labs|Black Forest|Nebula|Krea|Obsidian|Figma|Google|Vertex|Anthropic|Replicate|Runway|Ideogram|Meshy|Higgsfield|Seedream|Seedance|Grok|Luma|Recraft|Demucs|Whisper|Lyria|Imagen|Hunyuan|Quiver|Nous|Chrome|Electron|Opus|Sonnet|Haiku|Lottie|Tripo|Rodin|Qwen|Pika|Vidu|Topaz|Magnific|Hailuo|Paper|Wan|Jev|Speridlabs|Hermes|Mac|Windows|Linux|Cinema Studio|Character Studio|Moodboard Studio|Creator Studio|Commons|Agent Log|Marble|Finder)\b/;
+const NAME_LEADS = /^(?:Gemini|Nano|Veo|Kling|Claude|Codex|Remotion|Hugging|World Labs|Black Forest|Nebula|Krea|Obsidian|Figma|Google|Vertex|Anthropic|Replicate|Runway|Ideogram|Meshy|Higgsfield|Seedream|Seedance|Grok|Luma|Recraft|Demucs|Whisper|Lyria|Imagen|Hunyuan|Quiver|Nous|Chrome|Electron|Opus|Sonnet|Haiku|Lottie|Tripo|Rodin|Qwen|Pika|Vidu|Topaz|Magnific|Hailuo|Paper|Wan|Jev|Speridlabs|Idol|Hermes|Mac|Windows|Linux|Cinema Studio|Character Studio|Moodboard Studio|Creator Studio|Commons|Agent Log|Marble|Finder)\b/;
 
 /** Whether a reason's first word can follow "because": a lead word (lower-cased by the rule), a lower-case word,
  * a quoted name or a {} slot, a name Nebula knows (NAME_LEADS), or a name written with a capital inside it or a

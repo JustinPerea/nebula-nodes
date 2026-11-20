@@ -1,4 +1,4 @@
-"""Server-side media reads in the direct maker routes (round 2 security stage).
+"""Server-side media reads in the direct maker routes (security stage).
 
 Every URL the backend fetches for an upload goes through the public fetcher
 (public https only, each redirect re-checked), owned outputs resolve to their

@@ -1,21 +1,21 @@
-"""PR #199 review 7: what fix round 7 makes true (2026-10-28).
+"""PR #199: what the fix makes true (2026-10-28).
 
-- M-1. Whether the live canvas waits is read from the canvas itself: an
+- Whether the live canvas waits is read from the canvas itself: an
   agent's write right after a catalog restore, before any listing, settles
   the canvas first, so at the limit it is refused and the person's canvas is
   the one saved. The guard runs again in the write step of a route that
-  awaits (N-4). No route that changes cli_graph goes unmarked (N-3).
-- M-2 / N-6. A held canvas's nodes and connections are checked item by item,
+  awaits. No route that changes cli_graph goes unmarked.
+- A held canvas's nodes and connections are checked item by item,
   each canvas is filed in its own try, and a damaged main copy loses to a
   good .bak.
-- L-1. A canvas is held once, filed once, and named once.
-- L-2. A cut canvas-held.json keeps its complete leading entries.
-- L-3. One file per held canvas, no shared cap: the person's open always
+- A canvas is held once, filed once, and named once.
+- A cut canvas-held.json keeps its complete leading entries.
+- One file per held canvas, no shared cap: the person's open always
   holds it; only an agent's write is refused past a project's size. The old
   canvas-held.json moves in once, a crash midway included.
-- N-1 / N-2 / N-5: no false "may be lost" (restoreRoom's deletes: gone in fix round 12)
+- No false "may be lost" (restoreRoom's deletes: gone)
   along the way, sizes measured once.
-- GM: the person's own clear and load lines, the over-the-save-limit saved
+- Design: the person's own clear and load lines, the over-the-save-limit saved
   line's marker, the Agent log line after a restore.
 """
 from __future__ import annotations
@@ -54,11 +54,11 @@ def _events(change: str) -> list[dict]:
             if call.args and call.args[0].get("type") == "projectsChanged" and call.args[0].get("change") == change]
 
 
-# -- M-1: an agent's write before the first listing after a restore -------------------
+# -- An agent's write before the first listing after a restore -------------------
 
 
 def _restored_with_the_open_project_gone(client, store, state, monkeypatch, limit: int) -> None:
-    """Review 7's F10: Delta open with the person's nodes, catalog.json
+    """Delta open with the person's nodes, catalog.json
     zeroed, its .bak from before Delta, then a restart. No listing since."""
     monkeypatch.setattr(store_module, "MAX_PROJECTS", 4)
     for name in ("A", "B", "C"):
@@ -109,7 +109,7 @@ def test_m1_at_the_limit_an_agents_first_write_after_a_restore_is_refused(app, m
 
 
 def test_m1_the_refusal_after_a_restore_is_codex_s_agent_log_line(app, monkeypatch):
-    """GM's answer 1 to review 7: the usual "Codex tried to change the canvas
+    """Design's answer: the usual "Codex tried to change the canvas
     you had open…" line, as Codex's row."""
     client, store, _graph, state = app
     _restored_with_the_open_project_gone(client, store, state, monkeypatch, limit=3)
@@ -124,8 +124,8 @@ def test_m1_the_refusal_after_a_restore_is_codex_s_agent_log_line(app, monkeypat
 
 def test_m1_below_the_limit_the_persons_canvas_is_saved_first_then_the_write_goes_on(app, monkeypatch):
     """Room for the canvas: the guard files the person's canvas untouched as
-    its own project, never opened, and the agent's write goes on a copy (GM's
-    rule (a), fix round 8, replacing "lands on it"); the agent's own undo
+    its own project, never opened, and the agent's write goes on a copy (design's
+    rule (a), replacing "lands on it"); the agent's own undo
     works on the copy and never reaches the filed project."""
     client, store, _graph, state = app
     _restored_with_the_open_project_gone(client, store, state, monkeypatch, limit=5)
@@ -184,9 +184,9 @@ def test_n4_a_restore_between_the_fence_and_the_write_is_caught_in_the_write_ste
     assert not any(node.get("definitionId") == "image-input" for node in graph.nodes.values())
 
 
-# -- N-3: no unmarked route reaches a cli_graph mutation ---------------------------------
+# -- No unmarked route reaches a cli_graph mutation ---------------------------------
 
-# Review 7's static scan (probes/mutators.py), as a test: every HTTP route in
+# Static scan (probes/mutators.py), as a test: every HTTP route in
 # main.py whose body reaches (through main.py's own functions) a call that
 # changes cli_graph must be marked graph_write, or listed here with why the
 # waiting-canvas guard doesn't need to see it.
@@ -271,7 +271,7 @@ def test_n3_every_route_that_can_change_the_graph_is_marked_or_says_why():
     assert unmarked <= set(_UNMARKED_ALLOWED), sorted(unmarked - set(_UNMARKED_ALLOWED))
 
 
-# -- M-2 / N-6: a held canvas's items, and filing each on its own ----------------------
+# -- A held canvas's items, and filing each on its own ----------------------
 
 
 def _held_one(client, store, graph, state, monkeypatch) -> list[str]:
@@ -372,7 +372,7 @@ def test_m2_a_canvas_that_cant_be_filed_is_set_aside_and_the_others_are_saved(ap
     assert ids
 
 
-# -- L-1: held once, filed once, named once ---------------------------------------------
+# -- Held once, filed once, named once ---------------------------------------------
 
 
 def _fail_open(client, monkeypatch, project_id):
@@ -413,10 +413,10 @@ def test_l1_failed_opens_hold_the_canvas_once_and_it_is_filed_once(app, monkeypa
     other = next(pid for pid in catalog["projects"] if pid != catalog["activeProjectId"])
     _free_a_slot(client, other)
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]  # one project, never two
-    assert "restoreRoom" not in after  # no restore verdict since fix round 12
+    assert "restoreRoom" not in after  # no restore verdict since it was removed
 
 
-# -- L-3: one file per canvas, no shared cap, agents capped like a project --------------
+# -- One file per canvas, no shared cap, agents capped like a project --------------
 
 
 def test_l3_the_persons_open_always_holds_even_past_a_projects_size(app, monkeypatch):
@@ -428,7 +428,7 @@ def test_l3_the_persons_open_always_holds_even_past_a_projects_size(app, monkeyp
     assert len(_held(store)) == 1
     created = client.post("/api/projects", headers=PERSON, json={"name": "New", "workspaceRevision": _rev(client)})
     assert created.status_code != 409 or created.json().get("code") != main_module.CANVAS_HELD_FULL_CODE
-    # Filed over the save limit: the saved line's marker (GM).
+    # Filed over the save limit: the saved line's marker (design).
     after = _free_a_slot(client, ids[0])
     rows = after["canvasSaved"]["filed"]
     assert rows[0]["overSaveLimit"] is True and after["canvasSaved"]["overSaveLimit"] is True
@@ -560,7 +560,7 @@ def test_l3_a_crash_midway_through_the_move_loses_nothing_and_files_nothing_twic
     assert len(_projects_holding(client, store, ONLY_W)) == 2
 
 
-# -- L-2 / N-1: the old file cut, or one copy's id flipped --------------------------------
+# -- The old file cut, or one copy's id flipped --------------------------------
 
 
 def test_l2_both_old_copies_cut_keep_their_complete_leading_entries(app, monkeypatch):
@@ -626,13 +626,13 @@ def test_l2_a_damaged_note_still_says_a_canvas_may_be_lost(app, monkeypatch):
     assert client.get("/api/projects", headers=PERSON).json()["canvasHeldUnreadable"]["count"] is None
 
 
-# -- N-2 / N-5: restoreRoom, gone (fix round 12) -------------------------------------
+# -- restoreRoom, gone -------------------------------------
 # Justin, 2026-10-29: a restore may pass the project limit, so no count of
 # deletes is ever said for it, and canvases waiting never refuse it.
 
 
 def test_n2_a_restore_lands_however_many_canvases_wait(app, monkeypatch):
-    """Review 7's case: the live canvas and two held at a limit of 3. One
+    """Case: the live canvas and two held at a limit of 3. One
     delete and its Undo: the restore lands at once, no deletes asked for."""
     client, store, graph, state = app
     _held_one(client, store, graph, state, monkeypatch)
@@ -653,8 +653,8 @@ def test_n2_a_restore_lands_however_many_canvases_wait(app, monkeypatch):
     assert hasattr(main_module, "_restore_room") is False
 
 
-# -- GM answer 7: the person's own clear and load ----------------------------------------
-# GM r11 #3 (fix round 9) dropped the person's lines: the tab never reaches the
+# -- Design: the person's own clear and load ----------------------------------------
+# Design: dropped the person's lines: the tab never reaches the
 # refusal (a waiting canvas leaves the tab on Projects home, where clear and
 # load aren't offered). A person request that gets here anyway is refused in
 # the agents' lines, with no `audience`.

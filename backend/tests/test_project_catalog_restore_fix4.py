@@ -1,23 +1,23 @@
-"""PR #199 review 4: what fix round 4 makes true (2026-10-27).
+"""PR #199: what the fix makes true (2026-10-27).
 
-- M-2. No single bit flip of any structural byte (a record's opening ``{``
+- No single bit flip of any structural byte (a record's opening ``{``
   included) silently reverts a project: a record whose opener broke is
   found by its key and its own ``"id"``.
-- M-3. The base copy never trusts a date from the future: ``.bak`` wins
+- The base copy never trusts a date from the future: ``.bak`` wins
   unless ``.bak.1`` holds later dates that aren't ahead of the clock, and a
   whole record never loses to a copy's on a future date.
-- L-2. An older, damaged catalog.json never brings back a project deleted
+- An older, damaged catalog.json never brings back a project deleted
   for good after it.
-- L-3. A delete for good as the last commit survives a zeroed catalog.json
+- A delete for good as the last commit survives a zeroed catalog.json
   (catalog-purged.json).
-- L-4. A broken ``"deletedAt"`` key never says "in Recently deleted again".
-- L-5. Two flips never add a phantom project (review 4's 1,500 set).
-- L-1. Restoring past the project limit is refused with the limit's 413
+- A broken ``"deletedAt"`` key never says "in Recently deleted again".
+- Two flips never add a phantom project (1,500 set).
+- Restoring past the project limit is refused with the limit's 413
   and its number; allowing it is one switch.
 - Nits: a damaged or missing canvas-waiting.json keeps ``since`` and the
   one event; start_here says when there is room; needs_reading() and
   projection() see an in-place rewrite.
-- GM r6: no agent text says the waiting canvas is open or reachable.
+- Design: no agent text says the waiting canvas is open or reachable.
 """
 from __future__ import annotations
 
@@ -61,13 +61,13 @@ def quick_disk(monkeypatch):
     monkeypatch.setattr(store_module.os, "fsync", lambda fd: None)
 
 
-# -- review 4's fuzz base -------------------------------------------------------------
+# -- Fuzz base -------------------------------------------------------------
 
 SHADOW, SHADOW2, FAKE = "5" * 32, "6" * 32, "7" * 32
 
 
 def _fuzz_base(tmp_path: Path):
-    """Review 4's base (test_r4_fuzz): Logo renamed "Logo v2" after the copy,
+    """Base (test_r4_fuzz): Logo renamed "Logo v2" after the copy,
     Old in Recently deleted, a name holding record-shaped text, a project's
     params holding a whole project, and a record-shaped object one level
     under Hero's record."""
@@ -114,7 +114,7 @@ def _restore_with(base: ProjectStore, root: Path, damaged: bytes):
 
 
 def _verdict(store, catalog, ids, error) -> str:
-    """Review 4's verdict: ok / no-restore, or every way it went wrong."""
+    """Verdict: ok / no-restore, or every way it went wrong."""
     if catalog is None:
         return f"REFUSED:{type(error).__name__}"
     restore = store.restore_notice()
@@ -169,12 +169,12 @@ def _structural(raw: bytes) -> list[int]:
     return positions
 
 
-# -- M-2: a record's opening brace ----------------------------------------------------
+# -- A record's opening brace ----------------------------------------------------
 
 
 @pytest.mark.parametrize("bit", range(8))
 def test_m2_a_flip_of_a_records_opening_brace_keeps_its_newest_version(tmp_path, bit):
-    """Review 4's M-2: 8 of 8 flips of Logo's `{` reverted it to "Logo"."""
+    """8 of 8 flips of Logo's `{` reverted it to "Logo"."""
     base, ids = _fuzz_base(tmp_path)
     raw = base.path.read_bytes()
     brace = raw.index(f'"{ids["logo"]}":{{'.encode()) + 35
@@ -196,7 +196,7 @@ def test_m2_a_flipped_opener_in_recently_deleted_keeps_it_there(tmp_path):
 
 
 def test_m2_every_bit_of_every_structural_byte_never_reverts_silently(tmp_path, quick_disk):
-    """The full 8-bit sweep of every structural byte of review 4's base."""
+    """The full 8-bit sweep of every structural byte of base."""
     base, ids = _fuzz_base(tmp_path)
     raw = base.path.read_bytes()
     positions = _structural(raw)
@@ -211,7 +211,7 @@ def test_m2_every_bit_of_every_structural_byte_never_reverts_silently(tmp_path, 
     assert bad == {}, {verdict: (len(cases), cases[:4]) for verdict, cases in bad.items()}
 
 
-# -- L-5: two flips never add a phantom -----------------------------------------------
+# -- Two flips never add a phantom -----------------------------------------------
 
 
 def test_l5_the_reviews_1500_two_flip_set_adds_no_phantom_and_no_wrong_id(tmp_path, quick_disk):
@@ -230,7 +230,7 @@ def test_l5_the_reviews_1500_two_flip_set_adds_no_phantom_and_no_wrong_id(tmp_pa
 
 
 def test_l5_a_broken_quote_after_a_nested_record_shaped_object_never_counts_it(tmp_path):
-    """Review 4's case @613/@2193: a flip right after Hero's id stops its
+    """Case @613/@2193: a flip right after Hero's id stops its
     read before Shadow3 (a whole record-shaped object in Hero's `extra`), and
     a broken quote in Dunes after it hides every brace that closes it."""
     base, ids = _fuzz_base(tmp_path)
@@ -249,7 +249,7 @@ def test_l5_a_broken_quote_after_a_nested_record_shaped_object_never_counts_it(t
 
 
 def test_l5_a_record_whose_key_and_id_both_changed_is_never_a_new_project(tmp_path):
-    """Fix round 4's run of the 1,500 set (@2896/@2846): a flip in Old's key
+    """Run of the 1,500 set (@2896/@2846): a flip in Old's key
     (a hex digit to "i") and another in its own id (a hex digit to another)
     filed Old under the changed id as a project added back."""
     base, ids = _fuzz_base(tmp_path)
@@ -265,7 +265,7 @@ def test_l5_a_record_whose_key_and_id_both_changed_is_never_a_new_project(tmp_pa
 
 
 def test_torn_page_after_a_whole_record_never_makes_it_look_nested():
-    """Fix round 4's run: a torn record's leftover text after a whole record
+    """Run: a torn record's leftover text after a whole record
     read as broken, so with a torn record before it too, neither count could
     be read and the whole record was dropped."""
     text = ('{"version":1,"projects":{"' + "a" * 32 + '":{"id":"' + "a" * 32 + '","snapshot":{' + "\0" * 16
@@ -274,7 +274,7 @@ def test_torn_page_after_a_whole_record_never_makes_it_look_nested():
     assert catalog_recovery._at_record_place(text, text.index('{"id":"' + "b" * 32), [text.index('"' + "a" * 32)])
 
 
-# -- L-4: a broken "deletedAt" key ----------------------------------------------------
+# -- A broken "deletedAt" key ----------------------------------------------------
 
 
 def test_l4_a_broken_deleted_at_key_never_says_in_recently_deleted_again(tmp_path):
@@ -304,11 +304,11 @@ def test_l4_a_trash_record_without_deleted_at_is_damaged_not_restored():
     assert found.failed[alpha["id"]] == "invalid" and found.groups[alpha["id"]] == "trash"
 
 
-# -- M-3: a clock that ran ahead never chooses the base --------------------------------
+# -- A clock that ran ahead never chooses the base --------------------------------
 
 
 def _skewed_older_copy(tmp_path: Path, monkeypatch):
-    """Review 4's a3: .bak.1 written while the clock was 3 h ahead, the clock
+    """a3: .bak.1 written while the clock was 3 h ahead, the clock
     corrected, Alpha and Beta edited again and Gamma made (all in .bak)."""
     store = ProjectStore(tmp_path / "p")
     with store.transaction() as c:
@@ -367,7 +367,7 @@ def test_m3_a_torn_catalog_keeps_its_newest_records(tmp_path, monkeypatch):
 
 
 def test_m3_the_bak_only_project_survives_the_next_two_commits(tmp_path, monkeypatch):
-    """Review 4's a3c: the next commit after the restore replaced .bak, and
+    """a3c: the next commit after the restore replaced .bak, and
     Gamma, whole in a valid copy, was gone from every file."""
     store, ids = _skewed_older_copy(tmp_path, monkeypatch)
     with open(store.path, "r+b") as handle:
@@ -418,11 +418,11 @@ def test_m3_bak_wins_a_tie_and_an_older_copy_with_truly_later_dates_still_wins(t
     assert _record(fresh)["source"] == store_module.OLDER_BACKUP_NAME
 
 
-# -- L-2 and L-3: deleted for good stays deleted ---------------------------------------
+# -- Deleted for good stays deleted ---------------------------------------
 
 
 def test_l2_an_older_damaged_catalog_never_brings_back_a_project_deleted_for_good(tmp_path):
-    """Review 4's a1: catalog.json rolled back to a file from before the
+    """a1: catalog.json rolled back to a file from before the
     delete for good (a sync tool), and torn; .bak holds the tombstone."""
     store = ProjectStore(tmp_path / "p")
     with store.transaction() as c:
@@ -454,7 +454,7 @@ def test_l2_an_older_damaged_catalog_never_brings_back_a_project_deleted_for_goo
 
 
 def test_l3_a_delete_for_good_as_the_last_commit_survives_a_zeroed_catalog(tmp_path):
-    """Review 4's a2: .bak is one commit behind; the tombstone was only in
+    """a2: .bak is one commit behind; the tombstone was only in
     catalog.json's head. It is in catalog-purged.json too now."""
     store = ProjectStore(tmp_path / "p")
     with store.transaction() as c:
@@ -523,8 +523,8 @@ def test_l3_a_damaged_side_file_is_ignored(tmp_path):
     assert a["id"] in fresh.read()["projects"]
 
 
-# -- L-1 / GM bug 3: restoring past the project limit ----------------------------------
-# Justin, 2026-10-29 (fix round 12): Undo of a delete may go over the limit
+# -- Design: restoring past the project limit ----------------------------------
+# Justin, 2026-10-29: Undo of a delete may go over the limit
 # when the recovered canvas took the freed slot. RESTORE_MAY_PASS_THE_PROJECT_LIMIT
 # is on, so this is the default path; no switch is flipped here.
 
@@ -617,7 +617,7 @@ def test_nit1_the_wait_journals_its_since(app, monkeypatch):
 
 
 def test_nit2_start_here_says_when_room_has_freed(app, monkeypatch):
-    """Review 4's b2b: after an agent's delete with no listing, start_here
+    """b2b: after an agent's delete with no listing, start_here
     still said opening was refused (413) until then; the open succeeded."""
     client, store, graph, state = app
     ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
@@ -652,7 +652,7 @@ def test_nit3_needs_reading_and_projection_see_an_in_place_rewrite(tmp_path):
     assert store.projection().revision == "f" * len(view.revision)
 
 
-# -- GM r6: the waiting canvas isn't open or reachable ---------------------------------
+# -- Design: the waiting canvas isn't open or reachable ---------------------------------
 
 
 def test_gm_no_agent_text_says_the_waiting_canvas_is_open(app, monkeypatch):

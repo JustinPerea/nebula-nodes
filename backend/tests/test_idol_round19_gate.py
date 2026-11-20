@@ -1,4 +1,4 @@
-"""PR #203 round 19, section 1b: Justin's decisions on the Idol gate (2026-10-31).
+"""PR #203, section 1b: Justin's decisions on the Idol gate (2026-10-31).
 
 1. Only the Hugging Face call is gated. An agent's run with Idol in scope
    starts: the nodes before it run, and an Idol node whose last result is
@@ -35,7 +35,7 @@ from tests.test_canvas_proposals import CLAUDE, KEY, _key, _propose, api  # noqa
 TOKEN = "hf_fixturetoken0123456789abcdefghijklmnop"
 SIGNED_IN = {"HF_TOKEN": TOKEN}
 CLI = {**CLAUDE, "X-Nebula-Surface": "cli"}
-# GM, PR #203 r39 item 1 (round 20): the agent's words, then how it asks.
+# Design, PR #203: the agent's words, then how it asks.
 STOP = speridlabs_idol.agent_stop_text("Idol")
 PERSON_LINE = ("An agent’s run stopped here because this node could bill your Hugging Face account, and only you "
                "can start that. Run the node yourself to go ahead.")
@@ -100,7 +100,7 @@ def test_an_agents_run_that_must_call_stops_before_any_request(world, headers, p
     assert event["proposalNeeded"] is True and event["person"] == PERSON_LINE and event["nodeId"] == world.idol
 
 
-# GM, PR #203 r40 item 7, verbatim (no comma before "because").
+# Design, PR #203, verbatim (no comma before "because").
 DONE = ("Claude Code finished 1 of 3 nodes. “Idol” is waiting for you to run it because it could bill your Hugging "
         "Face account.")
 
@@ -115,7 +115,7 @@ def test_the_runs_other_branches_finish(world):
     assert text in body["results"] and tail in body["results"]
 
 
-# The run's own Agent log row says what ran, then the waiting sentence the done card says (design r211 item 3): both
+# The run's own Agent log row says what ran, then the waiting sentence the done card says (design): both
 # end with a period, and the row never says the node "failed". The agent's name sits in the log row's header.
 ROW = ("Ran “Image Input” in under 1 s. “Idol” is waiting for you to run it because it could bill your Hugging "
        "Face account.")

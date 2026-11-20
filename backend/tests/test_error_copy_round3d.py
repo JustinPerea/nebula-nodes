@@ -1,6 +1,6 @@
-"""Error copy round 3d: GM - Design's lines for the other handlers' run errors.
+"""Error copy: design's lines for the other handlers' run errors.
 
-GM owns the copy; GM's lines are verbatim here. GM: "Raw provider text stays
+Design owns the copy; design's lines are verbatim here. Design: "Raw provider text stays
 behind Details in every case." The exception text is what agents, MCP, the
 run record and the journal read, and none of it changes: every test asserts
 the exact text beside the line.
@@ -9,7 +9,7 @@ the exact text beside the line.
   error, execution/provider_status.py), naming the provider the node actually
   called; a handler's own line wins.
 - Paid async jobs Nebula stopped waiting on, empty or malformed answers, a
-  connected file that isn't there, every missing-key shape, GM's ten Krea
+  connected file that isn't there, every missing-key shape, design's ten Krea
   lines, and no provider model ids or parentheses on the card.
 """
 from __future__ import annotations
@@ -73,12 +73,12 @@ TROUBLE = "Meshy is having trouble right now. Try again in a few minutes."
 ])
 def test_one_table_maps_a_providers_status_to_gms_line(status: int, line: str) -> None:
     # The status the provider's API answered, attached where it is raised
-    # (round 3d, part 2: never read from the text).
+    # (never read from the text).
     exc = with_api_status(RuntimeError(f'Meshy submit failed ({status}): {{"message": "the provider\'s own words"}}'),
                           status)
     card = _card(exc, "meshy-text-to-3d", {}, {"MESHY_API_KEY": "fixture"})
     assert card.person == line
-    # The provider's own words stay behind Details (GM), and agents' text is untouched.
+    # The provider's own words stay behind Details (design), and agents' text is untouched.
     assert card.provider_text is True
     assert str(exc).startswith(f"Meshy submit failed ({status})")
 
@@ -88,7 +88,7 @@ def test_one_table_maps_a_providers_status_to_gms_line(status: int, line: str) -
     ("OpenAI TTS error 403: forbidden", 403),
 ])
 def test_the_table_reads_every_shape_handlers_write_a_status_in(text: str, status: int) -> None:
-    # Round 3d, part 2: whatever the shape, the status comes from the call.
+    # Whatever the shape, the status comes from the call.
     card = _card(with_api_status(RuntimeError(text), status), "gpt-image-1-generate", {}, {"OPENAI_API_KEY": "fixture"})
     assert card.person == "OpenAI didn't accept your API key. Check it in Settings, then run the node again."
 
@@ -486,7 +486,7 @@ def test_jev_modes_key_line_is_gms() -> None:
     assert person_line(exc) == "Add a TypeSafe API key in Settings to run this node."
 
 
-# -- 6. GM's Krea lines --------------------------------------------------------
+# -- 6. design's Krea lines --------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -653,7 +653,7 @@ def test_seedances_dated_ids_leave_the_card() -> None:
     assert person_line(exc) == "Seedance 2.5 on BytePlus renders 480p, 720p or 1080p. Pick one in “Resolution”."
     exc = _raised(_whole_seconds, 3.5, SEEDANCE_2_5)
     assert str(exc).startswith("BytePlus takes whole seconds from 4 to 30 for this model (received 3.5).")
-    # GM's own example of the rule, the label in quotes since round 3f (rule 5).
+    # Design's own example of the rule, the label in quotes, per rule 5.
     assert person_line(exc) == "Set “Duration” to whole seconds from 4 to 30. It was 3.5."
     exc = _raised(_frames, SEEDANCE_1_0_PRO_FAST, ["https://e.com/a.png"], ["https://e.com/end.png"])
     assert str(exc) == f"BytePlus's {SEEDANCE_1_0_PRO_FAST} takes a start image only, not an end image"
@@ -700,7 +700,7 @@ def test_the_guard_knows_kebab_and_dated_ids_and_parentheses() -> None:
 
 def test_nebulas_words_around_a_providers_keep_the_providers_behind_details() -> None:
     # Two lines wrap Nebula's instruction around the provider's own words
-    # (3c-2's allowlist): the card shows the instruction, Details the rest.
+    # (the guard's allowlist): the card shows the instruction, Details the rest.
     for name, start in (("handlers/elevenlabs.py", "Your ElevenLabs API key can't list your voices ({exc})"),
                         ("services/typesafe_client.py", "{label} is damaged or incomplete: {exc}")):
         source = (BACKEND / name).read_text()
@@ -722,7 +722,7 @@ def test_a_provider_line_marks_the_text_as_the_providers() -> None:
 
 
 def test_a_value_goes_in_its_own_sentence() -> None:
-    # GM: "the value goes in its own sentence or into the line".
+    # Design: "the value goes in its own sentence or into the line".
     from execution.person_line import it_was
 
     assert it_was(3.5) == "It was 3.5."
@@ -752,7 +752,7 @@ def test_a_range_line_names_the_field_by_its_label_not_its_key() -> None:
     exc = _raised(_validate_int_range, _node("ideogram-transparent", {"num_images": 9}), "num_images", 1, 8,
                   "Ideogram num_images")
     assert str(exc) == "Ideogram num_images must be an integer from 1 to 8 (received 9)"
-    # Round 3f review (GM's rule 5): the label in quotes.
+    # Design's rule 5: the label in quotes.
     assert person_line(exc) == "Set “Images” to a whole number from 1 to 8. It was 9."
 
 
@@ -761,7 +761,7 @@ def test_a_reasoning_effort_line_names_the_model_and_levels_as_the_node_shows_th
 
     exc = _raised(_listed_effort, "gpt-6-astra", "none")
     assert str(exc) == "Reasoning effort 'none' isn't available for gpt-6-astra. Pick one of: low, medium, high, xhigh, max."
-    # Round 3f review (GM's rule 5): the field's label in quotes.
+    # Design's rule 5: the field's label in quotes.
     assert person_line(exc) == ("GPT-6 Astra doesn't offer None for “Reasoning Effort”. "
                                 "Pick Low, Medium, High, Extra high or Max, then run the node again.")
 
@@ -786,7 +786,7 @@ def test_hailuo_and_grok_lines_name_the_model_not_its_id() -> None:
                                 "the node again.")
 
 
-# -- review of 3d -------------------------------------------------------------
+# -- review of this pass -------------------------------------------------------------
 # Four findings from the review, each pinned before its fix.
 
 
@@ -972,7 +972,7 @@ def test_a_submit_failure_and_a_jobs_out_of_credits_still_read_the_table(make, l
     ("Replicate prediction failed (429): slow down", 429),
 ])
 def test_an_api_answer_that_says_failed_is_not_a_job_failure(text, status) -> None:
-    # Round 3d, part 2: an API answer carries its status; only a raise marked
+    # An API answer carries its status; only a raise marked
     # as a job failure is one, whatever its words.
     from execution.provider_status import failure_kind
 

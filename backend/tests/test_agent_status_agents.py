@@ -1,4 +1,4 @@
-"""Agent support for the Agents panel (Q125 item 2): MCP, the `nebula` CLI and docs.
+"""Agent support for the Agents panel: MCP, the `nebula` CLI and docs.
 
 Justin's standing rule: "Every feature we add needs to make sure we include
 MCP support for agents." Agents set their own status line (set_status,

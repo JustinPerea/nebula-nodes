@@ -1,13 +1,13 @@
-"""PR #199 fix round 13 (GM r17).
+"""PR #199 (design).
 
 - Past the limit (an Undo that passed it, then a canvas waiting): the count
   is named. The listing's `deletes` (per canvas and in total) and the agents'
   `note` that MCP (start_here, list_projects) and the CLI (`nebula projects`,
-  `nebula context`) print say, GM r18, "The project list has 4
+  `nebula context`) print say, design, "The project list has 4
   projects, over the limit of 3. Move 2 to Recently deleted to make room.";
   at the limit itself
   the line is as before ("Moving a project …").
-- GM r17: MCP new_project past the limit carries the limit and its number, as
+- Design: MCP new_project past the limit carries the limit and its number, as
   the HTTP body does; the 409 canvas_kept_in_tab detail uses ’.
 """
 from __future__ import annotations
@@ -105,7 +105,7 @@ def test_q4_the_kept_detail_uses_curly_apostrophes():
 
 
 def test_a_copy_past_the_limit_restores_and_the_canvas_waits_on_two_deletes(app, monkeypatch):
-    """Found by round 13's live check: a list an Undo took past the limit (4
+    """Found by live check: a list an Undo took past the limit (4
     of 3), then catalog.json damaged. The restore from .bak (Nebula's own
     copy of that list) was refused as "past a limit" and every listing then
     answered 413. A restore adds no new project, so it may pass the limit:

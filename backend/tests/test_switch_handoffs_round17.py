@@ -1,11 +1,11 @@
-"""Round 17 of PR #114, review 16 M1: one save handoff per project an agent's
+"""PR #114: one save handoff per project an agent's
 switches left, not only the last one.
 
 A tab that is offline (or only thinks it is) while an agent switches twice
 holds its last unsaved changes for the project it was showing. Before this
 round the backend kept a single handoff, the next switch replaced it, and the
 tab's held save for the first project got 409, which the tab turned into a
-"(recovered)" copy of work that was already saved (live, review 16 F and G).
+"(recovered)" copy of work that was already saved (live, F and G).
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def _tab(*node_ids: str, viewport=None) -> dict:
 
 
 def test_a_tab_offline_through_two_agent_switches_still_saves_into_its_own_project(workspace, person):
-    """Review 16 F: A, then the agent makes B, then C. The tab's held save
+    """F: A, then the agent makes B, then C. The tab's held save
     for A lands in A (no 409, so no recovered copy)."""
     client, _, store = workspace
     mine = _create(client, "Recovered canvas", headers=person.headers)
@@ -87,7 +87,7 @@ def test_a_tab_offline_through_two_agent_switches_still_saves_into_its_own_proje
 
 
 def test_a_project_reopened_by_the_agent_ends_its_handoff(workspace, person):
-    """Review 16 G: C, then D, then back to C. C was opened again from what
+    """G: C, then D, then back to C. C was opened again from what
     it had saved, so the tab's old save for C is refused (the tab then
     compares it with what C has saved before making any copy)."""
     client, _, store = workspace
@@ -133,7 +133,7 @@ def test_handoffs_are_bounded_oldest_first(workspace, person):
 
 
 def test_a_catalog_with_the_old_single_handoff_still_takes_that_save(workspace, person):
-    """A catalog written before round 17 kept ``handoff`` ({projectId,
+    """A catalog written before the per-project handoffs kept ``handoff`` ({projectId,
     revision}); it reads as one of the handoffs."""
     client, _, store = workspace
     mine = _create(client, "Mine", headers=person.headers)

@@ -1,8 +1,8 @@
-"""Done cards (Q125 item 3): a finished agent run posts one Update.
+"""Done cards: a finished agent run posts one Update.
 
-Justin, 2026-10-24, merge-oks Q125, item 3: "A finished run posts a card with
+Justin, 2026-10-24, merge-oks: "A finished run posts a card with
 a thumbnail and Show on canvas, without the agent having to remember to ...
-run_nodes completion posts the card." GM - Design, 2026-10-25, built
+run_nodes completion posts the card." design, 2026-10-25, built
 verbatim:
 
 - Success: Codex finished “Hero shots”. / Codex finished 3 nodes.
@@ -99,7 +99,7 @@ def _run(api, headers=CLAUDE, target: str | None = None) -> dict:
     return response.json()
 
 
-# -- the copy (GM, verbatim) ---------------------------------------------------------------
+# -- the copy (design, verbatim) ---------------------------------------------------------------
 
 def test_the_copy():
     one = {"n1": "Hero shots"}
@@ -119,7 +119,7 @@ def test_the_copy():
 
 
 def test_the_line_for_a_surface_that_shows_the_agent_says_no_name_and_one_without_says_it():
-    """Design r211: where the agent's name is on the card or row (Updates' header, the Agent log row), the
+    """Design: where the agent's name is on the card or row (Updates' header, the Agent log row), the
     line doesn't repeat it ("Run of 4 nodes failed."); a toast has no header and keeps "Codex’s run of 4 nodes
     failed." (done_text's default)."""
     one = {"n1": "Hero shots"}
@@ -363,10 +363,10 @@ def test_thumbnail_by_output_type(done):
     assert thumbnail_for({}, url_for) is None
 
 
-# -- the run pill's model name (GM - Design, 2026-10-25) ---------------------------------------------------
+# -- the run pill's model name (design, 2026-10-25) ---------------------------------------------------
 
 def test_a_node_name_in_the_run_pill_is_quoted_and_a_model_name_is_not(done):
-    """GM: "A node name in the run pill is quoted: Running “Text Input” · 0:00
+    """Design: "A node name in the run pill is quoted: Running “Text Input” · 0:00
     (the type-name fallback is a node name). Provider model names stay
     unquoted: Running FLUX.2 [pro] · 0:41." """
     from models.graph import GraphNode

@@ -1,5 +1,5 @@
 """The one helper that turns a board's weights into the form a node needs
-(services/moodboard_weights.py; plan sections 5.7.2 and 5.7.4, Q21 b)."""
+(services/moodboard_weights.py; plan sections 5.7.2 and 5.7.4)."""
 from __future__ import annotations
 
 from decimal import Decimal
@@ -44,7 +44,7 @@ def test_no_negatives() -> None:
 def test_other_forms() -> None:
     # sum-to-one: shares, rounded the same way (Recraft's image_weights, PR24).
     assert native_strengths(0.7, [1.0, 0.5, 0.5], normalize="sum-to-one").strengths == [0.5, 0.25, 0.25]
-    # none: the pre-Q21 raw strength x weight, for test fixtures.
+    # none: the pre- raw strength x weight, for test fixtures.
     assert native_strengths(0.7, [1.0, 0.5], normalize="none").strengths == [0.7, 0.35]
     with pytest.raises(ValueError, match="rank"):
         native_strengths(0.7, [1.0], normalize="rank")

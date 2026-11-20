@@ -107,7 +107,7 @@ def pytest_configure(config):
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
-    """The cursor checks go in before any fixture runs (PR #211 review 5,
+    """The cursor checks go in before any fixture runs (PR #211,
     M3; see _install_cursor_route_check below).
 
     Root ignores file permissions, so a test that makes a file unreadable or
@@ -128,7 +128,7 @@ def pytest_runtest_teardown(item, nextitem):
     undone. Removed, the path falls back to the repo's real settings.json:
     every later test would read the person's keys and write their settings."""
     yield
-    # What the fixtures' undo left on main.manager (PR #211 review 5, M3).
+    # What the fixtures' undo left on main.manager (PR #211).
     _check_instance_senders()
     import sys
 
@@ -165,8 +165,8 @@ def _assert_no_canvas_socket_left(item, main_module) -> None:
 
 @pytest.fixture(autouse=True)
 def empty_model_cache():
-    """Each test starts and ends with an empty provider model cache (review
-    14, L-G): services.model_cache lives for the process, so a model list one
+    """Each test starts and ends with an empty provider model cache:
+    services.model_cache lives for the process, so a model list one
     test cached (OpenRouter's, for 5 minutes) answered a later test's picker
     before its own fixture's keys were read, and its outcome depended on test
     order."""
@@ -187,7 +187,7 @@ def _forget_canvas_sockets() -> None:
 @pytest.fixture(autouse=True)
 def no_canvas_sockets_between_tests():
     """Each test starts and ends with no canvas or agent socket registered
-    (PR #203 round 13). main.manager lives for the process: a socket one test
+    (PR #203). main.manager lives for the process: a socket one test
     left registered made `manager.canvas_open()` true for the next, so
     test_cli_apply's arrange line said a canvas was open only in CI's part 1.
     The /ws handler now unregisters however a socket ends; this keeps any
@@ -239,7 +239,7 @@ def canvas_project(tmp_path, monkeypatch) -> str:
         store.commit(catalog)
     monkeypatch.setattr(main, "project_store", store)
     # The live canvas is this project's (state.json's projectId), so nothing
-    # files or closes it on the next listing (H1 of PR #199's review 1).
+    # files or closes it on the next listing (H1 of PR #199).
     monkeypatch.setattr(main.cli_graph, "owner", project["id"])
     return project["id"]
 
@@ -343,7 +343,7 @@ def wait_for_promote(socket) -> None:
     """Wait for a hello's answer before acting on the socket. The server
     promotes a socket only when its receive loop reads the hello, so a write
     made straight after send_json can broadcast to a socket that isn't the
-    person's yet (round 14's CI). The proposalSync is the observable promote:
+    person's yet (CI). The proposalSync is the observable promote:
     it is sent on a verified hello and nowhere else (main.websocket_endpoint)."""
     for _ in range(80):
         kind = socket.receive_json().get("type")
@@ -356,9 +356,9 @@ def wait_for_promote(socket) -> None:
 class TabHeaders(Mapping):
     """What a canvas tab sends on a graph write: ``base`` (PERSON and
     X-Nebula-Tab) plus the open workspace's revision, read when the request
-    is made. Round 19 of PR #195: Nebula refuses a tab's write that carries no
+    is made. PR #195: Nebula refuses a tab's write that carries no
     revision on a route that writes the graph (marked ``main.graph_write``
-    since round 20), as the canvas's apiFetch always sends one while a
+    now), as the canvas's apiFetch always sends one while a
     project is open."""
 
     def __init__(self, base: Mapping[str, str]) -> None:
@@ -489,7 +489,7 @@ class BroadcastCapture:
 @pytest.fixture
 def broadcast_capture(monkeypatch) -> BroadcastCapture:
     """Patch main.manager.broadcast_raw with a BroadcastCapture. Use it in
-    place of a hand-written fake (review 1 of PR #211, LOW-2)."""
+    place of a hand-written fake (PR #211)."""
     import main
 
     capture = BroadcastCapture()
@@ -497,11 +497,10 @@ def broadcast_capture(monkeypatch) -> BroadcastCapture:
     return capture
 
 
-# -- every broadcast_raw stand-in takes ``others=`` (PR #211 review 2, LOW-3) --
+# -- every broadcast_raw stand-in takes ``others=`` (PR #211) --
 #
 # A stand-in that can't take ``others=`` raises a TypeError that _show_agent
-# swallows, so presence events vanish from a test with no failure (review 1,
-# LOW-2). The old guard read the test files' syntax and missed
+# swallows, so presence events vanish from a test with no failure. The old guard read the test files' syntax and missed
 # functools.partial, a class with __call__, string-path and keyword setattr
 # and direct assignment. This checks behaviour instead: whatever sits at
 # main.manager.broadcast_raw after any monkeypatch.setattr, and again when a
@@ -535,7 +534,7 @@ _monkeypatch_setattr = pytest.MonkeyPatch.setattr
 
 def _checked_setattr(self, *args, **kwargs):  # type: ignore[no-untyped-def]
     # The cursor check goes in before anything is saved, so a fixture that
-    # patches a sender saves (and puts back) the checked one (review 5, M3).
+    # patches a sender saves (and puts back) the checked one.
     _install_cursor_route_check()
     result = _monkeypatch_setattr(self, *args, **kwargs)
     _check_broadcast_raw("monkeypatch.setattr")
@@ -548,7 +547,7 @@ pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
 
 # -- a cursor event with a target goes out only through _broadcast_presence --
 #
-# PR #211 review 4, LOW-1: the person's tabs must get a cursor event in the
+# PR #211: the person's tabs must get a cursor event in the
 # person form (its session and number), so every one is sent by
 # main._broadcast_presence. The AST guards in test_agent_cursor_round4.py read
 # the source; this checks behaviour, in every test, two ways (tests only: the
@@ -557,7 +556,7 @@ pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
 # - The route: while a test runs, the ConnectionManager's senders record any
 #   ``agentPresence`` with a target that reaches them from anywhere but
 #   _broadcast_presence.
-# - The content (review 5, LOW-1): no person-only frame (an ``agentPresence``
+# - The content: no person-only frame (an ``agentPresence``
 #   carrying ``session``, its key and number, or an ``agentPresenceReplay``)
 #   may reach a socket that isn't the person's canvas. Checked on the real
 #   senders, on every instance-level stand-in a test puts on main.manager,
@@ -568,13 +567,12 @@ pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
 # Either one fails the test. The check is installed before any fixture runs
 # (pytest_runtest_setup, tryfirst, and every monkeypatch.setattr), and a
 # sender left on the manager instance by a fixture's undo is dropped before
-# and after each test, so a patched sender can't blind it (review 5, M3).
+# and after each test, so a patched sender can't blind it.
 # A stand-in, a Mock included, is wrapped in a proxy that checks each call
-# and forwards everything else to it (review 6, MEDIUM-1). It is a check for
+# and forwards everything else to it. It is a check for
 # the ways the suite patches senders (monkeypatch.setattr on the manager),
 # not a wall: a test that patches the class, uses mock.patch.object or
-# sends from a thread after the call phase can still go around it (review 6,
-# LOW-1); the AST guards read main.py for those.
+# sends from a thread after the call phase can still go around it; the AST guards read main.py for those.
 
 _PRESENCE_ROUTE: contextvars.ContextVar[bool] = contextvars.ContextVar("nebula_presence_route", default=False)
 # Where the checks record a stray event while a test runs; None between tests.
@@ -590,8 +588,7 @@ def person_only_frame(data: object) -> bool:
     """A frame only the person's canvas may get: a cursor event in the person
     form (it carries ``session``) or the replay of the live cursors. Text or
     bytes are read as JSON; bytes in any encoding json reads (UTF-8, -16 or
-    -32, a BOM included), else as UTF-8 with bad bytes replaced (review 7,
-    NIT-2)."""
+    -32, a BOM included), else as UTF-8 with bad bytes replaced."""
     import json
 
     if isinstance(data, (bytes, bytearray)):
@@ -609,7 +606,7 @@ def person_only_frame(data: object) -> bool:
     if not isinstance(data, Mapping):
         return False
     kind = data.get("type")
-    # Also the carried cursors' new arrivals (#211 follow-up, r23 item 2) and
+    # Also the carried cursors' new arrivals (#211 follow-up) and
     # a person form's event id, which a log-only line carries with no session.
     return kind in ("agentPresenceReplay", "agentPresenceArrival") or (
         kind == "agentPresence" and ("session" in data or "eventId" in data))
@@ -651,7 +648,7 @@ def _socket_check(send):  # type: ignore[no-untyped-def]
 
 # The code of this file's own checked wrappers: a stand-in is left as it is
 # only if it is one of them (or a _CheckedStandIn), never because it says so
-# (review 7, NIT-1: a Mock given the marker by hand).
+# (a Mock given the marker by hand).
 _CHECKED_CODES: set[object] = set()
 
 
@@ -728,8 +725,8 @@ def _check_instance_senders() -> None:
             del own[name]  # (a bound method reads its function's marker, so this goes first)
             continue
         # By what it is, not by the marker: a Mock makes up any attribute it
-        # is asked for (review 6, MEDIUM-1), and one can be given the marker
-        # by hand (review 7, NIT-1).
+        # is asked for, and one can be given the marker
+        # by hand.
         if type(value) is _CheckedStandIn or getattr(getattr(value, "__func__", value), "__code__", None) in _CHECKED_CODES:
             continue
         own[name] = _CheckedStandIn(value, name)
@@ -739,7 +736,7 @@ class _CheckedStandIn:
     """A stand-in for a sender, checked: each call goes through both checks,
     then to the stand-in; every attribute is the stand-in's own, read when
     asked (a Mock's ``await_args``, a capture's ``sent``), so the test reads
-    it as if nothing were in between (review 6, MEDIUM-1 and N4)."""
+    it as if nothing were in between."""
 
     _nebula_cursor_route = True
 

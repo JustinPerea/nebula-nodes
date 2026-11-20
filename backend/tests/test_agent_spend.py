@@ -238,7 +238,7 @@ def total_off(client):
 
 
 def test_cli_run_of_an_unpriced_node_is_refused(client):
-    # With the daily total off; with it on, an unpriced node waits instead (Justin's Q165, test_daily_total*).
+    # With the daily total off; with it on, an unpriced node waits instead (Justin's ruling, test_daily_total*).
     total_off(client)
     price(None)
     node_id = add_paid_node(client)
@@ -283,7 +283,7 @@ def test_an_agent_with_the_person_token_is_still_held_to_it(client):
     node_id = add_paid_node(client)
     response = client.post("/api/graph/run", json={"targetNodeId": node_id},
                            headers={**PERSON, "X-Nebula-Agent": "Claude Code"})
-    # Held to the daily total, which an unpriced node always waits on: a proposal (Justin's Q165).
+    # Held to the daily total, which an unpriced node always waits on: a proposal (Justin's ruling).
     assert response.status_code == 202 and response.json()["status"] == "waiting"
     total_off(client)
     client.put("/api/settings", json={"runCostConfirmUsd": 1}, headers=PERSON)

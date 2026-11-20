@@ -1,10 +1,10 @@
-"""PR #203 round 15: GM r28 and r29, review 14.
+"""PR #203: an unwritable settings file, and design's lines for it.
 
 - Item 4: a settings file Nebula can read but isn't allowed to change gets a
-  409 with the code ``settings_unwritable`` and GM's line, by who asked,
+  409 with the code ``settings_unwritable`` and design's line, by who asked,
   never a 500: the file read-only, its folder read-only (a save writes a temp
   file there and renames it over the file), or either one turning read-only
-  between the read and the write. PUT and DELETE settings; since round 16
+  between the read and the write. PUT and DELETE settings; since the in-place save was added,
   the desktop's credentials/update keeps only the read check, and a
   read-only folder with a writable file saves in place (test_idol_round16).
   The read failures carry codes too, so the client picks its line by the
@@ -78,7 +78,7 @@ def _refused(response) -> tuple[int, str, str | None]:
 
 
 # -- item 4: the file read-only ----------------------------------------------------------------
-# Round 16 (review 15, settings-keychain MEDIUM-2): credentials/update writes
+# credentials/update writes
 # the backend's memory, never the file, so it keeps only the read check.
 
 
@@ -129,8 +129,8 @@ def test_a_file_that_turns_read_only_after_the_read_is_refused_at_the_write(home
 
     monkeypatch.setattr(main, "_saved_settings_or_409", read_then_lock)
     client = _person()
-    # Each write runs after the one before it was restored (review 15,
-    # sockets-tests NIT-1: a tuple of responses ran both first).
+    # Each write runs after the one before it was restored (
+    # A tuple of responses ran both first).
     for write in (lambda: client.put("/api/settings", json={"favorites": []}),
                   lambda: client.delete("/api/settings/api-keys/FAL_KEY")):
         assert home_file.stat().st_mode & 0o200, "restored before this write"
@@ -142,9 +142,9 @@ def test_a_file_that_turns_read_only_after_the_read_is_refused_at_the_write(home
 
 def test_a_rename_refused_by_the_filesystem_writes_the_file_in_place(home_file, monkeypatch):
     """A rename the filesystem refuses (EROFS here: no chmod, so as root
-    too) falls back to the in-place write that saved before round 15, and
+    too) falls back to the in-place write that saved before, and
     leaves no temp file. The seam is settings._replace, never os.replace for
-    the whole process (review 15, sockets-tests NIT-2)."""
+    the whole process."""
     def refuse(_src, _dst, **_dir_fd):
         raise OSError(errno.EROFS, "Read-only file system")
 
@@ -274,7 +274,7 @@ def test_the_key_file_lines_name_the_service_account_key():
         assert "Vertex AI service account key" in line and "credentials" not in line, line
 
 
-# -- review 14, settings-gate: the file's states ------------------------------------------------
+# -- settings-gate: the file's states ------------------------------------------------
 
 
 def _gate_states(client) -> tuple[int, int, int]:
@@ -284,8 +284,8 @@ def _gate_states(client) -> tuple[int, int, int]:
 
 
 def test_a_folder_on_the_way_that_is_a_file_reads_as_no_file_as_before_round_14(tmp_path, monkeypatch, sockets):  # noqa: F811
-    """HIGH-1: ENOTDIR is "the file isn't there", as exists() said before
-    round 14: defaults, and the gate's reach is what it was."""
+    """ENOTDIR is "the file isn't there", as exists() said before the read-failure codes:
+    defaults, and the gate's reach is what it was."""
     parent = tmp_path / "f"
     parent.write_text("a file, not a folder", encoding="utf-8")
     monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(parent / "settings.json"))
@@ -296,7 +296,7 @@ def test_a_folder_on_the_way_that_is_a_file_reads_as_no_file_as_before_round_14(
 
 @pytest.mark.parametrize("content", ["null", "[]", '"x"', "0", "true"])
 def test_on_desktop_a_file_that_isnt_an_object_gets_the_read_line_never_a_500(home_file, monkeypatch, content):
-    """MEDIUM-1: the injected keys no longer meet a non-object (a TypeError,
+    """The injected keys no longer meet a non-object (a TypeError,
     a 500). GET, every write, start_here and spend answer as in the browser."""
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {"GOOGLE_API_KEY": "AIza-fixture-0000"})
     home_file.write_text(content, encoding="utf-8")
@@ -317,7 +317,7 @@ def test_on_desktop_a_file_that_isnt_an_object_gets_the_read_line_never_a_500(ho
 
 
 def test_the_spend_route_says_the_agents_read_line_through_mcp_and_the_cli(home_file, monkeypatch):
-    """LOW-2: GET /api/agent/spend answered 500 on a file Nebula can't read
+    """GET /api/agent/spend answered 500 on a file Nebula can't read
     (or the default limits for a non-object). Now it says what start_here
     says, with the same status and code."""
     import mcp_server
@@ -341,7 +341,7 @@ def test_the_spend_route_says_the_agents_read_line_through_mcp_and_the_cli(home_
 
 
 def test_a_symlink_loop_is_a_file_nebula_cant_read_everywhere(tmp_path, monkeypatch, sockets):  # noqa: F811
-    """LOW-3: resolve() raised outside every handler, a 500 everywhere."""
+    """resolve() raised outside every handler, a 500 everywhere."""
     loop = tmp_path / "loop.json"
     loop.symlink_to(loop)
     monkeypatch.setenv("NEBULA_SETTINGS_PATH", str(loop))
@@ -356,7 +356,7 @@ def test_a_symlink_loop_is_a_file_nebula_cant_read_everywhere(tmp_path, monkeypa
 
 
 def test_a_broken_symlink_reads_as_no_file_and_a_save_writes_through_it(tmp_path, monkeypatch, sockets):  # noqa: F811
-    """NIT-1: as before, and pinned now."""
+    """As before, and pinned now."""
     target = tmp_path / "real" / "settings.json"
     target.parent.mkdir()
     link = tmp_path / "linked-settings.json"
@@ -369,7 +369,7 @@ def test_a_broken_symlink_reads_as_no_file_and_a_save_writes_through_it(tmp_path
 
 
 def test_a_symlink_to_a_folder_is_named_as_configured(tmp_path, monkeypatch, sockets):  # noqa: F811
-    """NIT-2: the line names the settings path, never the folder it points to."""
+    """The line names the settings path, never the folder it points to."""
     folder = tmp_path / "adir"
     folder.mkdir()
     link = tmp_path / "linked-settings.json"
@@ -379,7 +379,7 @@ def test_a_symlink_to_a_folder_is_named_as_configured(tmp_path, monkeypatch, soc
 
 
 def test_an_empty_settings_path_is_unset(monkeypatch):
-    """NIT-3: "" is the default path, never the working folder."""
+    """"" is the default path, never the working folder."""
     monkeypatch.setenv("NEBULA_SETTINGS_PATH", "")
     assert settings.settings_path() == settings._DEFAULT_SETTINGS_PATH
     monkeypatch.delenv("NEBULA_SETTINGS_PATH")
@@ -396,13 +396,13 @@ def test_an_empty_settings_path_is_unset(monkeypatch):
     ({}, "agent"),
 ], ids=["person", "tab-no-token", "tab-stale-token", "fetch-site", "mcp", "cli", "bare"])
 def test_every_browser_tab_reads_the_persons_line(home_file, headers, audience):
-    """LOW-1 and GM r29 item 5: the words by refusal_copy.person_reads."""
+    """Design: the words by refusal_copy.person_reads."""
     home_file.write_text('{"apiKeys": {', encoding="utf-8")
     line = main.SETTINGS_UNREADABLE_ON_READ[audience].format(path=SHOWN)
     assert TestClient(main.app).get("/api/settings", headers=headers).json()["detail"] == line
 
 
-# -- GM r29 item 7: saving the same key again is safe -----------------------------------------------
+# -- Design: saving the same key again is safe -----------------------------------------------
 
 
 def test_saving_the_same_key_again_changes_nothing_the_second_time(home_file, monkeypatch):
@@ -428,7 +428,7 @@ def test_saving_the_same_key_again_changes_nothing_the_second_time(home_file, mo
     assert [m["keys"] for m in sent if m.get("type") == "settingsChanged"] == [["OPENAI_API_KEY"], []]
 
 
-# -- review 14, copy MEDIUM-1 and LOW-1: every not-ready line names the node, from one table -------
+# -- Every not-ready line names the node, from one table -------
 
 
 def test_every_not_ready_line_starts_with_the_quoted_name_and_the_table_is_current():
@@ -442,7 +442,7 @@ def test_every_not_ready_line_starts_with_the_quoted_name_and_the_table_is_curre
     reasons = json.loads(built)["reasons"]
     assert len(reasons) > 40
     # Every kind of reason appears, so a kind no node reaches is caught
-    # (review 16 of PR #203, tests LOW-1).
+    # (PR #203).
     from execution import person_line
 
     assert {reason["kind"] for reason in reasons} == set(person_line.NOT_READY_PREDICATES)
@@ -453,7 +453,7 @@ def test_every_not_ready_line_starts_with_the_quoted_name_and_the_table_is_curre
 
 
 def test_route_table_auto_with_no_key_names_the_node():
-    """MEDIUM-1 and GM r29 item 1; the card keeps its run line."""
+    """Design; the card keeps its run line."""
     from services import node_readiness, node_route
     from services.node_registry import NodeRegistry
 
@@ -472,7 +472,7 @@ def test_merged_not_ready_lines_and_the_run_again_ending():
                                           ("Writer", reason)])
     assert lines == [("2 “GPT Image 2” nodes and “Writer” need your OpenAI API key. Add it in Settings.", 3),
                      ("“Krea 2” needs your Krea plan. Sign in to Krea in Settings.", 1)]
-    # The Agent Log's forms: the ending in each action sentence's end slot (round 16).
+    # The Agent Log's forms: the ending in each action sentence's end slot.
     logged = person_line.merged_not_ready([("GPT Image 2", reason), ("GPT Image 2", reason), ("Krea 2", plan),
                                            ("Writer", reason)], again=True)
     assert logged == [("2 “GPT Image 2” nodes and “Writer” need your OpenAI API key. "
@@ -482,7 +482,7 @@ def test_merged_not_ready_lines_and_the_run_again_ending():
     assert person_line.merged_not_ready([("Idol", own), ("Idol", own)]) == [(own.own, 1), (own.own, 1)]
 
 
-# -- review 14, copy MEDIUM-2: the Agent Log merges by the bar's rule -------------------------------
+# -- The Agent Log merges by the bar's rule -------------------------------
 
 
 @pytest.mark.parametrize("definitions,line", [
@@ -514,7 +514,7 @@ def test_the_agent_log_merges_names_with_one_reason(monkeypatch, agent_log, defi
             client.delete("/api/graph?force=true")
 
 
-# -- review 14, copy NIT-3: the CLI's free part when entries outnumber the count ---------------------
+# -- The CLI's free part when entries outnumber the count ---------------------
 
 
 def test_the_cli_tags_no_free_run_when_the_entries_dont_match_the_count():
@@ -528,7 +528,7 @@ def test_the_cli_tags_no_free_run_when_the_entries_dont_match_the_count():
 
 
 def test_a_proposals_not_ready_rows_carry_the_reason_the_bar_merges_by(api, monkeypatch):  # noqa: F811
-    """The bar merges by `reason` (review 14, copy LOW-1): each row sends the
+    """The bar merges by `reason`: each row sends the
     line without the name, for one node and for several."""
     monkeypatch.setattr(main, "load_settings", lambda: {"apiKeys": {}})
     text = api.graph.add_node("text-input", {"value": "a cat"})
@@ -547,8 +547,8 @@ def test_a_proposals_not_ready_rows_carry_the_reason_the_bar_merges_by(api, monk
 
 
 def test_a_route_table_node_on_auto_says_its_routes_own_keys():
-    """The route's own missing keys, for a list that names the node (GM r29
-    item 1), never None for a key it can name."""
+    """The route's own missing keys, for a list that names the node (design),
+    never None for a key it can name."""
     from services import node_route
     from services.node_registry import NodeRegistry
 

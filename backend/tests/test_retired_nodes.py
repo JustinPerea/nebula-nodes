@@ -110,7 +110,7 @@ def test_sora_retirement_message_names_the_alternatives(definition_id):
     message = retired_nodes.retired_message(definition_id)
     assert "2026-09-24" in message
     for alternative in ("veo-3", "grok-imagine-video", "runway-video"):
-        # GM r19 answer 1 (PR #198 fix round 12): ids bare.
+        # Design (PR #198): ids bare.
         assert f" {alternative}" in message and f"'{alternative}'" not in message
         assert alternative in NodeRegistry().get_all()
     assert definition_id not in NodeRegistry().get_all(), "hidden for new graphs"

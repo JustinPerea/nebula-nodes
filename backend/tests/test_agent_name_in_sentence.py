@@ -1,5 +1,5 @@
 """A personal agent's name inside a sentence is lower case ("your Claude"), at the
-start of a sentence or label it keeps the capital (GM, copy sweep 2026-11-14).
+start of a sentence or label it keeps the capital (design, copy sweep 2026-11-14).
 An outside agent ("Claude Code") and a stored older name ("Claude (your setup)")
 come out unchanged. One row per sentence family built outside a route."""
 from __future__ import annotations

@@ -1,13 +1,13 @@
-"""PR #198 fix round 10 (review 9): the agent rule across MCP and the CLI,
+"""PR #198: the agent rule across MCP and the CLI,
 and ``onlyIfFree`` on inputs that take several connections.
 
-- M-1: a write that sends no session (``nebula set``, a plain PUT) and
+- A write that sends no session (``nebula set``, a plain PUT) and
   never read is held to the newest read by any session of that name, so an
   MCP read guards it; a session that never read falls back to the name's.
-  A verified token stays its own reader. Fix round 11 (review 10, L-1): a
+  A verified token stays its own reader. A
   writer's own read comes first, so a CLI write built on its older read is
   refused even after a fresh MCP read.
-- N-1: ``onlyIfFree`` refuses only an input that takes one connection.
+- ``onlyIfFree`` refuses only an input that takes one connection.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def test_m1_an_mcp_read_guards_a_cli_write(api):  # noqa: F811
 
 
 def test_m1_a_cli_write_on_a_fresh_mcp_read_is_held_to_its_own_older_read(api):  # noqa: F811
-    # Fix round 11 (review 10, L-1; probe B8): the CLI's own read comes first,
+    # (probe B8): the CLI's own read comes first,
     # so an MCP read never refreshes it. A refusal the agent recovers from
     # (`nebula look`, then redo), never a write over the person's typing.
     node = _cinema(api)

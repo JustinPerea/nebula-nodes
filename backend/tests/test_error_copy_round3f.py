@@ -1,6 +1,6 @@
-"""Error copy round 3f: GM - Design's rules for every card line (GM's 3f message).
+"""Error copy: design's rules for every card line (design's message).
 
-GM: "RULES FOR EVERY CARD LINE (the "shown again, word for word" list breaks
+Design: "RULES FOR EVERY CARD LINE (the "shown again, word for word" list breaks
 these all over; each one can be applied mechanically)":
 
 1. Every line ends with a period.
@@ -82,14 +82,14 @@ def _field_labels() -> frozenset[str]:
 _LABELS = "|".join(sorted((re.escape(label) for label in _field_labels()), key=len, reverse=True))
 # Rule 5: a field named after a verb that sets it ("Set Duration to 10",
 # "Clear the node's Quality field", "doesn't offer Reasoning Effort Low") is
-# written as the node shows it, in quotes. GM's verbatim xAI edit-video line
-# ("Pick it in the node's Model field") is GM's own and isn't one of these verbs.
+# written as the node shows it, in quotes. Design's verbatim xAI edit-video line
+# ("Pick it in the node's Model field") is design's own and isn't one of these verbs.
 _BARE_LABEL = re.compile(r"\b(?:[Ss]et|[Cc]lear|offer|fewer|[Ll]ower|[Rr]aise|[Tt]urn (?:on|off)|[Ff]ill in)\s+"
                          r"(?:the\s+(?:node's\s+)?)?(?:" + _LABELS + r")\b"
                          # "the node's Tags field": a label by name, not in quotes. A port
                          # ("the node's Prompt input") is an input, not a field.
                          r"|\b[Tt]he node's (?!Model field)(?:" + _LABELS + r")\b(?! input| output)"
-                         # "in the Palette field" (round 3g review): a field named bare, the node's or not.
+                         # "in the Palette field" (review): a field named bare, the node's or not.
                          r"|\bthe (?:" + _LABELS + r") field\b"
                          # A label filled in from a table ("Set the node's {} to"), never quoted.
                          r"|\b[Ss]et the node's \{\}")
@@ -104,7 +104,7 @@ def _port_labels() -> list[str]:
 
 
 _PORTS = "|".join(re.escape(label) for label in _port_labels())
-# Round 3g (GM): "anything a person reads as a label on the node goes in
+# Design: "anything a person reads as a label on the node goes in
 # quotes, field or port." A port named by its label, bare.
 _BARE_PORT = re.compile(
     # "the node's Prompt input", "Krea 2's Moodboard input", "this node's Image input"
@@ -119,12 +119,12 @@ _BARE_PORT = re.compile(
 
 
 def port_breaks(line: str) -> bool:
-    """Whether `line` names a port by its label without quotes (round 3g)."""
+    """Whether `line` names a port by its label without quotes."""
     return bool(_BARE_PORT.search(_QUOTED.sub("“”", _URL.sub("", line.strip()))))
 
 
 def rule_breaks(line: str, *, ends_in_a_sentence: bool | None = None) -> list[str]:
-    """What `line` breaks of GM's mechanical rules ([] for none). ``{}`` stands
+    """What `line` breaks of design's mechanical rules ([] for none). ``{}`` stands
     for a value; ``ends_in_a_sentence`` says whether a line ending in one ends
     with a whole sentence (it_was, a shared sentence constant)."""
     broken = []
@@ -149,7 +149,7 @@ def rule_breaks(line: str, *, ends_in_a_sentence: bool | None = None) -> list[st
 
 
 def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None:
-    # Round 3g: "Prompt input" names a port by its label, bare, too.
+    # "Prompt input" names a port by its label, bare, too.
     assert rule_breaks("Prompt input is required") == ["no final period", "a port label not in quotes"]
     assert "an em dash or a semicolon" in rule_breaks("No mask painted yet — open the Mask Painter node.")
     assert "an em dash or a semicolon" in rule_breaks("It can't be found; it may be gone.")
@@ -177,16 +177,16 @@ def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None
     assert "a field label not in quotes" in rule_breaks("Set the node's {} to a number from 0 to {}.")
     assert "a field label not in quotes" in rule_breaks("Set the node's Seed to a whole number from 0 to 9.")
     assert "a field label not in quotes" in rule_breaks("The node's Tags field takes up to 10 tags.")
-    # Round 3g review: "in the Palette field" names a field bare too.
+    # Review: "in the Palette field" names a field bare too.
     assert "a field label not in quotes" in rule_breaks("Add hex swatches in the Palette field, then run the node again.")
     assert "a field label not in quotes" not in rule_breaks("The wire into the node's Prompt input brings something.")
-    # Round 3g: a port is quoted too.
+    # A port is quoted too.
     assert "a port label not in quotes" in rule_breaks("The wire into the node's Prompt input brings something.")
     assert "a port label not in quotes" not in rule_breaks("The wire into “Prompt” brings something it can't take.")
     assert "a field label not in quotes" not in rule_breaks("Set “Duration” to 10 or less.")
     assert "a field label not in quotes" not in rule_breaks(
         "xAI edits videos only on Grok Imagine. Pick it in the node’s Model field, or disconnect the video to edit.")
-    # GM's own lines pass.
+    # Design's own lines pass.
     for line in (
         "Set “Item cap” to a whole number from 1 to 25.",
         "Connect a prompt to this node, then run it again.",
@@ -429,7 +429,7 @@ def test_the_id_guard_also_refuses_code_names() -> None:
         assert not forbidden_in_a_line(line), line
 
 
-# -- GM's specific lines -------------------------------------------------------
+# -- Design's specific lines -------------------------------------------------------
 
 
 def _raised(fn, *args, **kwargs) -> BaseException:
@@ -555,7 +555,7 @@ def test_line_74_names_the_key_that_would_run_it() -> None:
     definition = definition_for("seedream-4-5")
     assert _blocked_key_line(definition, "BYTEPLUS_API_KEY", None) == (
         "These settings need your fal.ai API key. Add it in Settings, then run the node again.")
-    # GM's approved form for a node whose copy runs on any of several keys.
+    # Design's approved form for a node whose copy runs on any of several keys.
     several = {"id": "x", "envKeyName": ["BFL_API_KEY", "FAL_KEY", "REPLICATE_API_TOKEN", "KREA_API_TOKEN"],
                "directKeyName": "BFL_API_KEY"}
     assert _blocked_key_line(several, "BFL_API_KEY", None) == (
@@ -661,7 +661,7 @@ def test_rule_9_units_and_names() -> None:
         "MiniMax makes 1080p clips at 6 seconds only.")
 
 
-# -- the card knows who answered (GM's general line under the heading) ---------
+# -- the card knows who answered (design's general line under the heading) ---------
 
 
 @pytest.mark.asyncio
@@ -761,8 +761,8 @@ def test_a_proposals_missing_node_has_a_line_in_words(monkeypatch) -> None:
     [row] = rows
     # Agents keep find_nodes' words.
     assert "OPENAI_API_KEY" in row["missing"]
-    # The name in curly quotes (GM, PR #203 r20 item 3).
-    # The card names the node in curly quotes (GM - Design on #216 round 1).
+    # The name in curly quotes (design, PR #203).
+    # The card names the node in curly quotes (design on #216).
     assert row["person"] == "“GPT Image 2” needs your OpenAI API key. Add it in Settings."
     assert not re.search(r"[A-Z]{2,}_[A-Z_]+|\(|\)|>", row["person"])
 
@@ -807,7 +807,7 @@ def test_the_recovery_warnings_say_couldnt() -> None:
     assert not any("so it could not save it durably" in text for text in strings)
 
 
-# -- review fixes (round 3f's confirmed findings) ---------------------------------
+# -- review fixes (confirmed findings) ---------------------------------
 
 
 def test_a_field_label_written_into_a_card_line_sits_in_quotes() -> None:

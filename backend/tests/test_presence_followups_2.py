@@ -1,11 +1,11 @@
-"""PR #200 follow-up 2 (GM's ruling on review 20 GM-Q1, and review 20 NIT-3).
+"""PR #200 follow-up 2 (design's ruling on its questions).
 
 A tab that isn't connected as the person sees a new asset proposal only as
 its Update, and shows a placeholder card built from it. The placeholder
 says what the real card says ("proposes the automatic cover", "proposes 3
 changes to this reference"), so the Update's structured ref carries the
 kind of cover and the count of edits. Only those: never the image, the asset
-or a field value (GM: "a held tab gets nothing more than today but a more
+or a field value (design: "a held tab gets nothing more than today but a more
 exact word"). The count is never read from the text, where an agent's name
 could spoof it.
 """
@@ -55,7 +55,7 @@ def test_closing_one_of_two_retargets_the_ref_with_the_other_ones_kind(api):
 
 
 def test_a_moodboard_ask_carries_only_when_it_was_asked(api):
-    """No detail of the change, only ``since`` (PR #202 review 3 LOW-1)."""
+    """No detail of the change, only ``since`` (PR #202)."""
     from tests.test_asset_proposals import _board
 
     board = _board(api)
@@ -96,7 +96,7 @@ def test_the_inbox_flag_is_only_ever_true():
 
 
 def test_post_proposal_checks_what_it_is_handed(api, monkeypatch):
-    """PR #202 review 1 NIT-1: post_proposal itself puts only the checked
+    """PR #202: post_proposal itself puts only the checked
     detail in the ref, whatever its caller hands it."""
     import main
 
@@ -105,7 +105,7 @@ def test_post_proposal_checks_what_it_is_handed(api, monkeypatch):
     _pin(api, A, api.person)
     view = _propose(api, {"cover": C}).json()["proposal"]
     (note,) = _proposal_notes(api)
-    # The junk detail goes; the share fields (PR #204 round 3) are main's own, not the caller's.
+    # The junk detail goes; the share fields (PR #204) are main's own, not the caller's.
     assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk,
                                 "asks": 1, "firstSince": view["createdAt"]}
     assert C not in json.dumps(_note_messages(api, "added")[-1]["note"])
@@ -119,7 +119,7 @@ def test_a_count_is_one_to_999_and_a_float_is_no_count():
 
 
 def test_since_is_a_whole_timestamp_and_a_retarget_replaces_it():
-    """PR #202 review 2 LOW-A: ``since`` (the ask's createdAt, ms) orders a
+    """PR #202: ``since`` (the ask's createdAt, ms) orders a
     held tab's line; only a whole, non-negative number is kept, and a retarget
     carries the new ask's, never the closed one's."""
     clean = agent_notes_module.proposal_detail
@@ -133,7 +133,7 @@ def test_since_is_a_whole_timestamp_and_a_retarget_replaces_it():
 
 
 def test_an_inbox_ask_with_more_than_its_id_and_accept_is_no_inbox_ask():
-    """PR #202 review 2 NIT-B: the inbox words (and flag) are for a membership
+    """PR #202: the inbox words (and flag) are for a membership
     of exactly {id, accept}; one that also sets a role is a change."""
     from services import asset_proposals as module
 

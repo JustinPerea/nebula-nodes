@@ -1,4 +1,4 @@
-"""The MCP tools for covers and proposals outside the graph (U16, Q60 a):
+"""The MCP tools for covers and proposals outside the graph (U16):
 `list_project_covers`, `set_project_cover`, `propose_asset_change`, and
 `get_proposal` / `withdraw_proposal` on an asset proposal. Each goes through
 the HTTP route the Projects screen and Moodboard Studio use."""

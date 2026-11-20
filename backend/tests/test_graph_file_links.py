@@ -1,4 +1,4 @@
-"""Q123 a (Justin, 2026-10-24): "Yes: `nebula load` and an MCP tool open a
+"""(Justin, 2026-10-24): "Yes: `nebula load` and an MCP tool open a
 bundle, restoring its files, as Load graph does. A big one opens as a new
 project."
 

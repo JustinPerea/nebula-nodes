@@ -264,8 +264,7 @@ def test_emptying_deletes_only_what_the_person_saw(api):
 
 def test_emptying_an_empty_shown_list_deletes_nothing(api):
     """`{"items": []}` is a list the person saw with nothing on it, not a
-    missing one: it deletes nothing for good, in every scope's trash
-    (review 10, LOW-4 B1/B2)."""
+    missing one: it deletes nothing for good, in every scope's trash."""
     kept = _board(api, "Still restorable")
     api.client.delete(f"/api/moodboards/{kept['id']}", headers=PERSON)
     project = api.client.post("/api/projects", json={"name": "Also restorable"}, headers=PERSON).json()["project"]["id"]

@@ -1,4 +1,4 @@
-"""A file param's preview and name follow the file an agent sets (GM r46 Q2
+"""A file param's preview and name follow the file an agent sets (design
 on #222, services/file_param_preview.py).
 
 The person uploads a file into an Image Input; an agent then points the
@@ -72,7 +72,7 @@ def test_mcp_edit_canvas_moves_the_preview_and_name_to_the_agents_file(held, mon
     assert params["filePath"].endswith(agents["filePath"].split("/")[-1])
     assert params["_previewUrl"] == agents["url"] != before
     # The old upload's name goes with its file. The card shows the name the
-    # agent's file was uploaded with (GM r48 Q1, services/upload_names.py).
+    # agent's file was uploaded with (design, services/upload_names.py).
     assert "_fileName" not in params
     entry = next(n for n in api.client.get("/api/canvas/snapshot").json()["nodes"] if n["id"] == node_id)
     assert entry["fileName"] == "harbour.png"
@@ -159,7 +159,7 @@ def test_follow_file_params_unit():
 
 
 def test_follow_file_params_leaves_the_preview_of_inputs_that_draw_none():
-    """Merged from main (#226 review 4, NIT-2): audio, video and document inputs
+    """Merged from main (#226): audio, video and document inputs
     draw no image, and a `_previewUrl` there would feed a mask source's fallback."""
     from services.file_param_preview import follow_file_params
 

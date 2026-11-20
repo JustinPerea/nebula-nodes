@@ -1,9 +1,9 @@
-"""PR #198 fix round 2 (review 2 and GM's round-2 rulings, gm-pr198-r2.md).
+"""PR #198 (and design's rulings).
 
 - M1: a shot an Undo brings back keeps its output only when the shot is
   `done` or `error`; it never overwrites an existing `shot_<id>` port, and
   when that port holds a newer result the shot takes it. A shot that is
-  still rendering can't be removed (GM: "block it"): the backend refuses the
+  still rendering can't be removed (design: "block it"): the backend refuses the
   write with a line an agent can act on.
 - M2: a Cinema scene missing `base`, `aspectRatio` or `version` is filled
   with the defaults on every write; only what can't be normalized is refused.
@@ -130,7 +130,7 @@ def test_a_saved_scene_with_a_running_shot_loads_settled(tmp_path):
     assert shots[1]["output"] == {"imageUrl": "/api/outputs/x.png", "status": "done"}
 
 
-# -- GM: a shot that is still rendering can't be removed ------------------------------
+# -- Design: a shot that is still rendering can't be removed ------------------------------
 
 
 @pytest.fixture
@@ -176,7 +176,7 @@ def test_a_whole_scene_run_blocks_removing_any_of_its_shots(api, rendering, pers
     # The person's own undo (a restore) is refused too: nothing orphans a paid run.
     response = _restore(client, node, [{"id": "s2", "prompt": "b"}])
     assert response.status_code == 409, response.text
-    # The person reads GM's line (fix round 3, M2); agents keep "Shot 1 (s1)" and the run.
+    # The person reads design's line; agents keep "Shot 1 (s1)" and the run.
     assert response.json()["detail"] == (
         "Nebula couldn’t undo because it would remove \u201cShot 1\u201d, which is still running. Stop the run first.")
 

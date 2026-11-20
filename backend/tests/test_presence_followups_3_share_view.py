@@ -1,4 +1,4 @@
-"""PR #204 round 4: who sees a shared asset Update's ``asks`` and ``firstSince``.
+"""PR #204: who sees a shared asset Update's ``asks`` and ``firstSince``.
 
 The person's tabs (connected as the person, or held: a tab that says it is one with
 X-Nebula-Tab, or ``?tab=1`` on its socket, and carries no agent marker) and the agent that

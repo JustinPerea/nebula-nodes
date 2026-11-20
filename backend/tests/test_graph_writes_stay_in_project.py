@@ -1,6 +1,6 @@
-"""A write that awaits lands only on the project that was open when it was asked (review 9 of PR #114, round 10).
+"""A write that awaits lands only on the project that was open when it was asked (PR #114).
 
-Review 9's Q5: an agent's model change (PUT /api/graph/node/{id}, or an edit
+An agent's model change (PUT /api/graph/node/{id}, or an edit
 through /api/graph/apply) awaits the model catalog, then writes by node id.
 Agents send no workspace revision, so a project switch during that await
 landed the change on the other project's node with the same id (node ids
@@ -25,7 +25,7 @@ from tests.conftest import PERSON
 from tests.test_canvas_pins import AGENT, api  # noqa: F401  (fixture)
 from tests.test_journal_write_project import CLAUDE, KEY, Race, _png
 
-# Round 11 (review 10, item 5): true after a switch away and back to the same project too.
+# True after a switch away and back to the same project too.
 MOVED = ("The open project changed since this started, so nothing was changed. Read the canvas again "
          "and send the change again if it still fits.")
 RESTARTED = ("The canvas was cleared or replaced since, so nothing was changed. Read the canvas again "
@@ -90,7 +90,7 @@ def _refused(answer: Any, detail: str = MOVED) -> None:
     assert answer.json()["detail"] == detail
 
 
-# -- the agent's model change: Q5, both routes ------------------------------------------
+# -- the agent's model change, both routes ------------------------------------------
 
 @pytest.mark.parametrize("route", ["put", "apply"])
 def test_an_agents_model_change_never_lands_on_the_project_opened_during_its_lookup(race, monkeypatch, route):
@@ -236,7 +236,7 @@ def test_a_canvas_run_never_starts_on_the_project_opened_during_its_spend_check(
 # -- item 6: a rolled-back upload node leaves the open canvas too --------------------------
 
 def _upload_failing_with_a_switch_away_and_back(race, monkeypatch) -> Any:
-    """The upload's sync opens B, then A again, then fails (Q4 case 3)."""
+    """The upload's sync opens B, then A again, then fails (upload case 3)."""
     main = race.main
     from services.agent_presence import _request_headers
 
@@ -264,7 +264,7 @@ def _upload_failing_with_a_switch_away_and_back(race, monkeypatch) -> Any:
 
 
 def test_an_upload_rolled_back_off_the_live_graph_leaves_the_stored_project_too(race, monkeypatch):
-    """The coordinator, round 10: the switch saved the upload's node into A's
+    """The coordinator: the switch saved the upload's node into A's
     stored snapshot; the rollback takes it off the live graph and writes that
     through at once, so a crash right after can't bring it back."""
     answer = _upload_failing_with_a_switch_away_and_back(race, monkeypatch)
@@ -276,7 +276,7 @@ def test_an_upload_rolled_back_off_the_live_graph_leaves_the_stored_project_too(
 
 
 def test_an_upload_rolled_back_off_the_live_graph_resyncs_the_open_canvas(race, monkeypatch):
-    """Q4 case 3: during the upload's failed sync the person opens B and then A
+    """Upload case 3: during the upload's failed sync the person opens B and then A
     again. A's reopen sent the canvas a graph with the upload's node (the
     switch had saved it into A); the rollback takes it off the live graph,
     so the canvas is synced again and holds what the backend holds."""
@@ -312,7 +312,7 @@ def test_an_upload_rolled_back_off_the_live_graph_resyncs_the_open_canvas(race, 
     assert shown == [], "the open canvas still shows the rolled-back node"
 
 
-# -- round 11 (review 10): a run writes back only to the canvas it started on ---------------
+# -- A run writes back only to the canvas it started on ---------------
 #
 # F4: a Clear during a registered run let ids start again, and the run's
 # outputs then landed on whatever node held the id (no type check). Both
@@ -325,7 +325,7 @@ def test_an_upload_rolled_back_off_the_live_graph_resyncs_the_open_canvas(race, 
 import httpx  # noqa: E402
 
 CLEAR_REFUSED = "Cannot clear the canvas while a run is active. Wait for the run to finish or stop it first."
-# GM (round 11): the person's canvas shows "Couldn't clear the canvas." then this.
+# Design: the person's canvas shows "Couldn't clear the canvas." then this.
 CLEAR_REFUSED_PERSON = "A run is still going. Wait for it to finish or stop it first."
 
 
@@ -598,7 +598,7 @@ def test_an_agents_run_shows_ran_only_once_it_is_registered(race, monkeypatch):
     answer = race.client.post("/api/graph/run", headers=AGENT, json={"targetNodeId": t1, "wait": 5})
     assert state.get("registered") is True, state
     # The person's open (race.switch) reads the person's line for the run
-    # refusal since PR #199 round 21; agents keep "Cannot switch projects
+    # refusal since PR #199; agents keep "Cannot switch projects
     # while a run is active. …" (tests/test_project_catalog_restore_fix21.py).
     assert state["switch"] == main.CLEAR_DURING_RUN_PERSON
     assert answer.status_code == 200, answer.text
@@ -651,7 +651,7 @@ def test_a_canvas_run_refuses_a_moved_canvas_before_its_approval_and_spend(race,
 
 
 def test_a_runs_provider_recovery_reaches_no_node_once_its_canvas_was_cleared(race, monkeypatch):
-    """The coordinator, round 11: the recovery event of a run whose canvas was
+    """The coordinator: the recovery event of a run whose canvas was
     cleared since (guard bypassed; unreachable today) neither sets the new
     node's recovery params nor goes to the canvas, which would put it on its
     node by id. The run-and-node checkpoint itself is still kept."""
@@ -683,7 +683,7 @@ def test_a_runs_provider_recovery_reaches_no_node_once_its_canvas_was_cleared(ra
     assert [record["resume_operation_id"] for record in kept] == ["op_old_run"]
 
 
-# -- round 12 (review 11) ------------------------------------------------------------------
+# -- an empty catalog with nodes on the unfiled canvas ----------------
 #
 # G1m: an empty catalog (a fresh install, or the only project deleted) with
 # nodes on the unfiled canvas. A run registers on (None, its epoch). GET
@@ -907,7 +907,7 @@ def test_mcp_setup_quotes_every_refusal_a_run_causes_word_for_word(race, monkeyp
         assert f'"{detail}"' in doc, detail
 
 
-# -- Round 13 of PR #114 (review 12's H1/H2): filing the unfiled canvas is a
+# -- PR #114: filing the unfiled canvas is a
 # rename, not a move. GET /api/projects on an empty catalog files the live
 # unfiled canvas as "Recovered canvas" (same graph, same ids) under a new
 # workspace revision. A write fenced on the unfiled canvas before the filing

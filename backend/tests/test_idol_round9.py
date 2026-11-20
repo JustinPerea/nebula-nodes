@@ -1,18 +1,18 @@
-"""PR #203 round 9: one key state and one cost class for every surface.
+"""PR #203: one key state and one cost class for every surface.
 
-- GM r17 item 1 (review 8, LOW-1): a key that is empty once trimmed reads as
+- Design: a key that is empty once trimmed reads as
   not set everywhere, through node_route.key_text, a value already stored
   that way included; PUT /api/settings and the desktop credential bridge
   refuse it, as the Settings field does.
-- GM r17 item 2 (review 8, LOW-2): the re-ask over an Idol-only "may cost"
+- Design: the re-ask over an Idol-only "may cost"
   placeholder has no total line (Idol adds nothing to any estimate), and the
   409's fallback message says "may cost", never "paid".
-- Review 8, LOW-3: the gate, the billing note and the label read the one cost
+- The gate, the billing note and the label read the one cost
   class (node_route.key_billing, key_billing_account), and the frontend's
   twin agrees case by case (tests/fixtures/key_billing_cases.json).
-- Review 8, NIT-2: the billing note states the downstream rule.
-- Review 8, NIT-3: every key change tells every socket, with no values.
-- Review 8, NIT-4: the refusal names MCP's tool; the CLI prints its command.
+- The billing note states the downstream rule.
+- Every key change tells every socket, with no values.
+- The refusal names MCP's tool; the CLI prints its command.
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ BILLING_CASES = json.loads((FIXTURES / "key_billing_cases.json").read_text(encod
 DEFINITIONS = NodeRegistry().get_all()
 
 
-# -- one cost class (review 8, LOW-3) --------------------------------------------------------
+# -- one cost class --------------------------------------------------------
 
 
 @pytest.mark.parametrize("case", BILLING_CASES, ids=lambda c: f"{c['params']}-{c['apiKeys']!r}")
@@ -94,15 +94,15 @@ def test_a_key_billing_route_that_is_no_space_gets_its_note_from_the_class():
 
 
 def test_the_billing_note_states_the_downstream_rule():
-    """Review 8, NIT-2: an agent that reads only describe_node or find_nodes
-    learns the rule before its first stop (at the call since round 19,
-    Justin decided 2026-10-31)."""
+    """An agent that reads only describe_node or find_nodes
+    learns the rule before its first stop (at the call,
+    as of Justin's decision, 2026-10-31)."""
     assert ("An agent's run goes ahead up to it, and a result it reuses passes, but while the token is set the "
             "node stops before calling Hugging Face and the nodes after it don't run") in main.HF_SPACE_BILLING_TOKEN
     assert "then an agent's run that reaches it stops at it, before anything is sent" in main.HF_SPACE_BILLING_FREE
 
 
-# -- one key state (GM r17 item 1; review 8, LOW-1) ------------------------------------------
+# -- one key state (design) ------------------------------------------
 
 
 @pytest.fixture
@@ -115,7 +115,7 @@ def stored(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main, "is_injected_mode", settings.is_injected_mode)
     broadcast = AsyncMock()
     monkeypatch.setattr(main.manager, "broadcast_raw", broadcast)
-    # Round 10 (review 9, keys LOW-1): the signal goes to the person's tabs only.
+    # The signal goes to the person's tabs only.
     monkeypatch.setattr(main.manager, "broadcast_browser", broadcast)
 
     def write(keys):
@@ -176,7 +176,7 @@ def test_put_stores_every_key_trimmed_and_an_empty_value_changes_nothing(stored)
     assert saved == {"OPENAI_API_KEY": "sk-kept-2222", "HF_TOKEN": "hf_new_token_3333", "FAL_KEY": "fal-key-4444"}
 
 
-# -- every key change tells every socket (review 8, NIT-3) -----------------------------------
+# -- every key change tells every socket -----------------------------------
 
 
 def _signals(broadcast):
@@ -186,7 +186,7 @@ def _signals(broadcast):
 def test_each_key_change_tells_every_socket_with_no_values(stored, monkeypatch):
     client, _path, write, broadcast = stored
     write({"OPENAI_API_KEY": "sk-kept-2222"})
-    # Round 10 (GM, PR #203 r19 item 7): the names of the keys that changed, never a value.
+    # Design, PR #203: the names of the keys that changed, never a value.
     signal = {"type": "settingsChanged", "keys": ["HF_TOKEN"]}
     assert client.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "hf_signal_token_5555"}}).status_code == 200
     assert _signals(broadcast) == [signal]
@@ -211,10 +211,10 @@ def test_a_token_set_from_a_second_client_reaches_an_open_socket(tmp_path, monke
     tab = TestClient(main.app)
     other = TestClient(main.app, headers=PERSON)
     with tab.websocket_connect("/ws", headers=PERSON) as socket:
-        # The person's tab (round 10: the signal goes to their tabs only).
+        # The person's tab (the signal goes to their tabs only).
         socket.send_json({"type": "hello", "personToken": PERSON["X-Nebula-Person"]})
         # The write waits for the promote: sent straight after the hello, it
-        # could broadcast before the socket's loop read it (round 14's CI).
+        # could broadcast before the socket's loop read it (CI).
         wait_for_promote(socket)
         assert other.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "hf_second_client_7777"}}).status_code == 200
         # A marker sent after the PUT answered, so a backend that sends
@@ -230,7 +230,7 @@ def test_a_token_set_from_a_second_client_reaches_an_open_socket(tmp_path, monke
         assert heard == [{"type": "settingsChanged", "keys": ["HF_TOKEN"]}]
 
 
-# -- the placeholder re-ask (GM r17 item 2; review 8, LOW-2) ---------------------------------
+# -- the placeholder re-ask (design) ---------------------------------
 
 
 def test_the_reask_over_an_idol_only_may_cost_placeholder_has_no_total(gated):  # noqa: F811
@@ -253,11 +253,11 @@ def test_the_409_counts_paid_and_may_cost_apart():
     assert "This run includes 1 paid node " in plain.detail["message"]
 
 
-# -- the refusal per surface (review 8, NIT-4) -----------------------------------------------
+# -- the refusal per surface -----------------------------------------------
 
 
 def test_the_refusal_names_mcps_tool_and_the_cli_prints_its_command(capsys):
-    """Round 10 (review 9, keys MEDIUM-1): each surface's words are written
+    """Each surface's words are written
     where the refusal is, and the CLI prints it as it came."""
     from cli.client import NebulaClient
     from nebula_api import NebulaAPIError
@@ -274,7 +274,7 @@ def test_the_refusal_names_mcps_tool_and_the_cli_prints_its_command(capsys):
     assert printed == f"error: Needs the person's approval: x. {cli}\n"
 
 
-# -- the Accept chip's reasons (GM r17 item 4) -----------------------------------------------
+# -- the Accept chip's reasons (design) -----------------------------------------------
 
 
 def test_the_estimate_names_why_each_paid_node_leaves_the_total_open():

@@ -1,8 +1,8 @@
-"""PR #216 round 3l, review 4 logic NIT-1 (B2, B4): the nodes a proposal's card
+"""PR #216: the nodes a proposal's card
 names, and the name each had when it was made.
 
 ``Proposal.touched`` is the existing nodes the card names: those it references
-and BOTH ends of each connection Accept removes (review 3 LOW-2). Its
+and BOTH ends of each connection Accept removes. Its
 ``shown_names`` gives each one's name as made: the node's own title wins over
 the name a removed connection carried for it. Both read only ``existing`` and
 ``removed_edges``, so they run here on a stand-in."""

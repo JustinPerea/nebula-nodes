@@ -1,6 +1,6 @@
 """A node saved before the copy sweep carries a Title Case default label ("Video
 Edit"). It no longer equals the definition's name, but it is still the default
-title, not a name the person chose (final review LOW-4). The table lives in
+title, not a name the person chose (final). The table lives in
 node_route.FORMER_DEFAULT_TITLES; contracts/fixtures/former-default-titles.json
 pins it to the frontend's (frontend/tests/lib/formerDefaultTitles.test.ts)."""
 from __future__ import annotations
@@ -52,7 +52,7 @@ def test_a_video_edit_node_labelled_video_edit_is_not_reported_as_renamed():
     assert _renamed(node, definition, lambda _id: node_route.node_name(definition, "Video Edit", "n1")) is None
 
 
-# Design r160 flag D: a saved canvas read from disk shows the new default name where it holds the old default.
+# Design flag D: a saved canvas read from disk shows the new default name where it holds the old default.
 def _saved(tmp_path, nodes):
     path = tmp_path / "saved.json"
     path.write_text(json.dumps({"nodes": nodes, "edges": [], "counter": len(nodes)}))

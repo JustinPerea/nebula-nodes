@@ -1,14 +1,14 @@
-"""PR #199 fix round 20 (GM r29), the backend's part.
+"""PR #199 (design), the backend's part.
 
-- GM r29 2: copy names. Nebula never reads a number in someone else's
+- Design: copy names. Nebula never reads a number in someone else's
   name: "Recovered <name>" when it is free, else " copy", " copy 2"; the
   only number Nebula raises is its own "copy N". Names in Recently deleted
   and names promised to copies not filed yet are taken, so two recoveries
   at once get two names.
-- GM r29 2: the recover answer names the copy's true source
+- Design: the recover answer names the copy's true source
   (``sourceName``, from the copy's ``recoveredFrom``), never one read from
   the copy's name.
-- GM r29 3: open proposals survive a reopen of the project already open
+- Design: open proposals survive a reopen of the project already open
   (the person's, an agent's, the boot's), with the same ids; opening
   another project still closes them.
 """
@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 CASES = json.loads((Path(__file__).resolve().parent / "data" / "copy_name_cases.json").read_text(encoding="utf-8"))
 
 
-# -- GM r29 2: copy names ---------------------------------------------------------------------
+# -- Design: copy names ---------------------------------------------------------------------
 
 def _listed(names, trash=()) -> dict:
     return {"projects": {f"{index:032x}": {"name": name} for index, name in enumerate(names)},
@@ -76,7 +76,7 @@ def test_gm_r29_2_names_in_recently_deleted_are_taken(case):
 
 
 def test_gm_r29_2_the_cases_cover_gms_list():
-    """GM r29's cases, each in the shared file with its answer."""
+    """Design's cases, each in the shared file with its answer."""
     def answer(family: str, source: str, *taken: str) -> str:
         (case,) = [case for case in CASES if (case["family"], case["source"], tuple(case["taken"])) ==
                    (family, source, taken)]
@@ -166,7 +166,7 @@ def test_gm_r29_2_a_name_in_recently_deleted_is_taken_by_the_route(app):
     assert _recover(client, delta, snapshot, "3" * 32)["project"]["name"] == "Recovered Delta copy"
 
 
-# -- GM r29 2: the recover answer names its true source ----------------------------------------
+# -- Design: the recover answer names its true source ----------------------------------------
 
 def test_gm_r29_2_each_answer_names_its_own_source(app):
     """Two copies named "Recovered Shot 7 copy": one made from "Shot 7 copy",
@@ -224,7 +224,7 @@ def test_gm_r29_2_a_source_in_recently_deleted_is_named(app):
     assert (made["project"]["name"], made["sourceName"]) == ("Recovered Beta", "Beta")
 
 
-# -- GM r29 3: open proposals survive a reopen of the same project -----------------------------
+# -- Design: open proposals survive a reopen of the same project -----------------------------
 
 def _retitle(api, node_id: str, value: str = "agent's", headers=CLAUDE) -> str:
     made = _propose(api, {"note": "Retitle", "params": [{"nodeId": node_id, "params": {"value": value}}]},
@@ -301,7 +301,7 @@ def test_gm_r29_3_a_reopen_in_place_keeps_open_proposals(canvas, headers):
 
 
 def test_gm_r29_3_the_boots_reopen_keeps_them(app, monkeypatch):
-    """The boot's quiet reopen of the open project (round 18's system reopen)
+    """The boot's quiet reopen of the open project (system reopen)
     closes no proposal, and each socket's first sync says so."""
     client, store, _graph, state = app
     book = ProposalBook()

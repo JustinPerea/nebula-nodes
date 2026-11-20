@@ -1,4 +1,4 @@
-"""PR #203 round 17: GM r32.
+"""PR #203: the card's route lines and a refused run's card heading, with design's rulings.
 
 - The card's route lines quote the node's name, as the bar and the log do.
 - A refused run's card heading is the Agent log's "Nebula couldn’t start the
@@ -33,7 +33,7 @@ def _pick(options: list[str]) -> Fix:
 # -- item 1: the two-action comma ------------------------------------------------
 
 @pytest.mark.parametrize("options, with_switch, alone", [
-    (["1K"], "Pick 1K, or switch to fal.ai", "Pick 1K"),  # GM r37 item 1: the comma always
+    (["1K"], "Pick 1K, or switch to fal.ai", "Pick 1K"),  # Design: the comma always
     (["1K", "2K"], "Pick 1K or 2K, or switch to fal.ai", "Pick 1K or 2K"),
     (["1K", "2K", "4K"], "Pick 1K, 2K or 4K, or switch to fal.ai", "Pick 1K, 2K or 4K"),
 ], ids=["one", "two", "three"])
@@ -68,7 +68,7 @@ def test_a_real_stop_with_four_resolutions_lists_them_then_the_comma():
     assert line.endswith(" or 4K, or switch to Replicate.")
 
 
-# -- item 1 of GM's card note: quoted names on the card -----------------------------
+# -- Design's card note: quoted names on the card -----------------------------
 
 def test_the_card_quotes_the_node_name_as_the_log_does():
     flux3 = NodeRegistry().get_all()["flux-3-image"]

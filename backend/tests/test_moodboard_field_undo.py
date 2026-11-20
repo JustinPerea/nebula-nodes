@@ -1,4 +1,4 @@
-"""A board field's undo comes from the server (Q83).
+"""A board field's undo comes from the server.
 
 Moodboard Studio makes each board field change one undo step (Direction,
 Avoid, pinned colours, notes, strength...). Its undo must be the server's

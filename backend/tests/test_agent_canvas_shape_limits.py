@@ -1,4 +1,4 @@
-"""Review 6 of PR #205 (lines-limits MEDIUM-1): an agent's write is refused
+"""PR #205: an agent's write is refused
 when it would leave the canvas past Save's own shape limits, measured as Save
 measures them: depth from the file's root, values over the whole canvas.
 

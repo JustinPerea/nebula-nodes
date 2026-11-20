@@ -1,4 +1,4 @@
-"""Agents ask the person questions and wait for the answers (Q125 item 1).
+"""Agents ask the person questions and wait for the answers.
 
 Justin, 2026-10-24: "Yes, all four, in that order", then "go with your
 suggestions". Item 1 of four: an agent asks 1-5 questions, the person
@@ -295,7 +295,7 @@ def test_asking_posts_one_update_with_answer_and_sends_the_key_to_the_browser_on
     assert note["source"] == "nebula" and note["author"]["name"] == "Claude Code"
     assert note["refs"] == [n1]
     assert note["actions"] == [{"label": "Answer", "op": {"kind": "question.answer", "questionId": view["id"]}}]
-    # GM 2026-10-29 (the held needs-you count): how many it asks, as its line says, and when.
+    # Design 2026-10-29 (the held needs-you count): how many it asks, as its line says, and when.
     assert note["questions"] == {"id": view["id"], "count": 2, "since": view["createdAt"]}
     assert view["update"] == {"id": note["id"], "projectId": asked.project_id}
     # Template words only: the questions and the note are the form's, not the Update's.
@@ -486,7 +486,7 @@ def test_a_wait_returns_as_soon_as_the_person_answers(asked):
 
 
 def test_an_abandoned_answers_wait_frees_its_waiter_slot(asked):
-    # Review 1 of PR #114 (M2): the waits share /api/canvas/events' 32 slots,
+    # PR #114: the waits share /api/canvas/events' 32 slots,
     # and a client that went away held one for the rest of its wait.
     from services.canvas_events import MAX_WAITERS
 

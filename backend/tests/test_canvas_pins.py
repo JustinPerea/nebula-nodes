@@ -57,8 +57,8 @@ def _activate(store: ProjectStore, project_id: str) -> None:
 # -- text and caps ----------------------------------------------------------
 
 def test_text_is_plain_single_line_and_capped():
-    # A break and a tab read as spaces, kept inside (GM r19 answer 1, PR #200 fix round 12).
-    assert clean_text("  warmer\n\tplease\x00\x1b[31m \u202e ", limit=280) == "warmer  please"  # the colour code goes whole (PR #200 fix round 6, review 6 N-4)
+    # A break and a tab read as spaces, kept inside (design, PR #200).
+    assert clean_text("  warmer\n\tplease\x00\x1b[31m \u202e ", limit=280) == "warmer  please"  # the colour code goes whole (PR #200)
     assert clean_text("x" * MAX_PIN_TEXT, limit=MAX_PIN_TEXT) == "x" * MAX_PIN_TEXT
     for bad in ("", "   \n", None, 42, "x" * (MAX_PIN_TEXT + 1)):
         with pytest.raises(PinError) as exc:
@@ -145,7 +145,7 @@ def test_resolve_detach_and_agent_view(tmp_path):
     other = pins.add("later", position={"x": 0, "y": 0}, graph_nodes=nodes)
     resolved = pins.resolve(pin["id"], "Warmed  the grade\non n7", CODEX)
     assert resolved["status"] == "resolved"
-    assert resolved["reply"]["text"] == "Warmed  the grade on n7"  # spaces inside as typed (GM r19)
+    assert resolved["reply"]["text"] == "Warmed  the grade on n7"  # spaces inside as typed (design)
     assert resolved["reply"]["agent"]["name"] == "Codex"
     again = pins.resolve(pin["id"], "Second answer", CODEX)
     assert again["reply"]["text"] == "Second answer"
@@ -294,7 +294,7 @@ def test_agent_resolves_a_pin_and_its_cursor_moves_there(api):
 
 
 def test_an_agents_pin_answer_reaches_its_own_sessions_feed_only(api):
-    # Round 5, D1: `nebula pin resolve` from the listening session's shell
+    # `nebula pin resolve` from the listening session's shell
     # ends that pin's span; Nebula keeps the session beside the journal so
     # only that same session's ownReplies feed shows it.
     client, graph, _journal, *_ = api
@@ -384,7 +384,7 @@ def test_websocket_sends_pins_after_graph_sync(api):
         message = ws.receive_json()
     assert message["type"] == "canvasPins" and message["pins"][0]["text"] == "hello"
     # It left before the handler read from it again: still unregistered, so no
-    # canvas counts as open afterwards (PR #203 round 13).
+    # canvas counts as open afterwards (PR #203).
     import main as main_module
 
     assert main_module.manager.active_connections == [] and not main_module.manager.canvas_open()
@@ -547,7 +547,7 @@ def test_mcp_resolve_pin_sends_a_named_request(monkeypatch):
     assert json.dumps(calls[0]).count("Origin") == 0
 
 
-# -- Review 4 of PR #114: the listing names the project open at that moment ---------
+# -- PR #114: the listing names the project open at that moment ---------
 # The pins cache was cleared only at the end of _broadcast_graph_sync, so a
 # GET /api/canvas/pins landing while a switch awaited its export and
 # broadcast answered with the old project's pins (its pin still open), and
@@ -652,7 +652,7 @@ def test_any_commit_to_the_catalog_shows_in_the_next_listing(tmp_path):
     assert [pin["text"] for pin in pins.list()["pins"]] == ["warmer"]
 
 
-# -- Review 5 of PR #114: the journal names the project the catalog has open ---------
+# -- PR #114: the journal names the project the catalog has open ---------
 # M1: a "Recovered canvas" (GET /api/projects) commits a new open project with
 # no graph broadcast, and the journal's project tag was set only in that
 # broadcast: the journal kept naming no project, so the --channel listener
@@ -719,7 +719,7 @@ def test_a_pin_added_after_deleting_every_project_and_recovering_wakes_claude(ap
 
 @pytest.mark.parametrize("path", ["open", "create"])
 def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api, monkeypatch, path):
-    # Round 5's open item: the person pins on the project just opened while
+    # Open item: the person pins on the project just opened while
     # the switch still awaits its export, before canvas.replaced is journaled.
     import main as main_module
 
@@ -728,7 +728,7 @@ def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api
     capture = main_module.manager.broadcast_raw
 
     async def pin_mid_switch(data, **kw):
-        await capture(data, **kw)  # with others=, as the real one takes it (PR #211 review 5, LOW-1)
+        await capture(data, **kw)  # with others=, as the real one takes it (PR #211)
         if data.get("type") == "graphSync" and data.get("graphReplaced") and not added:
             added["at"] = store.read()["activeProjectId"]
             # The pin route itself, as a request landing at this await would run it.
@@ -750,7 +750,7 @@ def test_a_pin_added_between_a_switchs_commit_and_its_broadcast_wakes_claude(api
     _assert_pin_wake(*_channel_decides(client, journal), added["pin"]["id"], now_open)
 
 
-# Review 6 of PR #114, LOW-1: the pin routes read the project they wrote to,
+# PR #114: the pin routes read the project they wrote to,
 # awaited the browsers' broadcast, then journaled with that tag. A switch and a
 # pin on the new project could be journaled during that await, so the late
 # event named the project left, and the listener (_project_open) dropped the
@@ -771,7 +771,7 @@ def test_a_pin_route_journals_before_a_switch_can_overtake_it(api, monkeypatch, 
         first_id = first.json()["pin"]["id"]
 
     async def switch_and_pin(data, **kw):
-        await capture(data, **kw)  # with others=, as the real one takes it (PR #211 review 5, LOW-1)
+        await capture(data, **kw)  # with others=, as the real one takes it (PR #211)
         if data.get("type") == "canvasPins" and "armed" in done and "pin" not in done:
             done["pin"] = None
             # The person opens the other project while this route awaits its

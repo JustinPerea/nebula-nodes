@@ -1,4 +1,4 @@
-"""PR #203 round 23d: the settings save copies the old file's metadata onto
+"""PR #203: the settings save copies the old file's metadata onto
 its temp file, and clears a copied ACL off it, by open descriptor only, so a
 temp folder swapped for a symlink after the save opened it is never reached;
 and the sweep puts a private folder that was chmodded open back to 0700.

@@ -1,6 +1,6 @@
-"""Idol without a Hugging Face token, by run plan (GM, PR #203 r8 items 1-2).
+"""Idol without a Hugging Face token, by run plan (design, PR #203 items 1-2).
 
-Round 7: Idol is keyless (the first live call ran with no token), so no
+Idol is keyless (the first live call ran with no token), so no
 run is refused for the missing token any more. A canvas run still skips an
 agent's placeholder Idol and runs the rest (the backend validates after
 _skip_placeholders, as the canvas reads lib/runScope nodesThatRun), and a

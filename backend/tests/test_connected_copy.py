@@ -1,4 +1,4 @@
-"""Nebula says connected, never wired (GM - Design, 2026-10-25).
+"""Nebula says connected, never wired (design, 2026-10-25).
 
 The agent's cursor bubbles name nodes by their label in curly quotes, as the
 Agents panel does, falling back to the node type's name when a node has no
@@ -109,11 +109,11 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
                       json={"positions": {node: {"x": 900, "y": 640}}}).status_code == 200
     assert _says(sent)[-1] == "Moved “Hero shots”"
     # A params update that names no param changes nothing, so it says nothing
-    # (PR #198 review 2, N4): the last line is still the move.
+    # (PR #198): the last line is still the move.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
     assert [say for say in _says(sent) if say][-1] == "Moved “Hero shots”"
     # A params update that names params says which, by the card's label in
-    # curly quotes (GM - Design, round 16 of PR #195; GM, r18 of PR #114):
+    # curly quotes (design, PRs #195 and #114):
     # no node, never the raw key.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
     assert _says(sent)[-1] == "Set “Text”"
@@ -125,7 +125,7 @@ def test_updating_an_unlabeled_node_falls_back_to_its_type_name(logged):
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
     # The Agents panel's line names it by its type: Changed “Text Input”.
     assert (_presence_events(sent)[-1].get("did") or {}).get("label") == "Text Input"
-    # An empty change says and logs nothing (PR #198 review 2, N4).
+    # An empty change says and logs nothing (PR #198).
     before = (len(_presence_events(sent)), len(lines))
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
     assert not any(event.get("say") or event.get("log") for event in _presence_events(sent)[before[0]:])
@@ -160,8 +160,8 @@ def test_a_refused_run_bubble_names_the_node_in_quotes(logged):
     assert body["status"] == "failed"
     [event] = [event for event in _presence_events(sent) if str(event.get("say")).startswith("“GPT Image 2.5”")]
     # Its first sentence names what's needed; the action lives on the card and
-    # in the log (GM, PR #203 r39 item 5).
+    # in the log (design, PR #203).
     assert event["say"] == "“GPT Image 2.5” needs a prompt and your OpenAI API key."
-    # The Agent log's line rides on the cursor's event, once (GM, PR #203 r30 item 1).
+    # The Agent log's line rides on the cursor's event, once (design, PR #203).
     assert event["log"].startswith("Nebula couldn’t start the run. “GPT Image 2.5” needs")
     assert not any(line.startswith("Nebula couldn’t start the run.") for line in lines)

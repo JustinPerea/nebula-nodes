@@ -1,9 +1,9 @@
-"""Board strength 0 turns the whole board off for that node (Q36 a).
+"""Board strength 0 turns the whole board off for that node.
 
 Justin, 2026-10-20: "Strength 0 turns the whole board off for that node,
 text included. The run note becomes "Board strength is 0: board not sent".
 For images off with text on, use the node's existing "Send board images"
-switch." Plan sections 5.7.3 step 1, 5.7.4 and 7.5 Q36.
+switch." Plan sections 5.7.3 step 1, 5.7.4 and 7.5.
 
 A generator that takes a board gets nothing from a strength-0 board: no
 brief, Avoid, negatives or images, and the same run note on every node. A
@@ -218,7 +218,7 @@ async def test_strength_zero_through_the_engine_reaches_no_generator(tmp_path, m
 
 @pytest.mark.asyncio
 async def test_strength_zero_leaves_the_moodboard_nodes_own_outputs(tmp_path, monkeypatch):
-    """Judgment call (plan §7.5 Q36): the Brief, Negative, Palette and Images
+    """Judgment call (plan §7.5): the Brief, Negative, Palette and Images
     outputs are wiring the person chose, so strength 0 doesn't empty them.
     "Off for that node" is about a generator's Moodboard input."""
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))

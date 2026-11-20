@@ -127,7 +127,7 @@ def test_garbage_file_is_a_clear_error(api):
 
 
 def test_the_contact_sheet_turns_exif_rotated_images(tmp_path):
-    # PR #208 round 4 (review 3 R18): each tile as it shows, EXIF turn included.
+    # PR #208: each tile as it shows, EXIF turn included.
     path = tmp_path / "exif-6.jpg"
     exif = Image.Exif()
     exif[0x0112] = 6  # 60x40 stored, shown 40x60

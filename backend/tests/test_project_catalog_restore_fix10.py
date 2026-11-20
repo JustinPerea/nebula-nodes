@@ -1,19 +1,19 @@
-"""PR #199 fix round 10 (review 10, GM r12 and GM r13).
+"""PR #199 (design's two rulings).
 
-HIGH-1: `canvasPending` sits in the catalog's head (before `activeProjectId`),
+`canvasPending` sits in the catalog's head (before `activeProjectId`),
 a restore keeps what the copy and each damaged file's head still say, and a
 restore that couldn't read the damaged file whole protects the reopened
 project again when it is the live canvas's (a record the damage took fails
-safe). Review 10's 30-cut-point sweep: every cut keeps the person's canvas.
-L-1: an agent's copy carries its own name and agent in state.json (and a
+safe). A 30-cut-point sweep: every cut keeps the person's canvas.
+An agent's copy carries its own name and agent in state.json (and a
 held copy in its entry), so a damaged catalog never files it as "Recovered
 canvas N" or names it as the person's.
-HIGH-2 and GM r13, 1: protection ends only on the person's own open of the
+Design: protection ends only on the person's own open of the
 project (a `viewing` frame with `openedBy: "person"`, refused when the last
 switch to it was an agent's; or `personOpen`) or their first own edit there
 (`personInput`): a tab that followed an agent's switch, an agent's write and
 a sync echo never end it.
-GM r12, 2: the person's canvases are saved before an agent's copy, and each
+Design: the person's canvases are saved before an agent's copy, and each
 waiting canvas says its own count.
 """
 from __future__ import annotations
@@ -68,7 +68,7 @@ def _relaunch(client, monkeypatch, state, store) -> dict:
     return client.get("/api/projects", headers=PERSON).json()
 
 
-# -- HIGH-1: review 10's sweep, as a test -----------------------------------------------------
+# -- Sweep, as a test -----------------------------------------------------
 
 CUTS = [f"f{i:02d}" for i in range(2, 100, 4)] + ["in-head", "before-canvasPending", "inside-canvasPending",
                                                   "before-projects", "before-trash"]
@@ -93,9 +93,9 @@ def test_high1_every_cut_of_the_catalog_keeps_the_persons_canvas(app, monkeypatc
     """The listing filed and opened the person's waiting canvas, protected;
     then catalog.json is cut (damage: an atomic rename never tears it). After
     a restart, a listing and an agent's clear, the person's canvas is still
-    exactly in a project, wherever the cut landed (review 10, HIGH-1: at
-    7738ed8f, 9 of these lose it in this test; review 10 counted 10 in its
-    own probe)."""
+    exactly in a project, wherever the cut landed (at
+    7738ed8f, 9 of these lose it in this test; the reviewer's
+    own probe counted 10)."""
     client, store, graph, state = app
     _listed_fresh(client, store, graph, state, monkeypatch)
     before = _live_values(main_module.cli_graph)
@@ -173,7 +173,7 @@ def test_high1_only_the_live_canvass_own_project_is_protected_again(app, monkeyp
     assert store_module.canvas_pending_of(catalog)["fresh"]["projectId"] == project_id
 
 
-# -- L-1: the agent's copy is the agent's after any damage ------------------------------------
+# -- The agent's copy is the agent's after any damage ------------------------------------
 
 L1_CUTS = [f"f{i:02d}" for i in range(4, 100, 8)] + ["before-canvasPending", "inside-canvasPending", "before-trash"]
 
@@ -219,7 +219,7 @@ def test_l1_the_copy_note_travels_with_the_canvas(app, monkeypatch):
     assert filed["name"] == "Recovered canvas copy"
 
 
-# -- HIGH-2 and GM r13, 1: only the person's own open or edit ends it --------------------------
+# -- Design: only the person's own open or edit ends it --------------------------
 
 def _codex_copies_then_opens_the_original(client, store, graph, state, monkeypatch) -> tuple[str, list]:
     """Codex edits (the edit goes on a copy, the original closed and still
@@ -246,7 +246,7 @@ def _the_original_stays_intact(client, store, before) -> None:
 
 @pytest.mark.parametrize("frame", ["fixed-tab-viewing-null", "followed-tab-says-person", "old-tab-viewing"])
 def test_high2_a_tab_that_follows_codex_onto_the_original_doesnt_end_its_protection(app, monkeypatch, frame):
-    """Review 10, HIGH-2, with the person's tab connected: Codex edits, opens
+    """With the person's tab connected: Codex edits, opens
     the original, the tab follows it and says what it shows; Codex clears.
     The original keeps the person's canvas. Even a tab that wrongly says the
     person opened it is refused: the last switch to it was an agent's."""
@@ -359,7 +359,7 @@ def test_high2_no_agent_sends_the_persons_acts(app, monkeypatch, headers):
         assert not _settles(lambda: _fresh(store) is None, seconds=0.4)
 
 
-# -- GM r12, 2: the person's canvas first, each line its own count ----------------------------
+# -- Design: the person's canvas first, each line its own count ----------------------------
 
 def test_gm12_2_each_waiting_canvas_says_its_own_count_the_persons_first(app, monkeypatch):
     client, store, graph, state = app

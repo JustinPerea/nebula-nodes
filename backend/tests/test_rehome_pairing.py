@@ -338,7 +338,7 @@ def test_a_store_on_another_device_than_its_folder_is_unpaired(tmp_path, monkeyp
 
 
 def test_a_bind_mounted_real_store_in_a_copy_is_not_purged(tmp_path, monkeypatch):
-    """The review's LOW-4: a copy with the real store mounted into its home
+    """A copy with the real store mounted into its home
     (a different device here, simulated: bind mounts need root)."""
     copy = tmp_path / "copy" / ".nebula"
     root = copy / "moodboards"
@@ -409,7 +409,7 @@ def test_a_folder_holding_only_a_link_is_not_evidence(tmp_path):
     assert purge.finish({"projects": {}, "trash": {}, PENDING: [GONE]}, state_dir=state, stores=[store])[0] == []
 
 
-# -- round 2: the re-home never follows a link inside a store ------------------------
+# -- The re-home never follows a link inside a store ------------------------
 
 def test_a_copys_rehome_never_follows_a_linked_trash(tmp_path, caplog):
     """The final review's p1: a copy with its own HOME holds ``state`` and a real
@@ -444,7 +444,7 @@ def test_the_rehome_uses_the_purges_own_link_check(monkeypatch, tmp_path):
     assert seen == [(root, ".trash")]
 
 
-# -- round 2: a store Nebula made proves itself ---------------------------------------
+# -- A store Nebula made proves itself ---------------------------------------
 
 DESKTOP_STORES = ("characters", "moodboards", "presets")
 
@@ -543,7 +543,7 @@ def test_an_existing_empty_store_stays_unproven_until_something_is_saved(tmp_pat
     assert done == [GONE]
 
 
-# -- round 2: a pending id on an unproven store costs nothing -------------------------
+# -- A pending id on an unproven store costs nothing -------------------------
 
 def test_an_unproven_store_is_decided_once_and_never_scanned_for_the_ids(tmp_path, monkeypatch):
     data = _desktop_data(tmp_path)
@@ -591,7 +591,7 @@ def test_the_unproven_line_is_true_once_per_start_and_only_with_pending_ids(tmp_
     assert "mounted" not in lines[0] and str(tmp_path) not in lines[0] and GONE not in lines[0]
 
 
-# #230 round 2 check: the re-home never writes into a linked destination either,
+# #230 check: the re-home never writes into a linked destination either,
 # ``_global`` or the project's own folder (probes p6 and p7).
 
 def _copy_linking(tmp_path, link_name):
@@ -629,8 +629,8 @@ def test_a_copys_rehome_never_writes_into_a_linked_project_folder(tmp_path):
     assert report["moved"] == 0 and (root / OLD / "c-old.json").is_file()
 
 
-# #230 round 3 check: no backup or log through a linked backups folder (Q3), and
-# no move onto a destination file that is a link into another store (Q2).
+# #230 check: no backup or log through a linked backups folder, and
+# no move onto a destination file that is a link into another store.
 
 def test_a_linked_backups_folder_leaves_the_root_alone(tmp_path):
     real = tmp_path / "real" / ".nebula"

@@ -1,6 +1,6 @@
-"""Placeholders and statuses, round 9 (review 8 of feat/agent-presence).
+"""Placeholders and statuses, (feat/agent-presence).
 
-- L-a: the model a node runs is named the same way on the run pill and in the
+- The model a node runs is named the same way on the run pill and in the
   person's paid-placeholder dialog (lib/placeholderRunConfirm.ts modelName):
   the chosen option of a select param labelled Model (``model``,
   ``model_id``, Meshy's ``ai_model``), else the model a free-text model param
@@ -19,7 +19,7 @@ from tests.test_canvas_proposals import api  # noqa: F401 - fixture
 from tests.test_pending_nodes import pend  # noqa: F401 - fixture
 
 
-# -- L-a: the run pill names the chosen model --------------------------------------------------------------
+# -- The run pill names the chosen model --------------------------------------------------------------
 
 @pytest.mark.parametrize(("definition_id", "params", "expected"), [
     ("openrouter-universal", {"model": "openai/gpt-4o-mini"}, "openai/gpt-4o-mini"),

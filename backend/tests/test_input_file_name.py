@@ -116,7 +116,7 @@ def test_a_name_that_no_longer_matches_the_file_is_not_shown(client):
     params = main_module.cli_graph.nodes[node_id]["params"]
     assert input_file_name(params) is None
     entry = next(n for n in client.get("/api/canvas/snapshot").json()["nodes"] if n["id"] == node_id)
-    # Not the old name: the path's own (GM r48 Q1 on #222, services/upload_names.py).
+    # Not the old name: the path's own (design on #222, services/upload_names.py).
     assert entry["fileName"] == "0123abcd.wav"
 
 

@@ -1,13 +1,13 @@
-"""Agent cursors, PR #211 review 2 (backend items).
+"""Agent cursors, PR #211 (backend items).
 
-- LOW-1: the refusal echo is cleaned in services/cursor_actions.py, the one
+- The refusal echo is cleaned in services/cursor_actions.py, the one
   place, so the route, MCP and the CLI all get it: no lone surrogate, no
   control, format or bidi character, a cut that never splits a character,
   and never a 500.
-- LOW-2: an agent with a live cursor is never evicted from the agent cap; a
+- An agent with a live cursor is never evicted from the agent cap; a
   new agent past the cap gets the plain agent cursor (no session).
-- LOW-4: the cap prefers an idle agent, then the least recently used one.
-- NIT-1: an invalid NEBULA_AGENT_SESSION acts as if it were unset.
+- The cap prefers an idle agent, then the least recently used one.
+- An invalid NEBULA_AGENT_SESSION acts as if it were unset.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _clean(line: str) -> None:
         assert char not in "\x1b\u202e\u202d\u2066\u2067\u2068\u2069​\x00\x7f", repr(line)
 
 
-# -- LOW-1: the echo ----------------------------------------------------------
+# -- The echo ----------------------------------------------------------
 
 def test_the_echo_drops_surrogates_controls_and_bidi_and_still_says_where():
     assert _quoted(refusal("\ud800x")) == "�x"
@@ -103,7 +103,7 @@ def test_the_cli_refuses_each_with_a_clean_line(capsys, bad):
     assert "\x1b" not in err and "\u202e" not in err
 
 
-# -- LOW-2 and LOW-4: the caps ----------------------------------------------
+# -- The caps ----------------------------------------------
 
 def _agent(index: int) -> AgentIdentity:
     return AgentIdentity(id=f"ext:x{index}", name=f"X{index}", color="#3FC1A5", verified=False)
@@ -182,7 +182,7 @@ def test_the_session_cap_lets_a_younger_idle_session_go_before_an_older_active_o
     assert presence.session_key(agent.id, "s0") not in {key for key, _o in presence.live_sessions(agent.id)}
 
 
-# -- NIT-1: an invalid NEBULA_AGENT_SESSION is ignored for the cursor ---------
+# -- An invalid NEBULA_AGENT_SESSION is ignored for the cursor ---------
 @pytest.mark.parametrize("bad", ["lane a", "x" * 65, "lane/a", "lañe", "\u202elane"])
 def test_the_cli_treats_an_invalid_session_as_unset_for_the_cursor(monkeypatch, bad):
     from cli.client import NebulaClient, cursor_session
@@ -246,7 +246,7 @@ def test_one_session_rule_for_the_backend_cli_and_mcp():
     assert presence_module._SESSION_RE is cursor_actions.SESSION_RE
 
 
-# -- NIT-3: a failed person form carries the real number, or none -------------
+# -- A failed person form carries the real number, or none -------------
 def test_a_failed_person_form_carries_the_live_sessions_real_number(sockets, monkeypatch):
     from tests.test_agent_cursor_sessions import MCP_SESSION, _presence_frames
 

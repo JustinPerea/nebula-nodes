@@ -334,7 +334,7 @@ def test_an_added_node_the_person_changed_or_wired_since_stays(api):
     assert set(api.graph.nodes) == {prompt, image, a, b}
     reasons = {item["nodeId"]: item["reason"] for item in result["skipped"]}
     assert reasons == {a: "changed since", b: "wired since"}
-    # The reason stays a code; the message agents and `nebula undo` read says connected (GM, 2026-10-25).
+    # The reason stays a code; the message agents and `nebula undo` read says connected (design, 2026-10-25).
     messages = {item["nodeId"]: item["message"] for item in result["skipped"]}
     assert messages[b] == "“Text Input” was connected to “Nano Banana” after that step, so Nebula left it as it is."
     assert messages[a] == "“Text Input” changed after that step, so Nebula left it as it is."
@@ -639,7 +639,7 @@ def test_an_edit_whose_canvas_is_cleared_while_it_finishes_gets_no_token(api, mo
     assert "cleared" in applied["undo"]["reason"]
 
 
-# -- a node someone ran since the edit stays (Q82) ----------------------------
+# -- a node someone ran since the edit stays ----------------------------
 # Justin: "Your run counts as changed since: the agent's undo leaves that node
 # and says why. The agent's own runs don't count, so it can still undo its own
 # experiments." A run by the person, by another agent or by an unnamed client

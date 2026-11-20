@@ -1,11 +1,11 @@
-"""PR #198 fix round 13 (review 12; GM r21).
+"""PR #198 (design).
 
-- Review 12 N-5: ids and handles take no quotes, through ``!r`` too: a card
+- Ids and handles take no quotes, through ``!r`` too: a card
   id already on a board, an imported node's output handle, a preview's port,
   a definition id an agent wrote, the engine's run errors.
-- GM r21 answer 1: a name an agent wrote that matches nothing is shown in
+- Design: a name an agent wrote that matches nothing is shown in
   “…” (``no Style “X”``, ``no board “X”``), as the person's lines show names.
-- GM r21 answer 2: a call an agent can make next stays code: in backticks,
+- Design: a call an agent can make next stays code: in backticks,
   with its own straight quotes (```get_run('run_x')```).
 """
 from __future__ import annotations
@@ -61,7 +61,7 @@ def test_no_id_or_handle_goes_through_repr():
 
 
 def test_names_an_agent_wrote_are_in_curly_quotes():
-    """GM r21 answer 1: ``no Style “X”``, ``no board “X”``, the same for
+    """Design: ``no Style “X”``, ``no board “X”``, the same for
     Characters, projects and looks, and when several share the name."""
     straight = re.compile(r"\b(?:no (?:Style|Character|board|project|look|frame)|(?:Styles|Characters|boards|projects) are named|"
                           r"the project|Board|Moodboard) '\{")
@@ -96,7 +96,7 @@ def test_a_style_by_a_name_nothing_has_or_two_share():
 
 
 def test_calls_shown_to_agents_are_code_in_backticks():
-    """GM r21 answer 2: the next call stays code, with its straight quotes,
+    """Design: the next call stays code, with its straight quotes,
     in backticks: never bare in a sentence."""
     call = re.compile(r"(?<!`)\b(?:get_run|open_project|rename_project|model_catalog|get_proposal)\('")
     found = [f"{rel}:{number}: {line.strip()}" for rel, number, line in _source_lines()

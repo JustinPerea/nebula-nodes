@@ -1,11 +1,11 @@
-"""PR #202 review 3 (round 5): LOW-1.
+"""PR #202: a held tab orders by the time of the ask.
 
-LOW-1: a held tab orders a project's cover and a moodboard's placeholder
+A held tab orders a project's cover and a moodboard's placeholder
 cards by when each ask was made (the Update ref's ``since``), as the promoted
-cards order by the proposal's createdAt. Review 2's LOW-A gave Commons asks
+cards order by the proposal's createdAt. An earlier fix gave Commons asks
 ``since``; covers and moodboards now get it too, so after the Update falls
 back to an agent's older ask the cards keep their places on the promote.
-LOW-2 is in test_presence_followups_2e_settle.py.
+The settle half is in test_presence_followups_2e_settle.py.
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ def _by_author(api) -> dict[str, dict]:
     return {n["author"]["name"]: n for n in _proposal_notes(api) if not n.get("resolvedAt")}
 
 
-# -- LOW-1 --------------------------------------------------------------------
+# -- a held tab orders by the time of the ask ---------------------------
 
 def _fall_back(api, change_first, change_other, change_again, *, kind="project", target=None):
-    """Review 3's R3-1: Codex asks, Claude Code asks, Codex asks again and
+    """Codex asks, Claude Code asks, Codex asks again and
     withdraws that ask, so Codex's Update falls back to its first ask while
     keeping the later time."""
     first = _propose(api, change_first, kind=kind, target=target, headers=CODEX).json()["proposal"]

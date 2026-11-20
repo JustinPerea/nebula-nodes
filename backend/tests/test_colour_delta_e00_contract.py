@@ -64,7 +64,7 @@ def test_the_hue_wrap_pairs_match_an_independent_ciede2000(case):
 
 
 def test_the_fixture_takes_both_hue_wraps_away_from_zero_chroma():
-    # Review 4 N1: a pair at zero chroma or exactly 180° doesn't notice a
+    # A pair at zero chroma or exactly 180° doesn't notice a
     # missing wrap, so keep one each way with real chroma and |Δh'| well past 180.
     def hue_step(case):
         lab1, lab2 = np.array(case["a"], float), np.array(case["b"], float)
@@ -87,7 +87,7 @@ def test_the_generator_writes_exactly_the_fixture():
 
 
 def test_near_blacks_are_one_colour_and_mid_tones_past_the_threshold_are_two():
-    # Why Extract uses this metric (review 3, M1): plain OKLab put #000000 and
+    # Why Extract uses this metric: plain OKLab put #000000 and
     # #010101 twice its threshold apart, while CIEDE2000 keeps near-blacks and
     # near-whites alike under the merge threshold.
     def d(a, b):

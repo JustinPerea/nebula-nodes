@@ -1,12 +1,12 @@
-"""Round 22 of PR #195: review 21 L-e and GM's round-22 Accept wording.
+"""PR #195: design's Accept wording.
 
-- L-e: once a run is registered, nothing reads storage (``_register_run``'s
+- Once a run is registered, nothing reads storage (``_register_run``'s
   own rule). ``_admit_registered_run`` used to make the placeholders normal
   (saved) and only then read the workspace again for the agent-run record,
   so a failing read answered "nothing started" (507) with the placeholders
   already changed. The reads now come before the one write, and the project
   is the one the run registered on.
-- GM round 22 (4b): an Accept refused because the canvas was cleared or
+- Design (4b): an Accept refused because the canvas was cleared or
   replaced after the proposal was made carries ``code:
   "proposal_canvas_replaced"`` (the canvas reads the code, never the words)
   and a detail that says the same as the person's line.
@@ -32,7 +32,7 @@ def _run(pend, route, target):
 
 def _storage_fails_once_registered(main, monkeypatch):
     """The catalog can't be read from the moment the run is registered until
-    its admission returns (review 21's ADMFAIL, as the real read fails)."""
+    its admission returns (ADMFAIL, as the real read fails)."""
     armed = {"on": False}
     real_context = main._workspace_context
 
@@ -117,7 +117,7 @@ def test_Le_a_failing_placeholder_save_keeps_no_agent_run(pend, monkeypatch, rou
 
 
 # ---------------------------------------------------------------------------
-# GM round 22 (4b): Accept after the canvas was cleared or replaced
+# Design (4b): Accept after the canvas was cleared or replaced
 
 
 def test_accept_after_the_canvas_moved_carries_the_code_and_the_detail(api):
@@ -127,7 +127,7 @@ def test_accept_after_the_canvas_moved_carries_the_code_and_the_detail(api):
     assert proposed.status_code == 201, proposed.text
     proposal_id = proposed.json()["proposal"]["id"]
     key = _key(api, proposal_id)
-    # A clear or an import landed inside the accept's own await (review 20, L-3).
+    # A clear or an import landed inside the accept's own await.
     api.main.canvas_undo_book.advance_epoch(api.main._workspace_context()["activeProjectId"])
     response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**PERSON, KEY: key}, json={})
     assert response.status_code == 409, response.text

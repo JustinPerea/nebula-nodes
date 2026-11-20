@@ -1,4 +1,4 @@
-"""A file param's name (GM r48 Q1 on #222, services/upload_names.py).
+"""A file param's name (design on #222, services/upload_names.py).
 
 Everywhere a file param's name shows, it is the name the file was uploaded
 with when Nebula has one, else the path's base name, and never a bare

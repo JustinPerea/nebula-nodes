@@ -1,7 +1,7 @@
 """No cost path prices a key-billing route without the person's keys, and
 nothing decides "may cost" but the one cost-class function.
 
-GM, PR #203 r15 item 1: the ghost card priced Idol with no keys and read
+Design, PR #203: the ghost card priced Idol with no keys and read
 "free" while the bar, priced with the token, read "may cost". Whether a
 ``mayBillWithKey`` route is free or may cost (and who bills a route-table
 node) depends on the keys set, so every function that reads it takes them as
@@ -9,7 +9,7 @@ a required argument, and this ratchet reads every backend caller and fails on
 one that leaves them out or passes an empty mapping in any spelling: ``{}``,
 ``None``, ``dict()``, or a name bound to one of those.
 
-Review 8 of PR #203, LOW-3 and NIT-1: the class has one source,
+PR #203: the class has one source,
 node_route.key_billing (with key_billing_account for the account it names).
 The gate (may_bill), the billing note (main._space_billing), cost_for and the
 estimate read it; a second derivation (reading ``mayBillWithKey`` anywhere
@@ -174,14 +174,14 @@ def _flag_reads() -> list[str]:
 
 
 def test_only_the_one_cost_class_function_reads_the_route_flag():
-    """Review 8 of PR #203, LOW-3: "may cost" has one source. A surface that
+    """PR #203: "may cost" has one source. A surface that
     reads ``mayBillWithKey`` itself (the gate, the billing note, a label) is
     a second derivation that can drift on the next keyed route."""
     assert not _flag_reads(), f"read {FLAG} outside node_route.key_billing: {_flag_reads()}"
 
 
 def test_the_ratchet_catches_each_disguise(tmp_path, monkeypatch):
-    """The scan itself: each planted form is reported (review 8, NIT-1)."""
+    """The scan itself: each planted form is reported."""
     planted = {
         "keyless.py": "cost_for(d, p, defs)\n",
         "literal.py": "cost_for(d, p, defs, {})\n",

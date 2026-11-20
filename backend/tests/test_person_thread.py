@@ -1,4 +1,4 @@
-"""The Message box's thread (services/person_thread.py, GM - Design r50).
+"""The Message box's thread (services/person_thread.py, design).
 
 The person messages a Claude Code session listening through the Nebula
 channel from the canvas; it answers with reply_to_person (MCP) or `nebula
@@ -6,7 +6,7 @@ reply` (CLI). Rows are kept on the project record, so a reload and every tab
 agree. What these pin down:
 
 - only the person sends, only to a listening session; the 201st message to
-  one listener in an hour is accepted and held (GM r55), never refused, and
+  one listener in an hour is accepted and held (design), never refused, and
   the listener reports any other message it holds;
 - the read boundary (Justin, 2026-11-03): every connected agent reads the
   thread, as pins (journal and read tool), under ONE switch,
@@ -51,9 +51,9 @@ def thread(api, monkeypatch):  # noqa: F811 - the imported fixture
     monkeypatch.setattr(api.main, "channel_book", book)
     cap = person_thread.SendCap(clock)
     monkeypatch.setattr(api.main, "thread_send_cap", cap)
-    # Each test starts with a fresh reply pace (round 3: 5 in a row, then one every 2 s).
+    # Each test starts with a fresh reply pace (5 in a row, then one every 2 s).
     monkeypatch.setattr(api.main, "thread_reply_pace", person_thread.ReplyPace(clock))
-    # And a fresh push ledger on the same clock (review 4: which push a reply answers).
+    # And a fresh push ledger on the same clock (which push a reply answers).
     from services import push_ledger
 
     ledger = push_ledger.PushLedger(clock)
@@ -371,7 +371,7 @@ def test_the_thread_is_kept_with_the_project_and_capped(thread, monkeypatch):
     ids = [_send(thread, a, f"m{n}").json()["row"]["id"] for n in range(7)]
     catalog = thread.main.project_store.read()
     kept = catalog["projects"][thread.project_id][person_thread.FIELD]
-    # Messages still in flight (sent, not taken) are never trimmed (MEDIUM-2).
+    # Messages still in flight (sent, not taken) are never trimmed.
     assert [r["text"] for r in kept] == [f"m{n}" for n in range(7)]
     assert "personThread" not in catalog["projects"][thread.project_id]["snapshot"]
     # Once taken (accepted) they are the person's settled rows: the oldest go.
@@ -403,7 +403,7 @@ def test_opening_a_project_sends_its_thread(thread):
     asyncio.run(thread.main._broadcast_projects_changed("renamed", thread.project_id))
     assert not [m for m in thread.browser if m.get("type") == "personThread"]
 
-# -- a typed answer stays the asking agent's (GM r73 item 2, Justin's boundary rule) ------
+# -- a typed answer stays the asking agent's (design, Justin's boundary rule) ------
 
 TYPED_ANSWER = "Keep the warm one only for the hero, please"
 
@@ -433,7 +433,7 @@ def test_a_typed_answer_is_one_question_answered_and_never_a_thread_row_post_or_
     new = [e for e in thread.journal._events if e["seq"] > seq_before]
     assert [e["kind"] for e in new] == [mcp_channel.ANSWERED_KIND]
     assert TYPED_ANSWER not in _journal_text(thread)
-    # No new thread row, no message, nothing in an inbox. GM r79.5: the
+    # No new thread row, no message, nothing in an inbox. Design: the
     # question row keeps the outcome, in the person's form only.
     rows_after = thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"]
     assert [r["id"] for r in rows_after] == [r["id"] for r in rows_before]

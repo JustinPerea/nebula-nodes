@@ -1,4 +1,4 @@
-"""PR #212 round 6: a refusal is worded for its reader where it is written
+"""PR #212: a refusal is worded for its reader where it is written
 (agent_spend.propose_hint, main._quick_propose_hint, handlers/speridlabs_idol.agent_call_stop),
 never rewritten on its way out. The refusals an MCP caller can get (a spend
 refusal from decide, a stopped Idol call, a quick run's) reach the caller through

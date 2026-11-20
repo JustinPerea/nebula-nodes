@@ -11,7 +11,7 @@ The CLI runs as an agent does (`nebula --url ... <command>`, NEBULA_AGENT_NAME
 set) against the app in-process, with the MCP test's isolated stores
 (tests/test_mcp_projects_and_reads.py's `nebula` fixture). Every output is
 scanned for the test keys: the CLI never has the person token, so it never
-prints any part of a key (Justin, Q55 a: "Only the app (your person token)
+prints any part of a key (Justin: "Only the app (your person token)
 gets the endings. Everything else learns which providers are set, and
 nothing more").
 """

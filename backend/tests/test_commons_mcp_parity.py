@@ -1,4 +1,4 @@
-"""Commons for agents, now (Justin's Q63 b, 2026-10-20; audit U13).
+"""Commons for agents, now (Justin's ruling, 2026-10-20; audit U13).
 
 Read tools for what agents could reach only over raw HTTP: the collections
 (`commons_add` needs one's id), status, borrowings, a borrowing's fidelity
@@ -186,7 +186,7 @@ def test_an_empty_listing_still_answers_the_client(tools):
 
 
 def test_status_explains_both_pauses_as_state_not_ui_copy():
-    """sf (GM - Design shortened the Commons toolbar's worker status). Agents
+    """sf (design shortened the Commons toolbar's worker status). Agents
     keep the structured state, never the person's status line: the tool says
     what each field means and what resumes each pause, so an agent can explain
     it the way the tooltip does."""

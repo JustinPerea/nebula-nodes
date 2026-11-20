@@ -1,19 +1,19 @@
-"""Round 21 of PR #195: review 20's backend findings and GM's round 21 lines.
+"""PR #195: backend findings and design's lines.
 
-- M-1. An agent reopening the project the tab shows reloads it from what was
+- An agent reopening the project the tab shows reloads it from what was
   saved; the tab's handoff then keeps its typing on the live graph too, not
   only in the stored copy (the next read or overlay put the live values back).
-- L-3. A proposal keeps the canvas revision it was made on; Accept refuses
+- A proposal keeps the canvas revision it was made on; Accept refuses
   when the canvas moved since (a clear landing while it awaited).
-- L-5. The revisions file is saved as a merge: another book's later write
+- The revisions file is saved as a merge: another book's later write
   never moves a project's revision backwards.
-- L-6. A handoff's ``pendingParams`` and ``pendingLabels`` come only from a
-  person's tab; anyone else gets 409 with GM's line (G4: "the change came
+- A handoff's ``pendingParams`` and ``pendingLabels`` come only from a
+  person's tab; anyone else gets 409 with design's line (G4: "the change came
   from an agent").
 - G4. The handoff's refusal reads "Nebula couldn't keep this save's unsent
   changes in the project because <why>, so nothing was saved."
 - G5. Recovered copies are numbered: "Recovered <project>", then
-  "Recovered <project> 2", 3 and so on (GM r23 a on PR #199); a new copy never reuses an earlier one.
+  "Recovered <project> 2", 3 and so on (design, PR #199); a new copy never reuses an earlier one.
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _refusal(why: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# M-1: a reopen keeps the typing on the live graph and in the stored project
+# A reopen keeps the typing on the live graph and in the stored project
 
 
 def _reopen(api) -> tuple[str, dict]:
@@ -82,7 +82,7 @@ def test_M1_control_a_switch_away_leaves_the_live_graph_alone(api):
 
 
 # ---------------------------------------------------------------------------
-# L-6 and G4: only a person's tab sends the unsent changes
+# Only a person's tab sends the unsent changes
 
 
 def test_L6_an_agents_handoff_with_pending_params_is_refused(api):
@@ -133,7 +133,7 @@ def test_G4_another_kind_of_node_reads_a_nodes_type_changed(api):
 
 
 # ---------------------------------------------------------------------------
-# L-3: Accept refuses on a canvas that moved since the proposal was made
+# Accept refuses on a canvas that moved since the proposal was made
 
 
 def test_L3_a_proposal_keeps_the_canvas_it_was_made_on_and_accept_refuses_when_it_moved(api, monkeypatch):
@@ -155,7 +155,7 @@ def test_L3_a_proposal_keeps_the_canvas_it_was_made_on_and_accept_refuses_when_i
 
 
 # ---------------------------------------------------------------------------
-# L-5: the revisions file is saved as a merge
+# The revisions file is saved as a merge
 
 
 def test_L5_two_books_on_one_file_never_move_a_revision_backwards(tmp_path):
@@ -196,7 +196,7 @@ def test_G5_recovered_copies_are_numbered(api):
         answer = _recover(api, f"{index:032x}")
         assert answer.status_code == 200, answer.text
         names.append(answer.json()["project"]["name"])
-    # GM r29 of PR #199, 2: " copy", then " copy 2".
+    # Design of PR #199, 2: " copy", then " copy 2".
     assert names == ["Recovered Active", "Recovered Active copy", "Recovered Active copy 2"]
 
 

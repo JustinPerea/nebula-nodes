@@ -5,7 +5,7 @@ change altered what an old board gives generators, agents or the Moodboard
 node. Fix the change, not ``expected.json``.
 
 The boards in ``fixtures/moodboard_golden/boards/`` are files as Nebula saved
-them before the moodboard canvas (item 6), captured on main at 12257250:
+them before the moodboard canvas, captured on main at 12257250:
 
 - ``prebrief_v2_plain``: saved before the brief fields (no ``direction``,
   ``avoid``, ``pinnedColors``, ``briefOverride`` or ``briefVersion``) and
@@ -69,16 +69,16 @@ before it was replaced (the review lists every path that moved):
   ``briefBasis``, run notes, Krea style references, the brief's palette and
   accents, negative and avoid prompts, and every hand-written override.
 - 2026-10-20, moodboard canvas PR2 (one "Set aside" switch, analysis
-  version 5; plan section 4.4, Q7). The CLI's ``brief()`` gives every image
+  version 5; plan section 4.4). The CLI's ``brief()`` gives every image
   ``setAside`` (``excluded`` or weight 0): true for the 7 excluded and
   weight-0 images, false for the other 32. ``sourceHash.version`` for the
   never-analyzed ``prebrief_unanalyzed`` is today's analyzer's, 4 to 5; its
   hash is the same. Nothing else moved: the node's bundle (the fresh analysis
   of ``prebrief_unanalyzed`` included) still carries no excluded image, in
   ``images`` or in ``analysis.images``.
-- 2026-10-20, Q21 b: Krea 2 board refs scaled to add up to the board's
+- 2026-10-20: Krea 2 board refs scaled to add up to the board's
   strength; unchanged: refs, order, every other key (moodboard canvas
-  PR13a, plan section 4.8 item 7; Justin: "They should normalize for however
+  PR13a, plan section 4.8; Justin: "They should normalize for however
   any nodes need the information"). Each board's ``kreaStyleReferences``
   strengths go from ``strength x weight`` to ``strength x weight / sum`` over
   the references sent, at 4 decimals by largest remainder, adding up to the
@@ -107,7 +107,7 @@ before it was replaced (the review lists every path that moved):
   file before the change with those paths normalized
   (``_without_weight_zero``), and ``tests/test_moodboard_weight_zero.py``
   pins that no generator request changes.
-- 2026-10-21, Q98 (Justin: "a) Yes: the same check, and the same
+- 2026-10-21, outside image links (Justin: "a) Yes: the same check, and the same
   placeholder for old boards"; contract 07 section 1.19). The 3 boards with
   an external https image (``prebrief_v2_edited``, ``v3_current``,
   ``v4_current_private``) moved on 15 paths: the node bundle's ``images``
@@ -121,7 +121,7 @@ before it was replaced (the review lists every path that moved):
   ``test_q21b_changed_only_the_krea_style_references`` normalizes those
   paths too (``_without_outside_links``); the file at 26572670, the file
   just before this change and this one give the same hash.
-  Q98's review (same day) moved 9 more paths on those 3 boards: the bundle's
+  A review of the outside-link change (same day) moved 9 more paths on those 3 boards: the bundle's
   and the CLI's ``analysis.summary`` count drops by one (the outside image
   steers by its settings but no generator gets it, so it isn't counted,
   ``moodboard_analysis.counts``), and ``outsideNote`` tells an agent to ask
@@ -136,7 +136,7 @@ before it was replaced (the review lists every path that moved):
   never-analyzed ``prebrief_unanalyzed`` is today's analyzer's, 5 to 6; its
   hash is the same. ``test_q21b_changed_only_the_krea_style_references``
   reads that path as 5 (``_ANALYZER_AT_26572670``), so the hash is unchanged.
-  The same PR (GM r1 on #208): the summary's count gets a real plural,
+  The same PR (design on #208): the summary's count gets a real plural,
   "1 reference image" / "N reference images", in place of "reference
   image(s)". 13 paths moved, each an ``analysis.summary`` (the node bundle's,
   and the CLI's saved analysis as read, which ``with_steering_count`` now
@@ -364,7 +364,7 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
     assert sorted(p.name for p in root.iterdir()) == sorted({p.parent.name for p in seeded.values()})
 
 
-# The file as it stood before PR13a's deliberate update (Q21 b), less its
+# The file as it stood before PR13a's deliberate update, less its
 # ``kreaStyleReferences``: sha256 of the canonical JSON (sorted keys, no
 # spaces), taken on main at 26572670. PR13a may change only that key. The
 # clash-wording change (``LEXICON_VERSION`` 3, same day) moves only the
@@ -373,9 +373,9 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
 # The weight-0 change (2026-10-20) moves only the paths ``_without_weight_zero``
 # normalizes, so the hash is of the file at 26572670 with those normalized too
 # (it was c97b6c2d4b07... before them); the file just before that change gives
-# the same hash. Q98 (2026-10-21) moves only the paths ``_without_outside_links``
+# the same hash. The outside-link change (2026-10-21) moves only the paths ``_without_outside_links``
 # normalizes, so the hash is of the file at 26572670 with those normalized too
-# (it was ef8f5d4016bb... before them); the file just before Q98 and the file
+# (it was ef8f5d4016bb... before them); the file just before the outside-link change and the file
 # after it give the same hash.
 BEFORE_Q21B_WITHOUT_KREA_REFS = "5cc3283db0dfd28e80d29ef1651607f2926df7a7fac5d3fd24661d438a45ac1c"
 # The analyzer version a never-analyzed board reported at 26572670.
@@ -405,7 +405,7 @@ _OUTSIDE_NOTE = re.compile(r"from outside Nebula")
 
 
 def _without_outside_links(outputs: dict[str, Any]) -> None:
-    """The paths Q98 moved (2026-10-21), normalized in place: an image that
+    """The paths the outside-link change moved (2026-10-21), normalized in place: an image that
     is a link to another site out of the bundle's ``images`` and
     ``analysis.images`` (where the file before it still had them), the run
     note that says so, and the CLI view's ``outside`` mark and
@@ -444,7 +444,7 @@ def _without_krea_refs(expected: dict[str, Any]) -> str:
         source = outputs.get("sourceHash")
         if label == "prebrief_unanalyzed" and isinstance(source, dict) and source.get("version") == 6:
             source["version"] = _ANALYZER_AT_26572670
-        # PR #198 fix round 13 (GM r21 answer 1): a run note names its board in
+        # PR #198 (design): a run note names its board in
         # “…”, where it had straight quotes; nothing else in it changed.
         if isinstance(outputs.get("runNotes"), list):
             outputs["runNotes"] = [re.sub(r"Moodboard “([^”]*)”", r"Moodboard '\1'", str(note)) for note in outputs["runNotes"]]
@@ -468,6 +468,6 @@ def test_q21b_changed_only_the_krea_style_references() -> None:
 
 def test_the_golden_docstring_records_the_q21b_change() -> None:
     doc = __doc__ or ""
-    assert "Q21 b" in doc
+    assert "2026-10-20" in doc
     assert ("Krea 2 board refs scaled to add up to the board's strength; unchanged: refs, order, "
             "every other key") in " ".join(doc.split())
