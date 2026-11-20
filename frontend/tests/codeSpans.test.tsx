@@ -137,12 +137,27 @@ describe('quoted names and quote styles', () => {
     expect(codes(el)).toEqual([]);
     expect(el.textContent).toBe(text);
   });
-  it('leaves a backslash-escaped backtick literal', () => {
-    const text = 'a \\`b\\` c';
+  it('leaves a backslash-escaped backtick literal and still pairs a real span after it', () => {
+    const el = html('x \\`a\\` y `b` z');
+    expect(codes(el)).toEqual(['b']);
+    expect(el.textContent).toBe('x \\`a\\` y b z');
+    expect(codes(html('only \\`a` here'))).toEqual([]);
+  });
+  it('a GNU quote around a name with a space or a non-ASCII letter stays literal', () => {
+    const mv = "mv: cannot move `my a.png' to `my b.png'";
+    const el = html(mv);
+    expect(codes(el)).toEqual([]);
+    expect(el.textContent).toBe(mv);
+    expect(codes(html("see `café.png' now"))).toEqual([]);
+  });
+  it('an apostrophe inside a span still pairs', () => {
+    expect(codes(html("it `don't` and `echo 'x'`"))).toEqual(["don't", "echo 'x'"]);
+  });
+  it('an unclosed opening quote protects the rest of a cut line', () => {
+    const text = 'Couldn’t add “a`b`.png (cut';
     const el = html(text);
     expect(codes(el)).toEqual([]);
     expect(el.textContent).toBe(text);
-    expect(codes(html('a \\`b` c'))).toEqual([]);
   });
 });
 

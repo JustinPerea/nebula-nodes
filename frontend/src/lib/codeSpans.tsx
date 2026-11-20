@@ -8,8 +8,8 @@ import type { ReactNode } from 'react';
  * inside a “…” run, a GNU-style `quote', and an escaped (\`) backtick stay as typed.
  */
 const SPAN = /(?<![`\\])`([^`\n]+)`(?!`)/g;
-/** A GNU-style quote opens with a backtick and closes with a straight apostrophe (`a'), so it is not a span. */
-const GNU_OPEN = /^[\w./~-]+'(?![A-Za-z])/;
+/** A GNU-style quote opens with a backtick and closes with a straight apostrophe (`my a.png'), so it is not a span: the first apostrophe in the inner text is not followed by a letter (`don't` and `echo 'x'` are spans). */
+const GNU_OPEN = /^[^']*'(?![\p{L}])/u;
 
 export const CODE_SPAN_CLASS = 'code-span';
 
@@ -18,8 +18,9 @@ function quotedRuns(text: string): Array<[number, number]> {
   const runs: Array<[number, number]> = [];
   let from = text.indexOf('“');
   while (from !== -1) {
-    const to = text.indexOf('”', from + 1);
-    if (to === -1) break;
+    const found = text.indexOf('”', from + 1);
+    // A line that was cut short leaves its “ open: the run goes to the end of the line.
+    const to = found === -1 ? text.length : found;
     runs.push([from, to]);
     from = text.indexOf('“', to + 1);
   }
