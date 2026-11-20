@@ -3,8 +3,8 @@ import { apiRequest } from './apiRequest';
 import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
 import { actorLabel, type TrashedItem } from './trash';
-import { MoodboardVersionConflict, type MoodboardEditResult, type MoodboardOp } from './moodboardEdits';
-import { CharacterVersionConflict } from './characterEdits';
+import type { MoodboardEditResult, MoodboardOp } from './moodboardEdits';
+import { CharacterVersionConflict, MoodboardVersionConflict } from './versionConflicts';
 import { RequestFailedError, requestError, requestSucceeded, withHeading } from './errorCopy';
 import type {
   ProviderRecoveryCheckpoint,

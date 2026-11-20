@@ -1,20 +1,6 @@
-import { RequestFailedError } from './errorCopy';
 import type { Character } from '../types';
 
-/** A PUT sent with `baseVersion` after someone else saved the Character
- *  (409). `character` is the Character as it is now, to rebase on. */
-export class CharacterVersionConflict extends RequestFailedError {
-  readonly character: Character;
-
-  /** After three in a row the Studio's notice says this, as the board's does
-   * (GM, error-copy round 2); the version stays in `detail`. */
-  constructor(character: Character) {
-    super("Couldn’t save the character.", 409, { reason: 'This character changed in another tab. Reload to get the latest version.',
-      detail: { code: 'version_conflict', version: character.version } });
-    this.name = 'CharacterVersionConflict';
-    this.character = character;
-  }
-}
+export { CharacterVersionConflict } from './versionConflicts';
 
 /** The Character fields the Studio edits and a PUT may carry. */
 export const CHARACTER_FIELD_KEYS = ['name', 'subjectType', 'referenceViews', 'frozenTraitString', 'seed',
