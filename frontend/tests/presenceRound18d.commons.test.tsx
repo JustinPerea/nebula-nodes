@@ -1,5 +1,5 @@
 /**
- * Design (PR #204): findings on the real Commons screens with the
+ * PR #204 (design): tests on the real Commons screens with the
  * real Commons API (only apiFetch is stubbed).
  * - The Commons turned off (design): the header keeps only the way back, the
  *   title and Updates; no sections, Add to, Add, status, Start or Stop; one line, "Commons is
@@ -9,7 +9,7 @@
  * - A settings write that landed, whose read-back failed (design).
  * - The grid says nothing while the collections haven't loaded (design).
  * - One loading look (design); a pane's load line hides offline.
- * - The surviving mutants.
+ * - Guards that mutation testing showed untested.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,5 +1,5 @@
 /**
- * PR #204 (commons-reconnect logic lens): races and Try again.
+ * PR #204: races and Try again.
  *
  * - A link's late read-back renames only the notice it wrote, never a newer one.
  * - A collections read that answers after a newer one is dropped, and Add to
@@ -7,7 +7,6 @@
  * - Design: a Try again whose re-read fails for another reason keeps focus on the new
  *   line's Try again.
  * - Design: Agent review's loaded-state line ending "Try again." has the button.
- * Probes turned into assertions.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';

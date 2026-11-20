@@ -254,7 +254,7 @@ const SEEDS = [7, 11, 2026, 31337, 424242];
 const SEEDS_200 = Array.from({ length: 200 }, (_, i) => 1000 + i * 7919);
 const SEEDS_40 = SEEDS_200.slice(0, 40);
 
-/** An orange disc on a noisy grey background, as a reviewer built it: each
+/** An orange disc on a noisy grey background, as the original report built it: each
  *  background pixel ``base`` moved by 0 to 7 levels (toward white when
  *  ``sign`` is 1). */
 function noisyDisc(seed: number, base: number, sign: 1 | -1, perChannel = false): Img {

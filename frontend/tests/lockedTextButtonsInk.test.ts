@@ -8,7 +8,7 @@ import { cascaded } from './helpers/cssCascade';
  * PR #198: a ghost's grey --disabled-label, a filled button's dark
  * --disabled-fill-label on the grey fill), and keep it while focused, the
  * focus ring drawn on top. Read from the app's real stylesheets the way the
- * browser cascades them (tests/helpers/cssCascade.ts). Before this, Run
+ * browser cascades them (tests/helpers/cssCascade.ts). Before the fix, Run
  * History's buttons weren't in the shared rule, so their own sheet's enabled
  * white (--sr-ink) won.
  */

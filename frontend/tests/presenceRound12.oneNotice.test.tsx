@@ -1,7 +1,7 @@
 /**
  * Design (PR #204): one rule for the general notice. A because line on screen sends it
  * away; a lock line alone keeps it; when both show, the because line wins. The rule is checked
- * here after a demote on the two sections design named: the Commons (design's shot 09 showed its because
+ * here after a demote on the two sections design named: the Commons (a design screenshot showed its because
  * line beside the notice) and Personal agents. `noticeBesideBecauseLine` is the ratchet: it fails
  * whenever the general notice shows while a registered because line is on screen (in view by the
  * observer, rendered). The live check runs the same rule on every screen it visits, and records
@@ -130,7 +130,7 @@ describe('one rule for the general notice (design)', () => {
   });
 
   it('the ratchet fails a because line on screen beside the notice', async () => {
-    // The notice drawn by hand beside a registered because line: what design's shot 09 showed.
+    // The notice drawn by hand beside a registered because line: what the design screenshot showed.
     const notice = document.createElement('div');
     notice.className = 'person-required';
     document.body.appendChild(notice);

@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * Design (PR #198): rendered: the scenes' stop lines
+ * PR #198, design's rulings, rendered: the scenes' stop lines
  * are a state in their own slot of the region's stack, above the event
  * slots (the message line and the canvas notice), one line per cause, with
  * [Try again] for every scene the line names and no ×.

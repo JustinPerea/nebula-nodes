@@ -134,7 +134,7 @@ describe('no toast cuts a sentence (design)', () => {
     const cut = rules.filter((rule) => /(toast|notice)(?![\w-]*(dot|icon|close|action|button|dismiss|back))/i.test(rule.selector)
       && (/text-overflow:\s*ellipsis/.test(rule.body) || /white-space:\s*nowrap/.test(rule.body)))
       .map((rule) => `${rule.file}: ${rule.selector}`);
-    // The exceptions, design (PR #216): an Undo notice carrying the
+    // The exceptions, as design ruled in PR #216: an Undo notice carrying the
     // fold's count ("Moved “Hero shot” · Undo · 3 more") cuts its name
     // so Undo and "3 more" fit on one line; and one kept to one line where
     // its full height leaves the proposal card short of Accept and Reject

@@ -19,7 +19,7 @@ import { regionNoticesReady } from './helpers/regionNoticesReady';
  * places once, on the layout spring.
  *
  * The layout is mocked: a 1024x640 window, the region's line 81 px up, a
- * floating log at 200-540 x 400-554 (a reviewer's p4/p5 repro).
+ * floating log at 200-540 x 400-554 (a repro).
  */
 const root = () => document.documentElement;
 const FLOAT = ['top', 'bottom', 'left', 'right'] as const;

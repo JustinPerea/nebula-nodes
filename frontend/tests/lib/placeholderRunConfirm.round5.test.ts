@@ -67,7 +67,7 @@ describe("the placeholder dialog's $0 lines (design)", () => {
 });
 
 describe('the total the run sends', () => {
-  // Superseded (design): the amount sent is
+  // Superseded by a later design ruling: the amount sent is
   // the one shown, in cents rounded up ("$0.01" for anything under a cent).
   it('is the amount shown, rounded up to the cent', () => {
     const model = placeholderRunConfirm([node('i', 'Hero still', codex)], [], 'i', summaryOf({

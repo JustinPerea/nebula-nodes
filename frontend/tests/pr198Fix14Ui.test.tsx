@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Design (PR #198): rendered:
+ * PR #198, design's rulings, rendered:
  * - After Try again saved the tab's edits as a recovered project, the
  *   banner's place holds a neutral notice with [Open] and ×: "Your latest
  *   edits were saved as their own project, “<name>”." Focus goes to its ×,
@@ -39,7 +39,7 @@ const savedAs = { line: editsSavedAsProjectLine('Recovered canvas (recovered)'),
   open: { id: 'p9', name: 'Recovered canvas (recovered)' } };
 
 describe('the saved-as notice takes the banner’s place (design)', () => {
-  it('the line (design) with the real name, [Open] and ×; focus on its ×, never [Open]', () => {
+  it('the saved-as line (design) with the real name, [Open] and ×; focus on its ×, never [Open]', () => {
     expect(savedAs.line).toBe(LINE);
     const onOpenCopy = vi.fn();
     const { container, rerender } = render(<ProjectHome {...props({ error: BANNER, retry: 'reload' })} />);

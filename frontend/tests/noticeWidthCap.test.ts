@@ -110,7 +110,7 @@ describe('notices are capped at 560 px', () => {
     expect(declarations(notice)).toContainEqual(['--proposal-bar-max-w', 'var(--notice-max-w, 560px)']);
   });
 
-  // Design (PR #204): supersedes an earlier version's "Don't grow the band": "The band reserves
+  // Design (PR #204): supersedes an earlier ruling's "Don't grow the band": "The band reserves
   // the tallest single notice (three lines)." A one-line item is still --notice-h.
   it('the band is the tallest single notice (three lines) plus its gap', () => {
     const css = readFileSync(join(SRC, 'styles/noticeRegion.css'), 'utf8');

@@ -85,7 +85,7 @@ afterEach(async () => {
   setProjectContext(null);
 });
 
-// Error copy design: "Reasons in parentheses: move each into
+// Error copy (design): "Reasons in parentheses: move each into
 // its own sentence after the heading. No parentheses in error copy." Before:
 // "… couldn't be saved as a recovered project yet (<error.message>). …" and
 // "… but this window couldn't follow (<error.message>). Try again to load it."
@@ -170,7 +170,7 @@ describe('a backend at a newer params version', () => {
     editCanvas();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(new Error('Recovery disk full'));
     reportParamsOutdated(NEXT);
-    // Error copy design: no reason in parentheses, and never an error's
+    // Error copy (design): no reason in parentheses, and never an error's
     // own message: a failure that isn't a request's says no reason at all here
     // (design's general line would say "reload", which drops these edits).
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(

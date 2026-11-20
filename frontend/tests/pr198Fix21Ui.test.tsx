@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Design (PR #198): rendered: every notice button held while
+ * PR #198, design's rulings, rendered: every notice button held while
  * its action is on its way (a [Try again], a clash answer being sent) is
  * aria-disabled at once, label unchanged, no reason tooltip; it greys with
  * the shared disabled style only after ~150 ms (data-held-look), so a fast

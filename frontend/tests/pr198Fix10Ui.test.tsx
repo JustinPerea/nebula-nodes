@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Design (PR #198): rendered:
+ * PR #198, design's rulings, rendered:
  * - Design: the recovered copy's notice is not a toast. It is the
  *   inline notice at the top of Projects home, first in a real stack of
  *   notices (then the held edits or where they went, then the error).
@@ -173,7 +173,7 @@ describe('where focus goes when a notice closes (design, PR #200)', () => {
   // either way. jsdom has no heuristic, so this pins the two halves it can
   // see: the move is a plain focus() (no focusVisible option, no class) and
   // every target rings from :focus-visible only. The ring itself is checked
-  // live in Chrome (notes).
+  // live in Chrome.
   it.each([
     ['from the keyboard', (button: HTMLElement) => { fireEvent.keyDown(button, { key: 'Enter' }); }],
     ['with a click', (button: HTMLElement) => { fireEvent.pointerDown(button); fireEvent.click(button); }],

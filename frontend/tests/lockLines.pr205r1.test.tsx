@@ -91,7 +91,7 @@ describe('a refusal after a key press is the lock line alone', () => {
   });
 });
 
-describe('Generate all', () => {
+describe('Generate all says "the shots" in its lock line', () => {
   const scene = [{ id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
     data: { label: 'Opening', definitionId: 'cinema-scene', state: 'idle', outputs: {},
       params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a' }] } } } }];

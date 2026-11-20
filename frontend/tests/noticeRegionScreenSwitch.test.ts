@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { BOTTOM_BAR_SWITCH_ATTR, clearBottomBarClearance, publishBottomBarClearance } from '../src/lib/bottomBar';
 
 /**
- * Design: back on the
+ * Design reported: back on the
  * canvas from Cinema Studio, the "Codex changed the canvas" notice sat over
  * the bottom bar, covering Canvas actions and the zoom. The region had
  * sprung (bottom, 420 ms) from where it sits with no bar (24 px up, the

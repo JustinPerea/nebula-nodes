@@ -231,7 +231,7 @@ describe('the merge check (design): each locked Cinema control looks locked', ()
     }
   });
 
-  it('every control design checks carries the mark the rule reads', () => {
+  it('every control the merge check covers carries the mark the rule reads', () => {
     offline();
     renderStudio();
     for (const name of ['Generate shot', 'Generate 2', 'Generate all', '+ Add shot', 'Send to motion',

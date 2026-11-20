@@ -13,10 +13,10 @@ import {
 } from '../src/lib/savedParamsUpgrades';
 
 /**
- * Justin, 2026-10-20 (moodboard canvas PR13a): Krea 2's board
+ * Justin, 2026-10-20 (moodboard canvas): Krea 2's board
  * references now share out the board's strength. No saved param changes
  * meaning, so there is no params version bump; a replay of a record made
- * before the change says once that its image can differ (plan 4.8).
+ * before the change says once that its image can differ.
  * "Before" is the record's behaviour stamp, not its date: a record made on a
  * build without the change has no stamp, whenever the change merges.
  */

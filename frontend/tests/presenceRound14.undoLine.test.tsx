@@ -1,5 +1,5 @@
 /**
- * PR #204 lock-look-ui:
+ * PR #204:
  * - On a demote with the key-added notice up on the Providers tab, Undo's own copy of the
  *   Providers line never enters the notice's live region, not even for one commit. Undo decides
  *   from state while rendering (settings/groupLockLines, which ProvidersTab's line registers).

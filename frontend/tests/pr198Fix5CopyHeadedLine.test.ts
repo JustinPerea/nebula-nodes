@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { headedLine, isGenericHeading, isNamedLine } from '../src/lib/errorCopy';
 
 /**
- * PR #198; design ("A
- * specific line replaces the generic one, never both").
+ * PR #198, design's ruling ("A specific line replaces the generic one, never both").
  *
  * headedLine decides "generic or specific" by the heading's role, not by
  * curly quotes: a generic heading names nothing the reason could add to
@@ -14,7 +13,7 @@ import { headedLine, isGenericHeading, isNamedLine } from '../src/lib/errorCopy'
 const SHOT_RUNNING = "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.";
 const AGENT_SCENE = "Couldn't delete “Agent scene”. “Shot 2” is still running. Stop the run first.";
 
-/** Every pair from a reviewer's probe ("headedLine"), then the
+/** Every pair tried against headedLine, then the
  * call sites' own headings over the backend's named lines. `alone` means the
  * reason shows by itself; `both` means "<heading> <reason>". */
 const TABLE: [heading: string, reason: string, shown: 'alone' | 'both', why: string][] = [
@@ -57,7 +56,7 @@ const TABLE: [heading: string, reason: string, shown: 'alone' | 'both', why: str
     'the backend line repeats the heading in another form'],
   ["Couldn't refresh the source.", "Paper can’t find the object. Link it again.", 'both',
     'the heading names the refresh; the reason is its cause'],
-  ["Couldn't run “Hero still”.", "Couldn't reach Krea.", 'both', 'round 4\'s own case'],
+  ["Couldn't run “Hero still”.", "Couldn't reach Krea.", 'both', 'a heading that names a thing keeps its place over a reason that names another'],
   ["Couldn't delete the node.", 'It is locked.', 'both', 'not a line of its own'],
 ];
 

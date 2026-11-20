@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { chipEstimate, chipTitle, formatChipEstimate, formatUsd, formatUsdRange } from '../src/lib/pricing';
 
 /**
- * PR #198 and design.
+ * PR #198, design's rulings:
  * - A high end that isn't a number never reads "~$0" ("$0" only means
  *   free), and an amount too small for figures reads "<$0.000001" on both
  *   sides (money.py usd_amount(5e-324) used to raise).
@@ -58,9 +58,9 @@ describe('amounts too small for figures', () => {
   });
 });
 
-describe('N2 and N3', () => {
+describe('chips and detail lines at a cent', () => {
   // Design: chips never show sub-cent precision; a low end
-  // under a cent is "Up to $Y"): the chip and its tooltip say the same figure.
+  // under a cent is "Up to $Y", so the chip and its tooltip say the same figure.
   it('a low end under a cent reads "Up to", in the chip and its tooltip', () => {
     expect(formatChipEstimate(0.0099, 0.0101, true)).toBe('Up to $0.01 + unpriced');
     expect(chipTitle(chipEstimate(0.0099, 0.0101, true))).toBe('The priced part of this run costs up to $0.01.');

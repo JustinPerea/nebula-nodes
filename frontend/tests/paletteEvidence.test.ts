@@ -39,7 +39,7 @@ import {
 // transparency is reduced alpha-weighted, never by the canvas.
 //
 // Fixtures (tests/fixtures/palette/<name>-<w>x<h>.rgba, straight RGBA): the
-// reviewers' probe sources, built again below at full size, scaled to 96 px
+// stripe, frame and attack-case sources, built again below at full size, scaled to 96 px
 // with PIL BILINEAR as the 29 real images are (the browser's own downscale
 // of an opaque image stands in the same place). mark74 is the PR's 74%-clear
 // mark at its own 182 px, as Chrome's getImageData gives it (its alpha is 0
@@ -47,7 +47,7 @@ import {
 
 type Px = [number, number, number, number];
 
-// Full-size probes (1000 px images, several per test) take seconds each on a
+// Full-size fixtures (1000 px images, several per test) take seconds each on a
 // loaded machine: a timeout here is never a verdict on the palette.
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -788,8 +788,8 @@ describe('Extract picks the path by any transparency (surviving mutants)', () =>
 });
 
 // Design (PR #208): the 256 px read decides which colours exist;
-// the full image decides what each one is. Each case is a reviewer's
-// probe, clustered on its PIL BILINEAR 96 px
+// the full image decides what each one is. Each case is an attack
+// image, clustered on its PIL BILINEAR 96 px
 // fixture (opaque) and by area (one clear pixel).
 describe('the full image names each colour (design)', () => {
   const both = (data: Uint8ClampedArray, w: number, h: number, small: string) => [

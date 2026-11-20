@@ -1,10 +1,10 @@
 /**
  * PR #204: the runtime ratchet (tests/helpers/bareLines.ts)
  * closes the three bypasses the review found, each caught here, beside controls that still pass.
- * - A bare "connected as you" text beside a <LineText> in the same parent (before or after
+ * - P1: a bare "connected as you" text beside a <LineText> in the same parent (before or after
  *   it, or in a child element) passed because the parent was registered.
- * - data-agent-text on any element exempted it; only the two Update texts are an agent's.
- * - A line in a `title` (a tooltip) or an `aria-label` was never read.
+ * - P2: data-agent-text on any element exempted it; only the two Update texts are an agent's.
+ * - P3: a line in a `title` (a tooltip) or an `aria-label` was never read.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';

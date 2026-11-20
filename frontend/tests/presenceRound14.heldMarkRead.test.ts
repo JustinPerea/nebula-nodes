@@ -1,5 +1,5 @@
 /**
- * PR #204 held-calls (lib: store/agentNotesStore sendRead, holdRead, sendHeldRead):
+ * PR #204 (lib: store/agentNotesStore sendRead, holdRead, sendHeldRead):
  * - A held read keeps the unread updates its `upTo` covered. When that `upTo` leaves the
  *   list before the promote (an agent's next "since its last turn" update replaces it), the promote
  *   still reads what the person saw, by id, and never the newer update they didn't.

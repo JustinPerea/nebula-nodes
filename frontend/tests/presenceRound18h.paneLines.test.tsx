@@ -4,7 +4,7 @@
  *   online, no stale "didn’t respond" shows while the load reads again (Settings, the detail,
  *   Blind labeling).
  * - A Try again that succeeds clears the line, in Blind labeling,
- *   Agent review's image and Blind labeling's image (Settings' was pinned in 18f).
+ *   Agent review's image and Blind labeling's image (Settings' is pinned in tests/presenceRound18f.commons).
  * These run the real Commons API and apiFetch; only the browser's fetch is stubbed.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

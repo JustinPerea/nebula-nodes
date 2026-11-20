@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 
 /**
- * Design's 150 ms rule (PR #198) for a held
+ * The 150 ms rule from design (PR #198) for a held
  * [Try again], held against regression in the repo, not only in the live
  * harness. The real store sends the try to a fake
  * backend whose answer the test lets go; a MutationObserver notes, on one

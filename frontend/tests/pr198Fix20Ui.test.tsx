@@ -103,7 +103,7 @@ describe('focus on a stop line never drops to the page (design)', () => {
     nodes: [scene('n1', 'Opening', 0), scene('n2', 'Ref scene', 300)], stoppedScenes: { n1: true }, sceneStops: { n1: { cause } },
     sceneTries: {}, scenePopover: null, undoNotice: null, messageNotice: null, sceneClashes: {}, ...extra });
 
-  it('(a) a [Try again] from the keyboard that fails the same way: focus stays on the same [Try again] the whole time', async () => {
+  it('a [Try again] from the keyboard that fails the same way: focus stays on the same [Try again] the whole time', async () => {
     useGraphStore.setState({ ...stoppedOpening('server'), retrySceneSave: (id: string) => {
       useGraphStore.setState({ stoppedScenes: {}, sceneTries: { [id]: { cause: 'server' } } } as never); } } as never);
     render(<NoticeRegion screen="canvas" />);
@@ -118,7 +118,7 @@ describe('focus on a stop line never drops to the page (design)', () => {
     expect(button.getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('(a) the try comes back under another cause (400, then 413): focus goes to the new line’s [Try again]', async () => {
+  it('the try comes back under another cause (400, then 413): focus goes to the new line’s [Try again]', async () => {
     useGraphStore.setState({ ...stoppedOpening('bad-save'), retrySceneSave: (id: string) => {
       useGraphStore.setState({ stoppedScenes: {}, sceneTries: { [id]: { cause: 'bad-save' } } } as never); } } as never);
     render(<NoticeRegion screen="canvas" />);
@@ -129,7 +129,7 @@ describe('focus on a stop line never drops to the page (design)', () => {
     expect(document.activeElement).toBe(tryOf(TOO_BIG_ONE));
   });
 
-  it('(b) a focused line that clears by itself, another stop line left: focus on that line itself, never its [Try again]', async () => {
+  it('a focused line that clears by itself, another stop line left: focus on that line itself, never its [Try again]', async () => {
     useGraphStore.setState({ ...stoppedOpening('server'), stoppedScenes: { n1: true, n2: true },
       sceneStops: { n1: { cause: 'server' }, n2: { cause: 'bad-save' } } } as never);
     render(<NoticeRegion screen="canvas" />);
@@ -140,7 +140,7 @@ describe('focus on a stop line never drops to the page (design)', () => {
     expect(document.activeElement).toBe(lineEl(CANT_REF));
   });
 
-  it('(b) no stop line left, a toast below: focus on its ×, never its action', async () => {
+  it('no stop line left, a toast below: focus on its ×, never its action', async () => {
     useGraphStore.setState(stoppedOpening('server', { undoNotice: { id: 7, text: 'Codex changed the canvas.', offer: null } }) as never);
     render(<NoticeRegion screen="canvas" />);
     await screen.findByText(SERVER_ONE, {}, LAZY);
@@ -150,7 +150,7 @@ describe('focus on a stop line never drops to the page (design)', () => {
     expect(document.activeElement?.closest('.canvas-undo-notice')?.textContent).toContain('Codex changed the canvas.');
   });
 
-  it('(b) no stop line left, only a clash prompt (no ×): focus on the prompt itself', async () => {
+  it('no stop line left, only a clash prompt (no ×): focus on the prompt itself', async () => {
     useGraphStore.setState(stoppedOpening('server', { sceneClashes: { n2: { id: 51, line: 'Codex changed “Ref scene” while you were editing it.', agent: 'Codex' } } }) as never);
     render(<NoticeRegion screen="canvas" />);
     await screen.findByText(SERVER_ONE, {}, LAZY);
@@ -159,7 +159,7 @@ describe('focus on a stop line never drops to the page (design)', () => {
     expect(document.activeElement?.getAttribute('data-scene-clash')).toBe('n2');
   });
 
-  it('(b) nothing else in the region: focus on the canvas', async () => {
+  it('nothing else in the region: focus on the canvas', async () => {
     const wrapper = canvas();
     useGraphStore.setState(stoppedOpening('server') as never);
     render(<NoticeRegion screen="canvas" />);

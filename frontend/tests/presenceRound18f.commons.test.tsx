@@ -4,9 +4,9 @@
  * - Focus when the Commons turns off mid-visit goes to the heading, by the one handover rule
  *   (design).
  * - A collection made while the list's re-read failed joins the kept list: Add to shows what Add
- *   sends to (of the logic lens, its).
+ *   sends to.
  * - Any answer proving the Commons is on clears the off line; only the 404 "disabled" sets it; no
- *   answer leaves it (design M1/M14).
+ *   answer leaves it (design).
  * - A linked folder's own name once the read-back has it (design).
  * - A load line's "Try again" button, and the silent re-read on reconnect (design).
  * - The other survivors: the settings read-back while off, the loading line's timer.
@@ -290,8 +290,8 @@ describe('only the 404 "disabled" sets the off line; any answer proving the Comm
   });
 
   it.each([
-    ['a 500 that says "Commons is disabled" (M1/M14)', 500, 'Commons is disabled'],
-    ['a 409 that says "Commons is disabled" (M1/M14)', 409, 'Commons is disabled'],
+    ['a 500 that says "Commons is disabled"', 500, 'Commons is disabled'],
+    ['a 409 that says "Commons is disabled"', 409, 'Commons is disabled'],
     ['a plain 404', 404, 'not found'],
     ['a 403', 403, undefined],
   ])('%s proves the Commons is on', async (_, status, detail) => {

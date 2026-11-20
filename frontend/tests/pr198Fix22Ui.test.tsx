@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Design (PR #198): rendered:
+ * PR #198, design's rulings, rendered:
  * - The run-lock line is a state line in the state slot,
  *   with no × and no [Try again] (it clears when the run ends).
  * - The "other" line is a stop line with [Try again] (one
@@ -208,7 +208,7 @@ describe('notice buttons read the one disabled token set (design)', () => {
 });
 
 /**
- * Design's ratchet: no new literal disabled opacity (a number, or a number
+ * The design ratchet: no new literal disabled opacity (a number, or a number
  * as a var() fallback, in a rule for a disabled, locked or held control) in
  * the style files PR #198 touches. KNOWN is what was already there; the
  * pressed-state sweep moves them to the tokens and deletes them here. The

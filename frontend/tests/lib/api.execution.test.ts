@@ -106,7 +106,7 @@ describe('execution API run correlation', () => {
     const rejection = executeGraph(nodes, edges, 'run-rejected');
 
     await expect(rejection).rejects.toBeInstanceOf(ExecutionStartRejectedError);
-    // error-copy design: the heading names the action, then the reason.
+    // error-copy (design): the heading names the action, then the reason.
     await expect(rejection).rejects.toMatchObject({
       message: 'Nebula couldn’t start the run because a paid start is already active.',
       reason: 'A paid start is already active.',

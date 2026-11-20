@@ -196,7 +196,7 @@ describe('a shot that is rendering can\'t be removed (design)', () => {
   });
 });
 
-// -- M2 -------------------------------------------------------------------------------
+// -- A scene without base opens; a studio that can't render is contained -------------------------------------------------------------------------------
 
 describe('a scene without base opens; a studio that can\'t render is contained', () => {
   it('the scene settings read through the defaults', () => {
@@ -206,7 +206,7 @@ describe('a scene without base opens; a studio that can\'t render is contained',
     expect(screen.getAllByText('Seedream 4.5').length).toBeGreaterThan(0);
   });
 
-  it('the line (design), Back to canvas, and the Agent log line', () => {
+  it('the studio-boundary line (design), Back to canvas, and the Agent log line', () => {
     const logged: string[] = [];
     const listen = (event: Event) => logged.push((event as CustomEvent<{ message: string }>).detail.message);
     window.addEventListener('nebula:agent-log-entry', listen);

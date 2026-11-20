@@ -1,5 +1,5 @@
 /**
- * PR #204 survived): lib/commonsApi send holds
+ * PR #204 (two mutants survived): lib/commonsApi send holds
  * a Commons call only on a hold that has lasted the held rule's 150 ms (personHeldSettled), never at
  * once and never while the tab is still starting. Two windows where a call must still go out, with
  * the stored token, and reach apiFetch:

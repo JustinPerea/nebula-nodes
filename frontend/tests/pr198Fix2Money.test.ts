@@ -37,8 +37,8 @@ describe('one money formatter', () => {
   });
 });
 
-/** Every chip form and its priced part's sentence (design's; no
- * bare "Estimated cost" heading, design, PR #203), as built. */
+/** Every chip form and its priced part's sentence (design's rulings; no
+ * bare "Estimated cost" heading, per design in PR #203), as built. */
 const CHIPS: [number, number, boolean, string, string][] = [
   [0, 0, false, '~$0', 'Estimated cost $0.'],
   // Design (PR #198): an open chip reads " + unpriced", and its

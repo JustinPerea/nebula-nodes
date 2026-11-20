@@ -13,7 +13,7 @@ import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow
  *   throws anyway shows design's line at card size, keeps its wires, and tries
  *   again when its data changes.
  * - Design: the studio boundary keeps the studio's header and replaces
- *   only the body; L6: the Commons' "Back to canvas" goes to the canvas.
+ *   only the body; the Commons' "Back to canvas" goes to the canvas.
  * - Design: Composition's toolbar is a row under the offline row.
  * - The context menu's Delete is disabled, with design's tooltip, while a
  *   scene has a shot rendering.
@@ -73,7 +73,7 @@ function Flow({ nodes, nodeTypes = CANVAS_NODE_TYPES }: { nodes: Node[]; nodeTyp
   );
 }
 
-// -- L4: damaged data on a card ----------------------------------------------------------
+// -- A card whose data is damaged ----------------------------------------------------------
 
 // The less common cards load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
 beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
@@ -190,7 +190,7 @@ describe('Composition\'s offline row sits under the top header, above the toolba
   });
 });
 
-// -- G1: the disabled Delete ---------------------------------------------------------------------
+// -- The disabled Delete ---------------------------------------------------------------------
 
 describe('Delete is disabled while the scene has a shot rendering (design)', () => {
   const open = () => useUIStore.setState({ contextMenu: { visible: true, position: { x: 10, y: 10 }, nodeId: 'n4', flowPosition: null } } as never);
@@ -229,7 +229,7 @@ describe('Delete is disabled while the scene has a shot rendering (design)', () 
   });
 });
 
-// -- N1 ----------------------------------------------------------------------------------------------
+// -- A load-failure notice on reconnect ----------------------------------------------------------------------------------------------
 
 describe('a load-failure notice doesn\'t flash back on reconnect', () => {
   it('the first render back online shows nothing; the check clears it, so it never shows', () => {

@@ -12,7 +12,7 @@
  * With two notices showing, put the late line above the newer one, so the
  * notice with a button stays nearest the bar."
  *
- * Before: when the person moved on (a new step, a quick delete)
+ * Before this change: when the person moved on (a new step, a quick delete)
  * before a restore's answer arrived, the "Restored the node. 1 proposal
  * couldn't be reopened." line no longer applied (its Redo would do nothing),
  * so it stayed away and the count went with it. Now the count shows on its

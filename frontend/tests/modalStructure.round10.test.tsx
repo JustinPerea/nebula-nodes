@@ -11,7 +11,7 @@ import { ModalPortal } from '../src/components/ModalPortal';
  * in the app now renders through one ModalPortal: on document.body, with
  * `nokey` (React Flow ignores keys from inside it) and clicks, double clicks
  * and context menus contained, so nothing inside acts on what is behind.
- * Nits a and b: a modal inside a hidden, inert or display:none ancestor
+ * A modal inside a hidden, inert or display:none ancestor
  * doesn't count, and the one on top is the last one opened.
  */
 

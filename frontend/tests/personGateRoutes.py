@@ -1,4 +1,4 @@
-"""Every backend route behind the person gate, read with ast (PR #204 rounds 6 to 10).
+"""Every backend route behind the person gate, read with ast (PR #204).
 
 Run by tests/personGatedCallers.ts (gatedRoutes, unreadableRouteForms). Prints JSON:
 
@@ -21,7 +21,7 @@ lambda, decorator or Depends() dependency in those files:
 - outside services/person_gate.py: PersonGateError (or a class whose bases lead to it)
   built or raised (an `except PersonGateError` or an isinstance() isn't a gate),
   PERSON_REQUIRED written, or the refusal code "person_required" anywhere outside a comparison or
-  a docstring, written or through a string constant (the chat socket's refusals, rounds 8 and 9),
+  a docstring, written or through a string constant (the chat socket's refusals),
   or built by +, an f-string, %, .format() or "_".join([...]) of those;
 - Depends(...) on a gate in the route's dependencies=, a parameter default, its router's
   APIRouter(dependencies=[...]), an include_router(..., dependencies=[...]) that mounts it, or the

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Design's budget on #225: only the wake path (the socket's rows,
+ * The design budget on #225: only the wake path (the socket's rows,
  * listeners and session activity) rides in the entry with the thread store;
  * the draft and the send (the one API call) are lib/personThreadCompose.ts's,
  * which only the deferred box imports. A runtime import of it, or of the API

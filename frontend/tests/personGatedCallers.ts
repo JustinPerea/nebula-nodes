@@ -1123,8 +1123,8 @@ function callsKeeper(file: string, node: ts.Node, except: string): boolean {
   return found;
 }
 
-/** `useGraphStore.getState().notify(…)`: an imported store's action whose own body registers (round
- * 7: Create's Generate line goes through graphStore's notify). */
+/** `useGraphStore.getState().notify(…)`: an imported store's action whose own body registers
+ * (Create's Generate line goes through graphStore's notify). */
 function storeKeeper(file: string, call: ts.CallExpression): boolean {
   const callee = call.expression;
   if (!ts.isPropertyAccessExpression(callee) || !ts.isCallExpression(callee.expression)) return false;

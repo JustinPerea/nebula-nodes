@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Design (PR #198): rendered: the saved-as notice's × rings by
+ * PR #198, design's rulings, rendered: the saved-as notice's × rings by
  * the input that pressed Try again. A mouse click moves focus to × with no
  * ring; Enter or Space rings it. That is the mechanism every other notice
  * uses (design): a plain `focus()` left to the browser's :focus-visible

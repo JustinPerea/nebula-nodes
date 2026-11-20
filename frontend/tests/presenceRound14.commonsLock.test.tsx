@@ -22,7 +22,7 @@ vi.mock('../src/lib/personSession', async (importOriginal) => ({
   personToken: async () => transport.token,
 }));
 /**
- * (CI on d2040a0f): the test says when the page's loads answer, so the one-shift test
+ * Added after CI failed on d2040a0f: the test says when the page's loads answer, so the one-shift test
  * reads the same on any machine. While `gate.hold` is set, the view's three loads wait for it
  * before they go to the real API (which still answers a held tab unsent).
  */

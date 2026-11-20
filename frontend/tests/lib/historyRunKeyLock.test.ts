@@ -6,7 +6,7 @@ import type { NodeData } from '../../src/types';
 import { keyIdolInEachTest } from '../helpers/keyedSpace';
 
 // PR #203: Idol is keyless. These tests pin the shared key-lock
-// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+// machinery on Idol's keyed shape (tests/helpers/keyedSpace.ts).
 keyIdolInEachTest();
 
 /**

@@ -1,6 +1,6 @@
 /**
- * PR #204's mutation gaps on the Commons screen (logic), with round
- * 18f's harness (the real Commons API; only apiFetch is stubbed).
+ * PR #204: mutation gaps on the Commons screen, with the harness of
+ * presenceRound18f.commons (the real Commons API; only apiFetch is stubbed).
  * - The page row's Try again reads every page load again (status and references too).
  * - The spring never shows while the Commons is off.
  * - The opening mark is used once: a later ordinary entry neither springs nor takes focus.

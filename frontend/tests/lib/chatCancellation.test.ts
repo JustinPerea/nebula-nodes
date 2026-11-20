@@ -46,7 +46,7 @@ describe('chat cancellation truth state', () => {
       state: 'failed',
       busy: false,
     });
-    // error-copy design: "Couldn't {verb} {object}." then the reason,
+    // error-copy (design): "Couldn't {verb} {object}." then the reason,
     // never "failed:".
     expect(chatCancellationDisconnectNotice('requested')).toEqual({
       // Design's words, verbatim: "People need to know it might still be spending."

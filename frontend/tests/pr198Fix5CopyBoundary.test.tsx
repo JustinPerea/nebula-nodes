@@ -5,7 +5,7 @@ import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow
 /**
  * PR #198:
  * - a card that keeps failing writes one Agent log line per
- *   distinct error, not one per data change (the probe's running node wrote
+ *   distinct error, not one per data change (a running node wrote
  *   7 identical lines over 7 progress events). A card that draws again logs
  *   its next failure again.
  * - Design: the damaged Agent log says what the code knows: "<field>

@@ -74,7 +74,7 @@ describe('Krea connection contract', () => {
   });
 
   it('keeps transport and response errors out of the visible error message', async () => {
-    // Error copy design: "Couldn't {verb} {object}." then the reason;
+    // Error copy (design): "Couldn't {verb} {object}." then the reason;
     // never "Could not", and still never the error's own text (it can hold
     // credential-bearing URLs).
     const GENERAL = 'because the server didn’t accept it. Try again, or reload if it keeps happening.';

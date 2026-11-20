@@ -136,7 +136,7 @@ describe('formatUsdRange with an end that isn\'t a number', () => {
     }
   });
 
-  it('a detail line keeps formatUsd\'s figures and N3\'s two per end', () => {
+  it('a detail line keeps formatUsd\'s figures and the two per end', () => {
     expect(formatUsdRange(0.0099, 0.0101)).toBe('$0.0099–$0.010');
     expect(formatUsdRange(0.0047, 0.43)).toBe('$0.0047–$0.43');
   });

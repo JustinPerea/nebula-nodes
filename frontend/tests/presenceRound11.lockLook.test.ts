@@ -25,7 +25,7 @@ describe('a locked control looks locked (PR #204)', () => {
     for (const selector of LOCK_LOOK_SELECTORS) expect(rule(selector), selector).not.toBeNull();
     // No lock rule names :focus (or :focus-visible): a locked control stays focusable, and a
     // keyboard user sees the token ring on it.
-    const lockRules = css.slice(css.indexOf('PR #204 round 11 (review 9 MEDIUM-1'));
+    const lockRules = css.slice(css.indexOf('PR #204: a person lock\'s control'));
     expect(lockRules).not.toMatch(/\[data-person-lock\][^{]*:focus/);
   });
 

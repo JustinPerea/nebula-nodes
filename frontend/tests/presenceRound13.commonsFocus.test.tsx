@@ -1,6 +1,6 @@
 /**
  * PR #204:
- * - Design: "A demote must never pull focus from a control that is still
+ * - Design ("A demote must never pull focus from a control that is still
  *   there"): CommonsView keyed its whole body on the demote, so every filter remounted and focus
  *   on an unlabelled one (the Media select, a range, a checkbox) jumped to Add's line, and an IME
  *   composition in the search was cut. Now only the data panes start again: each control is the

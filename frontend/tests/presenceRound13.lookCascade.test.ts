@@ -102,7 +102,7 @@ describe('the lock look through the cascade', () => {
       const button = locked(name);
       for (const state of ['', ':hover', ':active']) {
         const background = look(button, 'background', state);
-        // The swatch's × keeps its dark bubble, locked or not (its own rule, design).
+        // The swatch's × keeps its dark bubble, locked or not (its own rule, as design specified).
         if (name === 'cinema-shared-controls__swatch-remove' && background === 'rgba(0, 0, 0, 0.7)') continue;
         const label = look(button, 'color', state);
         const edge = look(button, 'border-color', state);

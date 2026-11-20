@@ -109,7 +109,7 @@ describe('the bar: the summary line, the per-reason count inside the list (desig
   });
 });
 
-// Design's copy findings.
+// Design's copy findings: Krea’s sign-in line, the switcher row’s size note and the two-actions comma.
 describe('Krea’s sign-in line never names a provider that can’t take the run', () => {
   const krea3 = () => NODE_DEFINITIONS['krea-3'];
   const plan = { _provider: 'krea', _kreaAuth: 'mcp' };

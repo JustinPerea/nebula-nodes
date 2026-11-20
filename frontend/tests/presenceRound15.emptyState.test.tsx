@@ -163,7 +163,7 @@ describe('the Add to menu\'s collections (design)', () => {
     fails.collections = 503;
     render(<CommonsView />);
     await tick(1000);
-    // Design's shape for the collections.
+    // The shape design set for the collections.
     expect(commonsLines()).toEqual(['Nebula couldn’t load the collections because the server didn’t respond. Try again.']);
     expect(noCollectionsOption()).toBeNull();
   });
