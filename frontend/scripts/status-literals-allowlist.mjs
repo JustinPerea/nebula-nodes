@@ -25,10 +25,6 @@ export const ALLOWLIST = [
   { file: 'styles/commons-review.css', whole: true, reason: 'the Commons labelling page is a standalone olive theme (design); every rule in the file is that theme' },
   { file: 'styles/commons-labeling-page.css', whole: true, reason: 'the Commons labelling page theme itself' },
   { file: 'components/brand/BrandShowcase.css', whole: true, reason: 'the brand showcase page is painted in the brand colours (--nn-crab-*), a brand surface and not product UI' },
-  // Open PR #269 rewrites these three rules onto tokens; delete these entries when it merges.
-  { file: 'styles/character-studio.css', selector: '.character-studio-toolbar__state--error', reason: 'PR #269 moves this rule onto --sr-error' },
-  { file: 'styles/moodboard-studio.css', selector: '.moodboard-studio-toolbar__state--saved', reason: 'PR #269 moves this rule onto a token' },
-  { file: 'styles/moodboard-studio.css', selector: '.moodboard-studio-toolbar__state--error', reason: 'PR #269 moves this rule onto --sr-error' },
 ];
 
 export const TS_ALLOWLIST = [

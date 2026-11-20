@@ -106,4 +106,24 @@ describe('check-status-literals: fine', () => {
     expect(run(css('.pill { color: #e6a395; }'), entry)).toEqual([]);
     expect(run(css('', '.pill { color: #e6a395; }'), entry)).toHaveLength(1);
   });
+  // Design: a whole-file entry exempts the hue guard (rule 5) only; rules 1-4 still run on the file.
+  it('a whole-file entry still fails a status selector (rule 1)', () => {
+    const entry = [{ file: 'fixture0.css', whole: true, reason: 'theme' }];
+    const hits = run(css('.row--error { color: #e6a395; }'), entry);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].rules).toContain(1);
+  });
+  it('a whole-file entry still fails a literal fallback (rule 4) and a palette family (rule 3)', () => {
+    const entry = [{ file: 'fixture0.css', whole: true, reason: 'theme' }];
+    expect(run(css('.x { color: var(--sr-accent, #e8c46a); }'), entry).some((h: { rules: number[] }) => h.rules.includes(4))).toBe(true);
+    expect(run(css('.x { background: rgb(255 90 31 / 10%); }'), entry).some((h: { rules: number[] }) => h.rules.includes(3))).toBe(true);
+  });
+  it('a whole-file entry still fails --line-warning with a literal fallback (rule 2)', () => {
+    const entry = [{ file: 'fixture0.css', whole: true, reason: 'theme' }];
+    expect(run(css('.x { color: var(--line-warning, #e0796b); }'), entry).some((h: { rules: number[] }) => h.rules.includes(2))).toBe(true);
+  });
+  it('a whole-file entry still passes the same file\'s hue literals', () => {
+    const entry = [{ file: 'fixture0.css', whole: true, reason: 'theme' }];
+    expect(run(css('.pill { background: #e6a395; } .chip { color: #86efac; } .x { color: hsl(30 80% 55%); }'), entry)).toEqual([]);
+  });
 });

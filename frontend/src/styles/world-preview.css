@@ -120,15 +120,6 @@
   font-weight: 650;
 }
 
-.world-preview--invalid {
-  display: grid;
-  place-items: center;
-  gap: 7px;
-  min-height: 120px;
-  color: var(--sr-ink-light);
-  font-size: 11px;
-}
-
 body.app-slava-restraint .model-node--world-surface {
   min-width: 276px;
   max-width: 360px;
@@ -659,6 +650,12 @@ body.app-slava-restraint .world-modal__metadata {
   font-size: var(--sr-type-micro);
 }
 
+/* Loading is the base state of the status line; design reads it as neutral
+   pending ink, a step above the metadata's meta ink. */
+body.app-slava-restraint .world-modal__status {
+  color: var(--sr-ink-light);
+}
+
 body.app-slava-restraint .world-modal__status--ready {
   color: var(--sr-success);
 }
@@ -679,7 +676,7 @@ body.app-slava-restraint :is(
 }
 
 body.app-slava-restraint .world-modal__failure p {
-  color: var(--sr-ink-light);
+  color: var(--sr-ink);
   font-size: var(--sr-type-body);
   line-height: var(--sr-line-body);
 }
@@ -693,8 +690,8 @@ body.app-slava-restraint .world-modal__help {
 }
 
 body.app-slava-restraint .world-environment-viewer__spinner {
-  border-color: var(--sr-accent-soft);
-  border-top-color: var(--sr-accent);
+  border-color: var(--sr-pending-soft);
+  border-top-color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint :is(

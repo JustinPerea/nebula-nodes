@@ -46,7 +46,8 @@ import { ALLOWLIST, TS_ALLOWLIST } from './status-literals-allowlist.mjs';
 // matches nothing, so it is not read.
 // Exemptions: a `palette-exempt: <reason>` comment on the line above a declaration (or its rule's
 // selector) or on the same line; and the entries of status-literals-allowlist.mjs, each with a
-// reason, by file and selector.
+// reason, by file and selector. A `whole: true` file entry exempts the hue guard (rule 5) only;
+// rules 1-4 still run on that file.
 
 const SRC = join(process.cwd(), 'src');
 
@@ -267,15 +268,24 @@ const isStatusPart = (part) => {
 const selectorMatches = (entry, selector) =>
   entry.selector instanceof RegExp ? entry.selector.test(selector) : selector.includes(entry.selector);
 
-/** The allowlist entry that covers this declaration, if any. */
+/**
+ * How the allowlist covers this declaration: 'all' (a selector or prop entry exempts every rule),
+ * 'hue' (a `whole: true` file entry exempts the hue guard, rule 5, only; design: rules 1-4 still
+ * run on a themed file) or null.
+ */
 function allowed(entries, file, selector, prop) {
-  return entries.some((entry) => {
-    if (entry.file !== file) return false;
-    if (entry.whole) return true;
-    if (entry.prop && !(entry.prop instanceof RegExp ? entry.prop.test(prop) : prop.startsWith(entry.prop))) return false;
-    if (entry.selector && !selectorMatches(entry, selector)) return false;
-    return Boolean(entry.selector || entry.prop);
-  });
+  let cover = null;
+  for (const entry of entries) {
+    if (entry.file !== file) continue;
+    if (entry.whole) {
+      cover = cover ?? 'hue';
+      continue;
+    }
+    if (entry.prop && !(entry.prop instanceof RegExp ? entry.prop.test(prop) : prop.startsWith(entry.prop))) continue;
+    if (entry.selector && !selectorMatches(entry, selector)) continue;
+    if (entry.selector || entry.prop) return 'all';
+  }
+  return cover;
 }
 
 const stripStrings = (value) => value.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""').replace(/url\([^)]*\)/g, 'url()');
@@ -322,7 +332,8 @@ export function findStatusLiteralHits({ css = [], ts = [] }, allowlist = ALLOWLI
       for (const d of parseDeclarations(rule.body, rule.bodyStart)) {
         const line = lineForOffset(sheet.lineStarts, d.offset);
         if (ruleExempt || exempt.has(line)) continue;
-        if (allowed(allowlist, sheet.file, label, d.prop)) continue;
+        const cover = allowed(allowlist, sheet.file, label, d.prop);
+        if (cover === 'all') continue;
         const value = compact(stripStrings(d.value));
         const colourBearing = COLOUR_PROPS.test(d.prop) || (d.prop.startsWith('--') && COLOUR_CUSTOM.test(d.prop));
         const found = scanValue(value, { namedColours: colourBearing, defined });
@@ -346,7 +357,7 @@ export function findStatusLiteralHits({ css = [], ts = [] }, allowlist = ALLOWLI
               rules.push(4);
               reasons.push(`var(${f.fallbackOf}, <colour>): the fallback is a second palette; drop it`);
             }
-            if (f.guarded) {
+            if (f.guarded && cover !== 'hue') {
               rules.push(5);
               reasons.push('red, orange, yellow and green mean a status: use a token, or allowlist it with a reason');
             }
