@@ -480,3 +480,13 @@ def test_an_agents_own_later_entry_doesnt_release_a_persons_choice(read_record):
     ]
     with pytest.raises(rec.RecordInvalid, match="A person corrected brand"):
         _fix(record, [{"path": "brand", "op": "set", "value": "gamma"}], "agent")
+
+
+
+def test_a_keyword_spelled_differently_is_still_a_persons_choice(read_record):
+    # The check compares the value as it would be stored: "MINIMAL" is stored as the vocabulary's spelling.
+    word = read_record["structure"]["read"]["reader_1"]["keywords"][0]
+    person = _fix(read_record, [{"path": "structure.read.reader_1.keywords", "op": "remove", "value": word}], "person")
+    for spelling in (word.upper(), f"  {word.title()}  ", word.replace("_", " ")):
+        with pytest.raises(rec.RecordInvalid, match="person"):
+            _fix(person, [{"path": "structure.read.reader_1.keywords", "op": "add", "value": spelling}], "agent")

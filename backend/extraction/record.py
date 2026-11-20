@@ -499,8 +499,6 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
         if _depth(value) > MAX_VALUE_DEPTH:
             raise RecordInvalid(f"A correction's value is nested at most {MAX_VALUE_DEPTH} levels deep.")
         view = effective(updated)
-        if actor == "agent":
-            _keep_persons_choices(updated, view, parts, op, value)
         if parts[0] == "brand":
             if op != "set" or not (value is None or (isinstance(value, str) and len(value) <= MAX_BRAND_CHARS)):
                 raise RecordInvalid(f"brand is set to text of at most {MAX_BRAND_CHARS} characters, or to null.")
@@ -508,6 +506,10 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
             value = _check_shows(parts, op, value, view, actor)
         elif parts[:2] == ["structure", "read"]:
             value = _check_read(parts, op, value, view)
+        if actor == "agent":
+            # After the checks above, which store a value in its canonical form (a keyword's spelling): the
+            # comparison with a person's stored correction has to see the value as it would be stored.
+            _keep_persons_choices(updated, view, parts, op, value)
         if op in ("add", "remove"):
             current = get_path(view, raw["path"])
             if current is not None and not isinstance(current, list):
