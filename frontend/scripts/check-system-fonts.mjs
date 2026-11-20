@@ -11,7 +11,7 @@ import {
 } from './lib/css-scan.mjs';
 
 // Design: one face everywhere. Text in the app is set in the app face, var(--sr-ui) (Inter), which the
-// skin puts on body (slava-restraint.css). Two things break that and this check fails both:
+// skin puts on body (slava-restraint.css). Three things break that and this check fails each:
 //
 //   1. A `font-family` or `font` declaration whose FIRST family is a system or browser face:
 //      -apple-system, BlinkMacSystemFont, system-ui, ui-sans-serif, 'Segoe UI', Arial, Helvetica, or a
@@ -19,7 +19,11 @@ import {
 //      fallback for a missing token and passes; so does a first family that is a named face
 //      ('Inter', 'Helvetica Neue'), a mono stack (monospace, ui-monospace, 'SF Mono', ...; readouts
 //      and ids are mono by design), `inherit`, and a `font` shorthand with no family in it.
-//   2. The rule `:where(button, input, select, textarea) { font: inherit; }` missing from src. A button
+//   2. A `var(--name, ...)` that is a declaration's first family, where `--name` is defined in no
+//      stylesheet under src (a `--name:` declaration, any selector). The fallback is what renders, so
+//      the token only looks like the app face. A token defined only in src/extraction/ counts as
+//      undefined, since that page's sheets do not load with the app's.
+//   3. The rule `:where(button, input, select, textarea) { font: inherit; }` missing from src. A button
 //      or field does not inherit the page font on its own (Chrome gives it Arial at 13.33px), and
 //      that rule, at zero specificity so every class that sets its own size or weight still wins, is
 //      what puts the app face on every control that sets none.
@@ -68,7 +72,7 @@ const SHORTHAND_FAMILY = new RegExp(
 );
 
 /** The value with every balanced var(...) replaced by one mark: what is inside one is a fallback. */
-function maskVars(value) {
+function maskVars(value, names) {
   let out = '';
   let i = 0;
   while (i < value.length) {
@@ -83,6 +87,7 @@ function maskVars(value) {
         }
       }
       out += VAR_MARK;
+      if (names) names.push(/^var\(\s*(--[^\s,)]+)/i.exec(value.slice(i, j + 1))?.[1] ?? '');
       i = j + 1;
     } else {
       out += value[i];
@@ -123,6 +128,51 @@ export function firstFamilyOf(prop, value) {
   return face;
 }
 
+/** The custom property a value's first family is a var() of, or null when the first family is anything else. */
+export function firstFamilyVarOf(prop, value) {
+  const names = [];
+  const masked = maskVars(value.replace(/!important\s*$/i, '').trim(), names);
+  let list = masked;
+  let before = '';
+  if (prop === 'font') {
+    const match = SHORTHAND_FAMILY.exec(masked);
+    if (!match) return null;
+    list = match[1];
+    before = masked.slice(0, match.index + match[0].length - match[1].length);
+  }
+  if (!firstFamily(list).startsWith(VAR_MARK)) return null;
+  const skipped = [...before].filter((ch) => ch === VAR_MARK).length;
+  return names[skipped] || null;
+}
+
+/** Every custom property a `--name:` declaration defines in the sheets, lower-cased. */
+export function definedCustomProperties(files) {
+  const defined = new Set();
+  for (const { source } of files) {
+    for (const match of stripComments(source).matchAll(/(?:^|[{;\s])(--[\w-]+)\s*:/g)) defined.add(match[1].toLowerCase());
+  }
+  return defined;
+}
+
+/** Declarations whose first family is a var() of a token no sheet in `files` defines. */
+export function findUndefinedFontTokens(files, defined = definedCustomProperties(files)) {
+  const hits = [];
+  for (const { file, source } of files) {
+    const css = stripComments(source);
+    const lineStarts = computeLineStarts(css);
+    for (const rule of parseRules(css)) {
+      if (rule.nested) continue;
+      for (const decl of parseDeclarations(rule.body, rule.bodyStart)) {
+        if (decl.prop !== 'font-family' && decl.prop !== 'font') continue;
+        const token = firstFamilyVarOf(decl.prop, decl.value);
+        if (token === null || defined.has(token.toLowerCase())) continue;
+        hits.push({ file, line: lineForOffset(lineStarts, decl.offset), selector: rule.selector, prop: decl.prop, value: decl.value, token });
+      }
+    }
+  }
+  return hits;
+}
+
 /** Declarations in the sheets whose first family is a system or browser face. */
 export function findSystemFonts(files) {
   const hits = [];
@@ -161,25 +211,32 @@ export function hasBaseRule(files) {
 export const FAILURE_MESSAGE =
   'One face everywhere (design): text takes the app face, var(--sr-ui), or inherits it. A font-family or font whose first family is a system or browser face (-apple-system, system-ui, Segoe UI, Arial, Helvetica, a bare sans-serif) puts that surface in another typeface. A system face is allowed only as the fallback inside var(). Mono stacks are fine.';
 
+export const UNDEFINED_TOKEN_MESSAGE =
+  'A font declaration leads with a custom property that no stylesheet under src defines (design). The fallback after it is what renders, so the surface is in the fallback face, not the app face. Point it at var(--sr-ui), or define the token.';
+
 export const MISSING_BASE_MESSAGE = `The base rule is missing from src: ${BASE_RULE_TEXT} (design). Without it a button or field is set in the browser's Arial at 13.33px, not in the app face. Put it with the base element rules in App.css.`;
 
 export function scan(files) {
-  return { hits: findSystemFonts(files), baseRule: hasBaseRule(files) };
+  return { hits: findSystemFonts(files), undefinedTokens: findUndefinedFontTokens(files), baseRule: hasBaseRule(files) };
 }
 
 function main() {
   const files = collectCssFiles(SRC)
     .filter((path) => relative(SRC, path).split(sep)[0] !== EXCLUDED_DIR)
     .map((path) => ({ file: relative(SRC, path), source: readFileSync(path, 'utf8') }));
-  const { hits, baseRule } = scan(files);
+  const { hits, undefinedTokens, baseRule } = scan(files);
   if (process.argv.includes('--json')) {
-    console.log(JSON.stringify({ hits, baseRule }, null, 1));
+    console.log(JSON.stringify({ hits, undefinedTokens, baseRule }, null, 1));
     return;
   }
-  if (hits.length > 0 || !baseRule) {
+  if (hits.length > 0 || undefinedTokens.length > 0 || !baseRule) {
     if (hits.length > 0) {
       console.error(FAILURE_MESSAGE);
       for (const hit of hits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}`);
+    }
+    if (undefinedTokens.length > 0) {
+      console.error(UNDEFINED_TOKEN_MESSAGE);
+      for (const hit of undefinedTokens) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value} (${hit.token} is defined nowhere)`);
     }
     if (!baseRule) console.error(MISSING_BASE_MESSAGE);
     process.exit(1);

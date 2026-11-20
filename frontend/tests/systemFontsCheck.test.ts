@@ -1,6 +1,7 @@
 // @vitest-environment node
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { findSystemFonts, firstFamilyOf, hasBaseRule, scan } from '../scripts/check-system-fonts.mjs';
+import { findSystemFonts, findUndefinedFontTokens, firstFamilyOf, firstFamilyVarOf, hasBaseRule, scan } from '../scripts/check-system-fonts.mjs';
 
 /**
  * scripts/check-system-fonts.mjs runs in `npm run lint` (design: one face everywhere, the app face;
@@ -78,7 +79,7 @@ describe('check-system-fonts: what passes', () => {
 
 describe('check-system-fonts: the base rule', () => {
   it('passes when the rule is there', () => {
-    expect(scan(sheet(BASE))).toEqual({ hits: [], baseRule: true });
+    expect(scan(sheet(BASE))).toEqual({ hits: [], undefinedTokens: [], baseRule: true });
   });
 
   it('fails when it is absent', () => {
@@ -105,5 +106,61 @@ describe('check-system-fonts: the base rule', () => {
 
   it('finds the rule in any one sheet of several', () => {
     expect(hasBaseRule([...sheet('.a { color: red; }'), { file: 'b.css', source: BASE }])).toBe(true);
+  });
+});
+
+describe('check-system-fonts: undefined font tokens', () => {
+  const undef = (...sheets: string[]) => findUndefinedFontTokens(sheets.map((source, i) => ({ file: `f${i}.css`, source })));
+
+  it('fails a font-family led by a token nobody defines', () => {
+    const found = undef('.a { font-family: var(--nope, system-ui, sans-serif); }');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ line: 1, token: '--nope' });
+  });
+
+  it('fails the shorthand, with a token size and line height before the family', () => {
+    const found = undef('.a { font: 600 var(--size, 9px)/10px var(--nope, system-ui); }');
+    expect(found.map((hit) => hit.token)).toEqual(['--nope']);
+  });
+
+  it('passes a token defined in the same sheet or another', () => {
+    expect(undef('body { --sr-ui: Inter, sans-serif; } .a { font: 600 11px/14px var(--sr-ui); }')).toEqual([]);
+    expect(undef('.a { font-family: var(--face, serif); }', ':root { --face: Inter; }')).toEqual([]);
+  });
+
+  it('passes a token defined on any selector, in a media block, or minified', () => {
+    expect(undef('@media (min-width:1px){.b{--face:Inter}} .a { font-family: var(--face); }')).toEqual([]);
+  });
+
+  it('only reads the first family: a later var() or a token size is not checked', () => {
+    expect(undef(".a { font-family: 'Inter', var(--nope); }")).toEqual([]);
+    expect(undef('.a { font: 500 var(--nope, 12px)/1 Inter, sans-serif; }')).toEqual([]);
+  });
+
+  it('counts a token defined only in an excluded sheet as undefined for the app sheets', () => {
+    // The CLI passes the app sheets only; src/extraction/ is filtered out before the scan.
+    const appSheets = [{ file: 'app.css', source: '.a { font-family: var(--ext-face, serif); }' }];
+    expect(findUndefinedFontTokens(appSheets)).toHaveLength(1);
+    const withExtraction = [...appSheets, { file: 'extraction/x.css', source: ':root { --ext-face: Inter; }' }];
+    expect(findUndefinedFontTokens(appSheets, new Set(['--sr-ui']))).toHaveLength(1);
+    expect(findUndefinedFontTokens(withExtraction.slice(0, 1))).toHaveLength(1);
+  });
+
+  it('names the token of each form', () => {
+    expect(firstFamilyVarOf('font-family', 'var(--a, Arial)')).toBe('--a');
+    expect(firstFamilyVarOf('font', '12px/1 var(--b)')).toBe('--b');
+    expect(firstFamilyVarOf('font', '12px/1 Arial')).toBeNull();
+    expect(firstFamilyVarOf('font-family', 'inherit')).toBeNull();
+  });
+
+  it('is part of scan()', () => {
+    expect(scan(sheet(BASE + '.a { font-family: var(--nope); }')).undefinedTokens).toHaveLength(1);
+  });
+});
+
+describe('check-system-fonts: the real stylesheets', () => {
+  it('pass, with every first-family token defined', () => {
+    const out = execFileSync('node', ['scripts/check-system-fonts.mjs', '--json'], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
+    expect(JSON.parse(out)).toEqual({ hits: [], undefinedTokens: [], baseRule: true });
   });
 });
