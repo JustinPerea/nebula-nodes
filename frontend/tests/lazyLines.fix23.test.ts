@@ -154,8 +154,7 @@ describe('the reopen-hold lines load on first need, not with the store', () => {
     expect(chunk.loads).toBe(0);
     // The card's read finds the hold: the lines start loading, and nothing is said before they're here.
     expect(store.reopenHoldNow()).toBeNull();
-    await settle();
-    expect(chunk.loads).toBe(1);
+    await vi.waitFor(() => expect(chunk.loads).toBe(1));
     expect(store.reopenHoldNow()).toBeNull();
     await settle();
     expect(chunk.loads).toBe(1);
@@ -175,9 +174,8 @@ describe('the reopen-hold lines load on first need, not with the store', () => {
     const stop = store.useProjectStore.subscribe(heard);
     expect(store.reopenHoldNow()).toBeNull();
     opened.open();
-    await settle();
+    await vi.waitFor(() => expect(store.reopenHoldNow()?.line).toBe(UNCERTAIN));
     expect(heard).toHaveBeenCalled();
-    expect(store.reopenHoldNow()?.line).toBe(UNCERTAIN);
     stop();
   });
 
@@ -204,7 +202,7 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     await boot();
     holdAlpha();
     const pressed = reopenAlpha();
-    await settle();
+    await vi.waitFor(() => expect(chunk.loads).toBe(1));
     first.fail(new Error('Failed to fetch dynamically imported module'));
     await pressed;
     await settle();
@@ -226,8 +224,8 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     await failFirstLoad();
     chunk.gate = null;
     await store.useProjectStore.getState().retry();
-    await settle();
-    expect(chunk.loads).toBe(2);
+    await vi.waitFor(() => expect(chunk.loads).toBe(2));
+    await vi.waitFor(() => expect(store.useProjectStore.getState().heldReopenLine?.line).toBe(UNCERTAIN));
     const state = store.useProjectStore.getState();
     expect(state.error).toBeNull();
     expect(state.errorRetry).toBeNull();
@@ -240,7 +238,7 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     const second = gate();
     chunk.gate = second.wait;
     const retried = store.useProjectStore.getState().retry();
-    await settle();
+    await vi.waitFor(() => expect(chunk.loads).toBe(2));
     second.fail(new Error('Failed to fetch dynamically imported module'));
     await retried;
     await settle();
@@ -259,7 +257,7 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     // The press is on its way when the edits become kept (the restore, an agent's write).
     store.useProjectStore.setState({ screen: 'home' });
     const pressed = store.useProjectStore.getState().open('alpha');
-    await settle();
+    await vi.waitFor(() => expect(chunk.loads).toBe(1));
     setCanvasKept(true);
     first.fail(new Error('Failed to fetch dynamically imported module'));
     await pressed;
@@ -275,8 +273,7 @@ describe('a lines chunk that fails to load (GM r23, 1: a press always answers)',
     await failFirstLoad();
     chunk.gate = null;
     expect(store.reopenHoldNow()).toBeNull();
-    await settle();
-    expect(chunk.loads).toBe(2);
+    await vi.waitFor(() => expect(chunk.loads).toBe(2));
     await flows.loadReopenHoldLines();
     expect(store.reopenHoldNow()?.line).toBe(UNCERTAIN);
   });
@@ -289,7 +286,7 @@ describe('a line waiting on the chunk', () => {
     await boot();
     holdAlpha();
     const pressed = reopenAlpha();
-    await settle();
+    await vi.waitFor(() => expect(chunk.loads).toBe(1));
     store.useProjectStore.setState({ activeProject: project('beta') as never });
     const lines = recordLines();
     opened.open();
@@ -308,7 +305,7 @@ describe('a line waiting on the chunk', () => {
     await boot();
     holdAlpha();
     const pressed = reopenAlpha();
-    await settle();
+    await vi.waitFor(() => expect(chunk.loads).toBe(1));
     graph.setState({ uncertainWorldLabsRunId: null });
     const lines = recordLines();
     opened.open();

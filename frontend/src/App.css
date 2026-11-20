@@ -1,3 +1,9 @@
+/* The hidden attribute wins over any display rule (a class that sets display: flex would
+   otherwise draw an element the markup hides). `until-found` keeps the browser's own way. */
+[hidden]:not([hidden="until-found"]) {
+  display: none !important;
+}
+
 *,
 *::before,
 *::after {

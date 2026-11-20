@@ -44,6 +44,22 @@ describe('BackendConnectionStatus', () => {
     expect(isBackendOffline()).toBe(false);
   });
 
+  // Design: on Projects, while the first-load line shows, that line names what waits (the
+  // server), so the banner stays away; it keeps probing, and shows again once the line is gone.
+  it('stays away while bannerHidden, still probing, and shows once it is lifted', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const { rerender } = render(<BackendConnectionStatus placement="home" bannerHidden />);
+    await act(async () => { await Promise.resolve(); });
+    expect(isBackendOffline()).toBe(true);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(BACKEND_PROBE_INTERVAL_MS); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    rerender(<BackendConnectionStatus placement="home" />);
+    expect(screen.getByRole('status').textContent).toBe(OFFLINE_LINE);
+    rerender(<BackendConnectionStatus placement="workspace" />);
+    expect(screen.getByRole('status').textContent).toBe(OFFLINE_LINE);
+  });
+
   it('stays visually quiet while the backend is healthy', async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200 });
     render(<BackendConnectionStatus />);

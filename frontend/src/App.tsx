@@ -26,7 +26,8 @@ import './store/agentQuestionsStore';
 // The Message box's thread and listeners (r50): fed from load, as the log's store.
 import './store/personThreadStore';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
-import { BackendConnectionStatus } from './components/BackendConnectionStatus';
+import { ConnectionBanner } from './components/ConnectionBanner';
+import { firstLoadWaiting as firstLoadWaitingNow } from './components/projects/homeLine';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
@@ -306,9 +307,12 @@ export default function App() {
   // (review 19 item 1): the lock is Nebula's own, read before the press.
   useEffect(() => (isHome ? watchOpenHold() : undefined), [isHome]);
 
+  // Design: the first load found no server (trying again, or out of tries): its line shows on Projects.
+  const firstLoadWaiting = firstLoadWaitingNow(projects);
   let mainView;
   if (isHome) {
     mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy} workLoaded={projects.initialized}
+      serverWaiting={firstLoadWaiting}
       error={projects.error} errorDetails={projectErrorDetails(projects)} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
@@ -357,7 +361,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
+      <ConnectionBanner placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
       <PersonRequiredBanner />
       {/* The World Labs notice; the held-reopen line it clears is its second line (GM r33, 6). */}
       <ProviderRecoveryStatus reopenLine={isCanvas && projects.heldReopenLine?.place === 'worldLabsNotice'

@@ -46,6 +46,14 @@ function project(id = 'alpha'): SavedProject {
 }
 const summary = (id: string) => { const { snapshot: _s, ...rest } = project(id); void _s; return rest; };
 const trashed = (id: string): TrashedProject => ({ ...summary(id), deletedAt: '2026-10-10T10:00:00Z', purgeAt: '2026-11-09T10:00:00Z' });
+/** A first load that got no answer tries again by itself 1, 2, 4, 8 and 16 s later (design): run those out. */
+async function exhaustFirstLoadTries(): Promise<void> {
+  vi.useFakeTimers();
+  try {
+    void useProjectStore.getState().initialize();
+    await vi.advanceTimersByTimeAsync(31_000);
+  } finally { vi.useRealTimers(); }
+}
 const unavailable = (heading: string) => new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading });
 const refused = (heading: string, reason: string, status = 409) => new projects.ProjectRequestError(reason, status, { heading });
 // The backend's refusal of an open over an unconfirmed World Labs run (GM, round 13 of PR #114).
@@ -92,8 +100,10 @@ describe('Projects: Try again redoes the failed action', () => {
   it('a listing that failed at startup: Try again lists again (redo)', async () => {
     useProjectStore.setState(initial, true);
     resetProjectStoreForTests();
-    vi.mocked(projects.listProjects).mockRejectedValueOnce(unavailable("Couldn't load your projects."));
-    await useProjectStore.getState().initialize();
+    // The line the tries end on (design): a first load that found no server tries again by itself
+    // (1, 2, 4, 8, 16 s) before it says this.
+    for (let tries = 0; tries < 6; tries += 1) vi.mocked(projects.listProjects).mockRejectedValueOnce(unavailable("Couldn't load your projects."));
+    await exhaustFirstLoadTries();
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t load your projects because the server didn’t respond. Try again.");
     expect(offer()).toBe('redo');
     await useProjectStore.getState().retry();
@@ -433,8 +443,8 @@ describe('round 3c-2: the startup load never shows an error\'s own message', () 
   });
 
   it("a request's own written line still reads as it did", async () => {
-    vi.mocked(projects.getProject).mockRejectedValueOnce(unavailable("Couldn't load the project."));
-    await useProjectStore.getState().initialize();
+    for (let tries = 0; tries < 6; tries += 1) vi.mocked(projects.getProject).mockRejectedValueOnce(unavailable("Couldn't load the project."));
+    await exhaustFirstLoadTries();
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t load the project because the server didn’t respond. Try again.");
   });
 });
