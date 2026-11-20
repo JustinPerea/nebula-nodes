@@ -614,15 +614,15 @@ body.app-slava-restraint .cinema-shot-panel__preview-empty {
   font-size: 13px;
 }
 
+/* A failed shot is the node card's notice (the block carries model-node__error too, so its
+   warning tint, mono type, size, padding, radius and margin come from that one rule and cannot
+   drift). Design: it sits over the bottom of the preview inset by the card notice's own gap
+   (its margin), a notice and not a bar. Only the placement is set here. */
 body.app-slava-restraint .cinema-shot-panel__error {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 6px 10px;
-  background: rgba(192, 57, 43, 0.85);
-  color: #fff;
-  font-size: 12px;
 }
 
 body.app-slava-restraint .cinema-shot-panel__variations {

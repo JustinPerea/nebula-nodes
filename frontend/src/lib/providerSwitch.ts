@@ -89,7 +89,7 @@ export interface SwitchState {
 
 /** Short names for the 10px card chip, used only where the full name can't
  * fit (chipText); anything else has only its full label. */
-const SHORT: Readonly<Record<string, string>> = { bfl: 'BFL', fal: 'fal', replicate: 'Rep', openrouter: 'OR', krea: 'Krea' };
+const SHORT: Readonly<Record<string, string>> = { bfl: 'BFL', fal: 'fal', replicate: 'Rep', openrouter: 'OR', krea: 'Krea', huggingface: 'HF' };
 
 export function shortProvider(provider: string | null | undefined): string {
   return provider && Object.hasOwn(SHORT, provider) ? SHORT[provider] : providerLabel(provider);
@@ -309,9 +309,19 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const signInNeeded = planRun && !context.kreaSignedIn;
   const shownSpec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const shownProvider = shownSpec?.provider ?? route.provider;
+  // Design: a chip never names the maker of a keyless Space route (Idol's "Speridlabs", cut off
+  // by the chip's room), only where it runs: "Auto · free" with no token, "Auto · Hugging Face"
+  // (short "Auto · HF") on the person's token, "Hugging Face" when picked.
+  const runsOn = (spec: RouteSpec | undefined, provider: string | null | undefined) => (
+    spec && isKeylessRoute(spec) && spec.handler === 'hf-space' ? 'huggingface' : provider);
+  const autoFree = Boolean(autoSpec && isKeylessRoute(autoSpec) && autoSpec.handler === 'hf-space' && !autoRoute.key);
   const named = (name: (provider: string | null | undefined) => string) => (choice === AUTO
-    ? (autoRoute.routeId ? `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : name(autoSpec?.provider)}` : 'Auto')
-    : routeById(definition, choice) ? (route.kind === 'plan' ? 'Krea plan' : name(shownProvider)) : 'Unknown');
+    ? (autoRoute.routeId
+      ? (autoFree ? 'Auto · free'
+        : `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : name(runsOn(autoSpec, autoSpec?.provider))}`)
+      : 'Auto')
+    : routeById(definition, choice)
+      ? (route.kind === 'plan' ? 'Krea plan' : name(runsOn(shownSpec, shownProvider))) : 'Unknown');
   const blocked = Boolean(unavailable) || signInNeeded;
   const chipName = named(providerLabel);
   return {
