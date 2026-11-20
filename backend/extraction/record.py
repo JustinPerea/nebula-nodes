@@ -141,7 +141,7 @@ def build_record(item: Intake, *, shows: Iterable[dict[str, Any]] | None = None,
 
 def _need(ok: bool, where: str, what: str) -> None:
     if not ok:
-        raise RecordInvalid(f"The record's {where} {what}.")
+        raise RecordInvalid(f"The record’s {where} {what}.")
 
 
 def _is_int(value: Any) -> bool:
@@ -167,7 +167,7 @@ def validate(record: Any) -> None:
     _need(_is_int(rendering.get("height")) and rendering["height"] > 0, "rendering.height", "must be a positive whole number")
     _need(isinstance(rendering.get("sha256"), str) and bool(_HEX64.match(rendering["sha256"])), "rendering.sha256", "must be 64 hex digits")
     _need(isinstance(rendering.get("phash"), str) and bool(_HEX16.match(rendering["phash"])), "rendering.phash", "must be 16 hex digits")
-    _need(record["id"] == record_id(rendering["sha256"]), "id", "must come from the rendering's sha256")
+    _need(record["id"] == record_id(rendering["sha256"]), "id", "must come from the rendering’s sha256")
 
     source = record.get("source")
     _need(isinstance(source, dict), "source", "must be an object")
@@ -229,37 +229,37 @@ def _check_path(path: Any, record: dict[str, Any]) -> list[str]:
     if not isinstance(path, str) or not path:
         raise RecordInvalid("A correction needs a path.")
     if len(path) > MAX_PATH_CHARS:
-        raise RecordInvalid(f"A correction's path is at most {MAX_PATH_CHARS} characters.")
+        raise RecordInvalid(f"A correction’s path is at most {MAX_PATH_CHARS} characters.")
     parts = path.split(".")
     if not all(_SEGMENT.match(p) for p in parts):
-        raise RecordInvalid(f"The path {path!r} has a part that isn't letters, digits, - or _.")
+        raise RecordInvalid(f"The path {path!r} has a part that isn’t letters, digits, - or _.")
     top = parts[0]
     if top in ("status", "approved_by", "approved_at"):
-        raise RecordInvalid("Approval isn't a correction. A person approves a record separately, and an agent can't.")
+        raise RecordInvalid("Approval isn’t a correction. A person approves a record separately, and an agent can’t.")
     if top in ("id", "schema", "schema_status") or path.startswith("schema"):
-        raise RecordInvalid(f"{path} is part of the record's identity and can't be corrected.")
+        raise RecordInvalid(f"{path} is part of the record’s identity and can’t be corrected.")
     if any(path == f or path.startswith(f + ".") for f in _FACTS):
-        raise RecordInvalid(f"{path} was measured or recorded by code. It's a fact, not a correction.")
+        raise RecordInvalid(f"{path} was measured or recorded by code. It’s a fact, not a correction.")
     if path == "brand":
         return parts
     if path.startswith("structure.read."):
         if record["structure"].get("read") is None:
             raise RecordInvalid("There is no model read to correct yet.")
         if parts[2] in _READ_PROVENANCE and len(parts) == 3:
-            raise RecordInvalid(f"{path} says who read the image and can't be corrected.")
+            raise RecordInvalid(f"{path} says who read the image and can’t be corrected.")
         return parts
     if path.startswith("shows."):
         return parts
-    raise RecordInvalid(f"{path} can't be corrected. Correct brand, structure.read.* or shows.*.")
+    raise RecordInvalid(f"{path} can’t be corrected. Correct brand, structure.read.* or shows.*.")
 
 
 # -- what a correction to the reading may change ------------------------------------------------
 
 READ_CORRECTABLE = (
-    "A region's role (structure.read.regions.<id>.role) or label (.label), a text run's content, weight or "
-    "type_style (structure.read.text.<id>.content), one reader_1 field's value (structure.read.reader_1.<field>.value: "
+    "A region’s role (structure.read.regions.<id>.role) or label (.label), a text run’s content, weight or "
+    "type_style (structure.read.text.<id>.content), one reader_1 field’s value (structure.read.reader_1.<field>.value: "
     "summary, composition_notes, subject, type_style, spacing_density, layout or medium), or a keyword to add or remove "
-    "(structure.read.reader_1.keywords). Regions, text runs, boxes, sizes and the provenance fields can't be set whole."
+    "(structure.read.reader_1.keywords). Regions, text runs, boxes, sizes and the provenance fields can’t be set whole."
 )
 
 
@@ -272,7 +272,7 @@ def _read_enums() -> dict[str, tuple[str, ...]]:
 
 
 def _read_refusal(path: str) -> RecordInvalid:
-    return RecordInvalid(f"{path} can't be corrected. What can be: {READ_CORRECTABLE}")
+    return RecordInvalid(f"{path} can’t be corrected. What can be: {READ_CORRECTABLE}")
 
 
 def _check_read(parts: list[str], op: str, value: Any, view: dict[str, Any]) -> Any:
@@ -332,7 +332,7 @@ def _check_read(parts: list[str], op: str, value: Any, view: dict[str, Any]) -> 
 
         canon = load_vocabulary().canonical(value) if isinstance(value, str) else None
         if canon is None:
-            raise RecordInvalid(f"{path} takes a keyword from the vocabulary; {value!r} isn't one.")
+            raise RecordInvalid(f"{path} takes a keyword from the vocabulary; {value!r} isn’t one.")
         return canon
     raise _read_refusal(path)
 
@@ -351,23 +351,23 @@ def read_malformed(read: Any) -> str | None:
     """Why a reading would break the page's fixed shape, or None. Looks at each region and text run:
     an object with a box of four finite numbers and text where text belongs."""
     if not isinstance(read, dict):
-        return "the reading isn't an object"
+        return "the reading isn’t an object"
     for group, texts in (("regions", ("role", "label")), ("text", ("content", "weight", "type_style"))):
         items = read.get(group)
         if items is None:
             continue
         if not isinstance(items, dict):
-            return f"{group} isn't an object"
+            return f"{group} isn’t an object"
         for key, item in items.items():
             if not isinstance(item, dict):
-                return f"{group[:-1] if group == 'regions' else 'text run'} {key} isn't an object"
+                return f"{group[:-1] if group == 'regions' else 'text run'} {key} isn’t an object"
             if not _finite_box(item.get("box")):
                 return f"{group} {key} has no valid box"
             if "box_px" in item and not _finite_box(item["box_px"]):
                 return f"{group} {key} has no valid box_px"
             for name in texts:
                 if name in item and not isinstance(item[name], str):
-                    return f"{group} {key} {name} isn't text"
+                    return f"{group} {key} {name} isn’t text"
     return None
 
 
@@ -404,14 +404,14 @@ def _check_shows(path: list[str], op: str, value: Any, view: dict[str, Any], act
         raise RecordInvalid(f"There is no show {key}. Add it whole with a statement and evidence.")
     field = path[2]
     if field not in SHOW_FIELDS:
-        raise RecordInvalid(f"shows.{key}.{field} can't be corrected; a show's statement and evidence can. "
+        raise RecordInvalid(f"shows.{key}.{field} can’t be corrected; a show’s statement and evidence can. "
                             "Its status and decision are set when a person accepts it.")
     if field == "evidence" and len(path) == 3 and op == "set" and not _good_evidence(value, known):
         raise RecordInvalid(f"A show keeps at least one evidence id that exists (shows.{key}.evidence).")
     if field == "evidence" and (len(path) > 3 or (op != "set" and not (isinstance(value, str) and value in known))):
         raise RecordInvalid(f"Evidence is an id that exists, such as P0 (shows.{key}.evidence).")
     if field == "statement" and (len(path) > 3 or op != "set" or not (isinstance(value, str) and value.strip())):
-        raise RecordInvalid(f"A show's statement is set as text (shows.{key}.statement).")
+        raise RecordInvalid(f"A show’s statement is set as text (shows.{key}.statement).")
     return value
 
 
@@ -438,7 +438,7 @@ def _keep_persons_choices(record: dict[str, Any], view: dict[str, Any], parts: l
     if parts[0] == "shows" and len(parts) >= 2:
         show = view["shows"].get(parts[1])
         if isinstance(show, dict) and show.get("origin") == "person":
-            raise RecordInvalid(f"{path} belongs to a show a person wrote or kept, and a person's show stays as it is. {way_out}")
+            raise RecordInvalid(f"{path} belongs to a show a person wrote or kept, and a person’s show stays as it is. {way_out}")
     # Any person's correction that bears on this one blocks it, whoever wrote
     # last: only a person releases a person's choice. A person's set covers its
     # path, its parents and its children; for an agent's set, so does any person
@@ -455,7 +455,7 @@ def _keep_persons_choices(record: dict[str, Any], view: dict[str, Any], parts: l
         else:
             blocked = other == path and item.get("value") == value
         if blocked:
-            raise RecordInvalid(f"A person corrected {other}, and a person's correction stays. {way_out}")
+            raise RecordInvalid(f"A person corrected {other}, and a person’s correction stays. {way_out}")
 
 
 def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]], actor: str, *,
@@ -466,12 +466,12 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
     anything under ``structure.read.`` and ``shows.``.
     """
     if actor not in ACTORS:
-        raise RecordInvalid("A correction's actor is a person or an agent.")
+        raise RecordInvalid("A correction’s actor is a person or an agent.")
     validate(record)
     if record["status"] == "approved":
         # An approved record is what a person accepted; changing it would
         # change what they approved. It is replaced only through a new proposal.
-        raise RecordInvalid("That record is approved, so it can't be corrected.")
+        raise RecordInvalid("That record is approved, so it can’t be corrected.")
     incoming = list(corrections)
     if not incoming:
         raise RecordInvalid("There are no corrections to add.")
@@ -490,20 +490,20 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
             raise RecordInvalid("Each correction is an object with path, op and value.")
         op = raw.get("op")
         if op not in OPS:
-            raise RecordInvalid("A correction's op is set, add or remove.")
+            raise RecordInvalid("A correction’s op is set, add or remove.")
         parts = _check_path(raw.get("path"), updated)
         value = raw.get("value")
         try:
             encoded = json.dumps(value)
         except (TypeError, ValueError):
-            raise RecordInvalid("A correction's value must be plain JSON.") from None
+            raise RecordInvalid("A correction’s value must be plain JSON.") from None
         if len(encoded) > MAX_VALUE_CHARS:
-            raise RecordInvalid(f"A correction's value is over {MAX_VALUE_CHARS} characters.")
+            raise RecordInvalid(f"A correction’s value is over {MAX_VALUE_CHARS} characters.")
         reason = raw.get("reason")
         if reason is not None and (not isinstance(reason, str) or len(reason) > MAX_REASON_CHARS):
-            raise RecordInvalid(f"A correction's reason is text of at most {MAX_REASON_CHARS} characters.")
+            raise RecordInvalid(f"A correction’s reason is text of at most {MAX_REASON_CHARS} characters.")
         if _depth(value) > MAX_VALUE_DEPTH:
-            raise RecordInvalid(f"A correction's value is nested at most {MAX_VALUE_DEPTH} levels deep.")
+            raise RecordInvalid(f"A correction’s value is nested at most {MAX_VALUE_DEPTH} levels deep.")
         view = effective(updated)
         if parts[0] == "brand":
             if op != "set" or not (value is None or (isinstance(value, str) and len(value) <= MAX_BRAND_CHARS)):
@@ -519,7 +519,7 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
         if op in ("add", "remove"):
             current = get_path(view, raw["path"])
             if current is not None and not isinstance(current, list):
-                raise RecordInvalid(f"{raw['path']} isn't a list, so it takes set, not {op}.")
+                raise RecordInvalid(f"{raw['path']} isn’t a list, so it takes set, not {op}.")
         entry: dict[str, Any] = {"path": raw["path"], "op": op, "value": value, "actor": actor, "at": at}
         if reason:
             entry["reason"] = reason
@@ -528,7 +528,7 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
                                 f"{raw['path']} is larger. Shorten its value or reason.")
         # Later corrections in this call see the earlier ones (add a show, then change it).
         if effective(dict(updated, corrections=[*updated["corrections"], entry])).get("corrections_skipped"):
-            raise RecordInvalid(f"{raw['path']} can't take that correction here.")
+            raise RecordInvalid(f"{raw['path']} can’t take that correction here.")
         updated["corrections"].append(entry)
     validate(updated)
     return updated
@@ -542,12 +542,12 @@ def add_read_request(record: dict[str, Any], reason: Any, *, clock: Clock | None
     """
     validate(record)
     if record["status"] == "approved":
-        raise RecordInvalid("That record is approved, so it can't be changed.")
+        raise RecordInvalid("That record is approved, so it can’t be changed.")
     if not isinstance(reason, str) or not reason.strip():
         raise RecordInvalid("A read request needs a reason, in a sentence.")
     reason = reason.strip()
     if len(reason) > MAX_READ_REQUEST_CHARS:
-        raise RecordInvalid(f"A read request's reason is at most {MAX_READ_REQUEST_CHARS} characters.")
+        raise RecordInvalid(f"A read request’s reason is at most {MAX_READ_REQUEST_CHARS} characters.")
     updated = copy.deepcopy(record)
     pending = updated.setdefault("read_requests", [])
     if len(pending) >= MAX_READ_REQUESTS:

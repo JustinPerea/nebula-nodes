@@ -92,5 +92,5 @@ def test_a_failed_read_is_a_sentence_and_changes_nothing(saved, monkeypatch, cap
     monkeypatch.setattr(cli, "_interactive", lambda: True)
     monkeypatch.setattr(builtins, "input", lambda prompt="": "read")
     assert cli.main(["read", saved]) == 2
-    assert "didn't answer" in capsys.readouterr().err
+    assert "didn’t answer" in capsys.readouterr().err
     assert store.load(saved)["structure"]["read"] is None

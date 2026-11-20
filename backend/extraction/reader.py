@@ -78,8 +78,8 @@ class ReadFailed(ExtractionRefused):
 
 
 _FAILED = {
-    analysis_errors.UNAVAILABLE: "Claude didn't answer. Try the read again in a moment.",
-    analysis_errors.UNREADABLE: "Claude couldn't read this image.",
+    analysis_errors.UNAVAILABLE: "Claude didn’t answer. Try the read again in a moment.",
+    analysis_errors.UNREADABLE: "Claude couldn’t read this image.",
     analysis_errors.OTHER: "The read failed, and nothing was changed.",
 }
 
@@ -254,13 +254,13 @@ def _validate_read(structured: dict, palette_len: int, vocab: Vocabulary, size: 
             raise AnalysisInvalid("each gap must be an object")
         between = item.get("between")
         if not (isinstance(between, (list, tuple)) and len(between) == 2 and all(isinstance(b, str) for b in between)):
-            raise AnalysisInvalid("a gap's between must be two region ids")
+            raise AnalysisInvalid("a gap’s between must be two region ids")
         if any(b not in regions for b in between):
             continue  # a gap between regions that aren't there
         axis = item.get("axis")
         if axis not in AXES_XY:
-            raise AnalysisInvalid(f"a gap's axis must be x or y, got {axis!r}")
-        fraction = _frac(item.get("size"), "a gap's size")
+            raise AnalysisInvalid(f"a gap’s axis must be x or y, got {axis!r}")
+        fraction = _frac(item.get("size"), "a gap’s size")
         gaps.append({"between": list(between), "axis": axis,
                      "px": round(fraction * (width if axis == "x" else height)), "estimate": True})
     margin = _frac(spacing.get("outer_margin"), "the outer margin")
@@ -271,8 +271,8 @@ def _validate_read(structured: dict, palette_len: int, vocab: Vocabulary, size: 
             raise AnalysisInvalid("each show must be an object")
         evidence = item.get("evidence")
         if not isinstance(evidence, list) or not all(isinstance(e, str) for e in evidence):
-            raise AnalysisInvalid("a show's evidence must be a list of ids")
-        shows.append({"statement": _text(item.get("statement"), "a show's statement", MAX_STATEMENT),
+            raise AnalysisInvalid("a show’s evidence must be a list of ids")
+        shows.append({"statement": _text(item.get("statement"), "a show’s statement", MAX_STATEMENT),
                       "evidence": evidence, "origin": "model"})
 
     read = {
@@ -368,7 +368,7 @@ def apply_read(record: dict[str, Any], image: Image.Image, structured: dict[str,
     if record.get("status") != "proposal":
         # Checked here, under the record's lock, as well as before the model
         # call: a person can approve the record while Claude is reading it.
-        raise rec.RecordInvalid("That record was approved while it was being read, so the reading wasn't saved.")
+        raise rec.RecordInvalid("That record was approved while it was being read, so the reading wasn’t saved.")
     palette = record["structure"]["measured"]["palette"]
     read, shows = validate_read(structured, len(palette), vocab or load_vocabulary(), image.size, model=model,
                                 read_at=rec._stamp(clock))
@@ -394,7 +394,7 @@ async def ask(record: dict[str, Any], image: Image.Image, *, spawn: Callable[...
     palette = record["structure"]["measured"]["palette"]
     seen = await asyncio.to_thread(composite_on, image, COMMONS_READER_SURFACE)
     if seen is None:
-        raise ReadFailed("This image is too transparent to read, so it wasn't sent.", analysis_errors.TRANSPARENT)
+        raise ReadFailed("This image is too transparent to read, so it wasn’t sent.", analysis_errors.TRANSPARENT)
     png = await asyncio.to_thread(media.encode_png, seen, MAX_EDGE)
     kwargs: dict[str, Any] = {}
     if spawn is not None:
@@ -416,7 +416,7 @@ async def read_record(record: dict[str, Any], image: Image.Image, *, spawn: Call
     try:
         return await asyncio.to_thread(apply_read, record, image, structured, vocab=vocab, clock=clock)
     except AnalysisInvalid as exc:
-        raise ReadFailed(f"Claude's answer didn't fit what the page expects ({exc}). Nothing was changed.") from exc
+        raise ReadFailed(f"Claude’s answer didn’t fit what the page expects ({exc}). Nothing was changed.") from exc
 
 
 def load_fake(path: str) -> dict[str, Any]:
@@ -425,7 +425,7 @@ def load_fake(path: str) -> dict[str, Any]:
         with open(path, "rb") as handle:
             data = json.loads(handle.read(2_000_000))
     except (OSError, ValueError):
-        raise ExtractionRefused("The fake reader file couldn't be read as JSON.") from None
+        raise ExtractionRefused("The fake reader file couldn’t be read as JSON.") from None
     if not isinstance(data, dict):
         raise ExtractionRefused("The fake reader file must hold a JSON object.")
     return data

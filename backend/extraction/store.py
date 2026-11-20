@@ -53,10 +53,10 @@ def _forbidden_roots() -> list[tuple[str, Path]]:
     except (ImportError, KeyError, OSError):
         pass
     for home in homes:
-        roots.append(("Nebula's own state folder", (home / ".nebula").resolve()))
+        roots.append(("Nebula’s own state folder", (home / ".nebula").resolve()))
     state = os.environ.get("NEBULA_STATE_DIR")
     if state:
-        roots.append(("Nebula's own state folder", Path(state).resolve()))
+        roots.append(("Nebula’s own state folder", Path(state).resolve()))
     roots.append(("the Nebula source folder", REPO_ROOT.resolve()))
     return roots
 
@@ -82,7 +82,7 @@ def resolve_folder(folder: str | os.PathLike[str]) -> str:
         raise StoreRefused("Name a folder for the records.")
     real = os.path.realpath(raw)
     if not os.path.exists(real):
-        raise StoreRefused("That folder doesn't exist. Create it first, then try again.")
+        raise StoreRefused("That folder doesn’t exist. Create it first, then try again.")
     if not os.path.isdir(real):
         raise StoreRefused("That path is a file, not a folder.")
     for label, root in _forbidden_roots():
@@ -100,17 +100,17 @@ def _contained(path: str, root: str) -> str:
 
 def _record_dir(folder_real: str, record_id: str) -> str:
     if not _DIR_NAME.match(record_id):
-        raise StoreRefused("That isn't a record id.")
+        raise StoreRefused("That isn’t a record id.")
     path = os.path.join(folder_real, record_id)
     if os.path.islink(path):
-        raise StoreRefused("That record's folder is a symlink, so it won't be used.")
+        raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
     return path
 
 
 def _atomic_write(directory: str, name: str, data: bytes) -> None:
     final = os.path.join(directory, name)
     if os.path.islink(final):
-        raise StoreRefused(f"{name} is a symlink, so it won't be overwritten.")
+        raise StoreRefused(f"{name} is a symlink, so it won’t be overwritten.")
     _contained(final, directory)
     fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp-")
     try:
@@ -132,7 +132,7 @@ def _dump(record: dict[str, Any]) -> bytes:
     """The bytes of ``record.json``. Refused when a read would refuse them, so the record stays readable."""
     data = (json.dumps(record, indent=2, ensure_ascii=False, sort_keys=False) + "\n").encode("utf-8")
     if len(data) > MAX_RECORD_BYTES:
-        raise StoreRefused("That change would make the record too large to read back, so it wasn't saved. "
+        raise StoreRefused("That change would make the record too large to read back, so it wasn’t saved. "
                            "The record is as it was.")
     return data
 
@@ -149,11 +149,11 @@ def _locked(directory: str) -> Iterator[None]:
     try:
         fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     except OSError as exc:
-        raise StoreRefused("That record's lock file couldn't be opened (is it a link?), so the record "
-                           "wasn't changed.") from exc
+        raise StoreRefused("That record’s lock file couldn’t be opened (is it a link?), so the record "
+                           "wasn’t changed.") from exc
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise StoreRefused("That record's lock file isn't a regular file, so the record wasn't changed.")
+            raise StoreRefused("That record’s lock file isn’t a regular file, so the record wasn’t changed.")
         fcntl.flock(fd, fcntl.LOCK_EX)
         yield
     finally:
@@ -168,11 +168,11 @@ def _read_record_file(directory: str) -> dict[str, Any]:
     try:
         info = os.lstat(path)
     except FileNotFoundError:
-        raise StoreRefused("There's no record.json there.") from None
+        raise StoreRefused("There’s no record.json there.") from None
     if stat.S_ISLNK(info.st_mode):
-        raise StoreRefused("That record.json is a symlink, so it won't be read.")
+        raise StoreRefused("That record.json is a symlink, so it won’t be read.")
     if not stat.S_ISREG(info.st_mode):
-        raise StoreRefused("That record.json isn't a regular file.")
+        raise StoreRefused("That record.json isn’t a regular file.")
     if info.st_size > MAX_RECORD_BYTES:
         raise StoreRefused("That record.json is too large to read.")
     _contained(path, directory)
@@ -180,13 +180,13 @@ def _read_record_file(directory: str) -> dict[str, Any]:
         with open(path, "rb") as handle:
             record = json.loads(handle.read(MAX_RECORD_BYTES + 1))
     except (OSError, ValueError):
-        raise StoreRefused("That record.json couldn't be read as JSON.") from None
+        raise StoreRefused("That record.json couldn’t be read as JSON.") from None
     try:
         rec.validate(record)
     except rec.RecordInvalid as exc:
         raise StoreRefused(str(exc)) from None
     if os.path.basename(directory) != record["id"]:
-        raise StoreRefused("That record's folder name doesn't match its id.")
+        raise StoreRefused("That record’s folder name doesn’t match its id.")
     return record
 
 
@@ -197,12 +197,12 @@ def _locate(target: str | os.PathLike[str]) -> str:
         raw = os.path.dirname(raw) or "."
     raw = raw.rstrip("/") or "/"
     if os.path.islink(raw):
-        raise StoreRefused("That record's folder is a symlink, so it won't be used.")
+        raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
     parent = resolve_folder(os.path.dirname(os.path.abspath(raw)))
     name = os.path.basename(os.path.abspath(raw))
     directory = _record_dir(parent, name)
     if not os.path.isdir(directory):
-        raise StoreRefused("That isn't a record folder.")
+        raise StoreRefused("That isn’t a record folder.")
     return directory
 
 
@@ -221,9 +221,9 @@ def rendering_bytes(target: str | os.PathLike[str]) -> bytes:
     except FileNotFoundError:
         raise StoreRefused("That record has no rendering.") from None
     if stat.S_ISLNK(info.st_mode):
-        raise StoreRefused("That rendering is a symlink, so it won't be read.")
+        raise StoreRefused("That rendering is a symlink, so it won’t be read.")
     if not stat.S_ISREG(info.st_mode):
-        raise StoreRefused("That rendering isn't a regular file.")
+        raise StoreRefused("That rendering isn’t a regular file.")
     if info.st_size > MAX_RENDERING_BYTES:
         raise StoreRefused("That rendering is too large to read.")
     _contained(path, directory)
@@ -231,9 +231,9 @@ def rendering_bytes(target: str | os.PathLike[str]) -> bytes:
         with open(path, "rb") as handle:
             data = handle.read(MAX_RENDERING_BYTES + 1)
     except OSError:
-        raise StoreRefused("That rendering couldn't be read.") from None
+        raise StoreRefused("That rendering couldn’t be read.") from None
     if not data.startswith(_PNG):
-        raise StoreRefused("That rendering isn't a PNG.")
+        raise StoreRefused("That rendering isn’t a PNG.")
     return data
 
 
@@ -248,7 +248,7 @@ def list_records(folder: str | os.PathLike[str]) -> list[dict[str, Any]]:
         directory = os.path.join(real, name)
         try:
             if os.path.islink(directory):
-                raise StoreRefused("That record's folder is a symlink, so it won't be used.")
+                raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
             record = _read_record_file(directory)
         except StoreRefused as exc:
             rows.append({"id": name, "error": str(exc)})
@@ -286,15 +286,15 @@ def save(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, sour
     """
     rec.validate(record)
     if source_ext not in SOURCE_EXTS:
-        raise StoreRefused("The original's file type isn't one the store keeps.")
+        raise StoreRefused("The original’s file type isn’t one the store keeps.")
     if not rendering_png.startswith(_PNG):
-        raise StoreRefused("The rendering isn't a PNG.")
+        raise StoreRefused("The rendering isn’t a PNG.")
     real = resolve_folder(folder)
     directory = _record_dir(real, record["id"])
     made = False
     if os.path.lexists(directory):
         if not os.path.isdir(directory):
-            raise StoreRefused("A file with that record's name is in the way.")
+            raise StoreRefused("A file with that record’s name is in the way.")
     else:
         os.mkdir(directory)
         made = True
@@ -324,7 +324,7 @@ def _save_locked(record: dict[str, Any], rendering_png: bytes, source_bytes: byt
     dropped: list[dict[str, Any]] = []
     if existing is not None:
         if existing["status"] != "proposal":
-            raise StoreRefused("That record is approved, so it won't be replaced.")
+            raise StoreRefused("That record is approved, so it won’t be replaced.")
         remeasure = None
         if image is not None:
             from extraction import reader
@@ -335,7 +335,7 @@ def _save_locked(record: dict[str, Any], rendering_png: bytes, source_bytes: byt
     data = _dump(to_write)  # before any file changes: a record too large to read back isn't written
     _contained(directory, real)
     if os.path.islink(directory):
-        raise StoreRefused("That record's folder is a symlink, so it won't be used.")
+        raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
     _atomic_write(directory, "rendering.png", rendering_png)
     _atomic_write(directory, f"source.{source_ext}", source_bytes)
     _atomic_write(directory, "record.json", data)
@@ -345,7 +345,7 @@ def _save_locked(record: dict[str, Any], rendering_png: bytes, source_bytes: byt
 def _write_unlocked(directory: str, record: dict[str, Any]) -> None:
     rec.validate(record)
     if os.path.basename(directory) != record["id"]:
-        raise StoreRefused("That record's folder name doesn't match its id.")
+        raise StoreRefused("That record’s folder name doesn’t match its id.")
     data = _dump(record)
     _read_record_file(directory)  # the one there must be a good record
     _atomic_write(directory, "record.json", data)

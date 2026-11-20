@@ -50,7 +50,7 @@ BODY_CAP = IMAGE_CAP + BODY_MARGIN
 DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist-extraction"
 INDEX_FILE = "extraction.html"
 NOT_BUILT = (
-    "The extraction page isn't built yet.\n"
+    "The extraction page isn’t built yet.\n"
     "Run `npm run extraction:build` in the frontend folder, then reload this address.\n"
 )
 SECURITY_HEADERS = {
@@ -145,14 +145,14 @@ class _Guards:
             if origin.decode("latin-1") not in self.origins:
                 return _refuse(403, "This request came from somewhere other than the page.")
         elif scope["method"] not in ("GET", "HEAD"):
-            return _refuse(403, "This request didn't say where it came from.")
+            return _refuse(403, "This request didn’t say where it came from.")
         length = headers.get(b"content-length")
         if length is not None:
             try:
                 if int(length) > self.cap:
                     return _refuse(413, "That upload is too large.")
             except ValueError:
-                return _refuse(400, "That request's length isn't a number.")
+                return _refuse(400, "That request’s length isn’t a number.")
         return None
 
     async def _read(self, scope: Scope, receive: Receive) -> bytes | JSONResponse:
@@ -195,7 +195,7 @@ def _clean_name(name: str | None) -> str | None:
 
 def _record_id(value: str) -> str:
     if not _RECORD_ID.match(value):
-        raise ExtractionRefused("That isn't a record id.")
+        raise ExtractionRefused("That isn’t a record id.")
     return value
 
 
@@ -229,8 +229,8 @@ def create_app(token: str, *, port: int = DEFAULT_PORT, dev: bool = False,
 
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
-        return JSONResponse({"error": "There's nothing at that address." if exc.status_code == 404
-                             else "That request wasn't accepted."},
+        return JSONResponse({"error": "There’s nothing at that address." if exc.status_code == 404
+                             else "That request wasn’t accepted."},
                             status_code=exc.status_code, headers=SECURITY_HEADERS)
 
     @app.get("/api/folder")
@@ -275,7 +275,7 @@ def create_app(token: str, *, port: int = DEFAULT_PORT, dev: bool = False,
             directory = os.path.join(real, _record_id(record_id))
             record = await asyncio.to_thread(store.load, directory)
             if record["status"] == "approved":
-                return _refuse(409, "That record is approved, so it can't be read again.")
+                return _refuse(409, "That record is approved, so it can’t be read again.")
             if record["structure"]["read"] is not None and not body.again:
                 return _refuse(409, "That record has already been read. Choose Read again to replace the reading.")
             png = await asyncio.to_thread(store.rendering_bytes, directory)
@@ -291,9 +291,9 @@ def create_app(token: str, *, port: int = DEFAULT_PORT, dev: bool = False,
             except reader.ReadFailed as exc:
                 return _refuse(502, str(exc))
             except AnalysisInvalid as exc:
-                return _refuse(502, f"The answer didn't fit what the page expects ({exc}). Nothing was changed.")
+                return _refuse(502, f"The answer didn’t fit what the page expects ({exc}). Nothing was changed.")
             except media.MediaError:
-                return _refuse(400, "That record's image couldn't be read.")
+                return _refuse(400, "That record’s image couldn’t be read.")
             return JSONResponse({"record": updated, "effective": rec.effective(updated)}, headers=SECURITY_HEADERS)
 
     @app.get("/{path:path}")

@@ -25,12 +25,12 @@ def _line(record: dict[str, Any]) -> str:
 def _read_image(path: str) -> tuple[bytes, str]:
     real = os.path.realpath(os.path.expanduser(path))
     if not os.path.isfile(real):
-        raise ExtractionRefused("That image file doesn't exist.")
+        raise ExtractionRefused("That image file doesn’t exist.")
     try:
         with open(real, "rb") as handle:
             return handle.read(IMAGE_CAP + 1), real
     except OSError:
-        raise ExtractionRefused("That image file couldn't be read.") from None
+        raise ExtractionRefused("That image file couldn’t be read.") from None
 
 
 def _measure(args: argparse.Namespace) -> int:
@@ -58,7 +58,7 @@ def _list(args: argparse.Namespace) -> int:
         print("No records in that folder.")
     for row in rows:
         if "error" in row:
-            print(f"{row['id']}  can't be read: {row['error']}")
+            print(f"{row['id']}  can’t be read: {row['error']}")
         else:
             print(f"{row['id']}  {row['width']}x{row['height']}  {row['name'] or '(unnamed)'}  {row['status']}")
     return 0
@@ -97,7 +97,7 @@ def _read(args: argparse.Namespace) -> int:
     """Read a record with Claude. It uses the person's Claude usage, so only a person at a terminal may start it."""
     if not _interactive():
         raise ExtractionRefused("A read uses your Claude usage, so it needs you at a terminal. "
-                                "Start it from the extraction page's Read button instead.")
+                                "Start it from the extraction page’s Read button instead.")
     directory = store._locate(args.record)
     record = store.load(directory)
     if record["structure"]["read"] is not None and not args.again:
@@ -125,7 +125,7 @@ def _read(args: argparse.Namespace) -> int:
     except reader.ReadFailed as exc:
         raise ExtractionRefused(str(exc)) from None
     except reader.AnalysisInvalid as exc:
-        raise ExtractionRefused(f"The answer didn't fit what the page expects ({exc}). Nothing was changed.") from None
+        raise ExtractionRefused(f"The answer didn’t fit what the page expects ({exc}). Nothing was changed.") from None
     print(f"{_line(updated)}\nread: {len(updated['structure']['read']['regions'])} regions")
     return 0
 
@@ -148,7 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("--json", action="store_true")
     show.add_argument("--effective", action="store_true", help="with corrections applied")
     show.set_defaults(run=_show)
-    serve = sub.add_parser("serve", help="run the local page's server on 127.0.0.1")
+    serve = sub.add_parser("serve", help="run the local page’s server on 127.0.0.1")
     serve.add_argument("--port", type=int, default=8870, help="the port to listen on (default 8870)")
     serve.add_argument("--dev", action="store_true",
                        help="the page comes from the Vite dev server on 5870, which proxies /api here")

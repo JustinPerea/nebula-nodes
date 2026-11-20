@@ -92,9 +92,9 @@ def test_the_recompute_lists_name_only_what_the_image_gives():
 def test_a_show_whose_evidence_is_gone_is_dropped_and_listed(folder):
     item, before = _populated(folder)
     gone = copy.deepcopy(before)
-    gone["shows"]["ghost"] = {"statement": "Cites a color that won't exist", "evidence": ["P99"],
+    gone["shows"]["ghost"] = {"statement": "Cites a color that won’t exist", "evidence": ["P99"],
                               "origin": "agent", "status": "proposal", "decision_ref": None, "order": 99}
-    gone["shows"]["mixed"] = {"statement": "Cites one color that exists and one that won't", "evidence": ["P0", "P98"],
+    gone["shows"]["mixed"] = {"statement": "Cites one color that exists and one that won’t", "evidence": ["P0", "P98"],
                               "origin": "person", "status": "proposal", "decision_ref": None, "order": 98}
     fresh = rec.build_record(_item())
     out, dropped = rec.carry_over(fresh, gone)

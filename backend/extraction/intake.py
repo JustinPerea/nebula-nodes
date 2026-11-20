@@ -60,16 +60,16 @@ def intake(data: bytes, *, name: str | None = None, kind: Kind = "file", path: s
     try:
         sniffed = media.sniff(data)
     except media.MediaError:
-        raise ExtractionRefused(f"That file isn't a {STILL_TYPES} image.") from None
+        raise ExtractionRefused(f"That file isn’t a {STILL_TYPES} image.") from None
     if sniffed.media != "image":
-        raise ExtractionRefused(f"Videos aren't supported yet. Use a still image ({STILL_TYPES}).")
+        raise ExtractionRefused(f"Videos aren’t supported yet. Use a still image ({STILL_TYPES}).")
     try:
         media.check_size("image", len(data))
         image = media.load_image(data, sniffed.mime, keep_alpha=True)
     except media.MediaError as exc:
         if exc.code == "too_large":
             raise ExtractionRefused("That image is too large (over 25 MB or too many pixels).") from None
-        raise ExtractionRefused("That image couldn't be read.") from None
+        raise ExtractionRefused("That image couldn’t be read.") from None
     return Intake(
         data=data, mime=sniffed.mime, ext=sniffed.ext, image=image,
         name=name, kind=kind, path=path, mtime=_mtime_iso(path) if path else None,

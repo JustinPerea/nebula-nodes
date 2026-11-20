@@ -109,7 +109,7 @@ def test_a_failed_read_is_a_sentence_and_changes_nothing(folder):
     record_id = _add(client, folder)
     before = (folder / record_id / "record.json").read_bytes()
     reply = _read(client, folder, record_id)
-    assert reply.status_code == 502 and "didn't answer" in reply.json()["error"]
+    assert reply.status_code == 502 and "didn’t answer" in reply.json()["error"]
     assert (folder / record_id / "record.json").read_bytes() == before
     # the lock is free again
     assert not client.app.state.read_lock.locked()
@@ -122,7 +122,7 @@ def test_an_answer_that_does_not_fit_is_a_sentence_and_changes_nothing(folder):
     record_id = _add(client, folder)
     before = (folder / record_id / "record.json").read_bytes()
     reply = _read(client, folder, record_id)
-    assert reply.status_code == 502 and "didn't fit" in reply.json()["error"]
+    assert reply.status_code == 502 and "didn’t fit" in reply.json()["error"]
     assert (folder / record_id / "record.json").read_bytes() == before
 
 

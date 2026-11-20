@@ -89,7 +89,7 @@ def test_an_agent_cant_approve_or_touch_facts(image, folder):
     for path in ("status", "approved_by", "structure.measured.palette", "rendering.width", "source.name", "id"):
         with pytest.raises(RuntimeError):
             mcp_server.extraction_correct(str(folder / record_id), [{"path": path, "op": "set", "value": "x"}])
-    with pytest.raises(RuntimeError, match="Approval isn't a correction"):
+    with pytest.raises(RuntimeError, match="Approval isn’t a correction"):
         mcp_server.extraction_correct(str(folder / record_id), [{"path": "status", "op": "set", "value": "approved"}])
     assert mcp_server.extraction_show(str(folder / record_id))["record"]["corrections"] == []
 
@@ -111,13 +111,13 @@ def test_a_path_require_allowed_path_refuses_is_refused(image, folder, tmp_path)
 
 
 def test_the_stores_own_refusals_come_back_as_plain_errors(image, tmp_path, folder, monkeypatch):
-    with pytest.raises(RuntimeError, match="doesn't exist"):
+    with pytest.raises(RuntimeError, match="doesn’t exist"):
         mcp_server.extraction_measure(str(image), str(tmp_path / "nope"))
     with pytest.raises(RuntimeError, match="image file doesn't exist"):
         mcp_server.extraction_measure(str(tmp_path / "gone.png"), str(folder))
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64)
-    with pytest.raises(RuntimeError, match="Videos aren't supported"):
+    with pytest.raises(RuntimeError, match="Videos aren’t supported"):
         mcp_server.extraction_measure(str(video), str(folder))
     state = tmp_path / "state"
     state.mkdir()

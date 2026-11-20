@@ -51,7 +51,7 @@ def test_shows_without_evidence_are_dropped_by_the_builder():
     record = _build(shows=[
         {"statement": "One accent, on the button", "evidence": ["P7"]},
         {"statement": "No evidence given", "evidence": []},
-        {"statement": "Evidence that doesn't exist", "evidence": ["P99", "r9"]},
+        {"statement": "Evidence that doesn’t exist", "evidence": ["P99", "r9"]},
         {"statement": "   ", "evidence": ["P0"]},
         {"statement": "Two ids", "evidence": ["P0", "P1"]},
     ])
@@ -143,7 +143,7 @@ def test_the_refused_paths(path, actor):
 
 def test_an_agent_cant_approve_and_the_message_says_so():
     for path, value in (("status", "approved"), ("approved_by", "claude"), ("approved_at", "2026-11-19T00:00:00Z")):
-        with pytest.raises(rec.RecordInvalid, match="Approval isn't a correction"):
+        with pytest.raises(rec.RecordInvalid, match="Approval isn’t a correction"):
             rec.add_corrections(_build(), [{"path": path, "op": "set", "value": value}], "agent")
 
 
@@ -176,7 +176,7 @@ def test_read_paths_work_once_a_read_exists_but_its_provenance_stays():
     ({"path": "shows.s1.decision_ref", "op": "set", "value": "d1"}, "when a person accepts it"),
     ({"path": "shows.s1.statement", "op": "add", "value": "x"}, "statement is set as text"),
     ({"path": "shows.s1", "op": "add", "value": {}}, "whole entry"),
-    ({"path": "shows..x", "op": "set", "value": 1}, "isn't letters"),
+    ({"path": "shows..x", "op": "set", "value": 1}, "isn’t letters"),
     ({"path": "shows.s1.statement", "op": "clear", "value": 1}, "op is"),
     ({"path": "shows.s1.statement", "op": "set", "value": {1, 2}}, "plain JSON"),
     ({"path": "shows.s1.statement", "op": "set", "value": "x" * 30000}, "characters"),

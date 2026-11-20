@@ -208,7 +208,7 @@ def test_a_missing_field_is_a_plain_400(client):
 def test_a_folder_that_does_not_exist_is_a_plain_400(client, tmp_path):
     reply = client.get("/api/folder", params={"path": str(tmp_path / "nowhere")}, headers=AUTH)
     assert reply.status_code == 400
-    assert reply.json() == {"error": "That folder doesn't exist. Create it first, then try again."}
+    assert reply.json() == {"error": "That folder doesn’t exist. Create it first, then try again."}
 
 
 def test_the_state_folder_is_refused_as_a_plain_4xx_sentence(client, tmp_path, monkeypatch):

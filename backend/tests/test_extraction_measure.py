@@ -36,7 +36,7 @@ def test_video_is_refused_in_one_plain_sentence():
     mp4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
     mov = b"\x00\x00\x00\x14ftypqt  " + b"\x00" * 64
     for data in (mp4, mov):
-        with pytest.raises(ExtractionRefused, match=r"^Videos aren't supported yet\. Use a still image"):
+        with pytest.raises(ExtractionRefused, match=r"^Videos aren’t supported yet\. Use a still image"):
             intake(data)
 
 
@@ -53,7 +53,7 @@ def test_svg_garbage_and_empty_are_refused(data):
 
 
 def test_a_truncated_image_is_refused_as_unreadable():
-    with pytest.raises(ExtractionRefused, match="couldn't be read"):
+    with pytest.raises(ExtractionRefused, match="couldn’t be read"):
         intake(_bytes("gradient_accent.png")[:40])
 
 

@@ -111,7 +111,7 @@ def test_list_orders_newest_first_and_ignores_other_entries(folder):
 
 
 def test_a_missing_folder_is_refused(tmp_path):
-    with pytest.raises(StoreRefused, match="doesn't exist"):
+    with pytest.raises(StoreRefused, match="doesn’t exist"):
         _save(tmp_path / "nope")
     assert not (tmp_path / "nope").exists()
 
@@ -177,7 +177,7 @@ def test_a_record_directory_that_is_a_symlink_is_refused(tmp_path, folder):
     assert list(outside.iterdir()) == []
     with pytest.raises(StoreRefused, match="symlink"):
         store.load(folder / record["id"])
-    assert store.list_records(folder) == [{"id": record["id"], "error": "That record's folder is a symlink, so it won't be used."}]
+    assert store.list_records(folder) == [{"id": record["id"], "error": "That record’s folder is a symlink, so it won’t be used."}]
 
 
 def test_a_record_json_symlink_is_refused_on_read_and_write(tmp_path, folder):
@@ -213,7 +213,7 @@ def test_a_record_whose_folder_name_isnt_its_id_is_refused(folder):
     directory = folder / saved["record"]["id"]
     other = folder / "ex_0000000000000000"
     directory.rename(other)
-    with pytest.raises(StoreRefused, match="doesn't match"):
+    with pytest.raises(StoreRefused, match="doesn’t match"):
         store.load(other)
 
 
@@ -231,7 +231,7 @@ def test_bad_json_and_bad_records_are_refused(folder):
 
 
 def test_a_folder_is_not_a_record_and_bad_inputs_to_save(folder):
-    with pytest.raises(StoreRefused, match="isn't a record id"):
+    with pytest.raises(StoreRefused, match="isn’t a record id"):
         store.load(folder)
     record, png, data, ext = _made()
     with pytest.raises(StoreRefused, match="file type"):
