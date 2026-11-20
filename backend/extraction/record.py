@@ -32,6 +32,7 @@ GIVEN_REASON = "the source has no structure of its own"
 ACTORS = ("person", "agent")
 OPS = ("set", "add", "remove")
 STATUSES = ("proposal", "approved")
+SHOW_FIELDS = frozenset({"statement", "evidence"})
 MAX_CORRECTIONS_PER_CALL = 50
 MAX_CORRECTIONS_PER_RECORD = 1000
 MAX_VALUE_CHARS = 20_000
@@ -246,22 +247,28 @@ def _check_shows(path: list[str], op: str, value: Any, view: dict[str, Any], act
         if not (isinstance(value, dict) and isinstance(value.get("statement"), str) and value["statement"].strip()
                 and _good_evidence(value.get("evidence"), known)):
             raise RecordInvalid(f"A show needs a statement and at least one evidence id that exists, such as P0 (shows.{key}).")
+        extra = set(value) - SHOW_FIELDS
+        if extra:
+            raise RecordInvalid(f"A show added by a correction has only a statement and evidence "
+                                f"(shows.{key} also has {', '.join(sorted(extra))}).")
         order = max([s.get("order", 0) for s in view["shows"].values() if s] + [-1]) + 1
-        whole = dict(value)
-        whole.setdefault("origin", actor)
-        whole.setdefault("status", "proposal")
-        whole.setdefault("decision_ref", None)
-        whole.setdefault("order", order)
-        return whole
+        # Who added it, its status and its decision link are set here, never
+        # taken from the value: a correction can't claim a person's origin or
+        # an accepted decision.
+        return {"statement": value["statement"], "evidence": list(value["evidence"]), "origin": actor,
+                "status": "proposal", "decision_ref": None, "order": order}
     if not isinstance(view["shows"].get(key), dict):
         raise RecordInvalid(f"There is no show {key}. Add it whole with a statement and evidence.")
     field = path[2]
-    if len(path) == 3 and field == "evidence" and op == "set" and not _good_evidence(value, known):
+    if field not in SHOW_FIELDS:
+        raise RecordInvalid(f"shows.{key}.{field} can't be corrected; a show's statement and evidence can. "
+                            "Its status and decision are set when a person accepts it.")
+    if field == "evidence" and len(path) == 3 and op == "set" and not _good_evidence(value, known):
         raise RecordInvalid(f"A show keeps at least one evidence id that exists (shows.{key}.evidence).")
-    if len(path) == 3 and field in ("statement",) and op == "set" and not (isinstance(value, str) and value.strip()):
-        raise RecordInvalid(f"A show's statement is text (shows.{key}.statement).")
-    if len(path) == 3 and field in ("decision_ref", "status", "origin"):
-        raise RecordInvalid(f"shows.{key}.{field} is set when a person accepts the show as a decision, not by a correction.")
+    if field == "evidence" and (len(path) > 3 or (op != "set" and not (isinstance(value, str) and value in known))):
+        raise RecordInvalid(f"Evidence is an id that exists, such as P0 (shows.{key}.evidence).")
+    if field == "statement" and (len(path) > 3 or op != "set" or not (isinstance(value, str) and value.strip())):
+        raise RecordInvalid(f"A show's statement is set as text (shows.{key}.statement).")
     return value
 
 
@@ -275,6 +282,10 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
     if actor not in ACTORS:
         raise RecordInvalid("A correction's actor is a person or an agent.")
     validate(record)
+    if record["status"] == "approved":
+        # An approved record is what a person accepted; changing it would
+        # change what they approved. It is replaced only through a new proposal.
+        raise RecordInvalid("That record is approved, so it can't be corrected.")
     incoming = list(corrections)
     if not incoming:
         raise RecordInvalid("There are no corrections to add.")

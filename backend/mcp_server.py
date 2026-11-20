@@ -2595,7 +2595,43 @@ def _extraction_call(fn, *args: Any, **kwargs: Any) -> Any:
 
 
 def _extraction_path(value: str) -> str:
-    return str(_extraction_call(require_allowed_path, value))
+    """A path an agent named, under `nebula upload`'s rules (upload_client):
+    a relative path means an in-app turn's workspace, require_allowed_path
+    refuses protected storage, and a turn with a workspace reaches only its
+    own files."""
+    from extraction.errors import ExtractionRefused
+    from upload_client import _local_path
+
+    return str(_extraction_call(_local_path, value, error=ExtractionRefused))
+
+
+def _extraction_read_image(path: str, cap: int) -> bytes:
+    """Read the image at a checked path without following a link put in place
+    since the check, and only a regular file with one name (a hard link could
+    reach a protected file under an allowed name)."""
+    import errno
+    import stat
+
+    from moodboard_client import _open_no_follow
+
+    checked = _Path(_extraction_path(path))
+    try:
+        descriptor = _open_no_follow(checked)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise RuntimeError("The file changed while it was being read (a link took its place). "
+                               "Try again.") from exc
+        if exc.errno == errno.ENOENT:
+            raise RuntimeError("That image file doesn't exist.") from exc
+        raise RuntimeError(f"Can't read the file ({exc.strerror}).") from exc
+    with os.fdopen(descriptor, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError("That path isn't a file.")
+        if info.st_nlink != 1:
+            raise RuntimeError("That file has more than one name (a hard link), so it won't be read. "
+                               "Copy it first.")
+        return handle.read(cap + 1)
 
 
 @_tool(annotations=_EDIT)
@@ -2617,12 +2653,9 @@ def extraction_measure(image_path: str, folder: str, replace: bool = False) -> d
 
     source = _extraction_path(image_path)
     target = _extraction_path(folder)
-    if not os.path.isfile(source):
-        raise RuntimeError("That image file doesn't exist.")
+    data = _extraction_read_image(source, IMAGE_CAP)
 
     def run() -> dict[str, Any]:
-        with open(source, "rb") as handle:
-            data = handle.read(IMAGE_CAP + 1)
         item = intake(data, name=os.path.basename(source), kind="file", path=source)
         record = rec.build_record(item)
         return store.save(record, rendering_png(item.image), item.data, item.ext, target, replace=replace)
@@ -2659,9 +2692,9 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     reason?}`: `op` is set, add or remove, and `path` is `brand`, anything under
     `structure.read.` or anything under `shows.` (`shows.s1.statement`; a whole new show
     is `set` on `shows.<id>` with a statement and `evidence`, ids such as P0 from the
-    palette). Everything is checked first; one refusal adds none. Values code measured
+    palette; who added it, its status and its decision link are set for you). Everything is checked first; one refusal adds none. Values code measured
     (`structure.measured`, `rendering`, `source`), the id and the schema are facts and
-    can't be corrected. Approval isn't a correction: `status`, `approved_by` and
+    can't be corrected, and neither can a record a person approved. Approval isn't a correction: `status`, `approved_by` and
     `approved_at` are refused, and an agent can't approve a record. There is no model
     read yet, so `structure.read.` paths are refused until there is one. Returns the
     corrections added and the record's effective view."""

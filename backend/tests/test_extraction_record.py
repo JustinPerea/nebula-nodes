@@ -173,8 +173,8 @@ def test_read_paths_work_once_a_read_exists_but_its_provenance_stays():
     ({"path": "shows.s2", "op": "set", "value": {"statement": "x", "evidence": []}}, "evidence"),
     ({"path": "shows.s2", "op": "set", "value": {"statement": "x", "evidence": ["P99"]}}, "evidence"),
     ({"path": "shows.s1.evidence", "op": "set", "value": []}, "evidence"),
-    ({"path": "shows.s1.decision_ref", "op": "set", "value": "d1"}, "accepts the show as a decision"),
-    ({"path": "shows.s1.statement", "op": "add", "value": "x"}, "isn't a list"),
+    ({"path": "shows.s1.decision_ref", "op": "set", "value": "d1"}, "when a person accepts it"),
+    ({"path": "shows.s1.statement", "op": "add", "value": "x"}, "statement is set as text"),
     ({"path": "shows.s1", "op": "add", "value": {}}, "whole entry"),
     ({"path": "shows..x", "op": "set", "value": 1}, "isn't letters"),
     ({"path": "shows.s1.statement", "op": "clear", "value": 1}, "op is"),
@@ -208,3 +208,29 @@ def test_effective_skips_a_stored_correction_that_no_longer_fits():
     assert view["brand"] == "acme"
     assert view["corrections_skipped"][0]["path"] == "shows.s7.statement"
     assert copy.deepcopy(record)["brand"] is None
+
+
+@pytest.mark.parametrize("claimed", [
+    {"origin": "person"}, {"status": "approved"}, {"decision_ref": "dec_1"}, {"order": -5},
+])
+def test_a_whole_show_cant_claim_its_own_provenance(claimed):
+    value = {"statement": "Quiet grey ground", "evidence": ["P0"], **claimed}
+    with pytest.raises(rec.RecordInvalid, match="only a statement and evidence"):
+        rec.add_corrections(_with_show(), [{"path": "shows.s2", "op": "set", "value": value}], "agent", clock=CLOCK)
+
+
+@pytest.mark.parametrize("path", [
+    "shows.s1.status.x", "shows.s1.origin", "shows.s1.decision_ref", "shows.s1.order", "shows.s1.extra",
+    "shows.s1.statement.x",
+])
+def test_a_show_keeps_its_provenance_at_any_depth(path):
+    with pytest.raises(rec.RecordInvalid):
+        rec.add_corrections(_with_show(), [{"path": path, "op": "set", "value": "x"}], "agent", clock=CLOCK)
+
+
+@pytest.mark.parametrize("actor", ["agent", "person"])
+def test_an_approved_record_cant_be_corrected(actor):
+    record = _with_show()
+    record["status"], record["approved_by"], record["approved_at"] = "approved", "person", "2026-11-19T12:00:00Z"
+    with pytest.raises(rec.RecordInvalid, match="approved"):
+        rec.add_corrections(record, [{"path": "brand", "op": "set", "value": "acme"}], actor, clock=CLOCK)

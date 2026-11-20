@@ -137,3 +137,34 @@ def test_calls_go_through_the_server_as_a_client_would(image, folder):
     ok, bad = asyncio.run(run())
     assert not ok.isError and ok.structuredContent["record"]["id"].startswith("ex_")
     assert bad.isError and "device paths" in bad.content[0].text
+
+
+def test_a_turn_with_a_workspace_reaches_only_its_own_files(image, folder, tmp_path, monkeypatch):
+    from services import agent_workspaces
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(agent_workspaces, "active_workspace", lambda: workspace)
+    with pytest.raises(RuntimeError, match="outside this chat's workspace"):
+        mcp_server.extraction_measure(str(image), str(folder))
+    (workspace / "records").mkdir()
+    (workspace / "hero.png").write_bytes(image.read_bytes())
+    # A relative path means the workspace, not this process's folder.
+    saved = mcp_server.extraction_measure("hero.png", "records")
+    record_id = saved["record"]["id"]
+    assert record_id.startswith("ex_")
+    assert (workspace / "records" / record_id / "record.json").is_file()
+
+
+def test_a_symlinked_or_hard_linked_image_is_not_read(image, folder, tmp_path):
+    link = tmp_path / "link.png"
+    link.symlink_to(image)
+    hard = tmp_path / "hard.png"
+    os.link(image, hard)
+    with pytest.raises(RuntimeError, match="hard link"):
+        mcp_server.extraction_measure(str(hard), str(folder))
+    # A symlink is resolved by the path check first, so the read opens the
+    # real file; a link swapped in after the check fails the no-follow open.
+    from moodboard_client import _open_no_follow
+    with pytest.raises(OSError):
+        _open_no_follow(Path(str(link)))
