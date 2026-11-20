@@ -13,7 +13,8 @@ body { background: #111; }
   --ex-fill-hover: #202020;
   --ex-fill-selected: #272727;
   --ex-line: #262626;
-  --ex-notice: #2a1d1d;
+  /* One tint per tone: the warning text sits on the warning soft tint (the app's --sr-warning-soft). */
+  --ex-notice: color-mix(in srgb, var(--ex-warning) 12%, transparent);
   --ex-notice-text: var(--ex-warning);
   /* palette-exempt: the app's --sr-warning, copied once; the app's tokens live under body.app-slava-restraint (slava-restraint.css), which this standalone page doesn't load */
   --ex-warning: #F5C518;
@@ -276,7 +277,14 @@ body { background: #111; }
   color: #fff;
 }
 .ex-box-on { background: color-mix(in srgb, var(--ex-accent) 16%, transparent); z-index: 1; }
-.ex-box-selected { background: color-mix(in srgb, var(--ex-accent) 24%, transparent); }
+/* The outline carries the state, since any fill colour vanishes over some image: a hovered or focused
+   box keeps the 1px double outline, a selected one doubles it to 2px. */
+.ex-box-selected {
+  outline-width: 2px;
+  outline-offset: -2px;
+  box-shadow: 0 0 0 2px #000;
+  background: color-mix(in srgb, var(--ex-accent) 24%, transparent);
+}
 
 /* Read section and rows */
 .ex-read-line { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; flex-wrap: wrap; }
