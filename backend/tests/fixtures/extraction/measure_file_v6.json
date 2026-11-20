@@ -1,0 +1,161 @@
+{
+ "fully_transparent.png": {
+  "colors": [],
+  "height": 32,
+  "lightness": null,
+  "saturation": null,
+  "width": 32
+ },
+ "gradient_accent.png": {
+  "colors": [
+   {
+    "accent": false,
+    "hex": "#874276",
+    "share": 0.1527
+   },
+   {
+    "accent": false,
+    "hex": "#46897b",
+    "share": 0.1427
+   },
+   {
+    "accent": false,
+    "hex": "#49576d",
+    "share": 0.1405
+   },
+   {
+    "accent": false,
+    "hex": "#7f8488",
+    "share": 0.1362
+   },
+   {
+    "accent": false,
+    "hex": "#84627f",
+    "share": 0.134
+   },
+   {
+    "accent": false,
+    "hex": "#4f3f67",
+    "share": 0.1315
+   },
+   {
+    "accent": false,
+    "hex": "#466f74",
+    "share": 0.1299
+   },
+   {
+    "accent": true,
+    "hex": "#e61e28",
+    "share": 0.0326
+   }
+  ],
+  "height": 64,
+  "lightness": 103.261,
+  "saturation": 98.436,
+  "width": 96
+ },
+ "one_pixel.png": {
+  "colors": [
+   {
+    "accent": false,
+    "hex": "#c87828",
+    "share": 1.0
+   }
+  ],
+  "height": 1,
+  "lightness": 120.0,
+  "saturation": 204.0,
+  "width": 1
+ },
+ "partly_transparent.png": {
+  "colors": [
+   {
+    "accent": false,
+    "hex": "#438a7a",
+    "share": 0.2712
+   },
+   {
+    "accent": false,
+    "hex": "#427574",
+    "share": 0.1586
+   },
+   {
+    "accent": false,
+    "hex": "#4c6b73",
+    "share": 0.1465
+   },
+   {
+    "accent": false,
+    "hex": "#385668",
+    "share": 0.1131
+   },
+   {
+    "accent": false,
+    "hex": "#3c4565",
+    "share": 0.105
+   },
+   {
+    "accent": false,
+    "hex": "#575a71",
+    "share": 0.1048
+   },
+   {
+    "accent": false,
+    "hex": "#544069",
+    "share": 0.1008
+   }
+  ],
+  "height": 60,
+  "lightness": 92.306,
+  "saturation": 109.399,
+  "width": 80
+ },
+ "tall_narrow.png": {
+  "colors": [
+   {
+    "accent": false,
+    "hex": "#4d7978",
+    "share": 0.1449
+   },
+   {
+    "accent": false,
+    "hex": "#886882",
+    "share": 0.1398
+   },
+   {
+    "accent": false,
+    "hex": "#465d6e",
+    "share": 0.1333
+   },
+   {
+    "accent": false,
+    "hex": "#848389",
+    "share": 0.1301
+   },
+   {
+    "accent": false,
+    "hex": "#92457a",
+    "share": 0.1241
+   },
+   {
+    "accent": false,
+    "hex": "#424365",
+    "share": 0.1144
+   },
+   {
+    "accent": false,
+    "hex": "#3d8979",
+    "share": 0.1069
+   },
+   {
+    "accent": false,
+    "hex": "#6a426f",
+    "share": 0.1065
+   }
+  ],
+  "height": 180,
+  "lightness": 103.229,
+  "saturation": 95.072,
+  "width": 12
+ }
+}

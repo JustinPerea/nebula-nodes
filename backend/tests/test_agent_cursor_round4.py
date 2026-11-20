@@ -194,7 +194,7 @@ def test_the_proposing_session_never_reaches_an_agent(sockets, person):
 # _broadcast_presence fails the test that sent it.
 
 SENDERS = {"broadcast_raw", "broadcast_others", "broadcast_browser", "_broadcast_raw_quietly",
-           "send_text", "send_json", "send_bytes", "send"}
+           "send_text", "send_direct", "send_json", "send_bytes", "send"}
 POINT_FUNCS = {"_point", "point"}
 
 
