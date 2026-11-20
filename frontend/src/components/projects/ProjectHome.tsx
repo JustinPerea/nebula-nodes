@@ -6,6 +6,7 @@ import { editsRecoveredToast, filedCopyLine, OPEN_RECENTLY_DELETED, restoreCopyF
 import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
 import { ProjectCounts } from './projectFacts';
 import { editedDate } from './editedDate';
+import { homeLineDrawn } from './homeLine';
 import { UndoToast } from './UndoToast';
 import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
@@ -671,7 +672,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const recentHeading = useRef<HTMLHeadingElement>(null);
   // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
   const errorKept = useOfflineFirstBecause(error ?? null);
-  const showError = !unsavedEdits && Boolean(errorKept);
+  const showError = homeLineDrawn(errorKept, unsavedEdits);
   const current = useMemo<NoticeNow>(() => ({ projects, trash, canvasNotFiled, projectLimit }), [projects, trash, canvasNotFiled, projectLimit]);
   // The waiting line, unless the restore notice already says the limit.
   // Review 13 of PR #199 (LOW-1): the restore copy loads when one of its

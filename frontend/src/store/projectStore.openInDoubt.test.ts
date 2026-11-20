@@ -31,6 +31,7 @@ import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { TAB_ID } from '../lib/tabId';
 import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
 import { useGraphStore } from './graphStore';
+import { useUIStore } from './uiStore';
 import { core, projectRetryOffer, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
 import { workspaceSync } from './projectFlows';
 
@@ -311,6 +312,47 @@ describe('a newer open or create started since', () => {
   });
 });
 
+describe('a commit held for a Studio field in progress', () => {
+  it('keeps its doubt while an agent’s edit syncs in, then the blur follows it as the person’s own open, with no conflict line', async () => {
+    await alphaLoaded();
+    await betaTimesOut();
+    // Back to Alpha's card (no request), typing in a Studio field, edits not saved yet.
+    await state().open('p1');
+    useGraphStore.setState({ nodes: [{ id: 'n1', type: 'model', position: { x: 0, y: 0 },
+      data: { definitionId: 'gemini-chat', label: 'Chat', params: { prompt: 'kept' }, outputs: {} } }] as never });
+    useUIStore.setState({ viewMode: 'moodboard' as never });
+    const field = document.createElement('textarea');
+    document.body.appendChild(field);
+    field.focus();
+    try {
+      server(beta, 'r2');
+      workspaceSync(committed(beta, 'r2'));
+      // An agent's edit to Beta, at the revision Beta's commit made.
+      workspaceSync({ type: 'graphSync', nodes: [], edges: [], empty: true, activeProjectId: 'p2', workspaceRevision: 'r2',
+        paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      await settle();
+      expect(core.opensInDoubt.map((doubt) => doubt.id)).toEqual(['p2']);
+      expect(state()).toMatchObject({ error: null, unsavedEdits: null, busy: false });
+      expect(state().activeProject?.id).toBe('p1');
+
+      field.blur();
+      await vi.waitFor(() => expect(state().activeProject?.id).toBe('p2'));
+      await settle();
+      expect(state()).toMatchObject({ screen: 'workspace', error: null, errorRetry: null, unsavedEdits: null, busy: false, switchNotice: null });
+      expect(getProjectContext()).toEqual({ id: 'p2', revision: 'r2' });
+      expect(core.personOpenedId).toBe('p2');
+      expect(core.opensInDoubt).toEqual([]);
+      // The follow's handoff: Alpha's typing went to Alpha.
+      expect(saveProject).toHaveBeenCalledTimes(1);
+      const [id, snapshot, revision] = saveProject.mock.calls[0];
+      expect([id, revision, snapshot.nodes[0]?.data.params.prompt]).toEqual(['p1', 'r1', 'kept']);
+    } finally {
+      field.remove();
+      useUIStore.setState({ viewMode: 'canvas' });
+    }
+  });
+});
+
 describe('a reopen in place that times out (finding 5)', () => {
   const local = [{ id: 'local-1', type: 'model', position: { x: 0, y: 0 },
     data: { definitionId: 'gemini-chat', label: 'Chat', params: { prompt: 'a' }, outputs: {} } }] as never;
@@ -333,6 +375,32 @@ describe('a reopen in place that times out (finding 5)', () => {
     await vi.waitFor(() => expect(getProjectContext()).toEqual({ id: 'p1', revision: 'r2' }));
     await settle();
     expect(state()).toMatchObject({ screen: 'workspace', error: null, busy: false });
+  });
+
+  it('refused again after the one resend: its line with Try again, and no quiet reopen goes out', async () => {
+    await alphaLoaded();
+    useGraphStore.setState({ nodes: local });
+    await state().flush();
+    saveProject.mockClear();
+    await betaTimesOut();
+    useProjectStore.setState({ screen: 'home' });
+    // The read before the open sees r1; the read after the first refusal sees r2.
+    server(null, 'r1');
+    listProjects.mockResolvedValueOnce({ projects: [alpha, beta, gamma], trash: [], activeProjectId: null,
+      workspaceRevision: 'r1', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    listProjects.mockResolvedValueOnce({ projects: [alpha, beta, gamma], trash: [], activeProjectId: null,
+      workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    openProject.mockRejectedValueOnce(stale());
+    openProject.mockRejectedValueOnce(stale());
+    await state().open('p1');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(openProject).toHaveBeenCalledTimes(3);
+    expect(openProject).toHaveBeenLastCalledWith('p1', 'r2');
+    expect(core.quietReopenOf).toBeNull();
+    expect(state().error).not.toBeNull();
+    expect(state().error).not.toBe(openTimedOutLine('Beta'));
+    expect(state().errorRetry).toEqual({ action: 'load', reopen: 'p1' });
+    expect(core.relistBeforeAction).toBe(true);
   });
 
   it('quiet (activate’s own second try): nothing is said, and the open is in doubt', async () => {

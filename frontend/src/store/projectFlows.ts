@@ -720,7 +720,9 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // Labs hold that began meanwhile, or Nebula's own 409): back to the
     // canvas, where Stop and the World Labs notice are, with the line
     // (review 18 MEDIUM-2, GM r30 item 2). Nothing was replaced.
-    if (inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id && !(error instanceof OpenTimedOut)
+    // (A second refusal after the one resend has its own line below, for an in-place reopen too.)
+    const refusedAgain = resent && error instanceof api.ProjectRequestError && error.status === 409;
+    if (inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id && !(error instanceof OpenTimedOut) && !refusedAgain
       && !(reserved && !(error instanceof api.ProjectRequestError && error.status < 500))) {
       const project = useProjectStore.getState().activeProject?.name ?? '';
       // The open's own reservation isn't a hold: let it go before asking.
@@ -840,7 +842,7 @@ async function listNow(): Promise<void> {
     // landed), so the listed one is taken with a project loaded too; an open the listing shows
     // can no longer land (the revision moved on, to something else) is settled.
     const unconfirmed = core.relistBeforeAction || core.opensInDoubt.length > 0;
-    core.opensInDoubt = core.opensInDoubt.filter((doubt) => doubt.held
+    core.opensInDoubt = core.opensInDoubt.filter((doubt) => doubt.held || doubt.typing
       || list.workspaceRevision === doubt.sent || list.activeProjectId === doubt.id);
     useProjectStore.setState((state) => ({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
       ...(!state.activeProject || unconfirmed ? { workspaceRevision: list.workspaceRevision } : {}) }));
@@ -2394,16 +2396,20 @@ function settleOpenInDoubt(event: GraphSyncEvent, revision: string, busy: boolea
   const flight = core.openInFlight;
   if (flight && commitOf(event, revision, flight.id, flight.sent)) flight.synced = event;
   if (core.opensInDoubt.length === 0) return false;
+  // A commit held for a Studio field in progress keeps its doubt, and the syncs after it wait
+  // behind it in order (an agent's edit to that project, a run's output), so none of them is
+  // read as another tab's switch away from a project this tab itself left.
+  if (core.heldFollow && core.opensInDoubt.some((item) => item.typing)) { core.heldFollow.events.push(event); return true; }
   const doubt = [...core.opensInDoubt].reverse().find((item) => commitOf(event, revision, item.id, item.sent));
   // Anything else past the revision an open went with: that open can no longer land (Nebula
   // refuses a stale revision), and syncs come in the order Nebula committed them.
-  core.opensInDoubt = core.opensInDoubt.filter((item) => item === doubt || item.held || revision === item.sent);
+  core.opensInDoubt = core.opensInDoubt.filter((item) => item === doubt || item.held || item.typing || revision === item.sent);
   if (!doubt) return false;
   // Busy (the newer action under way, or a follow): handled once it isn't, not dropped.
   if (busy) { doubt.held = event; replayWhenIdle(); return true; }
   const context = getProjectContext();
   // A Studio field the person is typing in finishes first (as for an agent's switch).
-  if (context && doubt.newer !== 'landed' && holdFollowWhileTyping(event)) return true;
+  if (context && doubt.newer !== 'landed' && holdFollowWhileTyping(event)) { doubt.typing = true; return true; }
   core.opensInDoubt = core.opensInDoubt.filter((item) => item !== doubt);
   // A newer open or create landed after this commit: what it opened is what the server has.
   if (doubt.newer === 'landed') return true;

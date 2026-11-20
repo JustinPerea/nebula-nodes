@@ -441,6 +441,8 @@ export interface OpenInDoubt {
   sent: string;
   newer: null | 'pending' | 'landed' | 'failed';
   held: GraphSyncEvent | null;
+  /** Its commit waits for a Studio field the person is typing in (holdFollowWhileTyping). */
+  typing?: boolean;
 }
 let opensInDoubt: OpenInDoubt[] = [];
 /** Design: the person's open under way, and a sync of its commit seen while it waited. */

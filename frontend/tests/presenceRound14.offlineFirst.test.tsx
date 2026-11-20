@@ -64,7 +64,7 @@ describe('offline comes first (GM r23 3)', () => {
     expect(read('components/proposals/AssetProposalStrip.tsx')).toMatch(/\{!offline && <p className="asset-proposal__held-line">/);
     expect(read('components/panels/Inspector.tsx')).toMatch(/const shownFavoriteError = useOfflineFirstBecause\(favoriteError\);/);
     expect(read('components/panels/Inspector.tsx')).not.toMatch(/<LineText text=\{favoriteError\}/);
-    expect(read('components/projects/ProjectHome.tsx')).toMatch(/const errorKept = useOfflineFirstBecause\(error \?\? null\);\n\s*const showError = !unsavedEdits && Boolean\(errorKept\);/);
+    expect(read('components/projects/ProjectHome.tsx')).toMatch(/const errorKept = useOfflineFirstBecause\(error \?\? null\);\n\s*const showError = homeLineDrawn\(errorKept, unsavedEdits\);/);
     expect(read('components/panels/settings/AgentSpendSection.tsx')).toMatch(/useOfflineFirstBecause\(held \? notConnectedBecause\('load the connected apps'\) : error\)/);
     expect(read('components/panels/settings/PersonalAgentsSection.tsx')).toMatch(/useOfflineFirstBecause\(demoted \? notConnectedBecause\('load your agents'\) : error\)/);
   });

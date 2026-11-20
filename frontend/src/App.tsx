@@ -26,7 +26,8 @@ import './store/agentQuestionsStore';
 // The Message box's thread and listeners (r50): fed from load, as the log's store.
 import './store/personThreadStore';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
-import { BackendConnectionStatus } from './components/BackendConnectionStatus';
+import { ConnectionBanner } from './components/ConnectionBanner';
+import { firstLoadWaiting as firstLoadWaitingNow } from './components/projects/homeLine';
 import { PersonRequiredBanner } from './components/PersonRequiredBanner';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
@@ -307,7 +308,7 @@ export default function App() {
   useEffect(() => (isHome ? watchOpenHold() : undefined), [isHome]);
 
   // Design: the first load found no server (trying again, or out of tries): its line shows on Projects.
-  const firstLoadWaiting = !projects.initialized && projects.errorRetry?.action === 'load' && Boolean(projects.errorRetry.unreachable);
+  const firstLoadWaiting = firstLoadWaitingNow(projects);
   let mainView;
   if (isHome) {
     mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy} workLoaded={projects.initialized}
@@ -360,7 +361,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} bannerHidden={isHome && firstLoadWaiting} />
+      <ConnectionBanner placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
       <PersonRequiredBanner />
       {/* The World Labs notice; the held-reopen line it clears is its second line (GM r33, 6). */}
       <ProviderRecoveryStatus reopenLine={isCanvas && projects.heldReopenLine?.place === 'worldLabsNotice'

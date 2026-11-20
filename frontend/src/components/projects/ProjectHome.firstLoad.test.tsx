@@ -98,7 +98,11 @@ describe('design: the first-load line and the heading under it', () => {
 
   it('the empty state’s Create your first project, shown only once loaded, creates', () => {
     const onCreate = vi.fn();
-    render(<ProjectHome {...props({ onCreate })} />);
+    const { rerender } = render(<ProjectHome {...props({ onCreate, workLoaded: false })} />);
+    // Nothing loaded yet: no empty state and no button to press.
+    expect(screen.queryByText('Your first project starts here.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create your first project' })).toBeNull();
+    rerender(<ProjectHome {...props({ onCreate })} />);
     const button = screen.getByRole('button', { name: 'Create your first project' });
     expect(button.getAttribute('aria-disabled')).toBeNull();
     fireEvent.click(button);
