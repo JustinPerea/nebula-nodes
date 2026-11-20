@@ -178,3 +178,16 @@ it('error copy round 3b: the intro uses GM\'s words for what Blind labeling pick
     + 'It never uses the 15, or anything that looks like them, as examples.');
   expect(document.body.textContent).not.toMatch(/near-duplicate|clusters|quarantined/);
 });
+
+// Design: a person never reads a stored value. The role select reads "Accent" over the raw value.
+it('shows palette roles as words, with the raw value on each option', async () => {
+  const value = batch(); value.roles = ['background', 'dominant', 'accent', 'text', 'other'];
+  value.items[0].accent_locked = true; value.items[0].palette = [{ index: 0, hex: '#ff0000', share: 1 }];
+  api.get.mockResolvedValue(value);
+  render(<CommonsEvaluation />);
+  const select = await screen.findByLabelText('Role for P0') as HTMLSelectElement;
+  expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+    ['', 'Choose a role…'], ['background', 'Background'], ['dominant', 'Dominant'], ['accent', 'Accent'],
+    ['text', 'Text'], ['other', 'Other'],
+  ]);
+});

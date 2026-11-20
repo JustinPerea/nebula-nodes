@@ -1,5 +1,5 @@
 import { useCommonsDraft } from './commonsDraftsContext';
-import { AXES, AXIS_LABELS, ROLES, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
+import { AXES, AXIS_LABELS, ROLES, ROLE_LABELS, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
 
 interface Props {
   filters: FilterState;
@@ -139,7 +139,7 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
         Role
         <select value={filters.role} onChange={(event) => set({ role: event.target.value as FilterState['role'] })}>
           <option value="">Any (avoid hidden)</option>
-          {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+          {ROLES.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}
         </select>
       </label>
       <label className="commons-field">

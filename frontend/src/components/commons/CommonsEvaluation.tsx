@@ -14,6 +14,7 @@ import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
+import { paletteRoleLabel } from '../../lib/commonsTypes';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
@@ -383,7 +384,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
         {item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} />P{p.index}
           <select aria-label={`Role for P${p.index}`} value={labels.palette_roles[p.index] ?? ''} onChange={(e) => {
             const roles = { ...labels.palette_roles }; if (e.target.value) roles[p.index] = e.target.value; else delete roles[p.index]; change({ palette_roles: roles });
-          }}><option value="">Choose a role…</option>{batch.roles.map((role) => <option key={role}>{role}</option>)}</select></label>)}
+          }}><option value="">Choose a role…</option>{batch.roles.map((role) => <option key={role} value={role}>{paletteRoleLabel(role)}</option>)}</select></label>)}
         <h4 className="evaluation-subhead">Keywords · {labels.keywords.length} / 12</h4>
         <div className="evaluation-keywords">{labels.keywords.map((word) => <button className="commons-button commons-button--remove" key={word} aria-label={`Remove ${pretty(word)}`} onClick={() => change({ keywords: labels.keywords.filter((w) => w !== word) })}>{pretty(word)} ×</button>)}</div>
         <input aria-label="Search keywords" placeholder="Search the shared vocabulary…" value={query} onChange={(e) => setQuery(e.target.value)} />

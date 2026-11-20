@@ -5,7 +5,7 @@ import { wsClient } from '../../lib/wsClient';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { CommonsMedia } from './CommonsMedia';
 import {
-  AXES, AXIS_LABELS, ENUMS, ROLES, TEXT_FIELDS,
+  AXES, AXIS_LABELS, ENUMS, ROLES, ROLE_LABELS, enumValueLabel, TEXT_FIELDS,
   type AssetDetail, type EnumField, type MembershipDetail, type Region, type Role, type Sighting,
 } from '../../lib/commonsTypes';
 import { showConfirm } from '../../lib/commonsFiles';
@@ -97,7 +97,7 @@ function Membership({ assetId, membership, run }: {
             value={membership.role}
             onChange={(event) => run(() => commonsApi.patchMembership(membership.id, { role: event.target.value as Role }))}
           >
-            {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+            {ROLES.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}
           </select>
         </label>
         <label className="commons-field commons-field--grow">
@@ -116,7 +116,7 @@ function Membership({ assetId, membership, run }: {
           />
         </label>
       </div>
-      <p className="commons-meta">Added by {actorLabel(membership.actor)}</p>
+      <p className="commons-meta">Added by {actorLabel(membership.actor, { midSentence: true })}</p>
 
       {membership.sightings.length > 0 && (
         <ul className="commons-list">
@@ -475,7 +475,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
                 onChange={(event) => void correct(`${key}.value`, 'set', event.target.value, true)}
               >
                 <option value="" disabled>—</option>
-                {ENUMS[key].map((v) => <option key={v} value={v}>{v}</option>)}
+                {ENUMS[key].map((v) => <option key={v} value={v}>{enumValueLabel(key, v)}</option>)}
               </select>
             </label>
           ))}
@@ -524,7 +524,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
             ))}
           </div>
           <input
-            aria-label="Add keyword" placeholder="Add keyword, Enter" value={keywordDraft}
+            aria-label="Add keyword" placeholder="Add a keyword, then press Enter" value={keywordDraft}
             onChange={(event) => setKeywordDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return;

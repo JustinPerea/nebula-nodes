@@ -272,3 +272,19 @@ it('round 18m: while corrections save, the opener is natively disabled for that 
   await act(async () => { finish(saved); });
   await waitFor(() => expect(opener.disabled).toBe(false));
 });
+
+// Design: a person never reads a stored value. The palette role reads "Accent" (read-only and in
+// the select), and the option's value stays the raw "accent".
+it('shows a palette role as a word, with the raw value on the option', async () => {
+  const value = batch(); value.roles = ['background', 'accent', 'other'];
+  api.get.mockResolvedValue(value);
+  render(<CommonsReview />);
+  const label = await screen.findByText('Accent');
+  expect(label.tagName).toBe('STRONG');
+  fireEvent.click(screen.getByText('Edit grades'));
+  const select = screen.getByLabelText('Role for P0') as HTMLSelectElement;
+  expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
+    ['background', 'Background'], ['accent', 'Accent'], ['other', 'Other'],
+  ]);
+  expect(select.value).toBe('accent');
+});

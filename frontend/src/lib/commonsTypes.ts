@@ -1,5 +1,18 @@
 export type Role = 'attract' | 'avoid' | 'evidence' | 'neutral';
 export const ROLES: Role[] = ['attract', 'avoid', 'evidence', 'neutral'];
+/** What a person reads for a role; the stored value stays the option's `value` (design: a person never reads an enum value). */
+export const ROLE_LABELS: Record<Role, string> = {
+  attract: 'Attract', avoid: 'Avoid', evidence: 'Evidence', neutral: 'Neutral',
+};
+/** A palette colour's role, as the reader and the evaluation batch send it (backend commons/reader.py ROLES). */
+export type PaletteRole = 'background' | 'dominant' | 'accent' | 'text' | 'other';
+export const PALETTE_ROLE_LABELS: Record<PaletteRole, string> = {
+  background: 'Background', dominant: 'Dominant', accent: 'Accent', text: 'Text', other: 'Other',
+};
+/** What a person reads for a palette role; a role this app doesn't know reads as itself. */
+export function paletteRoleLabel(role: string): string {
+  return (PALETTE_ROLE_LABELS as Record<string, string>)[role] ?? role;
+}
 export type AnalysisState = 'held' | 'queued' | 'analyzing' | 'analysis_failed' | 'ready';
 export const AXES = ['quiet_loud', 'warm_cold', 'geometric_humanist', 'dense_airy', 'polished_raw'] as const;
 export type Axis = (typeof AXES)[number];
@@ -14,6 +27,26 @@ export const ENUMS = {
   medium: ['photo', 'render', 'illustration', 'ui', 'type_specimen', 'object', 'space', 'motion_still'],
 } as const;
 export type EnumField = keyof typeof ENUMS;
+/** What a person reads for each enum value, typed over the value union so a new value without a label fails tsc. */
+export const ENUM_VALUE_LABELS: { [F in EnumField]: Record<(typeof ENUMS)[F][number], string> } = {
+  type_style: {
+    geometric_sans: 'Geometric sans', humanist_sans: 'Humanist sans', serif: 'Serif', mono: 'Mono',
+    script: 'Script', display: 'Display', none: 'None',
+  },
+  spacing_density: { tight: 'Tight', balanced: 'Balanced', airy: 'Airy' },
+  layout: {
+    grid: 'Grid', modular: 'Modular', freeform: 'Freeform', centered: 'Centered', asymmetric: 'Asymmetric',
+    n_a: 'Doesn’t apply',
+  },
+  medium: {
+    photo: 'Photo', render: 'Render', illustration: 'Illustration', ui: 'UI', type_specimen: 'Type specimen',
+    object: 'Object', space: 'Space', motion_still: 'Motion still',
+  },
+};
+/** The label for one enum value; a value the app doesn't know (an older or newer backend) reads as itself. */
+export function enumValueLabel(field: EnumField, value: string): string {
+  return (ENUM_VALUE_LABELS[field] as Record<string, string>)[value] ?? value;
+}
 export const TEXT_FIELDS = ['summary', 'subject', 'composition_notes'] as const;
 export type TextField = (typeof TEXT_FIELDS)[number];
 

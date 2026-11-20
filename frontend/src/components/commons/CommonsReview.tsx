@@ -14,6 +14,7 @@ import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
+import { paletteRoleLabel } from '../../lib/commonsTypes';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 import { isLoadLine } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
@@ -352,7 +353,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
       <h4 className="evaluation-subhead">Color roles</h4>{item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} title={p.hex} />
         <span className="review-swatch-label">P{p.index} · {p.share * 100 < 0.1 ? '<0.1' : (p.share * 100).toFixed(1)}%</span>
         {editing ? <select aria-label={`Role for P${p.index}`} value={labels.palette_roles[p.index]} onChange={(e) => change({ palette_roles: { ...labels.palette_roles, [p.index]: e.target.value } })}>
-          {batch.roles.map((role) => <option key={role}>{role}</option>)}</select> : <strong>{labels.palette_roles[p.index]}</strong>}
+          {batch.roles.map((role) => <option key={role} value={role}>{paletteRoleLabel(role)}</option>)}</select> : <strong>{paletteRoleLabel(labels.palette_roles[p.index])}</strong>}
       </label>)}
       <h4 className="evaluation-subhead">Keywords</h4><div className="evaluation-keywords">{labels.keywords.map((word) => editing ?
         <button className="commons-button commons-button--remove" key={word} aria-label={`Remove ${pretty(word)}`} onClick={() => { const words = labels.keywords.filter((w) => w !== word); change({ keywords: words, no_keywords: !words.length }); }}>{pretty(word)} ×</button>
