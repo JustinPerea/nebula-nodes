@@ -172,6 +172,8 @@ const badTs: Array<[string, string]> = [
   ['toDateString on a date name', `export const f = (createdAt: Date) => createdAt.toDateString();`],
   ['toTimeString on new Date', `export const f = () => new Date().toTimeString();`],
   ['toUTCString on a date name', `export const f = (row: { closedAt: Date }) => row.closedAt.toUTCString();`],
+  ['toLocaleString on maxTimestamp (the last moment of a range is a date)', `export const f = (r: { maxTimestamp: Date }) => r.maxTimestamp.toLocaleString();`],
+  ['toLocaleString on minTs', `export const f = (r: { minTs: Date }) => r.minTs.toLocaleString();`],
   ['a parenthesised default in a placeholder', `export const a = { placeholder: 'Rachel (default)' };`],
   ['a parenthesised optional appended in a lib', "export const b = (l: string) => `${l} (optional)`;"],
 ];

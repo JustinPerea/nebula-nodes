@@ -270,14 +270,18 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   // What is timed, in a "...Time" name that is a length of time (`renderTime`, `waitTime`, `latency`): it
   // excludes only the time-word match, so `lastRunAt` and `loadedAt` still read as dates.
   // A count of times or a bound ("maxTime", "minTime", "avgTime", "timeCount") is a number too.
-  const TIMED_PART = new Set(['render', 'load', 'wait', 'latency', 'response', 'run', 'cpu', 'frame', 'total',
-    'max', 'min', 'avg', 'mean', 'median', 'count', 'num', 'number', 'sum']);
+  const TIMED_PART = new Set(['render', 'load', 'wait', 'latency', 'response', 'run', 'cpu', 'frame', 'total']);
+  // A statistic of a plain "time" is a number (maxTime, avgTime); the first or last moment of a
+  // range named with timestamp, ts or stamp (maxTimestamp, minTs) is still a date.
+  const STAT_PART = new Set(['max', 'min', 'avg', 'mean', 'median', 'count', 'num', 'number', 'sum']);
   const TIME_PART = new Set(['time', 'timestamp', 'ts', 'stamp']);
   const DATE_NAME_CASED = (name) => {
     const parts = nameParts(name);
     if (parts.some((p) => DURATION_PART.has(p))) return false;
     if (/^(?:date|when|moment|at)$/i.test(name) || /[a-z](?:At|Date|Moment|When)$/.test(name) || /_(?:at|date)$/i.test(name)) return true;
-    return !parts.some((p) => TIMED_PART.has(p)) && parts.some((p) => TIME_PART.has(p));
+    const timeParts = parts.filter((p) => TIME_PART.has(p));
+    if (!timeParts.length || parts.some((p) => TIMED_PART.has(p))) return false;
+    return !(parts.some((p) => STAT_PART.has(p)) && timeParts.every((p) => p === 'time'));
   };
   function nameOf(expr) {
     const n = unwrap(expr);

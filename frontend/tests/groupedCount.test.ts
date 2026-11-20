@@ -1,9 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { countNoun, groupedCount } from '../src/lib/groupedCount';
 import { deletedNoticeText } from '../src/lib/deleteNotice';
 import { scanSummaryText } from '../src/lib/commonsFormat';
 
-describe('counts of things are written with the locale\'s grouping', () => {
+describe('counts of things are written with digit grouping', () => {
+  it('groups in the app\'s one written form (en-US), not the system locale', () => {
+    const spy = vi.spyOn(Number.prototype, 'toLocaleString');
+    try {
+      groupedCount(1248);
+      expect(spy).toHaveBeenCalledWith('en-US');
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it('groups thousands and leaves small counts alone', () => {
     expect(groupedCount(0)).toBe('0');
     expect(groupedCount(999)).toBe('999');
