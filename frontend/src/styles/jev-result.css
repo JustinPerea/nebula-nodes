@@ -2,7 +2,9 @@
  * Jev results on the canvas (JevResult.tsx): Decide, Pick Best and Box.
  *
  * Quiet by default, like every Slava card: monochrome type, one tone per
- * result (pass green, fail orange, unsure yellow), figures in mono. Motion is
+ * result (design: a verdict is a routing outcome, so pass and fail both take the
+ * neutral tone and the word carries the verdict; unsure is yellow because it needs
+ * a person), figures in mono. Motion is
  * a single reveal when a result arrives: bars and meters grow from the left
  * and the Box outline draws itself, on the same sampled spring the workspace
  * dock uses (~2% overshoot). Reduced motion shows the final state at once.
@@ -14,10 +16,8 @@ body.app-slava-restraint {
   --jev-width: 300px;
   --jev-track: rgba(255, 255, 255, 0.07);
   --jev-rest: rgba(255, 255, 255, 0.24);
-  --jev-pass: var(--sr-success);
-  --jev-pass-soft: var(--sr-success-soft);
-  --jev-fail: var(--sr-accent);
-  --jev-fail-soft: var(--sr-accent-soft);
+  --jev-pass: var(--sr-ink-light);
+  --jev-fail: var(--sr-ink-light);
   --jev-unsure: var(--sr-warning);
   --jev-unsure-soft: var(--sr-warning-soft);
 }

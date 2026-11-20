@@ -56,8 +56,15 @@
      dialog (--sr-canvas-elevated); the grey is 6.19:1 and 6.26:1 there.
      Fix round 3's #ffa395 (9.7:1, hue 8°, lighter) read salmon. Hover is
      brighter: #ff9a91 (L 78%, same hue), over the red tint. */
-  --sr-danger-ink: #ff887d;
-  --sr-danger-ink-hover: #ff9a91;
+  --sr-danger: #ff887d;
+  --sr-danger-hover: #ff9a91;
+  --sr-danger-soft: rgba(255, 70, 60, 0.14);
+  --sr-danger-border: rgba(255, 70, 60, 0.34);
+  /* Design: --sr-danger is the one destructive red; the names below alias it
+     and the buttons keep reading them. It marks a destructive action only. An
+     error is --sr-error (the warning tone), and the accent is never either. */
+  --sr-danger-ink: var(--sr-danger);
+  --sr-danger-ink-hover: var(--sr-danger-hover);
   /* A filled destructive confirm (home's Delete, Delete forever, "Continue
      without them"): the same red as a fill, near-black ink on it (fix round 6
      of PR #200, GM r8: replaces round 2's white on the accent). #1f1f1f on
@@ -70,8 +77,8 @@
      edge where it has one (fix round 7 of PR #200, GM r11 answer 3: every
      destructive control reads these tokens; the ratchet's destructive-colour
      check fails on a hard-coded red or orange). */
-  --sr-danger-tint: rgba(255, 70, 60, 0.14);
-  --sr-danger-edge: rgba(255, 70, 60, 0.34);
+  --sr-danger-tint: var(--sr-danger-soft);
+  --sr-danger-edge: var(--sr-danger-border);
 }
 
 /* Ghost and outline buttons: unfilled, label and outline grey. First, so a

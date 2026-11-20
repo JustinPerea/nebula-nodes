@@ -12,12 +12,12 @@ const hits = (css: string) => findAccentBadges(css, 'fixture.css');
 describe('check-badge-tone', () => {
   const accented = [
     '.commons-badge--inbox { color: var(--sr-accent); }',
-    'body .commons-badge--missing { border-color: var(--sr-error-border); }',
+    'body .commons-badge--missing { border-color: var(--sr-accent-border); }',
     '.commons-badge--x { color: var(--sr-danger); }',
     '.commons-badge--x { border: 1px solid var(--sr-accent-border); }',
     '.commons-source--corrected { color: #FF5A1F; }',
     '.commons-badge--x { background: rgba(255, 90, 31, 0.1); }',
-    '.commons-badge--a, .commons-badge--b { color: var(--sr-error, red); }',
+    '.commons-badge--a, .commons-badge--b { color: var(--sr-danger, red); }',
     '.commons-badge--role-attract { color: var(--sr-success); }',
     '.commons-badge--role-avoid { border-color: var(--sr-warning-border); }',
     '.commons-badge--x:hover { border-color: var(--sr-accent-hover); }',
@@ -37,6 +37,7 @@ describe('check-badge-tone', () => {
 
   const fine = [
     '.commons-badge--analysis_failed { color: var(--sr-warning); border-color: var(--sr-warning-border); }',
+    '.commons-badge--analysis_failed { color: var(--sr-error); border-color: var(--sr-error-border); }',
     '.commons-badge--inbox { color: var(--sr-ink-light); border-color: var(--sr-edge); }',
     '.commons-source--corrected { color: var(--sr-ink-light); }',
     '.commons-badge--ready { color: var(--sr-success); }',

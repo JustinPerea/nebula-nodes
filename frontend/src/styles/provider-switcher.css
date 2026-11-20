@@ -321,15 +321,15 @@ body.app-slava-restraint .model-node__provider-chip:focus-visible {
 
 body.app-slava-restraint .model-node__provider-chip--blocked,
 body.app-slava-restraint .model-node__provider-chip--blocked:hover {
-  border-color: var(--sr-accent-border-strong);
-  background: var(--sr-accent-soft);
-  color: var(--sr-accent);
+  border-color: var(--sr-error-border);
+  background: var(--sr-error-soft);
+  color: var(--sr-error);
 }
 
-body.app-slava-restraint .provider-switcher__pill--blocked { border-color: var(--sr-accent-border-strong); }
+body.app-slava-restraint .provider-switcher__pill--blocked { border-color: var(--sr-error-border); }
 
 body.app-slava-restraint .provider-switcher__pill--blocked .provider-switcher__chip-text,
-body.app-slava-restraint .provider-switcher__pill--blocked .provider-switcher__warning { color: var(--sr-accent); }
+body.app-slava-restraint .provider-switcher__pill--blocked .provider-switcher__warning { color: var(--sr-error); }
 
 body.app-slava-restraint .model-node__provider-note {
   border-top: 1px solid var(--sr-edge);
@@ -375,7 +375,7 @@ body:not(.app-slava-restraint) .model-node__provider-chip {
   font-size: 10px;
 }
 
-body:not(.app-slava-restraint) .model-node__provider-chip--blocked { border-color: #ff5a1f; color: #ff5a1f; }
+body:not(.app-slava-restraint) .model-node__provider-chip--blocked { border-color: #f5c518; color: #f5c518; }
 
 body:not(.app-slava-restraint) .model-node__provider-note { color: #aaa; font-size: 11px; }
 

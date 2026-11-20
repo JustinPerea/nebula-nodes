@@ -87,13 +87,16 @@ export function wordFindings(control: Control): string[] {
 
 /** Each danger token and the only fallbacks it may carry (styles/disabled-buttons.css). */
 const DANGER_TOKENS: Record<string, string[]> = {
+  '--sr-danger': ['#ff887d'], '--sr-danger-hover': ['#ff9a91'],
+  '--sr-danger-soft': ['rgba(255,70,60,0.14)'], '--sr-danger-border': ['rgba(255,70,60,0.34)'],
   '--sr-danger-ink': ['#ff887d'], '--sr-danger-ink-hover': ['#ff9a91'],
   '--sr-danger-fill': ['#ff887d'], '--sr-danger-fill-hover': ['#ff9a91'],
   '--sr-danger-tint': ['rgba(255,70,60,0.14)'], '--sr-danger-edge': ['rgba(255,70,60,0.34)'],
   '--sr-on-danger': ['#1f1f1f'],
 };
-/** The orange: the accent in every variant, the error ink, and the bare --sr-danger alias and its relatives. */
-const ORANGE_VAR = /^--sr-(?:accent|error)(?:-[\w-]+)?$|^--sr-danger(?:-(?!(?:ink|ink-hover|fill|fill-hover|tint|edge)$)[\w-]+)?$/;
+/** Not the destructive red: the accent in every variant, the error tokens (the warning tone; design: error is not danger) and the warning tokens they alias.
+ * The --sr-danger family is the red itself, so it is in DANGER_TOKENS above. */
+const ORANGE_VAR = /^--sr-(?:accent|error|warning)(?:-[\w-]+)?$/;
 const WARM_NAMES = /\b(red|darkred|firebrick|crimson|indianred|tomato|orangered|orange|darkorange|coral|lightcoral|salmon|darksalmon|lightsalmon|maroon|brown)\b/i;
 
 function warmRgb(r: number, g: number, b: number): boolean {

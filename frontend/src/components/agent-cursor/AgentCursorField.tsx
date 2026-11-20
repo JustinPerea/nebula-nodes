@@ -2279,7 +2279,7 @@ function AgentCursorView({ space, cursor, zoom, peers, field, fontVersion = 0, l
               {/* The halo in place of a drop shadow (§1): the state surface. */}
               <path className="agent-cursor__halo" d={AGENT_CURSOR_ARROW_PATH} filter={`url(#${haloId})`} />
               {fx === 'error' && (playing || still) && (
-                <path className="agent-cursor__danger" d={AGENT_CURSOR_ARROW_PATH} filter={`url(#${haloId})`} />
+                <path className="agent-cursor__error" d={AGENT_CURSOR_ARROW_PATH} filter={`url(#${haloId})`} />
               )}
               {(fx === 'propose' || fx === 'wait') && (
                 <path className="agent-cursor__dashed" d={AGENT_CURSOR_ARROW_PATH} transform={DASHED_GROW} vectorEffect="non-scaling-stroke" />
