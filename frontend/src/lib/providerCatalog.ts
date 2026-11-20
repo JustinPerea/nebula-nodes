@@ -32,9 +32,9 @@ export interface ProviderKeySpec {
   /** The link to `url`, outside Nebula, in both the manage and the edit
    *  view: "Open <provider> keys", with the provider's own word for its
    *  credential (keys or tokens) and no domain, since the name says where it
-   *  goes (design; Idol's "Open Hugging Face tokens"). Every provider has one.
-   *  It is the one source of the row's credential noun (`credentialNoun`): its
-   *  buttons, notices and
+   *  goes (design, PR #203; Idol's "Open Hugging Face tokens"). Every provider
+   *  has one. It is the one source of the row's credential noun
+   *  (`credentialNoun`): its buttons, notices and
    *  screen-reader names say the link's word (GM, PR #203 r25 item 3). */
   keyLink: string;
 }

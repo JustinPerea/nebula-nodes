@@ -88,9 +88,9 @@ function confirm(update: Partial<SettingsDraft>) {
 /** The codes the backend puts beside a settings write's 409 (main
  * SETTINGS_UNREADABLE_CODE, KEYS_UNREADABLE_CODE, SETTINGS_UNWRITABLE_CODE,
  * SETTINGS_NOT_A_FOLDER_CODE, SETTINGS_BUSY_CODE): the file can't be read,
- * its keys can't, Nebula isn't allowed to change it or its folder (GM, PR
- * #203 r28 item 4, r31 item 1), a file is where its folder must be (r31
- * item 2), or another Nebula is saving the settings (r38 item 3). */
+ * its keys can't, Nebula isn't allowed to change it or its folder (GM,
+ * PR #203 r28 item 4, r31 item 1), a file is where its folder must be
+ * (design), or another Nebula is saving the settings (r38 item 3). */
 export const SETTINGS_BUSY_CODE = 'settings_busy';
 export const SETTINGS_REFUSAL_CODES: readonly string[] = [
   'settings_unreadable', 'keys_unreadable', 'settings_unwritable', 'settings_not_a_folder', 'settings_busy',
@@ -283,7 +283,8 @@ function labelFor(key: string) {
 /** "fal.ai key", and "Krea · API key" as it is: a row label that already
  * ends in "key" ("Krea · API key", "Krea · usage key") takes no second one.
  * Each provider says its own noun, the word its link uses (`credentialNoun`):
- * "Hugging Face token", "Replicate token" (design; every provider). */
+ * "Hugging Face token", "Replicate token" (design, PR #203; every
+ * provider). */
 export function keyNoun(key: string) {
   const label = labelFor(key);
   const spec = PROVIDER_KEY_SPECS[key];
@@ -298,10 +299,10 @@ export function keyNoun(key: string) {
 
 /** What an open panel says, politely, when a key is set or removed somewhere
  * else: another window, the desktop app, a script with the person token (the
- * CLI only reads keys; design), with each provider's own noun: "Replicate token
- * saved." / "Replicate token removed."; never "in another window", which may be
- * false. Its own save's notice reads the same, with
- * "Checking it now." after it. */
+ * CLI only reads keys; design, PR #203), with each provider's own noun:
+ * "Replicate token saved." / "Replicate token removed."; never
+ * "in another window", which may be false. Its own save's notice reads the
+ * same, with "Checking it now." after it. */
 export function keyChangedLine(key: string, set: boolean): string {
   return `${keyNoun(key)} ${set ? 'saved' : 'removed'}.`;
 }

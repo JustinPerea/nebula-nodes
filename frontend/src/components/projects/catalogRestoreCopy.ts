@@ -306,8 +306,8 @@ function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): s
 }
 
 /** The person's line when canvas-held.json couldn't be read and a canvas held
- * aside may be lost (the listing's `canvasHeldUnreadable`; design). Default
- * wording until design answers. */
+ * aside may be lost (the listing's `canvasHeldUnreadable`; design, PR #199).
+ * Default wording until the design says otherwise. */
 export function canvasHeldUnreadableLine(count: number | null | undefined, kept = true): string {
   const end = kept ? ` ${KEPT}` : '';
   if (count === 1) {

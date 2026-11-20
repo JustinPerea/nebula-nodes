@@ -123,7 +123,8 @@ export function Settings() {
   // stands until they leave it (ProvidersTab).
   // A change made elsewhere while this tab's own write is in flight is read
   // once the writes settle: a read now would be dropped for the write's newer
-  // confirmation, and the change would never reach the panel (design).
+  // confirmation, and the change would never reach the panel
+  // (design, PR #203).
   useEffect(() => {
     if (!visible) return;
     const heard = (event: Event) => {

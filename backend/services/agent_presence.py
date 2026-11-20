@@ -742,10 +742,10 @@ class AgentPresence:
         # Every node's box as the last graph sync had it (carry_nodes): what
         # the next one's moves are measured from.
         self._boxes: dict[str, dict[str, float]] | None = None
-        # While this says so, the browser's view isn't read (design): a tab
-        # keeping edits Nebula couldn't save shows a canvas that isn't the
-        # server's, and reports no view; the one it reported before is stale. main sets it to
-        # ConnectionManager.kept_in_tab.
+        # While this says so, the browser's view isn't read (design, PR #199): a
+        # tab keeping edits Nebula couldn't save shows a canvas that isn't the
+        # server's, and reports no view; the one it reported before is stale.
+        # main sets it to ConnectionManager.kept_in_tab.
         self.hide_view: Callable[[], bool] | None = None
 
     def _shown_view(self) -> dict[str, Any] | None:

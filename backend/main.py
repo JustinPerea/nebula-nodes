@@ -2306,7 +2306,7 @@ async def _read_catalog_off_loop() -> None:
         pass
 
 # Which routes a canvas tab's write must say its project and canvas for
-# (design): every route that changes the graph or starts
+# (design, PR #195): every route that changes the graph or starts
 # work on the canvas carries the marker ``graph_write``, and the fence
 # (project_workspace_fence) reads it from the route the request matches, never
 # from the path. tests/test_round20_fence.py walks every non-GET route: each is
@@ -6319,8 +6319,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await manager.send_direct(websocket, json.dumps(_channel_listeners_message()))
                 # The Message box's thread, person form (services/person_thread.py).
                 await manager.send_direct(websocket, json.dumps(await asyncio.to_thread(_thread_sync_message)))
-                # Where each World Labs record was written (design): the
-                # graphSync this socket got first was the agents' form.
+                # Where each World Labs record was written
+                # (design, PR #199): the graphSync this socket got first
+                # was the agents' form.
                 await manager.send_direct(websocket, json.dumps({"type": "providerRecoveryPlaces",
                                                       "places": _person_recovery_places()}))
                 # Now the person's canvas: their pins with registered variants kept.
@@ -11755,8 +11756,8 @@ async def _open_canvas_proposal(
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
                             detail=exc.detail) from exc
     # An agent can't propose a canvas the person's Save couldn't save: the
-    # staged canvas is measured as its own edits are, shape and size (design).
-    # Proposing is agent-only (identity above), so the
+    # staged canvas is measured as its own edits are, shape and size
+    # (design, PR #205). Proposing is agent-only (identity above), so the
     # person's skip never applies.
     _refuse_agent_growth_past_save_limit(candidate)
     known, visible_area = _proposal_layout_hints()
@@ -13965,7 +13966,8 @@ async def credentials_update(body: dict[str, Any]) -> dict:
             detail=f"unknown provider: {provider}",
         )
     # `check` asks only whether the write would be accepted. Anything but a
-    # boolean is refused, so a typo ("true", 1) never writes the key (design).
+    # boolean is refused, so a typo ("true", 1) never writes the key
+    # (design, PR #203).
     check = body.get("check", False)
     if not isinstance(check, bool):
         raise HTTPException(status_code=422, detail="check must be true or false")
@@ -13975,7 +13977,8 @@ async def credentials_update(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=422, detail=refusal)
     # The file holds this backend's other settings: one it can't read gets
     # the 409 before any key changes, as PUT /api/settings does. Only the
-    # read check: this writes the backend's memory, never the file (design).
+    # read check: this writes the backend's memory, never the file
+    # (design, PR #203).
     _saved_settings_or_409(writes_file=False)
     if check:
         return {"status": "ok"}
@@ -19897,8 +19900,8 @@ async def _restore_graph(
     # A redo of a delete (or an undo of an add) deletes like any delete: its
     # own removal records, which the canvas keeps for the next undo.
     entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was removed{note}")
-    # Every event of the restore is journaled here, before any await (design):
-    # it names the project the restore was made in.
+    # Every event of the restore is journaled here, before any await
+    # (design, PR #114): it names the project the restore was made in.
     for edge in unwired:
         _journal_edge("edge.removed", edge, note=note)
     _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was removed{note}")

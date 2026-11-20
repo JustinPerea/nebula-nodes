@@ -3,12 +3,12 @@
  * collapsed bar's preview and composer, and the expanded thread with the
  * composer at its foot. The log's height follows its content here, growing
  * to at most half the viewport, until the person drags its handle (design);
- * then their height (inline, data-sized) wins until a double-click. AgentLog
- * writes the height it has with no give to
- * --agent-log-h for the docked chat above it. #216's rules hold: folded for
- * the proposal card it is its header's height, and it is bounded by the
- * shown height only while a give is in force (layouts.css). Motion: the
- * layout spring (--agent-log-spring) only; reduced motion jumps.
+ * then their height (inline, data-sized) wins until a double-click.
+ * AgentLog writes the height it has with no give to --agent-log-h for the
+ * docked chat above it. #216's rules hold: folded for the proposal card it
+ * is its header's height, and it is bounded by the shown height only while
+ * a give is in force (layouts.css). Motion: the layout spring
+ * (--agent-log-spring) only; reduced motion jumps.
  */
 
 .agent-log.agent-log--messaging {

@@ -651,7 +651,7 @@
   "frontend/src/lib/scrollMore.ts": 2,
   "frontend/src/lib/scrollSpring.ts": 2,
   "frontend/src/lib/settingsNotice.ts": 6,
-  "frontend/src/lib/settingsWrites.ts": 47,
+  "frontend/src/lib/settingsWrites.ts": 46,
   "frontend/src/lib/sparkDispose.ts": 4,
   "frontend/src/lib/springs.test.ts": 1,
   "frontend/src/lib/springs.ts": 1,

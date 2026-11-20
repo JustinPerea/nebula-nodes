@@ -26,10 +26,10 @@ const definedProps = <T extends object>(props: T): Partial<T> =>
  * deferredRunLine). While a run goes, "You can run “X” when the current run
  * finishes.", and [Run] is disabled; [Dismiss] stays enabled. The line is
  * already beside [Run], so [Run] has no tooltip (it covered [Dismiss]) and
- * points aria-describedby at the line (canvasLock `shown`; design). When the
- * run finishes the line swaps in place to "You can run “X” now." and [Run]
- * enables: no toast, no timer. The held nodes are named as their cards read
- * now, so a rename shows at once.
+ * points aria-describedby at the line (canvasLock `shown`; design, PR #205).
+ * When the run finishes the line swaps in place to "You can run “X” now."
+ * and [Run] enables: no toast, no timer. The held nodes are named as their
+ * cards read now, so a rename shows at once.
  * Leaving, it keeps the line it last showed (review 1 of PR #205, NIT-3).
  */
 export function DeferredRunNotice() {

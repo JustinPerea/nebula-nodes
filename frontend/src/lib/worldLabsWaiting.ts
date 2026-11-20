@@ -153,9 +153,9 @@ export function cardTitle(nodes: readonly { id: string; data?: { label?: unknown
   return typeof label === 'string' && label.trim() ? label : nodeId;
 }
 
-/** The recovery line as the canvas's held-delete notice says it (design: "Name
- * the button if the line points to one (e.g. 'Forget ID')"). The backend's own
- * line (RECOVERY_ID_SAVED_TAIL) is unchanged. */
+/** The recovery line as the canvas's held-delete notice says it (design,
+ * PR #114: "Name the button if the line points to one (e.g. 'Forget ID')").
+ * The backend's own line (RECOVERY_ID_SAVED_TAIL) is unchanged. */
 export const RECOVERY_ID_FORGET_CLAUSE = 'it has a saved World Labs recovery ID. Check the run in Marble, then use \u201cForget ID\u201d in run history.';
 
 /**

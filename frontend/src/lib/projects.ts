@@ -164,7 +164,7 @@ export interface ProjectDeletion {
 }
 
 /** A refused project call: its heading names the call (design), its reason is
- * the backend's or design's line for the status, and `status` stays for the
+ * the backend's or the design's line for the status, and `status` stays for the
  * store's retry and conflict rules. */
 export class ProjectRequestError extends RequestFailedError {
   constructor(reason: string, status: number,

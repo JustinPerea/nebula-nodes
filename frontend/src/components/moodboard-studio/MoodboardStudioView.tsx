@@ -732,9 +732,10 @@ function resetBoardDraft(key: string, draft: MoodboardDraft) {
 }
 
 /**
- * The unsaved draft at `key`, now the board `destination` (design): moved there, or, when that board is open in the Studio already
- * (opened from the rail), folded into its draft, which keeps its epoch and
- * Undo; what this one still has to send goes on top and is sent.
+ * The unsaved draft at `key`, now the board `destination` (design): moved there,
+ * or, when that board is open in the Studio already (opened from the rail),
+ * folded into its draft, which keeps its epoch and Undo; what this one still has
+ * to send goes on top and is sent.
  */
 function handOverDraft(key: string, destination: string) {
   // The Board view's camera and its flag go with the draft (#210 round 6t): a new board's first save doesn't refit it,

@@ -868,13 +868,12 @@ export function Canvas() {
       // takes a focused button (a dialog's Cancel) as fair game and never asked
       // whether a modal dialog is open, so a node behind the placeholder dialog
       // was deleted. Here it goes through the same guard as every canvas key
-      // (isCanvasShortcutTarget, above), keeps React Flow's rules (bare key
-      // only, nothing in `.nokey`, not while a run goes, one delete per press).
-      // It deletes through the store in one undo step, nodes and wires together
-      // (React Flow's deleteElements took two: the wires, then the nodes); a
-      // node holding World Labs state
-      // stays (as onBeforeDelete had it), and "Deleted the node." with Undo
-      // still shows.
+      // (isCanvasShortcutTarget, above), keeps React Flow's rules (bare key only,
+      // nothing in `.nokey`, not while a run goes, one delete per press). It
+      // deletes through the store in one undo step, nodes and wires together
+      // (React Flow's deleteElements took two: the wires, then the nodes); a node
+      // holding World Labs state stays (as onBeforeDelete had it), and
+      // "Deleted the node." with Undo still shows.
       if ((event.key === 'Delete' || event.key === 'Backspace') && !isCtrlOrCmd && !event.altKey && !event.shiftKey) {
         if (event.repeat) return;
         if (event.target instanceof Element && event.target.closest('.nokey')) return;

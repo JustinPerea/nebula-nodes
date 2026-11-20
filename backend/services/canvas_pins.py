@@ -225,7 +225,8 @@ def _plain(line: str) -> str:
 def _shown(raw: str, multiline: bool) -> str:
     """The text with every control byte gone (see clean_text), never raising."""
     # A terminal colour code pasted with the text goes whole, never as a stray
-    # "[31m" once its ESC is dropped (design: every string sequence too).
+    # "[31m" once its ESC is dropped (design, PR #200: every string sequence
+    # too).
     raw = _ANSI.sub("", raw)
     # GM r19 answer 1 (whitespace): leading and trailing whitespace goes
     # (stored that way too: typed_text), and the spaces and blank lines
@@ -495,8 +496,8 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     if not text:
         raise PinError(422, f"{label} can't be empty")
     if text_length(text) > limit:
-        # The person's line comes from its code (design), never
-        # from these words.
+        # The person's line comes from its code
+        # (design, PR #200), never from these words.
         raise PinError(422, f"{label} must be {limit} characters or fewer", {"code": TOO_LONG_CODE, "limit": limit})
     # GM r22 Q3 (fix round 14): hidden characters, never bytes. What shows
     # can be any length in bytes (280 families are about 7 KB) and still save.

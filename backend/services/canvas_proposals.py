@@ -1077,8 +1077,8 @@ def plan_line(view: Mapping[str, Any]) -> str:
         if not paid and not plan_runs and not may_rows:
             segments.append("free")
         if paid > 0 or plan_runs > 0:
-            # A run on the Krea plan has no list price (design: "Krea 2 on
-            # your Krea plan · no list price").
+            # A run on the Krea plan has no list price (design, PR #216:
+            # "Krea 2 on your Krea plan · no list price").
             estimate = cost.get("estimate")
             if estimate and estimate.get("high") is not None:
                 segments.append(money.chip_label(estimate.get("low"), estimate.get("high"), bool(estimate.get("open"))))

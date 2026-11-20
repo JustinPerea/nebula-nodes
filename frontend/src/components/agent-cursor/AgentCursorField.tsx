@@ -288,10 +288,10 @@ class CursorField {
   /** The members of every column one of whose cursors glides now: drawn in
    *  column order, the head on top (inOrder). */
   readonly ordered = new Set<string>();
-  /** Cursors drawn over every other cursor and wire (design): from the frame a
-   *  flight starts until it has landed and its column's glide is at rest
-   *  (aloftRank). Each with the order its flight started in, so of two flights
-   *  that overlap the later one is on top. */
+  /** Cursors drawn over every other cursor and wire (design, PR #219): from
+   *  the frame a flight starts until it has landed and its column's glide is
+   *  at rest (aloftRank). Each with the order its flight started in, so of two
+   *  flights that overlap the later one is on top. */
   readonly aloft = new Map<string, { seq: number; flight: object | null }>();
   private flightSeq = 0;
   /** Cursors whose loop stopped with their node gone (the view's tick finds

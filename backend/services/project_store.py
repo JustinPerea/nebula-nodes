@@ -623,9 +623,9 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
 
 
 # What main keeps in the catalog about the person's canvas once it was
-# filed from waiting (design's rule (a); in the same commit as the filing,
-# so no failed write or crash can leave a filed project open and
-# unprotected). ``fresh``: the project filed
+# filed from waiting (PR #199, the design's rule (a); in the same commit
+# as the filing, so no failed write or crash can leave a filed project
+# open and unprotected). ``fresh``: the project filed
 # from the person's waiting canvas, with that canvas's digest; until the
 # canvas changes or one of the person's tabs is open on it (GM r11, 2), an
 # agent's write closes it first and works elsewhere. ``copies``: the copies
@@ -1884,8 +1884,8 @@ class ProjectStore:
             if found is not None:
                 return found
             # Which files the person was told were kept is in the note that
-            # didn't read, so every kept file there is now is named (design):
-            # pruning never deletes one of them.
+            # didn't read, so every kept file there is now is named
+            # (design, PR #199): pruning never deletes one of them.
             own = self._keep_held_aside([path])
             kept = [*own, *[name for name in self._held_kept_files() if name not in own]]
             note = {"count": None, "kept": kept, "at": now()}
