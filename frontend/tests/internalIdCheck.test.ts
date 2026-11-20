@@ -464,7 +464,7 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     expect(r.out).toContain('baseline 3 is above');
   });
 
-  it('a shallow checkout with no merge base compares with main, as CI does', () => {
+  it('a shallow checkout without its parent fetched compares with main', () => {
     gitIn(root, 'init', '-q', '-b', 'main');
     gitIn(root, 'add', '-A');
     gitIn(root, 'commit', '-qm', 'base');
@@ -487,6 +487,68 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     }
     expect(code).toBe(1);
     expect(out).toContain('baseline 3 is above');
+  });
+
+  it('a shallow merge ref made on an older main compares with the commit it sits on, as CI does', () => {
+    // The merge ref sits on main as it stood when it was made; main then lowers a.ts before lint
+    // fetches it. Only a raise on the branch itself may fail.
+    gitIn(root, 'init', '-q', '-b', 'main');
+    gitIn(root, 'config', 'uploadpack.allowAnySHA1InWant', 'true');
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'base');
+    const oldMain = gitIn(root, 'rev-parse', 'HEAD').trim();
+    gitIn(root, 'checkout', '-qb', 'quiet');
+    write('frontend/src/c.txt', 'no ids\n');
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'quiet branch');
+    gitIn(root, 'checkout', '-q', '-b', 'raise', oldMain);
+    write('frontend/src/a.ts', '// GM one\n// GM two\n// GM three\n');
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 3 }));
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'raising branch');
+    for (const [n, branch] of [['1', 'quiet'], ['2', 'raise']]) {
+      gitIn(root, 'checkout', '-q', '--detach', oldMain);
+      gitIn(root, 'merge', '-q', '--no-ff', '-m', `merge ${branch}`, branch);
+      gitIn(root, 'update-ref', `refs/pull/${n}/merge`, 'HEAD');
+    }
+    gitIn(root, 'checkout', '-q', 'main');
+    write('frontend/src/a.ts', '// GM one\n');
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 1 }));
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'main lowers');
+
+    const checkout = (n: string, withParent: boolean) => {
+      const dir = join(root, `pull-${n}-${withParent ? 'parent' : 'main'}`);
+      mkdirSync(dir);
+      gitIn(dir, 'init', '-q');
+      gitIn(dir, 'remote', 'add', 'origin', `file://${root}`);
+      gitIn(dir, 'fetch', '-q', '--no-tags', '--depth=1', 'origin', `+refs/pull/${n}/merge:refs/remotes/pull/${n}/merge`);
+      gitIn(dir, 'checkout', '-q', '--force', `refs/remotes/pull/${n}/merge`);
+      const parent = /^parent ([0-9a-f]+)$/m.exec(gitIn(dir, 'cat-file', 'commit', 'HEAD'))?.[1] ?? '';
+      expect(parent).toBe(oldMain);
+      const refs = ['+refs/heads/main:refs/remotes/origin/main', ...(withParent ? [parent] : [])];
+      gitIn(dir, 'fetch', '-q', '--no-tags', '--depth=1', 'origin', ...refs);
+      return dir;
+    };
+    const check = (dir: string) => {
+      try {
+        execFileSync('node', [script, '--root', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        return { code: 0, out: '' };
+      } catch (e) {
+        const err = e as { status: number; stdout: string; stderr: string };
+        return { code: err.status, out: `${err.stdout}${err.stderr}` };
+      }
+    };
+
+    // With only main fetched, main's later lowering reads as the branch's raise.
+    const stale = check(checkout('1', false));
+    expect(stale.code).toBe(1);
+    expect(stale.out).toContain("frontend/src/a.ts: baseline 2 is above main's 1");
+    // With the first parent fetched too, the quiet branch passes and the raise still fails.
+    expect(check(checkout('1', true)).code).toBe(0);
+    const raised = check(checkout('2', true));
+    expect(raised.code).toBe(1);
+    expect(raised.out).toContain("frontend/src/a.ts: baseline 3 is above the merge base's 2");
   });
 
   it('--write-baseline with --move is refused', () => {
