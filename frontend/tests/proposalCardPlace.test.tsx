@@ -1980,7 +1980,7 @@ describe('the rules', () => {
   it('step 2 puts the card last, a folded notice takes no room, clicks or focus, and the row is one 32 px line (design)', () => {
     expect(rule(REGION_CSS, ".notice-region:is([data-notice-mode='above'], [data-notice-mode='folded'], [data-notice-mode='pill']) .notice-region__slot > [data-notice-shrinks]").order).toBe('1');
     // Every step that stands the notices above the card is in that rule
-    // (the pill was missing, and the card stayed on top).
+    // (an earlier version missed the pill, and the card stayed on top).
     const selector = /\.notice-region:is\(([^)]*)\) \.notice-region__slot > \[data-notice-shrinks\] \{\s*order: 1;/.exec(REGION_CSS)?.[1] ?? '';
     expect([...selector.matchAll(/data-notice-mode='(\w+)'/g)].map((match) => match[1]).sort()).toEqual([...ABOVE_MODES].sort());
     expect(REGION_CSS).not.toMatch(/data-notice-mode='under'/);

@@ -70,7 +70,7 @@ describe('the walk applies a slice step as Undo does', () => {
       fitsSave(real.nodes, real.edges) ? 1 : null);
   });
 
-  it('a step that added a connection: its Undo (the slice\'s null) takes it off (f04)', () => {
+  it('a step that added a connection: its Undo (the slice\'s null) takes it off', () => {
     const rest = [node('a'), node('b')];
     const base = atLimit(rest);
     const added = edge('a', 'b', { note: 'x' });

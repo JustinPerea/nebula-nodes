@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fieldCases from '../../backend/tests/fixtures/required_field_cases.json';
 
 /**
- * With the design lines (
- * verbatim). An earlier version refused a Krea node whose required field was empty
+ * An earlier version refused a Krea node whose required field was empty by
  * reading only its definition, so three Krea copies that run on their
  * maker's own API with the person's key (GPT Image 2.5 Flare and Sunburst
  * with an OpenAI key, Grok Imagine 2.0 with an xAI key) were refused though

@@ -2,14 +2,14 @@
  * PR #204: every probe found in review of the frontend trace, pinned to its exact outcome:
  * which function the line is said to drop at, and how many paths are listed as
  * untraced. A probe that only asked "drops somewhere, or untraced" passed by the fail-closed rule
- * alone, so the earlier fixes (a destructured action, a two-hop store alias, a const prefix, a
- * placeholder first segment, a bracketed action) weren't pinned. With the exact outcome, each of
- * those fixes taken out changes it.
- * - a marker's words in a string, a template, a block
- *   comment or a JSX comment aren't a marker (the string, template and block-comment probes); a path made by a helper call
+ * alone, so the fixes pinned in presenceRound7.trace (a destructured action, a two-hop store alias,
+ * a const prefix, a placeholder first segment, a bracketed action) weren't pinned. With the exact
+ * outcome, each of those fixes taken out changes it.
+ * - A marker's words in a string, a template, a block comment or a JSX comment aren't a marker
+ *   (the string, template, block-comment, JSX-comment and JSX-text probes); a path made by a helper call
  *   is the transport's; JSX text isn't a comment.
  * - Documented limits, kept so a change to them is seen: a marker that ends the try's
- *   or the branch's last line, or an unrelated call's line inside the branch, counts (the trailing-marker, R11 and R12 probes).
+ *   or the branch's last line, or an unrelated call's line inside the branch, counts (the trailing-marker, trailing-comment and unrelated-call probes).
  */
 import { describe, expect, it } from 'vitest';
 import { callersOf, untracedApiText, withSources } from './personGatedCallers';

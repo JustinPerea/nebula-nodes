@@ -233,13 +233,13 @@ describe('the Commons toolbar keeps one row with the chip (design review)', () =
   });
 });
 
-// p157c: with the long worker status ("Library analysis paused until
+// PR #157: with the long worker status ("Library analysis paused until
 // reference labels are sealed") the Commons header still wrapped to 86 px at
 // 1280, 1366 and 1440. The status gives way first: its text truncates on one
 // line down to a minimum that keeps its first words, and only that minimum
 // counts toward the row (inline-size containment), so no status length can
 // push the controls or the header onto a second row. Start/Stop never shrinks.
-describe('the Commons worker status gives way before the toolbar wraps (p157c)', () => {
+describe('the Commons worker status gives way before the toolbar wraps (PR #157)', () => {
   it('grows into the toolbar\'s free room and keeps its text at the control\'s side', () => {
     const line = ruleIn(commonsCss, 'body.app-slava-restraint .commons-status');
     expect(declared(line, 'flex')).toBe('1 1 auto');

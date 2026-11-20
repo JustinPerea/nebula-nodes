@@ -271,7 +271,7 @@ async function settled(h: ReturnType<typeof backend>, id: string, from: number) 
 }
 
 describe('a delete keeps the stop in every state; Undo sends design’s one save', () => {
-  it('A: Undo, Redo while the restore’s save is out, Undo again: one save, for every cause, back stopped with its line', async () => {
+  it('Undo, Redo while the restore’s save is out, Undo again: one save, for every cause, back stopped with its line', async () => {
     for (const cause of CAUSES) {
       const h = backend({ n1: 'Opening' });
       await stopBy(h, 'n1', cause);
@@ -322,7 +322,7 @@ describe('a delete keeps the stop in every state; Undo sends design’s one save
     }
   });
 
-  it('I: stopped with a clash waiting, deleted, Undo asks again; Keep mine is the one try, for every cause', async () => {
+  it('stopped with a clash waiting, deleted, Undo asks again; Keep mine is the one try, for every cause', async () => {
     for (const cause of CAUSES) {
       const h = backend({ n1: 'Opening' });
       await stopBy(h, 'n1', cause);

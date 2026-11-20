@@ -107,7 +107,7 @@ const boom = () => json({ detail: 'boom' }, 500);
 const ok = () => json({ ok: true });
 
 describe('a canvas replacement takes a scene\'s kept edits with it, and names them', () => {
-  it('1d-rev: an unanswered removal, then a sync with no edit that brings another canvas: nothing PUT onto its n1, the edits named', async () => {
+  it('an unanswered removal, then a sync with no edit that brings another canvas: nothing PUT onto its n1, the edits named', async () => {
     const h = backend([async () => { throw new TypeError('Failed to fetch'); }, ok]);
     useGraphStore.getState().removeShot('n1', 's2');
     await sleep(80);
@@ -119,7 +119,7 @@ describe('a canvas replacement takes a scene\'s kept edits with it, and names th
     expect(notice()).toBe("Nebula couldn’t save “Scene” for “Opening”.");
   });
 
-  it('1e: kept edits (500), then an agent clear that re-adds n1: the typing line, no retry onto the new n1', async () => {
+  it('kept edits (500), then an agent clear that re-adds n1: the typing line, no retry onto the new n1', async () => {
     store.setSceneRetryDelaysForTests([60, 60, 60]);
     const h = backend([boom]);
     typeIn('s1', 'old canvas typing');
@@ -133,7 +133,7 @@ describe('a canvas replacement takes a scene\'s kept edits with it, and names th
     expect(notice()).toBe("Codex cleared the canvas while you were editing “Scene” for “Opening”. That change wasn’t saved.");
   });
 
-  it('1f: the same, then the person types in the new n1: only the new scene is sent', async () => {
+  it('kept edits, an agent clear, then the person types in the new n1: only the new scene is sent', async () => {
     store.setSceneRetryDelaysForTests([5000]);
     const h = backend([boom]);
     typeIn('s1', 'old canvas typing');
@@ -146,7 +146,7 @@ describe('a canvas replacement takes a scene\'s kept edits with it, and names th
     expect(h.puts.slice(1)).toEqual([['s1:person edits fresh']]);
   });
 
-  it('1a: an agent clear seen as its own empty sync names the kept scene edits', async () => {
+  it('an agent clear seen as its own empty sync names the kept scene edits', async () => {
     store.setSceneRetryDelaysForTests([400]);
     backend([boom]);
     typeIn('s1', 'person typing kept');
@@ -157,7 +157,7 @@ describe('a canvas replacement takes a scene\'s kept edits with it, and names th
     expect(useGraphStore.getState().unsavedScenes).toEqual({});
   });
 
-  it('1b: an import (graphReplaced) names them in its line', async () => {
+  it('an import (graphReplaced) names them in its line', async () => {
     useGraphStore.getState().setCanvasProjectName(() => 'Active');
     backend([() => json({ detail: 'A paid run is starting.', code: 'paid_start' }, 409)]);
     typeIn('s1', 'kept during run');
@@ -192,7 +192,7 @@ describe('a canvas replacement takes a scene\'s kept edits with it, and names th
 });
 
 describe('another change is merged in, never overwritten (design)', () => {
-  it('5a: another tab edits a different shot: shown, merged and saved without asking', async () => {
+  it('another tab edits a different shot: shown, merged and saved without asking', async () => {
     const h = backend([boom]);
     typeIn('s1', 'mine');
     await sleep(60);
@@ -208,7 +208,7 @@ describe('another change is merged in, never overwritten (design)', () => {
     expect(h.puts.at(-1)).toEqual(['s1:mine2', "s2:window's s2"]);
   });
 
-  it('5b: an agent adds Shot 3 with an image while edits are kept: it appears, with its port, and every save keeps it', async () => {
+  it('an agent adds Shot 3 with an image while edits are kept: it appears, with its port, and every save keeps it', async () => {
     const h = backend([boom]);
     typeIn('s1', 'mine');
     await sleep(60);
@@ -225,7 +225,7 @@ describe('another change is merged in, never overwritten (design)', () => {
     expect(said).toEqual([]);
   });
 
-  it('5c (control): with nothing kept, the same agent edit is simply shown', async () => {
+  it('with nothing kept, the same agent edit is simply shown (control)', async () => {
     backend([ok]);
     syncs({ ...AGENT, ...graph([{ id: 's1', prompt: 'a' }, { id: 's2', prompt: "agent's s2" }]) });
     await sleep(40);
@@ -300,7 +300,7 @@ describe('canvas_replaced says no line of its own', () => {
     code: 'canvas_replaced', project: { id: 'A', name: 'Active' },
     switchedBy: kind === 'agent' ? { kind: 'agent', name: 'Codex' } : { kind: 'person', name: 'You' } }, 409);
 
-  it('A: the 409 before the clear\'s sync: no "switched" line; the sync says #195\'s line', async () => {
+  it('the 409 before the clear\'s sync: no "switched" line; the sync says #195\'s line', async () => {
     backend([() => replaced('agent')]);
     typeIn('s1', 'typed');
     await sleep(60);
@@ -312,7 +312,7 @@ describe('canvas_replaced says no line of its own', () => {
     expect(said.some((line) => line.includes('switched'))).toBe(false);
   });
 
-  it('C: the person\'s own clear in another tab: nothing said', async () => {
+  it('the person\'s own clear in another tab: nothing said', async () => {
     backend([() => replaced('person')]);
     typeIn('s1', 'typed');
     await sleep(60);

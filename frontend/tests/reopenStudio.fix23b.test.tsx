@@ -1,7 +1,6 @@
-// PR #199 fix (design):
-// the person's reopen of this project in another
-// window keeps this window's studio. A window in Cinema, the video editor or
-// the composition editor stays there with its node carried through the
+// PR #199 (design): the person's reopen of this project in another window
+// keeps this window's studio. A window in Cinema, the video editor or the
+// composition editor stays there with its node carried through the
 // renumbering (and Cinema's shot selection with it); a studio whose node is
 // gone goes to the canvas. The canvas view stays the window's own, so the
 // next save doesn't store a null viewport.

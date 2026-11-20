@@ -91,7 +91,7 @@ const modes = [
   ['offline and following', () => { act(() => noteBackendConnection('offline')); follow(); }],
 ] as const;
 
-describe('A: every action surface, while following', () => {
+describe('every action surface, while following', () => {
   for (const [mode, enter] of modes) {
     it(`${mode}: the selection toolbar's Run, Ask, Note, Duplicate, Arrange and Delete; Copy stays`, () => {
       useGraphStore.setState({ nodes: [textNode('n1', true), textNode('n2', true)], edges: [] });
@@ -205,7 +205,7 @@ describe('A: every action surface, while following', () => {
   });
 });
 
-describe('A: one source for the read-only state', () => {
+describe('one source for the read-only state', () => {
   const SRC = join(__dirname, '../src');
   const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -273,7 +273,7 @@ describe('A: one source for the read-only state', () => {
   });
 });
 
-describe('A: the disabled Run looks neutral', () => {
+describe('the disabled Run looks neutral', () => {
   const css = readFileSync(join(__dirname, '../src/styles/canvas.css'), 'utf8');
   /** The block whose selector list names `selector` exactly. */
   const rule = (selector: string) => {
@@ -293,7 +293,7 @@ describe('A: the disabled Run looks neutral', () => {
   });
 });
 
-describe('B: the project bar while following', () => {
+describe('the project bar while following', () => {
   const project = { id: 'alpha', name: 'Glass campaign', createdAt: '', updatedAt: '', lastOpenedAt: null, nodeCount: 1,
     edgeCount: 0, thumbnail: null };
   for (const status of ['saved', 'unsaved', 'saving', 'error'] as const) {

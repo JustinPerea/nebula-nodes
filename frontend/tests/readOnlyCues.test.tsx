@@ -173,7 +173,7 @@ describe('the selection toolbar while offline (design)', () => {
   });
 });
 
-describe('the Inspector while offline (typing and opening it, the H1 path)', () => {
+describe('the Inspector while offline (typing and opening it, the path of selecting a node while offline)', () => {
   it('its fields are disabled with the mark, it settles, and they come back on reconnect', async () => {
     useGraphStore.setState({ nodes: [textNode('n1', true)], edges: [] });
     useUIStore.getState().selectNode('n1');

@@ -1,5 +1,5 @@
 /**
- * PR #199 (design; the rule has been design's since a later change). The
+ * PR #199 (design, revised later in the PR). The
  * tab's names (lib/recoveredNames: the fallback a recovered copy shows when
  * Nebula's answer had no name) follow the backend's rule; both sides read
  * the same cases (backend/tests/data/copy_name_cases.json), with the source

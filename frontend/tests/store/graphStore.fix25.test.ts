@@ -380,7 +380,7 @@ const changedBy = (n: number) => ({ status: 409, body: { detail: 'changed', code
   scene: sceneOf(codexShots(n)), sceneKey: JSON.stringify(codexShots(n).map((s) => [s.id, s.prompt])), sceneRev: (codexRev += 1),
   changedBy: { kind: 'agent', name: 'Codex' } } });
 
-describe('the retrying line’s paths the mutants found untested', () => {
+describe('the retrying line’s paths that mutation testing found untested', () => {
   it('a reconnect resends a server stop: the retrying line takes the stop’s place in one update, then clears when it saves', async () => {
     const h = backend({ n1: 'Opening' });
     store.setSceneRetryDelaysForTests([5]);

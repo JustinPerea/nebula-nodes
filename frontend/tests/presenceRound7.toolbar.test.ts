@@ -509,7 +509,7 @@ describe('no refusal or error sentence in a toolbar row', () => {
       return <WorkspaceHeader title="x"><span>{line}</span></WorkspaceHeader>; }
       export const G = () => <F run={{ failure: '' }} />;`))
       .toEqual(['components/create-studio/Probe.tsx:2 failure']);
-    // A prop no use can be followed for fails closed (as first reported).
+    // A prop no use can be followed for fails closed.
     expect(probe(`export function F({ line }: { line: string }) { return <WorkspaceHeader title="x"><span>{line}</span></WorkspaceHeader>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 line (a prop no use can be followed for)']);
     // What `a && b` shows is `b`, read; its condition `a` isn't.

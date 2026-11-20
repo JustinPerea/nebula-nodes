@@ -53,7 +53,7 @@ const { useGraphStore } = await import('../../src/store/graphStore');
 const BACKEND_UNLOCK = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
 const BACKEND_FORGET = '“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.';
 const BACKEND_ACTIVE = 'A World Labs run is still starting. Try again in a moment.';
-// Design's lines (for several nodes).
+// The design lines for several nodes.
 // Design, PR #114: one node reads "Couldn't delete “<node>”. <reason
 // line>", the shared World Labs reason with the button named.
 const ONE_UNLOCK = "Nebula couldn’t delete “World” because a World Labs run needs your check first. Use the notice at the top of the screen.";

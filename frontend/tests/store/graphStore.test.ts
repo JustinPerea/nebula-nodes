@@ -780,8 +780,9 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // Design dropped the offline add line: the add heading,
-    // as the earlier line had it; the reason goes to the Agent log. Before the first add synced the backend:
+    // Design dropped a later offline add line: the add heading alone, as when the
+    // first add began syncing the backend; the reason goes to the Agent log.
+    // Before that change:
     // "Couldn't add Text Input. Nebula lost contact with its backend, ...".
     expect(alertMock).toHaveBeenCalledWith('Nebula couldn’t add \u201cText Input\u201d.');
   });

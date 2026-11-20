@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 
 describe('a failed param edit', () => {
-  it('the connection drops while it is sent: Design\'s line, and the value is back to the last saved one', async () => {
+  it('the connection drops while it is sent: the design line, and the value is back to the last saved one', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     edit('edited');
     expect(value()).toBe('edited');
@@ -105,7 +105,7 @@ describe('a failed param edit', () => {
 });
 
 describe('a failed model change', () => {
-  it('OpenRouter: Design\'s line names the node and the model it is still on', async () => {
+  it('OpenRouter: the design line names the node and the model it is still on', async () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'no key' }, 400));
     await useGraphStore.getState().configureOpenRouterModel('n4', 'anthropic/claude-x');
     expect(alerted()).toEqual(["Nebula couldn’t change the model for “Writer”. It’s still on openai/gpt-5."]);

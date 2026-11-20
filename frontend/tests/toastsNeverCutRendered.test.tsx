@@ -14,8 +14,8 @@ vi.mock('../src/lib/backend', () => ({ backendAssetUrlSync: (url: string) => `ht
  * around it up to the toast or notice, is checked through getComputedStyle
  * for anything that cuts text: an ellipsis, one line (nowrap / pre), a line
  * clamp, or hidden overflow under a fixed or maximum height. jsdom does no
- * layout, so the live check (catalog-build/fix8/live) measures the same
- * elements' scroll sizes in Chromium; this one runs in CI.
+ * layout, so a live check in Chromium (not in the repo) measures the same
+ * elements' scroll sizes; this one runs in CI.
  */
 const root = join(__dirname, '../src');
 const sheets: string[] = [];

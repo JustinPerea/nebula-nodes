@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
  *   the run waits for it within the same 4 s.
  * - A 409 re-ask that asks again after a route change prices at the
  *   409 answer's own estimate, so the confirmation it sends passes.
- * - Only the rows whose route did not move; a
+ * - That holds only for rows whose route did not move; a
  *   moved row is priced at the canvas's numbers for its new route (the
  *   409's estimate was for the old one).
  * - Design: the re-ask after a route change says which
