@@ -741,7 +741,7 @@ def undo_ops(data: Any) -> list[dict[str, Any]]:
 
 
 def skipped_messages(result: dict[str, Any]) -> list[str]:
-    """What a restore left as it was, in the route's words ("#2 changed since, left as is")."""
+    """What a restore left as it was, in the route’s words ("Image 2 changed since, left as is")."""
     return [str(item.get("message")) for entry in result.get("applied") or [] if isinstance(entry, dict)
             for item in entry.get("skipped") or [] if isinstance(item, dict) and item.get("message")]
 

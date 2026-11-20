@@ -138,3 +138,31 @@ describe('the meta line hover title', () => {
     expect(title()).toBe('Codex says hi.');
   });
 });
+
+describe('the panel state on the meta line while the agent status is loading or failed', () => {
+  // Design: the panel state shows only while busy (a running turn, a cancel in progress, a failed cancel), whatever the
+  // status check says: a running turn means the agent can run. Idle shows none, and nor does an agent that can't run.
+  const statuses: [string, () => void][] = [
+    ['loading', () => apiMocks.fetchClaudeStatus.mockReturnValue(new Promise(() => {}))],
+    ['failed', () => apiMocks.fetchClaudeStatus.mockRejectedValue(new Error('boom'))],
+  ];
+
+  it.each(statuses)('shows thinking, canceling and cancel failed while the status is %s, and nothing when idle', async (_name, setStatus) => {
+    setStatus();
+    render(<ChatPanel />);
+    await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
+    const socket = ChatTestSocket.instances[0];
+    await act(async () => socket.open());
+    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|canceling…|cancel failed)/);
+    const input = screen.getByPlaceholderText('Message…');
+    fireEvent.change(input, { target: { value: 'Hello' } });
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
+    await waitFor(() => expect(meta().textContent).toMatch(/ · thinking…$/));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop response' })); });
+    expect(meta().textContent).toMatch(/ · canceling…$/);
+    await act(async () => socket.receive({ type: 'cancellation', status: 'failed', active: true, message: 'x' }));
+    expect(meta().textContent).toMatch(/ · cancel failed$/);
+    await act(async () => socket.receive({ type: 'cancellation', status: 'confirmed' }));
+    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|canceling…|cancel failed)/);
+  });
+});

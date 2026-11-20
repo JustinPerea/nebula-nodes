@@ -29,6 +29,14 @@ def _print_json(data: Any) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+def _skipped_line(message: str) -> str:
+    """A skipped step, indented, with one closing full stop: the backend’s
+    lines may or may not carry their own, and a line ending in a question
+    mark, an exclamation mark or an ellipsis is left as it is."""
+    text = str(message).rstrip()
+    return f"  {text}" if text.endswith((".", "?", "!", "…")) else f"  {text}."
+
+
 def _changes_flags(args) -> bool:
     """Whether `set` was given any change besides the image edits."""
     values = (args.name, args.notes, args.mode, args.strength, args.direction, args.brief, args.clash_mode,
@@ -83,7 +91,7 @@ def _print_edit(result: dict[str, Any], *, undoing: bool) -> None:
         line = f"Edited {label}: {changed} change{'' if changed == 1 else 's'}"
         print(line + (f", {same} already so." if same else "."))
     for message in boards.skipped_messages(result):
-        print(f"  {message}.")
+        print(_skipped_line(message))
     undo = result.get("undo") or {}
     if undo.get("ops"):
         text = json.dumps(undo, ensure_ascii=False, separators=(",", ":"))
@@ -605,7 +613,7 @@ def run(client: NebulaClient, args) -> None:
                 return
             print(f"Updated {boards.shown_name(board)} ({board.get('id')}).")
             for message in skipped:
-                print(f"  {message}.")
+                print(_skipped_line(message))
             for url in removed:
                 print(f"  Took {url} off the board. Put it back with `nebula moodboard add {board.get('id')} {url}`.")
             if not board.get("analysis"):

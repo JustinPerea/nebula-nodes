@@ -694,9 +694,9 @@ function statusClause(reason: string, status: number | undefined, beside: 'alone
   return null;
 }
 
-/** The pattern rows: refusal_copy.gone, the Recently deleted line, and the upload limit's 413 ("File exceeds 500 MB limit"), whatever the thing is called. */
+/** The pattern rows: refusal_copy.gone, the Recently deleted line, and the upload limit’s 413 ("File exceeds 500 MB limit", "Image exceeds 20 MB limit", "Document exceeds 20 MB limit"), whatever the thing is called. */
 const GONE_LINE = /^That .+? isn['’]t there anymore\. (Reload to get the latest .+\.)$/;
-const FILE_OVER_LIMIT_LINE = /^File exceeds (\d+(?:\.\d+)?) MB limit\.?$/;
+const FILE_OVER_LIMIT_LINE = /^(?:File|Image|Document) exceeds (\d+(?:\.\d+)?) MB limit\.?$/;
 const GONE_FROM_TRASH_LINE = /^That .+? isn['’]t in Recently deleted anymore\. (Reload to get the latest list\.)$/;
 
 /** A clause from the status rows, the table or the pattern rows; null when the reason is none of them. */
@@ -788,7 +788,7 @@ function namedLine(reason: string, beside: 'alone' | 'button'): string {
 }
 
 /** A sentence with its closing punctuation: a reason with none ("File exceeds 500 MB limit") gets a full stop. */
-function endedSentence(text: string): string {
+export function endedSentence(text: string): string {
   return ENDS_A_SENTENCE.test(text) ? text : `${text}.`;
 }
 

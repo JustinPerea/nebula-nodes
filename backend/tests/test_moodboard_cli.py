@@ -1433,3 +1433,18 @@ def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_pa
     _cli(app, ["moodboard", "analyze", board["id"]], capsys)
     got = mcp_server.moodboard_get(board["id"])
     assert "outdated" not in got["analysis"] and "outdated" not in got["brief"]
+
+
+def test_skipped_lines_end_in_one_full_stop(capsys):
+    """A skipped step prints with exactly one closing full stop, whether or not
+    the backend's line carries its own; a line ending in ?, ! or … is left."""
+    result = {"board": {"id": "b1", "name": "Dusk", "analysis": {"x": 1}}, "applied": [{"status": "applied", "skipped": [
+        {"message": "Image 2 changed since, left as is"},
+        {"message": "Nebula couldn’t undo “Changed the direction” because only you can change the direction."},
+        {"message": "Is that right?"}, {"message": "Gone…"}]}]}
+    moodboard_cmd._print_edit(result, undoing=True)
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.startswith("  ")]
+    assert lines == ["  Image 2 changed since, left as is.",
+                     "  Nebula couldn’t undo “Changed the direction” because only you can change the direction.",
+                     "  Is that right?", "  Gone…"]
+    assert moodboard_cmd._skipped_line("Done..") == "  Done.."

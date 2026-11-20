@@ -1791,12 +1791,10 @@ export function ChatPanel() {
     return 'ready';
   }, [connected, busy, cancelState]);
 
-  // The meta line says the panel's state only while it is busy ("thinking…"): "ready" next to a sign-in
-  // problem contradicted it, and an idle panel needs no word. An agent that can't run says why instead (design).
-  const agentCanRun = personal || (agent === 'claude'
-    ? !!claudeStatus?.installed && !!claudeStatus.loggedIn && !claudeBackendOffline && !claudeStatusError
-    : !!codexStatus?.installed && !!codexStatus.loggedIn && !codexBackendOffline && !codexStatusError);
-  const panelState = agentCanRun && (busy || cancelState === 'requested' || cancelState === 'failed') ? status : null;
+  // The meta line says the panel's state only while it is busy ("thinking…", "canceling…", "cancel failed"):
+  // "ready" next to a sign-in problem contradicted it, and an idle panel needs no word. A running turn means the
+  // agent can run, so those states show whenever they hold, whatever the status check says (design).
+  const panelState = busy || cancelState === 'requested' || cancelState === 'failed' ? status : null;
   // The session's id means nothing to a person on the line itself: it rides in the hover title.
   const sessionTitle = sessionId ? `Session ${sessionId}` : undefined;
   // The status call's `message` is the sign-in method's own word ("claude.ai", "none") when the CLI says nothing else, which
