@@ -14,7 +14,7 @@ import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
-import { paletteRoleLabel } from '../../lib/commonsTypes';
+import { enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 import { isLoadLine } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
@@ -338,9 +338,9 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     <div className="review-actions">{agreement}<button className="commons-button" disabled={disabled} onClick={() => setEditing(!editing)}>{editing ? 'Hide editing controls' : 'Edit grades'}</button></div>
     <fieldset disabled={disabled}>
       <h4 className="evaluation-subhead">Structure</h4>{Object.entries(batch.fields).map(([key, values]) => <div className="review-grade" key={key}>
-        <label>{pretty(key)}{editing ? <select value={labels.tags[key]} onChange={(e) => change({ tags: { ...labels.tags, [key]: e.target.value } })}>
-          {values.map((value) => <option key={value} value={value}>{pretty(value)}</option>)}
-        </select> : <strong>{pretty(labels.tags[key])}</strong>}</label><p className="review-reason">Agent: {reason(key)}</p>
+        <label>{enumFieldLabel(key)}{editing ? <select value={labels.tags[key]} onChange={(e) => change({ tags: { ...labels.tags, [key]: e.target.value } })}>
+          {values.map((value) => <option key={value} value={value}>{enumValueLabel(key as EnumField, value)}</option>)}
+        </select> : <strong>{enumValueLabel(key as EnumField, labels.tags[key])}</strong>}</label><p className="review-reason">Agent: {reason(key)}</p>
       </div>)}
       <h4 className="evaluation-subhead">Character</h4>{batch.axes.map((key) => <div className="review-grade" key={key}>
         <label>{pretty(key)} <strong>{labels.axes[key].toFixed(2)}</strong>
@@ -366,9 +366,9 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     {dirty && <button className="commons-button commons-button--danger" disabled={disabled} onClick={() => { onDiscarded(); discard(); }}>Discard changes</button>}
     <p role="status" id={statusLineId}>{dirty ? CHANGE_REFERENCE_LINE_REVIEW : item.reviewed_at ? 'Reviewed by you · saved on this computer' : 'Awaiting your review · nothing accepted yet'}</p>
     <details><summary>Original agent grade</summary><dl>
-      {Object.entries(item.proposal.labels.tags).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{pretty(value)}</dd></div>)}
+      {Object.entries(item.proposal.labels.tags).map(([key, value]) => <div key={key}><dt>{enumFieldLabel(key)}</dt><dd>{enumValueLabel(key as EnumField, value)}</dd></div>)}
       {Object.entries(item.proposal.labels.axes).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{value.toFixed(2)}</dd></div>)}
-      {Object.entries(item.proposal.labels.palette_roles).map(([key, value]) => <div key={key}><dt>Color P{key}</dt><dd>{value}</dd></div>)}
+      {Object.entries(item.proposal.labels.palette_roles).map(([key, value]) => <div key={key}><dt>Color P{key}</dt><dd>{paletteRoleLabel(value)}</dd></div>)}
       <dt>Keywords</dt><dd>{item.proposal.labels.keywords.map(pretty).join(', ') || 'No applicable keywords'}</dd>
     </dl></details>
   </div>;

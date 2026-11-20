@@ -20,7 +20,7 @@ describe('CommonsGrid', () => {
       onOpen={() => {}} onDropFiles={() => {}} proposed={new Set(['ast_2'])} />);
     const [first, second] = screen.getAllByRole('option');
     expect(first.querySelector('.commons-badge--proposal')).toBeNull();
-    expect(second.querySelector('.commons-badge--proposal')?.textContent).toBe('proposal');
+    expect(second.querySelector('.commons-badge--proposal')?.textContent).toBe('Proposal');
     expect(second.querySelector('.commons-badge--proposal')?.getAttribute('aria-label')).toBe('An agent proposes changes');
   });
 
@@ -38,7 +38,7 @@ describe('CommonsGrid', () => {
     expect(badge(first).textContent).toBe('Not analyzed');
     expect(first.querySelector('.commons-badge--analysis_failed')).toBeNull();
     expect(badge(second).className).toBe('commons-badge commons-badge--analysis_failed');
-    expect(badge(second).textContent).toBe('failed');
+    expect(badge(second).textContent).toBe('Failed');
     expect(badge(third).className).toBe('commons-badge commons-badge--analysis_failed');
   });
 
@@ -68,7 +68,7 @@ describe('CommonsGrid', () => {
       onOpen={() => {}} onDropFiles={() => {}} proposed={new Set(['ast_2'])} />);
     expect(screen.getByRole('option', { name: 'Lane refs, Not analyzed' })).toBeTruthy();
     expect(screen.getByRole('option', {
-      name: 'Reference ast_2, queued, inbox, An agent proposes changes, video, 2 comments',
+      name: 'Reference ast_2, Queued, Inbox, An agent proposes changes, Video, 2 comments',
     })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Reference ast_3' })).toBeTruthy();
     // What shows is unchanged: the badges' own words.

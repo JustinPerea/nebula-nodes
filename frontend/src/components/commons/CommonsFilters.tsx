@@ -1,5 +1,5 @@
 import { useCommonsDraft } from './commonsDraftsContext';
-import { AXES, AXIS_LABELS, ROLES, ROLE_LABELS, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
+import { AXES, AXIS_LABELS, MEDIA_LABELS, ROLES, ROLE_LABELS, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
 
 interface Props {
   filters: FilterState;
@@ -109,7 +109,7 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
           ))}
         </div>
         <input
-          aria-label="Add keyword" placeholder="Type and press Enter" value={keywordDraft}
+          aria-label="Add keyword" placeholder="Type a keyword, then press Enter" value={keywordDraft}
           onChange={(event) => setKeywordDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -131,8 +131,8 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
         Media
         <select value={filters.media} onChange={(event) => set({ media: event.target.value as FilterState['media'] })}>
           <option value="">Any</option>
-          <option value="image">Image</option>
-          <option value="video">Video</option>
+          <option value="image">{MEDIA_LABELS.image}</option>
+          <option value="video">{MEDIA_LABELS.video}</option>
         </select>
       </label>
       <label className="commons-field">

@@ -13,3 +13,10 @@ describe('CommonsFilters role select', () => {
     ]);
   });
 });
+
+describe('CommonsFilters keyword input', () => {
+  it('asks for a keyword, then Enter', () => {
+    render(<CommonsFilters filters={EMPTY_FILTERS} collections={[]} onChange={() => {}} />);
+    expect(screen.getByLabelText('Add keyword').getAttribute('placeholder')).toBe('Type a keyword, then press Enter');
+  });
+});

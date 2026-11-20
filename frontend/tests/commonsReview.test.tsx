@@ -41,7 +41,7 @@ it('preserves corrections and navigation guard if a stale save fails', async () 
   api.accept.mockRejectedValue(new Error('This review changed in another tab. Reload before saving.'));
   render(<CommonsReview />);
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
-  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
   // Round 18o (GM r51 Q3): the reference buttons lock in place, the status line their reason.
   const reference = screen.getByRole('button', { name: /Reference 01/ }) as HTMLButtonElement;
   expect(reference.disabled).toBe(false);
@@ -51,10 +51,10 @@ it('preserves corrections and navigation guard if a stale save fails', async () 
   expect(screen.queryByText(/Unsaved corrections ·/)).toBeNull();
   fireEvent.click(screen.getAllByText('Save corrections & next')[0]);
   await screen.findByRole('alert');
-  expect((screen.getByLabelText('type style') as HTMLSelectElement).value).toBe('serif');
+  expect((screen.getByLabelText('Type style') as HTMLSelectElement).value).toBe('serif');
   expect(batch().items[0].proposal!.labels.tags.type_style).toBe('none');
   fireEvent.click(screen.getByText('Discard changes'));
-  await waitFor(() => expect((screen.getByLabelText('type style') as HTMLSelectElement).value).toBe('none'));
+  await waitFor(() => expect((screen.getByLabelText('Type style') as HTMLSelectElement).value).toBe('none'));
 });
 
 it('closes only after confirmation, then reloads the review', async () => {
@@ -181,12 +181,12 @@ it('does not generate or accept merely from opening, polling, navigation or edit
   poll();
   fireEvent.click(screen.getByRole('button', { name: /Reference 02/ }));
   fireEvent.click(screen.getByText('Edit grades'));
-  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
   poll();
   await act(async () => Promise.resolve());
   expect(api.propose).not.toHaveBeenCalled();
   expect(api.accept).not.toHaveBeenCalled();
-  expect(screen.getByLabelText('type style')).toHaveValue('serif');
+  expect(screen.getByLabelText('Type style')).toHaveValue('serif');
 });
 
 it('waits for generation to finish before accepting or editing an already-ready grade', async () => {
@@ -239,7 +239,7 @@ it('round 18m (GM r44 1): unsaved corrections lock the opener in place, its line
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
   const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
   act(() => opener.focus());
-  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
   act(() => fixup.current().flush());
   expect(opener.disabled).toBe(false);
   expect(opener.getAttribute('aria-disabled')).toBe('true');
@@ -262,7 +262,7 @@ it('round 18m: while corrections save, the opener is natively disabled for that 
   api.accept.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   render(<CommonsReview />);
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
-  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
   fireEvent.click(screen.getAllByText('Save corrections & next')[0]);
   const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
   expect(opener.disabled).toBe(true);
@@ -279,8 +279,9 @@ it('shows a palette role as a word, with the raw value on the option', async () 
   const value = batch(); value.roles = ['background', 'accent', 'other'];
   api.get.mockResolvedValue(value);
   render(<CommonsReview />);
-  const label = await screen.findByText('Accent');
-  expect(label.tagName).toBe('STRONG');
+  // The current grade (strong) and the agent's original grade (dd) both read the word.
+  const labels = await screen.findAllByText('Accent');
+  expect(labels.map((el) => el.tagName).sort()).toEqual(['DD', 'STRONG']);
   fireEvent.click(screen.getByText('Edit grades'));
   const select = screen.getByLabelText('Role for P0') as HTMLSelectElement;
   expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([

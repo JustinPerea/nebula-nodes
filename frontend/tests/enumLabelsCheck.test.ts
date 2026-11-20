@@ -16,6 +16,18 @@ const bad: Array<[string, string]> = [
   ['a literal "by You" in a template', 'const a = `Added by You on ${d}`;'],
   ['the leading form after "by" in JSX', `const a = <p>Added by {actorLabel(m.actor)}</p>;`],
   ['the leading form after "by" in a template', 'const a = `Added by ${actorLabel(actor)}`;'],
+  ['an option whose text is String(value)', `const a = <option value={role}>{String(role)}</option>;`],
+  ['an option whose text is a template holding only the value', 'const a = <option value={role}>{`${role}`}</option>;'],
+  ['an option whose value and text differ by parentheses and a cast', `const a = <option value={role as Role}>{(role)}</option>;`],
+  ['the leading form after "by" and a {\' \'} spacer', `const a = <p>Added by{' '}{actorLabel(m.actor)}</p>;`],
+  ['the leading form after "by" and a line break', `const a = <p>Added by\n  {actorLabel(m.actor)}</p>;`],
+  ['the leading form through a member callee', `const a = <p>Added by {fmt.actorLabel(m.actor)}</p>;`],
+  ['the leading form in a concatenation', `const a = 'Added by ' + actorLabel(m.actor);`],
+  ['a badge with lower-case text', `const a = <span className="commons-badge commons-badge--inbox">inbox</span>;`],
+  ['a badge showing a stored value', 'const a = <span className={`commons-badge commons-badge--${s.state}`}>{s.state}</span>;'],
+  ['a badge showing a property access', `const a = <span className="commons-badge">{s.source_kind}</span>;`],
+  ['a source badge showing an identifier', 'const a = <span className={`commons-source commons-source--${kind}`}>{label}</span>;'],
+  ['a badge showing a cast value', `const a = <span className="commons-badge">{r.status as string}</span>;`],
 ];
 const fine: Array<[string, string]> = [
   ['an option labelled through a map', `const a = <option key={role} value={role}>{ROLE_LABELS[role]}</option>;`],
@@ -30,6 +42,14 @@ const fine: Array<[string, string]> = [
   ['trash actorLabel on a pinnedBy object', 'const a = actorLabel(choices.pinnedBy);'],
   ['"you" lower-case', `const a = <p>Added by you</p>;`],
   ['"You" leading a sentence', `const a = <p>You added this</p>;`],
+  ['the mid-sentence form through a member callee', `const a = <p>Added by {fmt.actorLabel(m.actor, { midSentence: true })}</p>;`],
+  ['the mid-sentence form in a concatenation', `const a = 'Added by ' + actorLabel(m.actor, { midSentence: true });`],
+  ['a concatenation not after "by"', `const a = 'Name: ' + actorLabel(m.actor);`],
+  ['a badge with a label map lookup', `const a = <span className="commons-badge">{ROLE_LABELS[role]}</span>;`],
+  ['a badge with a helper call', 'const a = <span className={`commons-badge commons-badge--${s}`}>{sourceKindLabel(s.source_kind)}</span>;'],
+  ['a badge with a capitalised literal', `const a = <span className="commons-badge commons-badge--inbox">Inbox</span>;`],
+  ['a badge with a count in a template', 'const a = <span className="commons-badge">{`${n} ✎`}</span>;'],
+  ['lower-case text on an element that is no badge', `const a = <span className="commons-meta">inbox</span>;`],
 ];
 
 describe('check-enum-labels', () => {

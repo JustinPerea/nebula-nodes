@@ -14,6 +14,49 @@ export function paletteRoleLabel(role: string): string {
   return (PALETTE_ROLE_LABELS as Record<string, string>)[role] ?? role;
 }
 export type AnalysisState = 'held' | 'queued' | 'analyzing' | 'analysis_failed' | 'ready';
+/** Capitalise the first letter: how an unknown value from an older or newer backend reads (as itself, not lower case). */
+export function capitalised(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+/** A sighting's source kind (backend commons/db.py CHECK on sightings.source_kind). */
+export type SourceKind = 'file' | 'folder' | 'url' | 'moodboard' | 'agent' | 'keyframe' | 'output';
+export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
+  file: 'File', folder: 'Folder', url: 'Web', moodboard: 'Moodboard', agent: 'Agent', keyframe: 'Keyframe', output: 'Output',
+};
+/** What a person reads for a source kind; one the app doesn't know reads as itself, capitalised. */
+export function sourceKindLabel(kind: string): string {
+  return (SOURCE_KIND_LABELS as Record<string, string>)[kind] ?? capitalised(kind);
+}
+/** A sighting's shown state ('ok' shows no badge). The class modifier stays the raw word; CSS keys on it. */
+export const SIGHTING_STATE_LABELS: Record<'missing_from_folder' | 'archived' | 'superseded', string> = {
+  missing_from_folder: 'Missing', archived: 'Archived', superseded: 'Superseded',
+};
+export type RegionStatus = 'proposed' | 'confirmed' | 'deleted';
+export const REGION_STATUS_LABELS: Record<RegionStatus, string> = { proposed: 'Proposed', confirmed: 'Confirmed', deleted: 'Deleted' };
+/** A borrowing's fidelity status (backend commons/borrow.py); 'pending' stands in when none is recorded yet. */
+export type FidelityStatus = 'pending' | 'pass' | 'fail' | 'unverifiable';
+export const FIDELITY_STATUS_LABELS: Record<FidelityStatus, string> = {
+  pending: 'Pending', pass: 'Passed', fail: 'Failed', unverifiable: 'Unverifiable',
+};
+export function fidelityStatusLabel(status: string): string {
+  return (FIDELITY_STATUS_LABELS as Record<string, string>)[status] ?? capitalised(status);
+}
+/** A folder file's pending device state (backend commons/db.py). */
+export type DeviceState = 'downloading' | 'download_failed';
+export const DEVICE_STATE_LABELS: Record<DeviceState, string> = { downloading: 'Downloading', download_failed: 'Download failed' };
+export function deviceStateLabel(state: string): string {
+  return (DEVICE_STATE_LABELS as Record<string, string>)[state] ?? capitalised(state.replaceAll('_', ' '));
+}
+export type Media = 'image' | 'video';
+export const MEDIA_LABELS: Record<Media, string> = { image: 'Image', video: 'Video' };
+export type MadeBy = 'human' | 'ai' | 'unknown';
+/** The detail line's sentence for who made an asset; the filter's dropdown names the value ("Human", "AI") instead. */
+export const MADE_BY_SENTENCES: Record<MadeBy, string> = {
+  human: 'Made by a person', ai: 'Made by AI', unknown: 'Maker unknown',
+};
+export function madeBySentence(madeBy: string): string {
+  return (MADE_BY_SENTENCES as Record<string, string>)[madeBy] ?? `Made by ${madeBy}`;
+}
 export const AXES = ['quiet_loud', 'warm_cold', 'geometric_humanist', 'dense_airy', 'polished_raw'] as const;
 export type Axis = (typeof AXES)[number];
 export const AXIS_LABELS: Record<Axis, [string, string]> = {
@@ -45,21 +88,29 @@ export const ENUM_VALUE_LABELS: { [F in EnumField]: Record<(typeof ENUMS)[F][num
 };
 /** The label for one enum value; a value the app doesn't know (an older or newer backend) reads as itself. */
 export function enumValueLabel(field: EnumField, value: string): string {
-  return (ENUM_VALUE_LABELS[field] as Record<string, string>)[value] ?? value;
+  return (ENUM_VALUE_LABELS[field] as Record<string, string> | undefined)?.[value] ?? value;
+}
+/** The field names the detail panel shows above each enum select. */
+export const ENUM_FIELD_LABELS: Record<EnumField, string> = {
+  type_style: 'Type style', spacing_density: 'Spacing', layout: 'Layout', medium: 'Medium',
+};
+/** A field key's name for a person: the detail panel's words for an enum field, else the key with spaces. */
+export function enumFieldLabel(key: string): string {
+  return (ENUM_FIELD_LABELS as Record<string, string>)[key] ?? key.replaceAll('_', ' ');
 }
 export const TEXT_FIELDS = ['summary', 'subject', 'composition_notes'] as const;
 export type TextField = (typeof TEXT_FIELDS)[number];
 
 export interface SearchRow {
   id: string; membership_id: string; collection_id: string; collection: string; summary: string | null;
-  role: Role; media: 'image' | 'video'; made_by: string; analysis_state: AnalysisState;
+  role: Role; media: Media; made_by: string; analysis_state: AnalysisState;
   /** Why a failed analysis failed (as AssetDetail's); absent from an older backend. */
   last_error_kind?: string | null; in_inbox: boolean;
   comment_count: number; matched: string[]; score: number; blob_key: string; also_in: string[];
 }
 export interface PaletteEntry { index?: number; hex: string; share: number; is_accent: boolean }
 export interface Region { id: string; box: [number, number, number, number]; label: string; note: string | null;
-  status: 'proposed' | 'confirmed' | 'deleted'; actor: string }
+  status: RegionStatus; actor: string }
 export interface Comment { id: string; actor: string; text: string; created_at: string; source_date: string | null; region: string | null }
 export interface Sighting { id: string; source_kind: string; url: string | null; page_url: string | null;
   page_title: string | null; original_path?: string | null; original_name: string | null; source_date: string | null;
@@ -90,7 +141,7 @@ export interface EffectiveFields {
   [key: string]: unknown;
 }
 export interface AssetDetail {
-  asset: { id: string; media: 'image' | 'video'; width: number | null; height: number | null; made_by: string;
+  asset: { id: string; media: Media; width: number | null; height: number | null; made_by: string;
     analysis_state: AnalysisState; last_error: string | null;
     /** Why the analysis failed, for the person's line (backend commons/analysis_errors.py):
      * 'unavailable' | 'unreadable' | 'other' | 'transparent'; absent from a backend before error-copy round 3. */
@@ -117,8 +168,8 @@ export interface FolderLink { id: string; path: string; ignores: string[]; last_
 
 export interface FilterState {
   query: string; axes: Partial<Record<Axis, [number, number]>>; keywords: string[];
-  paletteHex: string; paletteDeltaE: number; collection: string; media: '' | 'image' | 'video';
-  role: '' | Role; madeBy: '' | 'human' | 'ai' | 'unknown'; correctedOnly: boolean; hasComments: boolean; inbox: boolean;
+  paletteHex: string; paletteDeltaE: number; collection: string; media: '' | Media;
+  role: '' | Role; madeBy: '' | MadeBy; correctedOnly: boolean; hasComments: boolean; inbox: boolean;
 }
 export const EMPTY_FILTERS: FilterState = {
   query: '', axes: {}, keywords: [], paletteHex: '', paletteDeltaE: 10, collection: '', media: '', role: '',

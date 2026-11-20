@@ -193,7 +193,7 @@ describe('a reference whose analysis failed', () => {
     const button = await screen.findByRole('button', { name: 'Re-analyze' });
     const badge = document.querySelector('.commons-detail__bar .commons-badge')!;
     expect(badge.className).toBe('commons-badge commons-badge--analysis_failed');
-    expect(badge.textContent).toBe('failed');
+    expect(badge.textContent).toBe('Failed');
     reanalyze.mockResolvedValue({ queued: true });
     fireEvent.click(button);
     await waitFor(() => expect(reanalyze).toHaveBeenCalledWith('ast_1'));

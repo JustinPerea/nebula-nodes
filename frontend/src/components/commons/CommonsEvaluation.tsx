@@ -14,7 +14,7 @@ import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
-import { paletteRoleLabel } from '../../lib/commonsTypes';
+import { enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
@@ -370,9 +370,9 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
           onClick={() => void saveAccents()}>Save accents & reveal labels</button>{unsavedMark}</div>
       </> : <fieldset disabled={readonly}>
         <small>C1 · STRUCTURE & CHARACTER</small><h3 className="evaluation-step">Describe the visual language.</h3>
-        {Object.entries(batch.fields).map(([key, values]) => <label key={key}>{pretty(key)}<select value={labels.tags[key] ?? ''}
+        {Object.entries(batch.fields).map(([key, values]) => <label key={key}>{enumFieldLabel(key)}<select value={labels.tags[key] ?? ''}
           onChange={(e) => { const tags = { ...labels.tags }; if (e.target.value) tags[key] = e.target.value; else delete tags[key]; change({ tags }); }}>
-          <option value="">Choose one…</option>{values.map((value) => <option key={value} value={value}>{pretty(value)}</option>)}
+          <option value="">Choose one…</option>{values.map((value) => <option key={value} value={value}>{enumValueLabel(key as EnumField, value)}</option>)}
         </select></label>)}
         <h4 className="evaluation-subhead">Character</h4>
         {batch.axes.map((key) => <div className="evaluation-axis" key={key}><label>{pretty(key)} · {labels.axes[key]?.toFixed(2) ?? 'Unanswered'}

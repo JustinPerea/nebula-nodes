@@ -776,7 +776,6 @@ body.app-slava-restraint .commons-badge {
   color: var(--sr-ink-light);
   font-size: 10px;
   letter-spacing: 0.03em;
-  text-transform: uppercase;
   white-space: nowrap;
   transition: color 200ms var(--commons-spring), border-color 200ms var(--commons-spring),
     background-color 200ms var(--commons-spring), transform 200ms var(--commons-spring);

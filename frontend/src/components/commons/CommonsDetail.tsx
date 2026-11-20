@@ -5,7 +5,7 @@ import { wsClient } from '../../lib/wsClient';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { CommonsMedia } from './CommonsMedia';
 import {
-  AXES, AXIS_LABELS, ENUMS, ROLES, ROLE_LABELS, enumValueLabel, TEXT_FIELDS,
+  AXES, AXIS_LABELS, ENUMS, ENUM_FIELD_LABELS, MEDIA_LABELS, REGION_STATUS_LABELS, SIGHTING_STATE_LABELS, capitalised, fidelityStatusLabel, madeBySentence, sourceKindLabel, ROLES, ROLE_LABELS, enumValueLabel, TEXT_FIELDS,
   type AssetDetail, type EnumField, type MembershipDetail, type Region, type Role, type Sighting,
 } from '../../lib/commonsTypes';
 import { showConfirm } from '../../lib/commonsFiles';
@@ -30,17 +30,19 @@ interface Props {
 type Box = [number, number, number, number];
 
 const TEXT_LABELS: Record<string, string> = { summary: 'Summary', subject: 'Subject', composition_notes: 'Composition notes' };
-const ENUM_LABELS: Record<EnumField, string> = {
-  type_style: 'Type style', spacing_density: 'Spacing', layout: 'Layout', medium: 'Medium',
-};
-const SIGHTING_STATE: Record<Sighting['state'], string | null> = {
-  ok: null, missing_from_folder: 'missing', archived: 'archived', superseded: 'superseded',
+const ENUM_LABELS = ENUM_FIELD_LABELS;
+/** The sighting badge: its words (sentence case) and the class modifier, which stays the raw word CSS keys on. */
+const SIGHTING_STATE: Record<Sighting['state'], { modifier: string; label: string } | null> = {
+  ok: null,
+  missing_from_folder: { modifier: 'missing', label: SIGHTING_STATE_LABELS.missing_from_folder },
+  archived: { modifier: 'archived', label: SIGHTING_STATE_LABELS.archived },
+  superseded: { modifier: 'superseded', label: SIGHTING_STATE_LABELS.superseded },
 };
 
 function sourceLabel(source: string | undefined): string | null {
   if (!source) return null;
-  if (source.startsWith('model:')) return `model: ${source.slice(6)}`;
-  return source;
+  if (source.startsWith('model:')) return `Model: ${source.slice(6)}`;
+  return capitalised(source);
 }
 
 function SourceBadge({ source }: { source: string | undefined }) {
@@ -83,7 +85,7 @@ function Membership({ assetId, membership, run }: {
         {membership.brand && <span className="commons-badge">{membership.brand}</span>}
         {membership.in_inbox ? (
           <>
-            <span className="commons-badge commons-badge--inbox">inbox</span>
+            <span className="commons-badge commons-badge--inbox">Inbox</span>
             <button type="button" className="commons-button" onClick={() => run(() => commonsApi.accept(membership.id))}>
               Accept
             </button>
@@ -122,11 +124,11 @@ function Membership({ assetId, membership, run }: {
         <ul className="commons-list">
           {membership.sightings.map((s) => (
             <li key={s.id} className="commons-list__item">
-              <span className="commons-badge">{s.source_kind}</span>
+              <span className="commons-badge">{sourceKindLabel(s.source_kind)}</span>
               <span className="commons-list__text">{s.page_title || s.original_name || s.url || s.original_path || '—'}</span>
               {s.source_date && <span className="commons-meta">{writtenDate(s.source_date)}</span>}
               {SIGHTING_STATE[s.state] && (
-                <span className={`commons-badge commons-badge--${SIGHTING_STATE[s.state]}`}>{SIGHTING_STATE[s.state]}</span>
+                <span className={`commons-badge commons-badge--${SIGHTING_STATE[s.state]!.modifier}`}>{SIGHTING_STATE[s.state]!.label}</span>
               )}
             </li>
           ))}
@@ -325,9 +327,9 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       <div className="commons-detail__bar">
         <span className={`commons-badge commons-badge--${badge.modifier}`}>{badge.label}</span>
         <span className="commons-meta">
-          {asset.media}{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''} · made by {asset.made_by}
+          {MEDIA_LABELS[asset.media]}{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''} · {madeBySentence(asset.made_by)}
         </span>
-        {detail.quarantined && <span className="commons-badge commons-badge--analysis_failed">quarantined</span>}
+        {detail.quarantined && <span className="commons-badge commons-badge--analysis_failed">Quarantined</span>}
         <span className="commons-spacer" />
         <button type="button" className="commons-button" onClick={onClose} aria-label="Close detail">Close</button>
       </div>
@@ -407,7 +409,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <ul className="commons-list" aria-label="Regions">
           {liveRegions.map((r) => (
             <li key={r.id} className="commons-list__item">
-              <span className={`commons-badge commons-badge--region-${r.status}`}>{r.status}</span>
+              <span className={`commons-badge commons-badge--region-${r.status}`}>{REGION_STATUS_LABELS[r.status]}</span>
               <span className="commons-list__text">{r.label}</span>
               {r.status === 'proposed' && (
                 <button type="button" className="commons-link" onClick={() => run(() => commonsApi.patchRegion(r.id, { status: 'confirmed' }))}>
@@ -557,7 +559,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
               const status = b.fidelity?.status ?? 'pending';
               return (
                 <li key={b.id} className="commons-list__item">
-                  <span className={`commons-badge commons-badge--fidelity-${status}`} title={b.fidelity?.reason}>{status}</span>
+                  <span className={`commons-badge commons-badge--fidelity-${status}`} title={b.fidelity?.reason}>{fidelityStatusLabel(status)}</span>
                   <span className="commons-list__text">{b.attribute} → {b.used_in.kind}:{b.used_in.ref}</span>
                   <span className="commons-meta">{actorLabel(b.actor)}</span>
                 </li>

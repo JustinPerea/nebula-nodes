@@ -2,7 +2,7 @@ import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
 import type { AnalysisState, Collection } from './commonsTypes';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
-  held: 'held', queued: 'queued', analyzing: 'analyzing', analysis_failed: 'failed', ready: 'ready',
+  held: 'Held', queued: 'Queued', analyzing: 'Analyzing', analysis_failed: 'Failed', ready: 'Ready',
 };
 
 /** An asset's analysis badge: its label and `commons-badge--<modifier>`. A
