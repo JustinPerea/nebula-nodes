@@ -1,4 +1,4 @@
-"""PR #203 round 20, section 2a: what CI caught on round 19 (81bb9b41).
+"""PR #203, section 2a: what CI caught on (81bb9b41).
 
 1. A spatial value's metadata is never taken for a file. Storing a World
    rewrote every string that named an existing path under OUTPUT_ROOT into an

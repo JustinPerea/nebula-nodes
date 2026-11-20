@@ -1,4 +1,4 @@
-"""Q118's agent support: MCP project_size and its `nebula project size` twin.
+"""Agent support: MCP project_size and its `nebula project size` twin.
 
 Read-only: the open project's size (with the live canvas in it), the save
 limit, whether the person's canvas has paused saving, and what is large,

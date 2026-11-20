@@ -1,6 +1,6 @@
 """Commons refusals: the person reads written copy, agents keep the specific detail.
 
-GM - Design, error-copy round 2: "Raw backend exception text: fix it at the
+Design, error-copy: "Raw backend exception text: fix it at the
 backend. Log str(exc) and send written copy", and, after the coordinator's
 split: "the person/agent split is right. People get the written line and
 agents keep the specific detail. Keep it that way." Uploads gain a machine
@@ -113,7 +113,7 @@ def test_upload_to_a_missing_collection_says_its_code(client):
 
 
 def test_the_frontend_says_the_same_words_for_the_lines_both_sides_use():
-    """GM's 4xx fallback and 413 line are written on both sides of the wire:
+    """Design's 4xx fallback and 413 line are written on both sides of the wire:
     here for refusals the backend words itself, in the frontend for answers
     with no detail. Pin them equal so neither drifts."""
     from pathlib import Path
@@ -151,7 +151,7 @@ def test_link_folder_refusals_are_written_copy(client, tmp_path):
     (tmp_path / "link").symlink_to(real)
     link = client.post("/api/commons/folders", json={"path": str(tmp_path / "link")}, headers=h)
     assert link.status_code == 422
-    assert link.json()["detail"] == "Choose the folder itself, not a shortcut to it."  # GM, round 3
+    assert link.json()["detail"] == "Choose the folder itself, not a shortcut to it."  # Design
 
 
 def _asset(client, h) -> str:
@@ -215,13 +215,13 @@ def test_written_evaluation_reasons_stay_as_they_are(client):
     h = human()
     r = client.post("/api/commons/evaluation/prepare", json={"path": "relative/path"}, headers=h)
     assert r.status_code == 409
-    assert r.json()["detail"] == "Enter the folder's full path, starting with /."  # round 3
+    assert r.json()["detail"] == "Enter the folder's full path, starting with /."  # Design
 
 
 # -- the specific text reaches the terminal ------------------------------------
-# Review of round 2: the backend configures no logging, so `routes.commons`
+# The backend configures no logging, so `routes.commons`
 # inherits the root's WARNING level and a logger.info line is dropped at run
-# time. GM: "Log str(exc)". These tests don't lower the level.
+# time. design: "Log str(exc)". These tests don't lower the level.
 
 def _logged(caplog, needle: str) -> list[logging.LogRecord]:
     return [record for record in caplog.records

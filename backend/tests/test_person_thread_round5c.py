@@ -1,13 +1,13 @@
-"""The Message box thread, round 5c (the final review of #225: the push ledger).
+"""The Message box thread (the final review of #225: the push ledger).
 
-- MEDIUM-1: one agent's churn never evicts another's pushes, and a re-report
+- One agent's churn never evicts another's pushes, and a re-report
   counts only from the session the message was sent to.
-- LOW-1: a reply after the 10-minute cap still answers its message, until the
+- A reply after the 10-minute cap still answers its message, until the
   ledger's own bound (24 h).
-- LOW-2: a message to a listener that expires, ends or stops settles as dropped.
-- LOW-3: past 64 pushes in a session answered ones go first; 64 unanswered in
+- A message to a listener that expires, ends or stops settles as dropped.
+- Past 64 pushes in a session answered ones go first; 64 unanswered in
   span hold a new push (ledger and listener), never dropping the oldest.
-- NIT-1: `nebula reply --node` says what happened when the node was ignored.
+- `nebula reply --node` says what happened when the node was ignored.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def _row(thread, message_id: str) -> dict:
     raise AssertionError(message_id)
 
 
-# -- MEDIUM-1 --------------------------------------------------------------------------------
+# -- one agent's churn never evicts another's pushes --------------------------------
 
 def test_codex_flooding_the_accepted_route_never_evicts_claudes_push(thread):
     """The reviewer's probe: 256+ made-up Codex sessions, then Claude's reply
@@ -76,7 +76,7 @@ def test_a_re_report_counts_only_from_the_session_the_message_went_to(thread):
     assert thread.ledger.peek("app:claude1", "sess-a").reply_to() == mine
 
 
-# -- LOW-1 -----------------------------------------------------------------------------------
+# -- a late reply still answers its message --------------------------------------------
 
 def test_a_late_reply_still_answers_its_message_in_its_project(thread):
     coast = thread.project_id
@@ -108,7 +108,7 @@ def test_a_push_after_a_gap_past_the_cap_starts_a_new_period():
     assert ledger.peek("app:a", "s").reply_to() == "m1"
 
 
-# -- LOW-2 -----------------------------------------------------------------------------------
+# -- a message to a listener that expires settles as dropped ---------------------------
 
 def test_a_message_to_a_listener_that_expires_settles_as_dropped_when_its_window_ends(thread):
     from services import channel_listeners
@@ -117,7 +117,7 @@ def test_a_message_to_a_listener_that_expires_settles_as_dropped_when_its_window
     thread.channel_clock.now += channel_ttl(thread) + 1
     import asyncio
     asyncio.run(thread.main._sweep_channel_listeners())
-    assert _row(thread, mine)["state"] == "sent" and _row(thread, mine)["lapsed"]  # round 5d: lapsed, not dropped
+    assert _row(thread, mine)["state"] == "sent" and _row(thread, mine)["lapsed"]  # Lapsed, not dropped
     thread.channel_clock.now += channel_listeners.LAPSE_WINDOW_SECONDS
     asyncio.run(thread.main._sweep_channel_listeners())
     assert _row(thread, mine)["state"] == person_thread.DROPPED_STATE
@@ -150,7 +150,7 @@ def channel_ttl(thread) -> float:
     return channel_listeners.TTL_SECONDS
 
 
-# -- LOW-3 -----------------------------------------------------------------------------------
+# -- past 64 pushes, answered ones go first --------------------------------------------
 
 def _push(ledger, n: int, agent="app:a", session="s"):
     return ledger.record(agent, session, [(f"m{n}", push_ledger.MESSAGE, "p")])
@@ -204,7 +204,7 @@ def test_the_listener_holds_a_push_at_64_open_ones_and_sends_it_when_one_is_answ
     assert late is not None and "msg_65" in "".join(late.message_ids)
 
 
-# -- NIT-1 -----------------------------------------------------------------------------------
+# -- nebula reply --node says the node was ignored -------------------------------------
 
 def test_nebula_reply_node_says_the_node_was_ignored_when_it_was(capsys):
     from cli.commands import thread as thread_cmd

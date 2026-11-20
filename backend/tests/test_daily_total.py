@@ -1,6 +1,6 @@
 """The daily total for everything that isn't the person (Justin decided,
 2026-10-31): $5 by default, changeable in Settings, and a run that would pass
-it waits for the person's OK as a proposal. GM - Design's lines are pinned
+it waits for the person's OK as a proposal. design's lines are pinned
 here verbatim."""
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ PAID = "gpt-image-1-generate"
 KEY = "X-Nebula-Proposal-Key"
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 
-# GM - Design, 2026-10-31, verbatim (with the clarification: "$5 / day" is
+# Design, 2026-10-31, verbatim (with the clarification: "$5 / day" is
 # simply preselected, no option says "(default)").
 BAR_LEFT = "This would pass the $5 daily total, which has $0.20 left."
 BAR_USED_UP = "This would pass the $5 daily total, which is used up."
@@ -156,7 +156,7 @@ def test_the_combined_reason_puts_the_total_first():
     assert unpriced.wait.bar_line() == "This would pass the $5 daily total, and “Mystery” has no list price."
 
 
-# GM - Design, PR #212 r2, item 4, verbatim (Justin's Q165).
+# Design, PR #212, verbatim (Justin's).
 SKETCH_BAR = "“Mystery” has no list price, so Nebula can’t count it toward the $5 daily total."
 SKETCH_UPDATE = "It has no list price, so Nebula can’t count it toward the $5 daily total."
 SKETCH_AGENT = SKETCH_BAR + " Proposing it for the person’s OK."
@@ -164,7 +164,7 @@ UNPRICED_ONLY = [{"id": "n2", "definitionId": "unpriced", "params": {}}]
 
 
 def test_the_total_alone_makes_an_unpriced_node_ask_even_with_room():
-    """Justin's Q165 (a): with the daily total on, a node with no list price
+    """Justin's (a): with the daily total on, a node with no list price
     always waits for the person's OK, with no per-run limit and room left."""
     decision = _decide(0.4, 0.0, items=UNPRICED_ONLY)
     wait = decision.wait
@@ -199,7 +199,7 @@ def test_the_existing_line_stays_when_the_priced_part_already_passes_the_total()
 
 
 def test_the_existing_line_stays_with_the_per_run_limit_off_too():
-    """Q165: the total alone makes `unpriced` its other reason, so the existing line holds with no per-run limit."""
+    """The total alone makes `unpriced` its other reason, so the existing line holds with no per-run limit."""
     items = [{"id": "n1", "definitionId": "paid", "params": {}}] + UNPRICED_ONLY
     wait = _decide(4.0, 2.0, items=items, settings={"runCostConfirmUsd": None}).wait
     assert wait.over is True and wait.also == agent_spend.ALSO_UNPRICED
@@ -217,7 +217,7 @@ def test_with_the_total_off_an_unpriced_node_is_as_before():
 
 
 def test_a_size_priced_node_still_awaiting_its_input_keeps_its_own_refusal_with_the_total_on():
-    """Q165 is for a node with no list price. One priced by its input's size,
+    """Is for a node with no list price. One priced by its input's size,
     whose size isn't known yet, is refused in its own words (it says what to
     do), not made a proposal that could never be priced."""
     from services import model_pricing
@@ -427,8 +427,8 @@ def _chat_headers():
     return {"Authorization": f"Agent {token}"}, token
 
 
-# A caller that didn't name itself, over the total (round 2 of PR #212: only
-# callers that name themselves get the automatic proposal). GM - Design, 2026-10-31.
+# A caller that didn't name itself, over the total (PR #212: only
+# callers that name themselves get the automatic proposal). design, 2026-10-31.
 NAMELESS = ("This would pass the $5 daily total. Name yourself with NEBULA_AGENT_NAME or --as to send it "
             "as a proposal.")
 
@@ -548,7 +548,7 @@ def test_nebula_spend_prints_it():
     out = io.StringIO()
     with redirect_stdout(out):
         spend.run(Client())
-    # The limit as Settings writes it, used and left to the cent (review 1, NIT-3).
+    # The limit as Settings writes it, used and left to the cent.
     assert ("Daily total, everything that isn't the person, last 24 hours: $5, $3.35 used, $1.65 left"
             in out.getvalue())
 
@@ -564,7 +564,7 @@ def test_the_cli_and_mcp_pass_the_waiting_line_as_it_is():
         code = execute._report(answer)
     assert code == execute.EXIT_WAITING and out.getvalue().splitlines()[0] == AGENTS
     shown = json.loads(mcp_server._run_result(answer, None)[0])
-    # MCP's check-it hint names its own call (GM - Design, 2026-10-31).
+    # MCP's check-it hint names its own call (design, 2026-10-31).
     assert shown["message"] == AGENTS.replace("Check it with nebula proposals.",
                                               'Check it with get_proposal("p_1234abcd").')
     assert shown["dailyTotal"]["usedUsd"] == 4.8 and shown["status"] == "waiting"

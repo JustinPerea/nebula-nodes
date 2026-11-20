@@ -1,4 +1,4 @@
-"""Review 7 of PR #205 (limits MEDIUM-1, MEDIUM-2, LOW-1, LOW-2; GM r16
+"""PR #205 (design
 items 2 and 3): every agent path is measured against Save's limits, "no
 worse" compares measures that never stop early, an Accept that would leave
 the canvas past them is refused on the click (the proposal stays open), and an
@@ -94,7 +94,7 @@ def _measure(api) -> tuple[int, int]:
     return deepest, count
 
 
-# ---- MEDIUM-2: "no worse" never stops early ---------------------------------
+# ---- "no worse" never stops early ---------------------------------
 
 def test_values_an_agent_adds_a_million_to_an_over_count_canvas_is_refused(api, person):
     a = api.graph.add_node("text-input", {"value": "x"})
@@ -153,7 +153,7 @@ def test_the_project_snapshots_count_is_read_when_run_history_puts_it_past(api, 
     assert response.status_code == 413, response.text
 
 
-# ---- MEDIUM-1: every agent path is measured ---------------------------------
+# ---- Every agent path is measured ---------------------------------
 
 @pytest.mark.parametrize("levels, status", [(59, 200), (60, 400)])
 def test_an_agents_new_project_for_file_import_is_measured(api, levels, status):
@@ -260,7 +260,7 @@ def _open_proposal(api, value) -> tuple[str, str]:
 
 
 def test_accept_after_the_canvas_changed_past_saves_count_is_refused_and_the_proposal_stays_open(api, person, monkeypatch):
-    """GM r16 item 2: refused on the click with its code, the agent's answer
+    """Design: refused on the click with its code, the agent's answer
     giving the exact limit; nothing changed; the proposal is still open, and
     Accept works again once the canvas fits."""
     monkeypatch.setattr(api.main, "RESTORE_MAX_GRAPH_VALUES", 400)
@@ -297,7 +297,7 @@ def test_accept_with_the_canvas_unchanged_goes_through(api, person, monkeypatch)
     assert accepted.status_code == 200, accepted.text
 
 
-# ---- LOW-1 / GM r16 item 3: the import's own checks answer with codes -------
+# ---- / design: the import's own checks answer with codes -------
 
 @pytest.mark.parametrize("body, code", [
     ({"nodes": [{"id": "a", "definitionId": "no-such-node", "params": {}}], "edges": []}, "unknown_definition"),

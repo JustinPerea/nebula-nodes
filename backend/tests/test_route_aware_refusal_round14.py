@@ -1,6 +1,6 @@
-"""Round 14 of feat/agent-presence: review 13 and GM - Design's round-14 lines.
+"""feat/agent-presence: design's lines.
 
-M-1. Round 13 refused a Krea node's run when a required field (Aspect ratio,
+Refused a Krea node's run when a required field (Aspect ratio,
 Width, ...) had nothing in it, reading only the definition. Three Krea copies
 run on their maker's own API when that key is set (GPT Image 2.5 Flare and
 Sunburst with an OpenAI key, Grok Imagine 2.0 with an xAI key), and those
@@ -9,13 +9,13 @@ run takes (node_route.select_route, as the router, pricing and the spend gate
 read it): the Krea gateway (a token or the plan) needs every field; a maker's
 API only the fields it sizes by (Seedream on BytePlus: width and height).
 
-L-6. With no usable route (no key, the plan not signed in) no field is named:
+With no usable route (no key, the plan not signed in) no field is named:
 the key or sign-in refusal comes first.
 
-GM - Design, round 14, item 1 (verbatim): typed values use "Set" ("Nothing
+Design (verbatim): typed values use "Set" ("Nothing
 ran. Set a width for “X” first."), pickers keep "Choose".
 
-L-5. The model picker's failure header marks only a failed read of the
+The model picker's failure header marks only a failed read of the
 provider's settings; a missing key and a malformed id say so instead.
 
 Every case runs with fake keys and a fake transport: nothing leaves the machine.
@@ -88,7 +88,7 @@ class Intercepted(Exception):
 @pytest.fixture
 def maker_client(monkeypatch, person, spending_limits_off):
     """The real app, with fake maker keys in its settings; every outgoing
-    request is recorded and stopped before it leaves (review 13's probe)."""
+    request is recorded and stopped before it leaves (probe)."""
     async def fake_send(self, request, *args, **kwargs):
         SENT.append((request.method, str(request.url)))
         raise Intercepted(str(request.url))
@@ -150,14 +150,14 @@ def test_the_krea_gateway_still_needs_the_field(maker_client, definition_id):
 
 
 def test_no_krea_token_says_add_the_token_not_the_field(maker_client):
-    """L-6: Krea 2 Medium with no token: the key line, alone."""
+    """Krea 2 Medium with no token: the key line, alone."""
     body = _execute_node(maker_client, KREA2, {}, "r-krea2-nokey")
     assert body["status"] == "validation_error", body
     lines = [error["person"] for error in body["errors"]]
     assert lines == ["Add a Krea API key in Settings to run this node."], lines
 
 
-# -- review 13's B probes, adapted -------------------------------------------
+# -- B probes, adapted -------------------------------------------
 
 def _keys(pend, monkeypatch, keys):
     monkeypatch.setattr(pend.main, "load_settings", lambda: {"apiKeys": dict(keys)})
@@ -284,7 +284,7 @@ def test_style_training_says_set_a_name(pend, monkeypatch):
     assert [error.person for error in errors] == ["Set a name for “My style” first."]
 
 
-# -- L-5: the model picker's failure header ------------------------------------
+# -- The model picker's failure header ------------------------------------
 
 def _ports(client, definition_id, model):
     return client.post("/api/universal/ports", headers={**PERSON, "Origin": "http://127.0.0.1:5795"},

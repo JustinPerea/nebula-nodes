@@ -1,6 +1,6 @@
-"""scripts/count_agent_turns.py counts orientation turns as GM did (plan v2.7, PR26, §5.10.1).
+"""scripts/count_agent_turns.py counts orientation turns as design did (plan v2.7, PR26, §5.10.1).
 
-One fixture per class, and GM's headless run rebuilt from its table
+One fixture per class, and design's headless run rebuilt from its table
 (docs/agent-runs/2026-10-20-cli-headless.md), which must give 8 of 16.
 """
 from __future__ import annotations
@@ -250,10 +250,10 @@ def test_the_final_reply_is_a_needed_turn(counter):
     assert report["turns"] == 1 and report["orientation"] == 0 and report["rows"][0]["kind"] == "reply"
 
 
-# -- GM's run ---------------------------------------------------------------------
+# -- Design's run ---------------------------------------------------------------------
 
 def gm_run() -> Transcript:
-    """GM's 15 calls and final reply, as docs/agent-runs/2026-10-20-cli-headless.md records them."""
+    """Design's calls and final reply, as docs/agent-runs/2026-10-20-cli-headless.md records them."""
     unrecognized = "Exit code 2\nusage: nebula [--url URL] <command> [options]\nnebula: error: unrecognized arguments: {}"
     return (Transcript()
             .call("nebula projects", text="I'll find your project first.")
@@ -289,7 +289,7 @@ def test_gm_run_gives_8_of_16(counter):
     assert (report["orientation"], report["turns"]) == (8, 16)
     assert report["toolCalls"] == 15 and report["numTurns"] == 16 and "warning" not in report
     assert _kinds(report) == GM_KINDS
-    # GM's breakdown: two help reads, three node lookups... and the usage errors among them.
+    # Design's breakdown: two help reads, three node lookups... and the usage errors among them.
     assert report["helpReads"] == 2 and report["usageErrors"] == 3
     assert report["callsByKind"]["lookup"] == 3
 

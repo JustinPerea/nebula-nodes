@@ -30,7 +30,7 @@ from services.moodboard_brief import apply_to_generator, compose, migrate_board,
 from services.moodboard_store import MoodboardStore, migrate_brief_fields
 from services.output import OUTPUT_ROOT
 
-BLUE = (72, 92, 170)       # #485caa, the colour that took over a GM branch
+BLUE = (72, 92, 170)       # #485caa, the colour that took over a design branch
 ORANGE = (240, 110, 30)
 
 

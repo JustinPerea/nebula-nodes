@@ -1,4 +1,4 @@
-"""Agent cursors, foundations (GM - Design's cursor spec, §2 and §4): the ten
+"""Agent cursors, foundations (design's cursor spec, §2 and §4): the ten
 actions at every agent surface, one cursor per agent session on the person's
 tabs, and the read boundary.
 
@@ -39,7 +39,7 @@ TEN_TEXT = ", ".join(TEN)
 
 
 def REFUSED(value: str) -> str:
-    """GM's line, verbatim (PR #211 r2), echoing the value given."""
+    """Design's line, verbatim (PR #211), echoing the value given."""
     return (f"\u201c{value}\u201d isn\u2019t an action Nebula knows. "
             "Use one of move, look, think, type, click, drag, run, propose, wait or error.")
 MCP_SESSION = {"X-Nebula-Agent-Session": "a1b2c3d4e5f60718"}
@@ -330,7 +330,7 @@ def test_leaving_means_the_same_on_the_backend_and_the_tab():
 
 
 def test_the_no_session_cursor_takes_part_and_carries_its_number_to_the_person():
-    """GM - Design, PR #211 r3: every person-tab event carries the backend's
+    """Design, PR #211: every person-tab event carries the backend's
     number, the plain cursor's too, so a tab never works one out. The agent
     form is untouched."""
     clock = Clock()
@@ -340,7 +340,7 @@ def test_the_no_session_cursor_takes_part_and_carries_its_number_to_the_person()
     person = alone.person_form(event, AGENT, session=None)
     assert person is not event
     assert person["session"] == {"key": alone.session_key(AGENT.id, ""), "ordinal": 1}
-    # And when its cursor came there (r21): person-only, for the stack order.
+    # And when its cursor came there: person-only, for the stack order.
     assert person["since"] == int(clock.now * 1000)
     assert {k: v for k, v in person.items() if k not in ("session", "since", "eventId")} == event
     assert json.dumps(event) == before  # the agent form, byte for byte
@@ -461,7 +461,7 @@ def test_an_agent_log_only_event_has_one_form_for_agents():
     before = dict(event)
     person = presence.person_form(event, AGENT, session="a", shown="type")
     # The same line, with only its id for the person's Agent log (#211
-    # follow-up, LOW-5): the agent form is untouched.
+    # follow-up): the agent form is untouched.
     assert {k: v for k, v in person.items() if k != "eventId"} == event == before
     assert isinstance(person["eventId"], str) and "eventId" not in event
     assert presence.live_sessions(AGENT.id) == []
@@ -518,11 +518,11 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
     })
     assert _presence_frames(api.listener) == [expected]
     # No session: the person's canvas gets the same event plus the backend's
-    # number for the plain cursor (r3), and nothing else differs.
+    # number for the plain cursor, and nothing else differs.
     (plain,) = _presence_frames(api.person_socket)
     plain = json.loads(plain)
     assert plain.pop("session")["ordinal"] == 1
-    assert isinstance(plain.pop("since"), int)  # its arrival, person-only (r21)
+    assert isinstance(plain.pop("since"), int)  # its arrival, person-only
     assert isinstance(plain.pop("eventId"), str)  # the log's id for it, person-only (#211 follow-up)
     assert json.dumps(plain) == expected
 
@@ -550,7 +550,7 @@ def test_decision_4_the_read_boundary_agents_get_the_same_bytes_with_or_without_
         assert reads({**CLAUDE, **session}) == before == reads(CLAUDE)
 
     # Nothing an agent reads names a session or its number anywhere, or a
-    # cursor's arrival (r21).
+    # cursor's arrival.
     for text in [*reads(CLAUDE), *_presence_frames(api.listener)]:
         assert '"session"' not in text and '"ordinal"' not in text and '"since"' not in text
         assert '"eventId"' not in text  # the Agent log's id, person-only (#211 follow-up)
@@ -687,7 +687,7 @@ def test_the_broadcast_helper_sends_one_form_when_they_are_the_same(sockets):
     assert json.loads(api.person_socket.sent[-1])["session"]["ordinal"] == 2
 
 
-# -- NEBULA_AGENT_SESSION for orchestrators (GM - Design, PR #211 r1) ---------
+# -- NEBULA_AGENT_SESSION for orchestrators (design, PR #211) ---------
 
 def test_nebula_agent_session_is_documented_where_an_orchestrator_looks():
     """The CLI help, the skill and MCP-SETUP say how to give each subagent
@@ -718,10 +718,10 @@ def test_nebula_agent_session_is_documented_where_an_orchestrator_looks():
     assert "lowest number free" in skill
 
 
-# -- review 1 and GM's r2 answers ---------------------------------------------
+# -- Design's answers ---------------------------------------------
 
 def test_any_param_value_change_shows_type_through_put_and_apply_and_rename_stays_click(sockets):
-    """GM - Design, PR #211 r2, answer 8: a param value change is `type`
+    """Design, PR #211: a param value change is `type`
     through PUT, edit_canvas or apply; a rename stays `click`. Agents read
     `click` throughout."""
     api = sockets
@@ -761,7 +761,7 @@ def test_any_param_value_change_shows_type_through_put_and_apply_and_rename_stay
 
 
 def test_a_person_form_failure_still_sends_the_agent_form_and_never_500s(sockets, monkeypatch):
-    """Review 1, LOW-1: the person's copy is built apart from the agent form."""
+    """The person's copy is built apart from the agent form."""
     api = sockets
 
     def broken(*args, **kwargs):
@@ -774,7 +774,7 @@ def test_a_person_form_failure_still_sends_the_agent_form_and_never_500s(sockets
     assert pointed.status_code == 200, pointed.text
     # Agents get the agent form. The person's tabs get nothing for a session
     # with no live cursor yet: never a bare form the tab would number 1
-    # (review 2, NIT-3; test_agent_cursor_review2 covers a live one).
+    # (test_agent_cursor_review2 covers a live one).
     frames = [json.loads(t) for t in _presence_frames(api.listener)]
     assert frames and frames[-1]["action"] == "look" and "session" not in frames[-1]
     assert _presence_frames(api.person_socket) == []
@@ -788,8 +788,8 @@ def test_a_person_form_failure_still_sends_the_agent_form_and_never_500s(sockets
 
 
 def test_the_agents_kept_are_bounded_and_a_left_one_goes_with_its_slots():
-    """Review 1, LOW-3: at most SESSION_AGENT_MEMORY agents keep slots.
-    Review 2, LOW-2 (GM - Design, PR #211 r5): only an agent whose cursors
+    """At most SESSION_AGENT_MEMORY agents keep slots.
+    (design, PR #211): only an agent whose cursors
     have all left goes; a live one keeps its numbers, and a new agent past
     the cap gets the plain agent cursor, no session, until room frees."""
     from services.agent_presence import SESSION_AGENT_MEMORY
@@ -817,7 +817,7 @@ def test_the_agents_kept_are_bounded_and_a_left_one_goes_with_its_slots():
 
 
 def test_a_marked_socket_with_the_real_token_is_never_the_persons(api, person):  # noqa: F811
-    """Review 1, M3 (it hung through the socket tests): promote, directly."""
+    """Promote, directly (it hung through the socket tests)."""
     token = person.token
     manager = api.main.ConnectionManager()
 
@@ -838,9 +838,9 @@ def test_a_marked_socket_with_the_real_token_is_never_the_persons(api, person): 
 
 
 def test_every_broadcast_raw_stand_in_must_take_others():
-    """Review 1, LOW-2: a fake that can't take ``others=`` raised a TypeError
+    """A fake that can't take ``others=`` raised a TypeError
     that _show_agent swallowed, so presence events vanished in 40 test files.
-    Review 2, LOW-3: the guard is now a runtime check in conftest.py (after
+    The guard is now a runtime check in conftest.py (after
     every monkeypatch.setattr, and when each test body ends), so every way of
     installing a narrow stand-in is caught, not only the ones a syntax scan
     could read."""
@@ -904,10 +904,10 @@ def test_the_shared_capture_records_both_forms(sockets, broadcast_capture):
     assert person["session"]["ordinal"] == 1 and "session" not in agent
 
 
-# -- round 3 (GM - Design, PR #211 r3) ---------------------------------------
+# -- (design, PR #211) ---------------------------------------
 
 def test_a_refused_clear_keeps_the_old_chat_live_so_the_new_one_is_2_and_keeps_it():
-    """GM r3, answer 3: a /clear whose canvas clear is refused (a run going)
+    """Design: a /clear whose canvas clear is refused (a run going)
     leaves the old chat's cursor live, so the new chat is "Claude · 2" and
     keeps 2 after the old one leaves. No borrowing of the freed 1."""
     clock = Clock()
@@ -1047,7 +1047,7 @@ def test_a_person_tab_gets_the_replay_on_its_hello_and_no_one_else_does(sockets,
 
 
 def test_every_person_form_carries_the_backends_number_and_the_tab_has_no_fallback():
-    """GM r3, answer 4: the backend numbers in every event a person tab gets;
+    """Design: the backend numbers in every event a person tab gets;
     the tab computes none (no `?? 1` or the like)."""
     import pathlib
 
@@ -1114,7 +1114,7 @@ def test_the_replay_puts_a_cursor_whose_node_went_where_the_node_was():
     assert cursor["target"] == {"x": 120.0, "y": 210.0}
 
 
-# -- arrival order (GM - Design, PR #211 r21) --------------------------------
+# -- arrival order (design, PR #211) --------------------------------
 
 def test_each_cursor_carries_when_it_came_to_where_it_is_and_the_replay_keeps_it():
     """Every tab stacks a column by the backend's arrival order, so the same
@@ -1140,7 +1140,7 @@ def test_each_cursor_carries_when_it_came_to_where_it_is_and_the_replay_keeps_it
     clock.now += 1
     assert form("s3", {"x": 10 + ARRIVAL_RADIUS, "y": 10})["since"] == 5_005_000
     # Somewhere new: it arrives now. Two in the same millisecond get two
-    # arrivals, in order (#211 follow-up, LOW-2).
+    # arrivals, in order (#211 follow-up).
     clock.now += 1
     assert form("s3", {"x": 10 + 3 * ARRIVAL_RADIUS, "y": 10})["since"] == 5_007_000
     assert form("s1", {"nodeId": "n2"})["since"] == 5_007_001

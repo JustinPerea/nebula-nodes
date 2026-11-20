@@ -1,23 +1,23 @@
-"""PR #203 round 19, sections 2 and 3: review 18's findings and GM r38.
+"""PR #203, sections 2 and 3: findings and design.
 
-Settings durability (review 18):
-- LOW-1: with no flock, a save never removes another save's fresh temp
+Settings durability:
+- With no flock, a save never removes another save's fresh temp
   file: it waits for it, then refuses (409 settings_busy); a stale one is
   removed. Two real processes with no lock never tear the file.
-- LOW-2: a restore that can't write keeps nothing aside and says so (the
+- A restore that can't write keeps nothing aside and says so (the
   server log and settings.not_restored); a restore whose write fails keeps
   the file aside once, by its hash.
-- NIT-1 and copy-ui LOW-3: a folder at a fixed file name, and a lock wait
+- A folder at a fixed file name, and a lock wait
   past the deadline, are 409s, never 500s.
-- NIT-2 and GM r38 item 4: the copy-folder line names the folder that
+- And design: the copy-folder line names the folder that
   refuses and, when that is above the state folder, the state folder it
   can't make.
-- NIT-7: mutants O1 (the resolved temp of a symlinked settings.json), O19
+- Mutants O1 (the resolved temp of a symlinked settings.json), O19
   (the copy's temp inside the copy folder), O24 (a waiter stops at the
   deadline while another process holds the lock), O26 (an existing
   read-only copy folder).
 
-Copy (review 18 copy-ui NIT-2; GM r38 items 1, 2 and 5):
+Copy (design items 1, 2 and 5):
 - B14: a pass-through ("Through") is named by its label on the card and in
   the log, by the one rule.
 - A node's several needs are one line on the card and in the bubble, ending
@@ -68,7 +68,7 @@ def _popen(code: str) -> subprocess.Popen:
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
-# -- LOW-1: no flock, one fixed temp name ---------------------------------------------
+# -- No flock, one fixed temp name ---------------------------------------------
 
 def test_without_the_lock_a_fresh_temp_file_is_waited_for_never_removed(keyed, monkeypatch, shared_temp_name):
     temp = settings.temp_path_for(keyed)
@@ -168,7 +168,7 @@ B_SAVES = {"apiKeys": {"OPENAI_API_KEY": "sk-from-B-" + "b" * 40}, "favorites": 
 
 @pytest.mark.parametrize("b_ends", ["killed", "finishes"])
 def test_two_saves_with_no_flock_never_tear_the_file_or_lose_a_saved_answer(keyed, tmp_path, b_ends):
-    """Review 18's p8, two real processes whose _locked returns None: A has
+    """p8, two real processes whose _locked returns None: A has
     written its temp file whole and waits before its rename; B, started
     then, finds A's temp and waits (never removes it). A's rename puts its
     own whole file in place; B then saves, or is killed half way through its
@@ -246,7 +246,7 @@ def _within(seconds: float, work):
 
 
 def test_a_waiter_stops_at_the_lock_deadline_while_another_process_holds_it(keyed, lock_held, monkeypatch):
-    """Mutant O24 (review 18 NIT-7): the wait's deadline while the lock is
+    """Mutant O24: the wait's deadline while the lock is
     held, not only while its target keeps changing."""
     monkeypatch.setattr(settings, "LOCK_TIMEOUT_SECONDS", 0.3)
     outcome, refused = _within(20, lambda: settings._locked(keyed))
@@ -256,7 +256,7 @@ def test_a_waiter_stops_at_the_lock_deadline_while_another_process_holds_it(keye
 
 @pytest.mark.parametrize("write", ["put", "delete"])
 def test_a_settings_write_another_nebula_holds_past_the_wait_is_a_409(keyed, lock_held, monkeypatch, write):
-    """Review 18 copy-ui LOW-3: a bare 500 before. GM r38 item 3's line,
+    """A bare 500 before. design's line,
     neutral, with its own code."""
     monkeypatch.setattr(settings, "LOCK_TIMEOUT_SECONDS", 0.3)
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
@@ -280,7 +280,7 @@ def test_a_save_that_meets_another_saves_temp_past_the_wait_is_a_409(keyed, monk
     assert temp.read_bytes() == b"in flight"
 
 
-# -- LOW-2: a restore that can't write ------------------------------------------------
+# -- A restore that can't write ------------------------------------------------
 
 def _aside(folder: Path) -> list[str]:
     return sorted(p.name for p in folder.glob("settings-replaced-*")) if folder.exists() else []
@@ -348,7 +348,7 @@ def test_a_copy_the_start_cant_put_back_is_logged_and_journaled(home_state, keye
     assert notice == {"notice": None}  # only a restore that happened is shown to the person
 
 
-# -- NIT-1: a folder at one of the save's fixed names ---------------------------------
+# -- A folder at one of the save's fixed names ---------------------------------
 
 IN_THE_WAY = ("Nothing was saved because {folder} is a folder, and Nebula needs to put a file there. "
               "Move or rename that folder, then try again.")
@@ -380,7 +380,7 @@ def test_a_folder_at_the_temp_name_beside_a_file_is_written_in_place(keyed, monk
     assert response.status_code == 200 and _parses(keyed)["favorites"] == ["in place"]
 
 
-# -- NIT-2 and GM r38 item 4: the copy-folder line names both folders ------------------
+# -- Design: the copy-folder line names both folders ------------------
 
 TWO_FOLDERS = ("Nothing was saved because Nebula isn’t allowed to change ~/ro, so it can’t make ~/ro/deeper/state, "
                "where it keeps a copy while it saves. Check the permissions of ~/ro, then try again.")
@@ -429,7 +429,7 @@ def test_the_two_folder_line_by_reader(keyed, monkeypatch):
         assert (refusal.status_code, refusal.detail, refusal.fields["code"]) == (409, line, "settings_unwritable")
 
 
-# -- NIT-7: mutants O1, O19, O26 ------------------------------------------------------
+# -- Mutants O1, O19, O26 ------------------------------------------------------
 
 def test_a_symlinked_settings_files_real_temp_is_on_the_deny_list(keyed, tmp_path):
     """Mutant O1: the temp a save of a symlinked settings.json writes is
@@ -441,7 +441,7 @@ def test_a_symlinked_settings_files_real_temp_is_on_the_deny_list(keyed, tmp_pat
     keyed.symlink_to(real)
     assert [p for p in settings.secret_temp_paths() if p.name != settings.TEMP_FOLDER] == [
         settings.temp_path_for(keyed), settings.temp_path_for(real)]
-    assert settings.temp_folder_for(real.parent) in settings.secret_temp_paths()  # round 23b
+    assert settings.temp_folder_for(real.parent) in settings.secret_temp_paths()
     denied = agent_profiles.default_secret_paths()
     assert settings.temp_path_for(real) in denied and settings.temp_path_for(keyed) in denied
 
@@ -457,8 +457,8 @@ def test_the_copys_temp_file_is_inside_the_copy_folder_while_it_holds_the_keys(h
     settings.save_settings({"favorites": ["in place"]})
     copy = settings.backup_path(keyed)
     shared = settings.temp_path_for(copy)
-    [(temp, dir_fd)] = opened  # round 23: the shared name, then the save's process id and a token
-    # round 23b: in the private folder inside the copy folder; round 23c: a
+    [(temp, dir_fd)] = opened  # The shared name, then the save's process id and a token
+    # In the private folder inside the copy folder: a
     # bare name made through that folder's descriptor
     assert dir_fd is not None and temp.name.startswith(shared.name + "-")
     assert settings.is_secret_temp_name(temp.name)
@@ -468,7 +468,7 @@ def test_the_copys_temp_file_is_inside_the_copy_folder_while_it_holds_the_keys(h
 @pytest.mark.unprivileged
 def test_an_existing_copy_folder_nebula_cant_write_is_the_copy_folder_line(home_state, keyed, monkeypatch):
     """Mutant O26: EACCES in an existing 0500 copy folder names that folder
-    (round 18 tested only a state folder with no copy folder yet)."""
+    (tested only a state folder with no copy folder yet)."""
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
     folder = settings.settings_copy_folder()
     folder.mkdir(mode=0o700)
@@ -492,7 +492,7 @@ def test_a_pass_through_is_named_by_its_label_on_the_card_and_in_the_log():
     assert person_line.connect_line("Prompt") == "Connect a prompt to this node, then run it again."
 
 
-# -- GM r38 item 1: several needs, one line -------------------------------------------
+# -- Design: several needs, one line -------------------------------------------
 
 def _card(definition: str, keys: dict[str, str]) -> set[str]:
     errors = validate_graph([GraphNode(id="n1", definitionId=definition, params={})], [], keys)
@@ -580,7 +580,7 @@ def _headers(who: str, chat_turn: dict[str, str]) -> dict[str, str]:
 @WHO
 @pytest.mark.parametrize("definition,label,keys,bubble", [
     # Its first sentence: what's needed. The action is on the card and in the
-    # log (GM, PR #203 r39 item 5).
+    # log (design, PR #203).
     ("flux-kontext", "Hero shot", {"FAL_KEY": "fal-test-fake"}, "“Hero shot” needs a prompt and an image."),
     ("claude-chat", "Hero shot", {}, "“Hero shot” needs messages and your Anthropic API key."),
     # Longer than the bubble holds (MAX_SAY_CHARS): its whole first sentence,
@@ -602,7 +602,7 @@ FLUX3_AT_1_5K = ("flux-3-image", {"_provider": "fal", "resolution": "1.5K"})
 
 @WHO
 def test_a_renamed_nodes_route_line_names_it_once_by_its_label(monkeypatch, bubbles, chat_turn, person, who):
-    """GM r38 item 2: "“Hero shot” can’t run on fal.ai with “Resolution” set
+    """Design: "“Hero shot” can’t run on fal.ai with “Resolution” set
     to 1.5K. …": the label when renamed, never the type's name as well."""
     keys = {"FAL_KEY": "fal-test-fake", "REPLICATE_API_TOKEN": "r8-test-fake"}
     body = _run(monkeypatch, [("text-input", {"value": "a fox"}, None), (*FLUX3_AT_1_5K, "Hero shot")],
@@ -642,7 +642,7 @@ def test_a_line_with_no_name_of_its_own_follows_cant_run(monkeypatch):
         main.cli_graph.nodes.pop("n-r19", None)
 
 
-# -- GM r38 item 5: the restored line, once, for the person ---------------------------
+# -- Design: the restored line, once, for the person ---------------------------
 
 RESTORED_BECAUSE = ("Nebula restored your settings from its saved copy because the last save didn’t finish. "
                     "The file it replaced is kept at {kept}.")

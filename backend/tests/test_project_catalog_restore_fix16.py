@@ -1,17 +1,17 @@
-"""PR #199 fix round 16 (review 14, GM r21 and r22), the backend's part.
+"""PR #199 (design), the backend's part.
 
-- HIGH-1: the nodes a kept tab added or duplicated have tab-local ids. Save
+- The nodes a kept tab added or duplicated have tab-local ids. Save
   as a project (POST /api/projects/recover) renumbers them to backend ids
   (``nN``) with every edge, and answers the mapping (``renumbered``), so the
   tab's later typing reaches the server and an agent's read can't put the
   old value back. A copy recover writes never holds a non-``nN`` id.
-- GM r21, 3: a kept tab's wires arrive only in that snapshot. One the
+- Design: a kept tab's wires arrive only in that snapshot. One the
   server's rules refuse is left out and reported (``droppedWires``), never
   the whole save refused.
-- GM r22, 1 and GM r21, 4: the agents' restore note says "no project is
+- Design and design: the agents' restore note says "no project is
   missing" only when nothing else is said, and reports the open canvas's
   project once.
-- GM r22, 5 (review 14 LOW-1, NIT-1): the kept grace starts again at boot
+- Design: the kept grace starts again at boot
   when a tab kept edits before the restart, and each closed kept tab holds
   its own grace.
 - The project limit on a kept save: the 413 carries ``projectCount``; the
@@ -91,7 +91,7 @@ def _value(snapshot: dict, node_id: str):
     return next(node for node in snapshot["nodes"] if node["id"] == node_id)["data"]["params"].get("value")
 
 
-# -- HIGH-1: renumbered at Save as a project ------------------------------------------------
+# -- Renumbered at Save as a project ------------------------------------------------
 
 def test_high1_typing_in_a_kept_node_survives_save_and_an_agents_read(app):
     client, store, _graph, _state = app
@@ -223,7 +223,7 @@ def test_high1_the_invariant_refuses_a_local_id_before_the_commit(app, monkeypat
     assert set(ProjectStore(store.root).read()["projects"]) == before
 
 
-# -- GM r21, 3: a kept tab's wires the server refuses are left out and said --------------
+# -- Design: a kept tab's wires the server refuses are left out and said --------------
 
 def test_r21_3_refused_wires_are_dropped_and_reported_and_the_good_ones_kept(app):
     client, store, *_ = app
@@ -247,10 +247,10 @@ def test_r21_3_refused_wires_are_dropped_and_reported_and_the_good_ones_kept(app
     mapping = body["renumbered"]
     dropped = {wire["id"]: wire for wire in body["droppedWires"]}
     assert set(dropped) == {"w-img", "w-second", "w-loop", "w-dup"}
-    # The shared kinds (round 17: type and limit, where round 16 said contract).
+    # The shared kinds (type and limit, where said contract).
     assert {wire["id"]: wire["kind"] for wire in body["droppedWires"]} == {
         "w-img": "type", "w-second": "limit", "w-loop": "loop", "w-dup": "duplicate"}
-    # By the copy's ids, with the agents' detail (round 17: no person line).
+    # By the copy's ids, with the agents' detail (no person line).
     assert (dropped["w-loop"]["source"], dropped["w-loop"]["target"]) == (mapping[U3], mapping[U2])
     assert "Incompatible port types" in dropped["w-img"]["detail"]
     assert all("line" not in wire and wire["detail"] for wire in body["droppedWires"])
@@ -284,7 +284,7 @@ def test_r21_3_only_recover_drops_other_saves_still_refuse(app):
     assert saved.status_code == 400 and "Duplicate project connection" in saved.text
 
 
-# -- GM r22, 1 and GM r21, 4: the agents' restore note ---------------------------------------
+# -- Design and design: the agents' restore note ---------------------------------------
 
 _DAMAGED = {"kind": "restored", "reason": "corrupt", "source": "catalog.json.bak", "damagedReadWhole": False,
             "damagedRecordsUnread": False, "projectLimit": 3}
@@ -373,7 +373,7 @@ def test_r21_4_without_a_canvas_line_the_open_project_is_named_with_the_others()
     assert "The project that was open didn't come back" in note
 
 
-# -- GM r22, 5: the kept grace at boot and per tab -------------------------------------------
+# -- Design: the kept grace at boot and per tab -------------------------------------------
 
 class _Clock:
     def __init__(self) -> None:

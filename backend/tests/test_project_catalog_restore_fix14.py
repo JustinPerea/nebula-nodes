@@ -1,6 +1,6 @@
-"""PR #199 fix round 14 (GM r18).
+"""PR #199 (design).
 
-- The limit wording: the agents' note past the limit is GM's sentence, with the real
+- The limit wording: the agents' note past the limit is design's sentence, with the real
   numbers: "The project list has 4 projects, over the limit of 3. Move 2 to
   Recently deleted to make room." (MCP and the CLI print the same note:
   test_project_catalog_restore_fix13).
@@ -51,7 +51,7 @@ def test_q5_agents_read_the_left_out_records_in_plain_text():
     assert "could not be added back" not in note
     three = main_module._catalog_restore_note(_record(["Alpha", "Beta", "Gamma"]))
     assert '"Alpha", "Beta" and "Gamma" weren\'t added back' in three
-    # Review 13 NIT-3 of PR #199: three are named, from four on they're counted.
+    # Of PR #199: three are named, from four on they're counted.
     four = main_module._catalog_restore_note(_record(["Alpha", "Beta", "Gamma", "Delta"]))
     assert "4 projects weren't added back because the project list is at its limit of 500 projects." in four
     assert '"Delta"' not in four
@@ -91,7 +91,7 @@ def test_q5_a_restore_at_the_limit_records_the_readable_records_it_left_out(app,
     assert sorted(p["name"] for p in body["projects"]) == ["Alpha", "Beta", "Gamma"]
     assert restore["notAddedBackLimitCount"] == 2 and restore["projectLimit"] == 3
     assert sorted(row["name"] for row in restore["notAddedBack"] if row["reason"] == "limit") == ["Delta", "Epsilon"]
-    # Epsilon was open: the canvas's line owns it (GM r21 on PR #199, 4), so
+    # Epsilon was open: the canvas's line owns it (design on PR #199, 4), so
     # the left-out line names only Delta, as the person's notice does.
     assert restore["openProjectMissing"] == next(row["id"] for row in restore["notAddedBack"] if row["name"] == "Epsilon")
     assert "\"Delta\" wasn't added back because the project list is at its limit of 3 projects" in restore["note"]

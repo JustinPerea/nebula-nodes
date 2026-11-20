@@ -1,24 +1,24 @@
-"""PR #203 round 14: GM r26 and r27, and review 13.
+"""PR #203: design.
 
-- Review 13, HIGH-1: a settings.json that is exactly `null` fails closed
+- A settings.json that is exactly `null` fails closed
   again, as every other file that isn't an object: GET and every write get
   the 409, and runs don't go through.
-- Review 13, LOW-3 and GM r27 item 3: a file Nebula may not read (no
+- And design: a file Nebula may not read (no
   permission, a folder at the path) gets the same 409, never a 500, and
   start_here answers with the read line.
-- GM r27 item 2: agents read their own line, "Ask the person to fix the
+- Design: agents read their own line, "Ask the person to fix the
   file."; the person keeps "Fix the file, then try again.".
-- Review 13, LOW-2: nothing reloads services.settings; the path is read from
+- Nothing reloads services.settings; the path is read from
   the environment at each call.
-- Review 13, LOW-4: "~" only under a real home folder other than "/".
-- Review 13, NIT-2: `check` is a boolean or a 422.
-- Review 13, MEDIUM-1 and GM r27 item 1: every quoted Krea connection is a
+- "~" only under a real home folder other than "/".
+- `check` is a boolean or a 422.
+- And design: every quoted Krea connection is a
   real option label ("API key", "Krea account").
-- Review 13, copy LOW-5: the Agent Log's refused-run line names up to 3
+- The Agent Log's refused-run line names up to 3
   nodes and counts from 4.
-- Review 13, copy LOW-2 and GM r27 item 5: the CLI counts every free run
+- And design: the CLI counts every free run
   once, and a lone local run is "(local)" beside another class.
-- GM r26 item 5: Replicate's run-failure line says "token".
+- Design: Replicate's run-failure line says "token".
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def home_file(sockets, tmp_path, monkeypatch):  # noqa: F811
     return path
 
 
-# -- review 13, HIGH-1: `null` fails closed, as before round 13 ----------------------------------
+# -- `null` fails closed, as before ----------------------------------
 
 
 def _writes(client):
@@ -97,8 +97,7 @@ def test_no_file_still_reads_as_the_defaults(home_file):
 def test_an_agent_run_fails_closed_on_a_null_file(home_file, monkeypatch, injected, target):
     """A run the gate lets through on a readable file (a free text node; a
     model with its key in the Keychain) doesn't start on a null file: on
-    389a7c76 both went through under the default limits (review 13,
-    HIGH-1)."""
+    389a7c76 both went through under the default limits."""
     monkeypatch.setattr(settings, "_INJECTED_KEYS", injected)
     monkeypatch.setattr(main, "execute_graph", AsyncMock())
     with TestClient(main.app, raise_server_exceptions=False) as client:
@@ -125,7 +124,7 @@ def test_an_agent_run_fails_closed_on_a_null_file(home_file, monkeypatch, inject
             client.delete("/api/graph?force=true", headers=PERSON)
 
 
-# -- review 13, LOW-3; GM r27 item 3: no permission, or a folder at the path ----------------------
+# -- Design: no permission, or a folder at the path ----------------------
 
 
 @pytest.mark.unprivileged
@@ -168,7 +167,7 @@ def test_start_here_says_the_read_line_instead_of_a_500(home_file, content):
     assert f"SPEND: {AGENT_READ}" in printed and f"  {AGENT_READ}" in printed
 
 
-# -- GM r27 item 2: agents read their own line -----------------------------------------------------
+# -- Design: agents read their own line -----------------------------------------------------
 
 
 def test_the_read_line_is_worded_for_who_reads_it(home_file):
@@ -214,7 +213,7 @@ def test_the_read_lines_come_from_one_place_keyed_by_audience():
     assert source.count("Ask the person to fix the file.") == 1
 
 
-# -- review 13, LOW-2: no module reload, the path read at each call -------------------------------
+# -- No module reload, the path read at each call -------------------------------
 
 
 def test_the_settings_path_is_read_at_each_call(tmp_path, monkeypatch):
@@ -236,7 +235,7 @@ def test_no_test_reloads_the_settings_module_and_main_catches_the_imported_class
     assert main.SettingsUnreadable is settings.SettingsUnreadable
 
 
-# -- review 13, LOW-4: "~" only under a real home folder -------------------------------------------
+# -- "~" only under a real home folder -------------------------------------------
 
 
 @pytest.mark.parametrize("home", ["/", "", "."], ids=["root", "empty", "relative"])
@@ -261,7 +260,7 @@ def test_a_tilde_under_a_real_home_folder(tmp_path, monkeypatch):
     assert settings.settings_file_shown() == str((tmp_path / "gone" / "s.json").resolve())
 
 
-# -- review 13, NIT-2: `check` is true or false -----------------------------------------------------
+# -- `check` is true or false -----------------------------------------------------
 
 
 @pytest.mark.parametrize("check", [1, "true", "yes", [1], None], ids=["one", "text", "yes", "list", "null"])
@@ -275,7 +274,7 @@ def test_check_must_be_a_boolean(sockets, monkeypatch, check):  # noqa: F811
                                                            "check": False}).json() == {"status": "updated"}
 
 
-# -- review 13, MEDIUM-1; GM r27 item 1: Krea's connections by their labels -----------------------
+# -- Design: Krea's connections by their labels -----------------------
 
 
 def _connection_heads() -> set[str]:
@@ -312,7 +311,7 @@ def test_every_quoted_connection_is_a_real_label():
     """Every person or agent line that quotes a Krea connection by name
     quotes one the node shows, in the code and the docs alike."""
     heads = _connection_heads()
-    # Round 15 (review 14, copy LOW-3): any quoted name, curly or straight,
+    # Any quoted name, curly or straight,
     # in a sentence that says "connection" or "Choose" (B7: "Choose “API
     # token” or …"; B8: `Switch to the "API token" connection.`), and the bare
     # phrase "the API token" in agent text.
@@ -345,14 +344,14 @@ def test_the_out_of_compute_reason_names_the_api_key_connection():
     assert "→" not in reason and "API token" not in reason
 
 
-# -- review 13, copy LOW-5: the Agent Log's refused-run line, by the shared rule ----------------
+# -- The Agent Log's refused-run line, by the shared rule ----------------
 
 
 @pytest.mark.parametrize("count,line", [
-    # GM, PR #203 r29 item 3: the card's heading, same-named nodes merged.
+    # Design, PR #203: the card's heading, same-named nodes merged.
     (3, "Nebula couldn’t start the run. 3 “GPT Image 2” nodes need your OpenAI API key. "
         "Add it in Settings, then run the nodes again."),
-    # GM r35 item 1: from 4, the count is inside the reason's own sentence
+    # Design: from 4, the count is inside the reason's own sentence
     # (the bar's summary line keeps "4 nodes can’t run here yet.").
     (4, "Nebula couldn’t start the run. 4 nodes need your OpenAI API key. "
         "Add it in Settings, then run the nodes again."),
@@ -386,7 +385,7 @@ def test_the_backend_and_frontend_share_the_count_rule():
     assert (counts_instead(3), counts_instead(4)) == (False, True)
 
 
-# -- review 13, copy LOW-2; GM r27 item 5: every free run counted once ----------------------------
+# -- Design: every free run counted once ----------------------------
 
 
 def _entry(kind, provider=None, label=None, **extra):

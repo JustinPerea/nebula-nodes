@@ -1,4 +1,4 @@
-"""Round 19 of PR #195 (review 18, H-A and H-B): the write fence moves to
+"""PR #195: the write fence moves to
 the backend.
 
 - A canvas tab's graph write (any request with ``X-Nebula-Tab`` on the
@@ -253,7 +253,7 @@ def test_open_and_create_answers_carry_the_canvas_revision(api):
     assert created.json()["canvasRevision"] == _canvas(api)
 
 
-# -- key-level param writes (M-C, L-C) ----------------------------------------
+# -- key-level param writes ----------------------------------------
 
 def test_a_param_write_merges_only_the_keys_it_carries(api):
     node = api.graph.add_node("combine-text", {"separator": ",", "template": "x"}, position={"x": 0, "y": 0})

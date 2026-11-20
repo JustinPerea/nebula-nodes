@@ -1,8 +1,8 @@
-"""The follow-up to PR #114 (GM's r18 rulings and review 17's lows).
+"""The follow-up to PR #114 (design's rulings and lows).
 
 - The cursor bubble for an agent's param change names the card's label in
   quotes ("Set “Text”"), or says nothing when the field has no label. Never
-  a param key (GM: Codex's bubble read "Set value").
+  a param key (design: Codex's bubble read "Set value").
 - L2: a run's own write-backs are run output, not anyone's edit: the Cinema
   shot merge sync and the World Labs recovery/ambiguity syncs carry
   ``runParams`` (the run id), as _sync_params_to_cli_graph's sync does.

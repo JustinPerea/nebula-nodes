@@ -325,11 +325,11 @@ def test_route_docs_describe_pr5_behaviour():
         assert "Hidden settings" in text and "Model Jam · speed" in text, doc
 
 
-# -- Idol: keyless again (PR #203 round 7); the keyed rules stay ------------------
+# -- Idol: keyless again (PR #203); the keyed rules stay ------------------
 
 
 def _keyless_idol() -> dict:
-    """Idol keyless, built from the registry either way (round 7: the first
+    """Idol keyless, built from the registry either way (the first
     live call ran without a token, docs/model-providers/speridlabs/idol.md)."""
     definition = json.loads(json.dumps(REGISTRY["speridlabs-idol"]))
     route = definition["routes"][0]
@@ -358,7 +358,7 @@ def test_describe_node_shows_idols_optional_token_billing_and_whether_it_is_set(
         [route] = body["routes"]
         assert route["keys"] == [] and route["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
         assert route["billing"] == main.hf_space_billing_note(is_set)
-        # Round 7: with the token, propose it.
+        # With the token, propose it.
         assert "(propose_change)" in route["billing"]
     # Only a Space route carries the billing note.
     assert all("billing" not in route for route in TestClient(main.app).get(
@@ -367,7 +367,7 @@ def test_describe_node_shows_idols_optional_token_billing_and_whether_it_is_set(
 
 def test_describe_node_shows_a_keyless_routes_optional_key_and_whether_it_is_set():
     # A token of only invisible characters is unset here too, as it is for the
-    # run gate and the handler (node_route.key_set; review 7 of PR #203, NIT-4).
+    # run gate and the handler (node_route.key_set; PR #203).
     for keys, is_set in (({}, False), ({"HF_TOKEN": "hf_x"}, True), ({"HF_TOKEN": "\ufeff\u200b"}, False),
                          ({"HF_TOKEN": "\ufeffhf_x\n"}, True)):
         [route] = main._describe_routes(_keyless_idol(), keys, lambda _route: [])["routes"]
@@ -376,7 +376,7 @@ def test_describe_node_shows_a_keyless_routes_optional_key_and_whether_it_is_set
 
 
 def test_find_nodes_lists_idol_as_ready_and_free_with_or_without_its_token(real_nodes, monkeypatch):
-    # Round 7: keyless, so ready and free with no token.
+    # Keyless, so ready and free with no token.
     body = real_nodes.get("/api/agent/nodes", params={"query": "idol"}).json()
     row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
     assert row["price"] == "free" and row["runsWith"] and not row.get("missing")
@@ -385,8 +385,8 @@ def test_find_nodes_lists_idol_as_ready_and_free_with_or_without_its_token(real_
     body = TestClient(main.app).get("/api/agent/nodes", params={"query": "idol"}).json()
     row = next(node for node in body["nodes"] if node["id"] == "speridlabs-idol")
     assert row["price"] == "free" and row["runsWith"]
-    # "free" comes with who can bill past the allowance (review r3 L4), as
-    # the token is set now (review 7 of PR #203, LOW-1).
+    # "free" comes with who can bill past the allowance, as
+    # the token is set now (PR #203).
     assert row["billing"] == main.HF_SPACE_BILLING_TOKEN
     other = TestClient(main.app).get("/api/agent/nodes", params={"query": "text input"}).json()
     assert all("billing" not in node for node in other["nodes"])
@@ -399,7 +399,7 @@ def test_start_here_notes_who_can_bill_past_idols_allowance():
         for via in ("mcp", "cli"):
             notes = _start_notes(keys, via=via)
             [note] = [note for note in notes if note.startswith("speridlabs-idol")]
-            # As the token is set now (review 7 of PR #203, LOW-1): never
+            # As the token is set now (PR #203): never
             # "free here" with the token set.
             assert note.startswith("speridlabs-idol: May cost here" if keys else "speridlabs-idol: Free here")
             assert "free here" not in note
@@ -419,7 +419,7 @@ def test_nebula_info_prints_idols_billing_line(monkeypatch, capsys):
     nodes.run_info(client, "speridlabs-idol")
     lines = capsys.readouterr().out.splitlines()
     price = next(index for index, line in enumerate(lines) if line.startswith("PRICE:"))
-    # With the token set, and in the CLI's own words (review 7 of PR #203, LOW-1).
+    # With the token set, and in the CLI's own words (PR #203).
     assert lines[price + 1] == f"BILLING: {main.HF_SPACE_BILLING_TOKEN}".replace("propose_change", "`nebula propose`")
     assert "propose_change" not in lines[price + 1]
     nodes.run_info(client, "text-input")
@@ -437,7 +437,7 @@ def test_nebula_info_names_a_keyed_space_routes_token():
 
 
 def test_nebula_info_names_a_keyless_routes_optional_token():
-    """The keyless half (review r5 LOW-2): passes before and after idol.md's
+    """The keyless half: passes before and after idol.md's
     switch back."""
     keyless = format_node_detail(_keyless_idol())
     assert "Key: none (optional HF_TOKEN)" in keyless
@@ -458,7 +458,7 @@ def test_nebula_keys_counts_a_keyed_space_routes_token():
 
 
 def test_nebula_keys_counts_a_keyless_routes_optional_token():
-    """The keyless half (review r5 LOW-2): passes before and after idol.md's
+    """The keyless half: passes before and after idol.md's
     switch back."""
     from cli.formatter import format_keys
 
@@ -467,7 +467,7 @@ def test_nebula_keys_counts_a_keyless_routes_optional_token():
 
 
 def test_nebula_nodes_prints_idols_billing_line_under_the_table():
-    """Review r4 LOW-1: `nebula nodes` (find_nodes' CLI twin) says who can
+    """`nebula nodes` (find_nodes' CLI twin) says who can
     bill past Idol's allowance, as every other agent surface does; once per
     note, only for a row that runs free here."""
     from cli.formatter import format_agent_nodes
@@ -479,7 +479,7 @@ def test_nebula_nodes_prints_idols_billing_line_under_the_table():
     out = format_agent_nodes([idol_row, text_row], ranked=False)
     billing = [line for line in out.splitlines() if line.startswith("BILLING:")]
     assert billing == [f"BILLING: speridlabs-idol: {cli_note}"]
-    # Review r5 NIT-1: once per note, naming every row that carries it.
+    # Once per note, naming every row that carries it.
     twin = {**idol_row, "id": "idol-2", "name": "Idol 2"}
     out = format_agent_nodes([idol_row, text_row, twin], ranked=False)
     billing = [line for line in out.splitlines() if line.startswith("BILLING:")]

@@ -1,24 +1,24 @@
-"""PR #199 fix round 20, review 18's backend items.
+"""PR #199, backend items.
 
-- handoff-reopen MEDIUM-1: a tab-local node's delete is said, never read from
+- A tab-local node's delete is said, never read from
   an omission. Nebula records which of the person's windows saved each
   tab-local node (``_tabLocalWriters``), and a handoff deletes a renumbered
   node only when its ``deletedNodeIds`` lists it (by the old id or the new
   one) and the window sending it is the one that saved it. Another window's
   handoff, which never had the node, keeps it and the agent's edit.
-- handoff-reopen MEDIUM-3: a node's run result (outputs, state, notes,
+- A node's run result (outputs, state, notes,
   error, batch previews) moves through the handoff as one unit, for every
   node Nebula holds; the newer run wins (node_result_runs), and the result
   goes onto the live graph.
-- handoff-reopen LOW-1: the person's reopen in place keeps a handoff, and
+- The person's reopen in place keeps a handoff, and
   its sync carries ``projectSwitch`` with ``actor`` {"kind": "person",
   "tab"}, so the person's other windows follow and their typing lands.
-- handoff-reopen LOW-2: a renumber moves World Labs recovery checkpoints,
+- A renumber moves World Labs recovery checkpoints,
   paid-start holds, the node's last error and its result landings.
-- handoff-reopen NIT-1: mutants H7 and H13.
-- drops-copy-ui LOW-1, LOW-2: copy names fit 120 code points, and every
+- Mutants H7 and H13.
+- Copy names fit 120 code points, and every
   character matches the same on both sides.
-- drops-copy-ui NIT-2: one rule for "also" in the tab-only note.
+- One rule for "also" in the tab-only note.
 """
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ def _syncs() -> list[dict]:
             if call.args and call.args[0].get("type") == "graphSync"]
 
 
-# -- MEDIUM-1: a delete is said, by the window that saved the node ------------------------------
+# -- A delete is said, by the window that saved the node ------------------------------
 
 def test_m1_another_windows_handoff_keeps_the_duplicate_and_the_agents_edit(app):
     """The reviewer's probe: window B never had the duplicate; its handoff
@@ -274,7 +274,7 @@ def test_m1_after_an_agents_switch_away_its_own_windows_handoff_without_it_drops
     assert _disk_ids(store, delta) == ["n1"]
 
 
-# -- NIT-1, mutant H13: a node World Labs paid state holds isn't deleted -----------------------
+# -- Mutant H13: a node World Labs paid state holds isn't deleted -----------------------
 
 def test_h13_a_deleted_duplicate_a_world_labs_checkpoint_holds_stays_live(app, tmp_path, monkeypatch):
     client, store, *_ = app
@@ -295,7 +295,7 @@ def test_h13_a_deleted_duplicate_a_world_labs_checkpoint_holds_stays_live(app, t
     assert sorted(node["id"] for node in _stored(client, delta)["nodes"]) == ["n1", new]
 
 
-# -- MEDIUM-3: run results move as one unit; the newer run wins -----------------------------
+# -- Run results move as one unit; the newer run wins -----------------------------
 
 def test_m3_the_reviewers_probe_a_result_on_the_duplicate_survives_an_agents_reopen(app):
     client, store, *_ = app
@@ -474,7 +474,7 @@ def test_m3_nebula_notes_each_result_landing_in_the_runs_project(app, monkeypatc
     assert [entry["runId"] for entry in main_module.node_result_runs.entries(delta, "n1")] == ["run-hook"]
 
 
-# -- LOW-1: the person's reopen in place, other windows follow -----------------------------------
+# -- The person's reopen in place, other windows follow -----------------------------------
 
 def test_l1_the_persons_reopen_in_place_tells_other_windows_to_follow(app):
     client, store, *_ = app
@@ -513,7 +513,7 @@ def test_l1_the_persons_open_of_another_project_still_ends_every_handoff(app):
     assert "handoffs" not in store_module.ProjectStore(store.root).read()
 
 
-# -- LOW-2: per-node records follow a renumber --------------------------------------------------
+# -- per-node records follow a renumber --------------------------------------------------
 
 def test_l2_a_world_labs_checkpoint_and_hold_follow_the_boot_renumber(app, tmp_path, monkeypatch):
     """Recover after the renumber finds the checkpoint by the node's new id:
@@ -552,7 +552,7 @@ def test_l2_a_nodes_last_error_and_result_landings_follow_an_open_renumber(app):
     assert main_module.node_result_runs.entries(delta, DUP) == []
 
 
-# -- drops-copy-ui LOW-1, LOW-2: names fit; every character agrees -------------------------------
+# -- Names fit; every character agrees -------------------------------
 
 def test_names_every_shared_case_is_a_valid_name_of_at_most_120_code_points():
     long_cases = [case for case in CASES if len(case["source"]) > 100]
@@ -628,7 +628,7 @@ def test_names_the_recover_answer_keeps_a_long_source_name_whole(app):
     assert answer.json()["project"]["name"] == "Recovered " + "L" * 110
 
 
-# -- drops-copy-ui NIT-2: one rule for "also" ---------------------------------------------------
+# -- One rule for "also" ---------------------------------------------------
 
 @pytest.mark.parametrize("visible", [True, False])
 def test_the_read_and_the_prompt_say_also_by_one_rule(visible):

@@ -1,4 +1,4 @@
-"""The daily total, PR #212 round 2: GM - Design's review (2026-10-31),
+"""The daily total, PR #212: design's review (2026-10-31),
 verbatim. The bar names both reasons when a run also needs the person's OK
 for another one (Accept overrides both), with the nodes and the model by name;
 the cursor says the spec's default on
@@ -42,7 +42,7 @@ def node(node_id: str, definition: str) -> dict:
     return {"id": node_id, "definitionId": definition, "params": {}}
 
 
-# -- the bar names both reasons (GM's answers 1-3) ----------------------------------
+# -- the bar names both reasons (design's answers 1-3) ----------------------------------
 
 def test_a_node_with_no_list_price_is_named():
     one = _decide([node("n1", "paid"), node("n2", "unpriced")], settings={"runCostConfirmUsd": 10})
@@ -63,7 +63,7 @@ def test_a_models_own_per_run_limit_names_the_model():
     assert decision.wait.also == agent_spend.ALSO_MODEL_PER_RUN
     assert decision.wait.bar_line() == (
         "This would pass the $5 daily total and cost more than the $0.50 per-run limit for “FLUX.2 [pro]”.")
-    # The general per-run limit keeps GM's round-1 line.
+    # The general per-run limit keeps design's earlier line.
     general = _decide([node("n1", "paid")], settings={"runCostConfirmUsd": 1})
     assert general.wait.bar_line() == "This would pass the $5 daily total and cost more than $1 per run."
 
@@ -150,7 +150,7 @@ def test_a_held_runs_cursor_has_no_say_of_its_own_and_the_reason_stays_on_the_ba
     assert response.status_code == 202, response.text
     proposal = api.main.canvas_proposals.get(response.json()["proposalId"])
     # The held run's cursor carries no say of its own: the tab draws its default
-    # ("Waiting for your OK") until the node's header says it (GM - Design, PR #212 r2, item 8),
+    # ("Waiting for your OK") until the node's header says it (design, PR #212),
     # and the reason is never the cursor's.
     held = [event for event in said if isinstance(event, dict) and event.get("proposalId") == proposal.id]
     assert len(held) == 1 and held[0].get("say", "") == "" and held[0].get("action") == "propose"
@@ -173,7 +173,7 @@ def test_an_ordinary_proposal_still_says_its_note(api, monkeypatch):
     assert "Make it moodier" in says and "Waiting for your OK" not in says
 
 
-# -- agents get the numbers beside the line (GM's answer 6) ---------------------------
+# -- agents get the numbers beside the line (design's) ---------------------------
 
 def test_nebula_run_prints_the_numbers_beside_the_line():
     from cli.commands import execute

@@ -1,6 +1,6 @@
-"""Error copy round 3g: GM - Design's answers to round 3f's questions, and two fixes.
+"""Error copy: design's answers to questions, and two fixes.
 
-GM, verbatim (2026-10-23):
+Design, verbatim (2026-10-23):
 
 1. "Delete: choose a), make undo complete. While a) builds, ship c) so the
    Delete key doesn't start asking on every delete. It asks only when a node
@@ -34,7 +34,7 @@ from tests.test_error_copy_round3f import BACKEND, _files, _line_beside, card_li
 DEFINITIONS = json.loads((BACKEND / "data" / "node_definitions.json").read_text())
 
 
-# -- GM item 2: a port's label sits in quotes ------------------------------------
+# -- Design: a port's label sits in quotes ------------------------------------
 
 
 def test_the_port_check_catches_each_shape_and_lets_gms_lines_through() -> None:
@@ -49,7 +49,7 @@ def test_the_port_check_catches_each_shape_and_lets_gms_lines_through() -> None:
     ):
         assert port_breaks(line), line
     for line in (
-        # GM's own examples.
+        # Design's own examples.
         "The wire into “Prompt” brings something it can't take.",
         "Connect an image to “Character Refs”.",
         # Rule 6 names no port label: an input in words.
@@ -59,7 +59,7 @@ def test_the_port_check_catches_each_shape_and_lets_gms_lines_through() -> None:
         "Disconnect the extra ones, then run the node again.",
     ):
         assert not port_breaks(line), line
-    # 3f's rules still hold on GM's examples.
+    # 3f's rules still hold on design's examples.
     assert not rule_breaks("The wire into “Prompt” brings something it can't take.")
 
 
@@ -145,7 +145,7 @@ def _port_label(definition_id: str, port_id: str) -> str:
 
 
 def test_identity_edits_lines_name_its_ports_as_it_shows_them() -> None:
-    # "Where a line names a specific port, it becomes GM's second example's form."
+    # "Where a line names a specific port, it becomes design's second example's form."
     assert _port_label("identity-edit", "image") == "Image"
     assert _line_beside("execution/maker_routes_google.py", "identity-edit requires a base image") == (
         "Connect a base image to “Image”, then run the node again.")
@@ -175,7 +175,7 @@ def test_a_numbered_port_keeps_gms_second_example_form() -> None:
     assert connect_line("Prompt") == "Connect a prompt to this node, then run it again."  # rule 6, in words
 
 
-# -- GM's Gemini Omni fix ----------------------------------------------------------
+# -- Design's Gemini Omni fix ----------------------------------------------------------
 
 
 def test_the_gemini_omni_line_closes_the_quote_before_the_comma() -> None:

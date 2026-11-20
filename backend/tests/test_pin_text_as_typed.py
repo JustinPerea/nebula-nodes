@@ -1,10 +1,10 @@
-"""PR #200 fix round 10 (review 9 MEDIUM-1; GM r15 condition 1, r16 answer 3):
+"""PR #200 (design):
 a note, and an agent's reply, are stored exactly as typed; every output strips
 them. No output path carries a control byte (no C0 but \\n and \\t, no DEL, no
 C1, no ESC) for complete, unterminated and nested escape sequences, and random
 bytes. The canvas display's half is frontend/tests/agentPresenceFollowups.r10.test.tsx.
 
-From the reviewer's probe (r9 be/fuzz9.py): its "raw store" half reached 2,409
+From the reviewer's probe (be/fuzz9.py): its "raw store" half reached 2,409
 to 2,962 leaks per path before this round."""
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ PATHS = {
     "API pin (public_pin), the note": lambda t: public_pin(as_pin(t))["text"],
     "API pin (public_pin), the reply": lambda t: public_pin(resolved(t))["reply"]["text"],
     "shown_text, one line": lambda t: shown_text(t, multiline=False),
-    # Review 10 NIT-3: strips on its own, whatever its caller passes.
+    # Strips on its own, whatever its caller passes.
     "agent_start.pins_part (raw pins)": lambda t: "\n".join(row["text"] for row in agent_start.pins_part([as_pin(t)], via="mcp")["open"]),
 }
 
@@ -130,7 +130,7 @@ def test_the_store_keeps_the_note_and_the_reply_byte_for_byte_and_its_outputs_st
             refused += 1
             continue
         stored = next(p for p in store.projection().pins if p["id"] == added["id"])
-        # As typed but for whitespace at its ends (GM r19 answer 1: trimmed, so
+        # As typed but for whitespace at its ends (design: trimmed, so
         # what is saved is what was counted).
         assert stored["text"] == raw.strip() and stored["text"].encode() == raw.strip().encode()
         assert not bad(added["text"])
@@ -157,11 +157,11 @@ def test_a_note_too_long_once_shown_or_as_typed_is_refused(tmp_path):
     with pytest.raises(PinError) as over:
         pins.add_in("x" * (MAX_PIN_TEXT + 1), position={"x": 0, "y": 0}, graph_nodes={})
     assert over.value.detail == "Note must be 280 characters or fewer"
-    assert over.value.extra == {"code": "note_too_long", "limit": 280}  # GM r20 Q1: the person's line by its code
+    assert over.value.extra == {"code": "note_too_long", "limit": 280}  # Design: the person's line by its code
     with pytest.raises(PinError) as hidden:
         pins.add_in("x" + "\x1b[0m" * 281, position={"x": 0, "y": 0}, graph_nodes={})
     assert hidden.value.detail == HIDDEN_TOO_LONG
-    # GM r22 Q3 (fix round 14): counted in hidden characters, never bytes.
+    # Design: counted in hidden characters, never bytes.
     assert hidden.value.extra == {"code": "note_hidden_too_long", "hiddenCharacters": 4 * 281,
                                   "limitCharacters": HIDDEN_TEXT_CHARACTERS}
     with pytest.raises(PinError):
@@ -173,7 +173,7 @@ def test_a_note_too_long_once_shown_or_as_typed_is_refused(tmp_path):
     assert edge["text"] == "y"
 
 
-# GM r12 answer 3 (fix round 11): only what shows counts, in characters as a
+# Design: only what shows counts, in characters as a
 # person sees them; the frontend's noteLength is the same rule (its test
 # shares these cases: agentPresenceFollowups.r11.test.tsx).
 LENGTH_CASES = [
@@ -210,8 +210,8 @@ def test_280_visible_characters_fit_whatever_their_code_points():
     assert ok["text"] == accented
 
 
-# Review 11 MEDIUM-1 and NIT-3, GM r19 answer 1 (fix round 12): the shared
-# corpus (the named cases GM asked for and a seeded fuzz). The frontend's
+# Design: the shared
+# corpus (the named cases design asked for and a seeded fuzz). The frontend's
 # agentPresenceFollowups.r12text.test.ts checks its strip and count against
 # the same file.
 CORPUS = json.loads((Path(__file__).parent / "fixtures" / "pin_text_cases.json").read_text())["cases"]
@@ -227,7 +227,7 @@ def test_the_shared_corpus_shows_and_counts_as_written():
         assert named[name]["note"] == named[name]["typed"] and named[name]["noteLength"] == 1, name
     assert named["text and emoji hearts"]["note"] == "\u2665\ufe0e\u2665\ufe0f"
     assert named["a selector after a letter"]["note"] == "a"
-    # GM r21 (fix round 13): one selector, kept when Unicode lists it for its base.
+    # Design: one selector, kept when Unicode lists it for its base.
     assert named["an ideographic selector"]["note"] == "\u845b\U000E0100" and named["an ideographic selector"]["noteLength"] == 1
     assert named["a ZWJ between letters"]["note"] == "ab"
     assert named["tags without the black flag"]["note"] == "a"
@@ -247,7 +247,7 @@ def test_a_seeded_fuzz_leaves_no_stray_selector_joiner_or_tag_on_any_output():
                 if code == 0x34F:
                     raise AssertionError(repr(typed))
                 if 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF:
-                    # GM r21: one selector, right after a base it is listed for.
+                    # Design: one selector, right after a base it is listed for.
                     assert index and _selector_fits(shown[index - 1], code), repr(typed)
                 if char == "\u200d":
                     assert 0 < index < len(shown) - 1, repr(typed)
@@ -288,7 +288,7 @@ def test_a_payload_in_invisible_marks_is_hidden_text_and_never_reaches_an_agent(
     typed = "go" + "\U000E0100" * 32 + " \u2764\ufe0f\ufe0f"
     made = client.post("/api/canvas/pins", headers=PERSON, json={"text": typed, "nodeId": node})
     assert made.status_code == 201 and made.json()["pin"]["text"] == "go \u2764\ufe0f"
-    # The person's canvas keeps the emoji's FE0F; agents read the bare emoji (GM r23).
+    # The person's canvas keeps the emoji's FE0F; agents read the bare emoji (design).
     assert client.get("/api/canvas/pins", headers=PERSON).json()["pins"][0]["text"] == "go \u2764\ufe0f"
     assert client.get("/api/canvas/pins").json()["pins"][0]["text"] == "go \u2764"
     assert text_length("go \u2764\ufe0f") == 4
@@ -322,7 +322,7 @@ def test_routes_store_as_typed_and_every_answer_journal_and_broadcast_is_strippe
     created = client.post("/api/canvas/pins", headers=PERSON, json={"text": typed, "nodeId": node})
     assert created.status_code == 201, created.text
     pin = created.json()["pin"]
-    # \x85 is NEL, a line break; spaces inside show as typed (GM r19 answer 1).
+    # \x85 is NEL, a line break; spaces inside show as typed (design).
     assert pin["text"] == "say \nline two end \nx"
     assert store.projection().pins[0]["text"] == typed.strip()
     listed = client.get("/api/canvas/pins").json()["pins"][0]
@@ -340,7 +340,7 @@ def test_routes_store_as_typed_and_every_answer_journal_and_broadcast_is_strippe
             assert not bad(item["text"]) and not bad((item.get("reply") or {}).get("text") or "")
 
 
-# PR #200 fix round 11 (review 10 MEDIUM-1): the journal's own data fields
+# PR #200: the journal's own data fields
 # are output paths too. pin.detached and pin.reattached journaled the stored
 # (raw) note. Every pin event, its data and its summary, through the store
 # (detach, reattach) and through the routes and GET /api/canvas/events (what

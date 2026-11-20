@@ -214,7 +214,7 @@ def test_a_snapshot_save_cant_put_a_node_on_the_plan(client, headers):
     opened = client.post(f"/api/projects/{project_id}/open", json={"workspaceRevision": second["workspaceRevision"]},
                          headers=headers)
     assert opened.status_code == 200, opened.text
-    # The open gives a non-nN id Nebula's own (PR #199 round 17), so look for the plan by its param, not its id.
+    # The open gives a non-nN id Nebula's own (PR #199), so look for the plan by its param, not its id.
     assert "zz1" not in main.cli_graph.nodes
     assert not any((node.get("params") or {}).get("_kreaAuth") == "mcp" for node in main.cli_graph.nodes.values())
 
@@ -240,7 +240,7 @@ def test_snapshots_keep_the_persons_billing_and_the_person_may_change_it(client)
     second = new_project(client, "Second", first["workspaceRevision"])
     opened = client.post(f"/api/projects/{project_id}/open", json={"workspaceRevision": second["workspaceRevision"]})
     assert opened.status_code == 200, opened.text
-    # The open gives the snapshot's non-nN id Nebula's own (PR #199 round 17); the billing moves with it.
+    # The open gives the snapshot's non-nN id Nebula's own (PR #199); the billing moves with it.
     node_id = opened.json()["renumbered"]["zz1"]
     assert node_id.startswith("n") and node_id[1:].isdigit()
     assert billing(node_id) == (DUAL, "mcp")

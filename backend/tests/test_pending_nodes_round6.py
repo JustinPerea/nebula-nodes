@@ -1,9 +1,9 @@
-"""Placeholders, round 6 (review 5 of feat/agent-presence, GM - Design's
+"""Placeholders, (feat/agent-presence, design's
 round-6 rulings of 2026-10-26).
 
-Justin, Q133 b: a paid placeholder never runs without the person's
+Justin: a paid placeholder never runs without the person's
 confirmation, and what runs never costs more than the person was shown.
-Review 5, H1: an agent finishing its placeholders while the dialog was open
+An agent finishing its placeholders while the dialog was open
 left nothing for Nebula to hold the run to (no placeholders left, so no
 check), and a pricier model ran at a total nobody saw. A run that carries
 ``confirmedCost`` is now held to it whether or not a placeholder is left.
@@ -149,7 +149,7 @@ def test_the_canvas_measures_an_inline_image_as_the_confirmation_does(pend):
 def test_a_normal_unpriced_node_counts_nothing_on_both_sides(pend, monkeypatch):
     """The dialog shows it as "price not listed" and the button just "Run";
     the listed prices are what the person confirmed, and Nebula holds the run
-    to exactly those (review 5, L5: the same arithmetic as the canvas)."""
+    to exactly those (the same arithmetic as the canvas)."""
     _with_keys(pend, monkeypatch, {"FAL_KEY": "set", "GOOGLE_API_KEY": "set"})
     still = pend.graph.add_node("image-input", {"filePath": "https://example.com/huge.png"})
     upscale = pend.graph.add_node("seedvr2-upscale", {})
@@ -166,7 +166,7 @@ def test_a_normal_unpriced_node_counts_nothing_on_both_sides(pend, monkeypatch):
     assert ok.status_code == 200, ok.text
 
 
-# -- GM round 6, item 5: a status cut to its 140 characters says so ---------------------------------
+# -- Design: a status cut to its 140 characters says so ---------------------------------
 
 def test_a_status_cut_at_140_characters_ends_with_an_ellipsis():
     long = "Writing the hero prompt for three crops at dusk, then the alternates for the lamp room, " \

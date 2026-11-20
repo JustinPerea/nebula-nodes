@@ -1,15 +1,15 @@
-"""PR #198 fix round 4 (review 4 and GM's round-4 rulings, gm-pr198-r4.md, gm-pr198-r5.md).
+"""PR #198 (and design's rulings).
 
 - M2: a Cinema shot run with variations renders its upstream scenes again in
   every pass. Each upstream scene stays protected for the whole shot run and
-  is released when the run ends, stops or fails (review 4's probe
+  is released when the run ends, stops or fails (probe
   "variation pass 2 re-renders an upstream scene unprotected").
 - L1: a shot id made up for a shot that had none never takes over a port a
-  removed shot left on the node (review 4's probe "H1 lenient id meets a
+  removed shot left on the node (probe "H1 lenient id meets a
   dangling port").
 - M1 (the canvas's half): the person's refused scene delete carries which
   shots are rendering (``rendering``), so a multi-select delete can say
-  "Deleted 2 nodes." and GM's kept line instead of a second refusal line.
+  "Deleted 2 nodes." and design's kept line instead of a second refusal line.
 - N2: an import refused while a run is active reads as a line for the person.
 """
 from __future__ import annotations
@@ -210,7 +210,7 @@ def rendering(monkeypatch):
 
 
 def test_a_canvas_run_still_frees_a_scene_once_the_engine_is_done_with_it(api, rendering):  # noqa: F811
-    """Review 3's L2 stays for a run of the graph: only a shot run holds its
+    """Stays for a run of the graph: only a shot run holds its
     upstream scenes to the end (its passes render them again)."""
     client, graph, _sent = api
     node = graph.add_node("cinema-scene", {"scene": _scene("s1", "s2")})
@@ -252,7 +252,7 @@ def test_the_persons_refused_scene_delete_names_the_rendering_shots(api, renderi
     assert reply.status_code == 409
     body = reply.json()
     assert body["detail"] == "Couldn’t delete “Agent scene”. “Shot 2” is still running. Stop the run first."
-    # Review 5 added ``shotIds`` (and ``code``) beside the numbers.
+    # Added ``shotIds`` (and ``code``) beside the numbers.
     assert body["rendering"] == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
     agent = client.delete(f"/api/graph/node/{node}", headers=AGENT)
     assert agent.status_code == 409
@@ -368,7 +368,7 @@ def test_an_import_during_a_run_reads_as_a_line_for_the_person(api, person, monk
 
 
 def test_a_project_with_a_leftover_port_and_its_wire_still_opens(workspace):  # noqa: F811
-    """Saved data is converted, never refused (review 3, H1): a port no shot
+    """Saved data is converted, never refused: a port no shot
     owns (and a wire from it) is left out, and the project opens."""
     client, graph, store, _ = workspace
     a = client.post("/api/projects", json={"name": "A"}).json()

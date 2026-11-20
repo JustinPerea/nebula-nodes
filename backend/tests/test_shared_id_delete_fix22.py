@@ -1,5 +1,5 @@
-"""PR #199 fix round 22, the delete guard scoped to the record's project
-(review 20 LOW-2; GM r34 addendum 2; Justin's answer, 2026-10-31).
+"""PR #199, the delete guard scoped to the record's project
+(design; Justin's answer, 2026-10-31).
 
 Node ids repeat across projects. A World Labs recovery record holds a node
 from deletion only when it is placed in the open project, can't be placed
@@ -8,10 +8,10 @@ record holds nothing here: Delta's own n1 deletes while Alpha's n1 has a
 record, for the person and for agents, and Alpha's record stays.
 Ambiguities and active starts carry no ID and still hold by node id. When
 Nebula still refuses, agents' text is as it was; the person's is the
-record's own line, or GM's shared-id line when Nebula can't identify the
+record's own line, or design's shared-id line when Nebula can't identify the
 record's project.
 
-Since round 23 (review 21 LOW-1; Justin's answer), only the stamp Nebula
+Since (Justin's answer), only the stamp Nebula
 writes with a record releases a node: a record here is "Alpha's" because
 it is stamped with Alpha (``project=``); an unstamped one holds
 (test_world_labs_stamp_fix23 tests the stamp itself).
@@ -34,7 +34,7 @@ from tests.test_project_catalog_restore_fix21 import ENVIRONMENT, _alpha_then_de
 from tests.test_project_catalog_restore_fix17 import _open, _rev  # noqa: E402
 
 OLD_LINE = "“Delta brief” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history."
-# GM r36 item 2 (round 23), verbatim.
+# Design, verbatim.
 UNNAMED = ("Nebula couldn’t delete “Delta brief” because it shares the ID n1 with a World Labs run from a project "
            "Nebula can’t identify. Check that run in Marble before you forget its ID in Run history, then try again.")
 AGENT_DETAIL = ("Cannot delete n1: it has unresolved World Labs paid state. "
@@ -112,8 +112,8 @@ def test_the_open_projects_record_keeps_its_own_line_when_a_duplicate_copied_its
 
 
 def test_a_record_nobody_can_place_is_refused(app, recoveries):
-    """Refused; since round 23 (GM r35, 2) the person reads GM's line in
-    addendum 2's shape (test_project_catalog_fix23); agents' text as before."""
+    """Refused; since (design) the person reads design's line in
+    Shape (test_project_catalog_fix23); agents' text as before."""
     client, *_ = app
     _delta_brief(client)
     _alphas_record(recoveries, run_id="wl-run-nowhere")
@@ -139,7 +139,7 @@ def test_a_run_in_two_other_projects_cant_be_placed_and_is_refused(app, recoveri
     _alphas_record(recoveries)
     refused = _delete(client)
     assert refused.status_code == 409, refused.text
-    # Not the open project's, though whose can't be told: GM's shared-id line, unnamed.
+    # Not the open project's, though whose can't be told: design's shared-id line, unnamed.
     assert refused.json()["detail"] == UNNAMED
     assert _delete(client, CODEX).json()["detail"] == AGENT_DETAIL
     assert "n1" in main_module.cli_graph.nodes
@@ -147,9 +147,9 @@ def test_a_run_in_two_other_projects_cant_be_placed_and_is_refused(app, recoveri
 
 def test_the_shared_id_line_reads_only_the_records_that_hold(app, recoveries):
     """Beside a record whose run two other projects hold (it holds the node),
-    an unstamped seeded record placed by its ID in Alpha holds too (round
-    23: only a stamp releases), and its project can't be identified either:
-    the line is still GM's shared-id line."""
+    an unstamped seeded record placed by its ID in Alpha holds too (only a stamp
+    releases), and its project can't be identified either:
+    the line is still design's shared-id line."""
     client, store, *_ = app
     alpha, _delta = _delta_brief(client)
     with store.transaction() as catalog:
@@ -224,7 +224,7 @@ def test_a_seeded_record_stamped_alpha_lets_deltas_n1_go(app, recoveries):
     client, store, *_ = app
     alpha, _delta = _delta_brief(client)
     # Nebula seeds a record with a run id of its own, which no run history
-    # names, stamped with the canvas it seeded from (round 23).
+    # names, stamped with the canvas it seeded from.
     with store.transaction() as catalog:
         for node in catalog["projects"][alpha]["snapshot"]["nodes"]:
             if node.get("id") == "n1":

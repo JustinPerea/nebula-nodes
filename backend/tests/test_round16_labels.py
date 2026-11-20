@@ -1,4 +1,4 @@
-"""GM - Design, round 16 (2026-10-26), verbatim.
+"""Design (2026-10-26), verbatim.
 
 (b) "When the dialog builds the label, no parens: "Grok Imagine 2.0 via
 xAI", "GPT Image 2.5 Flare via OpenAI". Rows on the gateway keep the card's
@@ -46,7 +46,7 @@ def test_cost_for_names_a_krea_copy_on_its_makers_key_with_via():
 
 
 def test_on_the_gateway_a_key_routed_node_names_the_gateway_with_via():
-    # Round 19 (review 18 L-A, GM's visual pass) replaces round 16's "rows on
+    # (design's visual pass) replaces "rows on
     # the gateway keep the card's own display name" for nodes whose route
     # depends on keys: "Grok Imagine 2.0 via Krea".
     from services.canvas_proposals import cost_for
@@ -124,7 +124,7 @@ def test_two_labels(api):
 
 def test_three_or_more_labels_are_counted(api):
     event = _set(api, GROK, {"aspect_ratio": "16:9", "resolution": "2K", "quality": "high"})
-    # GM, round 18: "Changed N settings" (was "Set N settings").
+    # Design: "Changed N settings" (was "Set N settings").
     assert event["say"] == "Changed 3 settings"
 
 

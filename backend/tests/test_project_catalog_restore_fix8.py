@@ -1,6 +1,6 @@
-"""PR #199 fix round 8 (review 8 and GM r9, with GM's rule (a)).
+"""PR #199 (and design, with design's rule (a)).
 
-HIGH-1 and GM's rule (a): while the person's canvas waits to be saved as a
+And design's rule (a): while the person's canvas waits to be saved as a
 project, every agent write first files it untouched, never opened, and the
 write goes on a new canvas (clear, load) or a copy of it (any other write).
 The matrix: every agent route (HTTP, MCP, CLI; clear, load and five edits)
@@ -271,7 +271,7 @@ def test_n2_a_guard_inside_a_held_transaction_says_busy_not_the_limit(app, monke
             main_module._settle_in_step()
 
 
-# -- L-1 / N-3: the per-canvas reader under damage, itself (review 8's 600 cases) --
+# -- The per-canvas reader under damage, itself (600 cases) --
 
 def _held_entry_for_fuzz(i: int, digest: bool) -> dict:
     nodes = [{"id": f"n{j}", "type": "x", "data": {"params": {"value": f"c{i}-{j}"}}, "position": {"x": j, "y": i}}
@@ -350,10 +350,10 @@ def test_l1_a_held_canvas_whose_content_changed_is_kept_aside_at_filing_and_said
     assert not any(ONLY_W in _values(p) for p in _catalog(store)["projects"].values() if p["name"].startswith("Recov"))
 
 
-# -- L-2: a restore from Recently deleted counts the live waiting canvas --
+# -- A restore from Recently deleted counts the live waiting canvas --
 
 def test_l2_a_restore_never_takes_the_place_the_live_canvas_waits_on(app, monkeypatch):
-    """Fix round 12 (Justin, 2026-10-29: a restore may pass the limit): the
+    """Justin, 2026-10-29 (a restore may pass the limit): the
     waiting canvas takes the freed place first, as the listing after a
     delete does, and the restore then passes the limit (4 of 3)."""
     client, store, graph, state = app
@@ -367,7 +367,7 @@ def test_l2_a_restore_never_takes_the_place_the_live_canvas_waits_on(app, monkey
     assert [p["name"] for p in _catalog(store)["projects"].values() if ONLY_W in _values(p)] == ["Recovered canvas"]
 
 
-# -- N-1: the held canvases' kept files are pruned, never one the note names --
+# -- The held canvases' kept files are pruned, never one the note names --
 
 def test_n1_old_kept_held_files_are_pruned_by_the_catalogs_bound(tmp_path):
     store = store_module.ProjectStore(tmp_path / "projects")
@@ -391,7 +391,7 @@ def test_n1_old_kept_held_files_are_pruned_by_the_catalogs_bound(tmp_path):
     assert unfileable.exists() and migrated.exists()
 
 
-# -- GM r9: the held canvases' notice is closed with × (the person's only) --
+# -- Design: the held canvases' notice is closed with × (the person's only) --
 
 def test_gm_r9_the_held_canvases_notice_is_closed_by_the_person_only(app, monkeypatch):
     client, store, graph, state = app
@@ -413,17 +413,17 @@ def test_gm_r9_the_held_canvases_notice_is_closed_by_the_person_only(app, monkey
     _restart(monkeypatch, state, store)
     assert client.get("/api/projects", headers=PERSON).json().get("canvasHeldUnreadable") is None
     assert json.loads((store.held_dir / store_module.CANVAS_HELD_NOTE_NAME).read_text())["kept"]
-    # A new loss is a new note, shown again, counting only itself (review 9,
-    # nit 2, fix round 9: the person closed the one before).
+    # A new loss is a new note, shown again, counting only itself
+    # (the person closed the one before).
     store._note_held_lost(1, ["x"])
     assert client.get("/api/projects", headers=PERSON).json()["canvasHeldUnreadable"]["count"] == 1
 
 
-# -- GM's answer 1 to review 8: the restore notice names every canvas filed --
+# -- Design's answer: the restore notice names every canvas filed --
 
 def test_gm_answer1_a_canvas_filed_while_the_notice_shows_joins_it_with_no_toast(app, monkeypatch):
     """The restore's own canvas is its recoveredCanvas; the copy an agent's
-    edit made, filed while the notice shows, is the agent's (GM r11, 4:
+    edit made, filed while the notice shows, is the agent's (design:
     `agentCopies`, never `alsoFiled`) and gets no toast. Once the notice is
     closed, a later filing's toast says "Another"."""
     client, store, graph, state = app

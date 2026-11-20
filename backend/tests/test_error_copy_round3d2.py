@@ -1,6 +1,6 @@
-"""Error copy round 3d, part 2: the status comes from the call, not the text.
+"""Error copy: the status comes from the call, not the text.
 
-Round 3d's table found a provider's HTTP status by searching the error text,
+Table found a provider's HTTP status by searching the error text,
 provider bodies included. That read facts out of free text again (the bug 3c
 fixed): a presigned storage upload's 403 read as a refused key, and "Prompt is
 too long: 500 characters over" read as provider trouble. Now:
@@ -12,7 +12,7 @@ too long: 500 characters over" read as provider trouble. Now:
   matched by its wording; it never takes the key, busy or trouble lines, and
   the classifier never calls it ``auth``.
 - A status written in text alone never selects a table line.
-- A fal.ai stream job still running when Nebula stops polling gets GM's
+- A fal.ai stream job still running when Nebula stops polling gets design's
   slow-job line.
 - The id guard catches "gen4_turbo", "MiniMax-Hailuo-02", "nano-banana-pro"
   and "owner/name".

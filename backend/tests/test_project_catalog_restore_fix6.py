@@ -1,20 +1,20 @@
-"""PR #199 review 6: what fix round 6 makes true (2026-10-28).
+"""PR #199: what makes true (2026-10-28).
 
-- M-1. One guard at the graph-write fence covers every agent write while
+- One guard at the graph-write fence covers every agent write while
   the live canvas waits to be saved as a project: at the limit refused (409
-  ``canvas_waiting``, GM's line), below it the canvas is held aside first.
+  ``canvas_waiting``, design's line), below it the canvas is held aside first.
   The person's own writes pass. Every route marked ``graph_write`` goes
-  through it, checked by sending each one a request (N-6).
-- L-1. canvas-held.json is read entry by entry; a damaged copy is kept aside
+  through it, checked by sending each one a request.
+- canvas-held.json is read entry by entry; a damaged copy is kept aside
   before anything rewrites it, and a canvas that may be lost is said.
-- L-2. A failed open never gives its hold back, even when its rollback
+- A failed open never gives its hold back, even when its rollback
   failed too; the digest check drops a copy only while state.json is that
   canvas too.
-- L-3. The listing carries the backend's own restore verdict, held canvases
-  counted, and how many deletes really free a place (GM's answer 3).
-- L-5. A commit number carries a CRC (``commitCheck``): a flipped digit is
+- The listing carries the backend's own restore verdict, held canvases
+  counted, and how many deletes really free a place (design's).
+- A commit number carries a CRC (``commitCheck``): a flipped digit is
   unproven and never outranks the side file.
-- N-1 / N-2 / N-3 / N-5: the agents' "room now" note, every canvas named,
+- The agents' "room now" note, every canvas named,
   the Agent log row's agent, the held file's cap.
 """
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _png() -> bytes:
             + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
 
-# -- M-1: every agent write while the canvas waits -----------------------------------
+# -- Every agent write while the canvas waits -----------------------------------
 
 
 def _agent_writes(graph) -> dict[str, tuple[str, str, dict]]:
@@ -121,7 +121,7 @@ def test_m1_gm_lines_verbatim():
 
 
 def test_m1_the_reviewers_repro_codex_empties_the_canvas_then_a_slot_frees(app, monkeypatch):
-    """Review 6's WAITX: Codex's apply removes every node and adds its own;
+    """WAITX: Codex's apply removes every node and adds its own;
     then the person deletes a project. The person's canvas is saved intact,
     and Codex's scratch node is nowhere."""
     client, store, graph, state = app
@@ -145,7 +145,7 @@ def test_m1_below_the_limit_an_agent_write_holds_the_canvas_first(app, monkeypat
     main_module.manager.broadcast_raw.reset_mock()
     response = client.request(method, path, headers=CODEX, **kwargs)
     assert response.status_code == 200, response.text
-    # GM's rule (a) (fix round 8): the person's canvas is filed untouched
+    # Design's rule (a): the person's canvas is filed untouched
     # first, never opened, and the write goes on a copy (here the copy waits:
     # the one free place went to the person's canvas).
     assert response.json()["savedCanvas"]["name"] == "Recovered canvas"
@@ -169,7 +169,7 @@ def test_m1_two_agent_writes_at_once_hold_the_canvas_once(app, monkeypatch):
         response = client.post("/api/graph/node", headers=CODEX,
                                json={"definitionId": "text-input", "params": {"value": value}})
         statuses.append(response.status_code)
-    # Fix round 8 (GM's rule (a)): the first files the person's canvas once;
+    # (design's rule (a)): the first files the person's canvas once;
     # the second is on the copy, which waits at the limit, so it is refused.
     assert statuses == [200, 409]
     assert _held(store) == []
@@ -201,7 +201,7 @@ def _fill(path: str) -> str:
 
 
 def test_n6_every_graph_write_route_goes_through_the_guard(app, monkeypatch):
-    """Review 6, N-6: every route marked graph_write, found from the router
+    """Every route marked graph_write, found from the router
     (so a new one is covered by construction), refuses an agent's request
     with canvas_waiting while the canvas waits at the limit, before its own
     checks run; the canvas stays as it was."""
@@ -229,7 +229,7 @@ def test_n6_every_graph_write_route_goes_through_the_guard(app, monkeypatch):
             assert response.status_code == 409 and response.json().get("code") == "canvas_waiting", \
                 (method, route.path, response.status_code, response.text[:200])
             seen += 1
-    assert seen >= 20  # 26 at fix round 6
+    assert seen >= 20  # 26 at
     assert _live_values(graph) == before and _held(store) == []
 
 
@@ -245,12 +245,12 @@ def test_m1_mcp_tools_say_the_refusal_with_its_code(app, monkeypatch):
     assert ONLY_W in _live_values(graph)
 
 
-# -- L-1 / N-5: canvas-held.json ------------------------------------------------------
+# -- canvas-held.json ------------------------------------------------------
 
 
 def _held_one(client, store, graph, state, monkeypatch) -> list[str]:
-    """One canvas held, as fix round 6 kept it: canvas-held.json and its
-    .bak (fix round 7 moves it into canvas-held/ on the next read, through
+    """One canvas held, as it was kept: canvas-held.json and its
+    .bak (the next read moves it into canvas-held/, through
     the same tolerant reader these tests damage)."""
     ids = _waiting(client, store, graph, state, monkeypatch)
     opened = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
@@ -323,7 +323,7 @@ def test_l1_an_entry_whose_canvas_cant_be_read_is_counted_and_the_others_kept(ap
     assert listing["canvasNotFiled"]["heldUnreadable"]["count"] == 1
     assert listing["canvasHeldUnreadable"]["count"] == 1
     assert "project.canvasHeldUnreadable" in kinds
-    # Moved into canvas-held/ (fix round 7): the good canvas in its own two
+    # Moved into canvas-held/: the good canvas in its own two
     # copies, the lost one nowhere, the note kept beside them.
     assert store._held_ids_on_disk() == {good["projectId"]}
     assert all(path.exists() for path in store.held_paths(good["projectId"]))
@@ -344,15 +344,15 @@ def test_l1_main_copy_damaged_and_the_bak_whole_loses_nothing_and_says_nothing(a
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-# fix round 7 (review 7, L-3): no shared cap. The per-canvas cap, for agents
+# No shared cap. The per-canvas cap, for agents
 # only, is tested in test_project_catalog_restore_fix7.py.
 
 
-# -- L-2: a failed open keeps its hold ------------------------------------------------
+# -- A failed open keeps its hold ------------------------------------------------
 
 
 def test_l2_an_open_whose_rollback_fails_too_keeps_the_hold_and_files_it_after_a_restart(app, monkeypatch):
-    """Review 6's H5: the rename fails and so does the rollback's save
+    """The rename fails and so does the rollback's save
     (507): state.json holds B, memory the waiting canvas, the hold is the
     only copy of it on disk. It stays, a listing before the restart doesn't
     drop it (state.json isn't that canvas), and once a slot frees it is saved."""
@@ -392,14 +392,14 @@ def test_l2_no_hold_is_ever_released_by_name():
     assert "_release_hold" not in source
 
 
-# -- L-3: the restore verdict, gone (fix round 12) ---------------------------------
+# -- The restore verdict, gone ---------------------------------
 # Justin, 2026-10-29: a restore from Recently deleted may pass the project
 # limit, so the listing carries no `restoreRoom` verdict and a held canvas
 # holding the last place never refuses a restore.
 
 
 def test_l3_a_held_canvas_in_the_last_place_no_longer_refuses_a_restore(app, monkeypatch):
-    """Review 6's H8 case: the size cap keeps the held canvas held, so the
+    """Case: the size cap keeps the held canvas held, so the
     list shows 2 of 3. The restore lands (3 of 3), and the held canvas still
     waits, nothing in it lost."""
     client, store, graph, state = app
@@ -434,7 +434,7 @@ def test_l3_at_the_limit_with_a_canvas_held_a_restore_passes_and_a_create_is_ref
     assert created.status_code == 413 and created.json()["limit"] == "projects"
 
 
-# -- L-5: a flipped commit digit -----------------------------------------------------
+# -- A flipped commit digit -----------------------------------------------------
 
 
 def _flip_digit(path: Path, key: bytes, value: int, to: int) -> None:
@@ -483,7 +483,7 @@ def test_l5_the_control_and_every_commit_carries_its_check(tmp_path):
     assert _where(ProjectStore(store.root).read(), x) == "gone"
 
 
-# -- N-1 / N-2 ---------------------------------------------------------------------
+# -- the room-now note and the waiting canvases listed -------------------
 
 
 def test_n1_the_room_now_note_says_only_a_listing_saves_them(app, monkeypatch):

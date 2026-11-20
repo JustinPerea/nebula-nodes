@@ -1,4 +1,4 @@
-"""Review 7 of PR #205 (limits MEDIUM-3): the backend counts a canvas's Save
+"""PR #205: the backend counts a canvas's Save
 file as the person's Save does (frontend serializeGraph + its walk), value for
 value, so an agent's edit the backend accepts is one Save can save. The
 frontend's tests/saveCountParity.pr205r8.test.ts reads the same canvases and

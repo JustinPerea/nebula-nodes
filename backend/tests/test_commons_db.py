@@ -173,7 +173,7 @@ def test_empty_existing_sqlite_file_is_initialized(tmp_path):
 def _historical_ddl(version: int) -> str:
     # Verified against 27972325 (v1), fda31973 (v2), 99b873d0 (v3),
     # f26ee86f (v4): only these tables and nullable columns were added.
-    # assets.last_error_kind (error-copy round 3) came after v4 and stays v4:
+    # assets.last_error_kind (error-copy) came after v4 and stays v4:
     # an additive nullable column, so no released schema has it.
     ddl = DDL.replace("  last_error_kind TEXT,\n", "")
     if version < 4:

@@ -1,13 +1,13 @@
-"""Placeholders, round 5 (review 4 of feat/agent-presence, GM - Design's
+"""Placeholders, (feat/agent-presence, design's
 round-5 rulings of 2026-10-25).
 
-Justin, Q133 b: a paid placeholder never runs without the person's
+Justin: a paid placeholder never runs without the person's
 confirmation, and what runs never costs more than the person was shown.
-Review 4 found the backend's own estimate of the person's run left out a
-price read from an input's size (H1), refused forever when the tab and the
-server priced with different keys (M1), and let a confirmation without a
-total through at any cost (M4); the comparison rounded differently from the
-canvas (L1). The refusal now carries Nebula's own estimate, so the canvas
+Found the backend's own estimate of the person's run left out a
+price read from an input's size, refused forever when the tab and the
+server priced with different keys, and let a confirmation without a
+total through at any cost; the comparison rounded differently from the
+canvas. The refusal now carries Nebula's own estimate, so the canvas
 re-asks with it instead of a dead end.
 """
 from __future__ import annotations
@@ -186,7 +186,7 @@ def test_the_estimate_multiplies_then_rounds(pend, monkeypatch):
     assert main._run_estimate_high(nodes, edges, passes=4) == pytest.approx(round(0.00001256 * 4, 6))
 
 
-# -- L3 (GM, round 5): a shot's refusal ends with the shot panel's words ----------------------------
+# -- L3 (design): a shot's refusal ends with the shot panel's words ----------------------------
 
 def test_a_shots_refusal_says_generate_again(pend):
     ids = _paid_chain(pend)

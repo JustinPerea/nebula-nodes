@@ -1,4 +1,4 @@
-"""A Commons curation proposal posts an Update too (Justin's Q92 a, 2026-10-21).
+"""A Commons curation proposal posts an Update too (Justin's, 2026-10-21).
 
 The words follow the line above the Commons grid (CommonsProposalsLine:
 "asks to change a reference"). No Commons text in it: not the proposed
@@ -50,7 +50,7 @@ def test_several_edits_and_an_inbox_ask_use_the_lines_words(cx, canvas_project):
 
 
 def test_the_updates_ref_counts_the_edits_never_their_values(cx, canvas_project):
-    """PR #200 follow-up 2 (review 20 NIT-3): the count a held tab's placeholder
+    """PR #200 follow-up 2: the count a held tab's placeholder
     shows comes from the ref, not from the text an agent's name is part of."""
     _propose(cx, {"edits": [
         {"correction": {"field_path": "type_style.value", "value": "serif"}},
@@ -65,7 +65,7 @@ def test_the_updates_ref_counts_the_edits_never_their_values(cx, canvas_project)
 
 
 def test_an_inbox_ask_says_so_in_the_ref_and_nothing_else_does(cx, canvas_project):
-    """GM, PR #202 r1: the held Commons line words an inbox ask as the promoted
+    """Design, PR #202: the held Commons line words an inbox ask as the promoted
     line does, from the ref (``inbox: true``), never from the Update's text."""
     _propose(cx, {"membership": {"id": cx.inbox_membership, "accept": True}}, target=cx.inbox)
     _propose(cx, {"correction": {"field_path": "summary", "op": "set", "value": "A quiet grid poster"}})
@@ -75,7 +75,7 @@ def test_an_inbox_ask_says_so_in_the_ref_and_nothing_else_does(cx, canvas_projec
 
 
 def test_a_fallback_to_the_older_ask_rewrites_the_words_with_the_count(cx, canvas_project):
-    """PR #202 review 1 LOW-1 (GM's ruling on its Q1): when the agent's newer
+    """PR #202 (design's ruling on its): when the agent's newer
     ask on a reference closes and its Update falls back to the older, open
     one, the Update's words change in place with its ref: both say the older
     ask, so the corner, a held tab's line and its placeholder agree."""
@@ -94,7 +94,7 @@ def test_a_fallback_to_the_older_ask_rewrites_the_words_with_the_count(cx, canva
     (after,) = _proposal_notes(canvas_project)
     assert after["id"] == note["id"] and not after.get("resolvedAt")
     assert after["text"] == "Asks to make 3 changes to a reference in the Commons"
-    # PR #202 review 2 LOW-A: ``since`` is the older ask's createdAt now, so a held tab orders by it.
+    # PR #202: ``since`` is the older ask's createdAt now, so a held tab orders by it.
     assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.poster, "changes": 3,
                                  "since": older["createdAt"], "asks": 1, "firstSince": older["createdAt"]}
     assert after["actions"][0]["op"]["proposalId"] == older["id"]
@@ -117,7 +117,7 @@ def test_a_fallback_to_an_inbox_ask_says_so_in_words_and_ref(cx, canvas_project)
 
 
 def test_a_fallback_keeps_a_read_update_read(cx, canvas_project):
-    """PR #202 review 2 NIT-B: the in-place change keeps the read state the
+    """PR #202: the in-place change keeps the read state the
     person left (read here), so the corner's count doesn't move."""
     older = _propose(cx, {"edits": [
         {"correction": {"field_path": "type_style.value", "value": "serif"}},

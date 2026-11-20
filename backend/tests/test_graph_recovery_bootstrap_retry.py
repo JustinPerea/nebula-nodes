@@ -1,10 +1,10 @@
-"""Round 14 of PR #114: the canvas-replacement paid guard.
+"""PR #114: the canvas-replacement paid guard.
 
-1. Review 13, nit 7: `_reject_graph_replacement_during_paid_start` reads the
+1. `_reject_graph_replacement_during_paid_start` reads the
    ambiguity list once, so its rule is literally the pre-round-13 one. Before,
    an ambiguity acknowledged between two reads while a recovery record existed
    let the replacement through (the reviewer's probe F); b2b1529e refused it.
-2. The bootstrap retry path (coordinator's round 14 decisions, Justin's
+2. The bootstrap retry path (coordinator's decisions, Justin's
    "complete fixes" rule): `_graph_recovery_bootstrap_error` (Nebula couldn't
    journal a recovery it read from the canvas at boot) refused a graph bundle
    restore, and retrying never cleared it. The restore now re-runs the
@@ -29,9 +29,9 @@ from fastapi.testclient import TestClient
 from tests.conftest import PERSON
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
-# GM, round 15 of PR #114 (item 5): under the screen's own "Couldn't <action>." heading.
+# Design, PR #114: under the screen's own "Couldn't <action>." heading.
 BOOTSTRAP_PERSON = "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again."
-GENERAL_LINE = BOOTSTRAP_PERSON  # the name the round 14 probes import
+GENERAL_LINE = BOOTSTRAP_PERSON  # the name the probes import
 FENCE_UNVERIFIABLE = (
     "Cannot restore a graph bundle because Nebula cannot verify the durable World Labs paid-start fence."
 )
@@ -128,7 +128,7 @@ def _restore(canvas, headers):
 # -- 1. nit 7: one read of the ambiguity list ---------------------------------------------
 
 def test_an_ambiguity_that_goes_between_reads_still_refuses_while_a_record_exists(canvas, monkeypatch):
-    """Review 13's probe F: b2b1529e refused (409); round 13 let it through."""
+    """Probe F: b2b1529e refused (409); let it through."""
     main = canvas.main
     reads = iter([[{"kind": "worldlabs-environment", "nodeId": "n9", "runId": "r9"}], []])
     monkeypatch.setattr(main.provider_start_guard, "has_active", lambda: False)
@@ -143,7 +143,7 @@ def test_an_ambiguity_that_goes_between_reads_still_refuses_while_a_record_exist
 # -- 2. the bootstrap retry -------------------------------------------------------------
 
 def test_a_restore_retries_the_bootstrap_and_goes_on_when_the_journal_takes_it(canvas, monkeypatch):
-    """Round 15 (review 14, M4): the retry makes a real journal write, so the
+    """The retry makes a real journal write, so the
     journal file exists after it although the canvas holds no IDs to seed."""
     store = _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
     journal = canvas.tmp / "state" / "provider-recoveries.json"
@@ -280,7 +280,7 @@ def test_load_graph_file_hands_the_agent_the_bootstrap_detail(canvas, monkeypatc
     assert "read-only" not in str(refused.value)
 
 
-# -- 4. round 15 (review 14, M4 + L7): the retry proves the journal takes a real write -------
+# -- 4. (+ L7): the retry proves the journal takes a real write -------
 
 def _boot_failure(canvas, monkeypatch, directory):
     """A real boot failure: the journal's folder is read-only, so the seed of
@@ -297,7 +297,7 @@ def _boot_failure(canvas, monkeypatch, directory):
 
 @pytest.mark.unprivileged
 def test_b1_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(canvas, monkeypatch, unwritable):
-    """Review 14's B1: once the folder can be written again, the next restore's
+    """Once the folder can be written again, the next restore's
     retry writes the journal, clears the error and goes on."""
     store = _boot_failure(canvas, monkeypatch, unwritable)
     assert _restore(canvas, AGENT).status_code == 409
@@ -311,7 +311,7 @@ def test_b1_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(can
 
 @pytest.mark.unprivileged
 def test_b4_a_healthy_flag_over_an_unwritable_journal_still_refuses(canvas, monkeypatch, unwritable):
-    """Review 14's B4: the store's last operation succeeded (its flag says
+    """The store's last operation succeeded (its flag says
     healthy), then the folder went read-only. The canvas holds no IDs, so the
     re-seed writes nothing; the retry's own write fails, so it refuses and the
     error stays."""
@@ -330,7 +330,7 @@ def test_b4_a_healthy_flag_over_an_unwritable_journal_still_refuses(canvas, monk
 
 
 def test_l7_an_unhealthy_paid_start_store_answers_its_own_507_and_keeps_the_bootstrap_error(canvas, monkeypatch):
-    """Review 14's L7: the retry can't take the paid-start fence because that
+    """The retry can't take the paid-start fence because that
     store is unhealthy. It answers what a canvas replacement answers for it
     (507), blames that store, and leaves the bootstrap error as it was."""
     _use_recovery_store(canvas, monkeypatch, canvas.tmp / "state")
@@ -443,7 +443,7 @@ def test_a_paid_start_over_an_unwritable_journal_is_refused_and_keeps_the_error(
     assert canvas.main.provider_start_guard.has_active() is False
 
 
-# -- 6. round 15 (review 14, nit 3): the socket says which backend process it is ------------
+# -- 6. the socket says which backend process it is ------------
 
 def test_the_first_ws_message_carries_this_processes_boot_id(canvas):
     """A tab releases a create whose answer was lost only after a backend
@@ -454,7 +454,7 @@ def test_the_first_ws_message_carries_this_processes_boot_id(canvas):
             first = json.loads(socket.receive_text())
         assert first["type"] == "graphSync"
         assert isinstance(first.get("bootId"), str) and first["bootId"]
-        # PR #198 fix round 12 (review 11, L-4): and when it started, so a tab
+        # PR #198: and when it started, so a tab
         # orders processes whatever order their messages arrive in.
         assert first.get("bootStartedAt") == canvas.main.BACKEND_BOOT_STARTED_AT
         seen.append(first["bootId"])

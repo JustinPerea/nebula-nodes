@@ -34,7 +34,7 @@ def test_a_reopened_cover_proposals_update_says_image_again(canvas, monkeypatch)
 
 
 def test_a_reopened_proposals_update_says_its_words_again(canvas, monkeypatch):
-    """PR #202 review 1 LOW-1: a reopen rewrites the Update's words from the
+    """PR #202: a reopen rewrites the Update's words from the
     reopened proposal (update_text), as a retarget does, so the words and the
     ref always come from the same proposal."""
     book, c, cover = _cover_setup(canvas, monkeypatch)
@@ -51,7 +51,7 @@ def test_a_reopened_proposals_update_says_its_words_again(canvas, monkeypatch):
     assert _proposal_note(canvas)["text"] == canvas.main.asset_update_text(book.get(cover))
 
 
-# -- PR #202 review 2 LOW-C: a reopen racing the close of the agent's other proposal ----------
+# -- PR #202: a reopen racing the close of the agent's other proposal ----------
 #
 # The agent has two cover proposals sharing one Update: P1 (invalidated by a
 # node delete) and P2 (open, the Update reviews it). The agent withdraws P2

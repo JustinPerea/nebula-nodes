@@ -1,4 +1,4 @@
-"""PR #198 fix round 2, M2: a proposal that adds a Cinema scene without
+"""PR #198, M2: a proposal that adds a Cinema scene without
 `base` (MCP propose_change) is filled with the defaults when the person
 accepts it, so the scene opens in Cinema."""
 from __future__ import annotations

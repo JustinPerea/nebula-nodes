@@ -1,6 +1,6 @@
-"""Round 23 of PR #195: review 22's M-1 (the backend half) and L-4.
+"""PR #195: (the backend half) and.
 
-- M-1: a person's note is anchored by a node id of the canvas it was written
+- A person's note is anchored by a node id of the canvas it was written
   on. Node ids restart at n1 in every project and after a clear, so a note
   sent after an agent opened another project (or cleared this one) must never
   land on that canvas's n1. The pin routes are graph writes for the fence
@@ -8,7 +8,7 @@
   canvas they were made for and are refused (409) when either moved, with
   nothing pinned and nothing journaled. An agent's ``resolve_pin`` on a note
   that isn't in the open project says so in words an agent can act on.
-- L-4: once a run is admitted it has started (and may be spending). A step
+- Once a run is admitted it has started (and may be spending). A step
   after admission that fails (the placeholder broadcast reading the catalog,
   the skip notes, the cursor) never turns the answer into an error: the run
   answers ``status: "started"`` with its run id, the failure is logged and
@@ -66,7 +66,7 @@ def _tab_headers(revision: str, canvas: str | None = None) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# M-1: the pin routes and the fence
+# The pin routes and the fence
 
 
 def test_M1_every_pin_write_is_a_fenced_graph_write(api):
@@ -77,7 +77,7 @@ def test_M1_every_pin_write_is_a_fenced_graph_write(api):
 
 
 def test_M1_a_note_written_for_A_n1_is_refused_once_an_agent_opened_B(api, monkeypatch):
-    """Review 22's pins.out: A's n1 and B's n1 both exist; the tab still
+    """pins.out: A's n1 and B's n1 both exist; the tab still
     sends the revision of A, where the note was written."""
     main = api.main
     response = api.client.post("/api/graph/apply", headers=CLAUDE, json={
@@ -101,7 +101,7 @@ def test_M1_a_note_written_for_A_n1_is_refused_once_an_agent_opened_B(api, monke
 
 
 def test_M1_a_tab_note_sent_with_no_project_is_refused(api, monkeypatch):
-    """Review 22's PIN-F: sent while the tab followed the switch (it holds no
+    """PIN-F: sent while the tab followed the switch (it holds no
     project then): never anchored to whatever is open."""
     main = api.main
     api.graph.add_node("text-input", {"value": "a"})
@@ -165,7 +165,7 @@ def test_M1_resolve_of_a_note_not_in_the_open_project_says_so_for_agents(api):
 
 
 # ---------------------------------------------------------------------------
-# L-4: after admission, the run has started
+# After admission, the run has started
 
 
 def _run(pend, route, target):
@@ -178,7 +178,7 @@ def _run(pend, route, target):
 
 
 def _broadcast_fails_after_admission(main, monkeypatch) -> dict:
-    """Review 22's admission-first-read: the first catalog read after the
+    """admission-first-read: the first catalog read after the
     run is admitted fails (the placeholder broadcast's export)."""
     state = {"armed": False, "failed": 0}
     real_admit = main._admit_registered_run

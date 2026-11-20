@@ -1,7 +1,7 @@
-"""PR #198 fix round 11 (review 10): the agent rule's channels, and ’ in
+"""PR #198: the agent rule's channels, and ’ in
 the lines this PR's backend added.
 
-L-1 (review 10's probes, kept): a write is checked against its own
+(probes, kept): a write is checked against its own
 channel's read first. A writer with no session (the CLI, a plain PUT) has
 the name's session-less read as its own; only if it never read is it held
 to the newest read by any session of that name (kept apart, so a session
@@ -108,7 +108,7 @@ def test_c5_reads_stay_bounded(api):  # noqa: F811
     assert node
 
 
-# -- L-3 (GM r18 answer 1): ’ in the lines this PR's backend added, the
+# -- (design): ’ in the lines this PR's backend added, the
 # person's and the agents' alike. Agents match on `code`, never the detail.
 
 def test_l3_input_taken_detail_is_curly(api):  # noqa: F811

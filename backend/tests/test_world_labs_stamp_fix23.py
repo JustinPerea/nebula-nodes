@@ -1,5 +1,5 @@
-"""PR #199 fix round 23, 2a: the World Labs delete guard rests on a stamp
-Nebula writes (review 21 LOW-1; Justin's answer: stamp at write, histories
+"""PR #199, 2a: the World Labs delete guard rests on a stamp
+Nebula writes (Justin's answer: stamp at write, histories
 only add holds; the coordinator's two calls: a stamp naming a project
 deleted for good still holds, and the one-time startup stamp places by run
 history only).
@@ -84,7 +84,7 @@ def _duplicate(store, project_id, name):
     return twin
 
 
-# -- 1. Review 21's two repros now answer 409 -----------------------------------------------------
+# -- 1. two repros now -----------------------------------------------------
 
 @pytest.mark.parametrize("stamped", [True, False], ids=["stamped", "legacy-unstamped"])
 def test_an_agent_forging_another_projects_history_cant_release_the_open_projects_record(app, recoveries, stamped):
@@ -128,7 +128,7 @@ def test_the_open_projects_run_capped_out_while_a_copy_holds_it_still_refuses(ap
     refused = _delete(client)
     assert refused.status_code == 409, refused.text
     # Stamped with Delta: its own line. Unstamped: its run is only in the
-    # copy's history now, so whose can't be told: GM r36's line.
+    # copy's history now, so whose can't be told: design's line.
     assert refused.json()["detail"] == (OWN_LINE if stamped else SHARED)
     assert _delete(client, CODEX).json()["detail"] == AGENT_DETAIL
 
@@ -159,7 +159,7 @@ def test_a_stamp_releases_in_recently_deleted_too(app, recoveries):
 
 
 def test_an_unstamped_record_placed_in_alpha_by_history_holds(app, recoveries):
-    """The fail-open row of review 21's table: history placement may only add holds."""
+    """The fail-open row of table: history placement may only add holds."""
     client, *_ = app
     _delta_brief(client)
     _set(recoveries, "wl-run-alpha")
@@ -175,7 +175,7 @@ def test_an_unstamped_ambiguous_record_holds(app, recoveries):
 
 
 def test_a_stamp_naming_a_project_deleted_for_good_holds_with_the_shared_line(app, recoveries):
-    """The coordinator's call 1: review 21's "deleted for good -> 409" row stays 409."""
+    """The coordinator's call 1: "deleted for good -> 409" row stays 409."""
     client, store, *_ = app
     alpha, _delta = _delta_brief(client)
     with store.transaction() as catalog:
@@ -225,7 +225,7 @@ def test_the_open_projects_stored_node_holding_the_id_adds_a_hold():
 
 def test_a_stamped_elsewhere_world_id_record_held_by_the_nodes_world_id_keeps_the_recovery_line(app, recoveries,
                                                                                                   monkeypatch):
-    """RD NIT-1, M10 (`wanted` without existingWorldId): the node's own
+    """`wanted` without existingWorldId: the node's own
     Existing World ID holds Alpha's record, so the line is the record's own,
     not the params line. (The signs that only add a hold are switched off:
     the open project's stored copy mirrors the live node, so its stored-node
@@ -241,7 +241,7 @@ def test_a_stamped_elsewhere_world_id_record_held_by_the_nodes_world_id_keeps_th
 
 
 def test_a_run_only_in_recently_deleted_is_a_project_nebula_cant_identify(app, recoveries):
-    """RD NIT-1, M15: the shared-id line counts Recently deleted; without it
+    """The shared-id line counts Recently deleted; without it
     the line would wrongly say the record is placed nowhere."""
     client, store, *_ = app
     alpha, _delta = _delta_brief(client)
@@ -428,7 +428,7 @@ def test_the_startup_pass_never_places_by_world_id(app, recoveries):
     _refused(client, SHARED, agent_too=False)
 
 
-# -- 5. The one type rule (GM r36 item 1) ---------------------------------------------------------
+# -- 5. The one type rule (design) ---------------------------------------------------------
 
 @pytest.mark.parametrize(("kwargs", "subject"), [
     ({"world": "world-1"}, "A World Labs Environment node"),
@@ -639,7 +639,7 @@ def test_a_stamp_field_that_isnt_an_identifier_is_left_out(tmp_path):
     assert store.stamp_of("r1", "n1") == {"projectId": None, "nodeType": ENVIRONMENT}
 
 
-# -- 8. RD NIT-2: a handoff's delete the guard refuses is said ---------------------------------------
+# -- 8. a handoff's delete the guard refuses is said ---------------------------------------
 
 def _handoff_with_dup(client, recoveries, *, stamp_other=False):
     alpha = _create(client, "Alpha")

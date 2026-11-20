@@ -1,4 +1,4 @@
-"""PR #203 round 19, section 1: GM r37.
+"""PR #203, section 1: design.
 
 - Item 1: every route line with two actions takes the comma ("Add it in
   Settings, or switch to fal.ai."), and in the Agent Log "Then run the node
@@ -106,8 +106,8 @@ def test_media_is_a_media_input_never_it():
     assert person_line.input_needs(["Prompt", "Media"]).one == "needs a prompt and a media input. Connect both."
 
 
-# Mass nouns that are one thing the person connects ("Connect it"); GM r36
-# B2 and r37 item 2 ruled each. A new one must be ruled before it joins.
+# Mass nouns that are one thing the person connects ("Connect it"); design
+# B2 and ruled each. A new one must be ruled before it joins.
 ONE_THING = {"audio", "text", "context", "lighting", "guidance"}
 
 
@@ -121,7 +121,7 @@ def _every_input_label() -> set[str]:
 
 
 def test_every_input_kind_follows_the_one_rule():
-    """The general rule (GM r33, r36 B2, r37 item 2), for every input any node
+    """The general rule (design), for every input any node
     has: after a count the action names the input ("Connect a prompt to
     each"), never a pronoun; for one node "one" after an article, "them" for a
     plural, and "it" only for a mass noun that is one thing."""
@@ -231,6 +231,6 @@ def test_a_size_reads_the_same_on_the_card_the_bubble_and_every_log(monkeypatch,
                 agent_log, bubbles, wires=((0, "text", 1, "prompt"),))
     assert body.get("status") == "failed", body
     # The bubble says the first sentence, what's wrong; the action is on the
-    # card and in the log (GM, PR #203 r39 item 5).
+    # card and in the log (design, PR #203).
     assert bubbles == ["“FLUX 3 Image” can’t run on fal.ai with “Resolution” set to 1.5K."]
     assert agent_log == [f"{HEADING} {line[:-1]}. Then run the node again."]

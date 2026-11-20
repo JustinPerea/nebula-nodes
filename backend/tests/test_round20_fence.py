@@ -1,4 +1,4 @@
-"""Round 20 of PR #195 (review 19): the handoff keeps the person's typing,
+"""PR #195: the handoff keeps the person's typing,
 every route that writes the graph is fenced by a marker, the canvas revision
 survives a restart, and a run admitted before a clear never writes back onto
 the new node that reuses its id.
@@ -199,7 +199,7 @@ def test_H1_values_come_from_the_staged_snapshot_not_the_side_list(api):
 
 
 def test_H1_a_key_the_staged_node_lacks_refuses_the_save(api):
-    """Round 21 (GM's G4): a key that isn't a setting of the node refuses the
+    """Design's ruling: a key that isn't a setting of the node refuses the
     save with its own form, so the tab keeps it as a copy (it was dropped
     silently before)."""
     node = api.graph.add_node("combine-text", {"separator": ",", "template": "x"}, position={"x": 0, "y": 0})
@@ -750,7 +750,7 @@ def run_gate(api, monkeypatch):
 
 async def _agent_clears_and_adds(api) -> str:
     """An agent's Clear while the run is registered: PR #114 refuses it
-    (_project_replacement_guard, round 11), so nothing replaces the canvas
+    (_project_replacement_guard), so nothing replaces the canvas
     under the run and its write-back lands on the node it ran."""
     import main
 

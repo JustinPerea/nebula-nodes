@@ -1,4 +1,4 @@
-"""A moodboard's images are Nebula's own files (Q98, Justin 2026-10-21).
+"""A moodboard's images are Nebula's own files (Justin 2026-10-21).
 
 Justin's answer to "Should moodboards get the same check?": "a) Yes: the
 same check, and the same placeholder for old boards". #133 made a Style's
@@ -441,7 +441,7 @@ def test_agents_are_told_board_images_must_be_nebulas_own():
         assert re.search(r"/api/moodboards.{0,200}refuse", text), doc
 
 
-# ------------------------------------------------------------- review fixes (Q98)
+# ------------------------------------------------------------- review fixes
 
 def _counted(summary: str, count: int) -> bool:
     return summary.startswith(f"{count} reference image{'' if count == 1 else 's'} analyzed as ")
@@ -529,7 +529,7 @@ def test_undoing_an_outside_images_removal_names_the_image(client, root):
 
 def test_agents_are_told_to_ask_the_person_before_fetching_an_old_outside_link():
     """An old board's outside link may have been planted by anyone who could
-    reach the routes: fetching it from the person's machine is the leak Q98
+    reach the routes: fetching it from the person's machine is the leak
     closes. Agent guidance never tells an agent to fetch it on its own."""
     import mcp_server
     import moodboard_client as boards

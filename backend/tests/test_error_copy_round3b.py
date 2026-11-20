@@ -1,13 +1,13 @@
-"""Error copy, round 3b: the last World Labs refusals that used internal words.
+"""Error copy: the last World Labs refusals that used internal words.
 
-GM - Design, on the round-3 delete line: "'settle' and 'start' are internal.
+Design, on the delete line: "'settle' and 'start' are internal.
 Write it as: 'This node is still waiting on World Labs. Check the job in
 Marble, then {the node's actual button label} before you delete it.'" and the
 pattern for new refusals: "say what's needed in plain words, give the count,
-then what to do." GM again: "People get the written line and agents keep the
+then what to do." design again: "People get the written line and agents keep the
 specific detail. Keep it that way."
 
-Round 3 left "Checked Marble — unlock"'s refusals ("Cannot acknowledge a World
+Left "Checked Marble — unlock"'s refusals ("Cannot acknowledge a World
 Labs paid-start ambiguity while that provider handshake is still active",
 "World Labs paid-start ambiguity changed; refresh ...") and the run-start
 refusals ("Fresh paid ... start is safety-locked after an ambiguous provider
@@ -42,7 +42,7 @@ SCRIPT: dict[str, str] = {}
 ENVIRONMENT = "worldlabs-environment"
 EXPORT = "worldlabs-world-export"
 
-# Round 13 of PR #114 (GM): the buttons' labels and the state lines, verbatim.
+# PR #114 (design): the buttons' labels and the state lines, verbatim.
 UNLOCK = "“I’ve checked Marble”"
 FORGET = "“Forget ID”"
 STARTING = "A World Labs run is still starting. Try again in a moment."
@@ -273,7 +273,7 @@ def test_the_canvas_delete_notice_says_the_backends_words():
     backend's line. lib/worldLabsWaiting.ts writes the same lines; pin them
     equal so neither drifts."""
     ts = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "worldLabsWaiting.ts").read_text()
-    # Round 13 of PR #114 (GM): one line per state, the same on both sides.
+    # PR #114 (design): one line per state, the same on both sides.
     assert f'WORLD_LABS_STARTING = "{main_module.WORLD_LABS_STARTING_PERSON}"' in ts
     assert f'WORLD_LABS_NEEDS_CHECK = "{main_module.WORLD_LABS_NEEDS_CHECK_PERSON}"' in ts
     assert f'RECOVERY_ID_SAVED_TAIL = "{main_module._paid_state_person("recovery", node="X")[len("“X”"):]}"' in ts

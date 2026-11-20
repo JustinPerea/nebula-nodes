@@ -1,6 +1,6 @@
-"""A board's own fields are journaled: one ``board.fields`` event per write (Q91).
+"""A board's own fields are journaled: one ``board.fields`` event per write.
 
-Justin's answer to Q91: "a) Yes, every field change, with the field names but
+Justin's answer to: "a) Yes, every field change, with the field names but
 none of your text." Before this, a Direction, Avoid, pinned colour, strength
 or Send notes change made no journal event at all, so an agent waiting on a
 board (wait_for_canvas_change, ``nebula watch``) heard of it only when its

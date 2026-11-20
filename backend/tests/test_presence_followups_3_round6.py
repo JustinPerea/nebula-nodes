@@ -1,4 +1,4 @@
-"""PR #204 round 6 (review 4, gates-security NIT-1).
+"""PR #204.
 
 A broadcast's per-form cache keys each form by the payload it was built from (``id(base)``):
 a socket that reads Updates the way the person's canvas does (``sees_share`` and no agent), but

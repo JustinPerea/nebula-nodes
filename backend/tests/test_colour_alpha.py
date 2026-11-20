@@ -367,7 +367,7 @@ def test_an_analysis_from_before_alpha_counted_is_out_of_date_on_a_transparent_b
     assert board["images"][0]["hasTransparency"] is True
     old = _saved_v5(board)
     assert predates_alpha(board, old)
-    # It still describes the board (review 1 F5): only its colours are out of date.
+    # It still describes the board: only its colours are out of date.
     assert analysis_is_current(board, old)
     assert not colours_current(board, old)
     assert colours_current(board, analyze_moodboard(board))
@@ -400,7 +400,7 @@ def test_the_store_marks_a_pre_alpha_analysis_on_every_read(tmp_path, monkeypatc
     assert "outdated" not in store.get(made["id"])["analysis"]
 
 
-# -- round 2: one contract, the vision readers, Cinema Color's alpha -----------------------
+# -- One contract, the vision readers, Cinema Color's alpha -----------------------
 
 CONTRACT = json.loads((Path(__file__).resolve().parents[2] / "contracts/fixtures/colour/alpha.json")
                       .read_text(encoding="utf-8"))
@@ -517,7 +517,7 @@ def test_a_clear_reference_is_never_sent_or_priced() -> None:
     assert [line["text"] for line in skip] == ["Image 2 is too transparent to add colors."]
     placement = next(r for r in result["results"] if r["id"] == "img2")
     assert placement["status"] == "couldntRead"
-    assert placement["why"] == "It’s too transparent to add colors."  # GM r5: curly, no colon
+    assert placement["why"] == "It’s too transparent to add colors."  # Design: curly, no colon
     assert "Image 2 is unsorted because it’s too transparent." in [line["text"] for line in result["trace"]]
     assert len([b for b in google.bodies if "readings" in json.dumps(b)]) >= 1
 
@@ -563,7 +563,7 @@ async def test_cinema_color_output_keeps_the_sources_alpha_end_to_end() -> None:
         assert np.array_equal(np.asarray(result)[..., 3], np.asarray(soft_disc())[..., 3])
 
 
-# -- GM r1 on #208: each line verbatim, on every surface -----------------------------------
+# -- Design on #208: each line verbatim, on every surface -----------------------------------
 
 OUTDATED_LINE = "These colors counted transparent areas as dark. Analyze again to update them."
 RERUN_LINE = ("The board’s saved colors counted transparent areas as dark, so this run analyzed it again. "
@@ -590,7 +590,7 @@ async def test_the_node_says_why_it_analyzed_a_pre_alpha_board_again(tmp_path, m
     store.update(made["id"], analysis={**analyze_moodboard(store.get(made["id"])), "version": 5})
     result = await handle_moodboard_node(
         GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": made["id"]}), {}, {})
-    # The run's own warning first, then the per-image lines (review 2 surfaces L3).
+    # The run's own warning first, then the per-image lines (surfaces L3).
     assert result["moodboard"]["value"]["analysis"]["warnings"] == [RERUN_LINE, "Image 2 is too transparent to add colors."]
 
 
@@ -624,7 +624,7 @@ def test_the_cli_estimate_names_clear_references(capsys) -> None:
     moodboard_cmd._print_estimate({"reader": {"name": "Argon"}, "thinkingLevel": "low", "count": 2, "batches": 1,
                                    "low": 0.01, "high": 0.02, "transparent": [2]})
     out = capsys.readouterr().out
-    assert "  Image 2 wasn’t read because it’s too transparent.\n" in out  # GM r5
+    assert "  Image 2 wasn’t read because it’s too transparent.\n" in out  # Design
     assert "Too transparent, so not read" not in out
 
 
@@ -641,7 +641,7 @@ def test_the_cli_estimate_follows_the_readers_person_line_for_a_missing_key(caps
     assert "Providers" not in said("GOOGLE_API_KEY")
 
 
-# -- round 2, review 1 (affb9b25): each fails there ------------------------------------------
+# -- (affb9b25): each fails there ------------------------------------------
 
 def line_art_2048() -> Image.Image:
     """1px orange lines every 128px at offset 4, on a clear 2048 canvas."""
@@ -667,7 +667,7 @@ def one_pixel(alpha: int, size: int = 16) -> Image.Image:
 
 
 def test_the_threshold_is_16_of_255() -> None:
-    # Written as numbers, not the symbol (review 1 F6): 15 is out, 16 is in.
+    # Written as numbers, not the symbol: 15 is out, 16 is in.
     assert ALPHA_MIN == 16
     rgb, weights = visible_pixels(one_pixel(15))
     assert rgb.shape == (0, 3)
@@ -680,7 +680,7 @@ def test_the_threshold_is_16_of_255() -> None:
 
 
 def test_sparse_line_art_analyzes_without_error() -> None:
-    # Review 1 F1: the palette saw the lines while the stats' 64px sample didn't, and analyze crashed.
+    # The palette saw the lines while the stats' 64px sample didn't, and analyze crashed.
     analysis = analyze_moodboard(_board(_write(line_art_2048()), _write(opaque())))
     art = analysis["images"][0]
     assert [c["hex"] for c in art["colors"]] == ["#e8593c"] and "transparent" not in art
@@ -711,7 +711,7 @@ def test_no_lightness_skips_the_mean_instead_of_crashing() -> None:
 
 
 def test_a_thin_stroke_is_seen_and_has_its_own_colour() -> None:
-    # Review 1 F2: NEAREST to 256 missed the cross and called the image fully transparent.
+    # NEAREST to 256 missed the cross and called the image fully transparent.
     analysis = analyze_moodboard(_board(_write(thin_cross_2048())))
     cross = analysis["images"][0]
     assert [c["hex"] for c in cross["colors"]] == ["#e8593c"] and "transparent" not in cross
@@ -723,7 +723,7 @@ def test_a_thin_stroke_is_seen_and_has_its_own_colour() -> None:
 
 
 def test_faint_and_clear_images_both_read_too_transparent() -> None:
-    # Decided at full resolution: no pixel at 16 or above (GM r2 on #208: one line for both).
+    # Decided at full resolution: no pixel at 16 or above (design on #208: one line for both).
     from cinema.color import is_clear
 
     faint = Image.new("RGBA", (64, 64), (128, 32, 160, 15))
@@ -736,7 +736,7 @@ def test_faint_and_clear_images_both_read_too_transparent() -> None:
 
 
 def test_lightness_counts_each_pixel_by_its_alpha() -> None:
-    # Review 1 F6: half opaque white, half black at alpha 64. Weighted, the
+    # Half opaque white, half black at alpha 64. Weighted, the
     # black counts 64/255 of a pixel: 255 / (1 + 64/255) = 203.84. Unweighted 127.5.
     a = np.zeros((16, 16, 4), np.uint8)
     a[:, :8] = (255, 255, 255, 255)
@@ -772,7 +772,7 @@ def _accent_pass(orange_alpha: int, monkeypatch, count: int = 3) -> list[dict]:
 
 
 def test_an_accent_counts_by_its_mass_not_its_pixels(monkeypatch) -> None:
-    # Review 1 F6 (M09, M10). The board's mass is about 504 (2000 pixels at 64/255).
+    # (M09, M10). The board's mass is about 504 (2000 pixels at 64/255).
     # Three opaque orange pixels are an accent at 3 / 504.2 of it (by pixels: 3 / 2000).
     accents = [e for e in _accent_pass(255, monkeypatch) if e["hex"] == "#e8593c"]
     assert [(e["share"], e["is_accent"]) for e in accents] == [(0.0059, True)]
@@ -785,7 +785,7 @@ def test_an_accent_counts_by_its_mass_not_its_pixels(monkeypatch) -> None:
 
 
 # A transparent image's palette, pinned: it moves with any change to the
-# alpha weights, the reduce or the weighted seeding (review 1 M06).
+# alpha weights, the reduce or the weighted seeding.
 def _ramp_with_alpha() -> Image.Image:
     a = np.zeros((300, 400, 4), np.uint8)
     a[..., 0] = np.linspace(0, 255, 400)[None, :]
@@ -803,7 +803,7 @@ def test_a_transparent_images_palette_is_pinned() -> None:
 
 
 def test_la_is_read_through_la_not_refused() -> None:
-    # Review 1 F10: Pillow has no La to RGBA conversion; base raised here too.
+    # Pillow has no La to RGBA conversion; base raised here too.
     from cinema.color import as_rgba, composite_on
 
     la = Image.new("La", (8, 8), (100, 128))  # premultiplied grey 100 at alpha 128: straight 199
@@ -814,7 +814,7 @@ def test_la_is_read_through_la_not_refused() -> None:
     assert composite_on(la, (8, 8, 8)).getpixel((0, 0)) == tuple([round(199 * 128 / 255 + 8 * 127 / 255)] * 3)
 
 
-# -- the stored transparency fact (review 1 F3) and outdated never saved (F4) -------------------
+# -- the stored transparency fact and outdated never saved -------------------
 
 def _raw(store_root: Path, board_id: str) -> dict:
     return json.loads(next(store_root.rglob(f"{board_id}.json")).read_text(encoding="utf-8"))
@@ -937,7 +937,7 @@ def test_the_startup_pass_stores_the_fact_once(tmp_path, monkeypatch) -> None:
 
 
 def test_a_set_aside_transparent_image_still_makes_the_colours_outdated() -> None:
-    # Review 1 M24: the saved colours came from every image, set aside or not.
+    # The saved colours came from every image, set aside or not.
     board = _stamped(_board(_write(opaque()), _write(sprite_49())))
     board["images"][1]["excluded"] = True
     assert predates_alpha(board, _saved_v5(board))
@@ -961,7 +961,7 @@ def test_outdated_is_never_written_to_disk(tmp_path, monkeypatch) -> None:
                                         by="person"),
               # A client that sends the analysis back as it read it.
               lambda: store.update(made["id"], analysis=store.get(made["id"])["analysis"]),
-              # Review 2 L1: keeping a hand-written brief read the board without the strip.
+              # Keeping a hand-written brief read the board without the strip.
               lambda: store.update(made["id"], by="agent", briefOverride={"text": "Mine"}),
               lambda: store.keep_brief_override(made["id"], by="agent")]
     for write in writes:
@@ -976,7 +976,7 @@ def test_outdated_is_never_written_to_disk(tmp_path, monkeypatch) -> None:
     assert "outdated" not in store.get(made["id"])["analysis"]
 
 
-# -- analysis_is_current keeps its meaning (review 1 F5) -------------------------------------
+# -- analysis_is_current keeps its meaning -------------------------------------
 
 @pytest.mark.parametrize("second", [sprite_49, opaque])
 def test_a_pre_alpha_summary_still_recounts_and_its_edited_brief_stays_current(second, monkeypatch) -> None:
@@ -1001,7 +1001,7 @@ def test_a_pre_alpha_summary_still_recounts_and_its_edited_brief_stays_current(s
     assert migrated["briefOverride"]["basis"] != "migrated"
 
 
-# -- the other readers that flattened alpha onto black (review 1 F7) -------------------------
+# -- the other readers that flattened alpha onto black -------------------------
 
 def _decoded(data: str) -> Image.Image:
     return Image.open(io.BytesIO(base64.b64decode(data.split(",", 1)[-1]))).convert("RGB")
@@ -1047,7 +1047,7 @@ def test_qc_frames_and_references_show_as_on_the_node() -> None:
     assert np.array_equal(normalized_rgb(opaque(), (8, 8)), flat)
 
 
-# -- round 3, review 2 ------------------------------------------------------------------------
+# -- colours hidden under alpha 0, and the camera geometry ------------------
 
 def _hidden_red_reference() -> Image.Image:
     """A reference with red stored under alpha 0 and an opaque orange box."""
@@ -1059,7 +1059,7 @@ def _hidden_red_reference() -> Image.Image:
 
 @pytest.mark.asyncio
 async def test_qc_camera_geometry_measures_and_sends_the_reference_as_on_the_node(monkeypatch) -> None:
-    # Review 2 M1: open_rgb flattened the reference before seen_on saw it.
+    # open_rgb flattened the reference before seen_on saw it.
     import handlers.qc_camera_geometry as handler
     from models.graph import GraphNode, PortValueDict
     from services import qc_jev
@@ -1120,7 +1120,7 @@ def _file_of(url: str) -> Path:
     return OUTPUT_ROOT / url.removeprefix("/api/outputs/")
 
 
-# Review 2 M2: the reader trusts a stored opaque image and decodes off the loop.
+# The reader trusts a stored opaque image and decodes off the loop.
 
 def test_the_reader_never_decodes_an_image_stored_as_having_no_clear_pixel(monkeypatch) -> None:
     from services import moodboard_reader as reader
@@ -1200,7 +1200,7 @@ def test_the_reader_routes_work_out_clear_references_off_the_loop(tmp_path, monk
     assert sorted(name for name, _ in calls) == sorted([_file_of(sprite).name, _file_of(gone).name] * 2)
 
 
-# Review 2 L2: intake and the startup pass decode off the loop and outside the board lock.
+# Intake and the startup pass decode off the loop and outside the board lock.
 
 def test_the_board_routes_decode_new_files_off_the_loop_and_outside_the_lock(tmp_path, monkeypatch, person) -> None:
     from fastapi.testclient import TestClient
@@ -1268,7 +1268,7 @@ def test_the_startup_pass_decodes_outside_the_lock_and_writes_under_it(tmp_path,
     assert seen == {"decode": [False, False], "write": [True]}
 
 
-# Review 2 surfaces M1 and L2: only colours that really counted clear areas as dark.
+# Surfaces M1 and L2: only colours that really counted clear areas as dark.
 
 def test_an_image_added_after_the_analysis_doesnt_make_it_outdated() -> None:
     board = _stamped(_board(_write(opaque())))
@@ -1301,8 +1301,8 @@ def test_semi_transparent_only_images_dont_get_the_outdated_line() -> None:
 
 
 def test_facts_stored_before_the_stamp_are_read_again_once(monkeypatch) -> None:
-    # Round 4 (review 3 L1): a fact is trusted only with the stat of the file
-    # it was read from. One stored without it (round 3 builds) is read again,
+    # A fact is trusted only with the stat of the file
+    # it was read from. One stored by an earlier build without it is read again,
     # then stamped, and from then on only stated.
     from services import moodboard_analysis
 
@@ -1334,7 +1334,7 @@ def test_the_dry_run_says_both_when_the_board_changed_and_its_colours_are_old(ca
     assert f"  {ALPHA_OUTDATED}\n" in out
 
 
-# GM r5 3: the brief line, true on a hand-written brief and absent at strength 0.
+# Design: the brief line, true on a hand-written brief and absent at strength 0.
 
 BRIEF_LINE = "This brief uses the old colors. The next run analyzes the board again and sends an updated one."
 OVERRIDE_BRIEF_LINE = "This brief uses the old colors. The next run sends it with the updated ones."
@@ -1361,7 +1361,7 @@ def test_the_brief_line_on_each_kind_of_brief(capsys) -> None:
     assert lines[text + 1] == f"    {OVERRIDE_BRIEF_LINE}"
 
 
-# Review 2 L3: the guards no test pinned.
+# The guards no test pinned.
 
 def test_seen_on_shows_a_clear_image_as_the_bare_surface() -> None:
     from cinema.color import seen_on
@@ -1395,7 +1395,7 @@ def test_a_clear_image_is_graded_unchanged() -> None:
     assert graded.mode == "RGBA" and graded.tobytes() == hidden.tobytes()
 
 
-# Review 2 L4: the agent's contact sheet shows a transparent output as the node does.
+# The agent's contact sheet shows a transparent output as the node does.
 
 def test_the_contact_sheet_shows_transparent_outputs_on_the_node_surface() -> None:
     from services.output_preview import contact_sheet

@@ -1,4 +1,4 @@
-"""A board create sent again makes one board (PR #210 round 6e).
+"""A board create sent again makes one board (PR #210).
 
 Moodboard Studio gives each unsaved board a request id. When a create
 reached Nebula but its answer was lost on the way back, the Studio sends the
@@ -311,7 +311,7 @@ def test_cli_help_says_what_the_request_id_does():
     assert "new id for each board" in option.help and "another project is refused" in option.help
 
 
-# -- round 6g: attempts, the write order, scope, expiry and purge ----------------------
+# -- Attempts, the write order, scope, expiry and purge ----------------------
 
 def _record(tmp_path: Path, request_id: str) -> dict:
     return json.loads((tmp_path / "moodboards" / ".creates" / f"{request_id}.json").read_text())
@@ -400,7 +400,7 @@ def test_the_record_is_written_pending_before_the_board(tmp_path, monkeypatch):
 
 
 def test_a_failed_record_write_makes_no_board(tmp_path, monkeypatch):
-    """P2 of review 9: the record goes first, so a write that fails leaves
+    """The record goes first, so a write that fails leaves
     nothing behind, and the resend makes the one board."""
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
     real = moodboard_store._write_record
@@ -497,7 +497,7 @@ def test_a_pending_record_naming_no_board_is_overwritten(tmp_path, monkeypatch):
                                   {"id": "aaaaaaaaaaaa", "at": True},
                                   {"id": "aaaaaaaaaaaa", "at": "NOW", "projectId": 5}])
 def test_a_malformed_record_never_breaks_the_create(http, tmp_path, data):
-    """R4 and R5 of review 9: a record whose id isn't a string, or that holds
+    """A record whose id isn't a string, or that holds
     a JSON list, is ignored (no 500)."""
     first = _post(http, None).json()  # a live board the record might name
     if isinstance(data, dict) and data.get("id") == "aaaaaaaaaaaa":
@@ -553,7 +553,7 @@ def test_an_empty_project_id_is_global_for_the_repeat(tmp_path, monkeypatch):
 
 
 def test_the_store_refuses_another_scope(tmp_path, monkeypatch):
-    """P1 of review 9: never the other scope's board."""
+    """Never the other scope's board."""
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
     MoodboardStore().create_once(name="A", projectId="projA", requestId="shared-6g14-a")
     with pytest.raises(moodboard_store.RequestIdOtherScope):
@@ -572,7 +572,7 @@ def test_a_gone_board_from_another_scope_does_not_block_the_id(http, tmp_path, m
 
 
 def test_a_corrupt_board_behind_a_record_is_a_plain_500(http, tmp_path):
-    """NIT-1 / P4 of review 9: never the JSON parser's words."""
+    """Never the JSON parser's words."""
     first = _post(http, "corrupt-6g16-a").json()
     (tmp_path / "moodboards" / "_global" / f"{first['id']}.json").write_text("{not json")
 
@@ -668,7 +668,7 @@ def test_purging_through_the_trash_route_removes_its_records(http, tmp_path, per
 
 
 def test_a_repeat_answers_what_a_get_answers(http):
-    """R6 of review 9: the repeat is the board as GET shows it (brief,
+    """The repeat is the board as GET shows it (brief,
     outsideImages and the rest), plus the repeat's own fields."""
     first = _post(http, "get-6g23-aaaa", urls=stored_image_urls(2, name="get")).json()
     again = _post(http, "get-6g23-aaaa").json()
@@ -701,7 +701,7 @@ def test_the_commons_import_and_the_project_rehome_skip_the_records(tmp_path, mo
 # -- agents: a repeat says so --------------------------------------------------------
 
 def test_the_client_sends_an_empty_id_through_so_nebula_refuses_it(api, tmp_path):
-    """R7 of review 9: "" is sent, not dropped, so the create is refused
+    """"" is sent, not dropped, so the create is refused
     instead of silently making a board with no id."""
     sent: list[dict] = []
 
@@ -720,7 +720,7 @@ def test_the_client_sends_an_empty_id_through_so_nebula_refuses_it(api, tmp_path
 
 
 def test_the_client_skips_the_image_count_on_a_repeat(api, http, tmp_path):
-    """P3 of review 9: the person added an image before the agent's retry."""
+    """The person added an image before the agent's retry."""
     urls = stored_image_urls(2, name="p3")
     first = asyncio.run(mcp_server.moodboard_create("Agent", [urls[0]], request_id="agent-6g25-aaaa"))
     put = http.put(f"/api/moodboards/{first['id']}", json={"images": [{"url": urls[0]}, {"url": urls[1]}]})
@@ -760,7 +760,7 @@ def test_mcp_repeat_returns_the_first_board_whatever_the_name(api, tmp_path):
 
 
 def test_cli_new_says_a_repeat_was_already_made(api, capsys):
-    """P5 of review 9: never "Made" for a board this run didn't make."""
+    """Never "Made" for a board this run didn't make."""
     moodboard_cmd.run(api, build_parser().parse_args(["moodboard", "new", "First", "--request-id", "cli-6g27-aaaa"]))
     first = re.search(r"Made First \((\w+)\)", capsys.readouterr().out).group(1)
     moodboard_cmd.run(api, build_parser().parse_args(["moodboard", "new", "Second name", "--request-id", "cli-6g27-aaaa"]))

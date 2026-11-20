@@ -463,7 +463,7 @@ def test_the_spend_refusal_for_an_image_node_after_an_audio_node_keeps_the_image
     assert "Audio Input" not in image and "Image Input or Video Input" in image
 
 
-# -- the missing-input refusals, on both routes (GM r118) ----------------------------------
+# -- the missing-input refusals, on both routes (design) ----------------------------------
 
 def _person(exc: BaseException) -> str:
     from execution.person_line import person_line

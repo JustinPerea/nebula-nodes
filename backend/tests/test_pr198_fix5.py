@@ -1,6 +1,6 @@
-"""PR #198 fix round 5 (review 5, backend lane).
+"""PR #198 (backend lane).
 
-- Item 1 (GM question 3): a scene write refused for removing a rendering shot
+- Item 1 (design question 3): a scene write refused for removing a rendering shot
   (``PUT /api/graph/node/{id}``, and the canvas's undo/redo restore) carries
   ``code: "rendering_shots"`` and ``rendering: {shotIds, shots, stoppable}``,
   the same shape as the scene DELETE's, so the canvas can put back only those
@@ -205,7 +205,7 @@ def test_the_moved_and_restarted_refusals_have_the_code(workspace, person):  # n
     with pytest.raises(main_module.HTTPException) as restarted:
         main_module._refuse_if_graph_moved(fence)
     assert restarted.value.detail == main_module.GRAPH_RESTARTED_DETAIL
-    # PR #198 review 6, M1: a clear of the same project has its own code.
+    # PR #198: a clear of the same project has its own code.
     assert restarted.value.fields["code"] == "canvas_replaced"
     assert restarted.value.fields["switchedBy"] == {"kind": "agent", "name": "Codex"}
 
@@ -300,7 +300,7 @@ def test_a_renumbered_shot_keeps_its_port_and_wires(api, person, who):  # noqa: 
 
 
 def _dropped_line(connections, node_id="n1", loading=False):
-    # GM's line (pr198 r8; test_pr198_fix6 has the forms).
+    # Design's line (pr198; test_pr198_fix6 has the forms).
     return main_module.stray_shot_line("Opening", node_id, ["shot_s2"], connections, loading=loading)
 
 

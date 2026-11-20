@@ -1,4 +1,4 @@
-"""PR #198 fix round 3 (review 3 and GM's round-3 rulings, gm-pr198-r3.md).
+"""PR #198 (and design's rulings).
 
 - H1: only an agent-authored write (create, edit_canvas, a proposal, an
   agent's PUT) may be refused for a malformed Cinema scene. Every other path
@@ -10,9 +10,9 @@
 - L1: a render is protected from the start of its run's admission.
 - L2: only the shots a run actually renders are protected.
 - L3: a shot that adopts a late image gets a consistent variations list.
-- G1 (GM: yes): a scene can't be deleted while one of its shots renders.
+- G1 (design: yes): a scene can't be deleted while one of its shots renders.
 - M2: the person's undo or redo that would remove a rendering shot gets
-  GM's line; agents keep the specific detail.
+  Design's line; agents keep the specific detail.
 - L5: money never raises on a float denormal and never prints 300 digits.
 """
 from __future__ import annotations
@@ -35,7 +35,7 @@ from tests.test_params_version_gate import workspace  # noqa: F401 - fixture
 AGENT = {"X-Nebula-Agent": "Codex"}
 BASE = {"version": 1, "base": {"model": "seedream-4-5"}, "aspectRatio": "16:9"}
 
-# Every malformed shape review 3 found (and a few more of the same kind), by
+# Every malformed shape found (and a few more of the same kind), by
 # what a lenient read makes of it: (scene as saved, check on the result).
 SHAPES = {
     "base as a string": {**BASE, "base": "nano-banana", "shots": [{"id": "s1", "prompt": "a"}]},
@@ -434,7 +434,7 @@ def test_deleting_a_scene_while_its_shot_renders_is_refused(api, rendering, pers
     assert agent.status_code == 409, agent.text
     line = f"Couldn’t delete “Scene”, node {node}. “Shot 2” is still running, run run-x."
     assert agent.json()["detail"] == line
-    # GM: the Agent log says the same, under the agent's name.
+    # Design: the Agent log says the same, under the agent's name.
     assert [event.get("say") for event in _presence_events(sent)].count(line) == 1
     sent.clear()
     person_reply = client.delete(f"/api/graph/node/{node}", headers=PERSON)
@@ -534,7 +534,7 @@ def test_a_float_denormal_or_a_tiny_amount_never_raises_or_sprawls(amount):
 
 def test_an_amount_never_raises_and_never_lies_about_nothing():
     rng = random.Random(198_3)
-    # Past 1e9 to the largest float (review 5, N4): above $10 trillion both
+    # Past 1e9 to the largest float: above $10 trillion both
     # forms write the ceiling (">$10,000,000,000,000", 20 characters, and
     # ">$10,000,000,000,000.00", 23), never an OverflowError.
     samples = [10 ** rng.uniform(-330, 308.25) for _ in range(20_000)] + [

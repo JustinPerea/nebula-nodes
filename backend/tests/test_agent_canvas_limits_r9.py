@@ -1,4 +1,4 @@
-"""Review 8 of PR #205 (limits MEDIUM-1, LOW-1, NIT-1, NIT-2): a proposal is
+"""PR #205: a proposal is
 measured against the 16 MiB project size limit when it is made and on every
 Accept, as the edit it stages would be; on a canvas already too deep an
 agent's write may only take depth away; the uncapped "no worse" walk is timed
@@ -50,7 +50,7 @@ def _set_params(node_id: str, value: str) -> dict:
     return {"note": "Long text", "params": [{"nodeId": node_id, "params": {"value": value}}]}
 
 
-# ---- MEDIUM-1: a proposal is measured against the project size limit --------
+# ---- A proposal is measured against the project size limit --------
 
 @pytest.mark.parametrize("over", [0, 1])
 def test_a_proposal_is_measured_at_and_past_the_16_mib_size_limit(api, over):
@@ -77,7 +77,7 @@ def test_a_proposal_is_measured_at_and_past_the_16_mib_size_limit(api, over):
 
 
 def test_the_reviewers_9_mib_proposal_is_refused_as_apply_is(api):
-    """Review 8's repro: apply refused the 9 MiB node with 413, the same node
+    """Repro: apply refused the 9 MiB node with 413, the same node
     as a proposal was made and accepted (the project then 18 MB)."""
     node = api.graph.add_node("text-input", {"value": "x"})
     nine = "z" * (9 * MIB)
@@ -194,10 +194,10 @@ def test_the_mcp_and_cli_answers_for_a_proposal_past_the_size_limit(api, monkeyp
     assert api.graph.nodes[node]["params"]["value"] == ""
 
 
-# ---- LOW-1: on a too-deep canvas an agent may only take depth away ----------
+# ---- On a too-deep canvas an agent may only take depth away ----------
 
 def test_depth_an_agent_adding_a_second_value_as_deep_as_the_deepest_is_refused(api, person):
-    """Review 8's P1: the person's value is 66 deep; Codex's 66-deep value on
+    """The person's value is 66 deep; Codex's 66-deep value on
     another node was "no worse" (the deepest stayed 66) and left the canvas
     unsaveable once the person fixed theirs."""
     a = api.graph.add_node("text-input", {"value": "x"})
@@ -229,7 +229,7 @@ def test_depth_on_a_too_deep_canvas_an_agent_may_take_depth_away_or_add_within_t
 
 
 def test_depth_a_proposal_on_a_too_deep_canvas_follows_the_same_rule(api, person):
-    """Review 8's P5, made and accepted: a proposal adding no value past the
+    """Made and accepted: a proposal adding no value past the
     limit is accepted on a canvas the person made too deep; one adding any
     value past the limit is refused when made."""
     a = api.graph.add_node("text-input", {"value": "x"})
@@ -244,7 +244,7 @@ def test_depth_a_proposal_on_a_too_deep_canvas_follows_the_same_rule(api, person
     assert (refused.status_code, refused.json()["detail"]) == (400, DEEP_MSG)
 
 
-# ---- NIT-2: an Accept refused for depth names the depth limit (mutant b08) ---
+# ---- An Accept refused for depth names the depth limit (mutant b08) ---
 
 def test_accept_refused_for_depth_names_the_depth_limit(api, person, monkeypatch):
     """The canvas's limit changes under an open proposal (here the limit
@@ -277,7 +277,7 @@ def test_the_cli_line_for_a_limit_with_no_max_never_reads_none():
         assert f"the canvas would be {words};" in line and "None" not in line
 
 
-# ---- NIT-1: the uncapped walk, timed on the largest canvas Save allows ------
+# ---- The uncapped walk, timed on the largest canvas Save allows ------
 
 def test_the_no_worse_walk_on_the_largest_canvas_save_allows_is_within_budget(api, person):
     """A canvas at exactly 1,000,000 values (the most Save saves), and an
@@ -302,7 +302,7 @@ def test_the_no_worse_walk_on_the_largest_canvas_save_allows_is_within_budget(ap
     found = main._shape_past_save_limit(grown)
     no_worse = time.perf_counter() - started
     assert found is not None and found[2] == {"kind": "values", "max": main.RESTORE_MAX_GRAPH_VALUES}
-    # Measured at load average ~30: 0.04 s per walk (0.115 s for round 8's
+    # Measured at load average ~30: 0.04 s per walk (0.115 s for
     # walk), 0.17 s for the whole check (two walks and the export), 0.28 s
     # for the refused PUT. The bounds leave room for a machine under load.
     assert one_walk < 1.0, one_walk

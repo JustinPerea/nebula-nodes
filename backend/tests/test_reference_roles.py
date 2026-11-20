@@ -86,7 +86,7 @@ APPROVED_PARAM_LABEL_CHANGES = {
 }
 APPROVED_PORT_LABEL_CHANGES = {
     "identity-edit": {"mask": ("Mask", "Mask · unavailable")},
-    # Sentence case for the names a card shows (GM, 2026-11 copy sweep items 13 and 15).
+    # Sentence case for the names a card shows (design, 2026-11 copy sweep items 13 and 15).
     "cinema-scene": {"character_refs": ("Character Refs", "Character refs")},
 }
 # Output ports renamed in the same sweep: {node: {port id: (baseline label, current label)}}.
@@ -94,7 +94,7 @@ APPROVED_OUTPUT_PORT_LABEL_CHANGES = {
     "camera-rig": {"camera_rig": ("Camera Rig", "Camera rig")},
     "reference-set": {"reference_set": ("Reference Set", "Reference set")},
 }
-# Card type names in sentence case (GM, 2026-11 copy sweep item 13): {node: (baseline, current)}.
+# Card type names in sentence case (design, 2026-11 copy sweep): {node: (baseline, current)}.
 APPROVED_DISPLAY_NAME_CHANGES = {
     "cinema-scene": ("Cinema Scene", "Cinema scene"),
     "camera-rig": ("Camera Rig", "Camera rig"),
@@ -103,7 +103,7 @@ APPROVED_DISPLAY_NAME_CHANGES = {
     "video-edit": ("Video Edit", "Video edit"),
     "paper-source": ("Paper Source", "Paper source"),
 }
-# The `_provider` options' labels (GM, 2026-11 copy sweep item 18): every option's label was its value
+# The `_provider` options' labels (design, 2026-11 copy sweep): every option's label was its value
 # in lower case; values never change. {value: current label}.
 APPROVED_PROVIDER_LABELS = {
     "auto": "Auto", "bfl": "Black Forest Labs", "fal": "fal.ai", "replicate": "Replicate",
@@ -140,7 +140,7 @@ APPROVED_OPTION_LABEL_CHANGES = {
     }},
 }
 # Sizes read "768 × 768", with spaces, the option's own label on every
-# surface (GM, PR #203 r37 item 3, 2026-10-31; tests/test_idol_round19_copy.py
+# surface (design, PR #203, 2026-10-31; tests/test_idol_round19_copy.py
 # pins every size label). Values are unchanged. Each node's baseline wrote its
 # sizes with one separator and none with a spaced ×, so turning each "N × N"
 # back into it restores the baseline label exactly.
@@ -680,7 +680,7 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["character"] = {"description": "A saved chara
 APPROVED_TOP_LEVEL_FIELD_ADDITIONS["nebula-moodboard"] = {"description": "A saved Nebula moodboard as creative direction, with its style brief, negative prompt, palette and representative images. Set moodboard to a board id. GET /api/moodboards lists the boards."}
 APPROVED_LEADING_PARAM_ADDITIONS["character"] = {"key": "character", "label": "Character", "type": "character",
                                                  "required": True}
-# The model picker's loading placeholder takes the ellipsis character (GM, 2026-11 copy sweep item 16).
+# The model picker's loading placeholder takes the ellipsis character (design, 2026-11 copy sweep).
 # Placeholders take the ellipsis character, not three dots.
 for _node_id, _param_key, _old in (
     ("claude-chat", "system", "System instructions..."),

@@ -1,15 +1,15 @@
-"""PR #198 fix round 9 (review 8; GM r12 answer 4): the conditional scene
+"""PR #198 (design): the conditional scene
 write's agent rule, revisions and the connect a put-back sends.
 
-- H-1: each scene has a revision that grows whenever Nebula holds another
+- Each scene has a revision that grows whenever Nebula holds another
   authoring for it, in every export, snapshot, sync, save answer and 409.
-- M-1: a project switch away and back keeps an agent's read.
-- M-2: a read is a session's (token, MCP session), not a name's.
-- L-1: a refusal is not a read; reading again is.
-- L-2: a write whose scene is Nebula's is never refused.
-- L-3: ``onlyIfFree`` connect: 409 ``input_taken`` when the input holds
+- A project switch away and back keeps an agent's read.
+- A read is a session's (token, MCP session), not a name's.
+- A refusal is not a read; reading again is.
+- A write whose scene is Nebula's is never refused.
+- ``onlyIfFree`` connect: 409 ``input_taken`` when the input holds
   another connection.
-- GM r12 answer 4: the agent's refusal detail, verbatim; no Agent log row.
+- Design: the agent's refusal detail, verbatim; no Agent log row.
 """
 from __future__ import annotations
 
@@ -168,7 +168,7 @@ def test_l3_a_put_back_connect_never_takes_a_held_input(api):  # noqa: F811
 
 def test_docs_say_the_round_9_rule():
     """MCP-SETUP, SKILL.md and the MCP docstring (every feature has agent
-    support): revisions, sessions, refusal is not a read, N-2, N-3, input_taken."""
+    support): revisions, sessions, refusal is not a read, input_taken."""
     from pathlib import Path
     repo = Path(__file__).resolve().parents[2]
     setup = " ".join((repo / "docs/MCP-SETUP.md").read_text(encoding="utf-8").split())

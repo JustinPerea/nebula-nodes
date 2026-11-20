@@ -1,4 +1,4 @@
-"""Q123 a (Justin, 2026-10-24): "Yes: `nebula load` and an MCP tool open a
+"""(Justin, 2026-10-24): "Yes: `nebula load` and an MCP tool open a
 bundle, restoring its files, as Load graph does. A big one opens as a new
 project."
 
@@ -8,7 +8,7 @@ upload_file. It opens a plain .nebula / .json or a .nebula.zip as the
 person's Load graph does (frontend/src/components/GraphFileActions.tsx):
 a bundle's files are restored and its links rewritten (the restore's
 rewriteLinks), the canvas-shaped file becomes the import body the tab sends,
-and Q120's rule decides where it lands: with a project open the import asks
+and rule decides where it lands: with a project open the import asks
 to be refused when the file is over the save limit on its own; on that 413 a
 project named after the file is made (projectNameForFile's port) and the
 file loads there. The open project is never emptied or overwritten for a

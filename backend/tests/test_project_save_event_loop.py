@@ -70,7 +70,7 @@ def workspace(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_an_autosave_does_not_hold_up_other_requests(workspace, person, monkeypatch):
     """While the save checks its snapshot, the loop keeps serving. Driven by
-    events, never a time budget (review 17 of PR #203, tests LOW-1: a
+    events, never a time budget (PR #203: a
     starved runner's pause failed the old 0.3 s gap check while the code was
     right): the stand-in check blocks until a task on the loop has run while
     it is in progress, which it can only see if the check runs off the loop.

@@ -1,13 +1,13 @@
-"""PR #199 fix round 15 (review 13), the backend's part.
+"""PR #199, the backend's part.
 
-- NIT-2 (GM's call): kept mode outlasts the person's kept tab's socket by
+- (design's call): kept mode outlasts the person's kept tab's socket by
   KEPT_GRACE_SECONDS, so an agent's write in a network blip waits as it
   would with the tab connected. A tab that said kept:false before closing
   ends it at once; a tab back within the grace that says kept:true carries
   it on, kept:false ends it. Agents' sockets can neither extend nor end it.
-- LOW-3: `nebula project new` past the limit prints the limit's fields, as
+- `nebula project new` past the limit prints the limit's fields, as
   MCP's new_project does.
-- Merge-integrity LOW-2 B2: an open's change note carries `droppedPorts`
+- An open's change note carries `droppedPorts`
   and the agent's open says the stray-port line in the Agent log.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ from tests.test_project_catalog_restore_fix9 import _drain  # noqa: E402
 from tests.test_project_catalog_restore_fix12 import AGENT_WRITES, CODEX, _kept, _settles  # noqa: E402
 
 
-# -- NIT-2: the kept grace ------------------------------------------------------------------
+# -- The kept grace ------------------------------------------------------------------
 
 class _Clock:
     """A monotonic clock the test moves on."""
@@ -193,7 +193,7 @@ def test_nit2_an_agents_socket_can_neither_end_nor_extend_the_grace(app, clock):
     assert main_module.manager.kept_grace_until is None
 
 
-# -- LOW-3: `nebula project new` past the limit ---------------------------------------------
+# -- `nebula project new` past the limit ---------------------------------------------
 
 def test_low3_the_cli_says_the_project_limit_whole(app, monkeypatch, capsys):
     client, *_ = app
@@ -210,7 +210,7 @@ def test_low3_the_cli_says_the_project_limit_whole(app, monkeypatch, capsys):
         'error: Project limit reached (413, {"limit": "projects", "projectLimit": 3, "projectCount": 3, "deletes": 1})')
 
 
-# -- Merge-integrity LOW-2 B2: an open's dropped ports, said ---------------------------------
+# -- An open's dropped ports, said ---------------------------------
 
 def test_b2_an_agents_open_notes_its_dropped_ports_and_says_the_line(workspace, person):  # noqa: F811
     client, _graph, store, _ = workspace
@@ -240,7 +240,7 @@ def test_b2_an_agents_open_notes_its_dropped_ports_and_says_the_line(workspace, 
     assert line in said
 
 
-# -- GM r19, 6a: whether the damaged file held project records Nebula couldn’t read --------------
+# -- Design, 6a: whether the damaged file held project records Nebula couldn’t read --------------
 
 from services import catalog_recovery  # noqa: E402
 from tests.test_project_catalog_restore_fix1 import _add as _store_add, _records, _store  # noqa: E402
@@ -264,7 +264,7 @@ def _restored(tmp_path, damage) -> dict:
 @pytest.mark.parametrize("cut", [1, 3], ids=["inside-the-top-level-object", "the-live-shape-trash-cut"])
 def test_6a_a_cut_after_the_projects_group_closed_lost_no_project(tmp_path, cut):
     """The live fixture: catalog.json cut by its last 3 bytes leaves
-    `…}},"trash":`. Lost Recently deleted entries aren't in the notice (GM):
+    `…}},"trash":`. Lost Recently deleted entries aren't in the notice (design):
     no project record was unread."""
     record = _restored(tmp_path, lambda raw: raw[:-cut])
     assert record["damagedReadWhole"] is False

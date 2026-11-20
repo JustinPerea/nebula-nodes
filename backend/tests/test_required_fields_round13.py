@@ -1,17 +1,17 @@
-"""Round 13 of feat/agent-presence: review 12 and GM - Design's round-13 lines.
+"""feat/agent-presence: design's lines.
 
-L-7. A Krea node whose required field has no default and nothing chosen
+A Krea node whose required field has no default and nothing chosen
 (Krea 2's Aspect ratio and Resolution, a Flux 1.1 Pro's Width and Height,
 Topaz Standard's Model, a node app's Version, a style training's Name) can't
 run: the gateway (or the handler) refuses it before calling Krea. The canvas
 fills no value in, so Nebula refuses the run up front, on every run path,
-with GM's line "Choose an aspect ratio for “X” first." When several fields
+with design's line "Choose an aspect ratio for “X” first." When several fields
 are missing, only the first in the card's field order is named.
 
-L-3. /api/quick (`nebula quick`) never checked: it now refuses the same way,
+/api/quick (`nebula quick`) never checked: it now refuses the same way,
 before the spend check and before anything runs.
 
-L-4. The canvas's model picker tells "reading the provider's settings
+The canvas's model picker tells "reading the provider's settings
 failed" from any other failure: that answer carries a header the canvas
 reads (exposed to the browser through CORS).
 """
@@ -32,7 +32,7 @@ HERO_LINE = "Choose an aspect ratio for “Hero” first."
 
 @pytest.fixture(autouse=True)
 def _krea_token(monkeypatch):
-    """Round 14 (review 13, M-1 and L-6): the field is refused on the route
+    """The field is refused on the route
     that needs it, the Krea gateway here, so the runs have a Krea token. With
     none, the key line comes first (tests/test_route_aware_refusal_round14.py)."""
     import main
@@ -187,7 +187,7 @@ def test_chosen_fields_are_not_refused(pend, monkeypatch):
     assert "Choose" not in str(body.get("errors") or {})
 
 
-# -- L-3: /api/quick ------------------------------------------------------------------------------
+# -- /api/quick ------------------------------------------------------------------------------
 
 @pytest.mark.parametrize(("definition_id", "params", "line"), [
     (KREA2, {}, "Choose an aspect ratio for “Krea 2 Medium (Krea)” first."),
@@ -209,7 +209,7 @@ def test_quick_with_the_fields_chosen_runs(pend):
     assert pend.ran and pend.priced
 
 
-# -- L-4: the model picker's settings failure is marked ---------------------------------------------
+# -- The model picker's settings failure is marked ---------------------------------------------
 
 def test_a_settings_read_failure_is_marked_for_the_canvas(pend, monkeypatch):
     from services import universal_ports

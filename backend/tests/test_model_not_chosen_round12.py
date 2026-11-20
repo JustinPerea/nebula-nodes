@@ -1,10 +1,10 @@
-"""Round 12 of feat/agent-presence: GM - Design's rulings of 2026-10-26.
+"""feat/agent-presence: design's rulings of 2026-10-26.
 
 (b) Topaz Standard with no model chosen. Krea's schema requires `model`, so
 the gateway refuses the run before calling Krea (no spend). Nebula can tell
 before anything runs, so it refuses the run up front, on every run path
 (the canvas's runs, a direct run over placeholders before its confirmation,
-agents' run_nodes and `nebula run`), naming the node and the field: GM's
+agents' run_nodes and `nebula run`), naming the node and the field: design's
 "Choose a model for “Clean plate” first." Every Krea node whose
 model-choosing setting is required and has no default counts (Topaz
 Standard's Model, a node app's Version).
@@ -22,7 +22,7 @@ from tests.test_pending_nodes import _apply, _direct, _execute_body, _paid_chain
 
 @pytest.fixture(autouse=True)
 def _krea_token(monkeypatch):
-    """Round 14 (review 13, M-1 and L-6): the field is refused on the route
+    """The field is refused on the route
     that needs it, the Krea gateway here, so the runs have a Krea token. With
     none, the key line comes first (tests/test_route_aware_refusal_round14.py)."""
     import main
@@ -41,7 +41,7 @@ TOPAZ = "krea-enhance-topaz-standard-enhance"
 GM_LINE = "Choose a model for “Clean plate” first."
 
 
-# Round 13 (GM: only the first missing field, in the card's order): Topaz
+# (design: only the first missing field, in the card's order): Topaz
 # Standard's Width and Height come before its Model, so these set them.
 SIZE = {"width": 2048, "height": 2048}
 
@@ -122,7 +122,7 @@ def test_the_canvas_run_of_the_node_is_refused_the_same_way(pend):
 
 
 def test_a_direct_run_over_a_placeholder_with_no_model_is_refused_before_its_confirmation(pend):
-    """GM: "Don't ask someone to approve a run that can't go out." A run that
+    """Design: "Don't ask someone to approve a run that can't go out." A run that
     would otherwise get the paid-placeholder refusal (409, the dialog again)
     gets this one first."""
     ids = _topaz_chain(pend, pending=True)
@@ -152,7 +152,7 @@ def test_a_chosen_model_is_not_refused_for_it(pend, monkeypatch):
     assert GM_LINE not in str(body.get("errors") or {})
 
 
-# -- GM round 12, item 1: "the agents" ---------------------------------------------------------
+# -- Design: "the agents" ---------------------------------------------------------
 
 def test_the_skip_line_says_the_agents():
     assert pending_nodes.skip_line({"count": 3, "agents": ["Codex", "Claude Code"]}) == (

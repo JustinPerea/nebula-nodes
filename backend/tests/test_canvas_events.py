@@ -479,7 +479,7 @@ def test_own_replies_wakes_a_waiting_poll(api, monkeypatch):
 
 
 def test_own_pin_answers_reach_only_the_same_sessions_feed(api):
-    # Round 5, D1: `nebula pin resolve` from the listening session's shell
+    # `nebula pin resolve` from the listening session's shell
     # ends its pin's span; a sibling session under the same token never sees
     # it as its own. The session is kept beside the journal, never in an event.
     client, _graph, journal, _ = api
@@ -538,7 +538,7 @@ def test_events_endpoint_returns_an_event_published_during_the_wait(api):
 
 
 def test_an_abandoned_long_poll_frees_its_waiter_slot_at_once(api):
-    # Review 1 of PR #114, live: 33 long-polls whose clients went away held
+    # PR #114, live: 33 long-polls whose clients went away held
     # every one of the 32 slots for the rest of their 25 s, and the next poll
     # got 429. A client that hangs up now frees its slot at once.
     _client, _graph, journal, main_module = api
@@ -590,7 +590,7 @@ def test_a_connected_long_poll_still_gets_its_event_through_the_disconnect_watch
 
 
 def test_a_disconnect_watch_that_fails_as_the_wait_ends_is_read(api):
-    # Review 2 of PR #114 (L3a): when the wait finished and the server's
+    # PR #114 (L3a): when the wait finished and the server's
     # receive failed in the same step, nothing read the watcher's exception,
     # and asyncio logged "Task exception was never retrieved".
     import gc
@@ -734,7 +734,7 @@ def test_mcp_wait_for_canvas_change_loops_until_events(monkeypatch):
     assert result["events"] == [EVENT]
     first, second = calls
     assert first["url"].endswith("/api/canvas/events")
-    # Fix round 9, M-2: each MCP server sends its own session beside the name.
+    # Each MCP server sends its own session beside the name.
     assert first["headers"] == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": mcp_server._AGENT_SESSION}
     assert first["params"] == {"wait": 25.0, "limit": 50, "after": 2, "kinds": "node,pin"}
     assert first["timeout"] == 35.0

@@ -1,6 +1,6 @@
-"""Error copy, round 3 (GM - Design's heading review of #167).
+"""Error copy (design's heading review of #167).
 
-GM, verbatim, on the backend's part:
+Design, verbatim, on the backend's part:
 
 1. "World Labs delete refusal: 'settle' and 'start' are internal. Write it as:
    'This node is still waiting on World Labs. Check the job in Marble, then
@@ -8,7 +8,7 @@ GM, verbatim, on the backend's part:
    label."
 5. "Backend 404 details: do the copy pass to one pattern: 'That {thing} isn't
    there anymore. Reload to get the latest {things}.', matching your
-   unknown_collection line. Agents keep the specific text, as in round 2."
+   unknown_collection line. Agents keep the specific text, as before."
 6. "Blind labeling refusals: say what's needed in plain words, give the
    count, then what to do."
    And: folders.py:96 "Choose a real folder, not a symlink." -> "Choose the
@@ -41,8 +41,8 @@ def gone(thing: str, things: str) -> str:
 
 
 NODE_GONE = "That node isn’t on the canvas anymore."
-WAITING = "This node is still waiting on World Labs."  # before round 13 of PR #114
-# GM - Design's World Labs lines for round 13 of PR #114, verbatim (each under
+WAITING = "This node is still waiting on World Labs."  # before PR #114
+# Design's World Labs lines for PR #114, verbatim (each under
 # the screen's own "Couldn't <action>." heading; node names are card titles).
 STARTING = "A World Labs run is still starting. Try again in a moment."
 NEEDS_CHECK = "A World Labs run needs your check first. Use the notice at the top of the screen."
@@ -167,7 +167,7 @@ def test_no_line_the_person_reads_says_settle_or_start(canvas, monkeypatch):
         assert "settle" not in text and " start " not in text, text
 
 
-# Review of round 3: the line names the fields the node actually has. A World
+# Error copy: the line names the fields the node actually has. A World
 # export node's only recovery field is "Resume Export Operation ID"
 # (node_definitions.json); "Resume Operation ID" and "Existing World ID" are
 # the World node's.
@@ -199,20 +199,20 @@ def test_a_world_node_names_only_the_fields_it_holds(canvas, monkeypatch):
     assert _delete(canvas, world_only).json()["detail"] == PARAMS("Harbor world", "“Existing World ID”")
 
 
-# Review of round 3: Clear canvas, opening a project, replacing the graph and
+# Error copy: Clear canvas, opening a project, replacing the graph and
 # restoring a bundle refuse for the same World Labs state, and the person read
 # "Cannot clear the canvas while a World Labs paid start is settling. ..."
-# (GM: "'settle' and 'start' are internal."). The person's line leaves the
+# (design: "'settle' and 'start' are internal."). The person's line leaves the
 # action out: the screen's own heading ("Couldn't clear the canvas.") names it.
 A_NODE_WAITING = "A node is still waiting on World Labs."
-# Round 12 of PR #114 (GM), wherever _reject_graph_replacement_during_paid_start
+# PR #114 (design), wherever _reject_graph_replacement_during_paid_start
 # refuses: "Couldn't <action>. A World Labs start needs checking. Open Run
 # History and choose “Check Marble”." (an unresolved record) and "Couldn't
 # <action>. A World Labs start is still settling. Try again in a moment." (a
 # start settling); the screen's heading says "Couldn't <action>.". Before
-# round 12 these were the node lines ("A node is still waiting on World Labs.
+# These were the node lines ("A node is still waiting on World Labs.
 # Let its run finish, then try again." and the "Checked Marble — …" ones).
-# Round 13 (GM): the state's own line, as for a node (STARTING, NEEDS_CHECK,
+# (design): the state's own line, as for a node (STARTING, NEEDS_CHECK,
 # RECOVERY with the held node's card title).
 GRAPH_PAID_STATE_PERSON = {
     "active": STARTING,
@@ -225,7 +225,7 @@ def _ran_in_the_open_project(run_id: str) -> None:
     """The open project's stored run history has ``run_id`` (the tab's
     autosave of its Run history): a held record of that run is the open
     project's, so the person's line names the live node by its card title.
-    PR #199 round 22 (GM r34 A1): a record no project can be placed for no
+    PR #199 (design): a record no project can be placed for no
     longer borrows the live canvas's node of the same id."""
     import main as main_module
 
@@ -547,7 +547,7 @@ def test_commons_person_only_404s(commons):
     assert region.json()["detail"] == "That region isn't on this reference anymore. Reload to get the latest version."
 
 
-# -- folders.py:96, GM verbatim ---------------------------------------------------
+# -- folders.py:96, design verbatim ---------------------------------------------------
 
 def test_a_linked_folder_shortcut_says_gms_line(commons, tmp_path):
     h = human()
@@ -646,7 +646,7 @@ def test_a_broken_clients_labels_get_the_fallback_line_and_keep_the_detail_for_t
     assert str(bad.value) == "Invalid ground-truth label fields."
 
 
-# Round 13 of PR #114 (GM): the params line names the field that holds the ID.
+# PR #114 (design): the params line names the field that holds the ID.
 @pytest.mark.parametrize("params,fields", [
     ({"resume_operation_id": "op-1"}, "“Resume Operation ID”"),
     ({"existing_world_id": "w-1"}, "“Existing World ID”"),
@@ -668,10 +668,10 @@ def test_restoring_a_bundle_names_a_recovery_records_node_by_its_card_title(canv
 
 
 def test_a_bootstrap_error_reads_gms_restart_line(canvas, monkeypatch):
-    """GM, round 15 of PR #114 (item 5): "Couldn't <action>. Nebula couldn't
+    """Design, PR #114: "Couldn't <action>. Nebula couldn't
     save its World Labs safeguards. Restart Nebula, then try again." The
     screen's heading names the action; a reload doesn't re-run the boot
-    seeding (round 13 notes), so the line says restart."""
+    seeding (notes), so the line says restart."""
     import main as main_module
 
     monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", "journal unavailable")

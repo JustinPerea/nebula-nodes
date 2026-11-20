@@ -1,4 +1,4 @@
-"""PR #200 fix round 14, GM r23 (review 13 M-1 and the lines).
+"""PR #200, design (and the lines).
 
 1(a) E0100-E01EF stays only for a pair the Ideographic Variation Database
      registers (vendored by scripts/generate-pin-text-unicode.py).
@@ -158,7 +158,7 @@ def test_gm_r23_the_two_refusals_carry_their_codes(api):
     assert full.status_code == 409 and full.json()["code"] == "open_notes_full" and full.json()["limit"] == 100
 
 
-# Review 14 LOW-1 (PR #200 fix round 16): the person's form of the pins (the
+# (PR #200): the person's form of the pins (the
 # registered IVD variants kept) goes only to sockets that sent this launch's
 # person token in a hello. Every other /ws socket (an agent's raw socket, a tab
 # without the token, a wrong token) gets the agents' form, on connect and on
@@ -235,7 +235,7 @@ def _tags(spec: str) -> str:
 
 
 def test_gm_r26_the_channel_keeps_the_three_flags_and_drops_every_other_tag():
-    """GM r26 (fix round 17), reverting review 14 NIT-1's change: a bare 🏴 is
+    """Design, reverting change: a bare 🏴 is
     another symbol, so the England, Scotland and Wales flags reach the channel
     whole. Every other tag character goes, by the one shared rule
     (canvas_pins.agent_line, as agent_text and the card's count), in either mode."""
@@ -273,7 +273,7 @@ def test_gm_r26_each_flag_arrives_whole_in_the_channel_push():
 
 
 def test_review15_nit4_a_stray_zwj_never_reaches_the_raw_channel_push():
-    """Review 15 NIT 4 (fix round 18): round 17's shared agent_line drops a
+    """The shared agent_line drops a
     ZWJ outside an RGI sequence in the raw channel push too (not only in
     clean_text), and keeps the ones that join a family or a flag."""
     from tests.test_mcp_channel import pin, resp, take

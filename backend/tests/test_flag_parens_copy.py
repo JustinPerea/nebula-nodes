@@ -1,6 +1,6 @@
 """Person copy names a NEBULA_ flag in the sentence, never in parentheses.
 
-GM r38.1: "Agent review is off on this Nebula. Start it with a call budget
+Design: "Agent review is off on this Nebula. Start it with a call budget
 (NEBULA_COMMONS_REVIEW_CALL_BUDGET), then try again." read as an aside the person could skip, when
 the flag is the one thing they need. Lines say it plainly instead ("Start Nebula with
 NEBULA_COMMONS_REVIEW_CALL_BUDGET set to a call budget"). This scans every string constant in the
@@ -13,10 +13,10 @@ import re
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
-# Round 18l (review 17 logic NIT-2): anywhere inside the parens, not only first.
+# Anywhere inside the parens, not only first.
 FLAG_IN_PARENS = re.compile(r"\([^)]*\bNEBULA_[A-Z0-9_]+")
 SKIP_DIRS = {".venv", "tests", "__pycache__", "node_modules"}
-# Round 18m (GM r44 3): terminal help text is exempt by SURFACE, not by file: "(default:
+# (design): terminal help text is exempt by SURFACE, not by file: "(default:
 # $NEBULA_URL)" is that medium's convention. A string is help text when it is (part of) the value
 # of one of these keywords in any call: argparse's help, description, epilog and usage (CLI help
 # and usage), and the description of an MCP tool or parameter (Field(description=...), a tool's
@@ -24,7 +24,7 @@ SKIP_DIRS = {".venv", "tests", "__pycache__", "node_modules"}
 # Everything else is checked: the CLI's own messages, and the startup lines Nebula prints for the
 # person (the sign-in link and its startup errors), which follow the person-copy rules.
 #
-# The exemption list, by surface (round 18p, GM r59 Q6 and r60 20):
+# The exemption list, by surface (design):
 # - help text: the values of HELP_KEYWORDS, and docstrings;
 # - terminal prefixes: a line's leading TERMINAL_PREFIXES ("Nebula:", "error:", "note:" and "!") are
 #   that medium's convention. Only the prefix is exempt: the checks below read the text after it,
@@ -88,7 +88,7 @@ def test_the_scan_catches_a_flag_in_parens():
     assert offenders(old, "m.py")
     assert not offenders('"""Docstring (NEBULA_X) is fine."""\n', "m.py")
     assert not offenders("y = 'Start Nebula with NEBULA_X set.'\n", "m.py")
-    # Round 18l (NIT-2): a flag later in the parens too.
+    # A flag later in the parens too.
     assert offenders("z = 'Start it (set NEBULA_X=1), then try again.'\n", "m.py")
     assert offenders("z = 'Start it (the budget, NEBULA_X) now.'\n", "m.py")
     assert not offenders("z = 'Start it (now). Restart with NEBULA_X=1.'\n", "m.py")
@@ -126,12 +126,12 @@ def test_the_startup_lines_for_the_person_are_checked():
             assert any(text.startswith(start) for text in checked), f"{name}: {start!r} is not scanned"
 
 
-# Round 18n (GM r45 Q2): what the person reads in the terminal uses curly apostrophes, as the app's
+# (design): what the person reads in the terminal uses curly apostrophes, as the app's
 # lines do: the startup lines (the sign-in link and its startup errors) and `nebula mcp connect`
 # and `disconnect`, which the person runs. Help, description, epilog and usage stay exempt by
 # surface. Agents may read the mcp messages too (an agent running the command for the person);
 # the words mean the same either way.
-# Round 18o (GM r51 Q6): the same lines carry no semicolon and no aside in parentheses either: a
+# (design): the same lines carry no semicolon and no aside in parentheses either: a
 # second clause is its own sentence, and a detail such as the parser's words gets its own line.
 PERSON_READ = ("services/person_session.py", "devserver.py", "cli/commands/mcp_connect.py")
 STRAIGHT_APOSTROPHE = re.compile(r"\w'\w|^'\w")
@@ -191,7 +191,7 @@ def test_the_apostrophe_check_catches_what_it_is_for():
 
 
 def test_the_semicolon_and_parens_check_catches_what_it_is_for():
-    # The old lines GM r51 reworded.
+    # The old lines design reworded.
     assert semicolons_or_parens("print(\"error: an in-app agent can’t connect other apps to Nebula; the person runs this.\")\n", "m.py")
     assert semicolons_or_parens("print(\"error: Nebula doesn’t recognize this token (revoked, or from another Nebula).\")\n", "m.py")
     assert semicolons_or_parens("raise E(f\"{path} isn’t valid JSON ({exc}); fix it by hand.\")\n", "m.py")
@@ -205,7 +205,7 @@ def test_the_semicolon_and_parens_check_catches_what_it_is_for():
     assert not semicolons_or_parens('"""A docstring (with an aside); and more."""\n', "m.py")
 
 
-# Round 18p (GM r59 Q6, r60 19 and 20): nothing introduces a command or a path with a colon. A
+# (design): nothing introduces a command or a path with a colon. A
 # sentence ends with a period and the command goes on the next line ("Run this command."), and a
 # path sits in the sentence ("Nebula saved a backup at {backup}."). The check reads each message
 # whole, as the person sees it: a printed, logged or raised line, or a prompt, with f-string parts
@@ -292,7 +292,7 @@ def test_person_read_terminal_lines_never_introduce_a_command_or_path_with_a_col
 
 def test_the_colon_check_catches_what_it_is_for():
     check = colons_introducing_a_command_or_path
-    # The old lines GM r59 and r60 reworded, as they were written.
+    # The old lines design reworded, as they were written.
     assert check("print((\"Stop the OpenClaw Gateway, then run: \" if c else \"Run: \") + \" \".join(argv))\n", "m.py")
     assert check("print(\"Run: \" + \" \".join(argv))\n", "m.py")
     assert check("x = f\" Backup: {backup}\" if r else f\" Backup, blanked out: {backup}\"\nprint(x)\n"

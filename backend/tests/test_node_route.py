@@ -40,7 +40,7 @@ def test_route_matches_shared_cases(case, monkeypatch):
     if node_route.has_routes(definition):
         assert _as_case(route) == case["expected"]
         assert node_route.route_unavailable(definition, params, case["apiKeys"]) == case["unavailable"]
-        # The card's line for the same stop (error copy round 3e): the
+        # The card's line for the same stop (error copy): the
         # switcher's frontend twin reads the same words (directRoute.test.ts).
         assert node_route.route_unavailable_line(definition, params, case["apiKeys"]) == case["unavailableLine"]
         # Plan billing (the preflight's sign-in check, the estimate's plan

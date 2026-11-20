@@ -1,4 +1,4 @@
-"""PR #199 review 3: what fix round 3 makes true (2026-10-27).
+"""PR #199: what makes true (2026-10-27).
 
 - M1 (agents' half). The restore's rows that no longer hold (the project
   moved since) are marked and left out of the agents' note.
@@ -52,7 +52,7 @@ def _record(store: ProjectStore) -> dict:
 
 
 def _logo_renamed_after_the_copy(tmp_path: Path):
-    """Review 3's fuzz base: four projects and one in Recently deleted; Logo
+    """Fuzz base: four projects and one in Recently deleted; Logo
     renamed "Logo v2" after the copy (.bak still says "Logo")."""
     store = ProjectStore(tmp_path / "base")
     with store.transaction() as catalog:
@@ -116,7 +116,7 @@ def _verdict(store: ProjectStore, catalog: dict, ids: dict) -> str:
     pytest.param(lambda raw, at: raw[:at + 34] + b";" + raw[at + 35:], id="colon -> ;"),
 ])
 def test_m2_a_broken_key_keeps_the_records_latest_version(tmp_path, change):
-    """Review 3's M-A (test_r3_debug): the file no longer parses, the record
+    """test_r3_debug: the file no longer parses, the record
     behind the key is whole and holds its own id. Its newest version stays."""
     base, ids = _logo_renamed_after_the_copy(tmp_path)
     raw = base.path.read_bytes()
@@ -131,7 +131,7 @@ def test_m2_a_broken_key_keeps_the_records_latest_version(tmp_path, change):
 
 
 def test_m2_the_reviews_272_flips_in_a_changed_records_key_never_revert_it_silently(tmp_path):
-    """Review 3's fuzz, the region that failed (69 of 272 silent reverts):
+    """Fuzz, the region that failed (69 of 272 silent reverts):
     every bit of every byte of the key of the project changed since the copy."""
     base, ids = _logo_renamed_after_the_copy(tmp_path)
     raw = base.path.read_bytes()
@@ -206,7 +206,7 @@ def test_m2_a_whole_record_after_a_torn_one_with_a_broken_key_is_found_by_its_id
 
 
 def test_l2_a_nested_record_shaped_object_after_a_cut_is_not_a_project():
-    """Review 3's probe: {"<id>": {"id": "<id>", "name": "Shadow", "kind": ...}}
+    """Probe: {"<id>": {"id": "<id>", "name": "Shadow", "kind": ...}}
     in the tail of a torn snapshot read as "“Shadow”, a newer project,
     couldn't be added back"."""
     alpha, beta = make_project("Alpha"), make_project("Beta")
@@ -303,7 +303,7 @@ def test_l1_a_newer_catalog_and_copy_still_refuse_when_nothing_contradicts_them(
 
 
 def test_l3_a_project_made_while_the_clock_was_ahead_stays_deleted_for_good(tmp_path):
-    """Review 3's L-3 probe: created with the clock 3 h ahead, deleted for
+    """Probe: created with the clock 3 h ahead, deleted for
     good after it was corrected, then a cut that keeps the head."""
     store = ProjectStore(tmp_path / "projects")
     ahead = (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat()
@@ -333,7 +333,7 @@ def test_l3_a_project_made_while_the_clock_was_ahead_stays_deleted_for_good(tmp_
 
 
 def test_l4_create_one_below_the_limit_never_files_the_canvas_then_refuses(app, monkeypatch):
-    """Review 3's L-4 probe: limit 3, Alpha and Beta, and the open Gamma's
+    """Probe: limit 3, Alpha and Beta, and the open Gamma's
     canvas whose record is gone. A raw create (no listing first)."""
     client, store, _graph, state = app
     monkeypatch.setattr(store_module, "MAX_PROJECTS", 3)

@@ -1,17 +1,17 @@
-"""Round 17 of PR #114.
+"""PR #114.
 
-L1 (review 16): "stopped before it started, nothing was spent" only for a run
+L1: "stopped before it started, nothing was spent" only for a run
 id whose start this process saw begin. A Stop for any other id Nebula has no
 record of (a run that ran before a restart, one pruned from the registry, a
 mistyped id) says so, and says nothing about spend.
 
-L5 (review 16): a refused run start's 507 says which store failed: the
+L5: a refused run start's 507 says which store failed: the
 project store (``code: "project_store"``) or a run-safety store
 (``code: "run_safeguards"``), so the canvas words each by its cause. A
 project-store failure can no longer happen after a run's task exists: the
 canvas a run registers on is read before the task is made.
 
-L3 (review 16): a run's own param write-back sync carries ``runParams`` (the
+L3: a run's own param write-back sync carries ``runParams`` (the
 run id), so the canvas never takes it for someone's edit.
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ def _text(node_id: str = "n1") -> GraphNode:
 
 
 async def _ran_then_restarted(monkeypatch, run_id: str) -> None:
-    """Review 16 T4: a run starts and completes, then the backend restarts
+    """A run starts and completes, then the backend restarts
     (the registry and run reports are memory-only)."""
     from services.run_reports import run_reports
 
@@ -253,7 +253,7 @@ async def test_a_project_store_failure_as_the_run_registers_starts_nothing(monke
 
 
 def test_a_restart_does_not_clear_an_unreadable_catalog_and_fixing_it_does(tmp_path) -> None:
-    """GM's restart line for the project store's 507 holds only if a restart
+    """Design's restart line for the project store's 507 holds only if a restart
     clears it. It doesn't: nothing about it is kept in memory, and a new
     process reads the same file. Fixing the file clears it with no restart."""
     root = tmp_path / "projects"

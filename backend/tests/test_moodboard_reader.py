@@ -342,7 +342,7 @@ def test_the_one_off_price_goes_through_decide_as_one_gemini_chat_run():
     assert passed.refusal is None and passed.charge == {"gemini-chat": pytest.approx(est["high"])}
     refused = _decide(est, {"runCostConfirmUsd": est["high"] / 2})
     assert refused.refusal and "could cost up to" in refused.refusal
-    # The chat model's own per-run limit replaces the general one (Q11).
+    # The chat model's own per-run limit replaces the general one.
     capped = _decide(est, {"runCostConfirmUsd": 50.0,
                            "agentSpend": {"models": {"gemini-chat": {"perRunUsd": est["high"] / 2}}}})
     assert capped.refusal and "per-run limit for" in capped.refusal
@@ -632,7 +632,7 @@ def test_two_batches_interleave_and_order_within_each_holds():
         assert [n for bt, n in readings if bt == batch] == numbers
 
 
-# -- thoughts (Q29 c) ----------------------------------------------------------------------------
+# -- thoughts ----------------------------------------------------------------------------
 
 def _with_thoughts(body):
     return 200, sse(json.dumps({"readings": [reading(label) for label in labels_of(body)]}),

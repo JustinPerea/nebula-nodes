@@ -1,4 +1,4 @@
-"""PR #198 fix round 8, H2 (review 7; GM r9 decision 2, r11): conditional
+"""PR #198, H2 (design decision 2): conditional
 Cinema scene writes (services/scene_keys.py). A scene write built on a scene
 that changed since is refused with 409 ``scene_changed``, the scene Nebula
 has now, its ``sceneKey`` and who changed it, so nobody's edit replaces

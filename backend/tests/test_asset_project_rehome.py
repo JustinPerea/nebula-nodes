@@ -250,7 +250,7 @@ def test_roots_come_from_each_stores_own_resolver(tmp_path, monkeypatch):
     assert [(spec.kind, spec.root, spec.has_trash) for spec in rehome.default_roots()] == [
         ("moodboard", moodboard_store.store_root(), True),
         ("character", character_store.store_root(), True),
-        # Styles have Recently deleted since 2026-10-20 (Q53 a).
+        # Styles have Recently deleted since 2026-10-20.
         ("preset", preset_store.store_root(), True),
     ]
     assert moodboard_store.store_root() == tmp_path / "NEBULA_MOODBOARD_ROOT"

@@ -338,7 +338,7 @@ def test_the_person_pins_and_unpins_a_cover(workspace, person, clock):
     assert pinned.status_code == 200, pinned.text
     assert pinned.json()["project"]["cover"] == {"source": "pinned", "images": ["/api/outputs/a.png"]}
     assert client.get("/api/projects").json()["projects"][0]["cover"]["source"] == "pinned"
-    # Anyone else changes the person's pin only through a proposal (Q60 a,
+    # Anyone else changes the person's pin only through a proposal (
     # tests/test_asset_proposals.py has the rest).
     for headers in (AGENT, {}):
         refused = client.put(f"/api/projects/{project_id}/cover", json={"url": "/api/outputs/b.png"}, headers=headers)

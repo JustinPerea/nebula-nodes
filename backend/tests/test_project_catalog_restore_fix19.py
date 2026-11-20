@@ -1,19 +1,19 @@
-"""PR #199 fix round 19 (review 17; GM r27 and r28), the backend's part.
+"""PR #199 (design), the backend's part.
 
-- MEDIUM-1 (two lenses): after a reopen or boot that renumbers a tab-local
+- (two lenses): after a reopen or boot that renumbers a tab-local
   node, the tab's handoff counts as unsent only what differs from the node
   as the open (or boot) loaded it, so an agent's edit to the new id stands.
-- reopen LOW-1: the tab's real handoff shape (remapped, no unsent lists).
-- reopen LOW-2: a duplicate the person deleted before the handoff stays
+- The tab's real handoff shape (remapped, no unsent lists).
+- A duplicate the person deleted before the handoff stays
   deleted; a node an agent added after the open survives.
-- reopen NIT-1: the boot's replacement ends only at the person's read of
+- The boot's replacement ends only at the person's read of
   its own project.
-- drops-locks-ui MEDIUM-2: the person's own reopen in place renumbers.
-- drops-locks-ui MEDIUM-1, agents-docs LOW-1, LOW-2, NIT-1: the tab-only
+- The person's own reopen in place renumbers.
+- The tab-only
   count in every selection surface and in the selection event.
-- agents-docs NIT-3: which errors mean the kept marker's folder can't be
+- Which errors mean the kept marker's folder can't be
   written.
-- GM r27 2: copy names number only after "copy".
+- Design: copy names number only after "copy".
 """
 from __future__ import annotations
 
@@ -74,10 +74,10 @@ def _disk_node(store, project_id: str, node_id: str) -> dict:
     return next(node for node in _on_disk(store, project_id)["snapshot"]["nodes"] if node["id"] == node_id)
 
 
-# -- MEDIUM-1: the agent's edit to the renumbered node stands -----------------------------
+# -- The agent's edit to the renumbered node stands -----------------------------
 
 def test_medium1_p1_an_agents_edit_by_the_id_it_was_told_survives_the_tabs_handoff(app):
-    """Review 17 reopen-renumber's P1: the tab's only unsaved change is n1
+    """reopen-renumber's P1: the tab's only unsaved change is n1
     moved; the duplicate is as the open loaded it."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
@@ -96,7 +96,7 @@ def test_medium1_p1_an_agents_edit_by_the_id_it_was_told_survives_the_tabs_hando
 
 
 def test_medium1_a1_the_agents_value_name_and_place_all_stand(app):
-    """Review 17 agents-docs' a1, with the place too."""
+    """agents-docs' a1, with the place too."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
     new = _open(client, delta, headers=CODEX).json()["renumbered"][DUP]
@@ -128,7 +128,7 @@ def test_medium1_a1_control_an_agents_edit_to_n1_stands_as_before(app):
 
 
 def test_medium1_p6_after_a_boot_an_agents_edit_survives_the_old_tabs_handoff(app):
-    """Review 17 reopen-renumber's P6: the tab from before the boot typed
+    """reopen-renumber's P6: the tab from before the boot typed
     into n1 while offline; the duplicate is as the boot loaded it."""
     client, store, _graph, state = app
     delta = _legacy_state(client, store, state, live_value="dup-first", project_value="dup-first dup-second")
@@ -147,7 +147,7 @@ def test_medium1_p6_after_a_boot_an_agents_edit_survives_the_old_tabs_handoff(ap
 
 
 def test_medium1_a3_boot_variant_with_the_persons_read_between(app):
-    """Review 17 agents-docs' a3: the person's read (it overlays the live
+    """agents-docs' a3: the person's read (it overlays the live
     graph onto the stored copy) comes between the agent's edit and the
     handoff, so the stored copy can't be the baseline."""
     client, store, _graph, state = app
@@ -224,7 +224,7 @@ def test_medium1_a_later_handoff_counts_only_what_changed_since_the_last(app):
 
 
 def test_medium1_the_late_name_and_place_still_land_against_the_baseline(app):
-    """HIGH-1 still holds through the baseline: what the person changed
+    """Still holds through the baseline: what the person changed
     since the autosave lands, value, name and place."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
@@ -239,7 +239,7 @@ def test_medium1_the_late_name_and_place_still_land_against_the_baseline(app):
     assert node["position"] == {"x": 640, "y": 80}
 
 
-# -- reopen LOW-1: the tab's real handoff ------------------------------------------------------
+# -- The tab's real handoff ------------------------------------------------------
 
 def test_low1_p8_the_tabs_real_handoff_remapped_with_no_unsent_lists(app):
     """What the tab sends after a reopen (remapSnapshotIds; handoffPending
@@ -263,10 +263,10 @@ def test_low1_p8_the_tabs_real_handoff_remapped_with_no_unsent_lists(app):
     assert sorted(_export_ids(client)) == ["n1", new]
 
 
-# -- reopen LOW-2: an unsaved delete stays a delete ---------------------------------------------
+# -- An unsaved delete stays a delete ---------------------------------------------
 
 def test_low2_p4_a_duplicate_the_person_deleted_before_the_handoff_stays_deleted(app):
-    """Round 20 (review 18 MEDIUM-1): the window that saved the duplicate
+    """The window that saved the duplicate
     says the delete (``deletedNodeIds``, by the id it had)."""
     client, store, *_ = app
     delta, tab, _old = _delta_with_a_duplicate(client)
@@ -321,7 +321,7 @@ def test_low2_a_node_an_agent_added_after_the_open_survives_the_handoff(app, rea
     assert sorted(node["id"] for node in _on_disk(store, delta)["snapshot"]["nodes"]) == sorted(["n1", new, agents])
 
 
-# -- reopen NIT-1: the boot replacement's project scoping ---------------------------------------
+# -- The boot replacement's project scoping ---------------------------------------
 
 def test_nit1_the_persons_read_of_another_project_doesnt_end_the_boot_replacement(app):
     """Mutant B19: any project's read ended it."""
@@ -339,12 +339,12 @@ def test_nit1_the_persons_read_of_another_project_doesnt_end_the_boot_replacemen
     assert main_module._boot_first_sync() == {}
 
 
-# -- drops-locks-ui MEDIUM-2: the person's own reopen in place ----------------------------------
+# -- The person's own reopen in place ----------------------------------
 
 def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
     """The tab saves first (activate's flush: the late typing), then sends
-    POST /api/projects/{id}/open for the project it shows. Round 20 (review
-    18 LOW-1): a handoff is kept for this project, for the person's other
+    POST /api/projects/{id}/open for the project it shows.
+    A handoff is kept for this project, for the person's other
     windows, and the sync says the person reopened it in place."""
     client, store, *_ = app
     delta, tab, _old = _delta_with_a_duplicate(client)
@@ -362,7 +362,7 @@ def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
     assert _live(client)[new]["data"]["params"]["value"] == "dup typed late"
     assert sorted(_export_ids(client)) == ["n1", new]
     # The sync every tab gets: a replacement with the ids, and the person's
-    # reopen in place (round 20; no X-Nebula-Tab here, so no tab).
+    # reopen in place (no X-Nebula-Tab here, so no tab).
     syncs = [call.args[0] for call in main_module.manager.broadcast_raw.call_args_list
              if call.args and call.args[0].get("type") == "graphSync"]
     assert syncs and syncs[0]["graphReplaced"] is True and syncs[0]["renumbered"] == {DUP: new}
@@ -381,7 +381,7 @@ def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
 
 
 def test_medium2_a_save_at_the_revision_before_the_persons_reopen_lands_as_a_handoff(app):
-    """Round 20 (review 18 LOW-1): the person's reopen in place keeps a
+    """The person's reopen in place keeps a
     handoff as an agent's does, so a save at the old revision (another
     window's) lands in the project under the handoff's rules, once."""
     client, store, *_ = app
@@ -447,7 +447,7 @@ def test_dlu_medium1_and_agents_docs_low2_look_shows_the_count(app, monkeypatch)
     _create(client, "Delta")
     _add_text(client, "delta-1")
     client.post("/api/canvas/selection", headers=PERSON, json={"nodeIds": [DUP, P1]})
-    # One instant for both reads (review 19 agents-docs NIT-3): "secondsAgo"
+    # One instant for both reads: "secondsAgo"
     # is worked out per request, so two reads straddling a tenth of a second
     # printed "28.9s ago" against "29.0s ago".
     instant = main_module.agent_presence._clock()
@@ -543,7 +543,7 @@ def test_agents_docs_nit1_a_switch_forgets_the_tab_only_count(app):
     assert main_module.selection_context.tab_only() == 0
 
 
-# -- agents-docs NIT-3: which errors mean "can't write" -----------------------------------------
+# -- Which errors mean "can't write" -----------------------------------------
 
 @pytest.mark.parametrize(("code", "holds"), [
     (errno.EACCES, False), (errno.EPERM, False), (errno.EROFS, False),
@@ -566,7 +566,7 @@ def test_nit3_only_a_folder_no_run_could_write_ignores_the_marker(tmp_path, monk
     assert manager.start_boot_grace() == (2 if holds else 0)
 
 
-# -- GM r27 2: copy names number only after "copy" ----------------------------------------------
+# -- Design: copy names number only after "copy" ----------------------------------------------
 
 def _catalog(source: str, taken: list[str]) -> dict:
     names = [source, *taken] if source else list(taken)
@@ -599,7 +599,7 @@ def test_gm_r27_2_the_cases_cover_every_shape():
                   ("recovered", "X (recovered)"), ("recovered", "Delta")]:
         assert shape in shapes, shape
     shot = [case["expect"] for case in CASES if case["family"] == "recovered" and case["source"] == "Shot 7"]
-    # GM r29, 2: the name's own 7 is never read.
+    # Design: the name's own 7 is never read.
     assert shot[:4] == ["Recovered Shot 7", "Recovered Shot 7 copy", "Recovered Shot 7 copy 2",
                         "Recovered Shot 7 copy 3"]
 

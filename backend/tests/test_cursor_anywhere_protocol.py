@@ -350,7 +350,7 @@ def test_a_line_said_in_place_on_a_board_keeps_the_cursor_and_its_names(api):
 
 
 def test_the_route_refuses_a_moodboard_target_with_a_drag_start_as_mcp_does(api):
-    """Final review 4: the route took `from` with a moodboard target (200) while MCP and the CLI refuse it."""
+    """The route took `from` with a moodboard target (200) while MCP and the CLI refuse it."""
     client, sent, _, _ = api
     _create(client)
     before = len(sent)
@@ -666,7 +666,7 @@ def test_renaming_one_board_leaves_the_cursors_on_another_alone():
 
 
 def test_out_of_range_forms_name_the_id_only_where_an_id_is_accepted():
-    """GM, copy sweep last round: an image is found by number or id, a view only by number."""
+    """Design, copy sweep last round: an image is found by number or id, a view only by number."""
     from services.agent_presence import _out_of_range
 
     assert _out_of_range("image", "3", "“Dusk”", 1) == (

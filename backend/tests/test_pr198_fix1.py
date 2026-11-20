@@ -1,6 +1,6 @@
-"""PR #198 fix round 1 (review 1 and GM's rulings, gm-pr198-r1.md).
+"""PR #198 (and design's rulings).
 
-- GM item 7 / review L2: a universal node's provider setting is named by
+- Design: a universal node's provider setting is named by
   the Inspector's label, the key in sentence case ("Set “Guidance scale”").
   A setting with no label at all leaves the bubble empty, and the Agent log
   still gets a line: "Changed a setting on “<node>”" / "Changed <N> settings
@@ -10,7 +10,7 @@
 - N2: a bubble that fails never turns a saved PUT into a 500.
 - M1, the backend half: a restore that leaves out a shot's media keeps the
   media the scene has now (a run's output), and puts back the rest.
-- GM item 6: what was spent is never "$0.00" when it isn't nothing.
+- Design: what was spent is never "$0.00" when it isn't nothing.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def _last(sent: list[dict]) -> dict:
     return _presence_events(sent)[-1]
 
 
-# -- GM item 7: universal node settings ------------------------------------------
+# -- Design: universal node settings ------------------------------------------
 
 
 def test_a_replicate_setting_is_named_by_its_inspector_label_in_sentence_case(api):  # noqa: F811
@@ -174,7 +174,7 @@ def test_a_restore_that_leaves_out_a_shots_media_keeps_the_media_the_scene_has(a
         assert stored["s2"]["output"] == paid
 
 
-# -- GM item 6: what was spent ------------------------------------------------------
+# -- Design: what was spent ------------------------------------------------------
 
 
 def test_the_cli_never_says_a_non_zero_spend_is_zero():

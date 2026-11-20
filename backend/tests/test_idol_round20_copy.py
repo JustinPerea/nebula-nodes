@@ -1,14 +1,13 @@
-"""PR #203 round 20, section 1: GM r39's words, and r40 where it rewrote them.
+"""PR #203, section 1: design's words, and where it rewrote them.
 
-1. The Idol agent stop: its own card body for the person (r39 item 1), its
-   own body when the click came from a tab not connected as the person (r40
-   item 5), and the agents' text.
-2. A folder where the settings file goes (r39 item 2).
-3. Settings not restored (r39 item 3; r40 item 3 for any other cause).
-5. A needs or route bubble says its first sentence (r39 item 5).
+1. The Idol agent stop: its own card body for the person, its
+   own body when the click came from a tab not connected as the person, and the agents' text.
+2. A folder where the settings file goes.
+3. Settings not restored (for any other cause).
+5. A needs or route bubble says its first sentence.
 7. Agents read a size value as they send it back, its size after it:
-   "768sq (768 × 768)" (r39, MCP size).
-8. A renamed node's own card line names it by its name (r39 item 8).
+   "768sq (768 × 768)" (MCP size).
+8. A renamed node's own card line names it by its name.
 """
 from __future__ import annotations
 

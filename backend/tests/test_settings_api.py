@@ -77,7 +77,7 @@ def test_remove_provider_persists_and_reopening_returns_only_masked_other_keys(s
     assert settings.get_api_key("OPENAI_API_KEY") is None
     assert settings.get_api_key("FAL_KEY") == initial["apiKeys"]["FAL_KEY"]
     # The app reopening (its person token) sees the endings; anyone else only
-    # which keys are set (Justin, Q55 a).
+    # which keys are set (Justin).
     reopened = TestClient(main.app).get("/api/settings", headers=PERSON)
     assert reopened.status_code == 200
     assert reopened.json()["apiKeys"] == {"FAL_KEY": "***5678", "KREA_API_TOKEN": "***9012"}
@@ -250,7 +250,7 @@ def test_only_the_person_starts_a_codex_login(monkeypatch, person, headers):
 
 
 def test_a_pasted_hugging_face_token_is_saved_trimmed(settings_client):
-    """GM PR #203 r2: a token's leading and trailing spaces and line breaks
+    """Design PR #203: a token's leading and trailing spaces and line breaks
     go without a word (Settings trims the same); other keys keep theirs."""
     client, path, _initial, _clear = settings_client
     response = client.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "  hf_synthetic0123\r\n"}})

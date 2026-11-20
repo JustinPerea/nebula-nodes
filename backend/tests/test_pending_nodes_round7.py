@@ -1,10 +1,10 @@
-"""Placeholders, round 7 (review 6 of feat/agent-presence, GM - Design's
+"""Placeholders, (feat/agent-presence, design's
 round-7 rulings of 2026-10-26).
 
-Justin, Q133 b: what runs never costs more than the person was shown. Review 6,
-L-e (GM's answer): the canvas shows the amount the person confirms in cents,
+Justin: what runs never costs more than the person was shown.,
+(design's answer): the canvas shows the amount the person confirms in cents,
 rounded up, and sends exactly that; Nebula lets no run exceed it, so no slack
-above the confirmed total. GM round 7, polish: a status cut to 140 characters
+above the confirmed total. design, polish: a status cut to 140 characters
 is cut at a word.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from tests.test_pending_nodes import (  # noqa: F401 - fixture
 from tests.test_pending_nodes_round6 import _estimate_high, _finished_chain, _run
 
 
-# -- L-e: no slack above what the person confirmed ---------------------------------------------------
+# -- No slack above what the person confirmed ---------------------------------------------------
 
 def test_a_confirmed_total_a_millionth_below_nebulas_estimate_is_refused(pend):
     ids = _finished_chain(pend)
@@ -55,7 +55,7 @@ def test_with_a_placeholder_left_the_confirmed_total_has_no_slack_either(pend):
     assert ok.status_code == 200, ok.text
 
 
-# -- GM round 7, polish: the status cut lands on a word ----------------------------------------------
+# -- Design, polish: the status cut lands on a word ----------------------------------------------
 
 LONG = ("Writing the hero prompt for three crops at dusk, then the alternates for the lamp room, "
         "the stairwell and the keeper's cottage, then checking every crop against the moodboard")

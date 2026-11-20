@@ -1,13 +1,13 @@
 """nebula-mcp --channel: pushing the canvas into a running Claude Code session.
 
-The experiment Justin approved on 2026-10-20 (plan v2.7 Q43 b). Claude Code
+The experiment Justin approved on 2026-10-20 (plan v2.7). Claude Code
 channels (https://code.claude.com/docs/en/channels-reference) let an MCP
 server that declares `experimental['claude/channel']` send
 `notifications/claude/channel` into the session. With `--channel` Nebula's
 MCP server does that for the person's pins and edits, its own proposals'
-decisions and its own runs' ends, under the Q41 a limits; without the flag
+decisions and its own runs' ends, under the limits; without the flag
 nothing about the server changes. What wakes it and what that turn may do
-follow Justin's Q50 a and Q51 a (2026-10-26).
+follow Justin's (2026-10-26).
 
 Two layers are tested: the decisions (mcp_channel.ChannelState, every method
 takes the time, so no test sleeps for a quiet period), and the wiring (the
@@ -70,7 +70,7 @@ def nebula_agrees(state: ChannelState, now: float) -> None:
     """The listener's check before a decision (pins_to_check, then
     confirm_pins), against a Nebula that lists every pin asked about open in
     the project the channel believes open. Only a pin a check confirmed for
-    that very decision can go (review 4 of PR #114, M1)."""
+    that very decision can go (PR #114, M1)."""
     checked = state.pins_to_check(now)
     if checked:
         state.confirm_pins(checked, {"projectId": state.project_id,
@@ -150,7 +150,7 @@ def test_selections_moves_runs_and_other_actors_never_wake_it():
 def test_nodes_an_accepted_proposal_adds_are_not_a_change():
     # Accept is the person's click, so the nodes and wires it adds are
     # journaled as theirs (main.py accept route); they must not also wake
-    # the agent as edits. Nebula marks each with data.proposalId (review 1:
+    # the agent as edits. Nebula marks each with data.proposalId (
     # matching the summary's "(accepted from X)" let a node name hide edits).
     state = ChannelState(now=0.0)
     accepted = {"proposalId": "prop_x"}
@@ -211,7 +211,7 @@ def test_the_end_of_a_run_it_stopped_waiting_for_wakes_it():
 
 def test_a_run_it_is_collecting_does_not_wake_it():
     state = ChannelState(now=0.0)
-    # Its own run (review 1: get_run alone never makes a run its own).
+    # Its own run (get_run alone never makes a run its own).
     state.tool_finished("run_nodes", {"node_id": "n3"}, [json.dumps({"status": "running", "runId": "run_2"})],
                         now=0.5)
     state.tool_finished("get_run", {"run_id": "run_2"}, [json.dumps({"status": "running", "runId": "run_2"})], now=1.0)
@@ -221,7 +221,7 @@ def test_a_run_it_is_collecting_does_not_wake_it():
     assert drain(state, 10.0, 100.0) == []
 
 
-# -- Q41 a limits: they hold events back, never drop them ---------------------------
+# -- Limits: they hold events back, never drop them ---------------------------
 
 def test_passive_pushes_are_30_seconds_apart_and_what_waits_is_held_not_lost():
     # Passive wakes only (2026-11-03): a pin, an answer or a message skips
@@ -331,7 +331,7 @@ def test_a_push_carries_only_redacted_summaries():
         assert isinstance(value, str)
 
 
-# -- Q42 a: a change-woken turn proposes instead of editing (the experiment's gate) -
+# -- A change-woken turn proposes instead of editing (the experiment's gate) -
 
 def test_a_change_woken_turn_can_look_and_propose_but_not_edit():
     state = ChannelState(now=0.0)
@@ -407,7 +407,7 @@ def test_an_accept_pushed_mid_turn_doesnt_gate_that_turn():
     # Review 2026-10-20: a decision (or run end) pushed while one of the
     # agent's calls runs must not take the person's waiting edits along and
     # open the gate on the turn that is under way. (Renamed 2026-10-26: it
-    # pushed a rejection, which Q51 a now gates, so it waits; see
+    # pushed a rejection, which now gates, so it waits; see
     # test_a_gated_decision_waits_for_the_turn_under_way.)
     state = ChannelState(now=0.0)
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_7"}}, now=1.0)
@@ -446,7 +446,7 @@ def test_limits_from_the_env_never_break_the_limiter():
     assert take(state, 2.0) is not None
 
 
-# -- Q50 a: what counts as a change (Justin, 2026-10-26) -----------------------------
+# -- What counts as a change (Justin, 2026-10-26) -----------------------------
 
 def run_started(seq: int, run_id: str, node: str = "n3") -> dict:
     return ev(seq, "run.started", node=node, data={"runId": run_id}, summary=f"Hero ({node}) started")
@@ -551,7 +551,7 @@ def proposal_run_started(seq: int, run_id: str, proposal_id: str, node: str = "n
 def test_an_accepted_proposals_run_is_its_own_run_not_the_persons():
     # The canvas runs an accepted proposal's runNodeIds itself, as the
     # person (main.py accept route), so its run.started events are theirs.
-    # It is the agent's own work coming back (Q51 a), not the person's run.
+    # It is the agent's own work coming back, not the person's run.
     state = ChannelState(now=0.0)
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_r"}}, now=1.0)
     state.observe(resp(ev(1, "proposal.accepted", node="n9",
@@ -581,7 +581,7 @@ def test_another_agents_accepted_run_is_neither_its_run_nor_the_persons():
     assert state.person_runs == {} and state.tracked_runs == set() and drain(state, 13.0, 400.0) == []
 
 
-# -- Q51 a: what a turn woken by its own proposal or run may do (Justin, 2026-10-26) --
+# -- What a turn woken by its own proposal or run may do (Justin, 2026-10-26) --
 
 def _open_change_window(state: ChannelState) -> None:
     state.observe(resp(edit(1)), now=100.0)
@@ -589,7 +589,7 @@ def _open_change_window(state: ChannelState) -> None:
 
 
 def test_an_accepted_proposal_push_is_never_gated():
-    # Review 1 (H1, H2): it goes once the change turn's window has ended on
+    # It goes once the change turn's window has ended on
     # its own (here 60 s after that push), never into it.
     state = ChannelState(now=0.0)
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_a"}}, now=1.0)
@@ -607,7 +607,7 @@ def test_its_own_run_end_is_never_gated():
     state.tool_finished("run_nodes", {}, [json.dumps({"status": "running", "runId": "run_o"})], now=1.0)
     _open_change_window(state)
     state.run_ended({"runId": "run_o", "status": "finished", "nodesExecuted": 1}, now=140.0)
-    assert drain(state, 140.0, 168.0) == []  # review 1: never into the change turn's window
+    assert drain(state, 140.0, 168.0) == []  # Never into the change turn's window
     push = take(state, 168.5)
     assert push is not None and push.wake == "run" and not push.gate
     assert state.tool_started("run_nodes", {}, now=169.0) is None
@@ -624,7 +624,7 @@ def test_an_ungated_push_waits_for_a_change_turn_still_under_way():
     assert take(state, 125.0) is None
     assert state.tool_started("edit_canvas", {}, now=126.0) is not None  # still the change turn
     state.tool_finished("look_at_canvas", {}, {}, now=127.0)
-    # Review 1 (H2): 20 s without a call isn't the end while the window's
+    # 20 s without a call isn't the end while the window's
     # 60 s minimum runs (to 168): a quiet agent may be a turn still thinking.
     assert drain(state, 127.0, 168.0) == []
     push = take(state, 168.5)
@@ -676,7 +676,7 @@ def test_a_mixed_batch_of_the_persons_change_and_an_accept_is_gated_as_a_change(
     # The decision written here (2026-10-26): the change is the person's
     # hands on the canvas, so the batch is gated whatever else it carries.
     # A short turn heuristic: the run's push starts an ungated turn that no
-    # gated push may gate (review 1 of #225, HIGH-1), over by 105 here.
+    # gated push may gate (#225), over by 105 here.
     state = ChannelState(limits=Limits(window_min=10.0, window_idle=10.0), now=0.0)
     # They meet when both wait for the 30 s spacing after a passive push (its
     # own run's end: a pin's push no longer counts toward the spacing).
@@ -704,7 +704,7 @@ def test_a_board_line_riding_on_an_accept_gates_it_too():
     assert push is not None and push.wake == "proposal" and push.gate and "note changed on Moods" in push.content
 
 
-# -- Review 1 of PR #114 (2026-10-26): no passive push ever closes or shortens a gated window --
+# -- PR #114 (2026-10-26): no passive push ever closes or shortens a gated window --
 # Claude Code queues pushes that arrive while Claude is busy and hands them
 # over together on the next turn (channels reference), so a push sent while a
 # gated turn is still running never reaches that turn. Lifting the gate when
@@ -851,7 +851,7 @@ def test_every_push_kind_against_every_window_state(kind, window):
     assert pushes == [_KIND_TIMES[kind][_WINDOWS.index(window)]]
 
 
-# -- Review 1: get_run never makes the person's run its own (probe H) -------------------
+# -- get_run never makes the person's run its own (probe H) -------------------
 
 def test_get_run_on_the_persons_run_never_makes_it_its_own():
     # The 5-minute push says "get_run('rid') follows it"; doing so mustn't
@@ -896,7 +896,7 @@ def test_get_run_still_follows_and_drops_its_own_runs():
     assert state.tracked_runs == {"run_mine"}
 
 
-# -- Review 1, low findings ------------------------------------------------------------
+# -- Low findings ------------------------------------------------------------
 
 @pytest.mark.parametrize("kinds,summary", [
     (["board.resized"], "resized #3 on board Dusk"),
@@ -1016,7 +1016,7 @@ def test_its_own_run_watch_gives_up_after_repeated_errors():
     assert max(sleeps) <= 60.0
 
 
-# -- Review 1, M2: an abandoned long-poll held one of Nebula's 32 waiter slots ----------
+# -- An abandoned long-poll held one of Nebula's 32 waiter slots ----------
 
 def _listener_rig(limits: Limits):
     """A Listener on the real clock with a fake Nebula whose long-polls never answer early."""
@@ -1096,7 +1096,7 @@ def test_a_run_end_never_abandons_the_events_long_poll():
 
 
 def test_a_burst_of_33_wakes_never_abandons_a_long_poll():
-    # Live, review 1: 33 abandoned polls filled Nebula's 32 waiter slots and
+    # Live: 33 abandoned polls filled Nebula's 32 waiter slots and
     # the next poll got HTTP 429 for ~26 s.
     limits = Limits(run_gather=0.0, min_gap=0.0, agent_quiet=0.0, pin_merge=0.0, per_hour=1000)
     listener, record, ends = _listener_rig(limits)
@@ -1124,7 +1124,7 @@ def test_a_burst_of_33_wakes_never_abandons_a_long_poll():
     assert seen["cancelled"] == 0 and seen["most_open"] == 1 and seen["polls"] == 1
 
 
-# -- Review 2 of PR #114 (2026-10-26) ------------------------------------------------
+# -- PR #114 (2026-10-26) ------------------------------------------------
 # M1: a pin waits only for the window it came in, not for every gated push the
 # person's later edits make. L1: the board write of its own accepted asset
 # proposal is not the person's edit. L2: asset proposals are its proposals.
@@ -1268,7 +1268,7 @@ def test_a_board_write_not_marked_with_its_own_proposal_is_still_the_persons(pro
 @pytest.mark.parametrize("kind", ["project.cover", "commons.corrected", "commons.region", "commons.membership"])
 def test_the_other_writes_an_asset_accept_makes_never_wake_or_ride(kind):
     # Every write an asset accept journals: a board's (marked, above), a
-    # project cover's and the Commons'. The last two aren't Q50 a edits, the
+    # project cover's and the Commons'. The last two aren't edits, the
     # person's own or an accept's, so they never wake it or ride a push.
     state = ChannelState(now=0.0)
     _own_asset_proposal(state)
@@ -1302,7 +1302,7 @@ def test_its_asset_proposals_decision_wakes_it_like_a_canvas_proposals(decision,
 
 
 def test_a_gated_turn_may_propose_an_asset_change():
-    # Q42 a lets a change-woken turn propose; a cover, a board's notes and
+    # Lets a change-woken turn propose; a cover, a board's notes and
     # the Commons are proposed with propose_asset_change.
     state = ChannelState(now=0.0)
     _young_window(state)
@@ -1314,7 +1314,7 @@ def test_a_gated_turn_may_propose_an_asset_change():
     assert "pa_g" in state.own_proposals
 
 
-# -- Review 3 of PR #114 (2026-10-26) ------------------------------------------------
+# -- PR #114 (2026-10-26) ------------------------------------------------
 # H1: a pin wake needs a live pin from the person when it goes. A pin the
 # person deleted, another agent answered, or its own gated turn answered
 # with resolve_pin stayed in the batch and lifted the gate of everything held
@@ -1336,7 +1336,7 @@ def _in_project(project_id: str | None, *events: dict, **kwargs) -> dict:
 
 
 def test_a_pin_the_person_deleted_while_it_waited_never_lifts_the_gate():
-    # Probe Q1: the person pins during a gated window, deletes the pin, then
+    # Probe: the person pins during a gated window, deletes the pin, then
     # rejects a proposal and edits. The batch went at 168.5 as an ungated pin
     # wake quoting the deleted note.
     state = ChannelState(now=0.0)
@@ -1358,7 +1358,7 @@ def test_a_pin_the_person_deleted_while_it_waited_never_lifts_the_gate():
 
 
 def test_a_pin_another_agent_answered_while_it_waited_never_lifts_the_gate():
-    # Probe Q2: another agent's pin.resolved was dropped by the actor filter.
+    # Probe: another agent's pin.resolved was dropped by the actor filter.
     state = ChannelState(now=0.0)
     _young_window(state)
     state.observe(resp(pin(2)), now=110.0)
@@ -1373,7 +1373,7 @@ def test_a_pin_another_agent_answered_while_it_waited_never_lifts_the_gate():
 
 
 def test_a_pin_its_gated_turn_answered_with_resolve_pin_never_lifts_the_next_gate():
-    # Probe Q3: the gated turn sees the pin in look_at_canvas and answers it
+    # Probe: the gated turn sees the pin in look_at_canvas and answers it
     # (allowed); its own pin.resolved never reaches its feed.
     state = ChannelState(now=0.0)
     _young_window(state)
@@ -1449,7 +1449,7 @@ def test_a_pin_is_dropped_when_the_journal_names_another_open_project():
 
 
 def test_an_event_about_a_project_closed_since_never_drops_the_open_projects_pin():
-    # Round 8 (review 7, item 1): an event names the project its change was
+    # An event names the project its change was
     # made in, which can be one closed since: an Update a worker thread saved
     # on proj_1 is journaled after the person opened proj_2 and pinned there,
     # and a proposal the switch closed is tagged with its own project. Neither
@@ -1613,7 +1613,7 @@ def _pin_fuzz(seed: int) -> tuple[list, int]:
 
 
 def test_fuzz_an_ungated_batch_carrying_edits_always_holds_a_live_pin():
-    # Review 3's fuzz (Q7), with every pin lifecycle event the backend
+    # Fuzz, with every pin lifecycle event the backend
     # journals: 775 of its ungated batches carrying edits showed only pins
     # already deleted.
     violations, checked = [], 0
@@ -1626,7 +1626,7 @@ def test_fuzz_an_ungated_batch_carrying_edits_always_holds_a_live_pin():
 
 
 def test_a_withdrawn_proposal_leaves_its_open_proposals():
-    # Probe Q9.
+    # Probe.
     state = ChannelState(now=0.0)
     state.tool_finished("propose_asset_change", {}, {"proposal": {"id": "pa_w"}}, now=1.0)
     assert state.tool_started("withdraw_proposal", {"proposal_id": "pa_w"}, 2.0) is None
@@ -1640,7 +1640,7 @@ def test_a_withdrawn_proposal_leaves_its_open_proposals():
 
 
 def test_its_open_proposals_are_capped():
-    # Probe Q9: proposals a Nebula restart closed never get a decision event.
+    # Probe: proposals a Nebula restart closed never get a decision event.
     state = ChannelState(now=0.0)
     for n in range(mcp_channel.MAX_OWN + 40):
         state.tool_finished("propose_change", {}, {"proposal": {"id": f"prop_{n}"}}, now=1.0)
@@ -1649,7 +1649,7 @@ def test_its_open_proposals_are_capped():
 
 
 def test_a_decision_on_its_proposal_an_undo_reopened_wakes_it():
-    # Probe Q10: invalidated (pushed), reopened by an undo, then accepted.
+    # Probe: invalidated (pushed), reopened by an undo, then accepted.
     state = ChannelState(now=0.0)
     state.tool_finished("propose_change", {}, {"proposal": {"id": "prop_u"}}, now=1.0)
     state.observe(resp(ev(1, "proposal.invalidated", actor={"kind": "system"}, data={"proposalId": "prop_u"})),
@@ -1681,7 +1681,7 @@ def test_a_reopened_proposals_waiting_invalidation_is_not_pushed():
 
 
 def test_an_edit_made_just_before_a_pin_goes_rides_with_it():
-    # Probe Q11 turned round (2026-11-03): every passive item waiting when a
+    # Probe turned round (2026-11-03): every passive item waiting when a
     # deliberate send goes rides along, however recent, so the person's last
     # edit is never left behind the pin it explains.
     state = ChannelState(now=0.0)
@@ -1799,7 +1799,7 @@ def test_a_pin_that_arrives_during_the_check_is_never_dropped_by_it():
 
 
 def test_a_pin_check_nebula_cant_answer_holds_only_the_pin(monkeypatch):
-    # Review 4, M2: a check that failed held every push. Now only the pin
+    # A check that failed held every push. Now only the pin
     # waits (it goes only once a check confirms it); the edit goes on its own
     # terms, gated, and the pin follows as a pin wake once Nebula answers.
     monkeypatch.setattr(mcp_channel, "PIN_RETRY_MIN", 0.05)
@@ -1824,7 +1824,7 @@ def test_a_pin_check_nebula_cant_answer_holds_only_the_pin(monkeypatch):
 def test_a_pin_check_nebula_refuses_drops_the_pins_and_says_so():
     # A 4xx is Nebula refusing the check (its token no longer accepted, say;
     # with no project open it answers 200 and an empty list): none of the
-    # pins can be confirmed, so they leave, and the log says so (review 4, L1).
+    # pins can be confirmed, so they leave, and the log says so.
     class Refused(Exception):
         status = 401
 
@@ -1840,7 +1840,7 @@ def test_a_pin_check_nebula_refuses_drops_the_pins_and_says_so():
     assert "warmer" not in dropped[0]  # never the person's text in a log
 
 
-# -- Review 4 of PR #114 (2026-10-26) ------------------------------------------------
+# -- PR #114 (2026-10-26) ------------------------------------------------
 # H1: a check answered from the project open before a switch confirmed its
 # pin. M1: the clock was read twice, so a pin could go with no check. M2: a
 # failing check held every push. L1: a refused check dropped pins silently.
@@ -1974,7 +1974,7 @@ def test_a_failing_pin_check_never_holds_an_accept_or_an_edit():
     assert pushes, "no push at all"
     before = [(at, meta.get("wake"), "gate" in meta) for at, meta, content in pushes if at < 200.0]
     # The accept at once (ungated, no window open); the edit once the turn the
-    # accept started has ended (window_min, 60 s, with no Nebula call: HIGH-1).
+    # accept started has ended (window_min, 60 s, with no Nebula call).
     assert before == [(100.0, "proposal", False), (160.001, "change", True)], before
     assert all("<pin" not in content for at, _, content in pushes if at < 200.0)
     at, meta, content = pushes[-1]
@@ -1985,7 +1985,7 @@ def test_a_failing_pin_check_never_holds_an_accept_or_an_edit():
 
 
 def test_a_pin_check_for_another_project_confirms_none_of_its_pins():
-    # Review 4, H1 (b): an answer for a project other than the pins' (or than
+    # (b): an answer for a project other than the pins' (or than
     # the one the channel believes open) confirms nothing, even pins it lists open.
     def waiting() -> ChannelState:
         state = ChannelState(now=0.0)
@@ -2104,7 +2104,7 @@ def _stale_check_fuzz(seed: int) -> tuple[list, int, int]:
             # The H1 race: now and then the answer comes from the project open
             # before the last switch, which the channel already knows of (its
             # own open_project, or the journal's answer naming the new one).
-            # One it can't know of yet is review 4's L2: live when Nebula answered.
+            # One it can't know of yet is: live when Nebula answered.
             stale = state.project_id == open_project and rnd.random() < 0.3
             listed = before if stale else open_project
             state.confirm_pins(checked, {"projectId": listed,
@@ -2135,7 +2135,7 @@ def test_fuzz_no_pin_goes_unless_live_on_the_open_project_when_nebula_answered()
     assert pushes > 3000 and checks > 1000, (pushes, checks)
 
 
-# -- Review 5 of PR #114 (2026-10-26) ------------------------------------------------
+# -- PR #114 (2026-10-26) ------------------------------------------------
 # L1: a pin check that hung to its 15 s timeout held the push loop (195 s of
 # 600 in the probe; an accept 15 s late), and its retry counted from before
 # the request, so checks went back to back. L2: a failing-check episode that
@@ -2183,7 +2183,7 @@ def test_a_pin_check_that_hangs_never_holds_an_accept():
 
     async def sleep(seconds):
         # Each wait ends at its own time (the pin check's bound is a wait of
-        # its own since round 8): waits running together don't add up.
+        # its own): waits running together don't add up.
         clock["t"] = max(clock["t"], round(clock["t"] + min(seconds, 1.0), 6))
         if clock["t"] > 200.0:
             raise _Done()
@@ -2291,7 +2291,7 @@ def test_a_new_pin_after_a_failing_episode_starts_afresh():
 
 
 def test_a_check_that_fails_with_no_pin_waiting_ends_the_episode():
-    # Review 6, LOW-2 (probe probe_r6_episode): the only pin was answered by
+    # (probe probe_r6_episode): the only pin was answered by
     # another agent while a check hung; that check then failed with no pin
     # waiting, yet armed the backoff and the failure clock. A pin an hour
     # later inherited the episode: checks 10, 20, 40 s apart, and "failed for
@@ -2343,12 +2343,12 @@ def test_a_check_that_fails_with_no_pin_waiting_ends_the_episode():
 
 
 def test_the_listener_bounds_a_pin_check_that_never_answers():
-    # Review 6, LOW-3: the listener bounds its own check (it relied on the
+    # The listener bounds its own check (it relied on the
     # caller's fetch_pins to time out): one that never answers fails after
-    # PIN_CHECK_TIMEOUT, and the pins wait for the retry. Review 7, item 3:
+    # PIN_CHECK_TIMEOUT, and the pins wait for the retry.
     # on the listener's own clock and sleep, like its other waits (it ran on
     # real time, so a fake clock never saw it fire): this rig's clock moves
-    # only through those waits. PR #198 review 6, N5: the fake clock ends the
+    # only through those waits. PR #198: the fake clock ends the
     # test (_Done past 130 s); the real bound is only a hang guard, wide
     # enough that a loaded CI box never cancels it mid-way (it was 1 s).
     state = ChannelState(now=0.0)
@@ -2404,7 +2404,7 @@ def test_the_listener_bounds_a_pin_check_that_never_answers():
 
 
 def test_a_check_whose_deadline_passes_before_its_task_starts_is_still_cancelled():
-    # Review 8, hardening: the check's cancel scope was made inside its task
+    # Hardening: the check's cancel scope was made inside its task
     # (_ask_nebula), so a deadline that passed before the task's first step
     # found no scope to cancel. The task then ran its fetch anyway and its
     # answer landed after the decisions had already called it failed, even
@@ -2464,7 +2464,7 @@ def test_the_pin_check_gives_up_after_a_few_seconds(nebula, monkeypatch):
     # that waited with the pin goes then, gated, without it. The shipped
     # timeout is checked as a number; the behaviour runs on a short one, with
     # deadlines only as hang guards, so a loaded runner can't fail it (review
-    # 16 of PR #203, tests LOW-3: it waited out the real 4 s inside a 9 s budget).
+    # 16 of PR #203: it waited out the real 4 s inside a 9 s budget).
     shipped = mcp_channel.PIN_CHECK_TIMEOUT
     assert 3.0 <= shipped <= 5.0
     monkeypatch.setattr(mcp_channel, "PIN_CHECK_TIMEOUT", 0.3)
@@ -2515,7 +2515,7 @@ def _listener_check_fuzz(seed: int, horizon: float = 900.0) -> dict:
     def publish(kind, data=None, node=None, actor=None):
         seq[0] += 1
         e = ev(seq[0], kind, actor=actor, node=node, data=data)
-        e["projectId"] = truth["active"]  # round 6: the tag is the catalog's
+        e["projectId"] = truth["active"]  # The tag is the catalog's
         queue.append(e)
 
     def deliver():
@@ -2599,7 +2599,7 @@ def _listener_check_fuzz(seed: int, horizon: float = 900.0) -> dict:
             if gated:
                 out["violations"].append((seed, clock["t"], "a gated push carrying a pin"))
             last = answers[-1] if answers else None
-            # Review 6: the answer that confirmed it came for this decision
+            # The answer that confirmed it came for this decision
             # (with the slowest check counted, within 0.5 s of fake time), so
             # a confirmation never outlives its decision.
             if last is None or clock["t"] - last[0] > 0.5 + 1e-9:
@@ -2642,7 +2642,7 @@ def _listener_check_fuzz(seed: int, horizon: float = 900.0) -> dict:
     return out
 
 def test_fuzz_the_listener_with_slow_hanging_and_failing_checks():
-    # Review 5, L1: (1) every pin an ungated push carries was open on the
+    # (1) every pin an ungated push carries was open on the
     # open project in the answer that confirmed it; (2) no push carrying a
     # pin is gated; (3) no gated push goes inside a check's grace while pins
     # wait; (4) an ungated push carrying edits holds a pin.
@@ -2662,7 +2662,7 @@ def test_the_change_turn_allow_list_is_reads_and_the_change_turn_writes():
     allowed = mcp_channel.CHANGE_TURN_TOOLS
     assert allowed <= set(tools)
     writes = {name for name in allowed if not tools[name].annotations.readOnlyHint}
-    # Q42 a / Q51 a: look, point (and say), post an Update, answer a pin, propose;
+    # Look, point (and say), post an Update, answer a pin, propose;
     # and answer the person in the Message box (reply_to_person, PR C), as a pin is answered.
     assert writes == {"point_at", "post_note", "resolve_pin", "propose_change", "propose_asset_change",
                       "withdraw_proposal", "reply_to_person"}
@@ -2953,7 +2953,7 @@ def test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds(nebula):
     # The person's edit first: a gated change push, and its turn's edit is
     # refused. Then a pin: never gated, it ends the window, so its turn may
     # edit. (A pin first would start an ungated turn no gated push may gate
-    # for window_min, 30 s here: review 1 of #225, HIGH-1.)
+    # for window_min, 30 s here: #225.)
     pushes: list[dict] = []
 
     async def main():
@@ -2980,7 +2980,7 @@ def test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds(nebula):
     assert refused.isError and "propose_change" in refused.content[0].text
     assert not allowed.isError and not proposed.isError
     assert pushes[1]["meta"]["wake"] == "pin" and "gate" not in pushes[1]["meta"] and "warmer" in pushes[1]["content"]
-    assert nebula.pin_checks >= 1  # Round 4: Nebula confirmed the pin was still open before it went
+    assert nebula.pin_checks >= 1  # Nebula confirmed the pin was still open before it went
     assert not (freed.isError and "propose_change" in freed.content[0].text)
     # The listener long-polls as the tools' own identity, without self=1, so
     # Nebula leaves this agent's own edits out.
@@ -2990,7 +2990,7 @@ def test_a_pin_and_an_edit_reach_the_session_and_the_gate_holds(nebula):
 
 
 def test_a_pin_it_answered_under_its_own_name_elsewhere_never_lifts_the_gate(nebula):
-    # Round 4: the `nebula` CLI under the same name answers the pin; Nebula
+    # The `nebula` CLI under the same name answers the pin; Nebula
     # leaves that pin.resolved out of the listener's feed, so only the check
     # at push time can see the pin is no longer open.
     pushes: list[dict] = []
@@ -3017,7 +3017,7 @@ def test_a_pin_it_answered_under_its_own_name_elsewhere_never_lifts_the_gate(neb
 
 
 def test_a_persons_run_reaches_the_session_once_at_its_end(nebula):
-    # Q50 a through the real listener: run.started (one per node) never
+    # Through the real listener: run.started (one per node) never
     # pushes; the listener follows the run with GET /api/graph/runs/{id} and
     # pushes once when it ends, as a gated change with its result.
     pushes: list[dict] = []
@@ -3118,7 +3118,7 @@ def test_the_limits_come_from_the_answers_by_default():
     (mcp_channel.PIN_CHECK_TIMEOUT - 0.001, True),   # just before it: in time
 ])
 def test_a_check_answer_counts_only_strictly_before_its_deadline(arrives_at, applied):
-    # Review 9 fuzz (seeds 6468, 6594), the coordinator's rule: an answer is
+    # Fuzz (seeds 6468, 6594), the coordinator's rule: an answer is
     # in time only if it arrived strictly before the deadline, on the
     # listener's clock. One that arrived at or after it is dropped and the
     # check fails, even when the decision only looks later.
@@ -3167,7 +3167,7 @@ def test_a_check_answer_counts_only_strictly_before_its_deadline(arrives_at, app
 
 
 def test_a_cancelled_check_that_answers_late_never_overrides_the_live_one():
-    # Fuzz seed 9218 (round 11), the coordinator's rule: at most one live
+    # Fuzz seed 9218, the coordinator's rule: at most one live
     # check at a time, and a cancelled one's answer is never applied. A
     # fetch that ignores cancellation (a worker thread) lingers past its
     # deadline; the next check doesn't wait for it, the late answer is
@@ -3228,7 +3228,7 @@ def test_a_cancelled_check_that_answers_late_never_overrides_the_live_one():
 
 
 def test_the_listener_shutdown_cancels_and_awaits_a_lingering_check():
-    # Round 11: a check cancelled at its deadline whose fetch is still out
+    # A check cancelled at its deadline whose fetch is still out
     # when listening stops is cancelled again and awaited, so nothing leaks.
     state = ChannelState(now=0.0)
     state.last_person = 100.0

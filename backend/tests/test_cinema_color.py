@@ -231,7 +231,7 @@ async def test_handler_empty_palette_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_handler_empty_palette_card_line_quotes_the_nodes_labels() -> None:
-    # Error copy round 3g review (GM rule 5): fields by the label the node
+    # Error copy review (design rule 5): fields by the label the node
     # shows, in quotes ("Palette source", not "Source Image"). Agents keep the text.
     from execution.person_line import person_line
     from handlers.cinema_color import handle_cinema_color

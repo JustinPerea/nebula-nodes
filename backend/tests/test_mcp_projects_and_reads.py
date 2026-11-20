@@ -505,7 +505,7 @@ def test_get_settings_says_which_keys_are_set_and_never_any_part_of_one(nebula, 
         "exportFolder": "/tmp/nebula-exports",
         "kreaConnectionMode": "mcp",
     }
-    # GET /api/settings (Justin, Q55 a): "Only the app (your person token)
+    # GET /api/settings (Justin): "Only the app (your person token)
     # gets the endings. Everything else learns which providers are set, and
     # nothing more." An agent's curl or `nebula keys` gets a bare "***".
     http = nebula["http"]

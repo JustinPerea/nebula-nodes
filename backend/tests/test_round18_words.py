@@ -1,10 +1,10 @@
-"""Round 18: the cursor bubble and the Agent log words for an agent setting fields.
+"""The cursor bubble and the Agent log words for an agent setting fields.
 
-GM - Design (r18, item 3), verbatim: "Cursor bubble for 3 or more labels:
+Design, verbatim: "Cursor bubble for 3 or more labels:
 "Changed N settings" (was "Set N settings"). Keep "Set “Aspect ratio”" for
 one or two labels."
 
-Review 17 (nit): a universal node's configured model brings its own fields
+(nit): a universal node's configured model brings its own fields
 (``dynamicParams``); the Agent log listed their labels in key order, not in
 the order the card shows them. They now follow the card.
 """
@@ -36,7 +36,7 @@ def test_three_labels_say_changed_n_settings(graph):
     node = graph.add_node("text-input", {})
     say, log = main_module._set_words(node, ["quality", "resolution", "aspect_ratio"])
     assert say == "Changed 3 settings"
-    # The Agent log keeps naming them (round 17).
+    # The Agent log keeps naming them.
     assert log == "Set “Aspect ratio”, “Resolution” and “Quality”"
 
 

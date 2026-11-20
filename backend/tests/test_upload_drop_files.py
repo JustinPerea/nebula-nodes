@@ -339,7 +339,7 @@ def test_nebula_upload_at_takes_a_negative_x(argv_at):
 
 
 # An image's size as shown goes with its preview (services/preview_size.py,
-# #226 round 3): the Inspector's preview has its height before it decodes.
+# #226): the Inspector's preview has its height before it decodes.
 def _image_bytes(fmt: str, size: tuple[int, int], orientation: int | None = None) -> bytes:
     from PIL import Image
 
@@ -403,7 +403,7 @@ def test_agents_may_not_write_the_preview_size():
     assert internal_keys({"_previewSize": {"width": 1, "height": 1}}) == ["_previewSize"]
 
 
-# #226 review 2, MEDIUM-2: the size comes from the header, never the pixels.
+# #226: the size comes from the header, never the pixels.
 # Pillow's getexif() decodes a whole PNG whose EXIF isn't ahead of its pixel
 # data (a 13000x13000 PNG of 641 KB grew the process by ~680 MB), so these
 # fail if anything calls load().
@@ -518,7 +518,7 @@ def test_the_upload_reads_the_size_off_the_event_loop(client, monkeypatch):
     assert calls == [False]
 
 
-# #226 review 2, NIT-2: a `_previewSize` goes with its file. An agent or the
+# #226: a `_previewSize` goes with its file. An agent or the
 # CLI that names another file drops it; the Inspector's own upload sends the
 # new one with the file.
 AGENT = {"X-Nebula-Agent": "Codex"}
@@ -602,7 +602,7 @@ def test_an_agent_apply_that_sets_another_file_drops_the_old_size(client, monkey
     assert "_previewSize" not in _params(node_id)
 
 
-# #226 review 3, LOW-2: the round 4 rules review 3's mutants showed untested.
+# #226: the rules mutants showed untested.
 def test_the_cli_that_sets_only_another_preview_drops_the_old_size(client, tmp_path, monkeypatch):
     # Under the output root, so the canvas sync's normalizer leaves the
     # preview as sent (it imports a file from outside and names its own).
@@ -647,7 +647,7 @@ def test_the_normalizer_keeps_the_size_when_an_old_root_names_the_same_file(tmp_
         assert kept["_previewSize"] == size, preview
 
 
-# #226 review 3, NIT-2: the preview follows the file. An agent that names
+# #226: the preview follows the file. An agent that names
 # another file gets that file's preview, not the old one's.
 def test_an_agent_that_sets_another_file_gets_its_preview(client, tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "OUTPUT_ROOT", tmp_path)
@@ -703,7 +703,7 @@ def test_the_preview_and_size_stay_when_the_file_does_or_the_url_is_sent(client,
     assert _params(node_id)["_previewUrl"] == sent
 
 
-# #226 review 4, LOW-1: the preview follows the file, not its name. Two files
+# #226: the preview follows the file, not its name. Two files
 # with one name in different folders (a node's `{id}_final.png` in two run
 # folders, `~/a/photo.png` and `~/b/photo.png`) are different files.
 def _image_input_at(client, path) -> str:
@@ -772,7 +772,7 @@ def test_an_old_root_that_no_longer_resolves_falls_back_to_the_name():
     assert not main_module._same_ref_file(gone, "/elsewhere/output/run1/other.png")
 
 
-# #226 review 5, LOW-1 (B3): an outside http(s) URL names its own file, so two
+# #226: an outside http(s) URL names its own file, so two
 # of them with one basename are two files (never read as one by name).
 def test_two_outside_urls_with_one_basename_are_two_files():
     assert not main_module._same_ref_file("https://a.example.com/x/photo.png", "https://b.example.com/y/photo.png")
@@ -792,7 +792,7 @@ def test_a_deleted_local_file_is_not_an_outside_url_with_the_same_path(tmp_path)
     assert main_module._unresolved_ref_key("https://cdn.example.com/output/run1/n1.png")[0] == "url"
 
 
-# #226 review 5, NIT-3: the corners of the same-file rule.
+# #226: the corners of the same-file rule.
 def test_a_deleted_outside_file_is_not_another_file_of_the_same_name(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     a.mkdir()
@@ -837,7 +837,7 @@ def test_a_case_spelling_of_a_file_in_the_output_root_is_the_same_file(tmp_path,
     assert main_module._same_ref_file(str(tmp_path / "run1" / "N1_final.png"), str(tmp_path / "RUN1" / "n1_final.png"))
 
 
-# #226 review 4, NIT-2: only an Image Input's preview follows its file. An
+# #226: only an Image Input's preview follows its file. An
 # Audio or Document Input's filePath write leaves its params as sent (a
 # `_previewUrl` there would be read by the mask source's fallback).
 @pytest.mark.parametrize("kind, ext", [("audio-input", "mp3"), ("document-input", "pdf")])

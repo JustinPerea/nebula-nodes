@@ -1,14 +1,14 @@
-"""PR #203 round 20, section 2b C: review 19's settings-durability findings.
+"""PR #203, section 2b C: settings-durability findings.
 
 1. With no flock, a temp judged stale is removed only while it is still the
    file judged (moved to a name of its own, checked by inode), and judged on
    the folder's own clock; one dated ahead of that clock is stale too.
 2. A verified copy the copy folder won't take the replaced file for is said
    (settings.not_restored), naming that folder.
-3. settings.not_restored's line by cause (GM r40 item 3 for any cause but
+3. settings.not_restored's line by cause (design for any cause but
    not being allowed).
 5. The replaced file is named by the time and a random suffix, kept once.
-6. The guards review 19's mutants R1, R8 and R9 reached.
+6. The guards mutants R1, R8 and R9 reached.
 7. The Settings notice lasts until the person dismisses it, across a
    restart, and stays the person's only.
 """
@@ -107,7 +107,7 @@ def _marks(tmp_path: Path) -> dict[str, Path]:
 # -- 1. no flock: the stale temp, the folder's clock, a future one -----------------------------
 
 def test_two_saves_meeting_one_stale_temp_never_remove_each_others(keyed, tmp_path, shared_temp_name):
-    """Review 19's q1: B judges the stale temp and pauses before taking it;
+    """q1: B judges the stale temp and pauses before taking it;
     A takes it, makes its own and writes it whole. B then finds A's temp,
     not the one it judged: it puts it back and waits. Never a torn file."""
     marks = _marks(tmp_path)
@@ -139,7 +139,7 @@ def test_two_saves_meeting_one_stale_temp_never_remove_each_others(keyed, tmp_pa
 
 
 def test_a_wall_clock_running_fast_never_takes_a_live_temp(keyed, tmp_path, shared_temp_name):
-    """Review 19's q2: B's clock is two minutes fast (or the folder's server
+    """q2: B's clock is two minutes fast (or the folder's server
     two minutes behind). On the folder's own clock A's temp is fresh: B
     waits for it, and both save whole."""
     marks = _marks(tmp_path)
@@ -164,7 +164,7 @@ def test_a_wall_clock_running_fast_never_takes_a_live_temp(keyed, tmp_path, shar
 
 
 def test_a_temp_dated_ahead_of_the_folder_is_stale(keyed, monkeypatch, shared_temp_name):
-    """Review 19's q3: a temp a year ahead blocked every save with no flock
+    """q3: a temp a year ahead blocked every save with no flock
     and the sweep never removed it."""
     temp = settings.temp_path_for(keyed)
     future = time.time() + 86400 * 365
@@ -212,7 +212,7 @@ def test_only_the_judged_temp_is_removed(tmp_path):
 
 
 def test_the_judged_temp_is_checked_where_no_agent_reads(keyed, monkeypatch):
-    """Round 20: while it is checked, a temp file (another save's, keys
+    """While it is checked, a temp file (another save's, keys
     included, when it isn't the one judged) sits in the judging folder,
     which every agent deny list names: never under a name of its own beside
     settings.json, where none does."""
@@ -301,14 +301,14 @@ def test_the_not_restored_line_says_its_cause(tmp_path, why, allowed):
     if allowed:
         assert "isn’t allowed to change" in line
     else:
-        # GM, PR #203 r40 item 3, verbatim.
+        # Design, PR #203, verbatim.
         assert line == ("Nebula has a saved copy of your settings but couldn’t put it back. It’ll try again the "
                         "next time Nebula starts.")
 
 
 @pytest.mark.unprivileged
 def test_a_read_only_folder_is_the_place_the_line_names(home_state, keyed):
-    """Review 19's R10: the folder, not the file, when the folder refuses."""
+    """The folder, not the file, when the folder refuses."""
     _cut_copy(keyed)
     keyed.chmod(0o400)
     keyed.parent.chmod(0o500)
@@ -336,7 +336,7 @@ def test_the_replaced_file_is_named_by_time_and_kept_once(home_state):
     assert stat.S_IMODE(first.stat().st_mode) == 0o600
 
 
-# -- 6. the guards review 19's mutants reached ----------------------------------------------------
+# -- 6. the guards mutants reached ----------------------------------------------------
 
 def test_the_copys_temp_without_the_lock_is_never_taken_while_fresh(keyed, monkeypatch, shared_temp_name):
     """R1: an in-place save with no flock writes its copy through the copy's

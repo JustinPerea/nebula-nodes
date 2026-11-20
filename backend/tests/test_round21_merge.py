@@ -1,9 +1,9 @@
-"""Round 21 of PR #195: the merge of main (PR #114, c1e7338c).
+"""PR #195: the merge of main (PR #114, c1e7338c).
 
-- Run admission (review 20, C3): a run refused at the last fence (the canvas
+- Run admission: a run refused at the last fence (the canvas
   moved while it awaited) leaves the placeholders it would have made normal
   as they were, and keeps no agent-run record.
-- The canvas check (C2): with a filed revision the canvas header is compared
+- The canvas check: with a filed revision the canvas header is compared
   with the filed canvas's epoch; otherwise with the live one.
 - The epoch base: canvas revisions that can't be restored after a restart
   (the file unreadable, missing while a canvas was saved before, or memory

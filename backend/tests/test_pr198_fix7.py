@@ -1,4 +1,4 @@
-"""PR #198 fix round 7 (review 6, M1): a clear or an import of the open
+"""PR #198: a clear or an import of the open
 project is not a switch. A tab write made for the canvas before it gets
 ``code: "canvas_replaced"`` (with ``project`` and ``switchedBy``), so the
 scene save says no line of its own and #195's "cleared while you were

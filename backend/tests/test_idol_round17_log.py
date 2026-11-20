@@ -1,5 +1,5 @@
-"""PR #203 round 17, section 2: the refused run's Agent log line (review 16,
-copy-ui M1, M2 and L1; GM r33 items 1 and 2).
+"""PR #203, section 2: the refused run's Agent log line (
+copy-ui M1, M2 and L1; design items 1 and 2).
 
 - An input with no wire merges as a reason does, from one table
   (person_line.INPUT_NEED_PREDICATES): "2 “GPT Image 2” nodes need a prompt.
@@ -73,7 +73,7 @@ INPUT_CASES = [
                   "then run the nodes again."),
     ([GPT, GPT, TTS], f"{HEADING} 2 “GPT Image 2” nodes need a prompt. Connect a prompt to each, then run "
                       "the nodes again. “OpenAI TTS” needs text. Connect it, then run the node again."),
-    # GM r35 item 1: the count inside the need's sentence from 4.
+    # Design: the count inside the need's sentence from 4.
     ([GPT, GPT, GPT, GPT1], f"{HEADING} 4 nodes need a prompt. Connect a prompt to each, then run the nodes again."),
 ]
 
@@ -250,7 +250,7 @@ def test_an_agents_text_in_the_log_is_still_capped():
     assert len(event["log"]) == agent_presence.MAX_LOG_CHARS
 
 
-# -- GM r33 item 4: the missing-key line names another provider only when its key is set ----
+# -- Design: the missing-key line names another provider only when its key is set ----
 
 ROUTE_KEY = "“FLUX.2” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings"
 
@@ -269,12 +269,12 @@ def test_the_missing_key_line_names_another_provider_only_when_its_key_is_set(ke
     assert node_route.route_unavailable_line(flux2, {"_provider": "bfl"}, keys) == line
     reason = node_readiness.instance_missing_reason(flux2, {"_provider": "bfl"}, set(keys), False, definitions, {})
     assert reason.line("“FLUX.2”") == line
-    # GM r37 item 1: after the comma clause the ending is its own sentence.
+    # Design: after the comma clause the ending is its own sentence.
     end = ". Then run the node again." if ", or switch" in line else ", then run the node again."
     assert reason.again[0] == line.removeprefix("“FLUX.2” ").removesuffix(".") + end
 
 
-# -- review 16, N1: the size and retired why-clauses, pinned with a fixture route --------
+# -- The size and retired why-clauses, pinned with a fixture route --------
 
 def _fixture_route(rule: str, value: dict) -> dict:
     import copy

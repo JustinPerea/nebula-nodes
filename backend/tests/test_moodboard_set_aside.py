@@ -189,7 +189,7 @@ def test_a_set_aside_image_that_cant_be_read_is_listed_without_a_warning() -> No
     analysis = analyze_moodboard(board)
 
     far = analysis["images"][1]
-    # An outside link is never read (Q98): "outside", with no warning when set aside.
+    # An outside link is never read: "outside", with no warning when set aside.
     assert far["status"] == "outside" and far["setAside"] is True and far["palette"] == []
     # The warnings are the steering board's: what it would say without it.
     assert analysis["warnings"] == []
@@ -241,7 +241,7 @@ def test_krea_references_never_include_a_set_aside_image(tmp_path, monkeypatch) 
     for bundle in (fresh, saved):
         refs = references(bundle)
         assert [ref["url"] for ref in refs] == [cream, navy]
-        # Q21 b: the two share out the board's 0.7 (weights 0.8 and 0.5).
+        # The two share out the board's 0.7 (weights 0.8 and 0.5).
         assert [ref["strength"] for ref in refs] == [0.4308, 0.2692]
         assert bundle["representativeImages"] == [cream, navy]
         # The bundle carries no set-aside image, the switch or weight 0 (plan
@@ -288,7 +288,7 @@ def test_a_saved_analysis_that_counted_weight_zero_reads_with_the_steering_count
     assert board["analysis"]["summary"] == analysis["summary"]
     assert path.read_bytes() == before
     # One that no longer describes the board keeps its own count, read in
-    # today's plural (GM r1 on #208: no "(s)").
+    # today's plural (design on #208: no "(s)").
     images = [{**img, "weight": 0.9} if img["url"] == cream else img for img in board["images"]]
     store.update(created["id"], images=images, analysis=old)
     stale = store.get(created["id"])
