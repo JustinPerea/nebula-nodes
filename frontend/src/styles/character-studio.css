@@ -122,7 +122,7 @@ body.app-slava-restraint .character-studio-toolbar__state--saving {
 }
 
 body.app-slava-restraint .character-studio-toolbar__state--saved {
-  /* Design: saving is the calm case, so the neutral meta ink. */
+  /* Design: a finished save is the calm case, so the neutral meta ink. */
   color: var(--sr-ink-meta);
 }
 
@@ -130,8 +130,9 @@ body.app-slava-restraint .character-studio-toolbar__state--draft {
   color: var(--sr-ink-faint);
 }
 
+/* Design: a save that failed is a warning (the warning token, not a salmon literal). */
 body.app-slava-restraint .character-studio-toolbar__state--error {
-  color: #e0796b;
+  color: var(--sr-error);
 }
 
 /* ── Library rail ────────────────────────────────────────────────────────── */
