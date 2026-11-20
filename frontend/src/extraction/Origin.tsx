@@ -1,4 +1,5 @@
 import type { OriginTag } from './read'
+import { badgeWords, suffixWords } from './sources'
 
 const TITLES: Record<OriginTag, string> = {
   code: 'Set by code',
@@ -8,19 +9,10 @@ const TITLES: Record<OriginTag, string> = {
   agent: 'Changed by an agent',
 }
 
-/** A source tag is a badge: sentence case, one neutral look whoever set the value. */
-const BADGES: Record<OriginTag, string> = {
-  code: 'Code',
-  Claude: 'Claude',
-  'fake reader': 'Fake reader',
-  you: 'You',
-  agent: 'Agent',
-}
-
 export function Origin({ tag }: { tag: OriginTag }) {
   return (
     <span className="ex-origin" title={TITLES[tag]} data-origin={tag}>
-      {BADGES[tag]}
+      {badgeWords(tag)}
     </span>
   )
 }
@@ -36,7 +28,7 @@ export function SectionLabel({ title, tag }: { title: string; tag: OriginTag }) 
     <h2 className="ex-label">
       {title}{' '}
       <span className="ex-label-origin" data-section-origin={tag} title={TITLES[tag]}>
-        · {tag}
+        · {suffixWords(tag)}
       </span>
     </h2>
   )

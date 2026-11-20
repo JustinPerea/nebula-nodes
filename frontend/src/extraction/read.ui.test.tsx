@@ -6,6 +6,7 @@ import { MeasuredLines } from './RecordView'
 import { RegionOverlay } from './RegionOverlay'
 import { ReadingSection, RegionsSection, ShowsSection, SpacingSection, TextSection } from './Sections'
 import { axisFill, ROLE_LABELS, valueLabel } from './read'
+import { badgeWords, suffixWords } from './sources'
 import { applied, readRecord } from './testRecord'
 import type { Correction } from './types'
 
@@ -246,6 +247,12 @@ describe('sections', () => {
     const rows = screen.getAllByTestId('region-row')
     expect(rows[0].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('you')
     expect(rows[1].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('agent')
+    // The badge and the section suffix read one map: sentence case on a badge, lower case after
+    // the dot unless the source is a name.
+    expect(badgeWords('fake reader')).toBe('Fake reader')
+    expect(suffixWords('fake reader')).toBe('fake reader')
+    expect(suffixWords('code')).toBe('code')
+    expect(suffixWords('Claude')).toBe('Claude')
     // A source tag is a sentence-case badge with one neutral look.
     const badge = rows[1].querySelector('[data-origin]')!
     expect(badge.textContent).toBe('Agent')
