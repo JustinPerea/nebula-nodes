@@ -18,19 +18,24 @@ import {
 // This reads every stylesheet under src and fails on a rule whose selector holds one of those
 // state modifiers and sets color, border (any side), outline-color, background or a fill to the accent:
 // var(--sr-accent...), var(--sr-error...) or var(--sr-danger...) (the last two alias the
-// accent), or the literal #FF5A1F / rgba(255, 90, 31, ...). Known limits: a colour reached
-// through another custom property (`--x: var(--sr-accent)`) or set from TSX is not followed,
-// and CSS nesting is not read, so it fails.
+// accent), or the literal #FF5A1F (with or without alpha) / rgba(255, 90, 31, ...). The base
+// .commons-badge and .commons-source rules are held to the same rule, and box-shadow, text-shadow,
+// border-image and the other colour-bearing properties count. Known limit: a colour reached
+// through another custom property (`--x: var(--sr-accent)`) or set from TSX is not followed.
+// CSS nesting under a badge selector is not read, so it fails.
 // Role badges (`commons-badge--role-*`: Attract, Avoid) are neutral by rule: design says a role is a
 // category, not good or bad news, so a role rule may not set color, border or background at all
 // (the plain badge colours come from the base .commons-badge rule). There is no allow-list.
 
 const SRC = join(process.cwd(), 'src');
 const MODIFIER = /\.commons-(?:badge|source)--[\w-]+/;
-const COLOUR_PROP = /^(?:color|fill|stroke|background(?:-color|-image)?|outline(?:-color)?|border(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?(?:-color)?)$/i;
+/** The badge or source class itself, with or without a modifier: the base rule may not use the accent either. */
+const BADGE = /\.commons-(?:badge|source)(?![\w])/;
+const COLOUR_PROP = /^(?:color|fill|stroke|background(?:-color|-image)?|outline(?:-color)?|border(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?(?:-color)?|border-image(?:-source)?|box-shadow|text-shadow|accent-color|caret-color|text-decoration(?:-color)?|column-rule(?:-color)?)$/i;
 const ROLE = /\.commons-badge--role-[\w-]+/;
 const ACCENT_VAR = /var\(\s*--sr-(?:accent|error|danger)(?![\w])[\w-]*/i;
-const ACCENT_LITERAL = /#ff5a1f\b|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
+// #FF5A1F, with or without an alpha pair (#FF5A1FCC), and rgb()/rgba() of 255 90 31.
+const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
 
 function main() {
   const files = collectCssFiles(SRC);
@@ -51,15 +56,14 @@ export function findAccentBadges(source, file) {
   const hits = [];
   for (const rule of parseRules(css)) {
     const selector = compact(rule.selector);
-    if (!MODIFIER.test(selector)) continue;
+    if (!BADGE.test(selector)) continue;
+    // Nested CSS isn't read: a nested block under any badge selector (`.commons-badge { &--inbox {...} }`) fails.
     if (rule.nested) {
       hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
       continue;
     }
     for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
-      const isColour = COLOUR_PROP.test(declaration.prop);
-      const isVarDef = false;
-      if (!isColour || isVarDef) continue;
+      if (!COLOUR_PROP.test(declaration.prop)) continue;
       const reason = ROLE.test(selector)
         ? 'a role badge is neutral: it takes the plain badge colours'
         : ACCENT_VAR.test(declaration.value)

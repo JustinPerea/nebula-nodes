@@ -47,6 +47,7 @@
   --sr-error-border: var(--sr-edge-strong);
   --sr-danger-border: var(--sr-edge-strong);
   --sr-danger-edge: var(--sr-edge-strong);
+  --sr-warning-border: var(--sr-edge-strong);
 }
 
 /*

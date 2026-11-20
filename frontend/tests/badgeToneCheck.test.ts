@@ -21,6 +21,15 @@ describe('check-badge-tone', () => {
     '.commons-badge--role-attract { color: var(--sr-success); }',
     '.commons-badge--role-avoid { border-color: var(--sr-warning-border); }',
     '.commons-badge--x:hover { border-color: var(--sr-accent-hover); }',
+    '.commons-badge--x { color: #FF5A1FCC; }',
+    '.commons-badge--x { box-shadow: inset 0 0 0 1px var(--sr-accent); }',
+    '.commons-badge--x { text-decoration-color: var(--sr-accent); }',
+    '.commons-badge--x { border-image: linear-gradient(var(--sr-accent), transparent) 1; }',
+    '.commons-badge--role-attract { box-shadow: 0 0 0 1px var(--sr-success); }',
+    '.commons-badge { color: var(--sr-accent); }',
+    '.commons-source { border-color: var(--sr-accent-border); }',
+    '.commons-badge { &--inbox { color: var(--sr-accent); } }',
+    '.commons-badge { &.commons-badge--inbox { color: var(--sr-accent); } }',
   ];
   for (const css of accented) {
     it(`fails: ${css}`, () => expect(hits(css)).toHaveLength(1));
@@ -34,7 +43,9 @@ describe('check-badge-tone', () => {
     '.commons-badge--x { transition: color 200ms; --x: var(--sr-accent); }',
     '.commons-button--primary { color: var(--sr-accent); }',
     '.commons-badge--role-attract { transition: color 200ms; }',
-    '.commons-badge { color: var(--sr-accent); }',
+    '.commons-badge { color: var(--sr-ink-light); box-shadow: none; }',
+    '.commons-badge--x { color: #FF5A1E; }',
+    '.commons-badges-list { color: var(--sr-accent); }',
     '/* .commons-badge--x { color: var(--sr-accent); } */',
   ];
   for (const css of fine) {
