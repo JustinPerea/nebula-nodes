@@ -1131,7 +1131,10 @@ def test_a_keep_lost_to_a_race_hands_back_what_puts_the_saved_part_back(app, tmp
         _cli(app, ["moodboard", "set", board["id"], "--avoid", "z", "--keep-brief"], capsys)
     err = capsys.readouterr().err
     assert "The other changes were saved" in err and f"nebula moodboard set {board['id']} --restore" in err
-    printed = json.loads(err[err.index("{"):])
+    # The JSON follows the CLI's own "To put the board back ... --restore <file>`:" line;
+    # anything else on stderr (a stray thread's traceback) is not part of it.
+    marker = "--restore <file>`:\n"
+    printed = json.loads(err[err.index(marker) + len(marker):])
     assert printed["previous"]["avoid"] == ["x", "y"] and set(printed["previous"]) == {"avoid", "undo"}
     # A Keep lost after a write that changed nothing has nothing to put back.
     with pytest.raises(boards.MoodboardError, match="saved, and changed nothing") as same:

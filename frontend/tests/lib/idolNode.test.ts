@@ -71,14 +71,14 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
   it('switcher: "Free on Hugging Face." and "Auto · free" without the token; "Uses your Hugging Face allowance." and "Auto" with it', () => {
     const anonymous = providerSwitchState(IDOL, {}, { apiKeys: {}, kreaSignedIn: false });
     expect(anonymous.rows.map((row) => [row.id, row.label, row.keyState])).toEqual([
-      ['auto', 'Auto · free', null], ['hf-space', 'Speridlabs', 'none'],
+      ['auto', 'Auto · free', null], ['hf-space', 'Hugging Face', 'none'],
     ]);
     expect(anonymous.rows[1].info).toBe('Free on Hugging Face.');
     expect(anonymous.rows[1].setup).toEqual({ kind: 'api-key', key: 'HF_TOKEN' });
     expect(anonymous.blocked).toBe(false);
     const signedIn = providerSwitchState(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, kreaSignedIn: false });
     expect(signedIn.rows.map((row) => [row.id, row.label, row.keyState])).toEqual([
-      ['auto', 'Auto', null], ['hf-space', 'Speridlabs', 'connected'],
+      ['auto', 'Auto', null], ['hf-space', 'Hugging Face', 'connected'],
     ]);
     expect(signedIn.rows[1].info).toBe('Uses your Hugging Face allowance.');
   });

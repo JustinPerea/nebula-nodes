@@ -155,7 +155,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               `error` is the text agents read; errorRaw is the full text
               behind Details when the run cut it. */}
           {shot.output?.status === 'error' && shot.output.error && (
-            <NodeError className="cinema-shot-panel__error" raw={shot.output.errorRaw ?? shot.output.error}
+            <NodeError className="cinema-shot-panel__error model-node__error" raw={shot.output.errorRaw ?? shot.output.error}
               category={shot.output.errorCategory} friendly={shot.output.errorFriendly}
               person={shot.output.errorPerson} providerText={shot.output.errorProviderText}
               provider={shot.output.errorProvider} surface="shot" />
