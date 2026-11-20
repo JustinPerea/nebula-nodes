@@ -407,7 +407,7 @@
 
 /* The name never wraps: it takes what's left of the line and truncates. It
    isn't in the agent's colour (a dark or light one can fail contrast at
-   12 px); the dot and the left edge carry the colour. */
+   12 px); the dot carries the colour (design). */
 .proposal-bar__agent {
   min-width: 0;
   overflow: hidden;

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
 const ROOT = process.cwd();
@@ -74,12 +75,20 @@ const VISUAL_PROPS = new Set([
   'zIndex',
 ]);
 
-const files = collectFiles(COMPONENTS_DIR);
-const violations = [];
+/**
+ * Design: no accent bar down the left edge, in an inline style either. A style object key
+ * borderLeft*, borderInlineStart* (or border-left*, quoted), or a boxShadow whose value text
+ * holds `inset`, fails whether the value is a literal or computed (a template literal with the
+ * agent's colour is the case this is for).
+ */
+const EDGE_KEY = /^(border-?left|border-?inline-?start)/i;
+const edgeKey = (name) => EDGE_KEY.test(name);
 
-for (const file of files) {
-  const sourceText = readFileSync(file, 'utf8');
+/** The static-visual and left-edge problems in one source file: { staticStyles, edges } of { file, line, column, prop }. */
+export function scanSource(sourceText, file) {
   const sourceFile = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const staticStyles = [];
+  const edges = [];
 
   visit(sourceFile, (node) => {
     if (!ts.isJsxAttribute(node) || node.name.text !== 'style') return;
@@ -88,31 +97,55 @@ for (const file of files) {
     if (!expr || !ts.isObjectLiteralExpression(expr)) return;
 
     for (const prop of expr.properties) {
-      if (!ts.isPropertyAssignment(prop)) continue;
+      if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) continue;
       const name = propertyName(prop.name);
-      if (!name || !VISUAL_PROPS.has(name)) continue;
-      if (!isStaticValue(prop.initializer)) continue;
-
+      if (!name) continue;
       const { line, character } = sourceFile.getLineAndCharacterOfPosition(prop.name.getStart(sourceFile));
-      violations.push({
-        file: relative(ROOT, file),
-        line: line + 1,
-        column: character + 1,
-        prop: name,
-      });
+      const where = { file, line: line + 1, column: character + 1, prop: name };
+
+      const value = ts.isPropertyAssignment(prop) ? prop.initializer.getText(sourceFile) : name;
+      if (edgeKey(name) || (/^box-?shadow$/i.test(name) && /\binset\b/i.test(value))) {
+        edges.push(where);
+        continue;
+      }
+      if (!ts.isPropertyAssignment(prop) || !VISUAL_PROPS.has(name)) continue;
+      if (!isStaticValue(prop.initializer)) continue;
+      staticStyles.push(where);
     }
   });
+  return { staticStyles, edges };
 }
 
-if (violations.length > 0) {
-  console.error('Static inline visual styles found. Move these to CSS classes, or make them dynamic data/geometry values:');
-  for (const violation of violations) {
-    console.error(`  ${violation.file}:${violation.line}:${violation.column} style.${violation.prop}`);
+function main() {
+  const files = collectFiles(COMPONENTS_DIR);
+  const violations = [];
+  const edges = [];
+  for (const file of files) {
+    const found = scanSource(readFileSync(file, 'utf8'), relative(ROOT, file));
+    violations.push(...found.staticStyles);
+    edges.push(...found.edges);
   }
-  process.exit(1);
+
+  if (violations.length > 0 || edges.length > 0) {
+    if (violations.length > 0) {
+      console.error('Static inline visual styles found. Move these to CSS classes, or make them dynamic data/geometry values:');
+      for (const violation of violations) {
+        console.error(`  ${violation.file}:${violation.line}:${violation.column} style.${violation.prop}`);
+      }
+    }
+    if (edges.length > 0) {
+      console.error('Left-edge accent in an inline style (static or computed). Set the block apart with a label, a fill or space, not an edge down its left side:');
+      for (const edge of edges) {
+        console.error(`  ${edge.file}:${edge.line}:${edge.column} style.${edge.prop}`);
+      }
+    }
+    process.exit(1);
+  }
+
+  console.log(`Inline style guard passed (${files.length} component files scanned).`);
 }
 
-console.log(`Inline style guard passed (${files.length} component files scanned).`);
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();
 
 function collectFiles(dir) {
   const out = [];

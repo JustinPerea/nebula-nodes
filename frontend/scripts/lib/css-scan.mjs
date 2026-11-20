@@ -39,7 +39,8 @@ export function parseRules(css, baseOffset = 0) {
     const close = findMatchingBrace(css, open);
     if (close === -1) break;
 
-    const selectorStart = findSelectorStart(css, open);
+    // A rule starts after the previous one closed (cursor) or after a stray statement's semicolon (@import ...;).
+    const selectorStart = Math.max(cursor, findSelectorStart(css, open));
     const selector = css.slice(selectorStart, open).trim();
     const body = css.slice(open + 1, close);
 
@@ -50,6 +51,8 @@ export function parseRules(css, baseOffset = 0) {
         selector,
         body,
         bodyStart: baseOffset + open + 1,
+        // Nested CSS (`&` rules, or a `{` between declarations): the declaration reader below can't split it.
+        nested: bodyHasBrace(body),
       });
     }
 
@@ -58,14 +61,43 @@ export function parseRules(css, baseOffset = 0) {
   return rules;
 }
 
+/** The index of the brace that closes the one at openIndex. A brace inside a quoted string (content: "}") doesn't count. */
 export function findMatchingBrace(css, openIndex) {
   let depth = 0;
+  let quote = null;
   for (let i = openIndex; i < css.length; i += 1) {
-    if (css[i] === '{') depth += 1;
-    if (css[i] === '}') depth -= 1;
+    const char = css[i];
+    if (quote) {
+      if (char === '\\') i += 1;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '{') depth += 1;
+    if (char === '}') depth -= 1;
     if (depth === 0) return i;
   }
   return -1;
+}
+
+/** Whether a rule body holds a `{` outside quoted strings. */
+export function bodyHasBrace(body) {
+  let quote = null;
+  for (let i = 0; i < body.length; i += 1) {
+    const char = body[i];
+    if (quote) {
+      if (char === '\\') i += 1;
+      else if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '{') {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function findSelectorStart(css, openIndex) {
@@ -75,9 +107,41 @@ export function findSelectorStart(css, openIndex) {
   return prevBoundary + 1;
 }
 
+/** Split a rule body on `;` outside quoted strings and parentheses (a url(data:...;base64,...) keeps its semicolon). */
+function splitDeclarations(body) {
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let current = '';
+  for (let i = 0; i < body.length; i += 1) {
+    const char = body[i];
+    if (quote) {
+      current += char;
+      if (char === '\\' && i + 1 < body.length) {
+        i += 1;
+        current += body[i];
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") quote = char;
+    if (char === '(') depth += 1;
+    if (char === ')') depth = Math.max(0, depth - 1);
+    if (char === ';' && depth === 0) {
+      parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current);
+  return parts;
+}
+
 export function parseDeclarations(body, bodyStart) {
   const declarations = [];
-  const parts = body.split(';');
+  const parts = splitDeclarations(body);
   let offset = 0;
 
   for (const part of parts) {
