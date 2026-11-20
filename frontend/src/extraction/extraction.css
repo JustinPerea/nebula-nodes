@@ -61,13 +61,16 @@ body { background: #111; }
   padding: 0 12px;
   border: 0;
   border-radius: 6px;
-  background: var(--ex-fill-selected);
-  color: var(--ex-strong);
+  background: var(--ex-fill-selected, #272727);
+  color: var(--ex-strong, #e6e6e6);
   cursor: pointer;
 }
 .ex-button:hover:not(:disabled) { background: #323232; }
-.ex-button:disabled { color: #666; cursor: default; }
-.ex-button-quiet { background: transparent; color: var(--ex-muted); }
+/* The disabled look is the app's shared one (styles/disabled-buttons.css). */
+.ex-button:disabled { cursor: default; }
+/* The label is the page's text grey, brighter than the shared disabled grey, so a disabled quiet
+   button reads dimmer than an enabled one (the app raised its dim buttons the same way). */
+.ex-button-quiet { background: transparent; color: var(--ex-text, #ccc); }
 .ex-button-quiet:hover:not(:disabled) { background: var(--ex-fill); color: var(--ex-text); }
 
 .ex-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 0; }

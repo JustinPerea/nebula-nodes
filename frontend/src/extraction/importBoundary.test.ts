@@ -70,3 +70,56 @@ describe('the extraction page is outside the app', () => {
     expect(specifiers(text)).toEqual(expect.arrayContaining(['./a', '../b', './c.css', './d', './e.css']))
   })
 })
+
+// The other direction. The page may use small app modules (the springs, the shared disabled-button
+// sheet), but never the app's person session: lib/personSession takes a Nebula person link out of
+// the address bar on load and keeps its token, and this page has its own token and no person.
+// LineText reaches it through lib/errorCopy, which is why the page's notice doesn't register.
+const NEVER = ['lib/personSession.ts', 'lib/errorCopy.ts', 'components/LineText.tsx']
+
+function resolveModule(from: string, spec: string): string | null {
+  if (!spec.startsWith('.')) return null
+  const base = join(dirname(from), spec)
+  for (const candidate of [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]) {
+    try {
+      if (statSync(candidate).isFile()) return candidate
+    } catch {
+      /* not this one */
+    }
+  }
+  return null
+}
+
+/** Every source file the page's entry reaches through relative imports. */
+export function reachedFrom(entry: string): Set<string> {
+  const seen = new Set<string>()
+  const queue = [entry]
+  while (queue.length) {
+    const file = queue.pop()!
+    if (seen.has(file)) continue
+    seen.add(file)
+    if (!/\.(ts|tsx)$/.test(file)) continue
+    for (const spec of specifiers(readFileSync(file, 'utf8'))) {
+      const next = resolveModule(file, spec)
+      if (next && !next.includes('.test.')) queue.push(next)
+    }
+  }
+  return seen
+}
+
+describe('the extraction page leaves the app person session out', () => {
+  const reached = [...reachedFrom(join(SRC, 'extraction', 'main.tsx'))].map((file) => relative(SRC, file).split(sep).join('/'))
+
+  it('walks the page and the app modules it does use', () => {
+    expect(reached).toEqual(expect.arrayContaining(['extraction/App.tsx', 'lib/springs.ts', 'styles/disabled-buttons.css']))
+  })
+
+  it('never reaches the person session', () => {
+    expect(reached.filter((file) => NEVER.includes(file))).toEqual([])
+  })
+
+  it('would catch LineText', () => {
+    const viaLineText = [...reachedFrom(join(SRC, 'components', 'LineText.tsx'))].map((file) => relative(SRC, file).split(sep).join('/'))
+    expect(viaLineText).toContain('lib/personSession.ts')
+  })
+})
