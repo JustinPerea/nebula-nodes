@@ -40,6 +40,7 @@ import '../../styles/world-preview.css';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { failureMessage } from '../../lib/errorCopy';
 import { ModalPortal } from '../ModalPortal';
+import { LineText } from '../LineText';
 
 const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
@@ -384,7 +385,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
                 )}
                 {downloadState?.status === 'error' && (
                   <span className="world-modal__download-error" role="alert">
-                    {downloadState.message}
+                    <LineText text={downloadState.message} />
                   </span>
                 )}
               </div>

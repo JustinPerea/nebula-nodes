@@ -20,25 +20,39 @@ import {
 //   1. a token: --sr-error* or --sr-danger* (and the --sr-danger-ink/-fill/-tint/-edge aliases)
 //      whose value resolves, through var() chains or fallbacks, to the accent
 //      (var(--sr-accent...) or the literal #FF5A1F / rgba(255, 90, 31, ...)).
-//   2. an error state (a selector holding `error`, `fail` or `invalid`) that uses
-//      var(--sr-danger...) or the accent in any declaration.
-//   3. a destructive control (the last compound of a selector holds `danger`, `delete`,
-//      `destructive`, `--clear`, `discard`, `forget` or `trash__trigger`) that uses
-//      var(--sr-error...) or the accent in any declaration.
-// A selector that is both (`.kept-delete-chooser__error`) is an error state: the error check wins.
-// Known limit: a colour reached through a local custom property (`--x: var(--sr-accent)`) is
-// caught only where that property is declared inside such a rule; CSS nesting under such a
-// selector is not read, so it fails.
+//   2. an error state (the last compound of a selector part holds `error`, `fail`, `invalid`,
+//      `refused`, `warn`, `blocked`, `denied` or `rejected`) that uses var(--sr-danger...), the
+//      danger red literals (#ff887d, #ff9a91, rgba(255, 70, 60, ...)), the accent or the
+//      accent literal in any declaration.
+//   3. a destructive control (the last compound holds `danger`, `delete`, `destructive`,
+//      `--clear`, `discard`, `forget` or `trash__trigger`) that uses var(--sr-error...), the
+//      accent, the accent literal or the warning literal (#F5C518).
+//   4. design's one rule, yellow means something needs attention or went wrong and nothing else:
+//      a rule whose last compound names a state that needs neither (`running`, `pass`,
+//      `passed`, `done`, `ready`, `ok`, `success`) may not read --sr-warning*, --sr-error* or
+//      the warning literal.
+// The state words are read from the element and modifier, not the BEM block, so
+// `.personal-warning__accept` (a button in a warning dialog) is not an error state, and
+// `not-ready` is not a ready state. Selectors are classified by the last compound of each part, so the children of an error
+// container (a Retry button inside `.chat__tool--error`) are not error states. A selector that
+// is both error and destructive (`.kept-delete-chooser__error`) is an error state.
+// Limits: a custom property is followed one level, and only when it is declared in the same
+// file (`--x: var(--sr-accent)` in one rule, `var(--x)` in an error rule of that file). A chain
+// of two local properties, or a property declared in another file, is not followed. CSS nesting
+// under an error or destructive selector is not read, so it fails.
 
 const SRC = join(process.cwd(), 'src');
 const TOKEN_NAME = /^--(?:sr-(?:error|danger)|jev-fail)(?![\w])/;
 const ACCENT_VAR = /var\(\s*(--sr-accent(?![\w])[\w-]*)/gi;
 const VAR_REF = /var\(\s*(--[\w-]+)/g;
 const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
-const ERROR_STATE = /error|fail|invalid/i;
+const ERROR_STATE = /error|fail|invalid|refused|warn|blocked|denied|rejected/i;
+const CALM_STATE = /(?<![a-z0-9])(?<!not-)(?:running|pass|passed|done|ready|ok|success)(?![a-z0-9])/i;
+const ATTENTION_USE = /var\(\s*--sr-(?:warning|error)(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
+const WARNING_LITERAL = /#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const DESTRUCTIVE = /danger|delete|destructive|--clear|discard|forget|trash__trigger/i;
-const DANGER_USE = /var\(\s*--sr-danger(?![\w])/i;
-const ERROR_USE = /var\(\s*--sr-error(?![\w])/i;
+const DANGER_USE = /var\(\s*--sr-danger(?![\w])|#ff887d(?![0-9a-f])|#ff9a91(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*70\s*[, ]\s*60\b/i;
+const ERROR_USE = /var\(\s*--sr-error(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const ACCENT_USE = /var\(\s*--sr-accent(?![\w])|#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
 
 function main() {
@@ -56,7 +70,18 @@ function main() {
 export function findErrorTokenHits(sheets) {
   const parsed = sheets.map(({ file, source }) => {
     const css = stripComments(source);
-    return { file, css, lineStarts: computeLineStarts(css), rules: parseRules(css) };
+    const rules = parseRules(css);
+    // Custom properties declared in this file, for the one-level lookup.
+    const local = new Map();
+    for (const rule of rules) {
+      if (rule.nested) continue;
+      for (const d of parseDeclarations(rule.body, rule.bodyStart)) {
+        if (!d.prop.startsWith('--')) continue;
+        if (!local.has(d.prop)) local.set(d.prop, []);
+        local.get(d.prop).push(compact(d.value));
+      }
+    }
+    return { file, css, lineStarts: computeLineStarts(css), rules, local };
   });
 
   // Every definition of a custom property, across all sheets (a local override counts).
@@ -92,33 +117,52 @@ export function findErrorTokenHits(sheets) {
     for (const rule of sheet.rules) {
       const selector = compact(rule.selector);
       const parts = selector.split(',').map((part) => part.trim());
-      const errorState = parts.some((part) => ERROR_STATE.test(part));
+      const errorState = parts.some((part) => ERROR_STATE.test(stateOf(part)));
+      const calm = parts.some((part) => CALM_STATE.test(stateOf(part)));
       const destructive = !errorState && parts.some((part) => DESTRUCTIVE.test(lastCompound(part)));
       const lineAt = (offset) => lineForOffset(sheet.lineStarts, offset);
       if (rule.nested) {
-        if (parts.some((part) => ERROR_STATE.test(part) || DESTRUCTIVE.test(lastCompound(part)))) {
+        if (parts.some((part) => ERROR_STATE.test(stateOf(part)) || DESTRUCTIVE.test(lastCompound(part)))) {
           hits.push({ file: sheet.file, line: lineAt(rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
         }
         continue;
       }
       for (const d of parseDeclarations(rule.body, rule.bodyStart)) {
         const value = compact(d.value);
+        const seen = followLocal(value, sheet.local);
         const at = { file: sheet.file, line: lineAt(d.offset), selector, decl: `${d.prop}: ${value}` };
         if (TOKEN_NAME.test(d.prop)) {
           const found = reachesAccent(value);
           if (found) hits.push({ ...at, reason: `an error or danger token that resolves to the accent: ${found}` });
         }
+        if (calm && ATTENTION_USE.test(seen)) {
+          hits.push({ ...at, reason: 'yellow means something needs attention or went wrong; a running, passed, done or ready state takes a neutral or success tone' });
+        }
         if (errorState) {
-          if (DANGER_USE.test(value)) hits.push({ ...at, reason: 'an error state reads --sr-danger*: error is not danger, use --sr-error*' });
-          else if (ACCENT_USE.test(value)) hits.push({ ...at, reason: 'an error state paints the accent: use --sr-error*' });
+          if (DANGER_USE.test(seen)) hits.push({ ...at, reason: 'an error state reads --sr-danger*: error is not danger, use --sr-error*' });
+          else if (ACCENT_USE.test(seen)) hits.push({ ...at, reason: 'an error state paints the accent: use --sr-error*' });
         } else if (destructive) {
-          if (ERROR_USE.test(value)) hits.push({ ...at, reason: 'a destructive control reads --sr-error*: use --sr-danger*' });
-          else if (ACCENT_USE.test(value)) hits.push({ ...at, reason: 'a destructive control paints the accent: use --sr-danger*' });
+          if (ERROR_USE.test(seen)) hits.push({ ...at, reason: 'a destructive control reads --sr-error*: use --sr-danger*' });
+          else if (ACCENT_USE.test(seen)) hits.push({ ...at, reason: 'a destructive control paints the accent: use --sr-danger*' });
         }
       }
     }
   }
   return hits;
+}
+
+/** The state words of a part: its last compound without the BEM block (`.personal-warning__accept` -> `.accept`). */
+function stateOf(part) {
+  return lastCompound(part).replace(/\.[\w-]*?__/g, '.');
+}
+
+/** A value plus, for each var(--x) in it, the values --x is given elsewhere in the same file. */
+function followLocal(value, local) {
+  let out = value;
+  for (const match of value.matchAll(VAR_REF)) {
+    for (const next of local.get(match[1]) ?? []) out += ` ${next}`;
+  }
+  return out;
 }
 
 /** The last compound selector of a part ("a .b > .c:hover" -> ".c:hover"). */

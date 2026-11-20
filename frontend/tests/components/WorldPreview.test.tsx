@@ -13,6 +13,7 @@ vi.mock('../../src/components/nodes/WorldEnvironmentViewer', () => ({
   ),
 }));
 
+import { LineText } from '../../src/components/LineText';
 import { WorldPreview } from '../../src/components/nodes/WorldPreview';
 
 const world = {
@@ -226,6 +227,16 @@ describe('WorldPreview', () => {
       "Nebula couldn’t download the world because the server isn’t answering. Check that Nebula is running, then try again.",
     );
     expect(screen.getByRole('alert')).not.toHaveTextContent('CORS detail');
+    // Design: a because line is drawn neutral (becauseLine.css), so the alert is marked.
+    expect(screen.getByRole('alert')).toHaveAttribute('data-line-because');
+    expect(screen.getByRole('alert')).toHaveClass('world-modal__download-error');
+  });
+
+  it('marks only a because line, the same way the download error renders it', () => {
+    const { rerender } = render(<span role="alert"><LineText text="Couldn’t download the world." /></span>);
+    expect(screen.getByRole('alert')).not.toHaveAttribute('data-line-because');
+    rerender(<span role="alert"><LineText text="Nebula couldn’t download the world because that file is gone." /></span>);
+    expect(screen.getByRole('alert')).toHaveAttribute('data-line-because');
   });
 
   it('downloads a JPEG panorama with a truthful JPEG filename', async () => {
