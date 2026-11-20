@@ -1,3 +1,5 @@
+import { groupedCount } from './groupedCount';
+
 /**
  * What the canvas says when nodes are deleted and when undo brings them back
  * (GM - Design, 2026-10-23, item 1): "Make undo complete. ... When it lands,
@@ -77,12 +79,12 @@ export const DROPPED_REDO_TEXT = 'Nothing was redone. Your last change was still
 export const SKIPPED_UNDO_TEXT = skippedUndoText(1);
 
 export function deletedNoticeText(count: number): string {
-  return count === 1 ? 'Deleted the node.' : `Deleted ${count} nodes.`;
+  return count === 1 ? 'Deleted the node.' : `Deleted ${groupedCount(count)} nodes.`;
 }
 
 /** "1 proposal couldn't be reopened." / "2 proposals couldn't be reopened." */
 export function notReopenedText(count: number): string {
-  return count === 1 ? 'Nebula couldn’t reopen 1 proposal.' : `Nebula couldn’t reopen ${count} proposals.`;
+  return count === 1 ? 'Nebula couldn’t reopen 1 proposal.' : `Nebula couldn’t reopen ${groupedCount(count)} proposals.`;
 }
 
 /** What couldn't go back with the nodes. A pin counts only when its node came
@@ -92,7 +94,7 @@ export function notRestoredText(notReattached: number, notReopened: number): str
   if (notReattached === 0) return notReopened > 0 ? notReopenedText(notReopened) : '';
   const pins = notReattached === 1 ? '1 pin' : `${notReattached} pins`;
   if (notReopened === 0) return `Nebula couldn’t reattach ${pins}.`;
-  const proposals = notReopened === 1 ? '1 proposal' : `${notReopened} proposals`;
+  const proposals = notReopened === 1 ? '1 proposal' : `${groupedCount(notReopened)} proposals`;
   return `Nebula couldn’t restore ${pins} and ${proposals}.`;
 }
 
@@ -113,7 +115,7 @@ export function notRestoredText(notReattached: number, notReopened: number): str
  * restores). Empty when nothing was missed.
  */
 export function lateRestoreText(notReopened: number, notReattached: number): string {
-  const proposals = notReopened === 1 ? '1 proposal' : `${notReopened} proposals`;
+  const proposals = notReopened === 1 ? '1 proposal' : `${groupedCount(notReopened)} proposals`;
   const pins = notReattached === 1 ? '1 pin' : `${notReattached} pins`;
   if (notReattached > 0 && notReopened > 0) return `After the restore, Nebula couldn’t restore ${pins} and ${proposals}.`;
   if (notReopened > 0) return `After the restore, Nebula couldn’t reopen ${proposals}.`;
@@ -122,7 +124,7 @@ export function lateRestoreText(notReopened: number, notReattached: number): str
 }
 
 export function restoredNoticeText(count: number, notReopened: number, notReattached = 0): string {
-  const restored = count === 1 ? 'Restored the node.' : `Restored ${count} nodes.`;
+  const restored = count === 1 ? 'Restored the node.' : `Restored ${groupedCount(count)} nodes.`;
   const missed = notRestoredText(notReattached, notReopened);
   return missed ? `${restored} ${missed}` : restored;
 }

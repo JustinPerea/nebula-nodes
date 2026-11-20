@@ -1,3 +1,4 @@
+import { groupedCount } from '../../../lib/groupedCount';
 import { useRef, useState, type ChangeEvent } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { getKreaPlans, startKreaTrial, isKreaAuthorizationUrl, type KreaConnectionMode, type KreaConnectionState, type KreaPlans } from '../../../lib/kreaConnection';
@@ -22,7 +23,6 @@ const STATUS: Record<KreaConnectionState['status'], { label: string; tone: RowTo
   error: { label: 'Connection unavailable', tone: 'warn' },
 };
 
-const number = new Intl.NumberFormat('en-US');
 
 
 /** Krea's plans, loaded on request. Links open Krea's own pricing or checkout
@@ -65,7 +65,7 @@ function KreaPlans() {
             <span className="krea-connection__plan-name">{plan.name}</span>
             <span>{plan.price != null ? `$${plan.price}/mo` : ''}
               {plan.annualPrice != null ? ` · $${plan.annualPrice}/mo yearly` : ''}</span>
-            <span>{plan.units != null ? `${number.format(plan.units)} compute units` : ''}</span>
+            <span>{plan.units != null ? `${groupedCount(plan.units)} compute units` : ''}</span>
             {plan.checkoutUrl && <a href={plan.checkoutUrl} target="_blank" rel="noopener noreferrer">View on Krea</a>}
           </li>
         ))}

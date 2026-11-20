@@ -1,3 +1,4 @@
+import { countNoun } from '../../lib/groupedCount';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../types';
@@ -140,7 +141,7 @@ export function ResultsGallery({
         {/* Count + layout toggle (right side) */}
         <div className="results-gallery__display">
           <span className="results-gallery__count" role="status">
-            {items.length} result{items.length === 1 ? '' : 's'}
+            {countNoun(items.length, 'result')}
           </span>
           <div className="results-gallery__layout" role="group" aria-label="Result layout">
             <button

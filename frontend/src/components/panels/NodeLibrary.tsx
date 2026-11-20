@@ -1,3 +1,4 @@
+import { groupedCount, countNoun } from '../../lib/groupedCount';
 import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -308,7 +309,7 @@ export function NodeLibrary() {
               {providers.map((item) => <option key={item} value={item}>{providerLabel(item)}</option>)}
             </select>
           </label>}
-          {!isHome && <p className="node-library__count" aria-live="polite">{resultCount} node{resultCount === 1 ? '' : 's'} · {
+          {!isHome && <p className="node-library__count" aria-live="polite">{countNoun(resultCount, 'node')} · {
             // GM, round 16 of PR #114: offline the count line says why nothing adds.
             lock.following ? waitToOpenTooltip(lock.following.projectName)
               : readOnly ? 'Adding is paused while offline' : 'Choose a node to add'}</p>}
@@ -332,7 +333,7 @@ export function NodeLibrary() {
             <button type="button" className="node-library__all" ref={(button) => { browseButtonsRef.current.all = button; }}
               aria-label="Search all models" onClick={searchAllModels}>
               <Search size={16} aria-hidden="true" />
-              <span>Search all models <small>{catalogCount} nodes and tools</small></span>
+              <span>Search all models <small>{groupedCount(catalogCount)} nodes and tools</small></span>
               <ChevronRight size={15} aria-hidden="true" />
             </button>
           </div> : <>

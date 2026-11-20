@@ -5,11 +5,11 @@ import { EMPTY_FILTERS } from '../../lib/commonsTypes';
 
 // Design: the Role filter reads words, never the stored value; the values stay raw.
 describe('CommonsFilters role select', () => {
-  it('shows Attract, Avoid, Evidence and Neutral over the raw values, and keeps "Any (avoid hidden)"', () => {
+  it('shows Attract, Avoid, Evidence and Neutral over the raw values, and reads the empty value "All but Avoid"', () => {
     render(<CommonsFilters filters={EMPTY_FILTERS} collections={[]} onChange={() => {}} />);
     const select = screen.getByRole('combobox', { name: 'Role' }) as HTMLSelectElement;
     expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
-      ['', 'Any (avoid hidden)'], ['attract', 'Attract'], ['avoid', 'Avoid'], ['evidence', 'Evidence'], ['neutral', 'Neutral'],
+      ['', 'All but Avoid'], ['attract', 'Attract'], ['avoid', 'Avoid'], ['evidence', 'Evidence'], ['neutral', 'Neutral'],
     ]);
   });
 });

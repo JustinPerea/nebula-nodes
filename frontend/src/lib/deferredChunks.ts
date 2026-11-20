@@ -321,6 +321,16 @@ export const DeferredSettingsTopNotice = lazyWithPreload(
   (module) => module.SettingsTopNotice,
 );
 
+// The Settings dock (components/panels/Settings.tsx and what only it imports:
+// its draft store, tab strip, notice bar and row helpers). Closed at every
+// start, so it mounts on the first open and stays mounted
+// (components/DeferredPanels.tsx SettingsPanel); the idle preload below brings
+// it in before a person usually opens it.
+export const DeferredSettings = lazyWithPreload(
+  () => import('../components/panels/Settings'),
+  (module) => module.Settings,
+);
+
 // jszip, for the selection toolbar's download zip (lib/canvasSelection.ts): only
 // inside that action, so it loads at the moment of use, with the chunk retry.
 export const jszipModule = deferredModule(() => import('jszip'));
@@ -359,6 +369,7 @@ export const DEFERRED_PRELOADS: readonly (() => Promise<unknown>)[] = [
   graphFileModule.preload,
   settingsWritesModule.preload,
   placeholderRunDialogModule.preload,
+  DeferredSettings.preload,
   DeferredSettingsTopNotice.preload,
   projectFlowsModule.preload,
   ...DEFERRED_CARD_PRELOADS,
@@ -428,7 +439,12 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/nodes/MoodboardAdapterLine.tsx',
   'lib/moodboardAdapters.ts',
   'store/moodboardAdapterStore.ts',
-  // Settings' tabs load with their own dynamic import (Settings.tsx).
+  // The Settings dock and what only it imports; its tabs load with their own dynamic import (Settings.tsx).
+  'components/panels/Settings.tsx',
+  'store/settingsDraftStore.ts',
+  'components/panels/settings/SettingsTabs.tsx',
+  'components/panels/settings/SettingsNoticeBar.tsx',
+  'components/panels/settings/rowHelpers.ts',
   'components/panels/settings/PersonalAgentsSection.tsx',
   // Second pass (2026-10-22, docs/notes/2026-10-22-perf-entry-split-2.md).
   // Chat: closed at every start; its chat-send listener stays eager

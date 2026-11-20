@@ -7,12 +7,6 @@
       "text": "Current models use image references and trait guidance. Strength is unsupported; saved value"
     },
     {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/components/character-studio/CharacterTestPanel.tsx",
-      "rule": "sentence-punctuation",
-      "text": "Save the Character first (needs a name + ≥3 reference views)"
-    },
-    {
       "family": "em-dashes",
       "file": "frontend/src/components/cinema-studio/CinemaSharedControls.tsx",
       "rule": "em-dash",

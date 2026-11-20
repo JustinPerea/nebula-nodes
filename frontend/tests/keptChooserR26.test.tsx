@@ -72,8 +72,9 @@ describe('the chooser is the app\'s modal and deletes the app\'s way', () => {
     expect(scrim.closest('[data-modal-layer]')?.parentElement).toBe(document.body);
     const row = within(dialog).getAllByRole('listitem')[0];
     expect(row.textContent).toMatch(/Alpha/);
-    expect(row.textContent).toMatch(/Edited Oct 9, 2026/);
-    expect(row.textContent).toMatch(/3 nodes · 1 connection/);
+    // One written date form: the year shows only when it isn't the current one.
+    expect(row.textContent).toContain(`Edited October 9${new Date().getFullYear() === 2026 ? '' : ', 2026'}`);
+    expect(row.textContent).toMatch(/3\u00a0nodes ·\u00a01\u00a0connection/);
   });
 
   it('Delete moves the project to Recently deleted with the app\'s Undo toast, and Undo restores it', async () => {

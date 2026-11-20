@@ -5,6 +5,7 @@
  * value: lists are judged by their first SAMPLE items and only what is shown
  * is summarised, so a 50 MB array costs what its first few hundred items cost.
  */
+import { groupedCount } from './groupedCount';
 import type { PortValue } from '../types';
 import { isHexColor } from './moodboardBundle';
 import { hasRepresentationViewer } from './representationViewerRegistry';
@@ -84,7 +85,7 @@ export function clampText(text: string, chars: number): string {
 }
 
 function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`;
+  return `${groupedCount(count)} ${count === 1 ? one : many}`;
 }
 
 /** One line for a value inside a list or a field: strings clamped, lists and

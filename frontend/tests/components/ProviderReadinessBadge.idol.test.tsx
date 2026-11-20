@@ -24,12 +24,12 @@ describe('ProviderReadinessBadge on Idol (GM, PR #203 r12)', () => {
       + 'Add a Hugging Face token in Settings to use your own allowance.');
   });
 
-  it('reads "Hugging Face token · Saved" with the token, and only "Idol uses your Hugging Face allowance."', () => {
+  it('reads "Hugging Face token · saved" with the token, and only "Idol uses your Hugging Face allowance."', () => {
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true,
       apiKeys: { HF_TOKEN: 'hf_fixture' } } });
     render(<ProviderReadinessBadge definition={IDOL} />);
-    const label = screen.getByText('Saved').closest('.provider-readiness__label');
-    expect(label).toHaveTextContent(/^Hugging Face token · Saved$/);
+    const label = screen.getByText('saved').closest('.provider-readiness__label');
+    expect(label).toHaveTextContent(/^Hugging Face token · saved$/);
     expect(label).toHaveAttribute('title', 'Idol uses your Hugging Face allowance.');
   });
 

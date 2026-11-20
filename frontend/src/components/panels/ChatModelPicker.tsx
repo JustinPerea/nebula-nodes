@@ -12,6 +12,7 @@ import '../../styles/chat-model-picker.css';
 import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
+import { aside } from '../../lib/labelAside';
 
 type Agent = 'claude' | 'codex';
 
@@ -97,7 +98,7 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
   const modelLabel = isPersonalAgent(agent) ? provider.label
     : selected?.label ?? model ?? (loading ? 'Loading models…' : 'Choose model');
   const effortLabel = effort ? offeredEffort?.label ?? 'Unavailable effort'
-    : defaultEffort ? `${defaultEffort.label} · default` : 'CLI default';
+    : defaultEffort ? aside(defaultEffort.label, 'default') : 'CLI default';
   const unavailable = error ?? current?.error?.message ?? (
     current?.status === 'not_installed' ? `${provider.label} isn’t installed. Install it, then try again.`
       : current?.status === 'not_authenticated' ? `Sign in to ${provider.label}, then try again.`
