@@ -152,7 +152,7 @@ export function CharacterDefinitionPanel({
               <div key={`${url}-${idx}`} className={`character-def__ref${view.src ? '' : ' character-def__ref--empty'}`}
                 data-agent-anchor={surfaceAnchor('character', agentId, String(idx + 1))}>
                 {view.src ? <img src={view.src} alt="" draggable={false} /> : view.outside ? <OutsideImageNote /> : null}
-                {idx === 0 && <span className="character-def__ref-badge">cover</span>}
+                {idx === 0 && <span className="character-def__ref-badge">Cover</span>}
                 <button
                   type="button"
                   className="character-def__ref-remove"

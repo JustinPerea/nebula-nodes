@@ -11,7 +11,8 @@ import {
   stripComments,
 } from './lib/css-scan.mjs';
 
-// Design: orange is the brand accent, not a status. A state badge (`commons-badge--*`) or a
+// Design: orange is the brand accent, not a status. The badge classes listed under findCapsBadges
+// (World, Saved, Cover and the like) take the accent-free rule too: no accent var or literal. A state badge (`commons-badge--*`) or a
 // source tag (`commons-source--*`) is neutral, or uses the pending, warning or success tone;
 // it is never painted in the accent.
 //
@@ -42,7 +43,17 @@ const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]
 function main() {
   const files = collectCssFiles(SRC);
   const hits = [];
-  for (const file of files) hits.push(...findAccentBadges(readFileSync(file, 'utf8'), relative(SRC, file)));
+  const capsHits = [];
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8');
+    hits.push(...findAccentBadges(source, relative(SRC, file)));
+    capsHits.push(...findCapsBadges(source, relative(SRC, file)));
+  }
+  if (capsHits.length > 0) {
+    console.error('A badge or tag is drawn in capitals. A badge reads in sentence case; only a field label keeps its caps (design).');
+    for (const hit of capsHits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }${hit.reason ? `  (${hit.reason})` : ''}`);
+    process.exit(1);
+  }
   if (hits.length > 0) {
     console.error('A state badge is painted in the brand accent. Use the neutral, pending, warning or success tone (design: orange is the brand accent, not a status).');
     for (const hit of hits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }  (${hit.reason})`);
@@ -58,7 +69,10 @@ export function findAccentBadges(source, file) {
   const hits = [];
   for (const rule of parseRules(css)) {
     const selector = compact(rule.selector);
-    if (!BADGE.test(selector)) continue;
+    const commons = BADGE.test(selector);
+    // Design: the named badge classes (the list below) never take the accent either. The suffix
+    // match (__badge, __tag, __state, __status) stays with the caps rule: other accent badges are for design to rule on.
+    if (!commons && !selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => NAMED_BADGES.has(m[1].replace(/--[\w-]+$/, ''))))) continue;
     // Nested CSS isn't read: a nested block under any badge selector (`.commons-badge { &--inbox {...} }`) fails.
     if (rule.nested) {
       hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
@@ -66,7 +80,13 @@ export function findAccentBadges(source, file) {
     }
     for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
       if (!COLOUR_PROP.test(declaration.prop)) continue;
-      const reason = ROLE.test(selector)
+      const reason = !commons
+        ? ACCENT_VAR.test(declaration.value)
+          ? 'the brand accent: a badge is a kind or a state, not the current selection'
+          : ACCENT_LITERAL.test(declaration.value)
+            ? 'the literal accent colour'
+            : null
+        : ROLE.test(selector)
         ? 'a role badge is neutral: it takes the plain badge colours'
         : ACCENT_VAR.test(declaration.value)
         ? 'the brand accent'
@@ -76,6 +96,55 @@ export function findAccentBadges(source, file) {
           ? 'the literal accent colour'
           : null;
       if (reason) hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector, decl: `${declaration.prop}: ${compact(declaration.value)}`, reason });
+    }
+  }
+  return hits;
+}
+
+// Design: a badge or tag, whether it carries a state or a kind, reads in sentence case. A field
+// label (the small heading over a field or section) keeps its caps, so only badge-shaped class
+// names are read: the commons badge and source classes, the explicit list of non-Commons badges
+// below, and any class that ends in __badge, __tag, __state or __status or contains -badge.
+const NAMED_BADGES = new Set([
+  'world-modal__status', 'moodboard-studio-toolbar__state', 'moodboard-view-switch__badge',
+  'world-preview__badge', 'character-studio-toolbar__state', 'jev-result__badge', 'character-def__ref-badge', 'reference-set-node__role-badge',
+]);
+const CLASS = /\.(-?[_a-zA-Z][\w-]*)/g;
+const BADGE_SUFFIX = /(?:__(?:badge|tag|state|status)(?![a-zA-Z0-9_])|-badge)/;
+const CAPS_PROP = /^(?:text-transform|font-variant|font-variant-caps)$/i;
+const CAPS_VALUE = /(?:^|\s)(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)(?![\w-])/i;
+const isBadgeClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
+
+/** True when a rule nested in this body selects a badge class and sets capitals, at any depth. */
+function nestedCapsUnderBadge(body) {
+  return parseRules(body).some((inner) => {
+    const badge = inner.selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
+    if (inner.nested) return nestedCapsUnderBadge(inner.body) || (badge && CAPS_TEXT.test(inner.body));
+    return badge && CAPS_TEXT.test(inner.body);
+  });
+}
+const CAPS_TEXT = /(?:text-transform|font-variant(?:-caps)?)\s*:\s*[^;}]*(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)/i;
+
+/** Every declaration that capitalises a badge or tag: { file, line, selector, decl }. */
+export function findCapsBadges(source, file) {
+  const css = stripComments(source);
+  const lineStarts = computeLineStarts(css);
+  const hits = [];
+  for (const rule of parseRules(css)) {
+    const selector = compact(rule.selector);
+    const badgeParts = selector.split(',').filter((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
+    // Design: nested CSS isn't read, so it fails the same way findAccentBadges does: a nested block
+    // under a badge selector, or a badge selector nested under another rule that sets capitals.
+    if (rule.nested) {
+      const nestedBadge = badgeParts.length > 0 || nestedCapsUnderBadge(rule.body);
+      if (nestedBadge) hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
+      continue;
+    }
+    if (badgeParts.length === 0) continue;
+    for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
+      if (CAPS_PROP.test(declaration.prop) && CAPS_VALUE.test(declaration.value)) {
+        hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector: badgeParts.map((part) => part.trim()).join(', '), decl: `${declaration.prop}: ${compact(declaration.value)}` });
+      }
     }
   }
   return hits;
