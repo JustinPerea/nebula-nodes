@@ -1,11 +1,22 @@
 import { Suspense, type ComponentType } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { OnboardingOverlay, RunHistoryPanel } from '../../src/components/DeferredPanels';
+import { OnboardingOverlay, RunHistoryPanel, SettingsPanel } from '../../src/components/DeferredPanels';
 import { MeshPreview, WorldPreview } from '../../src/components/nodes/DeferredViewers';
-import { DeferredRunHistoryPanel } from '../../src/lib/deferredChunks';
+import { DeferredRunHistoryPanel, DeferredSettings } from '../../src/lib/deferredChunks';
 import { lazyWithPreload } from '../../src/lib/lazyWithPreload';
 import { useUIStore } from '../../src/store/uiStore';
+
+// The Settings dock reads its settings and its restored-at-start line when it opens.
+vi.mock('../../src/lib/api', async (original) => ({
+  ...await original<typeof import('../../src/lib/api')>(),
+  getSettings: vi.fn().mockResolvedValue({ apiKeys: {} }),
+  updateSettings: vi.fn().mockResolvedValue({ apiKeys: {} }),
+}));
+vi.mock('../../src/lib/settingsNotice', async (original) => ({
+  ...await original<typeof import('../../src/lib/settingsNotice')>(),
+  getSettingsNotice: vi.fn().mockResolvedValue(null),
+}));
 
 // Startup-entry split (lib/deferredChunks.ts): these pieces load on first use.
 // The tests pin the user-visible contract: nothing is fetched or drawn while
@@ -55,6 +66,24 @@ describe('deferred Run history', () => {
     expect(await screen.findByText('Run history')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close run history panel' })).toBeInTheDocument();
     preload.mockRestore();
+  });
+});
+
+describe('deferred Settings', () => {
+  it('stays unmounted while closed, opens on the first dock open and keeps its close button', async () => {
+    // The loader itself, not a spy on the preload property: the idle preload list and the lazy
+    // component call the loader they captured, so only its result shows a fetch.
+    const { getSettings } = await import('../../src/lib/api');
+    vi.mocked(getSettings).mockClear();
+    render(<SettingsPanel />);
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+    expect(DeferredSettings.isLoaded()).toBe(false);
+    expect(getSettings).not.toHaveBeenCalled();
+
+    act(() => useUIStore.getState().setLeftDock('settings'));
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(DeferredSettings.isLoaded()).toBe(true);
+    expect(screen.getByRole('button', { name: 'Close settings panel' })).toBeInTheDocument();
   });
 });
 

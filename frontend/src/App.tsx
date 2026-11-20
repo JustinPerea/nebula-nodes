@@ -6,10 +6,9 @@ import { NoticeRegion } from './components/NoticeRegion';
 import { NodeLibrary } from './components/panels/NodeLibrary';
 // Closed or empty at the first paint, loaded after it (lib/deferredChunks.ts).
 import {
-  AgentLog, AgentNotes, AssetsPanel, ChatPanel, CommandPalette, NodeInspectorPopover, OnboardingOverlay, RunHistoryPanel,
+  AgentLog, AgentNotes, AssetsPanel, ChatPanel, CommandPalette, NodeInspectorPopover, OnboardingOverlay, RunHistoryPanel, SettingsPanel,
 } from './components/DeferredPanels';
 import { AgentScreenLayer } from './components/DeferredScreenOverlays';
-import { Settings } from './components/panels/Settings';
 import { Toolbar } from './components/panels/Toolbar';
 import { GraphFileActions } from './components/GraphFileActions';
 import { WorkspaceRail } from './components/WorkspaceRail';
@@ -387,11 +386,11 @@ export default function App() {
       {isCanvas && <NodeInspectorPopover />}
       {!isHome && !isBrandShowcase && !commonsOffRoute && (
         <div className={`workspace-overlays${isCanvas ? '' : ' workspace-overlays--studio'}${isCommons ? ' workspace-overlays--hidden' : ''}`} inert={isCommons}>
-          <Settings />
+          <SettingsPanel />
           <ChatPanel />
         </div>
       )}
-      {isHome && <div className="workspace-overlays workspace-overlays--home"><Settings /></div>}
+      {isHome && <div className="workspace-overlays workspace-overlays--home"><SettingsPanel /></div>}
       {isCanvas && <WorkspaceRail />}
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
