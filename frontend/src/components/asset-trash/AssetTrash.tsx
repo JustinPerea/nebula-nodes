@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, RotateCcw, X } from 'lucide-react';
 import { storedImageView } from '../../lib/storedImage';
+import { writtenDateTime } from '../../lib/commonsFormat';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { InNoticeRegion } from '../InNoticeRegion';
 import {
@@ -51,7 +52,7 @@ function thumbnailOf(item: TrashedItem): string | null {
 function deletedLine(item: TrashedItem): string {
   const date = new Date(item.deletedAt);
   const when = Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date)
+    ? writtenDateTime(date)
     : '';
   const who = deletedByLabel(item);
   return ['Deleted', when, who ? `by ${who}` : ''].filter(Boolean).join(' ');

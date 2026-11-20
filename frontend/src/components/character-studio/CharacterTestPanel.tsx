@@ -85,7 +85,7 @@ export function CharacterTestPanel({
       </div>
 
       <label className="character-def__field">
-        <span className="character-def__label">Test prompt (guidance)</span>
+        <span className="character-def__label">Test prompt · guidance</span>
         <input
           type="text"
           className="character-def__input"
@@ -103,7 +103,7 @@ export function CharacterTestPanel({
           disabled: !canTest || pending,
           title: canTest
             ? 'Drop this Character on the canvas to test on a base-edit node'
-            : 'Save the Character first (needs a name + ≥3 reference views)',
+            : 'Save the Character first. It needs a name and at least 3 reference views.',
           kept: 'test-character',
         })}
       >

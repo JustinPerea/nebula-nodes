@@ -53,6 +53,14 @@ const bad: Array<[string, string]> = [
   ['a badge with a lower-case literal on the right of ??', `const a = <span className="commons-badge">{label ?? 'unknown'}</span>;`],
   ['a badge with a stored value after &&', `const a = <span className="commons-badge">{ok && s.state}</span>;`],
   ['a badge with lower-case text leading inside a child element', `const a = <span className="commons-badge"><b>hi</b></span>;`],
+  ['a label with a parenthesised aside in JSX text', `const a = <label>Ignore (comma separated)<input /></label>;`],
+  ['a label with a parenthesised aside in a string', `const a = 'Mode (beta)';`],
+  ['an optional note in parentheses inside a sentence', `const a = <p>Name your board (optional) and save it.</p>;`],
+  ['toLocaleString on a new Date', `const a = <p>{new Date(x).toLocaleString()}</p>;`],
+  ['toLocaleDateString on a date-named value', `const a = <p>{createdDate.toLocaleDateString()}</p>;`],
+  ['toLocaleTimeString on an ...At property', `const a = <p>{entry.closedAt.toLocaleTimeString()}</p>;`],
+  ['toLocaleString on a time-named value', `const a = <p>{resetTime.toLocaleString()}</p>;`],
+  ['an Intl.DateTimeFormat', `const a = new Intl.DateTimeFormat(undefined, { month: 'short' }).format(d);`],
 ];
 const fine: Array<[string, string]> = [
   ['an option labelled through a map', `const a = <option key={role} value={role}>{ROLE_LABELS[role]}</option>;`],
@@ -97,6 +105,15 @@ const fine: Array<[string, string]> = [
   ['a count concatenated with lower-case text after it', `const a = <span className="commons-badge">{n + ' items'}</span>;`],
   ['a capitalised literal concatenated with a count', `const a = <span className="commons-badge">{'Inbox ' + n}</span>;`],
   ['lower-case text on an element that is no badge', `const a = <span className="commons-meta">inbox</span>;`],
+  ['a label with no aside', `const a = <label>Ignore<input placeholder="Separate names with commas" /></label>;`],
+  ['a unit in parentheses', `const a = <label>Duration (s)<input /></label>;`],
+  ['a key shortcut in parentheses', `const a = <button title="Save canvas (Ctrl+S or ⌘S)">Save</button>;`],
+  ['parentheses in the middle of a sentence', `const a = <p>Library analysis is paused (for now) while the agent reads.</p>;`],
+  ['a media query', `const a = window.matchMedia('(prefers-reduced-motion: reduce)');`],
+  ['an aside after a middle dot', `const a = <option>Any · avoid hidden</option>;`],
+  ['toLocaleString on a number', `const a = <p>{count.toLocaleString('en-US')}</p>;`],
+  ['toLocaleString on a plain identifier', `const a = <p>{limit.toLocaleString()}</p>;`],
+  ['a written date', `const a = <p>{writtenDateTime(batch.closed_at)}</p>;`],
 ];
 
 describe('check-enum-labels', () => {

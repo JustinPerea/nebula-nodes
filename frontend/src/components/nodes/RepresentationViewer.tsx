@@ -18,6 +18,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { parseRepresentation, type ParsedRepresentation } from '../../lib/representationViewerRegistry';
 import { WorldPreview, WorldSplatPreview } from './DeferredViewers';
 import { previewSplat, splatAssetLabel, splatSourceLine, worldProviderName } from '../../lib/worldV2Splat';
+import { writtenDateTime } from '../../lib/commonsFormat';
 import '../../styles/spatial-preview.css';
 
 interface ViewerOptions {
@@ -328,7 +329,7 @@ function spatialSessionSummary(value: SpatialSessionMetadata, options: ViewerOpt
     ? 'Unspecified'
     : value.createdAtMs > 8_640_000_000_000_000
       ? `${value.createdAtMs} ms since epoch`
-      : new Date(value.createdAtMs).toLocaleString();
+      : writtenDateTime(value.createdAtMs);
   return (
     <SummaryCard
       eyebrow="Spatial session"

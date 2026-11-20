@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import { deviceStateLabel, type CommonsStatus, type FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
-import { linkedFolderNotice } from '../../lib/commonsFormat';
+import { linkedFolderNotice, scanSummaryText, writtenDateTime } from '../../lib/commonsFormat';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
@@ -24,12 +24,11 @@ const NUMBER_SETTINGS: { key: string; label: string; step: number }[] = [
   { key: 'load_threshold', label: 'Pause above load', step: 1 },
 ];
 
-function summaryText(summary: Record<string, unknown> | null): string {
-  if (!summary) return 'not scanned yet';
-  return Object.entries(summary)
-    .filter(([, v]) => typeof v === 'number' || typeof v === 'string')
-    .map(([k, v]) => `${k.replace(/_/g, ' ')} ${v}`)
-    .join(' · ');
+/** "Last scan November 20, 3:00 AM · 3 added"; never scanned reads once, "Not scanned yet". */
+function scanLine(link: FolderLink): string {
+  if (!link.last_scan_at) return link.last_scan_summary ? scanSummaryText(link.last_scan_summary) : 'Not scanned yet';
+  const when = `Last scan ${writtenDateTime(link.last_scan_at)}`;
+  return link.last_scan_summary ? `${when} · ${scanSummaryText(link.last_scan_summary)}` : when;
 }
 
 function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<unknown>) => Promise<boolean> }) {
@@ -41,8 +40,9 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
         <button type="button" className="commons-button" onClick={() => run(() => commonsApi.rescan(link.id))}>Rescan</button>
       </div>
       <label className="commons-field">
-        Ignore (comma separated)
+        Ignore
         <input
+          placeholder="Separate names with commas"
           key={link.ignores.join(',')}
           defaultValue={link.ignores.join(', ')}
           onBlur={(event) => {
@@ -53,10 +53,9 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
             if (ignores.join(',') !== link.ignores.join(',')) void run(() => commonsApi.setIgnores(link.id, ignores));
           }}
         />
+        {link.ignores.length > 0 && <span className="commons-meta">Separate names with commas</span>}
       </label>
-      <p className="commons-meta">
-        Last scan {link.last_scan_at ? new Date(link.last_scan_at).toLocaleString() : 'never'} · {summaryText(link.last_scan_summary)}
-      </p>
+      <p className="commons-meta">{scanLine(link)}</p>
       {pending.length > 0 && (
         <ul className="commons-list">
           {pending.map((d) => (
@@ -235,7 +234,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
           <p className="commons-meta">
             Analysis calls today {status.meter.calls} / {status.meter.cap}
             {status.agent_adds ? ` · agent adds ${status.agent_adds.calls} / ${status.agent_adds.cap}` : ''}
-            {' · '}resets {new Date(status.meter.resets_at).toLocaleString()}
+            {' · '}resets {writtenDateTime(status.meter.resets_at)}
           </p>
         )}
         <fieldset className="commons-fieldset" disabled={readOnly} {...offlineMark(readOnly)}>

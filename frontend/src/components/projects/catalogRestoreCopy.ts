@@ -13,6 +13,7 @@
  * (except where the name couldn't be read).
  */
 import type { CatalogRestore } from '../../lib/projects';
+import { writtenDate } from '../../lib/commonsFormat';
 
 /** How many projects are named before a line gives a count. */
 export const RESTORE_NAMED_MAX = 3;
@@ -421,7 +422,7 @@ const total = (count: number | undefined, rows: unknown[] | undefined) => Math.m
 /** The copy's age after "from" (GM r3's scale): under an hour "less than
  * an hour ago"; "an hour ago", "5 hours ago" to 23; "a day ago" to 47 hours;
  * "3 days ago" to 6 days; "a week ago" to 13 days; then the date as the
- * home cards write it ("Oct 12", with the year when it isn't this year's).
+ * home cards write it ("October 12", with the year when it isn't this year's).
  * Never "earlier today" or "over a week ago". Null when unknown. */
 export function copyAge(copyAt: string | null | undefined, now: number = Date.now()): string | null {
   const at = copyAt ? Date.parse(copyAt) : Number.NaN;
@@ -433,9 +434,7 @@ export function copyAge(copyAt: string | null | undefined, now: number = Date.no
   if (days < 2) return 'a day ago';
   if (days < 7) return `${days} days ago`;
   if (days < 14) return 'a week ago';
-  const date = new Date(at);
-  const thisYear = date.getFullYear() === new Date(now).getFullYear();
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...(thisYear ? {} : { year: 'numeric' as const }) }).format(date);
+  return writtenDate(new Date(at).toISOString(), new Date(now));
 }
 
 export interface CatalogRestoreNotice {

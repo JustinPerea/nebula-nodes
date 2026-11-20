@@ -1,3 +1,4 @@
+import { writtenDateTime } from '../../lib/commonsFormat';
 import { useEffect, useId, useRef, useState } from 'react';
 import { commonsReviewApi as api, commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationLabels } from '../../lib/commonsEvaluationTypes';
@@ -250,7 +251,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
         onDiscarded={() => { headingFocus.current = true; }} />
     </div>}
     <footer className="review-footer"><p>Agent proposals and your decisions are saved separately. This is assisted review, not an independent blind accuracy score.</p>
-      {batch?.state === 'closed' && <p className="evaluation-hash" role="status">Closed as assisted review · {batch.closed_at ? new Date(batch.closed_at).toLocaleString() : ''} · SHA-256: {batch.close_hash}</p>}
+      {batch?.state === 'closed' && <p className="evaluation-hash" role="status">Closed as assisted review · {writtenDateTime(batch.closed_at)} · SHA-256: {batch.close_hash}</p>}
       {/* Round 18l (review 17 MEDIUM-2, GM r43 Q7): inside the dialog the parent's state is an aria
           lock with its line, and the grade wait follows this pane's 5 s poll. Round 18m (GM r44 1):
           unsaved corrections lock the opener in place with their line; it is natively disabled

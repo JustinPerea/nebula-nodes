@@ -3,6 +3,7 @@ import type { ResultContext } from '../../lib/resultContext';
 import { BILLING_PARAM_LABELS } from '../../lib/billingParams';
 import { allParamDefinitions } from '../../lib/directRoute';
 import { universalSettingLabel } from '../../lib/universalSettingLabel';
+import { writtenDateTime } from '../../lib/commonsFormat';
 
 export function ResultMetadata({ context }: { context: ResultContext }) {
   const date = context.timestamp !== undefined ? new Date(context.timestamp) : null;
@@ -10,9 +11,7 @@ export function ResultMetadata({ context }: { context: ResultContext }) {
     <div className="result-metadata">
       <span>{context.modelName}</span>
       {date && Number.isFinite(date.getTime()) && (
-        <time dateTime={date.toISOString()} title={date.toLocaleString()}>
-          {date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-        </time>
+        <time dateTime={date.toISOString()}>{writtenDateTime(date)}</time>
       )}
     </div>
   );

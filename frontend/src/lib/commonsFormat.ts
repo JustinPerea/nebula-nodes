@@ -1,4 +1,5 @@
 import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
+import { clockTime } from './clockTime';
 import { capitalised, type AnalysisState, type Collection } from './commonsTypes';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
@@ -77,4 +78,72 @@ export function writtenDate(stored: string, now: Date = new Date()): string {
   }
   const name = `${LONG_MONTHS[month]} ${day}`;
   return year === now.getFullYear() ? name : `${name}, ${year}`;
+}
+
+type Moment = string | number | Date | null | undefined;
+
+function toMoment(stored: Moment): Date | null {
+  if (stored === null || stored === undefined || stored === '') return null;
+  const moment = stored instanceof Date ? stored : new Date(stored);
+  return Number.isNaN(moment.getTime()) ? null : moment;
+}
+
+/**
+ * A stored moment written out with its time (design): "November 20, 3:00 AM", or
+ * "November 20, 2025, 3:00 AM" when the year isn't the current one. Local time, no seconds, the clock
+ * written "3:00 AM" in every locale (`clockTime`). A date with no time of day (`2026-11-20`) reads as
+ * `writtenDate` does. A value that isn't a date reads as it came; null and undefined read ''.
+ */
+export function writtenDateTime(stored: Moment, now: Date = new Date()): string {
+  if (stored === null || stored === undefined) return '';
+  if (typeof stored === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(stored)) return writtenDate(stored, now);
+  const moment = toMoment(stored);
+  if (!moment) return stored === '' ? '' : String(stored instanceof Date ? '' : stored);
+  const year = moment.getFullYear();
+  const day = `${LONG_MONTHS[moment.getMonth()]} ${moment.getDate()}${year === now.getFullYear() ? '' : `, ${year}`}`;
+  return `${day}, ${clockTime(moment)}`;
+}
+
+/** The time of day alone, "3:00 AM" (design: no seconds). A value that isn't a date reads as it
+ *  came; null and undefined read ''. */
+export function writtenTime(stored: Moment): string {
+  if (stored === null || stored === undefined) return '';
+  const moment = toMoment(stored);
+  if (!moment) return stored instanceof Date ? '' : String(stored);
+  return clockTime(moment);
+}
+
+/** What a folder scan's summary counts are called, in the order they read. Keys are the backend's
+ *  (`scan_folder` in backend/commons/folders.py). */
+export const SCAN_COUNT_WORDS: Record<string, string> = {
+  added: 'added',
+  changed: 'changed',
+  restored: 'restored',
+  archived: 'archived',
+  missing: 'missing',
+  downloading: 'downloading',
+  failed: 'failed',
+  unchanged: 'unchanged',
+};
+
+/**
+ * A folder scan's summary as a line (design): the count first, "3 added · 2 changed". Known keys
+ * read in the order above; an unknown key follows as "<n> <key with spaces>". A zero is left out,
+ * and when nothing is left the line reads "nothing new". `failed` arrives as a list of files, so
+ * its length is the count. Flags and other non-counts are not shown. No summary reads
+ * "Not scanned yet".
+ */
+export function scanSummaryText(summary: Record<string, unknown> | null | undefined): string {
+  if (!summary) return 'Not scanned yet';
+  const counts = new Map<string, number>();
+  for (const [key, value] of Object.entries(summary)) {
+    if (typeof value === 'number' && Number.isFinite(value)) counts.set(key, value);
+    else if (Array.isArray(value)) counts.set(key, value.length);
+  }
+  const known = Object.keys(SCAN_COUNT_WORDS).filter((key) => counts.has(key));
+  const unknown = [...counts.keys()].filter((key) => !Object.hasOwn(SCAN_COUNT_WORDS, key));
+  const parts = [...known, ...unknown]
+    .filter((key) => counts.get(key) !== 0)
+    .map((key) => `${counts.get(key)} ${Object.hasOwn(SCAN_COUNT_WORDS, key) ? SCAN_COUNT_WORDS[key] : key.replace(/_/g, ' ')}`);
+  return parts.length > 0 ? parts.join(' · ') : 'nothing new';
 }

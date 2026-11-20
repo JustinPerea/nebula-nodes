@@ -324,7 +324,7 @@ function PlanRunsSelect({ limits, disabled, onChange, lock }: {
         else next.kreaPlanRuns = value === 'none' ? null : Number(value);
         onChange(next);
       }}>
-      <option value={DEFAULT_CHOICE}>{DEFAULT_PLAN_RUNS} (default)</option>
+      <option value={DEFAULT_CHOICE}>{DEFAULT_PLAN_RUNS} · default</option>
       <option value="0">Ask every time</option>
       {custom && <option value={current}>{own} run{own === 1 ? '' : 's'}</option>}
       {PLAN_RUN_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{choice} runs</option>)}

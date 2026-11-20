@@ -10,6 +10,7 @@ import { homeLineDrawn } from './homeLine';
 import { UndoToast } from './UndoToast';
 import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
+import { writtenDate } from '../../lib/commonsFormat';
 import { removalNote } from './trashDays';
 import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } from '../../lib/projectPurgeCopy';
 import { CrabMark } from '../brand/CrabMark';
@@ -326,7 +327,7 @@ function ProjectCard({ project, busy, offline = false, counts = true, onOpen, on
 function deletedDate(value: string): string {
   const date = new Date(value);
   return Number.isFinite(date.getTime())
-    ? `Deleted ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)}`
+    ? `Deleted ${writtenDate(date.toISOString())}`
     : 'Deleted';
 }
 

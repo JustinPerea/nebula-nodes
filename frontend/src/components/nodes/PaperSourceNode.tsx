@@ -24,12 +24,12 @@ import '../../styles/paper-source-node.css';
 import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
 import { fixedCardTitle } from '../../lib/cardTitles';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { writtenDateTime } from '../../lib/commonsFormat';
 import { LineText } from '../LineText';
 
 function refreshLabel(value?: string): string {
   if (!value) return 'Never refreshed';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return writtenDateTime(value);
 }
 
 const REFRESH_HEADING = "Couldn’t refresh the source.";

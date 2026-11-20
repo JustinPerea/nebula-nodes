@@ -236,7 +236,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   const correct = async (field_path: string, op: 'set' | 'add' | 'remove', value: unknown, withReason = false) => {
     let reason: string | undefined;
     if (withReason) {
-      const answer = await ask('Why? (optional — helps the next reading)');
+      const answer = await ask('Why? Optional, and it helps the next reading.');
       if (answer === null) return;
       reason = answer.trim() || undefined;
     }

@@ -1449,7 +1449,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   <div key={p.id} className="inspector__info-row">
                     <span className="inspector__info-dot" style={{ backgroundColor: PORT_COLORS[p.dataType as keyof typeof PORT_COLORS] ?? '#9E9E9E' }} />
                     <span className="inspector__info-name">{p.label}</span>
-                    <span className="inspector__info-type">{p.dataType}{p.required ? '' : ' (optional)'}{p.multiple ? ' +' : ''}</span>
+                    <span className="inspector__info-type">{p.dataType}{p.required ? '' : ' · optional'}{p.multiple ? ' +' : ''}</span>
                   </div>
                 ))
               )}

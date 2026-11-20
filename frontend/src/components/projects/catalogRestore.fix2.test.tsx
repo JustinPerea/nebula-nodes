@@ -90,11 +90,8 @@ describe('GM r3 strings 2 and 3: the age, with no comma before it', () => {
     expect(copyAge(at(6 * 24 * hour), NOW)).toBe('6 days ago');
     expect(copyAge(at(7 * 24 * hour), NOW)).toBe('a week ago');
     expect(copyAge(at(13 * 24 * hour), NOW)).toBe('a week ago');
-    const card = (iso: string, withYear: boolean) => new Intl.DateTimeFormat(undefined, {
-      month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' as const } : {}),
-    }).format(new Date(iso));
-    expect(copyAge('2026-10-12T12:00:00Z', NOW)).toBe(card('2026-10-12T12:00:00Z', false));
-    expect(copyAge('2025-10-12T12:00:00Z', NOW)).toBe(card('2025-10-12T12:00:00Z', true));
+    expect(copyAge('2026-10-12T12:00:00Z', NOW)).toBe('October 12');
+    expect(copyAge('2025-10-12T12:00:00Z', NOW)).toBe('October 12, 2025');
     expect(copyAge(null, NOW)).toBeNull();
     // Never "earlier today" or "over a week ago".
     expect([1, 3, 10, 20].map((days) => copyAge(at(days * 24 * hour), NOW)).join(' ')).not.toMatch(/earlier today|over a week/);

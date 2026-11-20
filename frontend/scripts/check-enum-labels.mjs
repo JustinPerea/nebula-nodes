@@ -27,6 +27,17 @@ import ts from 'typescript';
 //   4. "by You" written out in a string or JSX text, and "by {actorLabel(...)}" where the
 //      call is commonsFormat's leading form (no `{ midSentence: true }`): mid-sentence the
 //      local person reads "you".
+//   5. a person label with a parenthesised aside at its end ("Ignore (comma separated)", "Name
+//      (optional)", "Mode (beta)"): the note goes beside or under the label, as an aside or a
+//      placeholder, and a label reads as its name. A unit ("Duration (s)") and a key shortcut
+//      ("Save (Ctrl+S)") pass, as does a sentence with parentheses in the middle. A parenthesised
+//      "optional", "required", "beta", "experimental", "deprecated", "default" or "recommended"
+//      fails anywhere in a text;
+//   6. a date shown through `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` or
+//      `Intl.DateTimeFormat` where the receiver is a date (`new Date(x)`, or a name matching
+//      date, time, when, moment or an `...At` suffix): write it with `writtenDate`,
+//      `writtenDateTime` or `writtenTime` (lib/commonsFormat), spelled out with no seconds
+//      (design). Number formatting passes.
 // trash.ts's actorLabel already returns "you" and takes a `by` object; only a call whose
 // argument is a bare string actor (commonsFormat's) is read as the leading form. There is no
 // baseline: the check starts at zero.
@@ -169,8 +180,51 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
         ? parent.head.text : parent.templateSpans[parent.templateSpans.indexOf(node) - 1].literal.text);
       if (/\bby\s*$/.test(before)) leadingForm(node.expression, at(node));
     }
+    parenAsideHit(node);
+    dateFormatHit(node);
     ts.forEachChild(node, visit);
   };
+  const TEXT_NODES = new Set([ts.SyntaxKind.JsxText, ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral,
+    ts.SyntaxKind.TemplateHead, ts.SyntaxKind.TemplateMiddle, ts.SyntaxKind.TemplateTail]);
+  function parenAsideHit(node) {
+    if (!TEXT_NODES.has(node.kind)) return;
+    const text = node.text.replace(/\s+/g, ' ').trim();
+    const flagged = /\((?:optional|required|beta|experimental|deprecated|default|recommended)\)/i.exec(text);
+    if (flagged) {
+      hits.push({ line: at(node), value: text, reason: `"${flagged[0]}" in a person line: the note goes beside the label as an aside, or in a placeholder` });
+      return;
+    }
+    const label = /^[A-Z][^()]{0,40}?\s\(([^()]+)\)[.?!…]?$/.exec(text);
+    if (!label) return;
+    const aside = label[1];
+    if (/^[^\s()]{1,5}$/.test(aside)) return; // a unit: "Duration (s)"
+    if (/^(?:[A-Za-z⌘⌥⇧^]+\+)*[A-Za-z0-9⌘⌥⇧^]+(?: or (?:[A-Za-z⌘⌥⇧^]+\+)*[A-Za-z0-9⌘⌥⇧^]+)?$/.test(aside) && /[+⌘⌥⇧]|^(?:Ctrl|Cmd|Shift|Alt)/.test(aside)) return; // a key shortcut
+    hits.push({ line: at(node), value: text, reason: `"${text}" has a parenthesised aside: a label reads as its name; put the note beside it as an aside or a placeholder` });
+  }
+  const FORMATTERS = new Set(['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']);
+  const DATE_NAME = /(?:date|time|when|moment)|[a-z]At$|^at$/i;
+  function nameOf(expr) {
+    const n = unwrap(expr);
+    if (ts.isIdentifier(n)) return n.text;
+    if (ts.isPropertyAccessExpression(n)) return n.name.text;
+    return '';
+  }
+  function isDateReceiver(expr) {
+    const n = unwrap(expr);
+    if (ts.isNewExpression(n)) return n.expression.getText(sf) === 'Date';
+    if (ts.isCallExpression(n)) return /^Date\.(now|parse)$/.test(n.expression.getText(sf)) || n.expression.getText(sf) === 'Date';
+    return DATE_NAME.test(nameOf(n));
+  }
+  function dateFormatHit(node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && FORMATTERS.has(node.expression.name.text) && isDateReceiver(node.expression.expression)) {
+      hits.push({ line: at(node), value: exprText(node, sf), reason: `${node.expression.name.text}() on a date shows the browser's raw format: use writtenDate, writtenDateTime or writtenTime (lib/commonsFormat)` });
+    }
+    // new Intl.DateTimeFormat(...): its output is a date a person reads.
+    if (ts.isNewExpression(node) && node.expression.getText(sf) === 'Intl.DateTimeFormat') {
+      hits.push({ line: at(node), value: exprText(node, sf), reason: 'Intl.DateTimeFormat in a person line: use writtenDate, writtenDateTime or writtenTime (lib/commonsFormat)' });
+    }
+  }
   /** The text just before a JSX expression, skipping whitespace-only siblings and `{' '}`. */
   function textBefore(node) {
     const kids = node.parent.children;
