@@ -1,5 +1,4 @@
-// PR #199 fix:
-// the person's reopen in place.
+// PR #199: the person's reopen in place.
 // - a 409 that carries its own hold names the line, even when an older
 //   verdict read before the press holds something else (the carried hold
 //   wins over the stale one).

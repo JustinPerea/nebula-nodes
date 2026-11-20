@@ -1,6 +1,6 @@
 /**
  * PR #204: the backend scan for routes behind the person gate (tests/personGateRoutes.py)
- * fails closed. Two reviews found it skipped forms it couldn't read; now every such form is
+ * fails closed. It once skipped forms it couldn't read; now every such form is
  * listed as unreadable, and the forms it can read are read.
  *
  * 1. The real backend: the exact gated route set is pinned to personGateRoutes.snapshot.json, and

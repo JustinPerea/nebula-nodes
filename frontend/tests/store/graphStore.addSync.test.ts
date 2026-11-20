@@ -11,7 +11,7 @@ import { noticeSpy } from '../helpers/noticeSpy';
  * Agent log. Character, Moodboard and dynamic nodes go the same way, and a
  * failure never leaves the node only in this tab.
  *
- * Before the add sent DELETE /api/graph?force=true (an agent's work
+ * Before this change the add sent DELETE /api/graph?force=true (an agent's work
  * wiped by the person's first drop), and Character/Moodboard/dynamic adds
  * added the node locally on any failure, with only a console line.
  */

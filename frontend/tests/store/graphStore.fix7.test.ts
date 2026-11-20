@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   another canvas names them (and keeps the copy), and no kept save, retry
  *   or edit ever PUTs the old scene onto the new canvas's node. A reconnect
  *   to the same canvas cuts nothing off: the edits go again.
- * - design: another change is rebased in, field by
+ * - Design: another change is rebased in, field by
  *   field, and saved without asking when nothing overlaps; on a clash the
  *   person chooses, and until then saves send the other side's value for it.
  * - `canvas_replaced` says no line of its own.

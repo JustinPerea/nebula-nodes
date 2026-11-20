@@ -148,7 +148,7 @@ async function ownRun(nodes: unknown[]) {
   expect(useGraphStore.getState().isExecuting).toBe(true);
 }
 
-describe('Design (#200): the multi-delete lines read in canvas order', () => {
+describe('the multi-delete lines read in canvas order (design, #200)', () => {
   it('a plain multi-delete: the canvas\'s order, whatever order they went in', async () => {
     useGraphStore.setState({ nodes: [textNode('n5', 'A'), textNode('n6', 'B'), textNode('n7', 'C')] } as never);
     fetchMock.mockImplementation(async () => json({ removal: null }));
@@ -181,7 +181,7 @@ describe('Design (#200): the multi-delete lines read in canvas order', () => {
   });
 });
 
-describe('Design decision 2: a clash with another tab waits for the person', () => {
+describe('a clash with another tab waits for the person (design)', () => {
   const LINE = '“Opening” was changed in another tab while you were editing it.';
 
   it('kept edits, then another tab changes the same shot: mine stay on screen, saves send theirs for it, Keep mine saves mine', async () => {

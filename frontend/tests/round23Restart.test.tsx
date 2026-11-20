@@ -146,7 +146,7 @@ describe('a loaded or replaced canvas never inherits the previous boot', () => {
     expect(nebula().valueOf('n1')).toBe('AG');
   });
 
-  it('a canvas that took a sync of its own after the load still adopts across a later restart (L-a holds)', async () => {
+  it('a canvas that took a sync of its own after the load still adopts across a later restart (as in round22Restart)', async () => {
     start([textFakeNode('n1'), textFakeNode('n2')], '1', 'boot-A');
     await settle();
     expect(store().loadProjectGraph([canvasNode(textFakeNode('n1')), canvasNode(textFakeNode('n2'))], [], [])).toBe(true);

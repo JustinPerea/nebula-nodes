@@ -48,7 +48,7 @@ const STOP_LINE = "Nebula couldn’t stop the run because the server isn’t ans
 beforeEach(async () => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(json({}));
-  // The base URL is known, so asset links rewrite as in the app (the earlier setup).
+  // The base URL is known, so asset links rewrite as in the app.
   await apiFetch('/api/health').catch(() => null);
   fetchMock.mockClear();
   notices.length = 0;

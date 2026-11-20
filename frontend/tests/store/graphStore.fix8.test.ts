@@ -8,9 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * and a save's own echo is broadcast before its answer.
  * - Codex's edit while the person types is never lost.
  * - an order clash works both ways, and a later sync still merges.
- * - design: no retry and no retry line while a clash waits; after
+ * - Design: no retry and no retry line while a clash waits; after
  *   Keep mine, a failure says the normal line.
- * - design: Keep mine brings a removed shot back with its
+ * - Design: Keep mine brings a removed shot back with its
  *   connection, or says which one couldn't come back.
  * - Design: each clash its own line.
  * - the prompt names the change it clashes with; retries stop until
@@ -404,7 +404,7 @@ describe('Keep mine on a shot Codex removed (design)', () => {
   });
 });
 
-describe('the lines and the lows', () => {
+describe('the clash prompt, the retry limit and the reconnect send', () => {
   it('another tab: the removal and reorder lines in their no-agent shapes, with Use theirs', async () => {
     const h = backend();
     h.failNext(1);

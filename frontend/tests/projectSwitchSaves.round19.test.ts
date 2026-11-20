@@ -240,7 +240,7 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     expect(graphWrites.sent.filter((write) => write.method === 'DELETE')).toEqual([]);
   });
 
-  // Design follow-up 2: one line, naming the copy.
+  // Design: one line, naming the copy.
   it('the handoff fails: design\'s line names the setting, the node, the project and the agent', async () => {
     type('Typed');
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError('Nope.', 500, { heading: 'x' } as never));

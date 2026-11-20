@@ -144,7 +144,7 @@ describe('a failed save names its own settings (design)', () => {
   });
 
   // Merged with #198: "prompt" and "seed" have no card label on this node,
-  // and #198 never shows a raw key (design ask 3), so the three are
+  // and #198 never shows a raw key (design), so the three are
   // counted, as #198's own line had it; labelled ones are named (above).
   it('one request with three keys refused, two unlabelled: counted', async () => {
     useGraphStore.setState({ nodes: [banana({ prompt: 'old', seed: 1, aspect_ratio: '1:1' })] } as never);

@@ -51,7 +51,7 @@ describe('the project-switch toast', () => {
     expect(useProjectStore.getState().switchNotice).toBeNull();
   });
 
-  // Review: Projects keeps viewMode 'commons' and #commons (#163), and App
+  // Projects keeps viewMode 'commons' and #commons (#163), and App
   // shows Projects over the Commons (isHome wins), so leaving by Projects is
   // reaching Projects, not staying in the Commons.
   it('starts its 15 s once the person leaves the Commons by Projects', () => {

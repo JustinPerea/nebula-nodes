@@ -3,11 +3,11 @@
  * - Design: Undo on an agent's clear line puts the canvas back
  *   "as last saved": what Nebula had saved before the clear, never the
  *   typing the line says wasn’t saved.
- * - L-c: a rename draft folded into an agent's switch is handed off once;
+ * - A rename draft folded into an agent's switch is handed off once;
  *   a later switch carries no phantom `pendingLabels`.
- * - L-d: Cinema's "Send to motion" is refused while following (the bar
+ * - Cinema's "Send to motion" is refused while following (the bar
  *   pulses, nothing is sent) and offline.
- * - Design 4a: the Agent log says "Couldn’t delete “<node>”, node <id>. Nebula
+ * - Design: the Agent log says "Couldn’t delete “<node>”, node <id>. Nebula
  *   returned HTTP <status>."
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -214,7 +214,7 @@ describe('Undo on the agent-clear line restores the canvas as last saved', () =>
   });
 });
 
-describe('L-c: a rename draft folded in at an agent\'s switch is handed off once', () => {
+describe('a rename draft folded in at an agent\'s switch is handed off once', () => {
   it('the next agent switch carries no phantom pendingLabels and is not forced', async () => {
     useGraphStore.getState().noteRenameDraft('n1', 'Draft name');
     agentOpens();
@@ -238,7 +238,7 @@ describe('L-c: a rename draft folded in at an agent\'s switch is handed off once
   });
 });
 
-describe("L-d: Cinema's Send to motion", () => {
+describe("Cinema's Send to motion", () => {
   const scene = () => useGraphStore.setState((state) => ({ nodes: [...state.nodes, { id: 'n2', type: 'model-node', position: { x: 300, y: 0 },
     data: { definitionId: 'cinema-scene', label: 'Scene', state: 'idle', outputs: {},
       params: { scene: { shots: [{ id: 's1', prompt: 'a', output: { status: 'done', imageUrl: '/api/outputs/x.png' } }] } } } } as never] }));

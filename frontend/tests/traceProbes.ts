@@ -2,7 +2,8 @@
  * Synthetic worlds for the frontend trace (tests/personGatedCallers.ts), shared by
  * presenceRound7.trace and presenceRound8.trace. Each sends POST /api/presets and shows its
  * refusal's line without registering it (or registers it, where a probe says so).
- * - PROBES: the first set of probes.
+ * - PROBES: hook re-exports and aliases, two store layers, destructured actions,
+ *   wrapping components and hooks, path constants and window events.
  * - GATES_PROBES: the string, template, comment and branch-marker forms.
  * - RESPONSE_PROBES: a component's own Response.
  */
@@ -268,7 +269,8 @@ export const RESPONSE_PROBES: Record<string, Record<string, string>> = Object.fr
   Object.entries(RESPONSE_BODIES).map(([name, body]) => [name, { 'components/C.tsx': comp(body) }]));
 
 // `go` sends POST /api/presets with apiFetch, and its `!res.ok` branch shows
-// the line without registering it, inside a try whose catch registers (the shape of the registering-catch probe).
+// the line without registering it, inside a try whose catch registers (the shape of the
+// registering-catch probe in GATES_PROBES).
 const viaApiFetch = (path: string, before = `const presetsPath = () => '/api/presets';`, branch = 'setLine(await res.text())') => `${before}
 export function Panel({ setLine, show, keep }: any) {
   const go = async () => {
@@ -300,7 +302,7 @@ export const ROUND9_PROBES: Record<string, Record<string, string>> = {
   L2_literal_in_String: { 'components/C.tsx': viaApiFetch(`String('/api/presets')`, '') },
   L3_literal_in_joinBackendPath: { 'components/C.tsx': viaApiFetch(`joinBackendPath(b, '/api/presets')`, '') },
   L4_literal_non_null: { 'components/C.tsx': viaApiFetch(`('/api/presets')!`, '') },
-  // A const set from the helper is followed as its own function (as before).
+  // A const set from the helper is followed as its own function (as in the probes above).
   H7_helper_in_a_const: { 'components/C.tsx': viaLocal('const url = presetsPath();') },
   // A thrown refusal still goes to the catch: apiRequest isn't a transport.
   K2_wrapped_helper_sent_by_apiRequest: { 'components/C.tsx': viaApiFetch('presetsPath()!').replace(

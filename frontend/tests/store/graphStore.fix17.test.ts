@@ -4,7 +4,7 @@ import { deleteLanded } from '../helpers/deleteLanded';
 /**
  * PR #198 fix (design), on graphStore.fix12's keyed backend in
  * small (graphStore.fix16's harness):
- * - design: Codex ends a clash itself (it writes the
+ * - Design: Codex ends a clash itself (it writes the
  *   person's own value) while a 400 or 413 waits behind it: the same as the
  *   person's answer. The card matching Nebula's scene clears the stop and
  *   the mark; otherwise the stop line is said once, with [Try again].

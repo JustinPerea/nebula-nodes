@@ -377,7 +377,7 @@ describe('rendered: every control that acts is locked', () => {
   });
 });
 
-describe('a locked primary action looks neutral, never orange (design blocker A)', () => {
+describe('a locked primary action looks neutral, never orange (design)', () => {
   // Design made this one rule for every reason a button is disabled
   // (styles/disabled-buttons.css); agentPresenceFollowups.ratchet holds it
   // for every accent-filled button. Here: the two design named are in it.

@@ -4,13 +4,13 @@
  * - the handoff save names the settings and renames Nebula may not have
  *   (`pendingParams`, `pendingLabels`), and Nebula merges exactly those onto
  *   its copy of the project left.
- * - Design follow-up 2: a failed handoff is one line, "Couldn’t save “<setting>”
+ * - Design: a failed handoff is one line, "Couldn’t save “<setting>”
  *   for “<node>” in “<old project>” when <agent> switched projects. Your
  *   edits were saved as a copy, “<copy name>”." with "Open copy"; the toast
  *   no longer says "Edits saved as a copy." beside it.
- * - Design follow-ups 1 and 3: from the moment the tab sees an agent's
- *   switch until the new canvas is loaded the canvas is read-only (
- *   nothing is typed into a canvas about to go away), the project bar says
+ * - Design: from the moment the tab sees an agent's
+ *   switch until the new canvas is loaded the canvas is read-only (nothing
+ *   is typed into a canvas about to go away), the project bar says
  *   "Opening “<project>”…", Run is disabled with "Wait for “<project>” to
  *   open.", and a run press that gets through says "Couldn't run “<node>”.
  *   <agent> is opening “<project>”."
@@ -190,7 +190,7 @@ describe('the handoff names what Nebula may not have', () => {
   });
 });
 
-describe('Design follow-up 2: a failed handoff is one line, with Open copy', () => {
+describe('a failed handoff is one line, with Open copy', () => {
   it('names the setting, the node, the project, the agent and the copy', async () => {
     type('Typed');
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError('Nope.', 500, { heading: 'x' } as never));

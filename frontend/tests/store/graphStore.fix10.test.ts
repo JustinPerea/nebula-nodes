@@ -9,8 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * - the revisions the tab has seen belong to one backend process; a
  *   restart (a new bootId) forgets them, so a clock that went back can't
  *   freeze the card.
- * - design: a scene's unsaved edits count
- *   as unsaved for the page: hasUnsavedSceneEdits, and closing the tab asks.
+ * - A scene's unsaved edits count
+ *   as unsaved for the page: hasUnsavedSceneEdits, and closing the tab asks
+ *   (design: the bar follows the card).
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));

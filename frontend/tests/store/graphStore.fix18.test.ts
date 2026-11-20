@@ -3,12 +3,12 @@ import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
  * PR #198 fix (design), on graphStore.fix17's harness:
- * - design: while a clash waits on a scene (first or asked
+ * - Design: while a clash waits on a scene (first or asked
  *   again), Codex's edits about that scene alone go only to the Agent log,
  *   as for a stopped scene: one rule for a scene with a line of its own. An
  *   edit to the clashed field rewrites the prompt; one that makes it match
  *   the person's value ends the clash.
- * - design: while a scene is stopped, the person's own
+ * - Design: while a scene is stopped, the person's own
  *   toasts show with the stop line beside them, with [Try again]. Their own
  *   Undo that leaves nothing unsaved clears the stop and the mark.
  * - Design: a Codex wire from the stopped scene into another node

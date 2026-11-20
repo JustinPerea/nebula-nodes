@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * PR #198 fix (design rulings):
- * - design: the person's Undo or Redo that would take off a shot still
+ * - Design: the person's Undo or Redo that would take off a shot still
  *   rendering is refused on the canvas before anything is sent, in design's
  *   words; a restore the backend refuses anyway keeps the spinner and reads
  *   the backend's person line as is.
@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   next sync doesn't put the older scene over it; design's save line says so.
  * - a run of the graph holds the scene's shots only while it is on the
  *   scene (its node queued or executing).
- * - design: a scene with a shot rendering can't be deleted: one toast for
+ * - Design: a scene with a shot rendering can't be deleted: one toast for
  *   it alone, "Deleted 3 nodes. “Scene” wasn’t deleted because …" when the
  *   rest goes, and the disabled Delete's tooltip.
  * - Design: the unknown-actor reorder lines and the unnamed
@@ -90,7 +90,7 @@ async function addedShotRendering(withRun: boolean) {
   return added;
 }
 
-// -- Undo / Redo refused before it is sent ---------------------------------------
+// -- Undo / Redo refused before it is sent -------------------------------------------
 
 describe('an undo or redo that would remove a rendering shot is refused before it is sent (design)', () => {
   it('Undo, with a Stop for the shot: design\'s line, nothing sent, nothing changed', async () => {
@@ -185,10 +185,10 @@ describe('a restore the backend refuses keeps the spinner and reads the backend\
   });
 });
 
-// -- a refused scene save keeps the typing ------------------------------------------
+// -- a refused scene save keeps the typing ----------------------------------------------
 
 describe('a scene save the backend refuses keeps the person\'s typing', () => {
-  // Fix: any refusal of a scene write puts the scene
+  // Any refusal of a scene write puts the scene
   // back as the backend has it, so a later edit never re-sends what was
   // refused; design's save line says it went back. This replaces the earlier "the
   // typing stays" (kept typing re-sent a refused shot removal with the next edit).
@@ -204,7 +204,7 @@ describe('a scene save the backend refuses keeps the person\'s typing', () => {
     await sleep(80);
     // Design: a 400 is Nebula's bug; the typing stays on
     // screen, unsaved, and design's line says so.
-    // Design: the one 400 line, with [Try again]; design: in the state slot.
+    // Design: the one 400 line, with [Try again], shown in the state slot.
     expect(stopLineOf('n31')).toBe('Nebula can’t save your changes to “Opening”.');
     expect(said).toEqual([]);
     expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
@@ -223,7 +223,7 @@ describe('a scene save the backend refuses keeps the person\'s typing', () => {
     socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [cinema('n32', [{ id: 's1', prompt: 'an agent\'s fix' }], 'Opening')],
       edit: { actor: { kind: 'agent', name: 'Codex', id: 'cx' } } });
     await sleep(10);
-    // PR #198 (design decision 2): the same field on both sides is a
+    // PR #198 (design): the same field on both sides is a
     // clash: kept on screen, and the person is asked which to keep.
     expect(shotsOf('n32')[0].prompt).toBe('typed');
     expect(useGraphStore.getState().sceneClashes.n32?.line)
@@ -231,7 +231,7 @@ describe('a scene save the backend refuses keeps the person\'s typing', () => {
   });
 });
 
-// -- a graph run holds the shots only while it is on the scene ---------------------------
+// -- a graph run holds the shots only while it is on the scene -------------------------------
 
 describe('a run of the graph holds the scene\'s shots only while it is on the scene', () => {
   const shot = { id: 's1', output: { imageUrl: '/x.png', status: 'done' as const } };
@@ -252,7 +252,7 @@ describe('a run of the graph holds the scene\'s shots only while it is on the sc
   });
 });
 
-// -- a scene with a shot rendering can't be deleted ----------------------------------------
+// -- a scene with a shot rendering can't be deleted --------------------------------------------
 
 describe('a scene with a shot rendering can\'t be deleted (design)', () => {
   const renderingScene = (stoppable = true) => {
@@ -317,7 +317,7 @@ describe('a scene with a shot rendering can\'t be deleted (design)', () => {
   });
 });
 
-// -- the Accept undo lines ------------------------------------------------------------------
+// -- the Accept undo lines -----------------------------------------------------------------
 
 describe('the Accept undo lines', () => {
   const agent = { kind: 'agent' as const, name: 'Codex' };

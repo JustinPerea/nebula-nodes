@@ -188,7 +188,7 @@ describe('leave, copy, come back', () => {
     expect(page.confirmed).toBe(false);
   });
 
-  // A mutant, re-derived: a claim that settles after the page
+  // A mutation case, re-derived: a claim that settles after the page
   // went (or claimed again) changes nothing. Each answer of the lock manager
   // can come after a pagehide.
   it('a page that went while its claim was on its way and refused doesn’t move to a new id', async () => {

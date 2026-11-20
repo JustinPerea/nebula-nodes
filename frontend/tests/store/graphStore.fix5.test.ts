@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   Every step pushed while the refused write was out takes the shot back
  *   into its snapshot, so no Undo or Redo ever sends a scene without it
  *   (the live repro).
- * - design: a partial revert. A 409 that names its rendering shots
+ * - Design: a partial revert. A 409 that names its rendering shots
  *   (`rendering.shotIds`) puts back only those, and the rest of the save goes
  *   again at once: the typing saves, the removal never goes out again.
  * - Design: every whole-save refusal keeps the edits on screen, marked
@@ -146,7 +146,7 @@ function harness(options: { first?: () => Response; later?: () => Response; expo
 const typeIn = (shotId: string, prompt: string) => useGraphStore.getState().updateScene('n1', (current) => ({ ...current,
   shots: current.shots.map((shot) => (shot.id === shotId ? { ...shot, prompt } : shot)) }));
 
-// -- a refused removal while the person kept working ------------------------------
+// -- a refused removal while the person kept working ---------------------------------------
 
 describe('the undo stack after a refused removal', () => {
   it('typing in the scene while the removal was out; Undo and Redo after the run never drop Shot 2', async () => {
@@ -268,7 +268,7 @@ describe('the partial revert (design)', () => {
   });
 });
 
-// -- design: whole-save refusals ------------------------------------------------------
+// -- whole-save refusals (design) -----------------------------------------------------------
 
 // Design (2026-10-28): one line per status, a save that wasn't stopped too.
 const TOO_BIG_LINE = '“Opening” is too big to save. Remove something from it, then try again.';
@@ -460,7 +460,7 @@ describe('a refusal that can\'t be pinned keeps the edits, marked unsaved', () =
   });
 });
 
-// -- no answer ----------------------------------------------------------------------------
+// -- no answer --------------------------------------------------------------------------------
 
 describe('a removal with no answer', () => {
   function offlineBackend() {
@@ -520,7 +520,7 @@ describe('a removal with no answer', () => {
   });
 });
 
-// -- the re-read fails ----------------------------------------------------------------------
+// -- the re-read fails --------------------------------------------------------------------------
 
 describe('the re-read after a refusal fails', () => {
   it('the wire comes back from the canvas\'s own record', async () => {
@@ -540,7 +540,7 @@ describe('the re-read after a refusal fails', () => {
   });
 });
 
-// -- design naming rule ---------------------------------------------------------------------------
+// -- design naming rule --------------------------------------------------------------------------
 
 async function ownRun(nodes: unknown[]) {
   store.clearCinemaScenePersistence();

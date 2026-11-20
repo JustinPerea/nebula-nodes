@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * PR #204: a scene save the gate refused only because this tab isn't
  * connected as the person says so in the because form, and goes again on the promote, as
- * [Try again] does; landing clears its line. Harness from graphStore.fix22.test.ts (design):
+ * [Try again] does; landing clears its line. Harness from graphStore.fix22.test.ts:
  * - Answer 1: the run-lock line is not a failure, merged with the shared name
  *   list: "Your changes to “Opening” are kept. Nebula will save them when the
  *   run finishes."

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Design, PR #212, ruling 3. On a tab that isn't connected as you
+ * Design, PR #212. On a tab that isn't connected as you
  * the proposal bar shows the person lock's line under its buttons. Measured
  * settled (the bar's rects held for 8 samples): the line's `flex-basis: 100%`
  * (personLock.css, a row wrapper's rule) took the card's column height, so the

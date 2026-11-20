@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   node." [Undo] as the only line; no stop line stays for it.
  * - another writer's change that makes a stopped scene match the
  *   person's values clears the stop, its line and the mark together.
- * - design: Undo brings a scene deleted while
+ * - Design: Undo brings a scene deleted while
  *   stopped back as it was: stopped, with its line and [Try again], for every
  *   cause. No new round of timed retries; the quiet try still goes on the
  *   next sign that saving works.
@@ -398,9 +398,9 @@ describe('the person’s own delete of a stopped scene', () => {
   });
 });
 
-// Design call 3 changed this describe: Undo saves first; only a
+// A design ruling changed this describe: Undo saves first; only a
 // save that still fails comes back stopped (graphStore.fix20 pins it closely).
-describe('Undo saves first; still failing, the scene comes back stopped (design call 3)', () => {
+describe('Undo saves first; still failing, the scene comes back stopped (design)', () => {
   it.each<Cause>([400, 413])('%s again: one save at once, refused; back stopped with its line and [Try again]; nothing more until the person acts', async (cause) => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', cause);

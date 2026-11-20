@@ -292,7 +292,7 @@ describe('an agent\'s clear is one toast, its line carrying Undo', () => {
   });
 });
 
-describe('Design (LOCKED): a delete answered with a 500', () => {
+describe('a delete answered with a 500', () => {
   it('names the node, puts it back, and logs the status in the Agent log', async () => {
     useAgentLogStore.getState().clear();
     graphWrites.answer = (_path, init) => Promise.resolve(init?.method === 'DELETE'

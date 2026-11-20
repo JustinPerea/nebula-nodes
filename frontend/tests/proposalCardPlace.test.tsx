@@ -749,7 +749,7 @@ const R3F_FLOATING_SHORT = [
 // fades = 97), [the body it gets, 97]: the 420x560 window under the
 // two-line offline banner with the log docked (12 px short with no Undo
 // notice: 78 px of room, the log's 89 and its collapse's 47, the pill's 40;
-// 26 short with one, whose row now carries the fold's count, design); and a
+// 26 short with one, whose row now carries the fold's count, per design); and a
 // floating log the person left mid-column, at 30% of the height, where
 // nothing fits beside it either (design: under 400 px; its bottom edge stays,
 // so only the room above it grows). `floating wide` is that log resized to
@@ -837,7 +837,7 @@ describe('the grid', () => {
   const SIDE: Record<string, string> = {};
   /** The width each cell's card took beside a log in its narrow layout. */
   const NARROWED: Record<string, number> = {};
-  /** Each floating cell: its note whole (pass 1, design) or clipped. */
+  /** Each floating cell: its note whole (pass 1, per design) or clipped. */
   const NOTE: Record<string, 'whole' | 'clipped'> = {};
   const cells = SIZES.flatMap(([w, h]) => LOGS.flatMap((log) => COUNTS.flatMap((count) => [false, true].flatMap((banner) => (count ? [false, true] : [false]).map((undo) => {
     const regionLeft = 64;
@@ -1045,8 +1045,8 @@ describe('the grid', () => {
   });
 
   it('lists the cells where every step leaves the body short of its kept lines', () => {
-    // [the body it gets, the kept lines' need: 65 + two fades, and from
-    // then on, the 11 px to the line boundary above the top fade].
+    // [the body it gets, the kept lines' need: 65 + two fades, and, once the scroll
+    // stops on a line boundary, the 11 px to the line boundary above the top fade].
     expect(SHORT).toEqual(EXPECTED_SHORT);
     for (const [body, need] of Object.values(SHORT)) expect(body).toBeLessThan(need);
     // The plan line shows whole in every one of them but these.
@@ -1054,7 +1054,7 @@ describe('the grid', () => {
     for (const [body, need] of Object.values(PLAN_SHORT)) expect(body).toBeLessThan(need);
     // The cells: 420x560, the docked log, the banner, 2-4 notices with
     // no Undo: the plan line whole, the ⚠ line short (under the fade; 12 px
-    // until the change, 23 px now the scroll stops on a line boundary).
+    // before the scroll stopped on a line boundary, 23 px now).
     for (const count of [2, 3, 4]) {
       expect(SHORT[`420x560 open ${count} banner`]).toEqual([85, 108]);
       expect(PLAN_SHORT[`420x560 open ${count} banner`]).toBeUndefined();
@@ -1070,7 +1070,7 @@ describe('the grid', () => {
  * the native corner (it collapses to its header like any other).
  * In every cell: no notice overlaps another or the card; the card's header
  * and footer whole; nothing off the window or over the top line (the
- * offline banner's, design); the log's header never crossed; its body
+ * offline banner's, per design); the log's header never crossed; its body
  * crossed only in a shortfall under it (the last resort).
  */
 describe('the grid: other floating logs (design)', () => {

@@ -10,10 +10,10 @@ import { resolve } from 'node:path';
  * PR #195: the design lines, verbatim.
  * - a cut-off save names its node by id, so two nodes with the same
  *   title count as two.
- * - Design (LOCKED): the failed handoff's line, with non-breaking spaces inside
+ * - Design: the failed handoff's line, with non-breaking spaces inside
  *   the quoted project names.
- * - Design (LOCKED): a delete answered with a 500.
- * - Design derived: the run lines while following, and the Create line.
+ * - Design: a delete answered with a 500.
+ * - Design: the run lines while following, and the Create line.
  */
 const NBSP = ' ';
 
@@ -33,7 +33,7 @@ describe('cut-off saves count by node id', () => {
   });
 });
 
-describe('Design (LOCKED): the failed handoff line keeps quoted project names whole', () => {
+describe('the failed handoff line keeps quoted project names whole', () => {
   it('non-breaking spaces inside the quoted names only', () => {
     expect(handoffFailedLine([{ nodeId: 'n1', node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered 2)'))
@@ -48,7 +48,7 @@ describe('Design (LOCKED): the failed handoff line keeps quoted project names wh
   });
 });
 
-describe('Design (LOCKED): a delete answered with a 500', () => {
+describe('a delete answered with a 500', () => {
   it('one node', () => {
     expect(deleteServerErrorLine(['Hero prompt'])).toBe(
       "Nebula couldn’t delete “Hero prompt” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula.");
@@ -63,7 +63,7 @@ describe('Design (LOCKED): a delete answered with a 500', () => {
   });
 });
 
-describe('Design derived: runs and Create while following', () => {
+describe('the run lines and Create line while following', () => {
   it('a whole-canvas run, one node, several nodes, an unknown agent', () => {
     expect(runWhileFollowingLine(null, 'Codex', 'Second canvas')).toBe("Nebula couldn’t run the canvas because Codex is opening “Second canvas”.");
     expect(runWhileFollowingLine('Hero', 'Codex', 'Second canvas')).toBe("Nebula couldn’t run “Hero” because Codex is opening “Second canvas”.");

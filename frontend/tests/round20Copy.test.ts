@@ -7,7 +7,7 @@ import { agentClearedLine, handoffFailedLine } from '../src/lib/savingCutOff';
 import { openingLine, runWhileFollowingLine, waitToOpenTooltip } from '../src/lib/canvasFollow';
 import { deleteNoAnswerLine } from '../src/lib/deleteCopy';
 
-describe("Design ruling 3 and follow-up 4: an agent's clear dropped the person's editing", () => {
+describe("an agent's clear dropped the person's editing", () => {
   const text = (node: string) => ({ node, setting: 'Text' });
   it('one setting', () => {
     expect(agentClearedLine([text('Hero prompt')], 'Codex'))
@@ -49,7 +49,7 @@ describe("Design ruling 3 and follow-up 4: an agent's clear dropped the person's
   });
 });
 
-describe('Design follow-up 2: the failed handoff, one line (non-breaking spaces in the project names)', () => {
+describe('the failed handoff, one line (non-breaking spaces in the project names)', () => {
   it('one setting', () => {
     expect(handoffFailedLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered)'))
@@ -74,7 +74,7 @@ describe('Design follow-up 2: the failed handoff, one line (non-breaking spaces 
   });
 });
 
-describe('Design follow-ups 1 and 3: following an agent\'s switch', () => {
+describe('following an agent\'s switch', () => {
   it('the project bar', () => {
     expect(openingLine('beta')).toBe('Opening “beta”…');
   });

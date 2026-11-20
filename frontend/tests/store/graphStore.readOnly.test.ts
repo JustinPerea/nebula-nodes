@@ -131,7 +131,7 @@ describe('while Nebula is offline, every edit entry point is blocked', () => {
   });
 });
 
-// Second half: an add-and-connect whose answer was lost was
+// The other half of the gate: an add-and-connect whose answer was lost was
 // left "uncertain", and every later add-and-connect was refused until a
 // reload. A reconnect to the same backend process doesn't
 // release it (the create may still commit); a restarted backend (a new

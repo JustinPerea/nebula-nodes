@@ -3,11 +3,11 @@
  * Nebula restarted without canvas-revisions.json, so its canvas
  * revisions start again from a boot-unique base and every sync says
  * `canvasRevisionRestored: false` for that run.
- * - L-a: typing sent before the socket's first sync is refused as out of
+ * - Typing sent before the socket's first sync is refused as out of
  *   date (the old canvas header). It is kept and sent again under the
  *   adopted revision once that sync shows the same canvas; when the sync is
  *   another canvas, the line names it. Never lost with no line.
- * - L-b: the same-canvas adoption happens only across an actual restart
+ * - The same-canvas adoption happens only across an actual restart
  *   (the sync's `bootId` differs from the one the canvas last synced with),
  *   once per boot. A missed agent clear in the same boot that re-adds the
  *   same ids reads as a replacement: old typing never lands on its n1.

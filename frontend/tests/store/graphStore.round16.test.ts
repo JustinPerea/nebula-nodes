@@ -389,7 +389,7 @@ describe('a freshly loaded project shows its missing-key warning at once', () =>
   });
 });
 
-describe('nit: a reconnect while the mouse is still down keeps a put-back drag ended', () => {
+describe('a reconnect while the mouse is still down keeps a put-back drag ended', () => {
   const at = () => useGraphStore.getState().nodes.find((node) => node.id === 'n1')!.position;
   const move = (x: number, dragging: boolean) => useGraphStore.getState().onNodesChange(
     [{ type: 'position', id: 'n1', position: { x, y: 0 }, dragging }] as never);

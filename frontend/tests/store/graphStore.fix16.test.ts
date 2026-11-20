@@ -4,12 +4,12 @@ import { deleteLanded } from '../helpers/deleteLanded';
 /**
  * PR #198 fix (design), on graphStore.fix12's keyed backend in
  * small (graphStore.fix14's harness):
- * - design: every way a scene comes back asks a waiting
+ * - Design: every way a scene comes back asks a waiting
  *   clash again while the values still differ: the delete toast's Undo, the
  *   person's Redo then Undo again, the person's own delete undone, and
  *   another window's restore. No way back counts as an answer, and the
  *   person's own removal says nothing.
- * - design: a save refused 400 or 413 while a clash waits
+ * - Design: a save refused 400 or 413 while a clash waits
  *   leaves the clash prompt the only line, and nothing for the scene goes
  *   until the person answers. Then it is stopped for good with its line and
  *   [Try again], unless the answer left nothing unsaved (the edge case:

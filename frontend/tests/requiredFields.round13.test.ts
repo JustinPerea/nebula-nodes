@@ -110,7 +110,7 @@ describe('every run path refuses it before any dialog', () => {
   const initialCache = useUIStore.getState().settingsCache;
   const initialThreshold = useUIStore.getState().runCostConfirmUsd;
   const notice = () => useGraphStore.getState().undoNotice?.text ?? useGraphStore.getState().messageNotice?.text ?? null;
-  const GM = 'Nothing ran. Choose an aspect ratio for “Hero” first.';
+  const NOTHING_RAN_LINE = 'Nothing ran. Choose an aspect ratio for “Hero” first.';
   let started: ReturnType<typeof vi.fn>;
   const setCanvas = (params: Record<string, unknown>) => useGraphStore.setState({
     nodes: [node('n1', 'Prompt', 'text-input', { value: 'a fox' }), node('n2', 'Hero', KREA2, params)] as never,
@@ -152,7 +152,7 @@ describe('every run path refuses it before any dialog', () => {
     expect(askMock).not.toHaveBeenCalled();
     expect(window.confirm).not.toHaveBeenCalled();
     expect(started).not.toHaveBeenCalled();
-    expect(notice()).toBe(GM);
+    expect(notice()).toBe(NOTHING_RAN_LINE);
   });
 
   it('a replay from Run history: refused too', async () => {
@@ -163,13 +163,13 @@ describe('every run path refuses it before any dialog', () => {
       nodeIds: ['n1', 'n2'] }] as never });
     await useGraphStore.getState().rerunHistoryRecord('r1');
     expect(started).not.toHaveBeenCalled();
-    expect(notice()).toBe(GM);
+    expect(notice()).toBe(NOTHING_RAN_LINE);
   });
 
   it('(control) both fields chosen: the run goes out', async () => {
     setCanvas({ aspect_ratio: '16:9', resolution: '1K' });
     await useGraphStore.getState().executeNode('n2');
     expect(started).toHaveBeenCalled();
-    expect(notice()).not.toBe(GM);
+    expect(notice()).not.toBe(NOTHING_RAN_LINE);
   });
 });

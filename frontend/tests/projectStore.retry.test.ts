@@ -67,8 +67,8 @@ function listing(overrides: Partial<projects.ProjectList> = {}): projects.Projec
   return { projects: [summary('alpha'), summary('beta')], trash: [], activeProjectId: 'alpha',
     workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION, ...overrides };
 }
-// Before this change Projects offered Try again (with the short line) beside
-// every failure; that is what an older store without the offer reads as.
+// Before the retry offer existed, Projects offered Try again (with the short line)
+// beside every failure; that is what an older store without the offer reads as.
 const offer = () => typeof projectStore.projectRetryOffer === 'function'
   ? projectStore.projectRetryOffer(useProjectStore.getState()) : 'redo';
 
@@ -309,7 +309,7 @@ describe('Projects: Try again redoes the failed action', () => {
 // A refusal for good at startup still leaves a way out, and a
 // World Labs hold on the canvas is refused in the browser with design's line and
 // no Try again (redoing it fails the same local check until the person unlocks).
-describe('Projects: review fixes', () => {
+describe('Try again after a startup load refused for good, and the World Labs hold lines', () => {
   const ambiguity = { runId: 'run-wl', nodeId: 'n-wl', kind: 'worldlabs-environment' as const,
     message: 'held', durable: true };
   const holdLine = (heading: string) => `${nebula(heading)} ${WORLD_LABS_OPEN_CLAUSE}`;

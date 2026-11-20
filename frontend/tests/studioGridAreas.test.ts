@@ -440,7 +440,7 @@ describe('the Board view in a narrow window (design, #209)', () => {
       expect(at(761, slava).areas).toEqual(GRID);
     });
 
-    // #213 design: the row sizes and the panel's box.
+    // Design (#213): the row sizes and the panel's box.
     it(`${skin}: the board's row keeps at least --mb-board-min-h (300 px); the panel's row takes what is left, down to 0`, () => {
       const { root } = at(1440, slava);
       const own = cascaded(root, undefined, { viewport: { width: 1440, height: 900 } });

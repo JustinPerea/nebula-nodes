@@ -182,7 +182,7 @@ describe('what registers, not what the page says', () => {
     expect([...lines.registeredLines().values()].map((line) => line.kind)).toEqual(['fix']);
   });
 
-  it('a Commons line: neutral (the shared because style, design) and a status when it is the because form, red and an alert otherwise', async () => {
+  it('a Commons line: neutral (the shared because style, per design) and a status when it is the because form, red and an alert otherwise', async () => {
     const commons = copy.commonsNotConnectedCopy('Couldn’t load the references.', false);
     expect(commons).toBe('Nebula couldn’t load the references because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     render(<>

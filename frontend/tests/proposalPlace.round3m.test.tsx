@@ -253,7 +253,7 @@ describe('docked at 800x420, the card\'s foot never comes over the log', () => {
     clearOfEverything(m, place);
   });
 
-  it('had its foot 24 px over the log\'s header there; never again, with notices too', () => {
+  it('an earlier version had its foot 24 px over the log\'s header there; the foot now stays clear, with notices too', () => {
     for (const [items, undo] of [[[46], [true]], [[62, 46], [true, false]], [[62, 62], [true, true]]] as const) {
       const m = cell({
         logClearance: 356, logTop: 268, logSpare: 180 - 91, logCollapse: 91 - HEADER,

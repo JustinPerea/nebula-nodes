@@ -142,7 +142,7 @@ if (typeof document !== 'undefined' && typeof MutationObserver === 'function') {
     const found = takeBareLines();
     if (found.length === 0) return;
     throw new Error(`${found.length} "connected as you" line${found.length === 1 ? '' : 's'} rendered without registering `
-      + '(render it through <LineText>, components/LineText.tsx; review 8 LOW-1):\n'
+      + '(render it through <LineText>, components/LineText.tsx):\n'
       + found.map((text) => `  ${text}`).join('\n'));
   });
   // Disconnected before jsdom's teardown, so no change after it runs

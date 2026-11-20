@@ -227,7 +227,7 @@ function watchStopLines() {
   return { seen, off };
 }
 
-describe('Design call 3: Undo of a stopped scene’s delete saves first', () => {
+describe('Undo of a stopped scene’s delete saves first (design)', () => {
   it.each<Cause>(['server', 400, 413])('stopped by %s, saving works again: one save at once, it lands; no stop line in any store update', async (cause) => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', cause);
@@ -283,7 +283,7 @@ describe('Design call 3: Undo of a stopped scene’s delete saves first', () => 
   });
 });
 
-describe('Design call 2: one [Try again] at a time', () => {
+describe('one [Try again] at a time (design)', () => {
   it('while a try is on its way the line stays, its [Try again] marked as trying; a second press sends nothing', async () => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene' });
     await stopBy(h, 'n1', 'server');
@@ -316,7 +316,7 @@ describe('Design call 2: one [Try again] at a time', () => {
   });
 });
 
-describe('Design call 7: reading order with a row tolerance', () => {
+describe('reading order with a row tolerance (design)', () => {
   it('nearly level (a few px apart, within a quarter of a card): left to right', async () => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene' }, undefined, { n1: { x: 0, y: 12 }, n2: { x: 400, y: 0 } });
     await stopBy(h, 'n1', 400);
@@ -341,7 +341,7 @@ describe('Design call 7: reading order with a row tolerance', () => {
   });
 });
 
-// With design's retrying line: when the save stops, the
+// The retrying line (design): when the save stops, the
 // retry line it said ("…Nebula is trying again.") leaves the event slots, so
 // it never sits under the stop line that contradicts it.
 // Design: the retrying line is a state, in the state slot (never a

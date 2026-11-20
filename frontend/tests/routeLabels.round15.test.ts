@@ -9,7 +9,7 @@ import { describeRunScope, runCostConfirmMessage, summarizeRunScope } from '../s
 import { placeholderRunConfirm, rowSegments } from '../src/lib/placeholderRunConfirm';
 
 /**
- * And design (verbatim): "a confirm
+ * Design (verbatim): "a confirm
  * row names the route that actually runs, and that route's price. On the
  * person's xAI key: "Grok Imagine 2.0 (xAI) · $X", using the label the card
  * uses for that route. If that route's price isn't known: "price not listed"

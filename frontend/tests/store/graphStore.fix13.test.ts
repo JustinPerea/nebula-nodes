@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *   person edits or presses it. The Agent log has the status and code.
  * - Design: a delete's sync is ONE toast: the deleted line with
  *   Codex's [Undo]; when the write did more than delete the scene, one
- *   sentence (design note 3): "Codex changed the canvas and deleted …".
+ *   sentence (design): "Codex changed the canvas and deleted …".
  * - Design (#198): a clash waiting when the scene was
  *   deleted is asked again once it is back, against the restored scene; the
  *   same value is no clash; the clash prompt takes the deleted toast's place.
@@ -397,7 +397,7 @@ describe('the delete’s sync is ONE toast', () => {
     expect(said).toEqual([]);
   });
 
-  it('Codex’s write did more: one sentence with its [Undo] (design note 3)', async () => {
+  it('Codex’s write did more: one sentence with its [Undo] (design)', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([60]);
     h.failNext(1);

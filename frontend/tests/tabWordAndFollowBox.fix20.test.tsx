@@ -1,11 +1,11 @@
 /**
  * PR #199 (design):
- * - fix 2: every line with "tab" or "window" uses the shared word (lib/tabWord):
+ * - every line with "tab" or "window" uses the shared word (lib/tabWord):
  *   "tab" in the browser, "window" in the desktop app;
- * - 1 and fix 1: Nebula's own reopen this tab couldn't follow shows on
+ * - Nebula's own reopen this tab couldn't follow shows on
  *   Projects in the neutral box, the line ending at the failure, with
  *   [Open “Delta”] in place of Try again;
- * - 2: the recover answer's `sourceName` reaches the tab.
+ * - the recover answer's `sourceName` reaches the tab.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -25,7 +25,7 @@ import { apiRequest } from '../src/lib/apiRequest';
 
 const src = (file: string) => readFileSync(resolve(__dirname, '../src', file), 'utf8');
 
-describe('fix 2 (design): the shared tab/window word', () => {
+describe('the shared tab/window word (design)', () => {
   afterEach(() => { delete (window as { nebulaDesktop?: unknown }).nebulaDesktop; vi.resetModules(); });
 
   it('the other-tab follow failure is active, in the browser’s word and the desktop app’s', async () => {
@@ -77,7 +77,7 @@ describe('fix 2 (design): the shared tab/window word', () => {
 const base = { projects: [], loading: false, busy: false, error: null,
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() } satisfies ProjectHomeProps;
 
-describe('fix 1 (design): the boot-follow box on Projects', () => {
+describe('the boot-follow box on Projects (design)', () => {
   it('neutral, the line ending at the failure, and [Open “Delta”] as its only button', () => {
     const onRetry = vi.fn();
     const { container } = render(<ProjectHome {...base} onRetry={onRetry} retry="openFollowed" openFollowedName="Delta"

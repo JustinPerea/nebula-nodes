@@ -234,7 +234,7 @@ describe('leaving it', () => {
   });
 });
 
-describe('a save that fails while resuming (review)', () => {
+describe('a save that fails while resuming', () => {
   it('trimmed, but the save fails for another reason: "Save failed", never "Saving paused", and the save that lands still says "Saving again"', async () => {
     editCanvas(BIG);
     await useProjectStore.getState().flush();

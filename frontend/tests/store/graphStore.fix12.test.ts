@@ -5,13 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * backend in small (graphStore.fix11's), which can also delete the scene
  * node (404 node_gone with deletedBy), put it back, refuse a save as another
  * project opened (workspace_moved) or as 400 / 413:
- * - design: a clash answered while the save was
+ * - Design: a clash answered while the save was
  *   stopped sends the save once; landed, the stopped state is gone; failed,
  *   back to stopped with the same line, no new toast, no timed retries, and
  *   the quiet try comes back.
- * - design: "another window" only for the
+ * - Design: "another window" only for the
  *   person's own tab; anyone else unknown, and the line says nothing of who.
- * - design: a deleted scene says so once and stops for good, and picks the save back
+ * - Design: a deleted scene says so once and stops for good, and picks the save back
  *   up when the delete is undone; a workspace move says nothing of its own.
  */
 

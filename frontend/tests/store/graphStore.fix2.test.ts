@@ -12,7 +12,7 @@ import type { NodeData } from '../../src/types';
  * - a list both the Accept and someone since reordered: Undo says so.
  * - Redo after a run keeps the run's shot media and its flat keys.
  * - a part a run's render kept never names an agent.
- * - Design ask 3: an unlabeled setting is "a setting on “<node>”" in the line,
+ * - Design: an unlabeled setting is "a setting on “<node>”" in the line,
  *   its raw key in the Agent log.
  */
 
@@ -99,7 +99,7 @@ async function step(action: 'undo' | 'redo') {
   return { bodies, notice: useGraphStore.getState().undoNotice?.text ?? null };
 }
 
-// -- no transient run status in undo steps ----------------------------------------------------------------------------
+// -- no transient run status in undo steps -----------------------------------------
 
 describe('no undo step carries a transient run status', () => {
   it('a snapshot taken while a shot renders holds it settled: "done" with its image, else "idle"', () => {
@@ -156,7 +156,7 @@ describe('no undo step carries a transient run status', () => {
   });
 });
 
-// -- a clip the Accept changed ----------------------------------------------------------------------------
+// -- a clip the Accept changed -----------------------------------------------------
 
 describe('in a clip the Accept changed, the run\'s writes go back with it', () => {
   const asNode = (params: Record<string, unknown>, definitionId = 'video-edit') => node('n1', params, 'Cut', definitionId) as unknown as Node<NodeData>;
@@ -198,7 +198,7 @@ describe('in a clip the Accept changed, the run\'s writes go back with it', () =
   });
 });
 
-// -- both sides reordered a list ----------------------------------------------------------------------------
+// -- both sides reordered a list ---------------------------------------------------
 
 describe('both sides reordered the same list: Undo says so', () => {
   it('the order is kept and named as one item', () => {
@@ -238,7 +238,7 @@ describe('both sides reordered the same list: Undo says so', () => {
   });
 });
 
-// -- Redo after a run ----------------------------------------------------------------------------
+// -- Redo after a run --------------------------------------------------------------
 
 describe('Redo after a run keeps what the run wrote', () => {
   it('Accept, Undo, s2 renders, Redo: s2\'s image never leaves the canvas', async () => {
@@ -282,7 +282,7 @@ describe('Redo after a run keeps what the run wrote', () => {
   });
 });
 
-// -- a run's render never names an agent ----------------------------------------------------------------------------
+// -- a run's render never names an agent -------------------------------------------
 
 describe('what a run\'s render kept never names an agent', () => {
   it('a shot the Accept added and a run rendered: the line drops the actor', async () => {
@@ -303,9 +303,9 @@ describe('what a run\'s render kept never names an agent', () => {
   });
 });
 
-// -- design ask 3 ----------------------------------------------------------------------
+// -- an unlabeled setting ----------------------------------------------------------
 
-describe('Design ask 3: an unlabeled setting is "a setting on “<node>”"; the Agent log names the key in words', () => {
+describe('an unlabeled setting is "a setting on “<node>”"; the Agent log names the key in words (design)', () => {
   it('the undo line and the log', async () => {
     const fal = (scale: number, steps: number) => node('n1', { endpoint_id: 'fal-ai/flux', guidance_scale: scale, num_steps: steps },
       'Flux', 'fal-universal');

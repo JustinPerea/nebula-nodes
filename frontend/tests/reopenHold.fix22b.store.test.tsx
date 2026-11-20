@@ -3,17 +3,17 @@
  * - the 409's own `hold` names the line, before any re-read;
  * - a 409 with nothing holding tries once more, quietly, then says
  *   nothing (no stale line, two presses at once included);
- * - design: `bootstrap` is sent, its line only on its 409;
- * - design: the person's reopen of this project in another window
+ * - Design: `bootstrap` is sent, its line only on its 409;
+ * - Design: the person's reopen of this project in another window
  *   keeps this window's view (the Commons, the Settings dock, the selection);
  *   an agent's switch resets it;
  * - Projects is read when the follow lands;
  * - a Web Lock claims the tab id for the page's life;
- * - design: the rail callout isn't drawn over open Run history;
+ * - Design: the rail callout isn't drawn over open Run history;
  * - focus after an in-place reopen; the 4 s poll;
  * - the live regions mount empty, then get their text;
- * - design: the toolbar moves below the World Labs notice;
- * - mutants: sequence numbers, pageshow, and a 409 re-read after another open.
+ * - Design: the toolbar moves below the World Labs notice;
+ * - Also: the sequence numbers, pageshow and a 409 re-read after another open are pinned.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';

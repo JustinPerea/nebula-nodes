@@ -10,10 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * syncs and let them out late, in order (a lag found in review).
  * - a sync older than what the tab already knows never rolls the card
  *   back, never clashes, never stops a save (a late 409).
- * - design: a removed shot put back while the choice waits.
+ * - Design: a removed shot put back while the choice waits.
  * - Keep mine's put-back connect never takes an input that holds
  *   another connection.
- * - design: the person deletes a held connection: no request,
+ * - Design: the person deletes a held connection: no request,
  *   no line, and Keep mine doesn't put it back.
  * - Design: the stopped state outlives the toast.
  */

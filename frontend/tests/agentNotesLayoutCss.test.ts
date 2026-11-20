@@ -35,7 +35,7 @@ describe('the Updates corner off the canvas', () => {
     expect(shown).toMatch(/width:\s*var\(--agent-notes-chip-w\)/);
   });
 
-  // Review: a chat left open on the canvas stays mounted in the studios and
+  // A chat left open on the canvas stays mounted in the studios and
   // docked from the top gutter, under the chip's slot and the card's drop.
   it('starts a studio\'s docked chat below the line the corner drops from', () => {
     const body = rule('body.agent-notes-shown:not(.agent-notes-reserved) .workspace-overlays--studio .chat-panel');
@@ -136,7 +136,7 @@ function reservedAt(viewport: number): number {
 describe('the compact Updates chip below about 1360 px (design review)', () => {
   it('names the chip\'s full and compact widths as tokens, the full one by default', () => {
     const root = ruleIn(layouts, ':root');
-    // Measured live (2026-10-21, p157: the count as plain figures after a 4 px
+    // Measured live (2026-10-21, PR #157: the count as plain figures after a 4 px
     // gap): the dots 38 + gap 8 + "Updates" 52 + gap 8 + the count 4 + 7, plus padding and border.
     expect(declared(root, '--agent-notes-chip-w-full')).toBe('134px');
     // Without the word: dots 38 + gap 8 + count 4 + 7 + padding 15 + border 2.
@@ -217,7 +217,7 @@ describe('the Commons toolbar keeps one row with the chip (design review)', () =
     expect(ruleIn(fold, 'body.app-slava-restraint.agent-notes-shown .commons-tabs__more')).toMatch(/display:\s*inline-flex/);
   });
 
-  // Review of the fold: display:none on the open folded tab took it out of the
+  // display:none on the open folded tab took it out of the
   // accessibility tree, so the tablist had no selected tab. It stays in the
   // tree, hidden on screen (and out of the Tab order, CommonsView).
   it('keeps the open folded tab in the accessibility tree, hidden only on screen', () => {
@@ -270,7 +270,7 @@ describe('the Commons worker status gives way before the toolbar wraps (p157c)',
   });
 });
 
-// Review of the fold: More's menu drew its two items the same, so a sighted
+// More's menu drew its two items the same, so a sighted
 // person could not see which folded section was open. A checked radio item
 // carries a visible mark; the Move menu (no `checked`) stays plain.
 const assetMoveCss = readFileSync(join(__dirname, '../src/styles/asset-move.css'), 'utf8');

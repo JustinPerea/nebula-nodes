@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 
-// Made structural: while any modal dialog is open (the paid
+// While any modal dialog is open (the paid
 // placeholder confirm, a prompt, the keyboard shortcuts), the app-wide keys
 // that act on the graph don't act behind it, wherever focus is: ⌘O doesn't
 // open a file over the canvas, ⌘K doesn't open the palette (whose "Run graph"
-// would run behind the dialog). ⌘S doesn't save either.
+// would run behind the dialog). ⌘S doesn't save either. Checked structurally,
+// not by listing shortcuts.
 
 const mocks = vi.hoisted(() => ({ saveToFile: vi.fn(), loadFromFile: vi.fn() }));
 vi.mock('../src/lib/graphFile', () => ({ saveToFile: mocks.saveToFile, loadFromFile: mocks.loadFromFile }));

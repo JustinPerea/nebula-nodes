@@ -75,7 +75,7 @@ beforeEach(async () => {
     notify: (text: string) => { said.push(text); } } as never);
 });
 
-// -- H1-new: a refused shot removal -------------------------------------------------------
+// -- a refused shot removal ---------------------------------------------------------------
 
 const REMOVE_LINE = "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.";
 const PAID = '/api/outputs/paid-s2.png';
@@ -161,13 +161,13 @@ describe('a shot removal another tab\'s run refuses', () => {
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'very long' } : shot)) }));
     await sleep(120);
     expect(shotsOf()[0].prompt).toBe('very long');
-    // Design: the one 413 line, with [Try again]; design: in the state slot.
+    // Design: the one 413 line, with [Try again], shown in the state slot.
     expect(stopLineOf('n1')).toBe('“Opening” is too big to save. Remove something from it, then try again.');
     expect(said).toEqual([]);
   });
 });
 
-// -- the tab's own run (a real executeShot) --------------------------------------------
+// -- the tab's own run (a real executeShot) ------------------------------------------------
 
 /** n4 "Opening" (s1, s2) with s2 rendering in this tab's own shot run,
  * started through executeShot as the app does; n5-n7 text nodes. */
@@ -287,7 +287,7 @@ describe('during the tab\'s own run, every delete and undo path says why', () =>
   });
 });
 
-// -- another window's run ---------------------------------------------------------------
+// -- another window's run -------------------------------------------------------------------
 
 const SCENE_LINE = "Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.";
 
@@ -333,7 +333,7 @@ describe('a run this tab doesn\'t own: the backend\'s named line, once', () => {
   });
 });
 
-// -- a shot run's upstream scene on the canvas ---------------------------------------
+// -- a shot run's upstream scene on the canvas -------------------------------------------
 
 describe('a shot run holds its upstream scene on the canvas too', () => {
   it('the upstream scene\'s shots can\'t be removed and its Delete is disabled', async () => {
@@ -358,7 +358,7 @@ describe('a shot run holds its upstream scene on the canvas too', () => {
   });
 });
 
-// -- several scenes -----------------------------------------------------------------
+// -- several scenes -----------------------------------------------------------------------
 
 describe('several scenes', () => {
   const kept = (count: number) => Array.from({ length: count }, (_, index) => ({

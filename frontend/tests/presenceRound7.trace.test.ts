@@ -11,7 +11,7 @@ import { callersOf, untracedApiText, withSources } from './personGatedCallers';
 
 import { PRESETS, PROBES } from './traceProbes';
 
-describe('the probes found in review fail closed', () => {
+describe('every probe (the lib/-only rule, sendsTo, the keepsLine fallback, destructured store actions) fails closed', () => {
   for (const [name, files] of Object.entries(PROBES)) {
     it(name, () => {
       const found = withSources(files, () => callersOf(PRESETS));

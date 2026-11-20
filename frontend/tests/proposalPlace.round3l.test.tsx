@@ -57,7 +57,7 @@ function clearOfBannerAndHeader(m: StackMeasure, place: StackPlace) {
 }
 
 describe('the card never covers the offline banner', () => {
-  it('the cell (784x431, banner line 199, a collapsed log at 190-234): under the log, not above it over the banner', () => {
+  it('a collapsed log at 190-234 under a banner line at 199 (784x431): under the log, not above it over the banner', () => {
     const m = cell({ viewportW: 784, viewportH: 431, topLine: 199, column: { left: 92, right: 692 }, floating: { top: 190, bottom: 234, left: 92, right: 692 } });
     const place = placeNoticeStack(m);
     // Design: 19 px of body holds no whole line, so the card scrolls as a
@@ -69,7 +69,7 @@ describe('the card never covers the offline banner', () => {
     clearOfBannerAndHeader(m, place);
   });
 
-  it('above while its header and footer fit under the banner and under-crossing holds no line (a cell, design)', () => {
+  it('above while its header and footer fit under the banner and under-crossing holds no line (a cell from the design rulings)', () => {
     const m = cell({
       viewportW: 1024, viewportH: 640, topLine: 199, column: { left: 212, right: 812 }, floating: { top: 357, bottom: 401, left: 212, right: 812 },
       card: { ...CARD, items: [46, 46], undo: [false, true], host: [false, true] },

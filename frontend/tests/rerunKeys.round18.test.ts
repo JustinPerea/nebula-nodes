@@ -88,7 +88,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('m2stale: the 409 re-ask names and prices each row on one route', () => {
+describe('the 409 re-ask names and prices each row on one route', () => {
   it('the tab read only Krea, Nebula has the xAI key: the re-ask reads via xAI at $0.06', async () => {
     const { rows, sends } = await run(KREA, XAI);
     expect(rows[0]).toBe('Grok Imagine 2.0 via Krea|price not listed');

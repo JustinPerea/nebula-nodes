@@ -790,7 +790,6 @@
   "frontend/tests/presenceRound6.test.tsx": 31,
   "frontend/tests/proposalAcceptLimit.pr205r9.test.ts": 2,
   "frontend/tests/providerCatalog.test.ts": 1,
-  "frontend/tests/requiredFields.round13.test.ts": 4,
   "frontend/tests/round17Ui.test.tsx": 9,
   "frontend/tests/unsavedEdits.store.test.ts": 19,
   "scripts/count_agent_turns.py": 7,

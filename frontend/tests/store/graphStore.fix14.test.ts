@@ -372,7 +372,7 @@ describe('the popover open, the matching toast steps aside', () => {
   });
 });
 
-describe('Design notes 1 and 3: the agent’s toast is a sentence', () => {
+describe('the agent’s toast is a sentence (design)', () => {
   it('"Codex changed the canvas." ends with its period, at the source', async () => {
     const h = backend(S3);
     h.other((shots) => setPrompt(shots, 's3', 'codex'), 'agent');

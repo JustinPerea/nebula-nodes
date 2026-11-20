@@ -8,7 +8,7 @@ import type { NodeData } from '../src/types';
 
 /**
  * Offline is read-only, and it looks it (design, PR #114).
- * Rebuilt it from React state: every control that edits renders
+ * It is built from React state: every control that edits renders
  * `disabled` from useBackendOffline() with the offline mark (not-allowed
  * cursor, dimmed); nothing watches the DOM. An earlier version's first fault was the old
  * MutationObserver re-triggering itself forever as soon as anything rendered
@@ -296,7 +296,7 @@ describe('the project bar while offline', () => {
 
 describe('the banner (design)', () => {
   const css = readFileSync(join(__dirname, '../src/App.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  it('keeps the same y whether or not the selection toolbar shows: fixed, top 150px, nothing moves it (but the World Labs notice, which moves the toolbar and so the banner under it: design)', () => {
+  it('keeps the same y whether or not the selection toolbar shows: fixed, top 150px, nothing moves it (but the World Labs notice, which moves the toolbar and so the banner under it, per design)', () => {
     const rule = /\.backend-connection\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/position:\s*fixed/);
     // 150px with no notice (the variable unset reads 0px); below the notice's foot while it shows.

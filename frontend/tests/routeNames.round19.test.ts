@@ -9,14 +9,14 @@ import { describeRunScope, runCostConfirmMessage, runNodeName, summarizeRunScope
 import { placeholderRunConfirm, rowSegments, type PlaceholderRunOptions } from '../src/lib/placeholderRunConfirm';
 
 /**
- * And design (verbatim): a named Krea row
+ * Design (verbatim): a named Krea row
  * must read "“Alt still” · Grok Imagine 2.0 via Krea · price not listed";
  * xAI already reads "“Alt still” · Grok Imagine 2.0 via xAI · $0.06". The
  * cost notes, the costly-run confirm's "No list price for …" and the run
  * summary name an unnamed node on Krea "Grok Imagine 2.0 via Krea", never
  * "Grok Imagine 2.0 (Krea)". Only for nodes whose route depends on keys.
  *
- * (design, verbatim): when the keys can't be read (the re-ask's
+ * Design (verbatim): when the keys can't be read (the re-ask's
  * key read timed out or failed, so the route is unknown), the dialog row
  * drops only the route, never naming a possibly old one. Unnamed: "“Grok
  * Imagine 2.0” · $0.06". Named: "“Alt still” · Grok Imagine 2.0 · $0.06".
