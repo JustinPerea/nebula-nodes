@@ -2352,7 +2352,7 @@ describe('the head leads its column, says find room or wait for the log, columns
     const pointer = (x: number, y: number) => act(() => { window.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y })); });
     const list = (el: HTMLElement) => [...el.querySelectorAll('.agent-cursor__list-name')].map((n) => n.textContent);
 
-    it('a count cursor that is typing has no say pill, so the caret sits on the cursor (final review)', () => {
+    it('a count cursor that is typing has no say pill, so the caret sits on the cursor', () => {
       render(<AgentCursorLayer />);
       for (const [i, key] of ['a', 'b', 'c', 'd'].entries()) {
         send(event({ ...session(key, i + 1), action: 'type', say: 'Writing' }));
@@ -3419,7 +3419,7 @@ describe('the head leads its column, says find room or wait for the log, columns
         }
         prev = w;
       });
-      expect(AGENT_CURSOR_REST_HOLD_MAX_MS).toBe(300); // Design
+      expect(AGENT_CURSOR_REST_HOLD_MAX_MS).toBe(300); // design's ceiling
       for (const k of ['d', 'e'] as const) {
         expect(worst[k], k).toBeLessThanOrEqual(capFrames);
         // The cap is what ended the hold: it ran close to the full 300 ms.
@@ -5840,7 +5840,7 @@ describe('think, mark slot, dashed halo, quotes', () => {
  * PR #224's final review: propose and wait end when the person settles what
  * they wait on, and type never shows nothing.
  */
-describe('propose and wait end when the person acts (final review, MEDIUM)', () => {
+describe('propose and wait end when the person acts (PR #224)', () => {
   const sayText = () => document.querySelector('.agent-cursor__say')?.textContent ?? null;
   const expr = () => cursors()[0].dataset.expr;
   const proposal = (id: string, agentId = 'claude', expiresAt = Date.now() + 60_000) => ({
@@ -6101,7 +6101,7 @@ describe('propose and wait end when the person acts (final review, MEDIUM)', () 
   });
 });
 
-describe('type always shows something (final review, LOW)', () => {
+describe('type always shows something (PR #224)', () => {
   const tipCaret = () => document.querySelector('.agent-cursor__tip-caret');
   const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   const card = () => {
@@ -6158,7 +6158,7 @@ describe('type always shows something (final review, LOW)', () => {
   });
 });
 
-describe('only the field’s text is a keystroke (final review, LOW)', () => {
+describe('only the field’s text is a keystroke (PR #224)', () => {
   const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   const withData = (data: object) => {
     const next = new Map(lookup as Map<string, object>);

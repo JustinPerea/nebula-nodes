@@ -1,6 +1,6 @@
 /**
  * Follow-ups to PR #195 (agent presence): the review's store findings, turned
- * from its probes (r23store.probe.test.ts) into tests.
+ * from its probes into tests.
  * - A save on its way belongs to the canvas it was sent on. Undo of an
  *   agent's clear takes only the landings of the canvas that clear replaced,
  *   never one sent on an earlier canvas whose node ids came back (TWOCLEARS).

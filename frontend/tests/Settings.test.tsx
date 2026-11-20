@@ -885,7 +885,7 @@ describe('Settings — a key changed elsewhere (PR #203)', () => {
   });
 });
 
-describe('Settings — a key changed elsewhere during the person’s own write (PR #203)', () => {
+describe('Settings — keys changed elsewhere, own writes, and the row words (PR #203)', () => {
   // The backend's signal as the socket delivers it (store/settingsChangedSocket.ts).
   const signal = (keys: string[], origin?: string) => act(async () => {
     (wsClient as unknown as { dispatch: (event: unknown) => void }).dispatch({ type: 'settingsChanged', keys, ...(origin ? { origin } : {}) });

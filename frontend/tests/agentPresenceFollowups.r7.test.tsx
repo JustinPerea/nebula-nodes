@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * - Design: the destructive colours (the ratchet
  *   holds the rule; these pin the three named controls).
  * - The Inspector's pickers refuse in their own onChange.
- * One finding is the ratchet's; another is the backend's (test_agent_presence_followups).
+ * The ratchet covers the colour rule for every control; the backend's test_agent_presence_followups covers the server side.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));

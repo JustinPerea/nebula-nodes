@@ -57,7 +57,7 @@ describe('the store sends and keeps a note by what shows, never cut by code unit
     useCanvasPinsStore.setState({ pins: [], composer: null, composerCanvas: null, error: null, draft: '', drafts: {}, kept: [] });
   });
 
-  it('a note of 280 flags (560 code units) is sent whole (an earlier count sent only 140 of them)', async () => {
+  it('a note of 280 flags (560 code units) is sent whole (an earlier version sent only 140 of them)', async () => {
     const text = FLAG.repeat(MAX_PIN_TEXT);
     api.createPin.mockImplementation(async (sent: string) => ({ id: 'pin_f', text: sent, anchor: { nodeId: 'n1' }, position: null,
       status: 'open', createdAt: '2026-10-28T00:00:00+00:00', detached: false, reply: null } satisfies Pin));

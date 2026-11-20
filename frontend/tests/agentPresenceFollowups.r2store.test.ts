@@ -1,6 +1,6 @@
 /**
  * PR #200 (the PR review and design's 2026-10-28 answers), the store
- * side, from the reviewer's probes (r2/fe/fu2.probe.test.ts):
+ * side, from the reviewer's probes:
  * - Design: the kept note and a closed draft remember their
  *   project. The dialog starts with them only there; on another project it
  *   starts empty and an interrupted note's notice (with Copy note) stays
@@ -188,7 +188,7 @@ describe('a note written for one project never shows in another project\'s dialo
   beforeEach(() => resetPins());
   afterEach(() => resetPins());
 
-  it('R2-DRAFT-ACROSS: a draft closed on alpha gets no line, leaves beta\'s dialog empty, and prefills alpha\'s again', async () => {
+  it('a draft closed on alpha gets no line, leaves beta\'s dialog empty, and prefills alpha\'s again', async () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('for alpha n1');
     pins.getState().cancelCompose();
@@ -236,7 +236,7 @@ describe('a note written for one project never shows in another project\'s dialo
     expect(pins.getState().draft).toBe('warmer sky');
   });
 
-  it('R2-FAIL-THEN-FOLLOW: a send that had already failed keeps its own failure line, never "wasn’t sent because the canvas changed"', async () => {
+  it('a send that had already failed keeps its own failure line, never "wasn’t sent because the canvas changed"', async () => {
     graphWrites.answer = () => Promise.resolve(answer(500, { detail: 'boom' }));
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('failed note');
@@ -305,7 +305,7 @@ describe('recovered copies', () => {
     setReplacedCopyWaitForTests(null);
   });
 
-  it('R2-COPY-TWICE-BOTH: two copies race; both stay named, each with its own Open copy', async () => {
+  it('two copies race; both stay named, each with its own Open copy', async () => {
     const settle = holdPut();
     type('typed first');
     await sentPut();
@@ -324,7 +324,7 @@ describe('recovered copies', () => {
     expect(shown.some((notice) => notice.copy === 'copy-2' && notice.text.includes('“Glass campaign (recovered 2)”')), JSON.stringify(shown)).toBe(true);
   });
 
-  it('R2-COPY-HANG-THEN-200: a save released as unanswered that then lands clears its "Couldn’t save" line', async () => {
+  it('a save released as unanswered that then lands clears its "Couldn’t save" line', async () => {
     const settle = holdPut();
     type('typed hang');
     await sentPut();

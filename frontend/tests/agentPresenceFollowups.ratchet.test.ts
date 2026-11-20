@@ -1429,8 +1429,7 @@ describe('every file that reaches a gated action reads the canvas lock', { timeo
     expect(found).toEqual([]);
   });
 
-  // PR #200: the reviewer's G corpus (r3/fe/ratchet3.probe.test.ts,
-  // ratchet3.facts.json "bypass"): the 16 forms that slipped, and the ones
+  // PR #200: the reviewer's G corpus: the 16 forms that slipped, and the ones
   // that were too strict.
   it('G corpus: each of the 17 forms is caught; parent props and lock locals stay quiet', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
@@ -1486,8 +1485,7 @@ describe('every file that reaches a gated action reads the canvas lock', { timeo
     expect(loud, 'locked or harmless controls G flags').toEqual([]);
   });
 
-  // PR #200: the reviewer's G corpus (r4/fe/ratchet4.probe.test.ts,
-  // ratchet4.facts.json "forms"): the forms that don't really disable.
+  // PR #200: the reviewer's G corpus: the forms that don't really disable.
   it('G corpus: aria-disabled alone, readOnly where it does nothing, a fieldset that disables nothing, trust by name', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
     const forms: Record<string, string> = {
@@ -1527,8 +1525,7 @@ describe('every file that reaches a gated action reads the canvas lock', { timeo
     expect(loud, 'locked controls G flags').toEqual([]);
   });
 
-  // PR #200: the reviewer's G corpus (r5/fe/ratchet5.probe.test.ts,
-  // ratchet5.facts.json): a refusal counts only when it gates its own
+  // PR #200: the reviewer's G corpus: a refusal counts only when it gates its own
   // handler, readOnly only where it applies, a parameter only of the
   // component, the first legend through fragments, a component's prop only
   // when it reads it, and a pointer handler fires on a disabled button.
@@ -1584,8 +1581,7 @@ describe('every file that reaches a gated action reads the canvas lock', { timeo
     expect(loud, 'locked controls G flags').toEqual([]);
   });
 
-  // PR #200: the reviewer's G probe (r6/fe/ratchet6.probe.test.ts,
-  // ratchet6.facts.json): a guard counts where the gated call sits, and a
+  // PR #200: the reviewer's G probe: a guard counts where the gated call sits, and a
   // component's prop where it really lands.
   it('G corpus: a guard counts where the call sits; 5 missed forms caught, 6 correct guards quiet', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
@@ -2356,7 +2352,7 @@ describe('design and PR #200: a disabled button is neutral grey whatever the rea
     expect(wrong).toEqual([]);
   });
 
-  // The ratchet3.facts.json "colour" corpus: its false
+  // The reviewer's colour corpus: its false
   // positives and misses, and :is() lists split at their top-level commas.
   it('the fill parser: suffixed tokens and half-alpha white are no fill; color-mix, oklch, named colours, layers are', () => {
     const fills: Record<string, boolean> = {

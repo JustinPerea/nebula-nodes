@@ -3,8 +3,7 @@ import type { Box } from '../src/lib/agentAnchorResolve';
 import { planChips, type ChipCursor, type ChipSizes } from '../src/lib/agentEdgeChips';
 
 /**
- * PR #233 final review (the coordinator's ruling): when
- * chrome covers every spot on every edge so no chip or count has room, the
+ * PR #233: when chrome covers every spot on every edge so no chip or count has room, the
  * "+N agents off screen" count is still drawn, over chrome at the least-covered
  * edge spot. Never drop the information that agents are off screen.
  */
