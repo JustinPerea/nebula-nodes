@@ -9,7 +9,7 @@ import { getBackendBaseUrl } from '../src/lib/backend';
 import { useGraphStore } from '../src/store/graphStore';
 
 function record(status: RunRecord['status']): RunRecord {
-  return { id: 'batch-run', trigger: 'graph', startedAt: 1, status, snapshot: { nodes: [{ id: 'model', definitionId: 'batch', label: 'Prefix', params: {}, outputs: {} }], edges: [] },
+  return { id: 'batch-run', trigger: 'graph', startedAt: 1, status, snapshot: { labelsKept: true, nodes: [{ id: 'model', definitionId: 'batch', label: 'Prefix', params: {}, outputs: {} }], edges: [] },
     batchOutputs: { model: [
       { image: { type: 'Image', value: 'http://127.0.0.1:9292/api/outputs/first.png' }, text: { type: 'Text', value: 'First caption' } },
       { video: { type: 'Video', value: '/api/outputs/second.mp4' } },
@@ -44,6 +44,7 @@ describe('historical batch result access', () => {
     expect(openOutputLabel('DepthMap', 'DepthMap')).toBe('Open depth map');
     expect(openOutputLabel('DepthMap', 'preview')).toBe('Open depth map · preview');
     expect(openOutputLabel('Mask', 'mask')).toBe('Open mask');
+    expect(openOutputLabel('Image', 'image_2')).toBe('Open image · image_2');
     expect(openOutputLabel('PointCloud', 'cloud')).toBe('Open point cloud · cloud');
   });
 
@@ -71,7 +72,7 @@ describe('historical batch result access', () => {
   describe('node names', () => {
     const run = (nodes: RunRecord['snapshot']['nodes']): RunRecord => {
       const saved = record('complete');
-      saved.snapshot = { nodes, edges: [] };
+      saved.snapshot = { labelsKept: true, nodes, edges: [] };
       saved.batchOutputs = { model: [{ text: { type: 'Text', value: 'x' } }] };
       return saved;
     };
@@ -96,6 +97,32 @@ describe('historical batch result access', () => {
       live([]);
       render(<BatchRunInspection record={run([{ id: 'model', definitionId: 'batch', label: 'Gone', params: {}, outputs: {} }])} />);
       expect(screen.getByText('Gone · Result 1')).toBeInTheDocument();
+    });
+
+    const liveBatch = (label: string, definitionId = 'batch') => live([{ id: 'model', position: { x: 0, y: 0 },
+      data: { label, definitionId, params: {}, outputs: {}, state: 'idle' } }]);
+    const oldRun = (definitionId = 'batch'): RunRecord => {
+      const saved = run([{ id: 'model', definitionId, params: {}, outputs: {} }]);
+      delete saved.snapshot.labelsKept;
+      return saved;
+    };
+
+    it('an older record reads the live node name when the definition matches', () => {
+      liveBatch('Hero');
+      render(<BatchRunInspection record={oldRun()} />);
+      expect(screen.getByText('Hero · Result 1')).toBeInTheDocument();
+    });
+
+    it('an older record ignores a live node with a different definition', () => {
+      liveBatch('Hero', 'text-input');
+      render(<BatchRunInspection record={oldRun()} />);
+      expect(screen.getByText(`${canvasTitle(NODE_DEFINITIONS.batch)} · Result 1`)).toBeInTheDocument();
+    });
+
+    it('a record that kept names reads an unnamed run by its default title, though the canvas names it now', () => {
+      liveBatch('Hero');
+      render(<BatchRunInspection record={run([{ id: 'model', definitionId: 'batch', params: {}, outputs: {} }])} />);
+      expect(screen.getByText(`${canvasTitle(NODE_DEFINITIONS.batch)} · Result 1`)).toBeInTheDocument();
     });
 
     it('falls back to the live node when the snapshot lacks it', () => {
@@ -165,5 +192,17 @@ describe('historical batch result access', () => {
     expect(screen.getByText('Prefix · Result 1')).toBeInTheDocument();
     expect(screen.getByText('Prefix · Result 2')).toBeInTheDocument();
     expect(screen.queryByText(/Misaligned label/)).not.toBeInTheDocument();
+  });
+});
+
+describe('captured run snapshots', () => {
+  it('mark that node names were kept', async () => {
+    const { captureRunSnapshotForTest } = await import('../src/store/graphStore');
+    const node = (id: string, label: string) => ({ id, position: { x: 0, y: 0 },
+      data: { label, definitionId: 'batch', params: {}, outputs: {}, state: 'idle' } }) as never;
+    const snap = captureRunSnapshotForTest([node('a', 'Hero'), node('b', NODE_DEFINITIONS.batch.displayName)], []);
+    expect(snap.labelsKept).toBe(true);
+    expect(snap.nodes[0].label).toBe('Hero');
+    expect(snap.nodes[1].label).toBeUndefined();
   });
 });

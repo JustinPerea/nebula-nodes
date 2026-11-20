@@ -4,9 +4,10 @@ function typeWords(type: string): string {
   return type.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 }
 
-/** Letters only, lowercase: "depth_map", "depthMap" and "DepthMap" are the same name. */
+/** Lowercase letters and digits, separators dropped: "depth_map", "depthMap" and "DepthMap" are
+ * the same name, while "image_2" stays distinct from "image". */
 function letters(value: string): string {
-  return value.toLowerCase().replace(/[^a-z]/g, '');
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 /**

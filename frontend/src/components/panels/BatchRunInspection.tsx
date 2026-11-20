@@ -1,7 +1,8 @@
 import { backendAssetUrlSync } from '../../lib/backend';
 import { sanitizeVariantScopes, type RunRecord } from '../../lib/runHistory';
 import { openOutputLabel } from '../../lib/openOutputLabel';
-import { runNodeTitle } from '../../lib/runNodeTitle';
+import { runNodeTitle, type LiveNodeName } from '../../lib/runNodeTitle';
+import { useShallow } from 'zustand/react/shallow';
 import { useGraphStore } from '../../store/graphStore';
 
 function mediaUrl(value: unknown): string | null {
@@ -18,9 +19,15 @@ function mediaUrl(value: unknown): string | null {
 
 /** Every successful iterator item remains accessible, even in a failed run. */
 export function BatchRunInspection({ record }: { record: RunRecord }) {
-  const liveNodes = useGraphStore((state) => state.nodes);
   const batches = Object.entries(record.batchOutputs ?? {}).filter(([, batch]) => batch.length > 0);
+  // Only the shown nodes' definitions and names, so dragging or editing params elsewhere does not re-render this.
+  const liveKey = useGraphStore(useShallow((state) => batches.flatMap(([nodeId]) => {
+    const data = state.nodes.find((node) => node.id === nodeId)?.data;
+    return [data?.definitionId ?? '', typeof data?.label === 'string' ? data.label : ''];
+  })));
   if (!batches.length) return null;
+  const liveNames = new Map(batches.map(([nodeId], i): [string, LiveNodeName | undefined] => [nodeId,
+    liveKey[i * 2] ? { definitionId: liveKey[i * 2], label: liveKey[i * 2 + 1] || undefined } : undefined]));
   const count = batches.reduce((total, [, batch]) => total + batch.length, 0);
   return (
     <details className="run-history__batch-details">
@@ -29,7 +36,7 @@ export function BatchRunInspection({ record }: { record: RunRecord }) {
         const variants = sanitizeVariantScopes(record.batchVariants?.[nodeId], batch.length);
         return batch.map((outputs, index) => {
           const scope = variants?.[index];
-          const label = `${runNodeTitle(record.snapshot, liveNodes, nodeId)} · ${scope?.label || `Result ${index + 1}`}`;
+          const label = `${runNodeTitle(record.snapshot, liveNames.get(nodeId), nodeId)} · ${scope?.label || `Result ${index + 1}`}`;
           const lineage = scope?.lineage
             .map((item) => `${item.source_label}: ${item.item_label}`).join(' → ');
           return (

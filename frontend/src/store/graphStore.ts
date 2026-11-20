@@ -204,6 +204,7 @@ function runSnapshotLabel(node: Node<NodeData>): { label?: string } {
  * never read mutable canvas params later. */
 function captureRunSnapshot(nodes: Node<NodeData>[], edges: Edge[]): RunGraphSnapshot {
   return freezeRunSnapshot({
+    labelsKept: true,
     nodes: nodes.map((node) => ({
       id: node.id,
       definitionId: node.data.definitionId,
@@ -223,6 +224,8 @@ function captureRunSnapshot(nodes: Node<NodeData>[], edges: Edge[]): RunGraphSna
     })),
   });
 }
+
+export const captureRunSnapshotForTest = captureRunSnapshot;
 
 /** Gate state from the previous run, cleared when a node is queued or starts again. */
 const CLEAR_GATE_STATE = { skipReason: undefined, skipGateNodeId: undefined, withheldPorts: undefined } as const;

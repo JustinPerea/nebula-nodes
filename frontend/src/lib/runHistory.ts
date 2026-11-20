@@ -56,6 +56,9 @@ export interface RunSnapshotEdge {
 }
 
 export interface RunGraphSnapshot {
+  /** Set when the snapshot kept the person's node names (`label`), so a node with no label
+   * ran unnamed. Absent on records saved before names were kept. */
+  labelsKept?: true;
   nodes: RunSnapshotNode[];
   edges: RunSnapshotEdge[];
 }
