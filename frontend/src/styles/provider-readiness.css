@@ -44,4 +44,4 @@ body.app-slava-restraint .provider-readiness__setup:focus-visible { outline: var
 body.app-slava-restraint .create-composer > .provider-readiness { padding: 0 0 8px; justify-content: flex-start; }
 body.app-slava-restraint .create-composer > .provider-readiness .provider-readiness__setup { margin-left: 0; }
 /* "Hugging Face token Optional": the muted secondary word (GM, PR #203 r1). */
-body.app-slava-restraint .provider-readiness__note { opacity: 1; color: var(--sr-ink-faint); }
+body.app-slava-restraint .provider-readiness__note { opacity: 1; color: var(--sr-ink-light); }

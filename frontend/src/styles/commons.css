@@ -600,7 +600,7 @@ body.app-slava-restraint .commons-filters__row {
 body.app-slava-restraint .commons-axis {
   display: grid;
   gap: 2px;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .commons-axis--set {
@@ -776,6 +776,7 @@ body.app-slava-restraint .commons-badge {
   padding: 1px 7px;
   background: var(--sr-glass-strong);
   color: var(--sr-ink-light);
+  font-family: inherit;
   font-size: 10px;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -825,7 +826,7 @@ body.app-slava-restraint .commons-badge--region-confirmed {
 body.app-slava-restraint .commons-badge--archived,
 body.app-slava-restraint .commons-badge--superseded,
 body.app-slava-restraint .commons-badge--fidelity-unverifiable {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 /* Too transparent to analyze: not an error, so the plain neutral badge colour,
@@ -842,7 +843,7 @@ body.app-slava-restraint .commons-source {
   font-size: 9px;
   letter-spacing: 0.02em;
   text-transform: none;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   border: 1px solid var(--sr-edge);
 }
 

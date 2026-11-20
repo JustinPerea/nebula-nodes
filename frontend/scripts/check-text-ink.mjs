@@ -18,11 +18,12 @@ import {
 // for a disabled control, and for the icon-only controls named in ICON_ONLY below (an icon needs 3:1
 // and .40 clears it). Hierarchy between two text lines is carried by size and weight.
 //
-// What fails: a TEXT declaration that resolves to white at an alpha strictly between .20 and .55.
+// What fails: a TEXT declaration that resolves to white at an alpha above 0 and under .55. White at .20
+// (--sr-ink-faint) and anything dimmer fail; alpha 0 (transparent text) is outside the check.
 // TEXT properties are `color` (a ::placeholder rule's color included), `-webkit-text-fill-color`,
 // `-webkit-text-stroke-color`, `caret-color`, and `fill` on a rule whose selector targets an SVG
 // `text` or `tspan`. "Resolves to dim white" means:
-//   - var(--sr-ink-meta, ...), or var(--x) for any custom property that any rule in src defines as
+//   - var(--sr-ink-meta, ...), var(--sr-ink-faint, ...), or var(--x) for any custom property that any rule in src defines as
 //     dim white or as another such alias (followed to a fixed point, so a chain of any length is read);
 //   - white at an alpha in that range as a literal in every form: rgba(255,255,255,.45), rgb(255 255
 //     255 / 40%), #ffffff66, #fff8, hsla(0,0%,100%,.3), hsl(0 0% 100% / 50%).
@@ -35,7 +36,12 @@ import {
 //     itself; every part of a comma list must be scoped, and every :is()/:where() alternative must be a
 //     disabled state; :has() and :not() never scope; a disabled ancestor or earlier sibling does not
 //     (DISABLED_SIBLING names the one sibling form that is allowed);
-//   - the icon-only controls in ICON_ONLY, by exact selector (the part after `body.app-slava-restraint `).
+//   - the icon-only controls in ICON_ONLY, by exact selector (the part after `body.app-slava-restraint `),
+//     only at meta ink (.40) or brighter: an icon needs 3:1 and white at .20 gives under 2:1, so an
+//     ICON_ONLY selector at .20 or dimmer fails;
+//   - the decoration in DECORATION, by exact selector: separators and thumbnail stand-ins that carry no
+//     words (design keeps them at .20). Each is hidden from assistive tech (aria-hidden, or a ::before
+//     whose content has empty alt text); tests/textInkCheck.test.ts fails when one loses that.
 // Inline TSX: the file is parsed, and an object literal property whose key is a text colour (`color`,
 // `caretColor`, `WebkitTextFillColor`, `WebkitTextStrokeColor`, or the quoted CSS name) and whose value
 // is a string or a plain template that resolves to dim white fails. Comments, regex literals, nested
@@ -61,7 +67,6 @@ import {
 //   - computed keys (`['color']: ...`, a template-literal key) are not read;
 //   - colour forms not read: color(), oklch(), oklab(), lab(), lch(), hwb(), relative colours
 //     (`rgb(from ...)`), and calc() or var() inside a colour's channels;
-//   - text at exactly .20 is not checked yet (see above).
 
 const SRC = join(import.meta.dirname, '..', 'src');
 const PREFIX = 'body.app-slava-restraint';
@@ -88,13 +93,37 @@ export const ICON_ONLY = new Set([
   '.connection-popup__close',
   '.chat__tool-icon',
   '.model-node__loop-toggle',
+  '.panel__group-chevron',
+  '.inspector__favorite-button',
+  '.agent-log__hide',
+  '.agent-log-hidden-notice__icon',
+  '.editor-breadcrumb__arrow',
+]);
+
+// Decoration: separators and thumbnail stand-ins that carry no words. Design keeps them at .20. Exact
+// selectors, without the body.app-slava-restraint prefix. Each must be hidden from assistive tech: an
+// element with aria-hidden="true" in the TSX that renders it, or a ::before/::after whose content has
+// empty alt text (content: "·" / ""). tests/textInkCheck.test.ts reads the TSX and CSS and fails when
+// one of these loses that.
+export const DECORATION = new Set([
+  '.project-workspace-controls__count::before',
+  '.agent-log-hidden-notice__sep',
+  '.structured-preview__status-item + .structured-preview__status-item::before',
+  '.character-rail__thumb-empty',
+  '.character-palette__thumb-empty',
+  '.moodboard-rail__thumb',
 ]);
 
 const META_TOKEN = '--sr-ink-meta';
 
-// Text white must be at least this alpha. Alphas from DIM_FLOOR (exclusive) to LIGHT_ALPHA (exclusive) fail.
-const DIM_FLOOR = 0.2;
+// Text white must be at least this alpha. Alphas from DIM_FLOOR (exclusive: 0 is transparent text, outside
+// the check) to LIGHT_ALPHA (exclusive) fail.
+const DIM_FLOOR = 0;
 const LIGHT_ALPHA = 0.55;
+// An icon-only control may sit at meta ink (.40, about 3.7:1 against the app's surfaces; an icon needs 3:1).
+const META_ALPHA = 0.4;
+const FAINT_TOKEN = '--sr-ink-faint';
+const FAINT_ALPHA = 0.2;
 const EPSILON = 1e-6;
 
 function isDimAlpha(alpha) {
@@ -106,25 +135,32 @@ function parseAlpha(raw) {
   return text.endsWith('%') ? Number.parseFloat(text) / 100 : Number.parseFloat(text);
 }
 
-/** Whether a whole value is white at a dim alpha (strictly between .20 and .55) in any literal form. */
-export function isDimLiteral(value) {
+/** The alpha of a whole value that is white in any literal form (hex, rgb, hsl), or null. */
+function whiteAlpha(value) {
   const v = value.trim().toLowerCase().replace(/\s*!important$/, '').trim();
   const hex = /^#([0-9a-f]{3,8})$/.exec(v);
   if (hex) {
     const h = hex[1];
-    if (h.length === 4) return h.slice(0, 3) === 'fff' && isDimAlpha(Number.parseInt(h[3] + h[3], 16) / 255);
-    if (h.length === 8) return h.slice(0, 6) === 'ffffff' && isDimAlpha(Number.parseInt(h.slice(6), 16) / 255);
-    return false;
+    if (h.length === 4) return h.slice(0, 3) === 'fff' ? Number.parseInt(h[3] + h[3], 16) / 255 : null;
+    if (h.length === 8) return h.slice(0, 6) === 'ffffff' ? Number.parseInt(h.slice(6), 16) / 255 : null;
+    return null;
   }
   const fn = /^(rgba?|hsla?)\(([^)]*)\)$/.exec(v);
-  if (!fn) return false;
+  if (!fn) return null;
   const parts = fn[2].split(/[\s,/]+/).filter(Boolean);
-  if (parts.length !== 4) return false;
+  if (parts.length !== 4) return null;
   const [a, b, c, alpha] = parts;
-  if (!isDimAlpha(parseAlpha(alpha))) return false;
-  if (fn[1].startsWith('rgb')) return [a, b, c].every((n) => Number.parseFloat(n) === 255 || n === '100%');
+  const parsed = parseAlpha(alpha);
+  if (!Number.isFinite(parsed)) return null;
+  if (fn[1].startsWith('rgb')) return [a, b, c].every((n) => Number.parseFloat(n) === 255 || n === '100%') ? parsed : null;
   // hsl: lightness 100% is white whatever the hue and saturation.
-  return Number.parseFloat(c) === 100;
+  return Number.parseFloat(c) === 100 ? parsed : null;
+}
+
+/** Whether a whole value is white at a dim alpha (above 0 and under .55) in any literal form. */
+export function isDimLiteral(value) {
+  const alpha = whiteAlpha(value);
+  return alpha !== null && isDimAlpha(alpha);
 }
 
 /** 1 for every character inside a quoted span (quotes included), 0 elsewhere. Backslash escapes are honoured. */
@@ -174,21 +210,28 @@ function splitTopLevel(text) {
 }
 
 /**
- * Whether a value resolves to dim white, given the set of custom properties that do and the set of
- * custom properties defined anywhere in src (a fallback only matters for a variable defined nowhere).
+ * The alpha a value resolves to when it is dim white, else null. dimVars maps each custom property that is
+ * dim white (or an alias of one) to its lowest alpha; definedVars is every custom property defined anywhere
+ * in src (a fallback only matters for a variable defined nowhere).
  */
-export function resolvesToDim(value, dimVars, definedVars) {
+export function dimAlphaOf(value, dimVars, definedVars) {
   const v = value.trim().replace(/\s*!important$/i, '').trim();
-  if (isDimLiteral(v)) return true;
+  const literal = whiteAlpha(v);
+  if (literal !== null) return isDimAlpha(literal) ? literal : null;
   const wrapped = /^var\(([\s\S]*)\)$/i.exec(v);
-  if (!wrapped) return false;
+  if (!wrapped) return null;
   const [name, ...rest] = splitTopLevel(wrapped[1]);
-  if (dimVars.has(name)) return true;
-  if (definedVars.has(name) || rest.length === 0) return false;
-  return resolvesToDim(rest.join(','), dimVars, definedVars);
+  if (dimVars.has(name)) return dimVars.get(name);
+  if (definedVars.has(name) || rest.length === 0) return null;
+  return dimAlphaOf(rest.join(','), dimVars, definedVars);
 }
 
-/** Every custom property that is dim white or an alias of one, followed to a fixed point. */
+/** Whether a value resolves to dim white (see dimAlphaOf). */
+export function resolvesToDim(value, dimVars, definedVars) {
+  return dimAlphaOf(value, dimVars, definedVars) !== null;
+}
+
+/** Every custom property that is dim white or an alias of one, with its lowest alpha, followed to a fixed point. */
 export function collectDimVars(sources) {
   const defs = new Map();
   for (const { source } of sources) {
@@ -203,14 +246,20 @@ export function collectDimVars(sources) {
     }
   }
   const definedVars = new Set(defs.keys());
-  const dimVars = new Set([META_TOKEN]);
+  const dimVars = new Map([
+    [META_TOKEN, META_ALPHA],
+    [FAINT_TOKEN, FAINT_ALPHA],
+  ]);
   let grew = true;
   while (grew) {
     grew = false;
     for (const [name, values] of defs) {
-      if (dimVars.has(name)) continue;
-      if (values.some((value) => resolvesToDim(value, dimVars, definedVars))) {
-        dimVars.add(name);
+      if (name === META_TOKEN || name === FAINT_TOKEN) continue;
+      const alphas = values.map((value) => dimAlphaOf(value, dimVars, definedVars)).filter((alpha) => alpha !== null);
+      if (alphas.length === 0) continue;
+      const lowest = Math.min(...alphas);
+      if (dimVars.get(name) !== lowest) {
+        dimVars.set(name, lowest);
         grew = true;
       }
     }
@@ -309,6 +358,10 @@ function isIconOnly(part) {
   return expandIs(stripPrefix(part)).every((alt) => ICON_ONLY.has(alt));
 }
 
+function isDecoration(part) {
+  return DECORATION.has(stripPrefix(part));
+}
+
 function isSvgTextSelector(part) {
   const lastCompound = part.split(/[\s>+~]+/).filter(Boolean).pop() ?? '';
   return /^(text|tspan)(?![\w-])/.test(lastCompound);
@@ -325,10 +378,16 @@ export function findCssTextInk(files, dimVars, definedVars) {
       const parts = splitList(rule.selector);
       for (const decl of parseDeclarations(rule.body, rule.bodyStart)) {
         const textual = TEXT_PROPS.has(decl.prop) || (decl.prop === 'fill' && parts.some(isSvgTextSelector));
-        if (!textual || !resolvesToDim(decl.value, dimVars, definedVars)) continue;
+        if (!textual) continue;
+        const alpha = dimAlphaOf(decl.value, dimVars, definedVars);
+        if (alpha === null) continue;
         // Parts of the list this declaration reaches: for fill, only the svg text parts.
         const reached = decl.prop === 'fill' ? parts.filter(isSvgTextSelector) : parts;
-        const live = reached.filter((part) => !isDisabledScoped(part) && !isIconOnly(part));
+        // An icon-only control is exempt at meta ink or brighter, not below it.
+        const iconOk = alpha >= META_ALPHA - EPSILON;
+        const live = reached.filter(
+          (part) => !isDisabledScoped(part) && !isDecoration(part) && !(iconOk && isIconOnly(part)),
+        );
         if (live.length === 0) continue;
         hits.push({
           file,
@@ -336,6 +395,7 @@ export function findCssTextInk(files, dimVars, definedVars) {
           selector: live.join(', '),
           prop: decl.prop,
           value: decl.value,
+          iconTooDim: live.some(isIconOnly),
         });
       }
     }
@@ -402,7 +462,9 @@ export function findTsxTextInk(files, dimVars, definedVars) {
 }
 
 export const FAILURE_MESSAGE =
-  'Text takes the light ink, var(--sr-ink-light). White dimmer than the light ink (alpha above .20 and under .55, meta ink --sr-ink-meta among it) is for non-text (borders, strokes, ticks, backgrounds, shadows), disabled controls and the named icon-only controls (design). Put the text on var(--sr-ink-light); size and weight carry the hierarchy.';
+  'Text takes the light ink, var(--sr-ink-light). White dimmer than the light ink (any alpha above 0 and under .55: meta ink --sr-ink-meta at .40, faint ink --sr-ink-faint at .20 and anything dimmer) is for non-text (borders, strokes, ticks, backgrounds, shadows) and disabled controls, with two named exceptions: ICON_ONLY (icon-only controls, at meta ink or brighter, because an icon needs 3:1 and .20 gives under 2:1) and DECORATION (separators and thumbnail stand-ins hidden from assistive tech; design keeps them at .20). Put the text on var(--sr-ink-light); size and weight carry the hierarchy.';
+export const ICON_TOO_DIM_NOTE =
+  ' (an ICON_ONLY control must be at meta ink, var(--sr-ink-meta), or brighter: an icon needs 3:1)';
 
 function collectFiles(dir, extensions) {
   const out = [];
@@ -434,7 +496,7 @@ function main() {
       console.error(
         hit.parseError
           ? `  src/${hit.file}:${hit.line} does not parse, so it was not checked: ${hit.value}`
-          : `  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}`,
+          : `  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}${hit.iconTooDim ? ICON_TOO_DIM_NOTE : ''}`,
       );
     }
     process.exit(1);

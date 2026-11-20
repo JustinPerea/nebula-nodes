@@ -859,7 +859,7 @@ body.app-slava-restraint .connection-popup__search {
 }
 
 body.app-slava-restraint .connection-popup__search::placeholder {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .connection-popup__empty,
@@ -1129,7 +1129,7 @@ body.app-slava-restraint .chat-panel__thinking-body::-webkit-scrollbar-thumb {
 body.app-slava-restraint .chat__empty {
   align-self: flex-start;
   padding: var(--sr-space-2) var(--sr-space-1) 0;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-body);
   line-height: var(--sr-line-body);
@@ -1519,7 +1519,7 @@ body.app-slava-restraint .panel__search:focus {
   background: rgba(0, 0, 0, 0.45);
 }
 body.app-slava-restraint .panel__search::placeholder {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .panel__group-label {
@@ -1542,7 +1542,7 @@ body.app-slava-restraint .panel__group-label--button:hover {
 }
 
 body.app-slava-restraint .panel__group-chevron {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-meta);
 }
 
 body.app-slava-restraint .panel__group-text {
@@ -1980,7 +1980,7 @@ body.app-slava-restraint .inspector__empty {
   align-items: center;
   padding: var(--sr-space-4) var(--sr-space-4) var(--sr-space-4) 48px;
   overflow: hidden;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   line-height: var(--sr-line-meta);
@@ -2035,7 +2035,7 @@ body.app-slava-restraint .inspector__empty-status {
   grid-row: 3;
   width: max-content;
   margin-top: var(--sr-space-1);
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   text-transform: lowercase;
 }
 
@@ -2045,7 +2045,7 @@ body.app-slava-restraint .inspector__empty-line {
   position: relative;
   grid-row: 3;
   margin-top: var(--sr-space-1);
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-family: var(--sr-ui);
 }
 
@@ -2064,7 +2064,7 @@ body.app-slava-restraint .inspector__field:focus {
   background: var(--sr-surface-control-focus);
 }
 body.app-slava-restraint .inspector__field::placeholder {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint select.inspector__field {
@@ -2120,7 +2120,7 @@ body.app-slava-restraint .inspector__model-selection-text {
 }
 
 body.app-slava-restraint .inspector__favorite-button {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-meta);
   font-family: var(--sr-ui);
   transition: color var(--sr-motion-fast), transform var(--sr-motion-fast);
 }
@@ -2258,7 +2258,7 @@ body.app-slava-restraint .inspector__file-preview {
 
 /* Palette param control — restraint skin. */
 body.app-slava-restraint .inspector__palette-empty {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-label);
 }
@@ -2626,7 +2626,7 @@ body.app-slava-restraint .agent-log__drag-row {
 body.app-slava-restraint .agent-log__hide {
   margin-right: var(--sr-space-2);
   border-radius: var(--sr-radius-control, 8px);
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-meta);
   transition:
     color 120ms ease,
     background-color 120ms ease,
@@ -2659,7 +2659,11 @@ body.app-slava-restraint .agent-log-hidden-notice {
   font-size: var(--sr-type-control);
 }
 
-body.app-slava-restraint .agent-log-hidden-notice__icon,
+body.app-slava-restraint .agent-log-hidden-notice__icon {
+  color: var(--sr-ink-meta);
+}
+
+/* Decoration (design): the dot between the label and the action stays at .20; it is aria-hidden. */
 body.app-slava-restraint .agent-log-hidden-notice__sep {
   color: var(--sr-ink-faint);
 }
@@ -2713,7 +2717,7 @@ body.app-slava-restraint .agent-log__telemetry {
   margin-right: var(--sr-space-2);
   align-items: center;
   gap: var(--sr-space-2);
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   line-height: var(--sr-line-tight);
@@ -2760,7 +2764,7 @@ body.app-slava-restraint .agent-log__count {
 body.app-slava-restraint .agent-log__status {
   max-width: 72px;
   overflow: hidden;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2783,7 +2787,7 @@ body.app-slava-restraint .agent-log__empty {
   grid-template-rows: 1fr auto auto 1fr;
   column-gap: var(--sr-space-2);
   align-items: center;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   font-style: normal;
@@ -2845,7 +2849,7 @@ body.app-slava-restraint .agent-log__empty-status {
   grid-row: 3;
   width: max-content;
   margin-top: 4px;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   text-transform: lowercase;
 }
 
@@ -2889,7 +2893,7 @@ body.app-slava-restraint .agent-log__entry-marker {
 }
 
 body.app-slava-restraint .agent-log__time {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3449,7 +3453,7 @@ body.app-slava-restraint .model-node__id-chip {
   border: none;
   border-radius: 0;
   font-family: var(--sr-mono);
-  font-size: var(--sr-type-meta);
+  font-size: var(--sr-type-label);
   font-weight: 400;
   letter-spacing: 0;
   padding: 0;
@@ -3906,7 +3910,7 @@ body.app-slava-restraint .model-node--text-surface .model-node__textarea:focus-v
 }
 
 body.app-slava-restraint .model-node--text-surface .model-node__textarea::placeholder {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .model-node--text-surface .model-node__enhance {
@@ -4289,14 +4293,6 @@ body:has(.notice-region__slot[data-notice-slot='proposal'] > :not([data-leaving]
   z-index: var(--sr-layer-ambient);
 }
 
-body.app-slava-restraint .canvas-tabs__wordmark {
-  color: var(--sr-ink-faint);
-  font-family: var(--sr-mono);
-  font-size: var(--sr-type-meta);
-  font-weight: 500;
-  letter-spacing: 0.30em;
-}
-
 body.app-slava-restraint .canvas-tabs {
   padding: 4px;
   border: 1px solid var(--sr-edge);
@@ -4485,7 +4481,7 @@ body.app-slava-restraint .editor-breadcrumb__source {
 }
 
 body.app-slava-restraint .editor-breadcrumb__arrow {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-meta);
   stroke-width: var(--sr-icon-stroke);
 }
 
@@ -4962,6 +4958,7 @@ body.app-slava-restraint .edit-node__summary {
   border-top: 1px solid var(--sr-edge);
   padding: 4px 10px;
   font-size: 9px;
+  font-weight: 500;
   color: var(--sr-ink-light);
 }
 body.app-slava-restraint .edit-node__open {

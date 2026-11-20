@@ -145,7 +145,7 @@ export function CharacterLibraryRail({
                 {thumb.src ? (
                   <img src={thumb.src} alt="" draggable={false} />
                 ) : (
-                  <span className="character-rail__thumb-empty">◐</span>
+                  <span className="character-rail__thumb-empty" aria-hidden="true">◐</span>
                 )}
               </span>
               <span className="character-rail__meta">

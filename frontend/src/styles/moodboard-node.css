@@ -42,7 +42,7 @@ body.app-slava-restraint .moodboard-node__preview {
   display: grid;
   place-items: center;
   background: rgba(0, 0, 0, 0.22);
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-size: 10px;
   text-transform: uppercase;
 }
@@ -102,6 +102,7 @@ body.app-slava-restraint .moodboard-node__output {
 
 body.app-slava-restraint .moodboard-node__output span {
   padding-right: 7px;
+  font-weight: 500;
 }
 
 body.app-slava-restraint .moodboard-node__handle {

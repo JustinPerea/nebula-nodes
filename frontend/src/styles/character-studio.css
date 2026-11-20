@@ -199,7 +199,7 @@ body.app-slava-restraint .character-rail__list {
 
 body.app-slava-restraint .character-rail__empty,
 body.app-slava-restraint .character-palette__empty {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-size: 11px;
   padding: 6px 2px;
   line-height: 1.4;
@@ -296,7 +296,7 @@ body.app-slava-restraint .character-palette__name {
 body.app-slava-restraint .character-rail__sub,
 body.app-slava-restraint .character-palette__sub {
   font-size: 10px;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   letter-spacing: 0.03em;
 }
 
@@ -333,7 +333,7 @@ body.app-slava-restraint .character-def__thumb img {
 }
 
 body.app-slava-restraint .character-def__thumb-empty {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -383,8 +383,8 @@ body.app-slava-restraint .character-def__label {
 }
 
 body.app-slava-restraint .character-def__hint {
-  font-size: 11px;
-  color: var(--sr-ink-faint);
+  font-size: 10px;
+  color: var(--sr-ink-light);
   line-height: 1.4;
 }
 

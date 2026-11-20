@@ -79,6 +79,7 @@ body.app-slava-restraint .project-workspace-controls__count {
 }
 body.app-slava-restraint .project-workspace-controls__count::before {
   content: '·';
+  content: '·' / '';
   margin-right: 9px;
   color: var(--sr-ink-faint);
 }

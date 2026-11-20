@@ -3556,7 +3556,7 @@ function MoodboardRail({
             className={m.id === activeId ? 'moodboard-rail__item moodboard-rail__item--active' : 'moodboard-rail__item'}
             onClick={() => onSelect(m.id, scope)}
           >
-            <span className="moodboard-rail__thumb">
+            <span className="moodboard-rail__thumb" aria-hidden="true">
               {thumb.src ? <img src={thumb.src} alt="" draggable={false} /> : <span>MB</span>}
             </span>
             <span className="moodboard-rail__meta">
