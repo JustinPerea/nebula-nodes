@@ -4,18 +4,39 @@ import postcss, { type AtRule, type Rule } from 'postcss';
 import selectorParser from 'postcss-selector-parser';
 
 /**
- * What the app's own stylesheets declare for an element,
- * resolved the way the browser cascades them, so a test can say a modal looks
- * the same wherever it renders. jsdom's getComputedStyle can't: it drops any
- * shorthand that holds a var() ("border: 1px solid var(--sr-edge)") and
- * mis-resolves `font: inherit`. This reads every .css file under src/ with
- * postcss, matches each selector with the element's own `matches`, and keeps
- * the winning value per property (importance, specificity, source order).
- * Interaction states (:hover, :focus, :focus-visible, :focus-within,
- * :active) and pseudo-elements are kept apart in the key
- * (":focus-visible|outline", "::placeholder|color"), so a focus ring is
- * checked without focusing anything. Inherited properties and custom
- * properties come from the nearest ancestor that sets them, as in CSS.
+ * What the app's own stylesheets declare for an element, resolved the way the
+ * browser cascades them, so a test can say a modal looks the same wherever it
+ * renders. jsdom's getComputedStyle can't: it drops any shorthand that holds a
+ * var() ("border: 1px solid var(--sr-edge)") and mis-resolves `font: inherit`.
+ * This reads every .css file under src/ with postcss, matches each selector
+ * with the element's own `matches`, and keeps the winning value per property
+ * (importance, specificity, source order, and order within a rule).
+ *
+ * Interaction states (:hover, :focus, :focus-visible, :focus-within, :active)
+ * and pseudo-elements are kept apart in the key (":focus-visible|outline",
+ * "::placeholder|color"), so a focus ring is checked without focusing anything.
+ *
+ * Inheritance: an inherited property and a custom property come from the
+ * nearest ancestor that sets them. A winning `inherit` (or `unset` on an
+ * inherited property) is resolved from the parent, recursively; when no
+ * ancestor declares the property the keyword stays. The "|font" key itself is
+ * kept as written.
+ *
+ * The font shorthand: for the font longhands (font-family, font-size,
+ * font-style, font-weight, font-variant, font-stretch, line-height) a `font`
+ * declaration on a matching rule is a candidate too, by the same importance,
+ * specificity, source order and order within the rule. When it wins, the
+ * longhand takes what the shorthand sets: a CSS-wide keyword (inherit, initial,
+ * unset, revert, revert-layer) gives every longhand that keyword; a full
+ * shorthand is parsed (optional style, variant, weight and stretch, the size
+ * with an optional /line-height, then the family list) and a longhand it leaves
+ * out is `normal`. A system font keyword (caption, menu, ...) is left as the
+ * keyword for font-family only; the other longhands are not set by it. A
+ * shorthand it cannot split (one value, such as a lone var()) gives its raw
+ * text to every longhand.
+ *
+ * Not expanded: border, padding, margin, background and every other shorthand
+ * stay a single key under their own name.
  */
 
 const SRC = join(__dirname, '..', '..', 'src');
@@ -58,6 +79,85 @@ function cssFiles(dir: string): string[] {
     if (statSync(path).isDirectory()) return cssFiles(path);
     return name.endsWith('.css') ? [path] : [];
   });
+}
+
+const FONT_LONGHANDS = ['font-family', 'font-size', 'font-style', 'font-weight', 'font-variant', 'font-stretch', 'line-height'] as const;
+const CSS_WIDE = new Set(['inherit', 'initial', 'unset', 'revert', 'revert-layer']);
+const SYSTEM_FONT = /^(?:caption|icon|menu|message-box|small-caption|status-bar|-webkit-[\w-]+|-apple-system-[\w-]+)$/i;
+const FONT_STRETCH = /^(?:ultra-condensed|extra-condensed|condensed|semi-condensed|semi-expanded|expanded|extra-expanded|ultra-expanded|\d+(?:\.\d+)?%)$/i;
+
+/** Splits on whitespace outside parentheses and quotes. */
+function topLevelTokens(value: string): string[] {
+  const out: string[] = [];
+  let depth = 0; let quote = ''; let current = '';
+  for (const ch of value) {
+    if (quote) { current += ch; if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; current += ch; continue; }
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (/\s/.test(ch) && depth === 0) { if (current) out.push(current); current = ''; continue; }
+    current += ch;
+  }
+  if (current) out.push(current);
+  return out;
+}
+
+/** What a `font` shorthand value sets on each font longhand (see the header). */
+export function expandFont(value: string): Record<string, string> {
+  const text = value.replace(/\s+/g, ' ').trim();
+  const out: Record<string, string> = {};
+  if (CSS_WIDE.has(text.toLowerCase())) {
+    for (const prop of FONT_LONGHANDS) out[prop] = text;
+    return out;
+  }
+  if (SYSTEM_FONT.test(text)) return { 'font-family': text };
+  const tokens = topLevelTokens(text);
+  const set = { style: 'normal', variant: 'normal', weight: 'normal', stretch: 'normal' };
+  let at = 0;
+  for (; at < tokens.length; at += 1) {
+    const token = tokens[at];
+    const lower = token.toLowerCase();
+    if (lower === 'normal') continue;
+    if (lower === 'italic' || lower === 'oblique') {
+      set.style = token;
+      // `oblique 10deg`
+      if (lower === 'oblique' && /^-?\d+(?:\.\d+)?(?:deg|grad|rad|turn)$/i.test(tokens[at + 1] ?? '')) { at += 1; set.style = `${token} ${tokens[at]}`; }
+    } else if (lower === 'small-caps') set.variant = token;
+    else if (/^(?:bold|bolder|lighter|\d{1,4}(?:\.\d+)?)$/.test(lower)) set.weight = token;
+    else if (FONT_STRETCH.test(lower)) set.stretch = token;
+    else break;
+  }
+  const rest = tokens.slice(at);
+  if (rest.length < 2) {
+    for (const prop of FONT_LONGHANDS) out[prop] = text;
+    return out;
+  }
+  let size = rest[0];
+  let lineHeight = 'normal';
+  let familyFrom = 1;
+  const slash = size.indexOf('/');
+  if (slash > 0) {
+    lineHeight = size.slice(slash + 1) || (rest[1] ?? 'normal');
+    if (!size.slice(slash + 1)) familyFrom = 2;
+    size = size.slice(0, slash);
+  } else if (rest[1]?.startsWith('/')) {
+    if (rest[1].length > 1) { lineHeight = rest[1].slice(1); familyFrom = 2; }
+    else { lineHeight = rest[2] ?? 'normal'; familyFrom = 3; }
+  }
+  out['font-style'] = set.style;
+  out['font-variant'] = set.variant;
+  out['font-weight'] = set.weight;
+  out['font-stretch'] = set.stretch;
+  out['font-size'] = size;
+  out['line-height'] = lineHeight;
+  out['font-family'] = rest.slice(familyFrom).join(' ');
+  return out;
+}
+
+/** A declaration as the keys it sets: itself, and for `font` also each font longhand. */
+function expandDecl(prop: string, value: string): Array<[string, string]> {
+  if (prop !== 'font') return [[prop, value]];
+  return [[prop, value], ...Object.entries(expandFont(value))];
 }
 
 type Specificity = [number, number, number];
@@ -411,10 +511,12 @@ export function cascaded(element: Element, extraCss?: string,
     try { hit = element.matches(loose ? rule.loose : rule.base); } catch { hit = false; }
     if (!hit) continue;
     for (const decl of rule.decls) {
-      const key = `${rule.state}|${decl.prop}`;
-      const next = { value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file };
-      const prev = out.get(key);
-      if (!prev || wins(next, prev)) out.set(key, next);
+      for (const [prop, value] of expandDecl(decl.prop, decl.value)) {
+        const key = `${rule.state}|${prop}`;
+        const next = { value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file };
+        const prev = out.get(key);
+        if (!prev || wins(next, prev)) out.set(key, next);
+      }
     }
   }
   const inline = (element as HTMLElement).style;
@@ -442,26 +544,35 @@ export function declarationsOf(element: Element, prop: string,
     try { hit = element.matches(rule.base); } catch { hit = false; }
     if (!hit) continue;
     for (const decl of rule.decls) {
-      if (decl.prop !== prop) continue;
-      out.push({ value: decl.value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file });
+      const value = expandDecl(decl.prop, decl.value).find(([name]) => name === prop)?.[1];
+      if (value === undefined) continue;
+      out.push({ value, important: decl.important, specificity: rule.specificity, order: rule.order, selector: rule.selector, file: rule.file });
     }
   }
   return out.sort((a, b) => (wins(a, b) ? 1 : -1));
 }
 
-/** Every property the app's stylesheets give `element`, its own and those it inherits ("|color": "var(--sr-ink)"). */
-export function resolvedStyle(element: Element): Record<string, string> {
-  const own = cascaded(element);
+/** Every property the app's stylesheets (and `extraCss`, a test's own sheet) give `element`, its own and those it inherits ("|color": "var(--sr-ink)"). */
+export function resolvedStyle(element: Element, extraCss?: string): Record<string, string> {
+  const own = cascaded(element, extraCss);
   const result: Record<string, string> = {};
   for (const [key, winner] of own) result[key] = winner.value;
-  // Inherited and custom properties at rest: from the nearest ancestor that sets them.
-  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-    for (const [key, winner] of cascaded(parent)) {
-      if (!key.startsWith('|')) continue;
-      const prop = key.slice(1);
-      if (!(INHERITED.has(prop) || prop.startsWith('--')) || key in result) continue;
-      result[key] = winner.value;
-    }
+  const parent = element.parentElement;
+  const above = parent ? resolvedStyle(parent, extraCss) : {};
+  // Inherited and custom properties at rest: from the parent, which has them from its own ancestors.
+  for (const [key, value] of Object.entries(above)) {
+    if (!key.startsWith('|')) continue;
+    const prop = key.slice(1);
+    if (!(INHERITED.has(prop) || prop.startsWith('--')) || key in result) continue;
+    result[key] = value;
+  }
+  // A winning `inherit` (or `unset` on an inherited property) takes the parent's value; with none, the keyword stays.
+  for (const [key, value] of Object.entries(result)) {
+    if (!key.startsWith('|') || key === '|font') continue;
+    const prop = key.slice(1);
+    const word = value.trim().toLowerCase();
+    const takes = word === 'inherit' || (word === 'unset' && (INHERITED.has(prop) || prop.startsWith('--')));
+    if (takes && above[key] !== undefined) result[key] = above[key];
   }
   return result;
 }

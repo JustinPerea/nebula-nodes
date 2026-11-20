@@ -23,7 +23,7 @@
   border-radius: 999px;
   background: var(--sr-panel-bg, #181818);
   color: var(--sr-ink, #e8e6e1);
-  font: 500 12px/1 var(--sr-font-sans, system-ui, sans-serif);
+  font: 500 12px/1 var(--sr-ui);
   white-space: nowrap;
   cursor: pointer;
   pointer-events: auto;
@@ -75,7 +75,7 @@
   background: var(--sr-panel-bg, #181818);
   border: 1px solid var(--sr-border, rgba(255, 255, 255, 0.14));
   color: var(--sr-ink, #e8e6e1);
-  font: 600 11px/1 var(--sr-font-sans, system-ui, sans-serif);
+  font: 600 11px/1 var(--sr-ui);
   pointer-events: none;
   animation: agent-edge-chip-in var(--agent-cursor-chip) both;
 }

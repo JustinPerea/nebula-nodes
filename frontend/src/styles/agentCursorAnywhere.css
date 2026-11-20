@@ -59,7 +59,7 @@
   background: var(--agent-badge-ring);
   border: 1px solid var(--agent-count-border);
   color: var(--agent-count-ink);
-  font: 600 11px/14px var(--sr-font-sans, system-ui, sans-serif);
+  font: 600 11px/14px var(--sr-ui);
   white-space: nowrap;
 }
 
@@ -133,7 +133,7 @@
   background: var(--agent-badge-ring);
   border: 1px solid var(--agent-count-border);
   color: var(--agent-count-ink);
-  font: 600 var(--sr-type-micro, 9px)/10px var(--sr-font-sans, system-ui, sans-serif);
+  font: 600 var(--sr-type-micro, 9px)/10px var(--sr-ui);
   white-space: nowrap;
   pointer-events: none;
   transition: opacity var(--agent-cursor-soft);

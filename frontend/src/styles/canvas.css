@@ -102,7 +102,7 @@ body.app-slava-restraint .react-flow__minimap {
 
 .selection-toolbar__count {
   flex: 0 0 auto;
-  font-family: var(--sr-font-mono, 'SFMono-Regular', Consolas, monospace);
+  font-family: var(--sr-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.62);

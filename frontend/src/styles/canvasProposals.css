@@ -57,7 +57,7 @@
   border-radius: 10px;
   background: rgb(26 26 28 / 0.72);
   color: #ddd;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--sr-ui);
   font-size: 11px;
   line-height: 1.35;
   opacity: 0.62;
@@ -203,7 +203,7 @@
   border-radius: 999px;
   background: var(--agent-color);
   color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--sr-ui);
   font-size: 10px;
   white-space: nowrap;
   /* Long values are cut here; the bar's details list shows them whole. */
@@ -247,7 +247,7 @@
   box-shadow: 0 16px 42px rgb(0 0 0 / 0.38);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--sr-ui);
   font-size: 12px;
   pointer-events: auto;
   /* The footer's narrow form reads the card's own width. */
@@ -875,7 +875,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--sr-ui);
   font-size: 12px;
   pointer-events: auto;
   animation: canvas-undo-notice-in 420ms var(--canvas-undo-spring) both;
