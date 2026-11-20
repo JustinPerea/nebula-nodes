@@ -28,7 +28,7 @@ const DIRECTION = 'Direction: silver tonalist palette';
 const MODE_OFF = 'Measured colors are off for this board';
 
 // Entries as services/moodboard_brief.compose writes them (captured from a
-// real compose() run on the design board: Direction "silver tonalist palette,
+// real compose() run on a real board: Direction "silver tonalist palette,
 // blue cornflowers", Avoid "red, orange or pink flowers", pin #d03030).
 const BRICK = { hex: '#a6392d', role: 'accent', share: 0.0015, level: 'conflict', reason: AVOID,
   reasons: [AVOID, DIRECTION], foundBy: ['words'], why: 'check' };

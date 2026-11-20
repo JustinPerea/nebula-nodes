@@ -45,7 +45,7 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   // Design (PR #198): the Agent log's line for a card or studio that couldn't
   // draw data that checks out is "Couldn't draw “X”, node n4. <error message>":
   // the error is the point (agents read it); the person's line never has it.
-  'lib/studioBoundary.ts': { count: 1, why: "design's Agent log line names the drawing error, never on screen" },
+  'lib/studioBoundary.ts': { count: 1, why: "the Agent log line names the drawing error, never on screen" },
   // Reads a failed chunk import's message to tell a lost chunk from a
   // render error; it never reaches the screen.
   'lib/lazyWithPreload.ts': { count: 1, why: 'classifies a chunk-load failure, not shown' },

@@ -104,7 +104,7 @@ describe('the refusal is checked on what is known, and again on yes', () => {
       ["an accepted proposal's run", () => useGraphStore.getState().executeNode('n2', { approvalId: 'ap1' })],
       ['Run selected', () => useGraphStore.getState().executeCluster(['n1', 'n2'])],
       ["Creator Studio's run", () => useGraphStore.getState().executeClusterConcurrent(['n1', 'n2'])],
-    ] as const)('on %s: settings loaded first, refused, nothing asked or sent', async (_name, run) => {
+    ] as const)('%s: settings loaded first, refused, nothing asked or sent', async (_name, run) => {
       useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false }, runCostConfirmUsd: 0 } as never);
       apiFetchMock.mockImplementation(async (path: string) => {
         if (path === '/api/settings') return json({ apiKeys: { KREA_API_TOKEN: '••••' } });

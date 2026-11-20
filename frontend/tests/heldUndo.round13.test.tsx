@@ -236,7 +236,7 @@ describe('a held Cmd+Z', () => {
     expect(ids()).toEqual(['n1', 'n2', 'n3']);
   });
 
-  it("an upload held + Cmd+Z, then the person opens another project: design's line shows on the new canvas", async () => {
+  it("an upload held + Cmd+Z, then the person opens another project: the dropped-undo line shows on the new canvas", async () => {
     setGraph([textNode('n1')]);
     store().beginUndoStep();
     await undo();
@@ -247,7 +247,7 @@ describe('a held Cmd+Z', () => {
     expect(notice()).toBe(DROPPED_UNDO_TEXT);
   });
 
-  it("an upload held + Cmd+Z, then Load graph: design's line shows", async () => {
+  it("an upload held + Cmd+Z, then Load graph: the dropped-undo line shows", async () => {
     setGraph([textNode('n1')]);
     store().beginUndoStep();
     await undo();

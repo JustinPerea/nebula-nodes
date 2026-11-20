@@ -105,7 +105,7 @@ describe('Commons request failures carry copy and keep their status', () => {
     expect((await failure(() => commonsApi.blob('/api/commons/blobs/abc'))).reason).toBe(NO_ANSWER);
   });
 
-  // typeerror2 (2026-10-24): the body read is classified where apiFetch hands
+  // PR #191 (2026-10-24): the body read is classified where apiFetch hands
   // out the Response, so the Commons call's catch asks isNoAnswer, not
   // "any TypeError".
   it('a connection that drops while the body arrives says the connection line', async () => {

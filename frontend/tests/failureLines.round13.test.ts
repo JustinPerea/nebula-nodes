@@ -53,7 +53,7 @@ function writer(id: string, definitionId: string, params: Record<string, unknown
     data: { label: 'Writer', definitionId, params, state: 'idle', outputs: {} } };
 }
 
-describe("design's failure lines, verbatim", () => {
+describe("the clear and model-load failure lines, verbatim", () => {
   it('reads as design wrote them', () => {
     expect(CLEAR_REFUSED_TEXT).toBe("Nebula couldn’t clear the canvas because the server didn’t accept it. Nothing was removed.");
     expect(CLEAR_FAILED_TEXT).toBe("Nebula couldn’t clear the canvas.");

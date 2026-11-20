@@ -69,7 +69,7 @@ afterEach(() => {
   mocks.fetch.mockReset();
 });
 
-describe('design\'s general line under any other heading', () => {
+describe('the general failure line under any other heading', () => {
   it('drops "That didn\'t work."', () => {
     expect(errorCopy.REFUSED_FALLBACK_COPY).toBe(ELSEWHERE);
     expect(errorCopy.copyForError(new Error('internal'))).toBe(ELSEWHERE);
@@ -78,7 +78,7 @@ describe('design\'s general line under any other heading', () => {
   it('a request with no answer says the server on this computer isn\'t answering', () => {
     expect(errorCopy.CONNECTION_LOST_COPY).toBe(SERVER);
     expect(errorCopy.copyForError(new errorCopy.ConnectionLostError(new TypeError('Failed to fetch')))).toBe(SERVER);
-    // typeerror (2026-10-24): a TypeError nothing classified is a browser-side failure, not no answer.
+    // PR #191 (2026-10-24): a TypeError nothing classified is a browser-side failure, not no answer.
     expect(errorCopy.copyForError(new TypeError('Failed to fetch'))).toBe(ELSEWHERE);
     // Beside a Try again button, the line ends in the button's own words.
     const alone = 'Nebula couldn’t load the moodboard because the server isn’t answering. Check that Nebula is running, then try again.';

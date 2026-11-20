@@ -6,7 +6,7 @@ import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/u
 // Every case runs against a fake Nebula that applies
 // each request (its graph, params and wires), and checks the restore bodies
 // sent and that the canvas ends where Nebula's graph does.
-// Coordinator's decision: "arrived elsewhere" is relative to time. A
+// Decided: "arrived elsewhere" is relative to time. A
 //   node an undo or redo puts back is someone else's only for the steps taken
 //   after the change it undoes; an older step keeps owning what it added, so
 //   undoing the paste, duplicate, connect or upload still takes its node off.

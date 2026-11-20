@@ -127,7 +127,7 @@ describe("the person's direct run once the placeholder dialog has shown", () => 
       expect(execute.mock.calls[0][7]).toBe(0.3);
     });
 
-    // Coordinator's decision: a row at another price was not
+    // Decided: a row at another price was not
     // seen, so this asks again (before that decision it went ahead at the total shown;
     // the case that still goes ahead, every row unchanged, is in graphStore.placeholderRuns.round8.test.ts).
     it('the same nodes, one cheaper: asks again, since that row changed', async () => {

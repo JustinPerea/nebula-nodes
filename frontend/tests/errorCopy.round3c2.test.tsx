@@ -173,13 +173,13 @@ describe('the motion handoff says "Couldn\'t …" and leaves the retry to its bu
   });
 
   it('a request with no answer', async () => {
-    // As apiFetch throws it (typeerror, 2026-10-24: a bare TypeError is not no-answer).
+    // As apiFetch throws it (PR #191, 2026-10-24: a bare TypeError is not no-answer).
     const alert = await send(async () => { throw new ConnectionLostError(new TypeError('Failed to fetch')); });
     // Design: "don't stack two "Couldn't"s, and Nebula is local".
     expect(alert.textContent).toBe("Nebula couldn’t confirm the video connection because the server isn’t answering. Try again.");
   });
 
-  it('typeerror (2026-10-24): a browser TypeError after the answer is unconfirmed, not "didn\'t respond"', async () => {
+  it('PR #191 (2026-10-24): a browser TypeError after the answer is unconfirmed, not "didn\'t respond"', async () => {
     const alert = await send(async () => ({ ok: true, json: async () => JSON.parse(JSON.stringify({ a: 1n })) }));
     expect(alert.textContent).toBe("Nebula couldn’t confirm the video connection.");
   });

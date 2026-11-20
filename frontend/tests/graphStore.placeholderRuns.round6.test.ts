@@ -144,7 +144,7 @@ describe("the person's direct run once the placeholder dialog has shown", () => 
       expect(execute.mock.calls[0][7]).toBe(9.6);
     });
 
-    // Coordinator's decision: a row counts as seen only if its
+    // Decided: a row counts as seen only if its
     // node, model and price all match, so a row now at another price asks
     // again, even when cheaper (this test said "goes ahead" before that decision).
     it('a run that got cheaper asks again: its row changed price', async () => {

@@ -126,7 +126,7 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server isn’t answering. Check that Nebula is running, then try again.', retry: true });
   // An error that didn't come through the API never shows its own message
   // (design), and a TypeError the API didn't classify is not "isn't answering"
-  // (typeerror, 2026-10-24): design's general line.
+  // (PR #191, 2026-10-24): design's general line.
   api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
   expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.',
     message: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.', retry: true });

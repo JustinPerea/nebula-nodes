@@ -1,6 +1,6 @@
 /**
  * Justin, 2026-10-23: "Download your edits" plus "Continue
- * without them". The question's option: "Offer "Download your edits" (saves
+ * without them". The option chosen: "Offer "Download your edits" (saves
  * them as a .nebula file you can open later) …".
  *
  * The held recovered copy is written with the graph file writer the app

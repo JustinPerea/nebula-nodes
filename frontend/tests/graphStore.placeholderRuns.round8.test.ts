@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * A review of the confirm (Justin, 2026-10-25: a paid placeholder never
  * runs without the person's confirmation, and what runs never costs more than
- * they were shown), with the coordinator's decisions and design's rulings:
+ * they were shown), with the decisions made and design's rulings:
  * - A replay's classification follows what runs: a placeholder deleted
  *   from the canvas, or turned into another type, is never "finished"; the
  *   replay's saved copy runs as a normal paid node. One still a placeholder

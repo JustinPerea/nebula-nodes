@@ -360,7 +360,7 @@ describe("PR #205: the held Undo", () => {
     expect(cliIds()).toEqual([]);
   });
 
-  it('an agent clear that empties the canvas: Claude deletes the only node, which a restore holds (a sync that empties the canvas, not a clear): its Undo brings it back', async () => {
+  it('an agent delete that empties the canvas (same canvas, not a clear): Claude deletes the only node, which a restore holds: its Undo brings it back', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }]);
     await restoreHeld();
     // Nebula names the same canvas: an agent's delete, not a clear.
@@ -379,7 +379,7 @@ describe("PR #205: the held Undo", () => {
     expect(cliIds()).toEqual([]);
   });
 
-  it('an agent clear that empties the canvas, a refused Delete: Codex edits n1, Claude then deletes n1 and n2 (not a clear): the steps in Nebula\'s order, each Undo as Nebula', async () => {
+  it('an agent delete that empties the canvas, a refused Delete: Codex edits n1, Claude then deletes n1 and n2 (not a clear): the steps in Nebula\'s order, each Undo as Nebula', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }]);
     refuseDelete('n1');
     nebula().holdAnswers = true;

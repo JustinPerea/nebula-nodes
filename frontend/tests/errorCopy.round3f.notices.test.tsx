@@ -60,7 +60,7 @@ describe('a canvas notice for an error', () => {
   });
 });
 
-describe('design\'s size and "saved without" lines', () => {
+describe('the size and "saved without" notice lines', () => {
   it('names the graph\'s size and what Nebula opens', () => {
     expect(graphSizeLine(300 * 1024 * 1024, 250 * 1024 * 1024)).toBe('This canvas is 300 MB. Nebula opens canvases up to 250 MB.');
   });

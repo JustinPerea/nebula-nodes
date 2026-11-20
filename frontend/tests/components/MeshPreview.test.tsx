@@ -100,7 +100,7 @@ describe('MeshPreview', () => {
     expect(copy).not.toMatch(/HTTP|503/);
   });
 
-  it('typeerror (2026-10-24): a browser TypeError after the answer reads design\'s general line, not "isn\'t answering"', async () => {
+  it('PR #191 (2026-10-24): a browser TypeError after the answer reads design\'s general line, not "isn\'t answering"', async () => {
     const webglContext = { getExtension: vi.fn().mockReturnValue(null) } as unknown as WebGLRenderingContext;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(webglContext);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), {
@@ -124,7 +124,7 @@ describe('MeshPreview', () => {
     }
   });
 
-  it('typeerror (2026-10-24): a preview that can\'t reach Nebula still says the connection line', async () => {
+  it('PR #191 (2026-10-24): a preview that can\'t reach Nebula still says the connection line', async () => {
     const webglContext = { getExtension: vi.fn().mockReturnValue(null) } as unknown as WebGLRenderingContext;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(webglContext);
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
@@ -136,7 +136,7 @@ describe('MeshPreview', () => {
       .toBe('Nebula couldn’t load the 3D preview because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
-  it('typeerror review (2026-10-24): a connection that drops while the model streams still says the connection line', async () => {
+  it('PR #191 (2026-10-24): a connection that drops while the model streams still says the connection line', async () => {
     const webglContext = { getExtension: vi.fn().mockReturnValue(null) } as unknown as WebGLRenderingContext;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(webglContext);
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(new ReadableStream<Uint8Array>({

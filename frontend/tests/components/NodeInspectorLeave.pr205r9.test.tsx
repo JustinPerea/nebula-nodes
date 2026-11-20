@@ -334,7 +334,7 @@ describe('a drag-select ends however the drag ends', () => {
     expect([isCanvasSelectionDragging(), ...inspector()]).toEqual([false, 'b', true]);
   });
 
-  // Coordinator ruling (PR #205): the hold releases on the real pointerup that ends the
+  // Decided (PR #205): the hold releases on the real pointerup that ends the
   // box select, not on Escape, and releases exactly once.
   it('Escape, then the real pointerup: the hold releases on the pointerup, exactly once', async () => {
     const ended = vi.fn();

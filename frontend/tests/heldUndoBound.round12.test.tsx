@@ -196,7 +196,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for', () => {
     expect(stacks()).toEqual({ undo: 0, redo: 2 });
   });
 
-  it("Clear canvas with Codex adding n1 mid-clear, answer first: the clear's answer before its echo still empties the canvas and is undone by the held press", async () => {
+  it("Clear canvas, answer first: the clear's answer before its echo still empties the canvas and is undone by the held press", async () => {
     setGraph([textNode('n1', 'Hero prompt'), textNode('local', 'Local')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });

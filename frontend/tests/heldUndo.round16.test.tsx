@@ -7,7 +7,7 @@ import type { NodeData } from '../src/types';
 // canvas ends where Nebula's graph does: a fake backend applies each delete
 // (its answer), each sync (it is the backend's graph then), each clear and
 // each restore, in the order they reach it.
-// Coordinator's decision: an undo removes only the
+// Decided: an undo removes only the
 //   node ids its own step added. A step taken between a multi-node delete's
 //   echoes (typing) never takes back a node the delete's undo restored, and
 //   a typing step never takes off a node a sync brought.

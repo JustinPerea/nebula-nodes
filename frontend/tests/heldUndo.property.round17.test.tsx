@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeNebula, canvasNode, textFakeNode } from './helpers/undoFakeBackend';
 
-// A property-style test (the coordinator's decision). Random
+// A property-style test (a decision made for this PR). Random
 // sequences of the person's own edits (type, add from the library, add and
 // connect, upload, paste, duplicate, delete, Cmd+Z, Cmd+Shift+Z), with
 // Nebula's echoes and HTTP answers reaching the tab in random order (echoes

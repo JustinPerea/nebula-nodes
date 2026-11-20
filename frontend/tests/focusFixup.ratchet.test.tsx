@@ -11,8 +11,8 @@
  * toHaveFocus) and renders from src/components/commons/, uses useFocusHandover, renders
  * AgentSpendSection or PersonalAgentsSection, renders <App/> at the Commons' hash, or speaks of the
  * focus fixup installs the helper. No file blurs, or moves focus away, by hand "as Chrome (or a
- * browser) would": the helper does it. The rule also reads toHaveFocus, <App/> at
- * #commons, and a comment saying a browser blurs and jsdom doesn't near a .focus() or .blur().
+ * browser) would": the helper does it. The rule also reads a comment saying a browser
+ * blurs and jsdom doesn't near a .focus() or .blur().
  */
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';

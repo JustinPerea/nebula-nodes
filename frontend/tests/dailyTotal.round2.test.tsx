@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 /**
- * PR #212 design's review (2026-10-31), built verbatim:
+ * Design's review of PR #212 (2026-10-31), built verbatim:
  * the usage line on its own line with the meter right under it in the text
  * column, the new help, and the "Same as chats" select under its help. The
  * waiting band on the node card is in dailyTotal.review1.test.tsx (design moved
