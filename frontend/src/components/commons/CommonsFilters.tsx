@@ -36,7 +36,7 @@ function AxisRange({ axis, range, onChange }: {
         />
       </div>
       <button type="button" className="commons-link commons-filter__reset" disabled={!range} onClick={() => onChange(undefined)}>
-        clear
+        Clear
       </button>
     </div>
   );

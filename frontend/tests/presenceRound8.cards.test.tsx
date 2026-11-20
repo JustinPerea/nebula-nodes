@@ -102,6 +102,27 @@ describe('the tool kind in Nebula\'s words', () => {
       unmount();
     }
   });
+  it('an hour or more reads h:mm:ss', () => {
+    const timer = () => document.querySelector('.permission-card__timer')?.textContent;
+    for (const [seconds, text] of [[3600, '1:00:00'], [3599, '59:59'], [3661, '1:01:01'], [7200, '2:00:00']] as const) {
+      const { unmount } = render(<PermissionCard part={part({ timeoutSeconds: seconds })} agentName="Codex" onDecision={() => {}} />);
+      expect(timer()).toBe(`No answer in ${text} denies it`);
+      unmount();
+    }
+  });
+  it('a timeout that is not a finite number shows no countdown line, and a past one never reads negative', () => {
+    const timer = () => document.querySelector('.permission-card__timer')?.textContent;
+    for (const seconds of [Infinity, -Infinity, NaN, undefined]) {
+      const { unmount } = render(<PermissionCard part={part({ timeoutSeconds: seconds })} agentName="Codex" onDecision={() => {}} />);
+      expect(timer()).toBe('');
+      unmount();
+    }
+    for (const seconds of [0, -30]) {
+      const { unmount } = render(<PermissionCard part={part({ timeoutSeconds: seconds })} agentName="Codex" onDecision={() => {}} />);
+      expect(timer()).toBe('No answer in 0:00 denies it');
+      unmount();
+    }
+  });
 });
 
 const SET = { id: 'qs_8', status: 'open', agent: { name: 'Codex', color: '#7aa2ff' }, note: null, projectId: 'p1', nodeIds: [],

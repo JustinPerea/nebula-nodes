@@ -179,14 +179,33 @@ const CAPS_VALUE = /(?:^|\s)(?:uppercase|small-caps|all-small-caps|petite-caps|a
 const WRITTEN_CASE_TAGS = new Set(['permission-card__kind']);
 const WRITTEN_CASE_VALUE = /(?:^|\s)(?:lowercase|capitalize|full-width|full-size-kana)(?![\w-])/i;
 const writtenCaseTag = (name) => WRITTEN_CASE_TAGS.has(name.replace(/--[\w-]+$/, ''));
+// text-transform is inherited: a forced case on an element that holds the tag reaches it, unless the tag
+// resets it itself (`text-transform: none`). These are the real ancestors in PermissionCard.tsx.
+const WRITTEN_CASE_ANCESTORS = new Set(['permission-card', 'permission-card__head']);
+const FORCED_CASE_VALUE = /(?:^|\s)(?:uppercase|lowercase|capitalize|full-width|full-size-kana)(?![\w-])/i;
+const FORCED_CASE_TEXT = /text-transform\s*:\s*[^;}]*(?:uppercase|lowercase|capitalize|full-width|full-size-kana)(?![\w-])/i;
+const ancestorClass = (name) => WRITTEN_CASE_ANCESTORS.has(name.replace(/--[\w-]+$/, ''));
+/** True when a selector part reaches an ancestor of the tag: its last compound is an ancestor class, or a class-less
+ * element (`.permission-card__head > span`) under one. */
+function reachesTagAncestor(part) {
+  const compounds = part.trim().split(/[\s>+~]+/).filter(Boolean);
+  const last = compounds[compounds.length - 1] ?? '';
+  const lastClasses = [...last.matchAll(CLASS)].map((m) => m[1]);
+  if (lastClasses.length > 0) return lastClasses.some(ancestorClass);
+  return compounds.slice(0, -1).some((compound) => [...compound.matchAll(CLASS)].some((m) => ancestorClass(m[1])));
+}
+const reachesAncestors = (selector) => selector.split(',').some(reachesTagAncestor);
 const isBadgeClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) || writtenCaseTag(name) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
 
 /** True when a rule nested in this body selects a badge class and sets capitals, at any depth. */
 function nestedCapsUnderBadge(body) {
   return parseRules(body).some((inner) => {
-    const badge = inner.selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
-    if (inner.nested) return nestedCapsUnderBadge(inner.body) || (badge && CAPS_TEXT.test(inner.body));
-    return badge && CAPS_TEXT.test(inner.body);
+    const badges = inner.selector.split(',').filter((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
+    const badge = badges.length > 0;
+    const writtenTag = badges.some((part) => [...part.matchAll(CLASS)].some((m) => writtenCaseTag(m[1])));
+    const forced = (body) => CAPS_TEXT.test(body) || (writtenTag && FORCED_CASE_TEXT.test(body)) || (reachesAncestors(inner.selector) && FORCED_CASE_TEXT.test(body));
+    if (inner.nested) return nestedCapsUnderBadge(inner.body) || ((badge || reachesAncestors(inner.selector)) && forced(inner.body));
+    return (badge || reachesAncestors(inner.selector)) && forced(inner.body);
   });
 }
 const CAPS_TEXT = /(?:text-transform|font-variant(?:-caps)?)\s*:\s*[^;}]*(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)/i;
@@ -196,9 +215,28 @@ export function findCapsBadges(source, file) {
   const css = stripComments(source);
   const lineStarts = computeLineStarts(css);
   const hits = [];
-  for (const rule of parseRules(css)) {
+  const rules = parseRules(css);
+  // The tag resets the inherited case itself: `.permission-card__kind { text-transform: none }`.
+  const tagResets = rules.some((rule) => !rule.nested && rule.selector.split(',').some((part) => {
+    const last = part.trim().split(/[\s>+~]+/).pop() ?? '';
+    return [...last.matchAll(CLASS)].some((m) => writtenCaseTag(m[1]));
+  }) && parseDeclarations(rule.body, rule.bodyStart).some((d) => d.prop.toLowerCase() === 'text-transform' && /^\s*none\s*(?:!important)?\s*$/i.test(d.value)));
+  for (const rule of rules) {
     const selector = compact(rule.selector);
     const badgeParts = selector.split(',').filter((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
+    // A forced case on an element that holds the tag reaches it by inheritance.
+    if (!tagResets && reachesAncestors(selector) && badgeParts.length === 0) {
+      if (rule.nested) {
+        if (FORCED_CASE_TEXT.test(rule.body) || nestedCapsUnderBadge(rule.body)) hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
+        continue;
+      }
+      for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
+        if (declaration.prop.toLowerCase() === 'text-transform' && FORCED_CASE_VALUE.test(declaration.value)) {
+          hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector, decl: `${declaration.prop}: ${compact(declaration.value)}`, reason: 'the permission card’s kind tag inherits this case: reset it on the tag with text-transform: none, or drop it' });
+        }
+      }
+      continue;
+    }
     // Design: nested CSS isn't read, so it fails the same way findAccentBadges does: a nested block
     // under a badge selector, or a badge selector nested under another rule that sets capitals.
     if (rule.nested) {

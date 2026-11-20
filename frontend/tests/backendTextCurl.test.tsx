@@ -135,6 +135,8 @@ interface Row {
   keep?: string[];
   /** Straight-apostrophe words the row shows on purpose (a path it adds itself). */
   straight?: string[];
+  /** For a `code: true` row: the form the row prints the code fixture in. `because` reads the reason through becauseLine ("Nebula couldn’t read …"); the default `raw` shows the reason as it came ("Couldn’t read …"). */
+  form?: 'because' | 'raw';
   /**
    * A row whose files render the words through LineText or FailureLines says whether code spans are on there:
    * `true` (the row's render must draw a backticked span as code, the apostrophe inside it unchanged), or the reason they are not
@@ -301,7 +303,7 @@ export const RENDER_PATHS: Row[] = [
   { id: 'waiting stop', mode: 'curl', files: ['lib/nodeErrorCopy.ts'], show: (t) => nodeErrorCopy({ category: 'waiting', person: t }).reason },
   { id: 'run failure (already curled)', mode: 'curl', code: 'a pure function row; NodeError draws it with code on (the NodeError rows)', fields: ['NodeData.error', 'NodeData.errorFriendly', 'NodeData.errorPerson', 'CinemaShot.error', 'CinemaShot.errorFriendly', 'CinemaShot.errorPerson'], files: ['lib/nodeErrorCopy.ts', 'components/nodes/NodeError.tsx', 'components/nodes/ModelNode.tsx', 'components/nodes/DynamicNode.tsx', 'components/nodes/BatchNode.tsx',
     'components/cinema-studio/CinemaShotPanel.tsx', 'components/create-studio/ResultCard.tsx'], show: (t) => nodeErrorCopy({ category: 'unknown', person: t }).reason },
-  { id: 'NodeError, rendered', mode: 'curl', code: true, files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="unknown" person={t} />) },
+  { id: 'NodeError, rendered', mode: 'curl', code: true, form: 'because', files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="unknown" person={t} />) },
   { id: 'NodeError, a waiting stop, rendered', mode: 'curl', code: true, files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="waiting" person={t} />) },
   { id: 'ErrorDetails, the raw words behind a project error', mode: 'raw', fields: ['call:failureDetails'], files: ['components/projects/ProjectHome.tsx', 'components/failure/ErrorDetails.tsx', 'store/projectStore.ts', 'store/graphStore.ts'], show: (t) => shown(<ErrorDetails raw={t} />) },
   { id: 'NodeError raw Details, rendered', mode: 'raw', files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="unknown" raw={t} person="It stopped." providerText />) },
@@ -438,8 +440,12 @@ describe('the render-path table: backend text is curled where it renders', () =>
     const out = await row.show(text);
     expect(out, row.id).not.toContain('`');
     expect(out, row.id).toContain(span);
-    // A row that reads the reason through becauseLine opens "Nebula couldn’t"; one that shows it raw keeps "Couldn’t".
-    expect(out, row.id).toMatch(/(?:Nebula c|C)ouldn’t read/);
+    // Each row declares its form: one that reads the reason through becauseLine opens "Nebula couldn’t"; the rest keep "Couldn’t".
+    if (row.form === 'because') expect(out, row.id).toContain('Nebula couldn’t read');
+    else {
+      expect(out, row.id).toContain('Couldn’t read');
+      expect(out, row.id).not.toContain('Nebula couldn’t read');
+    }
     expect(out, row.id).toContain('isn’t there');
     const spans = [...document.querySelectorAll('code.code-span, code.canvas-undo-notice__mono')].filter((node) => node.classList.contains('code-span'));
     expect(spans.map((node) => node.textContent), row.id).toContain(span);

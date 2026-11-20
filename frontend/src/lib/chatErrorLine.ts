@@ -46,22 +46,41 @@ function cleaned(message: string): string {
 /** The provider names the app shows (directRoute.PROVIDER_LABELS), except the local-tools stand-in, which is not a name. */
 const PROVIDER_NAMES: readonly string[] = Object.entries(PROVIDER_LABELS).filter(([key]) => key !== 'utility').map(([, label]) => label);
 
-/** True when the text opens with one of these names (a provider or an agent), alone or as a possessive ("Krea’s reader"), compared without case. */
-function opensWithName(text: string, names: readonly string[]): boolean {
+/** What follows a provider's label when it is used as a verb or a common word ("Replicate the prompt", "Fal that"), not as a name. */
+const NOT_A_NAME_AFTER = /^\s+(?:the|a|an|this|that|these|those|your|my|it|them)(?![\w-])/i;
+
+/** The provider label (as the app spells it) the text opens with, alone or as a possessive ("Krea’s reader"), compared
+ * without case. Null when none does, or when the label is followed by a determiner or pronoun: then it is a word, not a name. */
+function openingProviderLabel(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const label of [...PROVIDER_NAMES].sort((a, b) => b.length - a.length)) {
+    const own = label.toLowerCase();
+    if (!lower.startsWith(own)) continue;
+    const after = text.slice(own.length);
+    if (after !== '' && !/^(?:[’']s)?(?![\w-])/.test(after)) continue;
+    return NOT_A_NAME_AFTER.test(after) ? null : label;
+  }
+  return null;
+}
+
+/** True when the text opens with the agent's own name (or its command's), alone or as a possessive, compared without case. */
+function opensWithAgentName(text: string, names: readonly string[]): boolean {
   const lower = text.toLowerCase();
   return names.some((name) => {
     const own = name.toLowerCase();
-    if (!lower.startsWith(own)) return false;
-    const after = lower.slice(own.length);
-    return after === '' || /^(?:[’']s)?(?![\w-])/.test(after);
+    return own !== '' && lower.startsWith(own) && /^(?:[’']s)?(?![\w-])/.test(lower.slice(own.length));
   });
 }
 
-/** The first letter lower case, unless the first word is a name (a provider or an agent, also as "Krea’s"), an acronym or has capitals of its own. */
+/** The first letter lower case, unless the first word is a name (a provider or an agent, also as "Krea’s"), an acronym or has capitals of its own.
+ * A provider's name is written as the app writes it ("Fal.ai" gives "fal.ai", "Hugging face" gives "Hugging Face"); a label used as a word
+ * ("Replicate the prompt") is lower-cased like any other. */
 function lowerFirst(text: string, names: readonly string[]): string {
   const first = (text.split(' ', 1)[0] ?? '').replace(/[,;:]+$/, '');
+  const label = openingProviderLabel(text);
+  if (label !== null) return label + text.slice(label.length);
   const kept = KEPT_WORDS.has(first.toLowerCase()) || names.some((name) => name.toLowerCase().split(' ')[0] === first.toLowerCase())
-    || opensWithName(text, [...PROVIDER_NAMES, ...names]);
+    || opensWithAgentName(text, names);
   return !first || kept || /[A-Z]/.test(first.slice(1)) || /^I[’']/.test(first) ? text : text.charAt(0).toLowerCase() + text.slice(1);
 }
 
@@ -86,9 +105,11 @@ export type ChatErrorLine = {
   details?: string;
 };
 
-export function chatErrorLine({ message, code, source, agentName }: {
+export function chatErrorLine({ message, code, source, agentName: given }: {
   message: string | undefined | null; code?: unknown; source?: unknown; agentName: string;
 }): ChatErrorLine {
+  // An agent with no name is "Your agent", as the chat panel calls it.
+  const agentName = given.trim() || 'Your agent';
   const raw = (message ?? '').trim();
   const text = cleaned(raw);
   const because = (reason: string): ChatErrorLine => ({ text: `${agentName} stopped because ${curlApostrophes(endedSentence(reason))}`, because: true });

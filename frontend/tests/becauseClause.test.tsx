@@ -12,7 +12,7 @@ import {
   ACCESS_LOST_COPY, BACKEND_NOT_RUNNING_COPY, CONNECTION_LOST_COPY, ConnectionLostError, FailureNotice, NEBULA_NOT_ANSWERING_COPY,
   NO_RESPONSE_COPY, PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_COPY, PERSON_REQUIRED_DEV_COPY, REASON_CLAUSES, REFUSED_FALLBACK_COPY,
   RequestFailedError, TOO_LARGE_COPY, becauseLine, besideButton, clauseFor, curlApostrophes, failedWhat, failureCopy, failureMessage,
-  foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
+  endedSentence, foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
 } from '../src/lib/errorCopy';
 import { nodeErrorCopy } from '../src/lib/nodeErrorCopy';
 import { createWhileFollowingLine, runWhileFollowingLine } from '../src/lib/canvasFollow';
@@ -575,5 +575,68 @@ describe('a closing full stop does not change the line', () => {
   it.each(FIXTURES)('%s %s', (heading, reason) => {
     sameLine(heading, reason);
     sameLine('', reason);
+  });
+});
+
+describe('becauseLine: ellipses, abbreviations, trailing links and colons', () => {
+  const line = (reason: string, heading = '') => becauseLine({ heading, reason });
+  const both = (reason: string, expected: string, heading = '') => {
+    expect(line(reason, heading)).toBe(expected);
+    expect(line(`${reason}.`, heading)).toBe(expected);
+  };
+
+  it('an ellipsis before a capital ends the sentence and its dots stay out of the action', () => {
+    expect(line("Couldn't read the file... It is gone.")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line("Couldn't read the file... it is gone")).toBe('Nebula couldn’t read the file... it is gone.');
+    expect(line("Couldn't read the file… It is gone")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line("Couldn't read the file.... It is gone.")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line('It is gone... Try again.', "Couldn't read the file.")).toBe('Nebula couldn’t read the file because it is gone... Try again.');
+  });
+  it('an ellipsis in the middle of a sentence does not end it', () => {
+    const text = line("Couldn't read... the file. It is gone");
+    expect(text).toBe('Nebula couldn’t read... the file because it is gone.');
+    expect(line("Couldn't read the file… and the rest. It is gone")).toBe('Nebula couldn’t read the file… and the rest because it is gone.');
+  });
+  it('an ellipsis at the end of the text closes the sentence', () => {
+    expect(line("Couldn't read the file...")).toBe('Nebula couldn’t read the file.');
+  });
+
+  it('abbreviations do not end a sentence', () => {
+    both("Couldn't reach the U.S. region because it is down", 'Nebula couldn’t reach the U.S. region because it is down.');
+    both("Couldn't read the file, i.e. the image, because it is gone", 'Nebula couldn’t read the file, i.e. the image, because it is gone.');
+    both("Couldn't read the file, e.g. the photo. It is gone", 'Nebula couldn’t read the file, e.g. the photo because it is gone.');
+    both("Couldn't send before 9 a.m. Try again", 'Nebula couldn’t send before 9 a.m. Try again.');
+    both("Couldn't read the files vs. the folder. It is gone", 'Nebula couldn’t read the files vs. the folder because it is gone.');
+    both("Couldn't read the images, etc. and the audio. It is gone", 'Nebula couldn’t read the images, etc. and the audio because it is gone.');
+  });
+  it('a sentence that ends in an abbreviation still ends', () => {
+    expect(line("Couldn't reach the U.S. Try again.")).toBe('Nebula couldn’t reach the U.S. Try again.');
+    expect(line("Couldn't reach the server in the U.S.")).toBe('Nebula couldn’t reach the server in the U.S.');
+  });
+
+  it('a trailing link or colon gets no full stop', () => {
+    expect(endedSentence('See https://fal.ai/docs')).toBe('See https://fal.ai/docs');
+    expect(endedSentence('Error:')).toBe('Error:');
+    expect(endedSentence('Reason follows:')).toBe('Reason follows:');
+    expect(line('Error:')).toBe('Error:');
+    expect(line('See https://fal.ai/docs')).toBe('See https://fal.ai/docs');
+  });
+  it('a reason that ends in a code span gets one full stop', () => {
+    expect(endedSentence('`~/a.png`')).toBe('`~/a.png`.');
+    expect(line('`~/a.png`')).toBe('`~/a.png`.');
+    expect(line('See `https://fal.ai/x`')).toBe('See `https://fal.ai/x`.');
+  });
+
+  it('decimals, links, Windows paths, an unclosed backtick, ? and !, trailing space and empty reasons stay whole', () => {
+    both("Couldn't upload 1.5 MB. It is too large", 'Nebula couldn’t upload 1.5 MB because it is too large.');
+    expect(line("Couldn't read https://fal.ai/x.png. It is gone")).toBe('Nebula couldn’t read https://fal.ai/x.png because it is gone.');
+    expect(line("Couldn't read https://fal.ai/x.png")).toBe('Nebula couldn’t read https://fal.ai/x.png.');
+    expect(line("Couldn't read C:\\a.b\\c. It is gone")).toBe('Nebula couldn’t read C:\\a.b\\c because it is gone.');
+    expect(line("Couldn't read `a. It is gone")).toBe('Nebula couldn’t read `a because it is gone.');
+    expect(line('Is it there?', "Couldn't read the file.")).toBe('Nebula couldn’t read the file. Is it there?');
+    expect(line('It is gone!', "Couldn't read the file.")).toBe('Nebula couldn’t read the file because it is gone!');
+    expect(line("Couldn't read the file because it is gone   ")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line('', "Couldn't read the file.")).toBe('Nebula couldn’t read the file.');
+    expect(line('`a.b`', "Couldn't read the file.")).toBe('Nebula couldn’t read the file because `a.b`.');
   });
 });

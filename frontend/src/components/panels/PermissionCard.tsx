@@ -38,10 +38,14 @@ function formatInput(input: unknown): string {
   }
 }
 
-/** Whole seconds as minutes and seconds: 599 reads "9:59", 42 reads "0:42". */
-function countdownText(seconds: number): string {
+/** Whole seconds as minutes and seconds: 599 reads "9:59", 42 reads "0:42"; an hour or more reads "1:00:00". Never
+ * negative. Null for a value that is not a finite number: by design the card then shows no countdown line. */
+function countdownText(seconds: number): string | null {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return null;
   const whole = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const hours = Math.floor(whole / 3600);
+  return hours > 0 ? `${hours}:${pad(Math.floor(whole / 60) % 60)}:${pad(whole % 60)}` : `${Math.floor(whole / 60)}:${pad(whole % 60)}`;
 }
 
 /** A personal agent asking before it acts (ACP session/request_permission).
@@ -62,6 +66,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
     return () => window.clearInterval(timer);
   }, [open]);
   const left = Math.max(0, Math.ceil(part.timeoutSeconds - (now - part.receivedAt) / 1000));
+  const countdown = Number.isFinite(part.timeoutSeconds) ? countdownText(left) : null;
   const input = formatInput(part.input);
   const settled = part.status !== 'pending' && part.status !== 'sent';
   // Review 5 MEDIUM-2 (GM r9 1): an agent's ask with a decision on it, like a question. While
@@ -99,7 +104,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
           <button type="button" className={`permission-card__deny${tabHeld ? ' agent-notes-btn--held' : ''}`} disabled={!open}
             {...lockProps} onClick={() => decide('deny')}>Deny</button>
           <span className="permission-card__timer" aria-live="off">
-            {open ? `No answer in ${countdownText(left)} denies it` : 'Sending…'}
+            {open ? (countdown === null ? null : `No answer in ${countdown} denies it`) : 'Sending…'}
           </span>
         </div>
         <PersonLockLine lock={lock} place="control" className="permission-card__held-line" />

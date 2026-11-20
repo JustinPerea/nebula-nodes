@@ -105,6 +105,14 @@ describe('check-badge-tone: capitals', () => {
     '.permission-card__kind { text-transform: capitalize; }',
     'body.app-slava-restraint .permission-card__kind { font-size: 10px; text-transform: LOWERCASE; }',
     '.permission-card__kind { font-variant: small-caps; }',
+    // text-transform is inherited: a forced case on an ancestor of the tag reaches it.
+    '.permission-card { text-transform: lowercase; }',
+    '.permission-card { text-transform: uppercase; }',
+    '.permission-card { text-transform: capitalize; }',
+    '.permission-card--pending { text-transform: lowercase; }',
+    '.permission-card__head { text-transform: lowercase; }',
+    '.permission-card__head > span { text-transform: lowercase; }',
+    '.permission-card .permission-card__head { text-transform: capitalize; }',
   ];
   it.each(capitalised)('catches %s', (css) => {
     expect(caps(css)).toHaveLength(1);
@@ -119,6 +127,10 @@ describe('check-badge-tone: capitals', () => {
     '.thing__badge { text-transform: capitalize; }',
     '.permission-card__kind { text-transform: none; font-size: 10px; }',
     '.permission-card__title { text-transform: lowercase; }',
+    '.permission-card .permission-card__title { text-transform: uppercase; }',
+    '.permission-card { text-transform: lowercase; } .permission-card__kind { text-transform: none; }',
+    '.permission-card__head { text-transform: uppercase; } .permission-card__kind { text-transform: none !important; }',
+    '.permission-card { color: red; }',
   ];
   it.each(fine)('passes %s', (css) => {
     expect(caps(css)).toHaveLength(0);
@@ -128,6 +140,11 @@ describe('check-badge-tone: capitals', () => {
     '.x__badge { &--y { text-transform: uppercase; } }',
     '.card { .x__badge { text-transform: uppercase; } }',
     '.card { .inner { .x__badge { text-transform: uppercase; } } }',
+    '.permission-card__head { .permission-card__kind { text-transform: lowercase; } }',
+    '.permission-card__head { .permission-card__kind { text-transform: capitalize; } }',
+    '.permission-card__head { .permission-card__kind { text-transform: uppercase; } }',
+    '.permission-card { text-transform: lowercase; .permission-card__note { color: red; } }',
+    '.card { .permission-card__head { text-transform: lowercase; } }',
   ];
   it.each(nested)('fails nested CSS: %s', (css) => {
     const found = caps(css);

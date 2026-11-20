@@ -117,12 +117,34 @@ describe('the chat stream error line', () => {
     expect(line('Krea’s reader can’t open it')).toBe('Claude stopped because Krea’s reader can’t open it.');
     expect(line("Krea's reader can't open it")).toBe('Claude stopped because Krea’s reader can’t open it.');
     expect(line('Krea can’t read the file')).toBe('Claude stopped because Krea can’t read the file.');
-    expect(line('KREA’s reader can’t open it')).toBe('Claude stopped because KREA’s reader can’t open it.');
+    expect(line('KREA’s reader can’t open it')).toBe('Claude stopped because Krea’s reader can’t open it.');
     expect(line('Black Forest Labs can’t read the file')).toBe('Claude stopped because Black Forest Labs can’t read the file.');
     expect(line('Hugging Face’s Space is asleep')).toBe('Claude stopped because Hugging Face’s Space is asleep.');
     expect(line('Your Codex’s session is gone', { agentName: 'Your Codex' })).toBe('Your Codex stopped because Your Codex’s session is gone.');
     expect(line('Atlas’s host is gone', { agentName: 'Nova' })).toBe('Nova stopped because atlas’s host is gone.');
     expect(line('The file is too large')).toBe('Claude stopped because the file is too large.');
     expect(line('Kreator can’t help')).toBe('Claude stopped because kreator can’t help.');
+  });
+
+  it('lower-cases a provider label used as a verb or a common word, and keeps it as a name otherwise', () => {
+    expect(line('Replicate the prompt and retry')).toBe('Claude stopped because replicate the prompt and retry.');
+    for (const after of ['a', 'an', 'this', 'that', 'these', 'those', 'your', 'my', 'it', 'them']) {
+      expect(line(`Runway ${after} thing`)).toBe(`Claude stopped because runway ${after} thing.`);
+    }
+    expect(line('Runway returned an error')).toBe('Claude stopped because Runway returned an error.');
+    expect(line('Krea’s reader can’t open it')).toBe('Claude stopped because Krea’s reader can’t open it.');
+  });
+  it('writes a kept provider name as the app spells it', () => {
+    expect(line('Fal.ai/x.png missing')).toBe('Claude stopped because fal.ai/x.png missing.');
+    expect(line('FAL.AI is down')).toBe('Claude stopped because fal.ai is down.');
+    expect(line('Hugging face hub error')).toBe('Claude stopped because Hugging Face hub error.');
+    expect(line('Typesafe check failed')).toBe('Claude stopped because TypeSafe check failed.');
+    expect(line('typesafe check failed')).toBe('Claude stopped because TypeSafe check failed.');
+    expect(line('krea’s reader failed')).toBe('Claude stopped because Krea’s reader failed.');
+  });
+  it('names an agent with no name "Your agent"', () => {
+    expect(line('connection refused', { agentName: '' })).toBe('Your agent stopped because the connection was refused.');
+    expect(line('boom', { agentName: '   ' })).toBe('Your agent stopped because boom.');
+    expect(line(null, { agentName: '' })).toBe('Your agent stopped because of an unknown error.');
   });
 });

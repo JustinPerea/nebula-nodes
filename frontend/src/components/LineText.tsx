@@ -86,5 +86,8 @@ export function LineText({ text, className, children, tone, code }: { text: stri
   }, [own, hide]);
   if (!text) return null;
   if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : body ?? (code ? curledWithCodeSpans(text) : words)}</span>;
-  return <>{hide ? null : body ?? (code ? curledWithCodeSpans(text) : words)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
+  // Text with code spans is several nodes. One plain span keeps it a single inline run, so a surface that lays its
+  // children out as flex items (a notice with a gap) does not space the pieces apart. The anchor stays a sibling.
+  const content = hide ? null : body ?? (code ? curledWithCodeSpans(text) : words);
+  return <>{Array.isArray(content) ? <span>{content}</span> : content}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
 }
