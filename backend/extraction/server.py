@@ -327,6 +327,9 @@ def _static(dist: Path, path: str) -> Response:
     return FileResponse(target, media_type=media, headers=headers)
 
 
+FAKE_READER_ENV = "EXTRACTION_ALLOW_FAKE_READER"
+
+
 def serve(port: int = DEFAULT_PORT, dev: bool = False, fake_reader: str | None = None) -> int:
     """Start the server on 127.0.0.1 and print the page's address with its token.
 
@@ -336,6 +339,11 @@ def serve(port: int = DEFAULT_PORT, dev: bool = False, fake_reader: str | None =
 
     import uvicorn
 
+    if fake_reader and os.environ.get(FAKE_READER_ENV) != "1":
+        # Development only: a normal launch can't answer reads from a file.
+        print(f"--fake-reader is for development only. Set {FAKE_READER_ENV}=1 as well to use it.",
+              file=sys.stderr, flush=True)
+        return 2
     fake = reader.load_fake(fake_reader) if fake_reader else None
     token = secrets.token_urlsafe(32)
     app = create_app(token, port=port, dev=dev, fake_reader=fake)

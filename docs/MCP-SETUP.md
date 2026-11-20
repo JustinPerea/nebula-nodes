@@ -776,9 +776,9 @@ The server exposes these tools for building and running (see
   `rendering`, `source`), the id and the schema can't be corrected, and approval
   isn't a correction: an agent can't approve a record. Every path goes through
   the same protected-path check as the other file tools. `extraction_request_read(record,
-  reason)` is the fifth tool: an agent can't start a model read (it spends the person's
-  Claude usage, and only the person starts one, from the page's Read button or at a
-  terminal), so it asks. The reason (at most 300 characters, at most 20 waiting)
+  reason)` is the fifth tool, and it doesn't read: an agent can't start a model read
+  (it spends the person's Claude usage, and only the person starts one, from the page's
+  Read button or at a terminal), so it asks. A request never starts a read on its own. The reason (at most 300 characters, at most 20 waiting)
   goes on the record's `read_requests`, and the page shows it above the Read button.
   After the person reads, `structure.read` holds regions with roles, the text in the
   image, estimated sizes and spacing, and `shows`, all marked as the model's. The tools run in the

@@ -138,8 +138,14 @@ record, so a correction made meanwhile is kept (tested). A failed read changes n
 plain sentence per error kind.
 
 `serve --fake-reader FILE` (development only) answers every read with that file's structured output through
-`validate_read`/`apply_read` and records `model: "fake-reader"`; no process is spawned. The page shows "fake
-reader" next to the model name. Fixtures: `tests/fixtures/extraction/landing.png` (made by a throwaway PIL script)
+`validate_read`/`apply_read` and records `model: "fake-reader"`; no process is spawned. It refuses to start unless
+`EXTRACTION_ALLOW_FAKE_READER=1` is set too, so a normal launch can't reach it. The page marks a fake reading three
+ways: a "Fake reading" chip beside the status, a notice in the read section saying the development reader wrote it,
+and "fake reader" origin tags on its values.
+
+A read request from an agent never starts a read: the page calls the read endpoint only from the confirm's Read
+button (`requests.test.tsx` checks there is one call site), and loading a folder, opening a record or dropping the
+same image again run no reader (`test_a_pending_request_never_starts_a_read_on_its_own`). Fixtures: `tests/fixtures/extraction/landing.png` (made by a throwaway PIL script)
 and `fake_read_landing.json`. The reader tests replace `read_image`'s default spawn with one that raises, so a
 test that forgets to inject a fake fails instead of calling `claude`.
 

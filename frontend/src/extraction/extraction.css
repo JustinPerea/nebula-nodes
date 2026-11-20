@@ -171,6 +171,11 @@ body { background: #111; }
   color: var(--ex-strong);
 }
 
+.ex-status-fake {
+  background: var(--ex-notice);
+  color: var(--ex-notice-text);
+}
+
 .ex-bar { display: flex; height: 22px; margin-bottom: 10px; border-radius: 6px; overflow: hidden; }
 .ex-seg { position: relative; height: 100%; transform-origin: left center; }
 .ex-seg-accent::after {

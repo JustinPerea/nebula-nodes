@@ -200,3 +200,35 @@ def test_refused_corrections_are_plain_sentences(folder):
         reply = _correct(client, folder, record_id, corrections)
         assert reply.status_code == 400 and reply.json()["error"].endswith((".", ")")), corrections
     assert json.loads((folder / record_id / "record.json").read_text())["corrections"] == []
+
+
+def test_a_pending_request_never_starts_a_read_on_its_own(folder):
+    # An agent's request waits for the person. Loading the folder, opening the
+    # record and dropping the same image again run no reader.
+    spawner = answering()
+    client = _client(spawner)
+    record_id = _add(client, folder)
+    store.request_read(str(folder / record_id), "Needs its regions for the brief.")
+    assert client.get("/api/folder", headers=AUTH, params={"path": str(folder)}).status_code == 200
+    shown = client.get(f"/api/records/{record_id}", headers=AUTH, params={"folder": str(folder)})
+    assert shown.status_code == 200 and shown.json()["record"]["read_requests"]
+    assert _add(client, folder) == record_id
+    assert client.get(f"/api/records/{record_id}/rendering", headers=AUTH,
+                      params={"folder": str(folder)}).status_code == 200
+    assert spawner.calls == []
+    assert store.load(str(folder / record_id))["structure"]["read"] is None
+
+
+def test_the_fake_reader_needs_its_env_var(monkeypatch, capsys, tmp_path):
+    import uvicorn
+
+    started = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: started.append(app))
+    fake = tmp_path / "fake.json"
+    fake.write_text(json.dumps(landing_structured()))
+    monkeypatch.delenv(server.FAKE_READER_ENV, raising=False)
+    assert server.serve(port=PORT, fake_reader=str(fake)) == 2
+    assert started == [] and server.FAKE_READER_ENV in capsys.readouterr().err
+    monkeypatch.setenv(server.FAKE_READER_ENV, "1")
+    assert server.serve(port=PORT, fake_reader=str(fake)) == 0
+    assert len(started) == 1

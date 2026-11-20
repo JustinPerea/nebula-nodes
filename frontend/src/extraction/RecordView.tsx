@@ -3,6 +3,7 @@ import { ApiError, type Api, type RecordDetail } from './api'
 import { cameIn, readTime, statusLabel } from './format'
 import { Origin } from './Origin'
 import { segmentWidths, sharePercent } from './palette'
+import { FAKE_MODEL } from './read'
 import { ReadSection } from './ReadSection'
 import { RegionOverlay } from './RegionOverlay'
 import { useRendering } from './rendering'
@@ -105,6 +106,7 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
       <aside className="ex-side">
         <div className="ex-side-head">
           <span className="ex-status">{statusLabel(record.status)}</span>
+          {read?.model === FAKE_MODEL ? <span className="ex-status ex-status-fake">Fake reading</span> : null}
           <button type="button" className="ex-button ex-button-quiet" onClick={onClose}>
             Close
           </button>

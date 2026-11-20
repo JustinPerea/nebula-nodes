@@ -32,6 +32,12 @@ export function ReadSection({ record, onRead }: {
   return (
     <section>
       <h2 className="ex-label">Read by Claude</h2>
+      {read?.model === FAKE_MODEL ? (
+        <p className="ex-notice" data-fake-reading>
+          The development reader wrote this reading from a file, not Claude. Read again with the real reader before
+          you rely on it.
+        </p>
+      ) : null}
       {read ? (
         <p className="ex-read-line">
           <span className="ex-mono">{read.model}</span>

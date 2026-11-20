@@ -2710,9 +2710,10 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
 
 @_tool(annotations=_EDIT)
 def extraction_request_read(record: str, reason: str) -> dict[str, Any]:
-    """Ask the person to read an extraction record with Claude. You can't start a read: it
-    spends the person's Claude usage, so only the person does, from the extraction page's
-    Read button or at a terminal. This adds your `reason` (max 300 characters, in a
+    """This doesn't read the record: it asks the person to read it with Claude. You can't
+    start a read, because a read spends the person's Claude usage; only the person starts
+    one, from the extraction page's Read button or at a terminal, and a request never
+    starts one on its own. This adds your `reason` (max 300 characters, in a
     sentence) to the record's `read_requests`, and the page shows it above the button
     ("An agent asked for a reading"). At most 20 wait on a record. Once the person has read
     it, `structure.read` has the regions, text, spacing and shows; read it with
