@@ -8,16 +8,12 @@ body.app-slava-restraint .review-actions .commons-button--primary { margin:0; }
 .review-grade label { margin:4px 0; }
 .review-grade strong { display:block; margin-top:6px; font-weight:600; font-size:16px; }
 .review-grade .review-reason { font-size:12px; margin:8px 0 0; }
-.review-grade meter { display:block; width:100%; height:14px; margin:10px 0; appearance:none; background:var(--evaluation-meter-track); border:0; border-radius:7px; }
-/* The meter has no low, high or optimum, so the browser's green carries no meaning: the track and the
- * fill are drawn here, from the meter tokens. appearance:none makes the meter render through its CSS
- * parts: the element's background is the track and the value part is the fill. The inner bar stays
- * clear so the track isn't painted twice. */
-.review-grade meter::-webkit-meter-bar { background:transparent; border:0; border-radius:7px; }
-.review-grade meter::-webkit-meter-optimum-value,
-.review-grade meter::-webkit-meter-suboptimum-value,
-.review-grade meter::-webkit-meter-even-less-good-value { background:var(--evaluation-meter-fill); border-radius:7px; }
-.review-grade meter::-moz-meter-bar { background:var(--evaluation-meter-fill); border-radius:7px; }
+.review-axis-meter { position:relative; display:block; width:100%; height:14px; margin:10px 0; background:var(--evaluation-meter-track); border-radius:7px; }
+/* The fill runs from the centre to the value in the ink fill (design): square at the centre, rounded at the outer end. */
+.review-axis-fill { position:absolute; top:0; bottom:0; width:calc(var(--axis-reach) * 50%); background:var(--evaluation-meter-fill); }
+.review-axis-fill[data-side="positive"] { left:50%; border-radius:0 7px 7px 0; }
+.review-axis-fill[data-side="negative"] { right:50%; border-radius:7px 0 0 7px; }
+.review-axis-tick { position:absolute; top:0; bottom:0; left:50%; width:1px; transform:translateX(-0.5px); background:var(--evaluation-meter-tick); }
 .review-axis-ends { display:flex; justify-content:space-between; font-size:11px; }
 .evaluation-role .review-swatch-label { width:auto; height:auto; border:0; background:none; font-size:11px; }
 .review-keyword { border:1px solid var(--evaluation-chip-edge); border-radius:4px; padding:5px 9px; }
