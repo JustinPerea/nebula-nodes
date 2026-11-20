@@ -54,7 +54,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: { HF_TOKEN: TOKEN } })).toBeNull();
   });
 
-  it('reads "Hugging Face · free" without the token and "Hugging Face token · Saved" with it, in GM\'s r12 words', () => {
+  it('reads "Hugging Face · free" without the token and "Hugging Face token · saved" with it', () => {
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
     expect(anonymous).toEqual({ label: 'free', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face',

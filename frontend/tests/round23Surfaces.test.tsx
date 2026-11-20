@@ -273,7 +273,7 @@ const SURFACES: Record<string, Surface> = {
       draft={{ name: 'Saved character', subjectType: 'human', referenceViews: ['/1.png', '/2.png', '/3.png'],
         frozenTraitString: 'Traits', seed: 2, consistencyStrength: 0.8 } as never} />),
     // The test prompt is guidance kept in the panel.
-    looks: [/^Test prompt \(guidance\)$/],
+    looks: [/^Test prompt\s·\sguidance$/],
   },
   ProviderRecoveryStatus: {
     mount: () => {

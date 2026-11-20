@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useMemo } from 'react';
 import type { PortValue } from '../../types';
 import { backendAssetUrlSync } from '../../lib/backend';
@@ -29,7 +30,7 @@ const BOARD_IMAGE_PORTS: Readonly<Record<string, readonly string[]>> = {
 };
 
 function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`;
+  return `${groupedCount(count)} ${count === 1 ? one : many}`;
 }
 
 function copyJson(value: unknown): string {
@@ -95,7 +96,7 @@ export function StructuredValuePreview({ output, label, variant = 'card', stored
         <div className="structured-preview__actions">
           {json?.truncated && (
             <span className="structured-preview__note">
-              Showing the first {FULL_JSON_LIMIT.toLocaleString('en-US')} characters. Copy takes all of it.
+              Showing the first {groupedCount(FULL_JSON_LIMIT)} characters. Copy takes all of it.
             </span>
           )}
           <CopyValueButton text={() => copyJson(value)} />

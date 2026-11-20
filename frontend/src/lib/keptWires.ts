@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import type { Connection, Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { DynamicNodeData, NodeData, PortDataType } from '../types';
@@ -274,7 +275,7 @@ export function droppedConnectionsLine(wires: readonly DroppedWire[], nameOf: (i
     const named = connectionNamed(from, to);
     return `Nebula left out ${named ? `the connection ${named}` : 'a connection'} because ${droppedReason(wire, from, to)}.`;
   }
-  const lead = `Nebula left out ${wires.length} connections that couldn’t be kept`;
+  const lead = `Nebula left out ${groupedCount(wires.length)} connections that couldn’t be kept`;
   if (wires.length >= 4) return `${lead}.`;
   const named = wires.map((wire) => connectionNamed(endName(wire, 'source', nameOf), endName(wire, 'target', nameOf)));
   if (named.some((item) => !item)) return `${lead}.`;

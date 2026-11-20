@@ -125,9 +125,11 @@ describe('AgentLog panel', () => {
     const source = rows[0].querySelector('.agent-log__source');
     expect(source?.textContent).toBe('Claude Code');
     expect(rows[0].style.getPropertyValue('--agent-log-source-color')).toBe('#3FC1A5');
-    expect(rows[0].querySelector('.agent-log__time')?.textContent).toBe(
-      new Date(Date.UTC(2026, 9, 20, 14, 6, 0)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    );
+    // The time of day written "3:06 PM", with no seconds (design).
+    const at = new Date(Date.UTC(2026, 9, 20, 14, 6, 0));
+    const hours = at.getHours();
+    expect(rows[0].querySelector('.agent-log__time')?.textContent)
+      .toBe(`${hours % 12 || 12}:${String(at.getMinutes()).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`);
     expect(document.querySelector('.agent-log__count')?.textContent).toBe('2 events');
     expect(document.querySelector('.agent-log')?.getAttribute('data-status')).toBe('Claude Code');
   });

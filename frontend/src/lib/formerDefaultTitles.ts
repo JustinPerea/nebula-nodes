@@ -1,6 +1,7 @@
 /**
- * The Title Case default labels of six nodes, before the copy sweep renamed
- * them to sentence case. A node saved earlier carries the old label, which no
+ * The former default labels of seven nodes: six Title Case ones that the copy
+ * sweep renamed to sentence case, and Jev Box, whose "(experimental)" aside
+ * became "· experimental". A node saved earlier carries the old label, which no
  * longer equals the definition's name, so a plain comparison would read it as a
  * name the person chose. Every default-title check goes through here, so a
  * former default counts as the default. A loaded canvas also shows the new
@@ -16,6 +17,7 @@ export const FORMER_DEFAULT_TITLES: Readonly<Record<string, string>> = {
   'reference-set': 'Reference Set',
   'remotion-node': 'Remotion Composition',
   'video-edit': 'Video Edit',
+  'jev-box': 'Jev Box (experimental)',
 };
 
 /** The label is the Title Case default this definition had before the sweep. */

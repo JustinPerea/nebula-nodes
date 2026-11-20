@@ -1,5 +1,10 @@
 import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
 import { capitalised, type AnalysisState, type Collection } from './commonsTypes';
+import { groupedCount } from './groupedCount';
+import { isRealCalendarDay, writtenDay } from './writtenDate';
+
+export { writtenDay, writtenTime } from './writtenDate';
+export { writtenDateTime } from './writtenDateTime';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
   held: 'Held', queued: 'Queued', analyzing: 'Analyzing', analysis_failed: 'Failed', ready: 'Ready',
@@ -51,8 +56,6 @@ export function withCollection(list: readonly Collection[], created: Collection)
   return list.some((c) => c.id === created.id) ? [...list] : [...list, created];
 }
 
-const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
 /**
  * A stored date written out (design): "November 20", with the year only when it isn't the current
  * one ("November 20, 2025"). A timestamp ('…T02:00:00Z', a comment's `created_at`) is the person's
@@ -63,18 +66,43 @@ const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
  */
 export function writtenDate(stored: string, now: Date = new Date()): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(stored);
-  if (!match || !LONG_MONTHS[Number(match[2]) - 1]) return stored;
-  let year = Number(match[1]);
-  let month = Number(match[2]) - 1;
-  let day = Number(match[3]);
-  if (match[4]) {
-    const moment = new Date(stored);
-    if (!Number.isNaN(moment.getTime())) {
-      year = moment.getFullYear();
-      month = moment.getMonth();
-      day = moment.getDate();
-    }
+  if (!match || +match[2] < 1 || +match[2] > 12 || !isRealCalendarDay(stored)) return stored;
+  const date = match[4] ? new Date(stored) : new Date(+match[1], +match[2] - 1, +match[3]);
+  return Number.isNaN(+date) ? stored : writtenDay(date, now);
+}
+
+/** What a folder scan's summary counts are called, in the order they read. Keys are the backend's
+ *  (`scan_folder` in backend/commons/folders.py). */
+export const SCAN_COUNT_WORDS: Record<string, string> = {
+  added: 'added',
+  changed: 'changed',
+  restored: 'restored',
+  archived: 'archived',
+  missing: 'missing',
+  downloading: 'downloading',
+  failed: 'failed',
+};
+
+/**
+ * A folder scan's summary as a line (design): the count first, "3 added · 2 changed". Known keys
+ * read in the order above; an unknown key follows as "<n> <key with spaces>". A zero is left out,
+ * and when nothing is left the line reads "nothing new". `failed` arrives as a list of files, so
+ * its length is the count. `unchanged` is left out: the line reports what is new, so a rescan that found nothing reads
+ * "nothing new" however many files were already known. Flags and other non-counts are not shown. No summary reads
+ * "Not scanned yet".
+ */
+export function scanSummaryText(summary: Record<string, unknown> | null | undefined): string {
+  if (!summary) return 'Not scanned yet';
+  const counts = new Map<string, number>();
+  for (const [key, value] of Object.entries(summary)) {
+    if (key === 'unchanged') continue;
+    if (typeof value === 'number' && Number.isFinite(value)) counts.set(key, value);
+    else if (Array.isArray(value)) counts.set(key, value.length);
   }
-  const name = `${LONG_MONTHS[month]} ${day}`;
-  return year === now.getFullYear() ? name : `${name}, ${year}`;
+  const known = Object.keys(SCAN_COUNT_WORDS).filter((key) => counts.has(key));
+  const unknown = [...counts.keys()].filter((key) => !Object.hasOwn(SCAN_COUNT_WORDS, key));
+  const parts = [...known, ...unknown]
+    .filter((key) => counts.get(key) !== 0)
+    .map((key) => `${groupedCount(counts.get(key) ?? 0)} ${Object.hasOwn(SCAN_COUNT_WORDS, key) ? SCAN_COUNT_WORDS[key] : key.replace(/_/g, ' ')}`);
+  return parts.length > 0 ? parts.join(' · ') : 'nothing new';
 }

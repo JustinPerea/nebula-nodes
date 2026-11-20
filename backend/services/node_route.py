@@ -1602,6 +1602,8 @@ FORMER_DEFAULT_TITLES: dict[str, str] = {
     "reference-set": "Reference Set",
     "remotion-node": "Remotion Composition",
     "video-edit": "Video Edit",
+    # The parenthesised aside became " · experimental" (design); saved labels still carry the old one.
+    "jev-box": "Jev Box (experimental)",
 }
 
 

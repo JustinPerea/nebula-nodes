@@ -53,6 +53,34 @@ const bad: Array<[string, string]> = [
   ['a badge with a lower-case literal on the right of ??', `const a = <span className="commons-badge">{label ?? 'unknown'}</span>;`],
   ['a badge with a stored value after &&', `const a = <span className="commons-badge">{ok && s.state}</span>;`],
   ['a badge with lower-case text leading inside a child element', `const a = <span className="commons-badge"><b>hi</b></span>;`],
+  ['a label with a parenthesised aside in JSX text', `const a = <label>Ignore (comma separated)<input /></label>;`],
+  ['a label with a parenthesised aside in a string', `const a = 'Mode (beta)';`],
+  ['an optional note in parentheses inside a sentence', `const a = <p>Name your board (optional) and save it.</p>;`],
+  ['toLocaleString on a new Date', `const a = <p>{new Date(x).toLocaleString()}</p>;`],
+  ['toLocaleString on a camelCase At name', `const a = <p>{run.createdAt.toLocaleString()}</p>;`],
+  ['toLocaleString on a snake_case at name', `const a = <p>{link.last_scan_at.toLocaleString()}</p>;`],
+  ['a brand in parentheses after a label', `const a = <label>Claude (Anthropic)<input /></label>;`],
+  ['a provider in parentheses in a string', `const a = 'Model (Google)';`],
+  ['a plain space after the dot of an optional aside in JSX', `const a = <span>Moodboard · optional</span>;`],
+  ['a plain space after the dot of a default aside in a string', `const a = <span>{'10 · default'}</span>;`],
+  ['a no-break space before the dot (the old form)', `const a = <span>{'Moodboard\u00a0· optional'}</span>;`],
+  ['a dot then a newline then the aside word in JSX text', "const a = <span>Moodboard ·\n  optional</span>;"],
+  ['a dot, an ordinary space and a note in a separate expression', `const a = <span>{label} · {'optional'}</span>;`],
+  ['a dot, an ordinary space and a template note in a separate expression', "const a = <span>{label} · {`default`}</span>;"],
+  ['a capitalised note in a separate expression after the dot', `const a = <span>{label} · {'Optional'}</span>;`],
+  ['a capitalised status word after the dot (JSX)', `const a = <span>Google API · Setup required</span>;`],
+  ['a capitalised status word after the aside dot', `const a = <span>{'Google API ·\u00a0Setup required'}</span>;`],
+  ['toLocaleString on a time-named value', `const a = <p>{resetTime.toLocaleString()}</p>;`],
+  ['toLocaleString on a ts property', `const a = <p>{entry.ts.toLocaleString()}</p>;`],
+  ['toLocaleTimeString on a ts property', `const a = <p>{entry.ts.toLocaleTimeString()}</p>;`],
+  ['toLocaleString on a timestamp property', `const a = <p>{row.timestamp.toLocaleString()}</p>;`],
+  ['toLocaleTimeString on any receiver', `const a = <p>{foo.toLocaleTimeString()}</p>;`],
+  ['toLocaleDateString on any receiver', `const a = <p>{value.toLocaleDateString()}</p>;`],
+  ['toLocaleString on a run date (lastRunAt)', `const a = <p>{lastRunAt.toLocaleString()}</p>;`],
+  ['toLocaleDateString on a date-named value', `const a = <p>{createdDate.toLocaleDateString()}</p>;`],
+  ['toLocaleTimeString on an ...At property', `const a = <p>{entry.closedAt.toLocaleTimeString()}</p>;`],
+  ['toLocaleString on a snake_case date name', `const a = <p>{status.resets_date.toLocaleString()}</p>;`],
+  ['an Intl.DateTimeFormat', `const a = new Intl.DateTimeFormat(undefined, { month: 'short' }).format(d);`],
 ];
 const fine: Array<[string, string]> = [
   ['an option labelled through a map', `const a = <option key={role} value={role}>{ROLE_LABELS[role]}</option>;`],
@@ -89,6 +117,26 @@ const fine: Array<[string, string]> = [
   ['a property of a label-map lookup with a non-null assertion', `const a = <span className="commons-badge">{SIGHTING_STATE[s.state]!.label}</span>;`],
   ['a property of a badge call', `const a = <span className="commons-badge">{analysisBadge(x).label}</span>;`],
   ['a property of a label call', `const a = <span className="commons-badge">{enumValueLabel(f, v).length}</span>;`],
+  ['format.toLocaleString (a number format, not a date)', `const a = <p>{format.toLocaleString()}</p>;`],
+  ['a duration named elapsedTime', `const a = <p>{elapsedTime.toLocaleString()}</p>;`],
+  ['a lower-case status word after the dot', `const a = <span>{'Google API ·\u00a0setup required'}</span>;`],
+  ['a capitalised proper noun after the dot', `const a = <span>Google · Gemini API key</span>;`],
+  ['a length of time named renderTime', `const a = <p>{renderTime.toLocaleString()}</p>;`],
+  ['a length of time named loadTime', `const a = <p>{loadTime.toLocaleString()}</p>;`],
+  ['a length of time named waitTime', `const a = <p>{waitTime.toLocaleString()}</p>;`],
+  ['a length of time named latencyTime', `const a = <p>{latencyTime.toLocaleString()}</p>;`],
+  ['a length of time named responseTime', `const a = <p>{responseTime.toLocaleString()}</p>;`],
+  ['a length of time named runTime', `const a = <p>{runTime.toLocaleString()}</p>;`],
+  ['a length of time named cpuTime', `const a = <p>{cpuTime.toLocaleString()}</p>;`],
+  ['a length of time named frameTime', `const a = <p>{frameTime.toLocaleString()}</p>;`],
+  ['a length of time named totalTime', `const a = <p>{totalTime.toLocaleString()}</p>;`],
+  ['a duration in ms', `const a = <p>{durationMs.toLocaleString()}</p>;`],
+  ['a timeout in ms', `const a = <p>{timeoutMs.toLocaleString()}</p>;`],
+  ['a unit written out', `const a = <label>Size (pixels)<input /></label>;`],
+  ['a unit in px', `const a = <label>Width (px)<input /></label>;`],
+  ['a count in parentheses', `const a = <h3>Images (3)</h3>;`],
+  ['a long count in parentheses', `const a = <h3>Images (1,204)</h3>;`],
+  ['the aside form with a no-break space after the dot', `const a = <span>{'Moodboard ·\u00a0optional'}</span>;`],
   ['a label call with ?? and a capitalised fallback', `const a = <span className="commons-badge">{enumValueLabel(f, v) ?? 'Unknown'}</span>;`],
   ['a count after &&', `const a = <span className="commons-badge">{ok && count}</span>;`],
   ['a template with a capitalised head', 'const a = <span className="commons-badge">{`Inbox ${n}`}</span>;'],
@@ -97,9 +145,54 @@ const fine: Array<[string, string]> = [
   ['a count concatenated with lower-case text after it', `const a = <span className="commons-badge">{n + ' items'}</span>;`],
   ['a capitalised literal concatenated with a count', `const a = <span className="commons-badge">{'Inbox ' + n}</span>;`],
   ['lower-case text on an element that is no badge', `const a = <span className="commons-meta">inbox</span>;`],
+  ['a label with no aside', `const a = <label>Ignore<input placeholder="Separate names with commas" /></label>;`],
+  ['a unit in parentheses', `const a = <label>Duration (s)<input /></label>;`],
+  ['a key shortcut in parentheses', `const a = <button title="Save canvas (Ctrl+S or ⌘S)">Save</button>;`],
+  ['parentheses in the middle of a sentence', `const a = <p>Library analysis is paused (for now) while the agent reads.</p>;`],
+  ['a media query', `const a = window.matchMedia('(prefers-reduced-motion: reduce)');`],
+  ['an aside after a middle dot', `const a = <option>Any · avoid hidden</option>;`],
+  ['toLocaleString on a number', `const a = <p>{count.toLocaleString('en-US')}</p>;`],
+  ['toLocaleString on a plain identifier', `const a = <p>{limit.toLocaleString()}</p>;`],
+  ['a written date', `const a = <p>{writtenDateTime(batch.closed_at)}</p>;`],
+  ['nodeCount.toLocaleString (a count, not a date)', `const a = <p>{nodeCount.toLocaleString()}</p>;`],
+  ['maxTime.toLocaleString (a bound, a number)', `const a = <p>{maxTime.toLocaleString()}</p>;`],
+  ['minTime.toLocaleString (a bound, a number)', `const a = <p>{minTime.toLocaleString()}</p>;`],
+  ['avgTime.toLocaleString (an average, a number)', `const a = <p>{avgTime.toLocaleString()}</p>;`],
+  ['an aside built with aside() across nodes', `const a = <span>{aside(label, 'optional')}</span>;`],
+  ['a dot then a dynamic note in separate nodes (not an aside word)', `const a = <span>{name} · {count} items</span>;`],
+  ['a no-break space after the dot, written in JSX text across lines', "const a = <span>Moodboard ·\u00a0optional</span>;"],
+];
+
+// .ts files are read for the word check only.
+const badTs: Array<[string, string]> = [
+  ['Intl.DateTimeFormat called without new in a .ts file', `export const f = (d: Date) => Intl.DateTimeFormat('en', { month: 'long' }).format(d);`],
+  ['new Intl.DateTimeFormat in a .ts file', `export const f = (d: Date) => new Intl.DateTimeFormat('en', { month: 'long' }).format(d);`],
+  ['toLocaleDateString on any receiver in a .ts file', `export const f = (d: Date) => d.toLocaleDateString();`],
+  ['toLocaleString on a createdAt in a .ts file', `export const f = (row: { createdAt: Date }) => row.createdAt.toLocaleString();`],
+  ['toDateString on a date name', `export const f = (createdAt: Date) => createdAt.toDateString();`],
+  ['toTimeString on new Date', `export const f = () => new Date().toTimeString();`],
+  ['toUTCString on a date name', `export const f = (row: { closedAt: Date }) => row.closedAt.toUTCString();`],
+  ['toLocaleString on maxTimestamp (the last moment of a range is a date)', `export const f = (r: { maxTimestamp: Date }) => r.maxTimestamp.toLocaleString();`],
+  ['toLocaleString on minTs', `export const f = (r: { minTs: Date }) => r.minTs.toLocaleString();`],
+  ['a parenthesised default in a placeholder', `export const a = { placeholder: 'Rachel (default)' };`],
+  ['a parenthesised optional appended in a lib', "export const b = (l: string) => `${l} (optional)`;"],
+];
+const fineTs: Array<[string, string]> = [
+  ['toLocaleString on a count in a .ts file', `export const f = (nodeCount: number) => nodeCount.toLocaleString();`],
+  ['toDateString on a name that is not a date', `export const f = (thing: { toDateString(): string }) => thing.toDateString();`],
+  ['toLocaleString on maxTime in a .ts file', `export const f = (maxTime: number) => maxTime.toLocaleString();`],
+  ['a label shape in a .ts file (too noisy outside JSX)', `export const a = 'Claude (Anthropic)';`],
+  ['a middle-dot aside in a .ts file', `export const a = { placeholder: 'Rachel · default' };`],
+  ['toLocaleString on an unnamed receiver in a .ts file', `export const a = (d: Date) => d.toLocaleString();`],
 ];
 
 describe('check-enum-labels', () => {
+  it.each(badTs)('fails %s', (_name, source) => {
+    expect(findEnumLabelHits(source, 'x.ts')).toHaveLength(1);
+  });
+  it.each(fineTs)('passes %s', (_name, source) => {
+    expect(findEnumLabelHits(source, 'x.ts')).toEqual([]);
+  });
   it.each(bad)('fails %s', (_name, source) => {
     expect(findEnumLabelHits(source)).toHaveLength(1);
   });

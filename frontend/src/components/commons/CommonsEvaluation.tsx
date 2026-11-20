@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsEvaluationApi as api } from '../../lib/commonsApi';
 import { evaluationComplete } from '../../lib/commonsEvaluationTypes';
@@ -246,7 +247,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
           <span>Reference {String(n + 1).padStart(2, '0')} · {evaluationComplete(item, batch) ? 'Ready' : item.labels?.flagged ? 'Needs review' : 'Incomplete'}</span>
           <button className="commons-button" onClick={() => { setIndex(n); setReview(false); }}>Review reference</button>
         </div>)}
-        <p>{batch.tuning_count} separate tuning references reserved. {batch.excluded_count} unsupported non-media files excluded from the scan.</p>
+        <p>{groupedCount(batch.tuning_count)} separate tuning references reserved. {groupedCount(batch.excluded_count)} unsupported non-media files excluded from the scan.</p>
         {batch.state === 'open' ? <>{batch.assisted_reviews > 0
           ? <p className="commons-notice" role="status">The agent graded these references before blind labels were sealed, so they can no longer be sealed as blind labels. Close them as assisted review to resume library analysis.</p>
           : <button className="commons-button commons-button--primary" disabled={busy || count !== 15 || readOnly} {...offlineMark(readOnly)} onClick={() => void run(() => api.seal(batch.revision))}>Seal all 15 labels</button>}

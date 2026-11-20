@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
@@ -657,13 +658,13 @@ function totalLineFor(cost: RunScopeSummary['cost'], anyMissing: boolean): strin
 function missingFootnote(unlisted: string[], byInput: string[]): string | null {
   const count = unlisted.length + byInput.length;
   if (count === 0) return null;
-  if (unlisted.length > 0 && byInput.length > 0) return `${count} nodes have no price yet, so the run may cost more.`;
+  if (unlisted.length > 0 && byInput.length > 0) return `${groupedCount(count)} nodes have no price yet, so the run may cost more.`;
   if (byInput.length === 1) return `${byInput[0]} is priced by its input, so the run may cost more.`;
   if (byInput.length === 2) return `${byInput[0]} and ${byInput[1]} are priced by their input, so the run may cost more.`;
-  if (byInput.length > 2) return `${count} nodes have no price yet, so the run may cost more.`;
+  if (byInput.length > 2) return `${groupedCount(count)} nodes have no price yet, so the run may cost more.`;
   if (unlisted.length === 1) return `${unlisted[0]} has no list price, so the run may cost more.`;
   if (unlisted.length === 2) return `${unlisted[0]} and ${unlisted[1]} have no list price, so the run may cost more.`;
-  return `${count} nodes have no list price, so the run may cost more.`;
+  return `${groupedCount(count)} nodes have no list price, so the run may cost more.`;
 }
 
 /** The distinct agent names, in order. */

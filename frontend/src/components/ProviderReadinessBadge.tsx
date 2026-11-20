@@ -5,7 +5,13 @@ import { useProviderReadinessStore } from '../store/providerReadinessStore';
 import { modelReadiness } from '../lib/providerReadiness';
 import { withNewKreaMode } from '../lib/kreaConnection';
 import { offlineMark, useBackendOffline } from '../lib/useBackendOffline';
+import { ASIDE_DOT, afterDot } from '../lib/labelAside';
 import '../styles/provider-readiness.css';
+
+/** The label as shown: after its route it starts lower case (a state never repeats its route: lib/providerReadiness); a dot inside it takes the aside form. */
+function shownLabel(label: string, route: string | undefined): string {
+  return (route ? afterDot(label) : label).replace(/ · /g, ASIDE_DOT);
+}
 
 /** Connection feedback never changes model selection, recipe parameters or jobs. */
 export function ProviderReadinessBadge({ definition, params, onSetup }: {
@@ -26,7 +32,7 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
     params ?? withNewKreaMode(definition, defaults, cache.kreaConnectionMode), cache, health);
   // A saved Hugging Face token reads "Settings", as every row with a saved key does (design); "Set up" is for no
   // token. It follows the saved token itself, not the label the token's state is worded with.
-  const manage = readiness.tone === 'success' || readiness.label.startsWith('Configured') || readiness.label === 'Krea signed in'
+  const manage = readiness.tone === 'success' || readiness.label.startsWith('Configured') || readiness.label === 'Signed in'
     || readiness.tokenSaved === true;
   return (
     // Offline (GM, round 16 of PR #114): the line goes neutral grey, since
@@ -37,10 +43,10 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
           <span className="provider-readiness__route">
             {readiness.connectionLabel}
             {readiness.connectionNote && <> <span className="provider-readiness__note">{readiness.connectionNote}</span></>}
-            {' · '}
+            {ASIDE_DOT}
           </span>
         )}
-        <span>{readiness.label}</span>
+        <span>{shownLabel(readiness.label, readiness.connectionLabel)}</span>
       </span>
       {readiness.setupTarget && <button type="button" className="provider-readiness__setup"
         title={readiness.detail}

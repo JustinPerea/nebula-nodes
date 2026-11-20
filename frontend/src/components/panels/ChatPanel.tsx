@@ -51,6 +51,7 @@ import {
 import { onPersonConnected, personPromotions, personUnconfirmed, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import { agentNameInSentence } from '../../lib/personalAgentName';
+import { chatErrorLine } from '../../lib/chatErrorLine';
 import {
   chatCancellationDisconnectNotice,
   chatCancellationNotice,
@@ -153,6 +154,8 @@ type SystemLine = {
   /** Text behind a collapsed Details toggle under the line: a person-only
    * refusal's own words, written for agents (GM, Q116 a). */
   details?: string;
+  /** The line is in the "<Agent> stopped because ..." form: LineText draws it neutral (tone="because"). */
+  because?: true;
   /** Its only reason was this tab not being connected as the person: it goes
    * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
   personGate?: true;
@@ -201,6 +204,8 @@ type ChatMessage =
       parts: MessagePart[];
       id: string;
       streaming: boolean;
+      /** The agent's display name when the turn was sent: an error line names it, not the agent selected by then. */
+      agentName?: string;
       // When the user sends a message via the Enhance button, this holds the
       // id of the text-input node so we can render "Apply to this node"
       // buttons next to any code blocks in the reply.
@@ -409,7 +414,7 @@ function AssistantBubble({ message, agentName, onPermission }: {
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.details ? <><LineText text={part.text} /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} />}
+              {part.details ? <><LineText text={part.text} tone={part.because ? 'because' : undefined} /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} tone={part.because ? 'because' : undefined} />}
             </div>
           );
         }
@@ -515,6 +520,9 @@ export function ChatPanel() {
   const personalAgent = personal
     ? personalAgents?.agents.find((item) => `personal:${item.id}` === agent && item.status === 'ready') ?? null : null;
   const agentDisplayName = personalAgent?.displayName ?? (agent === 'codex' ? 'Codex' : agent === 'claude' ? 'Claude' : 'Your agent');
+  // The ws handler below outlives a render; it reads the name the chat shows now.
+  const agentNameRef = useRef(agentDisplayName);
+  useEffect(() => { agentNameRef.current = agentDisplayName; }, [agentDisplayName]);
   const [modelCatalog, setModelCatalog] = useState<ChatModelCatalog | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -1285,6 +1293,10 @@ export function ChatPanel() {
               setCatalogRefresh((value) => value + 1);
             }
             setMessages((prev) => markThinkingCompleted(prev));
+            const errorPart = (turnAgentName: string | undefined): SystemLine => {
+              const line = chatErrorLine({ message: event.message == null ? null : errText, code: event.code, source: event.source, agentName: turnAgentName ?? agentNameRef.current });
+              return { kind: 'system', text: line.text, tone: 'error', ...(line.details ? { details: line.details } : {}), ...(line.because ? { because: true as const } : {}) };
+            };
             upsertAssistant((msg) => ({
               ...msg,
               parts: [
@@ -1295,7 +1307,7 @@ export function ChatPanel() {
                 ),
                 personRequired
                   ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText, personGate: true }
-                  : { kind: 'system', text: `Warning: ${errText}`, tone: 'error' },
+                  : errorPart(msg.agentName),
               ],
               streaming: false,
             }));
@@ -1651,7 +1663,7 @@ export function ChatPanel() {
         id: newId(),
         images: attachedImages.length ? attachedImages : undefined,
       },
-      { role: 'assistant', id: newId(), streaming: true, parts: [],
+      { role: 'assistant', id: newId(), streaming: true, parts: [], agentName: agentNameRef.current,
         enhanceTargetId: enhanceTarget?.id, enhanceCanvas: enhanceTarget?.canvas },
     ]);
     applyCancellationEvent({ type: 'send' });

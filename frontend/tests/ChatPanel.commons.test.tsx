@@ -128,6 +128,28 @@ describe('Commons chat integration', () => {
     expect(ChatSocket.instances).toHaveLength(1);
     expect(socket.sent[0]).toMatchObject({ personToken: token });
   });
+  it('a stream error reads as a because line with the agent named, drawn neutral, with no "Warning:" lead', async () => {
+    const socket = await connected();
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'error', message: 'connection refused:' }); socket.receive({ type: 'done' }); });
+    const line = await screen.findByText('Claude stopped because the connection was refused.');
+    expect(line.closest('.chat__system')).toHaveAttribute('data-line-because');
+    expect(screen.queryByText(/^Warning:/)).toBeNull();
+  });
+  it('a multi-line stream error reads as a short because line with the raw text behind Details', async () => {
+    const socket = await connected();
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    const trace = 'Traceback (most recent call last):\n  File "x.py", line 1\nValueError: nope';
+    await act(async () => { socket.receive({ type: 'error', message: trace }); socket.receive({ type: 'done' }); });
+    const line = await screen.findByText('Claude stopped because its command failed.');
+    expect(line.closest('.chat__system')).toHaveAttribute('data-line-because');
+    const details = line.parentElement?.querySelector('details') ?? null;
+    expect(details).not.toBeNull();
+    expect(details!.open).toBe(false);
+    expect(details!.textContent).toContain('ValueError: nope');
+  });
   it('raises the person banner when the backend refuses a turn as person_required', async () => {
     const seen = vi.fn(); window.addEventListener('nebula:person-required', seen);
     const socket = await connected();

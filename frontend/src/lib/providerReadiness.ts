@@ -111,16 +111,16 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
     const status = cache.kreaConnection?.status;
     if (!status) return { label: 'Connection not loaded', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
       detail: 'The saved Krea sign-in status has not loaded yet. This recipe keeps its Krea workspace billing connection.' };
-    if (status === 'connected') return { label: 'Krea signed in', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
+    if (status === 'connected') return { label: 'Signed in', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
       detail: 'Uses the signed-in Krea workspace and its compute units. This model is checked against that account when you explicitly run it.' };
-    return { label: status === 'connecting' ? 'Finish Krea sign-in' : status === 'error' ? 'Connection unavailable' : 'Krea sign-in required',
+    return { label: status === 'connecting' ? 'Setup not finished' : status === 'error' ? 'Connection unavailable' : 'Setup required',
       tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Sign in to Krea in Settings; an API key doesn’t replace it.' };
   }
   if (def.apiProvider === 'nous') {
     const target: ProviderSetupTarget = { kind: 'external', provider: 'nous' };
     const ready: ModelReadiness = health.loading ? { label: 'Checking connection', tone: 'neutral', setupTarget: target,
       detail: 'The local Nous OAuth credential is being checked without generating.' }
-      : checkedReadiness('Nous', target, health) ?? { label: health.error ? 'Check unavailable' : 'Sign-in not checked',
+      : checkedReadiness('Nous', target, health) ?? { label: health.error ? 'Check unavailable' : 'Not checked',
       tone: health.error ? 'warning' : 'neutral', setupTarget: target,
       detail: 'Nous uses a local Hermes OAuth login, not an API-key field. Open setup for the sign-in instructions and use Check connections.' };
     return { ...ready, connectionLabel: 'Nous sign-in' };
@@ -183,7 +183,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
 /** A maker's Hugging Face Space route (handler hf-space: Idol). Keyless
  * (PR #203 round 7: the first live call ran with no token), in GM's r12
  * words, and design's case: without the token "Hugging Face · free" and that it can be busy;
- * with it "Hugging Face token · Saved" (the shared key vocabulary: "Saved"
+ * with it "Hugging Face token · saved" (the shared key vocabulary: "Saved"
  * until a check runs, "Connected" after one passes, "Not connected" after
  * one fails) and "Idol uses your Hugging Face allowance." A keyed Space route
  * (one with `keys`, as Idol's was in rounds 4 to 6) says what is needed

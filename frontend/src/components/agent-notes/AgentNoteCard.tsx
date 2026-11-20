@@ -71,7 +71,7 @@ export function AgentNoteCard({
           type="button"
           className="agent-note-card__close"
           aria-label="Dismiss this update"
-          title={dismissLock.locked ? undefined : 'Dismiss (it stays in Updates)'}
+          title={dismissLock.locked ? undefined : 'Dismiss. It stays in Updates.'}
           {...dismissLock.control()}
           onClick={(event) => {
             event.stopPropagation();

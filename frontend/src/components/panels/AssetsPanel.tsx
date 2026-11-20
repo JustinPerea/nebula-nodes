@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { useReactFlow } from '@xyflow/react';
@@ -312,7 +313,7 @@ export function AssetsPanel() {
                   key={c.id}
                   agentItem={{ surface: 'character', id: c.id }}
                   name={c.name}
-                  sub={`${c.referenceViews.length} views`}
+                  sub={`${groupedCount(c.referenceViews.length)} views`}
                   thumbnail={c.thumbnail}
                   localOnly
                   emptyThumb="◐"

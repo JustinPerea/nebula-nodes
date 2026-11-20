@@ -23,6 +23,7 @@
  * site (warnFailure), lost connections aren't.
  */
 
+import { groupedCount } from './groupedCount';
 import { backendText } from './backendText';
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
@@ -359,7 +360,7 @@ export function closeBatchFailedLine(error: unknown, held: boolean = personGateH
  * the Commons turned off (round 18k): it destroyed nothing, so its line is neutral
  * (CommonsErrorLine). */
 export function isBecauseFailure(text: string): boolean {
-  return NEBULA_COULDNT.test(text) || /^Commons is turned off because /.test(text);
+  return NEBULA_COULDNT.test(text) || /^(?:Commons is turned off|[^.!?]{1,60} stopped) because /.test(text);
 }
 
 /** GM r41: the close's line says to try again (the close button beside it is the retry), or
@@ -1343,7 +1344,7 @@ export function countsInstead(count: number): boolean {
  * lines (lib/placeholderRunConfirm).
  */
 export function nodeNameList(names: string[]): string {
-  if (countsInstead(names.length)) return `${names.length} nodes`;
+  if (countsInstead(names.length)) return `${groupedCount(names.length)} nodes`;
   const groups = new Map<string, number>();
   for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
   return joinedList([...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`)));
@@ -1358,7 +1359,7 @@ export function nodeNameList(names: string[]): string {
  */
 export function agentNameList(names: string[]): string {
   const agents = [...new Set(names)];
-  if (countsInstead(agents.length)) return `${agents.length} agents`;
+  if (countsInstead(agents.length)) return `${groupedCount(agents.length)} agents`;
   return joinedList(agents.map((name, at) => (at === 0 ? name : agentNameInSentence(name))));
 }
 

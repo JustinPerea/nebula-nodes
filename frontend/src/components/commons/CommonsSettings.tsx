@@ -1,8 +1,9 @@
+import { groupedCount, countNoun } from '../../lib/groupedCount';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import { deviceStateLabel, type CommonsStatus, type FolderLink } from '../../lib/commonsTypes';
 import { saveBlob } from '../../lib/commonsFiles';
-import { linkedFolderNotice } from '../../lib/commonsFormat';
+import { linkedFolderNotice, scanSummaryText, writtenDateTime } from '../../lib/commonsFormat';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { LineText } from '../LineText';
@@ -24,12 +25,16 @@ const NUMBER_SETTINGS: { key: string; label: string; step: number }[] = [
   { key: 'load_threshold', label: 'Pause above load', step: 1 },
 ];
 
-function summaryText(summary: Record<string, unknown> | null): string {
-  if (!summary) return 'not scanned yet';
-  return Object.entries(summary)
-    .filter(([, v]) => typeof v === 'number' || typeof v === 'string')
-    .map(([k, v]) => `${k.replace(/_/g, ' ')} ${v}`)
-    .join(' · ');
+/**
+ * "Last scan November 20, 3:00 AM · 3 added" (design). A time with no summary reads "Last scan
+ * November 20, 3:00 AM"; a summary with no time keeps the prefix, "Last scan · 3 added", so the
+ * line still says what it reports; neither reads "Not scanned yet".
+ */
+function scanLine(link: FolderLink): string {
+  const when = link.last_scan_at ? `Last scan ${writtenDateTime(link.last_scan_at)}` : '';
+  if (!link.last_scan_summary) return when || 'Not scanned yet';
+  const counts = scanSummaryText(link.last_scan_summary);
+  return when ? `${when} · ${counts}` : `Last scan · ${counts}`;
 }
 
 function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<unknown>) => Promise<boolean> }) {
@@ -41,8 +46,10 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
         <button type="button" className="commons-button" onClick={() => run(() => commonsApi.rescan(link.id))}>Rescan</button>
       </div>
       <label className="commons-field">
-        Ignore (comma separated)
+        Ignore
         <input
+          aria-describedby={link.ignores.length > 0 ? `commons-ignore-hint-${link.id}` : undefined}
+          placeholder="Separate names with commas"
           key={link.ignores.join(',')}
           defaultValue={link.ignores.join(', ')}
           onBlur={(event) => {
@@ -54,9 +61,8 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
           }}
         />
       </label>
-      <p className="commons-meta">
-        Last scan {link.last_scan_at ? new Date(link.last_scan_at).toLocaleString() : 'never'} · {summaryText(link.last_scan_summary)}
-      </p>
+      {link.ignores.length > 0 && <span id={`commons-ignore-hint-${link.id}`} className="commons-meta">Separate names with commas</span>}
+      <p className="commons-meta">{scanLine(link)}</p>
       {pending.length > 0 && (
         <ul className="commons-list">
           {pending.map((d) => (
@@ -233,9 +239,9 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         <h3 className="commons-heading">Meter</h3>
         {status && (
           <p className="commons-meta">
-            Analysis calls today {status.meter.calls} / {status.meter.cap}
-            {status.agent_adds ? ` · agent adds ${status.agent_adds.calls} / ${status.agent_adds.cap}` : ''}
-            {' · '}resets {new Date(status.meter.resets_at).toLocaleString()}
+            Analysis calls today {groupedCount(status.meter.calls)} / {groupedCount(status.meter.cap)}
+            {status.agent_adds ? ` · agent adds ${groupedCount(status.agent_adds.calls)} / ${groupedCount(status.agent_adds.cap)}` : ''}
+            {' · '}resets {writtenDateTime(status.meter.resets_at)}
           </p>
         )}
         <fieldset className="commons-fieldset" disabled={readOnly} {...offlineMark(readOnly)}>
@@ -275,7 +281,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             {candidates.map((c) => (
               <li key={c.term} className="commons-list__item">
                 <strong>{c.term}</strong>
-                <span className="commons-meta">×{c.count}</span>
+                <span className="commons-meta">×{groupedCount(c.count)}</span>
                 {c.assets.slice(0, 6).map((id) => (
                   <button key={id} type="button" className="commons-link" onClick={() => onOpenAsset(id)}>{id.slice(-6)}</button>
                 ))}
@@ -292,7 +298,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.reanalyzeStale();
-              showMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
+              showMessage(`Queued ${countNoun(r.queued, 'stale item')} for re-analysis.`);
             })}
           >
             Re-analyze stale
@@ -301,7 +307,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.importMoodboards();
-              showMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);
+              showMessage(`Imported ${groupedCount(r.added)} from ${countNoun(r.collections, 'moodboard')}; skipped ${groupedCount(r.skipped.length)}.`);
             })}
           >
             Import moodboards

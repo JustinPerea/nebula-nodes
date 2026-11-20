@@ -1,3 +1,4 @@
+import { countNoun } from '../../lib/groupedCount';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, Eye } from 'lucide-react';
@@ -384,7 +385,7 @@ export function ProposalBar() {
   const detailsLabel = hasChangeLines ? 'What “Accept” saves' : 'Every node that can\u2019t run';
   const detailsCount = hasChangeLines
     ? changeCountLabel(changeTotal)
-    : `${notReadyInDetails.length} node${notReadyInDetails.length === 1 ? '' : 's'}`;
+    : countNoun(notReadyInDetails.length, 'node');
   const priced = current.view.run.length > 0 && current.view.cost.paidRuns > 0
     && proposalEstimateLabel(current.view) !== null;
   const plan = proposalPlan(current.view);

@@ -727,6 +727,9 @@ body:not(.app-slava-restraint) .agent-log__time {
 .agent-log__time {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  /* Times vary in width ("3:06 PM", "12:59 PM"); a fixed minimum keeps the source column from shifting. */
+  min-width: 8ch;
+  text-align: right;
 }
 
 body:not(.app-slava-restraint) .agent-log__source {

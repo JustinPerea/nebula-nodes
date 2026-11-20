@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import type { CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { AssetProposalView } from '../../lib/assetProposals';
@@ -21,7 +22,7 @@ interface Waiting {
 
 function asks(view: AssetProposalView): string {
   const edits = view.change.edits ?? [];
-  if (edits.length > 1) return `make ${edits.length} changes to a reference`;
+  if (edits.length > 1) return `make ${groupedCount(edits.length)} changes to a reference`;
   const only = edits[0];
   if (only && 'membership' in only && only.membership.accept && Object.keys(only.membership).length === 2) {
     return 'take a reference out of the inbox';
@@ -84,7 +85,7 @@ export function CommonsProposalsLine({ onOpen }: { onOpen: (assetId: string) => 
         // reference"; several: "Codex has 2 requests to change a reference",
         // "Codex and Claude Code have 2 requests to change a reference".
         const words = line.count > 1
-          ? ` ${line.agents.length > 1 ? 'have' : 'has'} ${line.count} requests to change a reference`
+          ? ` ${line.agents.length > 1 ? 'have' : 'has'} ${groupedCount(line.count)} requests to change a reference`
           : ` asks to ${line.asks}`;
         return (
           <p key={line.assetId} className="commons-notice commons-notice--proposal" role="status" data-commons-asset={line.assetId}
