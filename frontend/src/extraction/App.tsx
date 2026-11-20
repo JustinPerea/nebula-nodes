@@ -217,7 +217,12 @@ function Page({ token }: { token: string }) {
             aria-label="Records folder"
             spellCheck={false}
           />
-          <button type="submit" className="ex-button" disabled={!folderInput.trim()}>
+          <button
+            type="submit"
+            className="ex-button"
+            disabled={!folderInput.trim()}
+            title={folderInput.trim() ? undefined : 'You can use a folder after you type its path.'}
+          >
             Use folder
           </button>
         </form>

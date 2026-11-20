@@ -119,3 +119,20 @@ describe('a read that finishes after another record is opened', () => {
     expect(screen.queryAllByTestId('region-row')).toHaveLength(0) // folder one's reading didn't land here
   })
 })
+
+describe('the folder button', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('says what unlocks it while it is disabled', async () => {
+    window.localStorage.removeItem('extraction.folder')
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{}', { status: 404 }))))
+    render(<App token="t" />)
+    const button = screen.getByRole('button', { name: 'Use folder' }) as HTMLButtonElement
+    fireEvent.change(screen.getByLabelText('Records folder'), { target: { value: '  ' } })
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('title')).toBe('You can use a folder after you type its path.')
+    fireEvent.change(screen.getByLabelText('Records folder'), { target: { value: '/records' } })
+    expect(button.disabled).toBe(false)
+    expect(button.hasAttribute('title')).toBe(false)
+  })
+})
