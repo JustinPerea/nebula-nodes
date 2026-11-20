@@ -7,6 +7,7 @@ parses arguments and prints.
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -29,12 +30,18 @@ def _print_json(data: Any) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+# The frontend's ENDS_A_SENTENCE (lib/errorCopy.ts): closing punctuation, then any closing quotes or brackets.
+_ENDS_A_SENTENCE = re.compile("[.?!\u2026][\u201d\u2019\"')\\]]*$")
+
+
 def _skipped_line(message: str) -> str:
     """A skipped step, indented, with one closing full stop: the backend’s
     lines may or may not carry their own, and a line ending in a question
     mark, an exclamation mark or an ellipsis is left as it is."""
     text = str(message).rstrip()
-    return f"  {text}" if text.endswith((".", "?", "!", "…")) else f"  {text}."
+    if not text:
+        return ""
+    return f"  {text}" if _ENDS_A_SENTENCE.search(text) else f"  {text}."
 
 
 def _changes_flags(args) -> bool:

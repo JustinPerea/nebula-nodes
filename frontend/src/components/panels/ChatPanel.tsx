@@ -1794,7 +1794,8 @@ export function ChatPanel() {
   // The meta line says the panel's state only while it is busy ("thinking…", "canceling…", "cancel failed"):
   // "ready" next to a sign-in problem contradicted it, and an idle panel needs no word. A running turn means the
   // agent can run, so those states show whenever they hold, whatever the status check says (design).
-  const panelState = busy || cancelState === 'requested' || cancelState === 'failed' ? status : null;
+  // A failed cancel matters only while its turn still runs: once the turn ends, the word goes too.
+  const panelState = busy || cancelState === 'requested' ? status : null;
   // The session's id means nothing to a person on the line itself: it rides in the hover title.
   const sessionTitle = sessionId ? `Session ${sessionId}` : undefined;
   // The status call's `message` is the sign-in method's own word ("claude.ai", "none") when the CLI says nothing else, which

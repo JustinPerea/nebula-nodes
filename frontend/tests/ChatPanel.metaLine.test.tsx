@@ -165,4 +165,19 @@ describe('the panel state on the meta line while the agent status is loading or 
     await act(async () => socket.receive({ type: 'cancellation', status: 'confirmed' }));
     expect(meta().textContent).not.toMatch(/ · (ready|thinking…|canceling…|cancel failed)/);
   });
+
+  it('drops "cancel failed" once the turn it belonged to has ended', async () => {
+    apiMocks.fetchClaudeStatus.mockRejectedValue(new Error('boom'));
+    render(<ChatPanel />);
+    await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
+    const socket = ChatTestSocket.instances[0];
+    await act(async () => socket.open());
+    const input = screen.getByPlaceholderText('Message…');
+    fireEvent.change(input, { target: { value: 'Hello' } });
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
+    await waitFor(() => expect(meta().textContent).toMatch(/ · thinking…$/));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop response' })); });
+    await act(async () => socket.receive({ type: 'cancellation', status: 'failed', active: false, message: 'x' }));
+    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|canceling…|cancel failed)/);
+  });
 });

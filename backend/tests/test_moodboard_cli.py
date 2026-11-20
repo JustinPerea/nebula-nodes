@@ -1448,3 +1448,6 @@ def test_skipped_lines_end_in_one_full_stop(capsys):
                      "  Nebula couldn’t undo “Changed the direction” because only you can change the direction.",
                      "  Is that right?", "  Gone…"]
     assert moodboard_cmd._skipped_line("Done..") == "  Done.."
+    assert moodboard_cmd._skipped_line("It said \u201cok.\u201d") == "  It said \u201cok.\u201d"
+    assert moodboard_cmd._skipped_line("(left as is.)") == "  (left as is.)"
+    assert moodboard_cmd._skipped_line("   ") == ""
