@@ -546,9 +546,14 @@ def catalog_restore_lines(restore: dict[str, Any], *, canvas_block: bool = False
     return lines
 
 
+# Proposed wording; design hasn’t seen it. The one place the line lives.
+TAB_KEPT_LINE = "A tab is open, but it’s keeping edits of its own, so its view isn’t shared."
+
+
 def tab_state_line(view: Any, node_count: int | None = None) -> str:
-    """Whether anyone is looking at the canvas, in the design’s three states: no
-    tab, a tab whose view report is over 30 s old (``view.stale``), or watching,
+    """Whether anyone is looking at the canvas, in the design’s states: no
+    tab, a tab that keeps edits of its own (``view.kept``: its view isn’t shared),
+    a tab whose view report is over 30 s old (``view.stale``), or watching,
     which says what the view shows from ``view.onScreen`` (a count, sent when the
     visible area is known) and the canvas’s ``node_count``. A payload from before
     ``view.connected`` reads as no tab while stale."""
@@ -556,6 +561,9 @@ def tab_state_line(view: Any, node_count: int | None = None) -> str:
     stale = bool(view.get("stale", True))
     if not view.get("connected", not stale):
         return "No Nebula tab is open."
+    if view.get("kept"):
+        # The tab keeps edits of its own: its view is hidden by design, not old.
+        return TAB_KEPT_LINE
     if stale:
         return "A tab is open, but its view is more than 30 s old."
     if node_count == 0:

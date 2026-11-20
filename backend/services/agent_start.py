@@ -187,15 +187,18 @@ def _node_entry(node: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _view_part(snapshot: Mapping[str, Any]) -> dict[str, Any]:
-    """`stale`, `connected` and, when the browser reported its visible area,
-    `onScreen`: how many nodes are in it."""
+    """`stale`, `connected`, `kept` (only when true: the person’s tab keeps edits of its own, so
+    its view isn’t shared) and, when the browser reported its visible area,
+    `onScreen`: how many of the canvas’s nodes are in it (counted over every
+    node the browser reported, not only the listed ones)."""
     view = snapshot.get("view")
     view = view if isinstance(view, Mapping) else {}
     stale = bool(view.get("stale", True))
     part: dict[str, Any] = {"stale": stale, "connected": bool(view.get("connected", not stale))}
-    if view.get("visibleArea"):
-        part["onScreen"] = sum(1 for node in snapshot.get("nodes") or []
-                               if isinstance(node, Mapping) and node.get("onScreen") is True)
+    if view.get("kept"):
+        part["kept"] = True
+    if view.get("visibleArea") and isinstance(view.get("onScreenCount"), int):
+        part["onScreen"] = view["onScreenCount"]
     return part
 
 

@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from services.text_cut import clean_name
+
 # The words whose plural isn't the singular plus "s".
 _PLURALS = {"canvas": "canvases", "copy": "copies", "entry": "entries", "proxy": "proxies"}
 
@@ -72,4 +74,5 @@ def port_words(label: Any, port_id: str) -> str:
 
 def collapsed_owner(name: str, port: str | None) -> str:
     """“Preview” for a node with one port of results, “Preview”’s images with more."""
-    return f"“{name}”’s {port}" if port else f"“{name}”"
+    shown = clean_name(name) or "?"  # a label is free text: a newline mustn’t split the one-line summary
+    return f"“{shown}”’s {port}" if port else f"“{shown}”"

@@ -22,6 +22,7 @@ def _results(value, port_type="Moodboard", port="moodboard") -> dict:
 
 NAMES = {"n3": "Preview"}
 LOOKUP = {"names": NAMES, "ports": {"n3": {"moodboard": "Moodboard", "images": "Images"}}}
+WITH_NAMES = {"names": NAMES, "ports": LOOKUP["ports"]}  # as the run endpoints send them
 
 
 def test_a_51_kb_bundle_prints_as_one_exact_line():
@@ -113,14 +114,15 @@ def test_verbose_prints_the_value_whole():
 
 
 class _Client:
+    """A client with no read of the canvas: a name must come with the result."""
+
     def __init__(self, result):
         self.result = result
 
     def get_nodes(self):
-        return {"nodes": [{"id": "nebula-moodboard", "displayName": "Moodboard"}]}
+        raise AssertionError("a run result reads nothing but the run")
 
-    def get_graph(self):
-        return {"nodes": [{"id": "n3", "definitionId": "nebula-moodboard", "label": "Preview"}]}
+    get_graph = get_nodes
 
     def run_graph(self, target_node_id=None, wait=0):
         return self.result
@@ -134,7 +136,7 @@ def _run(result, **flags):
 
 
 def test_the_cli_run_names_the_node_as_the_canvas_does_and_verbose_and_json_switch_it():
-    result = {"status": "finished", **_results(_bundle())}
+    result = {"status": "finished", **_results(_bundle()), **WITH_NAMES}
     code, text = _run(result)
     assert code == 0 and text.splitlines()[0] == "“Preview” · moodboard bundle, 51 KB. Add --verbose to print it."
     code, text = _run(result, verbose=True)
@@ -161,7 +163,7 @@ def test_mcp_summarises_a_big_dict_or_list_and_leaves_the_rest():
     import mcp_server
 
     big = {"moodboard": {"type": "Moodboard", "value": _bundle()},
-           "images": {"type": "Array", "value": ["/api/outputs/" + "a" * 100 + ".png"] * 60},
+           "images": {"type": "Array", "value": [{"url": "/api/outputs/" + "a" * 100 + ".png"}] * 60},
            "small": {"type": "Any", "value": {"a": 1}},
            "text": {"type": "Text", "value": "t" * 5000}}
     out = mcp_server._brief_outputs(big, "n3", lambda: LOOKUP)
@@ -172,12 +174,12 @@ def test_mcp_summarises_a_big_dict_or_list_and_leaves_the_rest():
     assert out["text"]["value"].endswith("(5000 characters; view_output shows it all)")
 
 
-def test_mcp_run_result_carries_the_summary(monkeypatch):
+def test_mcp_run_result_carries_the_summary():
     import mcp_server
 
-    monkeypatch.setattr(mcp_server, "_canvas_node_names", lambda ctx: LOOKUP)
+    assert not hasattr(mcp_server, "_canvas_node_names")  # no canvas read for a name
     shown = json.loads(mcp_server._run_result(
-        {"status": "finished", "runId": "r1", **_results(_bundle())}, None)[0])
+        {"status": "finished", "runId": "r1", **_results(_bundle()), **WITH_NAMES}, None)[0])
     assert shown["outputs"]["n3"]["moodboard"]["value"] == "“Preview” · moodboard bundle, 51 KB. view_output shows it whole."
 
 
@@ -265,14 +267,84 @@ def test_the_canvas_part_sends_on_screen_only_when_the_visible_area_is_known():
     from services import agent_start
 
     nodes = [{"id": f"n{i}", "name": f"N{i}", "onScreen": i < 2} for i in range(5)]
-    known = agent_start.canvas_part({"view": {"stale": False, "connected": True, "visibleArea": {"x": 0, "y": 0, "width": 9, "height": 9}},
+    known = agent_start.canvas_part({"view": {"stale": False, "connected": True, "onScreenCount": 2,
+                                              "visibleArea": {"x": 0, "y": 0, "width": 9, "height": 9}},
                                      "nodes": nodes, "nodeCount": 5, "selection": []}, project=None, caller_id=None, via="cli")
     assert known["view"] == {"stale": False, "connected": True, "onScreen": 2}
     unknown = agent_start.canvas_part({"view": {"stale": False, "connected": True, "visibleArea": None},
                                        "nodes": [{"id": "n0", "name": "N0"}], "nodeCount": 1, "selection": []},
                                       project=None, caller_id=None, via="cli")
     assert unknown["view"] == {"stale": False, "connected": True}
-    none_on = agent_start.canvas_part({"view": {"stale": False, "connected": True, "visibleArea": {"x": 0}},
+    none_on = agent_start.canvas_part({"view": {"stale": False, "connected": True, "visibleArea": {"x": 0},
+                                              "onScreenCount": 0},
                                        "nodes": [{"id": "n0", "name": "N0", "onScreen": False}], "nodeCount": 1,
                                        "selection": []}, project=None, caller_id=None, via="cli")
     assert none_on["view"]["onScreen"] == 0
+
+
+def test_the_one_node_off_screen_line():
+    # A canvas of one, the visible area known, the node outside it.
+    assert tab_state_line({"connected": True, "stale": False, "onScreen": 0}, 1) == "Watching: the one node is off screen."
+    assert "  Watching: the one node is off screen.\n" in format_start(
+        {"canvas": {"nodeCount": 1, "view": {"connected": True, "stale": False, "onScreen": 0}}, "pins": {},
+         "proposals": {}, "boards": {}, "nodes": {}, "spend": {}, "next": {}})
+
+
+# -- a tab that keeps edits of its own ------------------------------------------------------------
+
+KEPT = "A tab is open, but it’s keeping edits of its own, so its view isn’t shared."
+
+
+def test_a_tab_that_keeps_edits_says_so_not_that_its_view_is_old():
+    # Kept mode hides the view, so it reads stale; the line says why.
+    assert tab_state_line({"connected": True, "stale": True, "kept": True}) == KEPT
+    assert tab_state_line({"connected": True, "stale": True, "kept": True, "onScreen": 3}, 14) == KEPT
+    assert tab_state_line({"connected": False, "stale": True, "kept": True}) == NO_TAB
+    assert tab_state_line({"connected": True, "stale": True, "kept": False}) == OLD_VIEW
+    assert f"  {KEPT}\n" in format_start(_start({"connected": True, "stale": True, "kept": True}))
+
+
+def test_the_canvas_part_sends_kept_only_when_it_is_true():
+    from services import agent_start
+
+    part = lambda view: agent_start.canvas_part({"view": view, "nodes": [], "selection": []},  # noqa: E731
+                                                project=None, caller_id=None, via="cli")["view"]
+    assert part({"stale": True, "connected": True, "kept": True}) == {"stale": True, "connected": True, "kept": True}
+    assert part({"stale": True, "connected": True, "kept": False}) == {"stale": True, "connected": True}
+
+
+def test_a_long_label_cannot_split_the_one_line_summary():
+    text = format_run_results(_results(_bundle()), names={"n3": "Two\nlines\x1b[31m and a\u2028break"})
+    first = text.splitlines()[0]
+    assert first == "“Two lines and a break” · moodboard bundle, 51 KB. Add --verbose to print it."
+    import mcp_server
+
+    out = mcp_server._brief_outputs({"moodboard": {"type": "Moodboard", "value": _bundle()}}, "n3",
+                                    {"names": {"n3": "Two\nlines"}, "ports": {}})
+    assert out["moodboard"]["value"] == "“Two lines” · moodboard bundle, 51 KB. view_output shows it whole."
+
+
+def test_a_finished_run_prints_its_results_without_a_name_lookup():
+    """A result that carries no names still prints, by id, and keeps its exit code
+    (a failed read of the canvas used to exit the CLI before it printed)."""
+    result = {"status": "finished", **_results(_bundle())}
+    code, text = _run(result)
+    assert code == 0 and text.splitlines()[0] == "“n3” · moodboard bundle, 51 KB. Add --verbose to print it."
+    failed = {"status": "failed", "error": "x", **_results(_bundle())}
+    out = io.StringIO()
+    with redirect_stdout(out), redirect_stderr(io.StringIO()):
+        assert execute.run_node(_Client(failed), "n3") == 1
+    assert out.getvalue().splitlines()[0].startswith("“n3” · moodboard bundle")
+
+
+def test_a_list_of_output_file_paths_is_never_collapsed_by_mcp():
+    import mcp_server
+
+    paths = ["/api/outputs/" + "a" * 100 + f"{i}.png" for i in range(60)]
+    out = mcp_server._brief_outputs({"images": {"type": "Image", "value": paths}}, "n3", lambda: LOOKUP)
+    assert len(out["images"]["value"]) == 60 and out["images"]["value"][0].endswith("a" * 100 + "0.png")
+    assert out["images"]["value"][0].startswith("http")  # absolute, as every output path is
+    # A list of anything else over the limit still collapses.
+    mixed = paths[:-1] + [{"url": "x"}]
+    assert "view_output shows it whole." in mcp_server._brief_outputs(
+        {"images": {"type": "Array", "value": mixed}}, "n3", lambda: LOOKUP)["images"]["value"]

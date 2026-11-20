@@ -28,7 +28,7 @@ Code's 10,000-token warning and its 50,000-character file cut:
 
 | Part | What's in it | Past its budget |
 |---|---|---|
-| `canvas` | The open project, `view` (`connected`: a Nebula tab is open now; `stale`: its view report is more than 30 s old), the selection, other agents' cursors, and each node's id, name, `definitionId`, state, `onScreen`, `inputsFrom` and up to 8 params (each cut to 60 characters, redacted as `look_at_canvas` redacts them) | The first nodes in full (selected, then on screen), the rest as `others: {id: name}`, `truncated: true`, and "look_at_canvas gives every node" |
+| `canvas` | The open project, `view` (`connected`: a Nebula tab is open now; `kept`: that tab keeps edits of its own, so its view isn’t shared; `stale`: its view report is more than 30 s old), the selection, other agents' cursors, and each node's id, name, `definitionId`, state, `onScreen`, `inputsFrom` and up to 8 params (each cut to 60 characters, redacted as `look_at_canvas` redacts them) | The first nodes in full (selected, then on screen), the rest as `others: {id: name}`, `truncated: true`, and "look_at_canvas gives every node" |
 | `pins` | Open pins: id, text, anchor | The 10 newest, and `openCount` |
 | `proposals` | Open proposals, briefly | 5, and `count` |
 | `boards` | Every moodboard: id, name, `where` (`current`, `global` or the project's name), image count, analyzed or not, Direction cut to 80 characters. Boards in Recently deleted, or in a project there, are left out. `read` is how to read one (`moodboard_get(board="<id or exact name>")`; over the CLI `nebula moodboard show <id>`). `use` is how to put one on the canvas: the exact `edit_canvas` call for a Moodboard node (`nebula-moodboard`, the board in its `moodboard` param, sending from its `moodboard` port) connected to a Preview's `input` (or, over the CLI, the `nebula apply` flags) | 30 rows (this project, then Global, then the rest by last edit), `count`, and, when rows were cut, `more`: `moodboard_list(project_id=...)` lists a project's boards and Global's |
@@ -902,7 +902,7 @@ And these canvas tools:
   provider quoted a key in that message (OpenAI's 401 shows its first and
   last characters), the key is `<key hidden>`; `get_project` and `get_run`
   errors are cleaned the same way (`services/key_echoes.py`).
-  `view.connected` is true while a Nebula tab is open and `view.stale` is true when its view report is more than 30 seconds old. `nebula context` says which: “No Nebula tab is open.”, “A tab is open, but its view is more than 30 s old.” or “Watching: …” with what the view shows: “6 of 14 nodes on screen”, “all 14 nodes on screen”, “none of the 14 nodes on screen”, “an empty canvas”, or “the canvas” when the visible area isn’t known. `view.onScreen` (a count) is sent only when the browser reported its visible area.
+  `view.connected` is true while a Nebula tab is open (one opened without the person link counts), `view.kept` is true while that tab keeps edits of its own, and `view.stale` is true when its view report is more than 30 seconds old. `nebula context` says which: “No Nebula tab is open.”, “A tab is open, but it’s keeping edits of its own, so its view isn’t shared.”, “A tab is open, but its view is more than 30 s old.” or “Watching: …” with what the view shows: “6 of 14 nodes on screen”, “all 14 nodes on screen”, “none of the 14 nodes on screen”, “an empty canvas”, or “the canvas” when the visible area isn’t known. `view.onScreen` (a count over every node the browser reported, not only the listed ones) is sent only when the browser reported its visible area.
   `proposals` lists the open proposals (id, agent, note, status).
   `providerHolds` lists the paid starts Nebula holds, as graph export has
   them: `recoveries` (an accepted World Labs operation a rerun resumes
@@ -6100,7 +6100,7 @@ to print it.`
 `--verbose` on `nebula run`, `run-all` and `result` prints them whole; `--json` prints
 the raw result and keeps the exit codes. `run_nodes` and `get_run` in MCP send the same
 line for a dict or list over 4000 characters (“Preview” · moodboard bundle, 51 KB.
-view_output shows it whole.; “Preview”’s images · … with more than one port), and cut a longer string at 4000.
+view_output shows it whole.; “Preview”’s images · … with more than one port), and cut a longer string at 4000. A list of output file paths (“/api/outputs/…”) always comes back whole: no tool returns the full list. The names in these lines come with the run result (`names`, node id to the name the canvas shows, and `ports`, node id to {output port id: label}, for the nodes in `results`, on `POST /api/graph/run` and `GET /api/graph/runs/{id}`); printing a result reads nothing else, so it never moves your Cinema scene reads forward.
 
 Finished outputs land on the canvas as each node completes, so a stopped
 run keeps what it made. The backend remembers the last 50 finished CLI runs

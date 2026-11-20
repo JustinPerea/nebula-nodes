@@ -9565,10 +9565,15 @@ async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _mark_tab_connected(snapshot: dict[str, Any]) -> None:
-    """Add ``view.connected``: a person's tab has its socket open now. ``stale``
-    stays "no view report in 30 s", so a tab that is open but quiet reads as
-    connected and stale (design: three states in `nebula context`)."""
-    snapshot.setdefault("view", {})["connected"] = bool(manager.browser_connections)
+    """Add ``view.connected``: a canvas tab is open now (any socket without an
+    agent marker, so a tab opened without the person link counts: it draws the
+    canvas and reports its view too), and ``view.kept``: that tab keeps edits of
+    its own, which hides its view from agents. ``stale`` stays "no view report
+    in 30 s", so a tab that is open but quiet reads as connected and stale
+    (design: the states in `nebula context`)."""
+    view = snapshot.setdefault("view", {})
+    view["connected"] = manager.canvas_open()
+    view["kept"] = manager.kept_in_tab()
 
 
 @app.get("/api/canvas/snapshot")
@@ -26551,7 +26556,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # A run that crashed after it started is a failed run, never an error
     # answer an agent could read as "didn't start" (report_failure).
     response = await _cli_run_response(run_id, None if wait is None else float(wait), report_failure=True)
-    return _hide_run_key_echoes({**response, **synced})
+    return _hide_run_key_echoes(_with_result_names({**response, **synced}))
 
 
 # The Agent Log's heading for a run its pre-call check stopped: the card's
@@ -26899,13 +26904,14 @@ async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
         return {"runId": run_id, "status": "cancelled", "source": "canvas", "neverStarted": True}
     if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
         response = await _canvas_run_response(run_id, wait)
-        return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
-                                     "nodes": reports.progress(run_id)})
+        return _hide_run_key_echoes(_with_result_names(
+            {**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
+             "nodes": reports.progress(run_id)}))
     response = await _cli_run_response(run_id, wait, report_failure=True)
     if response.get("status") == "running" and reports.known(run_id):
         response = {**response, "nodes": reports.progress(run_id),
                     "startedBy": actor_record(canvas_events.run_actor(run_id))}
-    return _hide_run_key_echoes(response)
+    return _hide_run_key_echoes(_with_result_names(response))
 
 
 def _agent_key_secrets() -> list[str]:
@@ -26929,6 +26935,32 @@ def _hide_run_key_echoes(response: dict[str, Any]) -> dict[str, Any]:
     from services.key_echoes import hide_in_run
 
     return hide_in_run(response, _agent_key_secrets())
+
+
+def _with_result_names(response: dict[str, Any]) -> dict[str, Any]:
+    """A run response with ``names`` (node id -> its name as the canvas shows
+    it) and ``ports`` (node id -> {output port id: label}) for the nodes in
+    ``results``, so the CLI and MCP print a collapsed output by name without
+    reading the canvas (a read of /api/graph or the snapshot notes the
+    reader's Cinema scene keys, which a run result must not do). A node no
+    longer on the canvas is left out: the caller names it by its id."""
+    results = response.get("results") if isinstance(response, dict) else None
+    if not isinstance(results, dict) or not results:
+        return response
+    definitions = node_registry.get_all()
+    names: dict[str, str] = {}
+    ports: dict[str, dict[str, str]] = {}
+    for node_id in results:
+        node = cli_graph.nodes.get(str(node_id))
+        if not node:
+            continue
+        definition_id = str(node.get("definitionId") or "")
+        definition = definitions.get(definition_id)
+        names[str(node_id)] = node_route.node_name(definition, node.get("label"), definition_id or str(node_id))
+        ports[str(node_id)] = {str(p.get("id")): p.get("label")
+                               for p in node_ports(definition_id, node.get("params"), definition, "outputPorts")
+                               if isinstance(p, dict)}
+    return {**response, "names": names, "ports": ports}
 
 
 def _run_reports():

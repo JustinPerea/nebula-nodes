@@ -28,35 +28,6 @@ def _limit(value: Any) -> str:
     return limit_usd(value)
 
 
-def _canvas_lookup(client: NebulaClient | None) -> tuple[Any, Any]:
-    """Two functions, read once and only when a value collapses: the canvas node
-    names as the canvas shows them (their own name, else the card title) and
-    each node’s output port labels from its definition. A node it can’t name
-    shows by its id, a port it can’t label by its id in words."""
-    found: dict[str, Any] = {}
-
-    def read() -> dict[str, Any]:
-        if not found:
-            names: dict[str, str] = {}
-            labels: dict[str, dict[str, str]] = {}
-            try:
-                from services import node_route
-
-                definitions = {d.get("id"): d for d in client.get_nodes().get("nodes") or []} if client else {}
-                for n in (client.get_graph().get("nodes") or []) if client else []:
-                    definition = definitions.get(n.get("definitionId"))
-                    names[str(n["id"])] = node_route.node_name(definition, n.get("label"),
-                                                              str(n.get("definitionId") or n["id"]))
-                    labels[str(n["id"])] = {str(p.get("id")): p.get("label") for p in (definition or {}).get("outputPorts") or []
-                                            if isinstance(p, dict)}
-            except Exception:  # noqa: BLE001 - the summary falls back to ids
-                pass
-            found.update(names=names, labels=labels)
-        return found
-
-    return (lambda: read()["names"]), (lambda: read()["labels"])
-
-
 def _exit_code(result: dict[str, Any]) -> int:
     """_report’s exit code for a result, without printing it."""
     status = result.get("status")
@@ -78,8 +49,9 @@ def _report(result: dict[str, Any], client: NebulaClient | None = None, *, verbo
     if as_json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return _exit_code(result)
-    names, port_labels = _canvas_lookup(client)
-    show = {"verbose": verbose, "names": names, "port_labels": port_labels}
+    # The names come with the result (`names`, `ports`): no read of the canvas
+    # for a summary, which would also move this agent’s Cinema scene reads forward.
+    show = {"verbose": verbose, "names": result.get("names"), "port_labels": result.get("ports")}
     status = result.get("status")
     run_id = result.get("runId", "")
     if result.get("canvasSync") == "deferred":

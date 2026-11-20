@@ -1435,6 +1435,14 @@ class AgentPresence:
                 f"{edge.get('source')}.{edge.get('sourceHandle')}→{edge.get('targetHandle')}"
             )
 
+        # How many of the canvas's nodes the visible area holds: every node the
+        # browser reported, not only the first MAX_SNAPSHOT_NODES the list carries.
+        on_screen_count = (
+            sum(1 for node_id in graph_nodes
+                if view_nodes.get(node_id) is not None and _overlaps(view_nodes[node_id], visible_area))
+            if visible_area is not None else None
+        )
+
         nodes: list[dict[str, Any]] = []
         for node_id, node in list(graph_nodes.items())[:MAX_SNAPSHOT_NODES]:
             definition_id = str(node.get("definitionId", ""))
@@ -1460,6 +1468,7 @@ class AgentPresence:
                 "viewport": viewport,
                 "screen": screen,
                 "visibleArea": visible_area,
+                **({"onScreenCount": on_screen_count} if on_screen_count is not None else {}),
             },
             "nodeCount": len(graph_nodes),
             "truncated": len(graph_nodes) > MAX_SNAPSHOT_NODES,
