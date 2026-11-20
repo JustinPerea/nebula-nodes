@@ -5,7 +5,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * GM, PR #203 r11 item 3, and the round 6 review's LOW-2: one lock order on
+ * Design (PR #203): one lock order on
  * every Run surface. A missing key comes first (it is the one thing the
  * person has to do), then canvasLock's order: the run, following an agent's
  * switch, offline; then the control's own state. Run history pins it in
@@ -42,7 +42,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { KEYED_LINE, keyIdolInEachTest } from './helpers/keyedSpace';
 
-// Idol is keyless (round 7); the order is pinned on its keyed shape.
+// Idol is keyless; the order is pinned on its keyed shape.
 keyIdolInEachTest();
 
 const INITIAL_GRAPH = { ...useGraphStore.getState() };

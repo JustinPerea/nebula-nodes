@@ -1,5 +1,5 @@
 /**
- * Round 18 of PR #199, GM r25 (4): the notices already on the page when an
+ * Design (PR #199): the notices already on the page when an
  * aria-modal dialog opens go under its scrim with the rest of the page:
  * inert, hidden from assistive technology, dimmed. A notice that arrives
  * while it is open lands above, live and in the dialog's focus trap. Closing
@@ -63,7 +63,7 @@ afterEach(() => {
   document.querySelectorAll(NOTICE_REGION).forEach((element) => element.remove());
 });
 
-describe('GM r25 (4): a notice present at open goes under the scrim', () => {
+describe('a notice present at open goes under the scrim (design)', () => {
   it('dimmed and inert while open; one arriving after is above, live and reachable; closing restores the old one', () => {
     const { slot } = region();
     const old = notice(slot, 'Old notice');

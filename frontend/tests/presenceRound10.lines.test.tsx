@@ -1,10 +1,10 @@
 /**
- * PR #204 round 10, review 8:
- * - MEDIUM-2: a line covered by something opaque (Settings' dock) doesn't count; the dock closing,
+ * PR #204:
+ * - a line covered by something opaque (Settings' dock) doesn't count; the dock closing,
  *   or a panel moving, settles the lines again (lib/notConnectedLine lineUncovered).
- * - MEDIUM-3: a line registers once and its words update in place, so a line whose words change
+ * - A line registers once and its words update in place, so a line whose words change
  *   keeps what the observer said, and the notice neither comes back nor announces.
- * - LOW-3: the observer's ratio guard, the unregister guard, and two lines in one element.
+ * - The observer's ratio guard, the unregister guard, and two lines in one element.
  * Harness from presenceRound9.notice.test.tsx.
  */
 import { StrictMode, useEffect, useState } from 'react';
@@ -92,7 +92,7 @@ const showInView = async (text: string, live = true) => {
   await quiet();
 };
 
-describe('review 8 MEDIUM-2: a covered line doesn\'t count', () => {
+describe('a covered line doesn\'t count', () => {
   it('wholly under the dock: the notice shows; the dock closing lets the line count, and the notice steps out', async () => {
     stubLayout();
     hits.covered = 1;
@@ -133,7 +133,7 @@ describe('review 8 MEDIUM-2: a covered line doesn\'t count', () => {
   });
 });
 
-describe('review 8 MEDIUM-3: new words update the one registration', () => {
+describe('new words update the one registration', () => {
   it('a line that isn\'t a live region: said once when it takes the notice\'s place, not again when its words change', async () => {
     await showInView(because, false);
     await waitFor(() => expect(banner()).toBeNull());
@@ -163,7 +163,7 @@ describe('review 8 MEDIUM-3: new words update the one registration', () => {
   });
 });
 
-describe('review 8 LOW-3: the guards', () => {
+describe('the guards', () => {
   it('intersecting at ratio 0 (an edge touching the window) is not in view', async () => {
     render(<Settings />);
     act(() => session.reportPersonRequired());

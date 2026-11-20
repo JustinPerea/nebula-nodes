@@ -1,4 +1,4 @@
-// PR #203 round 16: GM r30 item 3. The switcher's setup button shows the
+// Design (PR #203): the switcher's setup button shows the
 // provider's button noun ("Add token →" for Replicate), its accessible name
 // starts with that label, and the one add-key line is its description.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -43,7 +43,7 @@ afterEach(() => {
   usePricingStore.setState({ table: null, loading: false });
 });
 
-describe('every provider\'s setup button words (GM r30 item 3)', () => {
+describe('every provider\'s setup button words (design)', () => {
   it('covers every provider in Settings', () => {
     expect(Object.keys(PROVIDER_KEY_SPECS).length).toBeGreaterThan(20);
     expect([...TOKEN_KEYS].every((key) => key in PROVIDER_KEY_SPECS)).toBe(true);
@@ -55,7 +55,7 @@ describe('every provider\'s setup button words (GM r30 item 3)', () => {
     expect(words.description).toBe(addKeyLine([key]));
   });
 
-  it('pins the lines GM named', () => {
+  it('pins the lines design named', () => {
     const words = (key: string) => setupButtonWords({ keyState: 'missing', setup: { kind: 'api-key', key }, label: 'Row' });
     expect(words('REPLICATE_API_TOKEN')).toEqual({ label: 'Add token', description: 'Add a Replicate token in Settings to run this node.' });
     expect(words('HF_TOKEN')).toEqual({ label: 'Add token', description: 'Add a Hugging Face token in Settings to run this node.' });
@@ -69,7 +69,7 @@ describe('every provider\'s setup button words (GM r30 item 3)', () => {
   });
 });
 
-describe('the rendered setup buttons (GM r30 item 3)', () => {
+describe('the rendered setup buttons (design)', () => {
   it('Replicate\'s row shows "Add token →", is named "Add token" and described by its line', () => {
     render(<ProviderSwitcher definition={TABLE} params={{}} variant="inspector" onPick={vi.fn()} />);
     const replicate = screen.getByRole('menuitemradio', { name: /^Replicate/ }).closest('[data-provider-row]') as HTMLElement;
@@ -149,7 +149,7 @@ describe('WCAG 2.5.3 Label in Name: every switcher button\'s name holds its visi
         const parts = visibleParts(button.querySelector<HTMLElement>('.provider-switcher__label') ?? button);
         if (!parts.length) continue;
         expect(button, `${definition.id} ${variant}: “${parts.join(' ')}”`).toHaveAccessibleName(inOrder(parts));
-        // A setup button's name starts with its whole visible label (GM r30 item 3).
+        // A setup button's name starts with its whole visible label (design).
         if (button.classList.contains('provider-switcher__setup')) {
           expect(button).toHaveAccessibleName(new RegExp(`^${escape(parts.join(' '))}`));
           setups += 1;
@@ -163,7 +163,7 @@ describe('WCAG 2.5.3 Label in Name: every switcher button\'s name holds its visi
   });
 });
 
-describe('the Keychain line when Nebula didn’t answer (GM r31 item 5)', () => {
+describe('the Keychain line when Nebula didn’t answer (design)', () => {
   it('beside the row says “this key”; as a notice it names the key', () => {
     expect(keychainUnknownLine('removal', 'REPLICATE_API_TOKEN', 'notice'))
       .toBe('Nebula didn’t respond, so your Replicate token may not be removed. Remove it again to be sure.');
@@ -176,7 +176,7 @@ describe('the Keychain line when Nebula didn’t answer (GM r31 item 5)', () => 
   });
 });
 
-describe('the settings folder refusals reach the panel as the backend says them (GM r31 items 1 and 2)', () => {
+describe('the settings folder refusals reach the panel as the backend says them (design)', () => {
   const FOLDER = 'Nothing was saved because Nebula isn’t allowed to change ~/.nebula. Check the folder’s permissions, then try again.';
   const NOT_A_FOLDER = 'Nothing was saved because ~/.nebula is a file, and Nebula needs a folder there. '
     + 'Move or rename that file, then try again.';

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { resolvedStyle } from './helpers/cssCascade';
 
 /**
- * #210 round 6s (GM r105 3): a Studio line on the board can sit over cards
- * (a panned view, #213 r3), so its surface is solid: the colour it has over
+ * Design (PR #210): a Studio line on the board can sit over cards
+ * (a panned view, PR #213), so its surface is solid: the colour it has over
  * the empty canvas, wherever it is. The lines' own fill is a tint (the List
  * draws it over its panel), so on the board the tint is laid over the canvas
  * colour. Before this, the Slava skin's line rule (0,2,1) beat the board's
@@ -89,7 +89,7 @@ function isOpaque(color: string): boolean {
 
 afterEach(() => { document.body.innerHTML = ''; document.body.className = ''; });
 
-describe('a line on the board has a solid surface (GM r105 3)', () => {
+describe('a line on the board has a solid surface (design)', () => {
   for (const skinned of [true, false]) {
     for (const kind of KINDS) {
       it(`${skinned ? 'Slava skin' : 'no skin'}: ${kind.split(' ').slice(1).join(' ')}`, () => {
@@ -105,7 +105,7 @@ describe('a line on the board has a solid surface (GM r105 3)', () => {
     }
   }
 
-  // Review 12 LOW-3 (N20): a state rule (a hover, a focus inside the line) may not make it see-through either.
+  // A state rule (a hover, a focus inside the line) may not make it see-through either.
   for (const skinned of [true, false]) {
     it(`${skinned ? 'Slava skin' : 'no skin'}: hovered or with focus inside, every kind stays solid`, () => {
       for (const kind of KINDS) {

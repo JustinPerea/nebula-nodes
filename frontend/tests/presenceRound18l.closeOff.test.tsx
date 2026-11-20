@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18l (GM r43 Q5): a close answered 404 "Commons is disabled" never shows its own line
+ * Design (PR #204): a close answered 404 "Commons is disabled" never shows its own line
  * in the app: the Commons API notes the Commons off (lib/commonsOff), the Commons view switches to
  * its off view, the dialog unmounts with the pane, and focus goes to the Commons heading by the one
  * handover rule. The "Commons off" row in tests/commonsCopy.ratchet is tested-only for that reason.

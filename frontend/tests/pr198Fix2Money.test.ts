@@ -6,7 +6,7 @@ import { runChipLabel, runChipTitle, type RunScopeSummary } from '../src/lib/run
 import { proposalEstimateLabel } from '../src/lib/canvasProposalsBar';
 
 /**
- * PR #198 fix round 2, review 2's L4 and GM's asks 1-2 (gm-pr198-r2.md).
+ * PR #198: design's rulings.
  * One money formatter: the backend (services/money.py) and this side read the
  * same table (contracts/fixtures/money/cases.json). The chips never say
  * "<$0.01–0.01", "$0.10–0.10", "$10.00–10", "$0.000" or "$-0.00".
@@ -22,13 +22,13 @@ const summary = (low: number, high: number, open: boolean) => ({
 }) as unknown as RunScopeSummary;
 
 /** The whole tooltip around a chip's priced-part sentence (runScope
- * costTitle; GM, PR #203 r16 item 3 and r17 item 3): the paid nodes first,
+ * costTitle; design, PR #203): the paid nodes first,
  * then the sentence, then each reason on its own line. */
 const fullTitle = (open: boolean, sentence: string) =>
   [open ? '“Veo” and “Kling” call paid providers.' : '“Veo” calls a paid provider.', sentence].filter(Boolean).join(' ')
   + (open ? '\n“Kling” has no listed price.' : '');
 
-describe('one money formatter (L4)', () => {
+describe('one money formatter', () => {
   it.each(MONEY.spent)('spent $amount reads $text, as the backend writes it', ({ amount, text }) => {
     expect(formatSpentUsd(amount)).toBe(text);
   });
@@ -37,22 +37,22 @@ describe('one money formatter (L4)', () => {
   });
 });
 
-/** Every chip form and its priced part's sentence (GM's asks 1 and 2; no
- * bare "Estimated cost" heading, GM, PR #203 r16 item 3), as built. */
+/** Every chip form and its priced part's sentence (design's rulings; no
+ * bare "Estimated cost" heading, per design in PR #203), as built. */
 const CHIPS: [number, number, boolean, string, string][] = [
   [0, 0, false, '~$0', 'Estimated cost $0.'],
-  // GM, PR #198 r6 and r7 item 3: an open chip reads " + unpriced", and its
+  // Design (PR #198): an open chip reads " + unpriced", and its
   // tooltip leads with the priced part (the reasons need the run's scope).
-  // GM r8 (PR #198 round 6): no line for a free priced part; the reason leads.
+  // Design (PR #198): no line for a free priced part; the reason leads.
   [0, 0, true, '$0 + unpriced', ''],
   [0, 0.0047, false, '<$0.01', 'Estimated cost under $0.01.'],
   [0.0047, 0.0047, false, '<$0.01', 'Estimated cost under $0.01.'],
   [0.0047, 0.0047, true, '<$0.01 + unpriced', 'The priced part of this run costs under $0.01.'],
-  // GM r6 item 2: a range from $0 reads "Up to $Y".
+  // Design: a range from $0 reads "Up to $Y".
   [0, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
   [0, 0.43, true, 'Up to $0.43 + unpriced', 'The priced part of this run costs up to $0.43.'],
-  // GM, PR #198 r3 item 6 and r4: a range from under a cent reads "Up to $Y",
-  // in the chip and its tooltip (fix round 4: chips never show sub-cent figures).
+  // Design (PR #198): a range from under a cent reads "Up to $Y",
+  // in the chip and its tooltip (chips never show sub-cent figures).
   [0.0047, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
   [0.0047, 0.43, true, 'Up to $0.43 + unpriced', 'The priced part of this run costs up to $0.43.'],
   [0.0099, 0.0101, false, 'Up to $0.01', 'Up to $0.01.'],
@@ -66,17 +66,16 @@ const CHIPS: [number, number, boolean, string, string][] = [
   [0.04, 0.044, false, '~$0.04', 'Estimated cost $0.04.'],
   [0.0995, 0.1, false, '~$0.10', 'Estimated cost $0.10.'],
   [9.996, 10.2, false, '~$10', 'Estimated cost $10.'],
-  // GM r4: the same decimals on both ends.
+  // Design: the same decimals on both ends.
   [9.5, 12, false, '$9.50–12.00', 'Between $9.50 and $12.00.'],
 ];
 
-/** The run chip and the proposal card decide "$0" by source, not value (GM,
- * PR #203 r11 item 4; round 6 review NIT-1): only a sourced $0 (every priced
+/** The run chip and the proposal card decide "$0" by source, not value (design, PR #203): only a sourced $0 (every priced
  * row is exactly 0, `sourcedZero`) reads "$0", with "This costs nothing to
  * run."; a closed estimate that rounds to zero keeps the formatter's "~$0". */
 const runChip = (_low: number, _high: number, _open: boolean, chip: string) => chip;
 
-describe('the chips and their tooltips (GM asks 1 and 2)', () => {
+describe('the chips and their tooltips (design)', () => {
   it.each(CHIPS)('%s–%s open=%s: "%s", titled "%s"', (low, high, open, chip, title) => {
     expect(runChipLabel(summary(low, high, open))).toBe(runChip(low, high, open, chip));
     expect(formatChipEstimate(low, high, open)).toBe(chip);
@@ -84,8 +83,8 @@ describe('the chips and their tooltips (GM asks 1 and 2)', () => {
   });
 
   it('a sourced $0 shows no chip, as any free run, titled "This costs nothing to run."; open, the reasons still say what is unpriced', () => {
-    // A sourced $0 is free, never paid (GM, PR #203 r18 item 1), and looks
-    // like any other free node (r20 item 1): no chip, only its tooltip.
+    // A sourced $0 is free, never paid (design, PR #203), and looks
+    // like any other free node: no chip, only its tooltip.
     const sourced = { paid: [], free: ['Veo'], cost: { low: 0, high: 0, lines: [], unpriced: [], plus: [], sourcedZero: true } } as unknown as RunScopeSummary;
     expect(runChipLabel(sourced)).toBeNull();
     expect(runChipTitle(sourced)).toBe('This costs nothing to run.');
@@ -123,7 +122,7 @@ function rng(seed: number) {
   };
 }
 
-describe('the formatter, as properties (L4)', () => {
+describe('the formatter, as properties', () => {
   const random = rng(198);
   const amount = () => {
     const pick = random();
@@ -150,7 +149,7 @@ describe('the formatter, as properties (L4)', () => {
         const decimals = (text: string) => text.split('.')[1]?.length ?? 0;
         const value = (text: string) => Number(text.replace(/[<$,]/g, ''));
         // The same decimals below $0.10, unless that would give an end a
-        // third figure (review 3, N3: "$0.0099–0.010", as "$9.50–12"
+        // third figure ("$0.0099–0.010", as "$9.50–12"
         // changes at $10).
         const figures = (text: string) => text.replace(/[<$,.]/g, '').replace(/^0+/, '').length;
         if (!from.startsWith('<') && value(from) > 0 && value(from) < 0.1 && value(to) < 0.1 && decimals(from) !== decimals(to)) {

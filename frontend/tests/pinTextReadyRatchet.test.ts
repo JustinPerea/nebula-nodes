@@ -1,13 +1,13 @@
 // fix/pin-text-corpus-flake: the pin text rules (pinDisplayText and the
 // counts built on it) read Unicode data that canvasPins imports lazily, as its
-// own chunk (review 13 L-2). Until the chunk lands, every rule errs toward
+// own chunk. Until the chunk lands, every rule errs toward
 // hiding, by design. The product waits for the data: the pins store before
 // it sanitizes, the note dialog before it counts. A test that calls the rules
 // must wait too, or it races the import. agentPresenceFollowups.r12text
 // failed every time alone and now and then in CI: run 41569694838 attempt 1
 // failed, and attempt 2 on the same commit passed.
 //
-// The check (PR #218 review 1 LOW-2, LOW-3; #220 review 1), read from each
+// The check (PR #218, PR #220), read from each
 // test file's syntax tree, so comments and strings never count as code:
 // - It finds an import of canvasPins by the module specifier
 //   /(^|\/)canvasPins(\.[jt]sx?)?$/: '../src/lib/canvasPins', '…/canvasPins.ts'
@@ -16,9 +16,9 @@
 //   `await import(…)` brings in the names it lists. These bring in every
 //   rule: a namespace import, a default import, any other `import(…)`
 //   (`const m = await import(…)`, `.then`), `vi.importActual(…)`,
-//   `vi.importMock(…)` and `require(…)` (#220 review 1 LOW-1). importMock's
+//   `vi.importMock(…)` and `require(…)` (PR #220). importMock's
 //   rules are spies, so a file using it may need the opt-out below.
-// - A file that brings in a rule needs a wait in code (#220 review 1 NIT-1):
+// - A file that brings in a rule needs a wait in code (PR #220):
 //   `await pinTextReady`, `await pinTextSettling()` (called; awaiting the
 //   function itself resolves at once), or a beforeAll or beforeEach callback
 //   that returns one. A bare name counts only when the file's one
@@ -29,7 +29,7 @@
 //   whole, with no importOriginal and no importActual. Nothing lazy loads there.
 // - Opt-out: a comment `pin-text-ratchet: off, <reason>`. It is read from
 //   the scanner's comment ranges, so the same words inside a string never
-//   count (#220 review 1 NIT-2). The reason is required, at least 10
+//   count (PR #220). The reason is required, at least 10
 //   characters (for example, a file that tests the pending state on purpose).
 //
 // Known gaps, not caught here:
@@ -39,7 +39,7 @@
 // - Indirect callers. A test that renders PinLayer or PinComposer, or puts
 //   pins in the store with setState({ pins }), calls pinDisplayText with no
 //   import of its own. Today none of them assert text that depends on the
-//   data (review 1 NIT-1 grepped for ZWJ, FE0F, tag and emoji literals). A
+//   data (grepped for ZWJ, FE0F, tag and emoji literals). A
 //   test that does must wait as above.
 // - A wait in dead code: an `await pinTextReady` inside a function that
 //   never runs still counts. Telling that apart needs call-graph analysis;
@@ -156,7 +156,7 @@ function readFile(source: string, fileName = 'case.test.tsx') {
       }
     }
     if (isDynamicCanvasPins(node) && !destructured.has(node)) names.add(ALL);
-    // #220 review 1 LOW-1: vitest's and CommonJS's other ways to the module take every rule.
+    // PR #220: vitest's and CommonJS's other ways to the module take every rule.
     if (ts.isCallExpression(node) && ['importActual', 'importMock', 'require'].includes(calleeName(node)) && isCanvasPins(node.arguments[0])) {
       names.add(ALL);
     }
@@ -171,7 +171,7 @@ function readFile(source: string, fileName = 'case.test.tsx') {
   };
   collect(file);
 
-  // #220 review 1 NIT-1: the wait is canvasPins' own, as it must be used: pinTextReady
+  // PR #220: the wait is canvasPins' own, as it must be used: pinTextReady
   // awaited as the promise it is, pinTextSettling called. A bare name counts only
   // when the file's one declaration of it is the import (nothing shadows it);
   // a property (`pins.pinTextReady`) counts on any receiver.
@@ -201,7 +201,7 @@ function readFile(source: string, fileName = 'case.test.tsx') {
   };
   look(file);
 
-  // #220 review 1 NIT-2: only a real comment opts a file out.
+  // PR #220: only a real comment opts a file out.
   const optedOut = commentsOf(file).some((comment) => OPT_OUT.test(comment));
   const rules = names.has(ALL) ? [...DATA_RULES] : DATA_RULES.filter((rule) => names.has(rule));
   return { rules, waits, fullMock, optedOut, racing: rules.length > 0 && !waits && !fullMock && !optedOut };
@@ -231,7 +231,7 @@ describe('the ratchet reads every import form (mutation cases: each must be caug
     ['pinTextSettling called but not awaited', `import { pinDisplayText, pinTextSettling } from ${LIB};\npinTextSettling();`],
     ['a partial mock (importOriginal) is still the real module', `vi.mock(${LIB}, async (importOriginal) => ({ ...await importOriginal() }));\nimport { pinDisplayText } from ${LIB};`],
     ['an opt-out with no reason', `// pin-text-ratchet: off\nimport { pinDisplayText } from ${LIB};`],
-    // #220 review 1 LOW-1.
+    // PR #220.
     ['vi.importActual', `const real = await vi.importActual<typeof import(${LIB})>(${LIB});\nreal.pinDisplayText('a');`],
     ['vi.importMock', `const mocked = await vi.importMock(${LIB});`],
     ['require', `const pins = require(${LIB});`],
@@ -239,7 +239,7 @@ describe('the ratchet reads every import form (mutation cases: each must be caug
     ['a unicode escape in the specifier', "import { pinDisplayText } from '../src/lib/canvas\\u0050ins';"],
     ['a hex escape in the specifier', "import { pinDisplayText } from '../src/lib/\\x63anvasPins';"],
     ['a line continuation in the specifier', "import { pinDisplayText } from '../src/lib/canvas\\\nPins';"],
-    // #220 review 1 NIT-1.
+    // PR #220.
     ['pinTextSettling awaited but not called', `import { pinDisplayText, pinTextSettling } from ${LIB};\nawait pinTextSettling;`],
     ['pins.pinTextSettling awaited but not called', `import * as pins from ${LIB};\nawait pins.pinTextSettling;`],
     ['beforeAll returning pinTextSettling uncalled', `import { fitNote, pinTextSettling } from ${LIB};\nbeforeAll(() => pinTextSettling);`],
@@ -247,7 +247,7 @@ describe('the ratchet reads every import form (mutation cases: each must be caug
     ['a local pinTextReady that shadows nothing imported', `import { pinDisplayText } from ${LIB};\nconst pinTextReady = Promise.resolve();\nawait pinTextReady;`],
     ['a local pinTextReady shadowing the import', `import { pinDisplayText, pinTextReady } from ${LIB};\nit('x', async () => { const pinTextReady = Promise.resolve(); await pinTextReady; });`],
     ['a parameter named pinTextReady', `import { pinDisplayText, pinTextReady } from ${LIB};\nconst wait = async (pinTextReady: Promise<void>) => { await pinTextReady; };\nvoid wait;`],
-    // #220 review 1 NIT-2.
+    // PR #220.
     ['the opt-out words inside a string', `import { pinDisplayText } from ${LIB};\nconst url = 'http://x// pin-text-ratchet: off, this is only a string here';`],
     ['the opt-out words inside a template', `import { pinDisplayText } from ${LIB};\nconst t = \`/* pin-text-ratchet: off, only a template literal here */\`;`],
   ];
@@ -271,11 +271,11 @@ describe('the ratchet reads every import form (mutation cases: each must be caug
     ['only names that read no data', `import { noteKeptLine, PIN_REFUSAL_COPY, type KeptNote } from ${LIB};`],
     ['a type-only import', `import type { KeptNote } from ${LIB};`],
     ['another module named like it', "import { pinDisplayText } from '../src/lib/canvasPinsLegacy';"],
-    // #220 review 1 NIT-1: a renamed or destructured wait is still the import.
+    // PR #220: a renamed or destructured wait is still the import.
     ['a renamed pinTextReady import', `import { pinDisplayText, pinTextReady as ready } from ${LIB};\nbeforeAll(() => ready);`],
     ['a destructured pinTextSettling', `const { fitNote, pinTextSettling } = await import(${LIB});\nawait pinTextSettling();`],
     ['vi.importActual with a namespace wait', `const real = await vi.importActual<typeof import(${LIB})>(${LIB});\nawait real.pinTextReady;`],
-    // #220 review 1 NIT-2: a trailing comment and a comment at the end of the file are real comments.
+    // PR #220: a trailing comment and a comment at the end of the file are real comments.
     ['a trailing opt-out comment', `import { pinDisplayText } from ${LIB}; // pin-text-ratchet: off, only checks the module shape\n`],
     ['an opt-out at the end of the file', `import { pinDisplayText } from ${LIB};\nvoid pinDisplayText;\n/* pin-text-ratchet: off, only checks the module shape */\n`],
   ];

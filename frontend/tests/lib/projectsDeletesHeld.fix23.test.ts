@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// PR #199 round 23 (review 21 NIT-2): a handoff's answer names the deletes
+// PR #199: a handoff's answer names the deletes
 // a guard refused, each with the person's line; saveProject passes the lines
 // on (projectStore says them), and nothing else.
 const answer = vi.hoisted(() => ({ body: {} as unknown }));

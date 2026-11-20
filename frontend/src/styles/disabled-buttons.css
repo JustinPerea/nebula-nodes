@@ -299,19 +299,19 @@
   box-shadow: inset 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }
 
-/* PR #204 round 11 (review 9 MEDIUM-1, GM r19 item 1): a person lock's control
+/* PR #204: a person lock's control
    (hooks/usePersonLock control(): data-person-lock, aria-disabled, focusable)
    takes one disabled look through the helper, whatever its class: no class
    list to forget. Past the held rule's first moment only (data-held-pending
    keeps its own look then). No hover or press: these states are held to the
    same look. Focus isn't: a locked control stays focusable, so it keeps the
-   shared focus ring (round 12; tests/focusRingCss).
+   shared focus ring (tests/focusRingCss).
 
-   Round 13 (review 10 MEDIUM-1): the ghost and filled lists win over this
+   The ghost and filled lists win over this
    block, and so does each per-class rule after it. The element part is
    :where(), so the base rule is (0,2,0) against the lists' (0,3,0): a locked
    filled button keeps the grey fill with its dark label (--disabled-fill,
-   --disabled-fill-label, GM r33), and a ghost keeps the ghost tokens. The
+   --disabled-fill-label), and a ghost keeps the ghost tokens. The
    block sits above the filled list, so the list also wins while a locked
    filled button is pressed from the keyboard (:active without :hover), where
    this block's :active rule ties the list's base rule; the list's own hover

@@ -1,9 +1,9 @@
 /**
- * PR #204 round 14, review 11 lock-look-ui:
- * - NIT-1: on a demote with the key-added notice up on the Providers tab, Undo's own copy of the
+ * PR #204:
+ * - On a demote with the key-added notice up on the Providers tab, Undo's own copy of the
  *   Providers line never enters the notice's live region, not even for one commit. Undo decides
  *   from state while rendering (settings/groupLockLines, which ProvidersTab's line registers).
- * - LOW-4 (mutants R15, R16 of the old observer): the panel is never observed for it, in any
+ * - The panel is never observed for it, in any
  *   state: promoted, locked, on the promote, on unmount.
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -71,7 +71,7 @@ afterEach(() => {
   useSettingsDraftStore.setState(initialDraft, true);
 });
 
-describe('a demote with the notice up on the Providers tab (review 11 NIT-1)', () => {
+describe('a demote with the notice up on the Providers tab', () => {
   it('the live region never gains the duplicate line; the one line is the group\'s', async () => {
     act(() => session.notePersonPromoted());
     render(<Panel providers />);
@@ -107,7 +107,7 @@ describe('a demote with the notice up on the Providers tab (review 11 NIT-1)', (
   });
 });
 
-describe('the panel is never observed for Undo (review 11 LOW-4)', () => {
+describe('the panel is never observed for Undo', () => {
   it('no observer on the panel promoted, locked, on the promote or after unmount', async () => {
     const observe = vi.spyOn(MutationObserver.prototype, 'observe');
     const panelObserves = () => observe.mock.calls.filter(([target]) => target instanceof Element && !!target.closest('.panel--settings')).length;

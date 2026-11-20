@@ -8,7 +8,7 @@ const local = (month: number, day: number, hour: number, minute = 0) => new Date
 const seconds = (at: Date) => at.getTime() / 1000;
 
 describe('the hold line', () => {
-  it('keeps the fixed part GM wrote, with curly apostrophes', () => {
+  it('keeps the fixed part design wrote, with curly apostrophes', () => {
     expect(LEDGER_HOLD_SENTENCE).toBe(
       'Nebula couldn’t read its record of what agents have spent, so it counts every spending limit as used up until');
     expect(COUNTED_AS_USED_UP).toBe('Counted as used up');

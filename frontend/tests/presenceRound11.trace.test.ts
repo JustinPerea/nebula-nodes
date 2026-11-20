@@ -1,16 +1,16 @@
 /**
- * PR #204 round 11 (review 9 gates-trace LOW-2, LOW-3, NIT-1; lock-sweep LOW-3): the trace
+ * PR #204: the trace
  * (tests/personGatedCallers.ts), in synthetic sources.
- * - LOW-2: a helper's call inside a longer path (`${base(s)}/${id}/dismiss`, `base(s) + '/read'`)
+ * - A helper's call inside a longer path (`${base(s)}/${id}/dismiss`, `base(s) + '/read'`)
  *   is read with the rest of it, each of the helper's paths in its place: the route is the whole
  *   path's, never the helper's bare one.
- * - LOW-3: an imported const held in a local, a namespace member (`paths.X`), a parameter
+ * - An imported const held in a local, a namespace member (`paths.X`), a parameter
  *   wrapper (`const post = (u) => apiFetch(u, …)`) and an imported '/api' prefix are each read;
  *   what can't be read is listed with its reason (a `let` of an imported path, '/api' joined to
  *   a name it can't read, a wrapper that reads the answer itself).
- * - NIT-1: a self-referential const no longer overflows the stack.
- * - T1 (localConst innermost-only): a const in a block around the try's block is found (P1).
- * - lock-sweep LOW-3: lockReach walks from a sender to every control that reaches it, and says
+ * - A self-referential const no longer overflows the stack.
+ * - A const in a block around the try's block is found.
+ * - lockReach walks from a sender to every control that reaches it, and says
  *   how each is locked; a second, unlocked control is caught wherever it is.
  * Each probe sends POST /api/presets, then `if (!res.ok) setLine(await res.text())` with no marker
  * inside a try whose catch registers: read right, the call drops ('drops'). None may keep.
@@ -39,7 +39,7 @@ const PREFIX = { 'lib/paths.ts': "export const API = '/api';" };
 
 interface Probe { files: Record<string, string>; found: Record<string, string>; untraced: string[]; route?: { method: string; path: string } }
 const PROBES: Record<string, Probe> = {
-  // ---- LOW-3: imported and namespaced consts ----
+  // ---- imported and namespaced consts ----
   P4b_imported_const_in_a_local: { files: C(dropBody("import { PRESETS_PATH } from '../lib/paths';", `const u = PRESETS_PATH; ${SEND}`), PATHS), ...DROPS },
   P4b2_imported_const_aliased: { files: C(dropBody("import { PRESETS_PATH as P } from '../lib/paths';", `const u = P; ${SEND}`), PATHS), ...DROPS },
   P4b3_imported_through_a_reexport: { files: C(dropBody("import { PRESETS_PATH } from '../lib/index';", `const u = PRESETS_PATH; ${SEND}`),
@@ -59,23 +59,23 @@ const PROBES: Record<string, Probe> = {
   U10_local_api_prefix_used_unread: { files: C(dropBody('', "const b = '/api'; const res = await apiFetch(b + show.tail, { method: 'POST' });")),
     found: {}, untraced: ["components/C.tsx:6 /api (the /api prefix joined where the trace can't read the path)",
       "components/C.tsx:6 /api${…} (the /api prefix joined where the trace can't read the path)"] },
-  // ---- LOW-3: a parameter wrapper ----
+  // ---- a parameter wrapper ----
   P3e_arrow_wrapper: { files: C(dropBody('', "const post = (u: string) => apiFetch(u, { method: 'POST' }); const res = await post('/api/presets');")), ...DROPS },
   P3c_function_wrapper: { files: C(dropBody('', "function post(u: string) { return apiFetch(u, { method: 'POST' }); } const res = await post('/api/presets');")), ...DROPS },
   U11_wrapper_that_reads_the_answer: { files: C(dropBody('', "const post = async (u: string) => { const r = await apiFetch(u, { method: 'POST' }); show.log(r.status); return r; }; const res = await post('/api/presets');")),
     found: {}, untraced: ["components/C.tsx:6 /api/presets (handed to a function that sends it and reads the answer itself)"] },
-  // ---- LOW-2: a helper composed with a tail ----
+  // ---- a helper composed with a tail ----
   P5c_helper_with_a_tail: { files: C(dropBody("function base(x: any) { return x ? '/api/presets' : `/api/boards/${x}/presets`; }", "const res = await apiFetch(`${base(show)}/${show.id}`, { method: 'POST' });")),
     route: { method: 'POST', path: '/api/presets/{preset_id}' }, ...DROPS },
   P5c_not_the_bare_route: { files: C(dropBody("function base(x: any) { return x ? '/api/presets' : `/api/boards/${x}/presets`; }", "const res = await apiFetch(`${base(show)}/${show.id}`, { method: 'POST' });")),
     found: {}, untraced: [] },
   P5e_helper_in_a_concat: { files: C(dropBody("const base = () => '/api/presets';", "const res = await apiFetch(base() + '/' + show.id, { method: 'POST' });")),
     route: { method: 'POST', path: '/api/presets/{preset_id}' }, ...DROPS },
-  // ---- T1: a const outside the try's own block ----
+  // ---- a const outside the try's own block ----
   P1_const_in_an_outer_block: { files: C(dropBody('', SEND, "const u = '/api/presets';")), ...DROPS },
 };
 
-describe('round 11: review 9\'s trace forms, exact outcomes (LOW-2, LOW-3, T1)', () => {
+describe('trace forms, exact outcomes', () => {
   for (const [name, { files, found, untraced, route = PRESETS }] of Object.entries(PROBES)) {
     it(name, { timeout: 30_000 }, () => {
       const units = withSources(files, () => callersOf(route));
@@ -84,7 +84,7 @@ describe('round 11: review 9\'s trace forms, exact outcomes (LOW-2, LOW-3, T1)',
         .toEqual({ found, untraced });
     });
   }
-  it('NIT-1: a self-referential const doesn\'t overflow the stack', { timeout: 30_000 }, () => {
+  it('a self-referential const doesn\'t overflow the stack', { timeout: 30_000 }, () => {
     const files = C(dropBody('', "const u = `${u}/api/presets`; const res = await apiFetch(u, { method: 'POST' });"));
     expect(() => withSources(files, () => untracedApiText())).not.toThrow();
     const units = withSources(files, () => callersOf(PRESETS));
@@ -92,7 +92,7 @@ describe('round 11: review 9\'s trace forms, exact outcomes (LOW-2, LOW-3, T1)',
   });
 });
 
-// ---- LOW-2: lib/agentNotes' exact shape ----
+// ---- lib/agentNotes' exact shape ----
 const NOTES_LIB = `import { apiRequest } from './api';
 function base(surface: any): string {
   return surface.kind === 'canvas'
@@ -111,7 +111,7 @@ const NOTES = {
   'components/NewButton.tsx': `import { dismissAgentNote, markRead } from '../lib/agentNotes';
 export function NewButton({ s, id }: any) { return <button onClick={() => { void dismissAgentNote(s, id); void markRead(s); }}>Dismiss</button>; }`,
 };
-describe('round 11: a helper\'s path with a tail is the whole path (review 9 LOW-2)', () => {
+describe('a helper\'s path with a tail is the whole path', () => {
   const traced = (route: { method: string; path: string }) => withSources(NOTES, () => [...callersOf(route).keys()]);
   it('the composed routes trace to the control, both surfaces', { timeout: 30_000 }, () => {
     for (const path of ['/api/canvas/agent-notes/{note_id}/dismiss', '/api/moodboards/{moodboard_id}/agent-notes/{note_id}/dismiss',
@@ -125,7 +125,7 @@ describe('round 11: a helper\'s path with a tail is the whole path (review 9 LOW
   });
 });
 
-// ---- lock-sweep LOW-3: from a sender to its controls ----
+// ---- from a sender to its controls ----
 const SENDER = {
   'lib/keys.ts': "export async function removeKey(p: string) { await apiRequest(\"Couldn't remove.\", `/api/settings/api-keys/${p}`, { method: 'DELETE' }); }",
   'components/usePersonLock.ts': 'export function usePersonLock(verb: string): any { return verb; }',
@@ -150,7 +150,7 @@ function controls(sources: Record<string, string>): { sites: string[]; open: str
     };
   });
 }
-describe('round 11: lockReach reaches each control and reads its lock (lock-sweep LOW-3)', () => {
+describe('lockReach reaches each control and reads its lock', () => {
   it('a guard, a control spread and a disabled read are each a lock; an early return holds the way', { timeout: 30_000 }, () => {
     const reach = controls({ 'components/Host.tsx': HOST(`const undo = () => { if (lock.locked) return; void removeKey(p); };
   return <div>

@@ -1,10 +1,10 @@
 /**
- * PR #204 round 15, GM r24 a: a because line sends the general notice away on every Commons state,
+ * Design (PR #204): a because line sends the general notice away on every Commons state,
  * the New collection prompt open included. The prompt's backdrop (.commons-prompt, a fixed layer
  * over the whole window at rgba(0, 0, 0, 0.4)) was answering the hit test for the page's line, so
  * the line read as covered and the notice stayed (lib/notConnectedLine lineUncovered). The rule now
  * looks beneath a layer the line shows through: a dim with no picture, blur, text or replaced
- * content of its own. Anything else over the line still covers it (review 8 MEDIUM-2).
+ * content of its own. Anything else over the line still covers it.
  */
 import { readFileSync } from 'node:fs';
 import { ADD_TO_NAME } from './helpers/commonsAddNames';
@@ -55,7 +55,7 @@ const TOKEN = 'a'.repeat(43);
 const PROMPT_RULE = /body\.app-slava-restraint \.commons-prompt \{[^}]*\}/.exec(
   readFileSync(join(__dirname, '../src/styles/commons.css'), 'utf8'))![0];
 
-/** Round 17 (GM r27 3): the mask painter's overlay as the app styles it (styles/mask-painter.css). */
+/** Design: the mask painter's overlay as the app styles it (styles/mask-painter.css). */
 const MASK_RULE = /\.mask-painter__overlay \{[^}]*\}/.exec(
   readFileSync(join(__dirname, '../src/styles/mask-painter.css'), 'utf8'))![0];
 
@@ -137,7 +137,7 @@ afterEach(() => {
 
 // ── the rule ────────────────────────────────────────────────────────────────
 
-describe('lineUncovered: a layer the line shows through doesn\'t cover it (GM r24 a)', () => {
+describe('lineUncovered: a layer the line shows through doesn\'t cover it (design)', () => {
   /** What each test adds to the page, taken away after it. */
   const added: Element[] = [];
   afterEach(() => { added.splice(0).forEach((element) => element.remove()); });
@@ -166,7 +166,7 @@ describe('lineUncovered: a layer the line shows through doesn\'t cover it (GM r2
   };
 
   it('the threshold is a named constant', () => {
-    // Round 17 (GM r27 3): lowered from 0.85.
+    // Design: lowered from 0.85.
     expect(lines.SEE_THROUGH_ALPHA).toBe(0.6);
   });
   it('the prompt\'s own backdrop, as commons.css styles it: the line shows through', () => {
@@ -178,7 +178,7 @@ describe('lineUncovered: a layer the line shows through doesn\'t cover it (GM r2
     expect(getComputedStyle(backdrop).backgroundColor).toMatch(/rgba\(0, 0, 0, 0\.4\)/);
     expect(coveredBy(backdrop)).toBe(false);
   });
-  it('the mask painter\'s own overlay, as mask-painter.css styles it: a cover (GM r27 3)', () => {
+  it('the mask painter\'s own overlay, as mask-painter.css styles it: a cover (design)', () => {
     const overlay = document.createElement('div');
     added.push(overlay);
     overlay.className = 'mask-painter__overlay';
@@ -194,7 +194,7 @@ describe('lineUncovered: a layer the line shows through doesn\'t cover it (GM r2
     expect(coveredBy(layer('background-color: transparent'))).toBe(false);
     expect(coveredBy(layer('visibility: hidden; background-color: rgb(0, 0, 0)'))).toBe(false);
   });
-  it('an opaque panel, or one at 0.6 and up: a cover, as the Settings dock is (GM r27 3)', () => {
+  it('an opaque panel, or one at 0.6 and up: a cover, as the Settings dock is (design)', () => {
     expect(coveredBy(layer('background-color: rgb(20, 20, 20)'))).toBe(true);
     expect(coveredBy(layer('background-color: rgba(0, 0, 0, 0.6)'))).toBe(true);
     // The mask painter's overlay and an 0.8 toast: the line behind reads at 20–28% contrast.
@@ -253,7 +253,7 @@ const openPrompt = async () => {
 };
 const pageLineShows = () => expect([...document.querySelectorAll('[data-commons-line]')].map((line) => line.textContent)).toContain(PAGE);
 
-describe('the Commons: a because line up, no general notice (GM r24 a)', () => {
+describe('the Commons: a because line up, no general notice (design)', () => {
   it('held: never connected', async () => {
     act(() => reportPersonRequired());
     render(<Page />);
@@ -313,20 +313,20 @@ describe('the Commons: a because line up, no general notice (GM r24 a)', () => {
     act(() => reportPersonRequired());
     await until(pageLineShows);
     await settled();
-    // Round 17 (GM r27 2): it waits for a line it can count, up to the cap.
+    // Design: it waits for a line it can count, up to the cap.
     await tick(lines.BECAUSE_LINE_WAIT_MS);
     expect(generalNotice()).not.toBeNull();
     panel.remove();
   });
 });
 
-// ── Round 17 (review 13 LOW-2, GM r27 2): on a demote the notice waits for the because line ──
+// ── Design: on a demote the notice waits for the because line ──
 // Live, the notice slid in about 140 ms before the page's because line landed (its loads are
 // refused after the held rule's 150 ms), then slid out: two changes. The Commons says a demote
 // there brings its own line (expectBecauseLine), and the notice waits for it, capped at
 // BECAUSE_LINE_WAIT_MS. Every frame is recorded: the observer reports each line in view as soon
 // as it mounts, as a browser does within a frame.
-describe('a demote on the Commons: the notice waits for the because line (GM r27 2)', () => {
+describe('a demote on the Commons: the notice waits for the because line (design)', () => {
   /** Each 10 ms frame from the demote: [ms, notice up, page line up]. */
   async function framesFromDemote(until: number): Promise<[number, boolean, boolean][]> {
     const frames: [number, boolean, boolean][] = [];

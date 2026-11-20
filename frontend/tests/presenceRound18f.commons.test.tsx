@@ -1,15 +1,15 @@
 /**
- * PR #204 round 18f: review 15 and GM r35, on the real Commons screens with the real Commons API
+ * Design (PR #204): on the real Commons screens with the real Commons API
  * (only apiFetch is stubbed).
  * - Focus when the Commons turns off mid-visit goes to the heading, by the one handover rule
- *   (review 15 MEDIUM-1, GM r35 1).
+ *   (design).
  * - A collection made while the list's re-read failed joins the kept list: Add to shows what Add
- *   sends to (review 15 MEDIUM-1 of the logic lens, its probe P6).
+ *   sends to.
  * - Any answer proving the Commons is on clears the off line; only the 404 "disabled" sets it; no
- *   answer leaves it (GM r35 2, review 15 LOW-1, probes P1/P1b; NIT-3 M1/M14).
- * - A linked folder's own name once the read-back has it (GM r35 3, NIT-2).
- * - A load line's "Try again" button, and the silent re-read on reconnect (GM r35 4).
- * - NIT-3's other survivors: the settings read-back while off (M15), the loading line's timer (M17).
+ *   answer leaves it (design).
+ * - A linked folder's own name once the read-back has it (design).
+ * - A load line's "Try again" button, and the silent re-read on reconnect (design).
+ * - The other survivors: the settings read-back while off, the loading line's timer.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,7 +55,7 @@ const commonsOff = { on: false };
 /** Status reads still answered before the rest hang (null: all answer). */
 const statusGate = { answers: null as number | null };
 const postFails: Record<string, number> = {};
-/** Round 18f: the next answers for every Commons call, in place of the usual (status, detail). */
+/** The next answers for every Commons call, in place of the usual (status, detail). */
 const every = { answer: null as [number, unknown] | null };
 /** The search's rows, and whether a reference's detail read fails. */
 const rows = { list: [] as unknown[] };
@@ -106,7 +106,7 @@ const record = () => {
   for (const el of document.querySelectorAll('[aria-label], [title]')) seen += `\n${el.getAttribute('aria-label') ?? ''} ${el.getAttribute('title') ?? ''}`;
 };
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers();
@@ -167,7 +167,7 @@ const tab = (name: string) => screen.getByRole('tab', { name });
 const retry = () => screen.queryByRole('button', { name: 'Try again' });
 const reads = (load: string) => transport.fetch.mock.calls.filter(([path, init]) => String(path).endsWith(`/${load}`) && (init as RequestInit | undefined)?.method !== 'POST').length;
 
-describe('focus when the Commons turns off mid-visit goes to the heading (review 15 MEDIUM-1, GM r35 1)', () => {
+describe('focus when the Commons turns off mid-visit goes to the heading (design)', () => {
   it.each(['Inbox', 'Agent review'])('from the %s tab', async (name) => {
     render(<CommonsView />);
     await tick(1000);
@@ -223,7 +223,7 @@ describe('focus when the Commons turns off mid-visit goes to the heading (review
   });
 });
 
-describe('a collection made while the re-read failed joins the kept list (review 15 P6)', () => {
+describe('a collection made while the re-read failed joins the kept list', () => {
   it('the select shows the new collection, and Add sends to it', async () => {
     lists.collections = [{ id: 'c1', name: 'Refs', kind: 'manual' }];
     render(<CommonsView />);
@@ -256,7 +256,7 @@ describe('a collection made while the re-read failed joins the kept list (review
   });
 });
 
-describe('only the 404 "disabled" sets the off line; any answer proving the Commons is on clears it (GM r35 2)', () => {
+describe('only the 404 "disabled" sets the off line; any answer proving the Commons is on clears it (design)', () => {
   it('a 500 after the off view: the real load line replaces the off line, neutral', async () => {
     commonsOff.on = true;
     render(<CommonsView />);
@@ -290,8 +290,8 @@ describe('only the 404 "disabled" sets the off line; any answer proving the Comm
   });
 
   it.each([
-    ['a 500 that says "Commons is disabled" (M1/M14)', 500, 'Commons is disabled'],
-    ['a 409 that says "Commons is disabled" (M1/M14)', 409, 'Commons is disabled'],
+    ['a 500 that says "Commons is disabled"', 500, 'Commons is disabled'],
+    ['a 409 that says "Commons is disabled"', 409, 'Commons is disabled'],
     ['a plain 404', 404, 'not found'],
     ['a 403', 403, undefined],
   ])('%s proves the Commons is on', async (_, status, detail) => {
@@ -330,14 +330,14 @@ describe('only the 404 "disabled" sets the off line; any answer proving the Comm
     expectOffView('still off');
   });
 
-  it('isCommonsOff is the 404 alone (M14)', () => {
+  it('isCommonsOff is the 404 alone', () => {
     expect(isCommonsOff(new RequestFailedError('x', 404, { detail: 'Commons is disabled' }))).toBe(true);
     expect(isCommonsOff(new RequestFailedError('x', 500, { detail: 'Commons is disabled' }))).toBe(false);
     expect(isCommonsOff(new RequestFailedError('x', 409, { detail: 'Commons is disabled' }))).toBe(false);
   });
 });
 
-describe('a load line\'s "Try again" button (GM r35 4)', () => {
+describe('a load line\'s "Try again" button (design)', () => {
   const COLLECTIONS = 'Nebula couldn’t load the collections because the server didn’t respond. Try again.';
 
   it('ends the collections line, neutral, inline; it re-reads, and the line goes once a read succeeds', async () => {
@@ -441,7 +441,7 @@ describe('a load line\'s "Try again" button (GM r35 4)', () => {
   });
 });
 
-describe('a linked folder\'s own name (GM r35 3, review 15 NIT-2)', () => {
+describe('a linked folder\'s own name (design)', () => {
   const link = async (typed: string) => {
     render(<CommonsSettings status={null} onOpenAsset={() => {}} onChanged={() => {}} />);
     await tick(1000);
@@ -487,8 +487,8 @@ describe('a linked folder\'s own name (GM r35 3, review 15 NIT-2)', () => {
   });
 });
 
-describe('review 15 NIT-3: the other survivors', () => {
-  it('a settings read-back refused because the Commons is off says no "Saved…" line (M15)', async () => {
+describe('the other survivors', () => {
+  it('a settings read-back refused because the Commons is off says no "Saved…" line', async () => {
     render(<CommonsSettings status={null} onOpenAsset={() => {}} onChanged={() => {}} />);
     await tick(1000);
     folderState.offAfterPost = true;
@@ -499,7 +499,7 @@ describe('review 15 NIT-3: the other survivors', () => {
     expect(commonsLines()).toEqual([]);
   });
 
-  it('the loading line leaves no timer behind when it goes before 300 ms (M17)', () => {
+  it('the loading line leaves no timer behind when it goes before 300 ms', () => {
     const before = vi.getTimerCount();
     const { unmount } = render(<CommonsLoadingLine text="Loading settings…" />);
     expect(vi.getTimerCount()).toBe(before + 1);

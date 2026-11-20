@@ -2,12 +2,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * PR #198 fix round 20, rendered.
- * - GM r29 call 2: while a scene's [Try again] is on its way, its stop line
+ * PR #198: rendered.
+ * - Design: while a scene's [Try again] is on its way, its stop line
  *   stays and the button is disabled (aria-disabled, so focus stays on it)
  *   with its label unchanged, in the state slot and in the "Unsaved" mark's
  *   popover, so a double press can't queue two tries.
- * - Review 18 LOW-1 (GM r29): focus on a stop line never drops to the page.
+ * - Design: focus on a stop line never drops to the page.
  *   A line that comes back after its try gives focus to its [Try again]; a
  *   focused line that goes hands focus on by the × rule: another stop line
  *   (the notice, never its [Try again]), else the next notice's ×, else a
@@ -43,7 +43,7 @@ const scene = (id: string, label: string, x: number) => ({ id, type: 'cinemaScen
   data: { label, definitionId: 'cinema-scene', params: {}, state: 'idle', outputs: {} } });
 const LINE = 'Nebula couldn’t save your changes to “Opening” and “Ref scene”. They’re kept, and Nebula will try again with your next change.';
 
-describe('GM r29 call 2: [Try again] disabled while its try is on its way', () => {
+describe('[Try again] disabled while its try is on its way (design)', () => {
   it('the state slot: the line stays, [Try again] disabled with its label; pressing it retries nothing', async () => {
     const retry = vi.fn();
     // Opening's try is on its way (out of the stopped state); Ref is still stopped.
@@ -89,7 +89,7 @@ const lineEl = (text: string) => screen.getByText(text).closest('[data-scene-sto
 const tryOf = (text: string) => lineEl(text).querySelector('button') as HTMLButtonElement;
 const set = (state: Record<string, unknown>) => act(() => { useGraphStore.setState(state as never); });
 
-describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page', () => {
+describe('focus on a stop line never drops to the page (design)', () => {
   const canvas = () => {
     const el = document.createElement('div');
     el.className = 'canvas-wrapper';
@@ -103,7 +103,7 @@ describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page
     nodes: [scene('n1', 'Opening', 0), scene('n2', 'Ref scene', 300)], stoppedScenes: { n1: true }, sceneStops: { n1: { cause } },
     sceneTries: {}, scenePopover: null, undoNotice: null, messageNotice: null, sceneClashes: {}, ...extra });
 
-  it('(a) a [Try again] from the keyboard that fails the same way: focus stays on the same [Try again] the whole time', async () => {
+  it('a [Try again] from the keyboard that fails the same way: focus stays on the same [Try again] the whole time', async () => {
     useGraphStore.setState({ ...stoppedOpening('server'), retrySceneSave: (id: string) => {
       useGraphStore.setState({ stoppedScenes: {}, sceneTries: { [id]: { cause: 'server' } } } as never); } } as never);
     render(<NoticeRegion screen="canvas" />);
@@ -118,7 +118,7 @@ describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page
     expect(button.getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('(a) the try comes back under another cause (400, then 413): focus goes to the new line’s [Try again]', async () => {
+  it('the try comes back under another cause (400, then 413): focus goes to the new line’s [Try again]', async () => {
     useGraphStore.setState({ ...stoppedOpening('bad-save'), retrySceneSave: (id: string) => {
       useGraphStore.setState({ stoppedScenes: {}, sceneTries: { [id]: { cause: 'bad-save' } } } as never); } } as never);
     render(<NoticeRegion screen="canvas" />);
@@ -129,7 +129,7 @@ describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page
     expect(document.activeElement).toBe(tryOf(TOO_BIG_ONE));
   });
 
-  it('(b) a focused line that clears by itself, another stop line left: focus on that line itself, never its [Try again]', async () => {
+  it('a focused line that clears by itself, another stop line left: focus on that line itself, never its [Try again]', async () => {
     useGraphStore.setState({ ...stoppedOpening('server'), stoppedScenes: { n1: true, n2: true },
       sceneStops: { n1: { cause: 'server' }, n2: { cause: 'bad-save' } } } as never);
     render(<NoticeRegion screen="canvas" />);
@@ -140,7 +140,7 @@ describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page
     expect(document.activeElement).toBe(lineEl(CANT_REF));
   });
 
-  it('(b) no stop line left, a toast below: focus on its ×, never its action', async () => {
+  it('no stop line left, a toast below: focus on its ×, never its action', async () => {
     useGraphStore.setState(stoppedOpening('server', { undoNotice: { id: 7, text: 'Codex changed the canvas.', offer: null } }) as never);
     render(<NoticeRegion screen="canvas" />);
     await screen.findByText(SERVER_ONE, {}, LAZY);
@@ -150,7 +150,7 @@ describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page
     expect(document.activeElement?.closest('.canvas-undo-notice')?.textContent).toContain('Codex changed the canvas.');
   });
 
-  it('(b) no stop line left, only a clash prompt (no ×): focus on the prompt itself', async () => {
+  it('no stop line left, only a clash prompt (no ×): focus on the prompt itself', async () => {
     useGraphStore.setState(stoppedOpening('server', { sceneClashes: { n2: { id: 51, line: 'Codex changed “Ref scene” while you were editing it.', agent: 'Codex' } } }) as never);
     render(<NoticeRegion screen="canvas" />);
     await screen.findByText(SERVER_ONE, {}, LAZY);
@@ -159,7 +159,7 @@ describe('review 18 LOW-1 (GM r29): focus on a stop line never drops to the page
     expect(document.activeElement?.getAttribute('data-scene-clash')).toBe('n2');
   });
 
-  it('(b) nothing else in the region: focus on the canvas', async () => {
+  it('nothing else in the region: focus on the canvas', async () => {
     const wrapper = canvas();
     useGraphStore.setState(stoppedOpening('server') as never);
     render(<NoticeRegion screen="canvas" />);

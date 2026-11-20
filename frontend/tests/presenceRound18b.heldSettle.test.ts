@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18b (CI on d3c9e79e): the held rule's 150 ms timer told the views once, reading
+ * PR #204 (CI on d3c9e79e): the held rule's 150 ms timer told the views once, reading
  * Date.now. A timer can fire up to a millisecond before Date.now shows its full delay, and then
  * personHeldSettled was still false, nothing told the views again, and a held view (the chat's
  * agent list) stayed unswitched. Here Date.now runs a millisecond behind the timers, as then.

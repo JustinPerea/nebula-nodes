@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * PR #198 fix round 19 (GM r28 item 2), rendered: the scenes' stop lines
+ * PR #198, design's rulings, rendered: the scenes' stop lines
  * are a state in their own slot of the region's stack, above the event
  * slots (the message line and the canvas notice), one line per cause, with
  * [Try again] for every scene the line names and no ×.
@@ -37,7 +37,7 @@ const scene = (id: string, label: string, x: number) => ({ id, type: 'cinemaScen
 const MERGED = 'Nebula couldn’t save your changes to “Opening” and “Ref scene”. They’re kept, and Nebula will try again with your next change.';
 const CANT = 'Nebula can’t save your changes to “Finale”.';
 
-describe('GM r28 item 2: the state slot', () => {
+describe('the state slot (design)', () => {
   it('a merged line and a line of another cause sit above the event slot; [Try again] retries every scene the line names', async () => {
     const retry = vi.fn();
     useGraphStore.setState({
@@ -57,7 +57,7 @@ describe('GM r28 item 2: the state slot', () => {
     const item = (element: HTMLElement) => element.closest<HTMLElement>('[data-notice-slot] > *')!;
     expect(item(merged).parentElement).toHaveAttribute('data-notice-slot', 'scene-stop');
     expect(item(cant).parentElement).toHaveAttribute('data-notice-slot', 'scene-stop');
-    // One line per cause, in GM's order; both above both event slots.
+    // One line per cause, in design's order; both above both event slots.
     expect(item(merged).compareDocumentPosition(item(cant)) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     for (const below of [event, message]) {
       expect(item(below).compareDocumentPosition(item(merged)) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();

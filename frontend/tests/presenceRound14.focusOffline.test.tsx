@@ -1,5 +1,5 @@
 /**
- * PR #204 round 14 (GM r23 3 with review 11 MEDIUM-1's handover): going offline hides Add's line,
+ * Design (PR #204, with the focus handover): going offline hides Add's line,
  * so focus on it moves on as a demote does (to the heading, never the page), and keeps the
  * control it stands in for: back online it returns to the line, and on the promote to the field.
  */
@@ -15,7 +15,7 @@ vi.mock('../src/lib/backend', async (original) => {
     ...real,
     apiFetch: (path: string, init?: RequestInit) => {
       net.sent.push(`${String(init?.method ?? 'GET').toUpperCase()} ${path.split('?')[0]}`);
-      // Round 18c (GM r30 2): the collections answer (none), so Add and Add to are live once
+      // Design: the collections answer (none), so Add and Add to are live once
       // connected; with them pending both are disabled ("Not loaded").
       if (path.split('?')[0] === '/api/commons/collections' && String(init?.method ?? 'GET').toUpperCase() === 'GET') {
         return Promise.resolve(new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }));
@@ -50,7 +50,7 @@ const promote = async () => {
   await settle(50);
 };
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });

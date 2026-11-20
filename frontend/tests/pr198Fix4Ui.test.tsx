@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
 
 /**
- * PR #198 fix round 4 (review 4, L3; GM's r4 and r5 wording):
+ * PR #198 and design's wording:
  * - A card or studio says "missing or damaged" only when the data check
- *   finds something wrong; otherwise GM's neutral line ("Nebula ran into a
+ *   finds something wrong; otherwise design's neutral line ("Nebula ran into a
  *   problem drawing it, but its data is fine. Reload Nebula to try again.")
  *   and the Agent log's "Couldn’t draw “X”, node n4. <error message>".
- * - GM r4: a card keeps its header (icon and label) and replaces only the
+ * - Design: a card keeps its header (icon and label) and replaces only the
  *   body; no "so Nebula can't show it." on cards.
  * - The studio boundary's own header can't take the app down: a header
  *   that throws gives a plain one with the way back.
@@ -84,13 +84,13 @@ function logged(run: () => void): string[] {
 
 const NEUTRAL = 'something went wrong drawing it, but its data is fine. Reload Nebula to try again.';
 
-describe('L3: a card that throws on data that checks out', () => {
-  it('GM r5: the neutral line, the header kept, the Agent log names the error', () => {
+describe('a card that throws on data that checks out', () => {
+  it('the neutral line, the header kept, the Agent log names the error (design)', () => {
     const lines = logged(() => render(<Flow nodes={[card({ label: 'Hero still', definitionId: 'text-input',
       params: { text: '' }, outputs: {} })]} />));
     const boundary = document.querySelector('[data-node-card-boundary]')!;
     expect(boundary.querySelector('.node-card-boundary__line')!.textContent).toBe(`Nebula couldn’t show “Hero still” because ${NEUTRAL}`);
-    // GM r4: the header (icon and label) stays; only the body is replaced.
+    // Design: the header (icon and label) stays; only the body is replaced.
     const header = boundary.querySelector('.node-card-boundary__header')!;
     expect(header.textContent).toContain('Hero still');
     expect(header.querySelector('[role="img"]')).not.toBeNull();
@@ -103,9 +103,9 @@ describe('L3: a card that throws on data that checks out', () => {
   });
 });
 
-describe('L3: a card whose data is damaged', () => {
+describe('a card whose data is damaged', () => {
   it.each([
-    // Fix round 5 (GM r6 item 4): each is there but malformed, so "is damaged."
+    // Design: each is there but malformed, so "is damaged."
     ['params null', { label: 'Hero still', definitionId: 'text-input', params: null, outputs: {} }, 'params'],
     ['outputs null', { label: 'Hero still', definitionId: 'text-input', params: {}, outputs: null }, 'outputs'],
     ['an unknown definition', { label: 'Hero still', definitionId: 'remotion-composition', params: {}, outputs: {} }, 'definitionId'],
@@ -113,7 +113,7 @@ describe('L3: a card whose data is damaged', () => {
     ['a clip null', { label: 'Hero still', definitionId: 'video-edit', params: { clips: [null] }, outputs: {} }, 'clips[0]'],
     ['a layer a string', { label: 'Hero still', definitionId: 'remotion-node', params: { manifest: { timeline: ['x'] } }, outputs: {} }, 'manifest.timeline[0]'],
     ['a scene shot null', { label: 'Hero still', definitionId: 'cinema-scene', params: { scene: { shots: [null] } }, outputs: {} }, 'scene.shots[0]'],
-  ])('%s: GM r4\'s damaged line', (_name, data, field) => {
+  ])('%s: design\'s damaged line', (_name, data, field) => {
     expect(nodeDataProblem(data)).toEqual({ field, state: 'damaged' });
     const lines = logged(() => render(<Flow nodes={[card(data)]} />));
     const boundary = document.querySelector('[data-node-card-boundary]')!;
@@ -144,23 +144,23 @@ describe('L3: a card whose data is damaged', () => {
   });
 });
 
-describe('L3: the studio boundary', () => {
+describe('the studio boundary', () => {
   const Throws = () => { throw new TypeError('studio broke'); };
 
-  it('GM r5: data that checks out reads the neutral studio line, with the same way back', () => {
+  it('data that checks out reads the neutral studio line, with the same way back (design)', () => {
     const exit = vi.fn();
     useUIStore.setState({ exitCinemaEditor: exit } as never);
     const lines = logged(() => render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => null}><Throws /></StudioBoundary>));
     expect(document.querySelector('.studio-boundary__line')!.textContent)
       .toBe("Nebula couldn’t open “Opening” because something went wrong showing it, but its data is fine. Reload Nebula to try again.");
-    // GM r6 item 5 (fix round 5): the studio's own neutral Agent log line.
+    // Design: the studio's own neutral Agent log line.
     expect(lines).toEqual(["Couldn’t open “Opening” in Cinema, node n4. studio broke"]);
     fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }));
     expect(exit).toHaveBeenCalledTimes(1);
   });
 
-  it('damaged data keeps GM\'s approved studio line', () => {
+  it('damaged data keeps design\'s approved studio line', () => {
     render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => 'scene.base'}><Throws /></StudioBoundary>);
     expect(document.querySelector('.studio-boundary__line')!.textContent)

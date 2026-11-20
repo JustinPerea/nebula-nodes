@@ -1,5 +1,5 @@
 /**
- * PR #204 round 13, GM r21 1: in the Commons' line row (components/commons/CommonsPageLines),
+ * Design (PR #204): in the Commons' line row (components/commons/CommonsPageLines),
  * Add's lock line starts where the because line's words start, not at its rail, and at the same
  * x when it stands alone. The x comes from one measure: the line's rail and padding are tokens,
  * and the lock line's inset is their sum, so the two can't drift apart. The live check measures
@@ -23,7 +23,7 @@ function rule(selector: string): Record<string, string> {
   }));
 }
 
-describe('Add\'s lock line lines up with the because line\'s words (GM r21 1)', () => {
+describe('Add\'s lock line lines up with the because line\'s words (design)', () => {
   it('the line\'s padding is the shared token and the words\' inset is that padding (design: no bar down the edge)', () => {
     const tokens = rule('body.app-slava-restraint');
     expect(tokens['--commons-line-text-x']).toBe('var(--commons-line-pad-x)');
@@ -34,7 +34,7 @@ describe('Add\'s lock line lines up with the because line\'s words (GM r21 1)', 
 
   it('the lock line in the row starts at that inset, with or without the because line', () => {
     const lock = rule('body.app-slava-restraint .commons-messages__lock-line');
-    // Round 14 (GM r23 2): the inset is a margin and the line fits its words, so its focus ring
+    // Design: the inset is a margin and the line fits its words, so its focus ring
     // hugs the sentence; nothing pads it (the row's padding is .commons-messages').
     expect(lock.margin).toBe('0 0 0 var(--commons-line-text-x)');
     expect(lock.padding).toBe('0');
@@ -49,7 +49,7 @@ describe('Add\'s lock line lines up with the because line\'s words (GM r21 1)', 
   });
 });
 
-describe('a focused page-row line: the ring hugs the sentence (GM r23 2, PR #204 round 14)', () => {
+describe('a focused page-row line: the ring hugs the sentence (design, PR #204)', () => {
   it('no rule draws its own ring or offset on the lock line: the token ring and its usual offset apply', () => {
     const focusRules = [...css.matchAll(/([^{}]*(?:commons-messages__lock-line|person-lock-line)[^{}]*)\{([^}]*)\}/g)]
       .filter(([, selector]) => /:focus/.test(selector));

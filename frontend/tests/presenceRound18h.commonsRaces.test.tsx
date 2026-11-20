@@ -1,13 +1,12 @@
 /**
- * PR #204 round 18h, review 16 (commons-reconnect logic lens): races and Try again.
+ * PR #204: races and Try again.
  *
- * - PA (LOW-1): a link's late read-back renames only the notice it wrote, never a newer one.
- * - PB/PB2 (LOW-2): a collections read that answers after a newer one is dropped, and Add to
+ * - A link's late read-back renames only the notice it wrote, never a newer one.
+ * - A collections read that answers after a newer one is dropped, and Add to
  *   shows the collection Add sends to, by construction.
- * - PC (GM r38 3b): a Try again whose re-read fails for another reason keeps focus on the new
+ * - Design: a Try again whose re-read fails for another reason keeps focus on the new
  *   line's Try again.
- * - PF (GM r38 3a): Agent review's loaded-state line ending "Try again." has the button.
- * Probes from review 16, turned into assertions.
+ * - Design: Agent review's loaded-state line ending "Try again." has the button.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -50,7 +49,7 @@ function base(path: string, init?: RequestInit): Promise<Response> {
   if (path.includes('reanalyze')) return Promise.resolve(json({ queued: 0 }));
   return Promise.resolve(json({}));
 }
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers();
@@ -62,7 +61,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); act(() => notePersonPromoted()); act(() => resetBackendConnectionForTests()); resetCommonsSessionForTests(); vi.useRealTimers(); });
 
-it('PA: a link\'s late read-back leaves a newer notice alone', async () => {
+it('a link\'s late read-back leaves a newer notice alone', async () => {
   let release = () => {};
   const gate = new Promise<void>((r) => { release = r; });
   let foldersReads = 0;
@@ -90,7 +89,7 @@ it('PA: a link\'s late read-back leaves a newer notice alone', async () => {
   expect(notice()?.getAttribute('title')).toBeNull();
 });
 
-it('PB: Import\'s re-read, sent before New collection lands, answers after the merge', async () => {
+it('Import\'s re-read, sent before New collection lands, answers after the merge; the reads after it fail', async () => {
   render(<CommonsView />);
   await tick(1000);
   let release = () => {};
@@ -136,7 +135,7 @@ it('PB: Import\'s re-read, sent before New collection lands, answers after the m
   expect(bodies.filter((b) => b.path.endsWith('/intake/url')).map((b) => JSON.parse(b.body).collection_id)).toEqual(['c2']);
 });
 
-it('PB2: (no failure) Import\'s re-read, sent before New collection lands, answers after the merge', async () => {
+it('with no failure, Import\'s re-read, sent before New collection lands, answers after the merge', async () => {
   render(<CommonsView />);
   await tick(1000);
   let release = () => {};
@@ -182,7 +181,7 @@ it('PB2: (no failure) Import\'s re-read, sent before New collection lands, answe
   expect(bodies.filter((b) => b.path.endsWith('/intake/url')).map((b) => JSON.parse(b.body).collection_id)).toEqual(['c2']);
 });
 
-it('PC: a Try again whose re-read fails for another reason keeps focus on the new line\'s Try again', async () => {
+it('a Try again whose re-read fails for another reason keeps focus on the new line\'s Try again', async () => {
   let collectionsStatus = 503;
   transport.fetch.mockImplementation(async (p: string, i?: RequestInit) => {
     const path = String(p);
@@ -202,7 +201,7 @@ it('PC: a Try again whose re-read fails for another reason keeps focus on the ne
   expect(document.activeElement).toBe(btn());
 });
 
-it('PF: Agent review answered, then its 5 s re-read fails: the line ending "Try again." has the button', async () => {
+it('Agent review answered, then its 5 s re-read fails: the line ending "Try again." has the button', async () => {
   let fail = false;
   const batch = { id: 'b1', state: 'open', attempts: 0, call_budget: 3, items: [] };
   transport.fetch.mockImplementation(async (p: string, i?: RequestInit) => {
@@ -226,7 +225,7 @@ it('PF: Agent review answered, then its 5 s re-read fails: the line ending "Try 
   expect(document.querySelector('[data-commons-line]')).toBeNull();
 });
 
-it('H8: a newer list without the chosen collection: Add to and Add both move to the list\'s first', async () => {
+it('a newer list without the chosen collection: Add to and Add both move to the list\'s first', async () => {
   let gone = false;
   transport.fetch.mockImplementation(async (p: string, i?: RequestInit) => {
     const path = String(p);

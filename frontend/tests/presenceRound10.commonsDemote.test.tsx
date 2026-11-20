@@ -1,5 +1,5 @@
 /**
- * PR #204 round 10 (GM r17 item 6, option b): the Commons on a demoted tab shows exactly what a
+ * Design (PR #204): the Commons on a demoted tab shows exactly what a
  * tab that never connected shows. A demote that lasts the held rule's 150 ms holds every Commons
  * call (lib/commonsHold: the not-connected line, nothing sent) and mounts the view
  * afresh; the promote mounts it again, which reads everything again; a quick reconnect never
@@ -34,7 +34,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 const demote = () => act(() => { notePersonPromoted(); reportPersonRequired(); });
 const last = () => held.calls[held.calls.length - 1];
 
-describe('the Commons on a demote (GM r17 item 6)', () => {
+describe('the Commons on a demote (design)', () => {
   it('past 150 ms: calls are held and the view mounts afresh; the promote mounts it again', () => {
     render(<CommonsView />);
     const first = held.mounts;

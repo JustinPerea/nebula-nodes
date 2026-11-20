@@ -5,7 +5,7 @@ import { failureCopy, failureText } from '../src/lib/errorCopy';
 import { OfflineRefusal } from '../src/lib/backendConnection';
 
 /**
- * #210 round 6t (review 12 live MEDIUM-1, GM r113 1): offline, the deleted
+ * Design (PR #210): offline, the deleted
  * board line's Restore left an empty red alert (`<div role="alert"><span
  * class="failure-lines"><span class="failure-lines__reason"></span></span>`)
  * that stayed after reconnect. Two rules keep it from coming back:
@@ -14,12 +14,12 @@ import { OfflineRefusal } from '../src/lib/backendConnection';
  *   failure's text is empty (a write refused while offline: the banner is
  *   the reason);
  * - every button on a Studio notice line follows the offline convention
- *   (GM r90.3): aria-disabled with the offline mark, so a press only pulses
+ *   (design): aria-disabled with the offline mark, so a press only pulses
  *   the banner.
  */
 const STUDIO = readFileSync(resolve(__dirname, '../src/components/moodboard-studio/MoodboardStudioView.tsx'), 'utf8');
 
-describe('no Studio line mounts with empty text (GM r113 1)', () => {
+describe('no Studio line mounts with empty text (design)', () => {
   it('failureText is empty for a write refused while offline, and for an empty copy', () => {
     expect(failureText(failureCopy(new OfflineRefusal('POST', '/api/trash/moodboard/t1/restore')))).toBe('');
     expect(failureText({ heading: '', reason: '' })).toBe('');
@@ -41,7 +41,7 @@ describe('no Studio line mounts with empty text (GM r113 1)', () => {
     expect(STUDIO.slice(start, end)).toMatch(/if \(!failure \|\| !failureText\(failure, retry\)\) return null;/);
   });
 
-  it('every button on a Studio notice line is aria-disabled with the offline mark while offline (GM r90.3)', () => {
+  it('every button on a Studio notice line is aria-disabled with the offline mark while offline (design)', () => {
     const buttons = [...STUDIO.matchAll(/<button\b[^>]*?moodboard-studio__notice-action[\s\S]*?>/g)].map((match) => match[0]);
     expect(buttons.length).toBeGreaterThanOrEqual(3);
     for (const tag of buttons) {

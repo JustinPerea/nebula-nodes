@@ -3,15 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
 
 /**
- * PR #198 fix round 5:
- * - Review 5, L5: a card that keeps failing writes one Agent log line per
- *   distinct error, not one per data change (the probe's running node wrote
+ * PR #198:
+ * - a card that keeps failing writes one Agent log line per
+ *   distinct error, not one per data change (a running node wrote
  *   7 identical lines over 7 progress events). A card that draws again logs
  *   its next failure again.
- * - GM r6 item 4: the damaged Agent log says what the code knows: "<field>
+ * - Design: the damaged Agent log says what the code knows: "<field>
  *   is missing." when absent, "<field> is damaged." when present but
  *   malformed, "missing or damaged" only when the code can't tell.
- * - GM r6 item 5: the studio's neutral Agent log line, "Couldn’t open “X” in
+ * - Design: the studio's neutral Agent log line, "Couldn’t open “X” in
  *   <studio>, node n4. <error message>".
  */
 
@@ -66,7 +66,7 @@ function logged(run: () => void): string[] {
   return lines;
 }
 
-describe('L5: a card that keeps failing logs once per distinct error', () => {
+describe('a card that keeps failing logs once per distinct error', () => {
   it('7 data changes of a running node that always throws: one line', () => {
     const lines = logged(() => {
       const view = render(<Flow nodes={[running(0)]} />);
@@ -96,7 +96,7 @@ describe('L5: a card that keeps failing logs once per distinct error', () => {
   });
 });
 
-describe('GM r6 item 4: missing, damaged, or the code can\'t tell', () => {
+describe('missing, damaged, or the code can\'t tell (design)', () => {
   const card = (data: Record<string, unknown>): Node => ({ id: 'n4', type: 'boom', position: { x: 0, y: 0 },
     data: { boom: 'x', ...data } });
 
@@ -147,12 +147,12 @@ describe('GM r6 item 4: missing, damaged, or the code can\'t tell', () => {
     const Throws = () => { throw new TypeError('studio broke'); };
     const lines = logged(() => render(<StudioBoundary studio="cinema-editor" node={{ id: 'n4', label: 'Opening' }}
       problem={() => ({ field: 'scene.base', state: 'damaged' })}><Throws /></StudioBoundary>));
-    // GM r8: a studio's line names the studio.
+    // Design: a studio's line names the studio.
     expect(lines).toEqual(["Couldn’t open “Opening” in Cinema, node n4. scene.base is damaged."]);
   });
 });
 
-describe('GM r6 item 5: the studio\'s neutral Agent log line', () => {
+describe('the studio\'s neutral Agent log line (design)', () => {
   const Throws = () => { throw new TypeError('studio broke'); };
 
   it('"Couldn’t open “X” in <studio>, node n4. <error message>"', () => {

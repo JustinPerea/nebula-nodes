@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mergeRunEstimates, type RunEstimate } from '../src/lib/placeholderRunConfirm';
 import type { RunCost } from '../src/lib/runScope';
 
-// Review 16, M2 (round 17): a re-ask after a route change prices the rows
+// A re-ask after a route change prices the rows
 // that kept their route at Nebula's estimate and the moved ones at the
 // canvas's numbers for their new route.
 const refused: RunEstimate = { low: 0.13, high: 0.13, nodes: { a: { low: 0.07, high: 0.07 }, b: { low: 0.06, high: 0.06 } },

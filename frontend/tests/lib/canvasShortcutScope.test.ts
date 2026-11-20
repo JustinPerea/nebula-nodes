@@ -20,7 +20,7 @@ describe('canvas shortcut scope', () => {
   });
 
   // The proposal bar and the pin error toast left .canvas-wrapper for the app's
-  // notice region (round 2): focus on the bar (Review focuses it) or on a
+  // notice region: focus on the bar (Review focuses it) or on a
   // toast's button still leaves Cmd+Z, Shift+1 and Cmd+Enter the canvas's.
   it('accepts the notice region, which keeps no keys of its own, but not a field in it', () => {
     const $ = mount(`

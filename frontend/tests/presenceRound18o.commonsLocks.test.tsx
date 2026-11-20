@@ -1,12 +1,12 @@
 /**
- * PR #204 round 18o (GM r51, review 18): the Commons panes' locks and where focus goes.
- * - Q1: offline, Agent review keeps its last read on screen, and an open close dialog stays; the
+ * Design (PR #204): the Commons panes' locks and where focus goes.
+ * - Offline, Agent review keeps its last read on screen, and an open close dialog stays; the
  *   poll reads again on reconnect and focus stays where it was.
- * - Q2: a running grade locks the opener in place with its own line (commonsCopy.ratchet and
+ * - A running grade locks the opener in place with its own line (commonsCopy.ratchet and
  *   commonsReview cover the component; here, through the pane's poll).
- * - Q3: unsaved edits lock the reference buttons in place, the status line their reason, in both
+ * - Unsaved edits lock the reference buttons in place, the status line their reason, in both
  *   panes; Generate remaining grades locks with its own line; Download review record stays live.
- * - Q4: Discard hands focus to the reference's heading, Save labels keeps it, Save corrections &
+ * - Discard hands focus to the reference's heading, Save labels keeps it, Save corrections &
  *   next hands it to the next reference's heading. Focus is asserted under the focus fixup
  *   (tests/helpers/focusFixup), so it is where Chrome would leave it, never <body>.
  */
@@ -75,7 +75,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); act(() => resetBackendConnectionForTests()); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-describe('Q1: offline, Agent review keeps its last read', () => {
+describe('offline, Agent review keeps its last read', () => {
   const noAnswer = () => new CommonsRequestError("Nebula's server isn't answering. Make sure it's running, then try again.", 0,
     { heading: 'Couldn’t load Agent review.' });
 
@@ -130,7 +130,7 @@ describe('Q1: offline, Agent review keeps its last read', () => {
     await screen.findByText('An agent proposal');
     api.get.mockRejectedValueOnce(noAnswer());
     await poll();
-    // Online, a failed read shows its line alone (GM r39 Fix B).
+    // Online, a failed read shows its line alone (design).
     expect(screen.queryByText('An agent proposal')).toBeNull();
     act(() => noteBackendConnection('offline'));
     expect(screen.getByText('An agent proposal')).toBeTruthy();
@@ -152,7 +152,7 @@ describe('Q1: offline, Agent review keeps its last read', () => {
     expect(screen.queryByText(/couldn’t load this reference/)).toBeNull();
   });
 
-  it('online, a failed read still shows only its line (GM r39 Fix B unchanged)', async () => {
+  it('online, a failed read still shows only its line (design unchanged)', async () => {
     const poll = capturePoll();
     render(<CommonsReview />);
     await screen.findByText('An agent proposal');
@@ -163,7 +163,7 @@ describe('Q1: offline, Agent review keeps its last read', () => {
   });
 });
 
-describe('Q2: a grade starting and finishing, through the pane\'s poll', () => {
+describe('a grade starting and finishing, through the pane\'s poll', () => {
   it('focus on the opener stays as the grade starts (aria lock, its line) and as it finishes (live)', async () => {
     const poll = capturePoll();
     render(<CommonsReview />);
@@ -192,7 +192,7 @@ async function correct() {
   fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
 }
 
-describe('Q3: what unsaved corrections lock', () => {
+describe('what unsaved corrections lock', () => {
   it('Agent review: the reference buttons and Generate lock in place with their reasons; Download stays live', async () => {
     const value = review(); value.call_budget = 15;
     value.items[1].status = 'pending'; value.items[1].proposal = null;
@@ -252,7 +252,7 @@ function expectHeading(name: string) {
   expect(heading.getAttribute('tabindex')).toBe('-1');
 }
 
-describe('Q4: focus after Discard and Save', () => {
+describe('focus after Discard and Save', () => {
   it('Agent review, Discard changes: focus on the current reference\'s heading', async () => {
     render(<CommonsReview />);
     await correct();

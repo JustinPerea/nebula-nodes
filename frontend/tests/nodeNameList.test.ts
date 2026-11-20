@@ -4,7 +4,7 @@ import { changesNotSavedLine, changesSavedAsCopyLine } from '../src/lib/savingCu
 import { deleteNoAnswerLine, deleteServerErrorLine } from '../src/lib/deleteCopy';
 
 /**
- * GM - Design (2026-10-27, the follow-up to PR #195), verbatim: same-title
+ * Design (2026-10-27, the follow-up to PR #195), verbatim: same-title
  * nodes are grouped with a count, "Couldn't save your changes to 2 “Text”
  * nodes."; a mix, "…to “Brief” and 2 “Text” nodes."; the rule counts nodes,
  * not groups, so 4 or more nodes in total read "…to 4 nodes."; no node ids

@@ -1,5 +1,5 @@
 /**
- * PR #204 round 14, Justin's decision (2026-10-31): a browser tab drops its stored person token
+ * PR #204: Justin's decision (2026-10-31): a browser tab drops its stored person token
  * when the backend answers explicitly that the token is invalid, and then reads as a plain
  * never-connected tab; opening the link again connects it. The explicit answers: the canvas
  * socket refusing the hello that carried the token (`personRequired`), and a Commons call refused

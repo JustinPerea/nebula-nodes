@@ -6,11 +6,11 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * GM on PR #205, round 1:
- * - Answer 2: a refusal after a key press is the lock line alone, no
+ * Design (PR #205):
+ * - a refusal after a key press is the lock line alone, no
  *   "Couldn't …" sentence before it.
- * - Answer 3: Generate all says "the shots".
- * - Answer 6: a switch saving its own change follows the held rule (the
+ * - Generate all says "the shots".
+ * - A switch saving its own change follows the held rule (the
  *   SwitchRow tests here; Settings and Personal agents in their own suites).
  * - The fix: when the lock reason is already on screen beside a control, no
  *   tooltip; aria-describedby points at the line (canvasLock `shown`, a rule
@@ -62,8 +62,8 @@ const textNode = (id: string, label: string) => ({ id, type: 'model-node', posit
   data: { label, definitionId: 'text-input', params: {}, outputs: {}, state: 'idle' } }) as unknown as Node<NodeData>;
 const value = (element: Element, key: string) => cascaded(element).get(key)?.value ?? '';
 
-describe('answer 2: a refusal after a key press is the lock line alone', () => {
-  it('GM\'s five lines', () => {
+describe('a refusal after a key press is the lock line alone', () => {
+  it('the five lines (design)', () => {
     expect(runLockedLine('delete', 1, '“Brief”')).toBe('You can delete “Brief” when the run finishes.');
     expect(runLockedLine('delete', 3, undefined, ['A', 'B', 'C'])).toBe('You can delete “A”, “B” and “C” when the run finishes.');
     expect(runLockedLine('undo')).toBe('You can undo when the run finishes.');
@@ -82,7 +82,7 @@ describe('answer 2: a refusal after a key press is the lock line alone', () => {
       .toBe('You can delete “Brief” when the run finishes.');
   });
 
-  it('adding a connected node during an import: "You can add “X” when the import finishes." (GM PR #205 r4 item 3: a run no longer locks it)', async () => {
+  it('adding a connected node during an import: "You can add “X” when the import finishes." (design, PR #205: a run no longer locks it)', async () => {
     const said: string[] = [];
     const connect = { source: 'n1', sourceHandle: 'text', target: 'new', targetHandle: 'text', newNodeIs: 'target' as const };
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief')], edges: [], isImportingGraph: true, notify: (text: string) => { said.push(text); } } as never);
@@ -91,7 +91,7 @@ describe('answer 2: a refusal after a key press is the lock line alone', () => {
   });
 });
 
-describe('answer 3: Generate all', () => {
+describe('Generate all says "the shots" in its lock line', () => {
   const scene = [{ id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
     data: { label: 'Opening', definitionId: 'cinema-scene', state: 'idle', outputs: {},
       params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a' }] } } } }];
@@ -213,7 +213,7 @@ describe('the fix: a reason already on screen beside the control is no tooltip (
   });
 });
 
-describe('answer 6: a switch saving its own change follows the held rule', () => {
+describe('a switch saving its own change follows the held rule', () => {
   beforeEach(() => { document.body.className = 'app-slava-restraint'; vi.useFakeTimers(); });
   const row = (saving: boolean, onChange = vi.fn()) => (
     <SwitchRow title="Demo zoom telemetry" checked saving={saving} onChange={onChange} />);

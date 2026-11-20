@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18 (GM r28 1): a reference's media that Nebula didn't answer for says so in the
+ * Design (PR #204): a reference's media that Nebula didn't answer for says so in the
  * one Commons line style, neutral, inside its tile. Runs the real Commons API and apiFetch; only
  * the browser's fetch is stubbed (503, no reason). Read through the app's own stylesheets.
  */
@@ -30,7 +30,7 @@ it('a media load with no answer draws the neutral Commons line, not bare text', 
   expect(lineLook(line)).toEqual(NEUTRAL);
 });
 
-it('a reference\'s image or video the backend can\'t find (404 "not found"): the file isn\'t there anymore (GM r30)', async () => {
+it('a reference\'s image or video the backend can\'t find (404 "not found"): the file isn\'t there anymore (design)', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })));
   for (const [video, words] of [[false, 'Nebula couldn’t load this image because the file isn’t there anymore.'],
     [true, 'Nebula couldn’t load this video because the file isn’t there anymore.']] as const) {

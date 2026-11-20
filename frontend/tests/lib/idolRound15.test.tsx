@@ -1,4 +1,4 @@
-// PR #203 round 15: GM r28 and r29, review 14 (copy MEDIUM-1, LOW-1).
+// Design (PR #203): different names with one reason merge into one not-ready line, and the registry's reasons, the add-key line and the Keychain lines read design's words.
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { type ProposalNotReady } from '../../src/lib/canvasProposals';
@@ -17,7 +17,7 @@ const row = (ref: string, name: string, one: string, many?: string): ProposalNot
 });
 const texts = (rows: ProposalNotReady[]) => notReadyShown(rows, null);
 
-describe('different names with the same reason merge into one line (GM r28)', () => {
+describe('different names with the same reason merge into one line (design)', () => {
   it('two names, one reason: one line, the plural verb', () => {
     const { lines } = texts([row('+w', 'Writer', ANTHROPIC), row('+e', 'Editor', ANTHROPIC)]);
     expect(lines.map((line) => line.text)).toEqual(['“Writer” and “Editor” need your Anthropic API key. Add it in Settings.']);
@@ -64,7 +64,7 @@ describe('different names with the same reason merge into one line (GM r28)', ()
   });
 });
 
-describe('every reason the registry gives, for one node and for several (review 14, copy LOW-1)', () => {
+describe('every reason the registry gives, for one node and for several', () => {
   it.each(NOT_READY_REASONS.map((reason) => [reason.line, reason] as const))('%s', (_line, reason) => {
     const one = { ...reason, ref: '+a', nodeId: null, missing: 'x', person: reason.line, reason: { one: reason.one, many: reason.many } };
     expect(reason.line.startsWith(`“${reason.name}” `)).toBe(true);
@@ -75,7 +75,7 @@ describe('every reason the registry gives, for one node and for several (review 
     expect(reason.many).not.toMatch(/^(needs|is|isn’t|has) |\bits (list|provider)\b|\bthe node’s\b|\bit doesn’t\b/);
   });
 
-  it('the switcher and Replicate lines read GM r29’s words in both forms', () => {
+  it('the switcher and Replicate lines read design’s words in both forms', () => {
     const unknown = NOT_READY_REASONS.find((reason) => reason.one.startsWith('is set to a provider that'))!;
     expect(mergedNotReadyLine(['N'], unknown)).toBe('“N” is set to a provider that isn’t in its list. Choose one in its provider switcher.');
     expect(mergedNotReadyLine(['N', 'N'], unknown))
@@ -84,7 +84,7 @@ describe('every reason the registry gives, for one node and for several (review 
   });
 });
 
-describe('the one add-key line (GM r28 item 3)', () => {
+describe('the one add-key line (design)', () => {
   it('says each key from the noun source, a sentence with its period', () => {
     expect(addKeyLine(['REPLICATE_API_TOKEN'])).toBe('Add a Replicate token in Settings to run this node.');
     expect(addKeyLine(['GOOGLE_VERTEX_CREDENTIALS'])).toBe('Add a Vertex AI service account key in Settings to run this node.');
@@ -97,7 +97,7 @@ describe('the one add-key line (GM r28 item 3)', () => {
   });
 });
 
-describe('the Keychain lines say what Nebula is using now (GM r28 item 2)', () => {
+describe('the Keychain lines say what Nebula is using now (design)', () => {
   it.each([
     ['save-over', 'Nebula couldn’t save this key and is still using the one it had. Your Keychain has the new one. Try again, or remove it.',
       'Nebula couldn’t save your OpenAI API key and is still using the one it had. Your Keychain has the new one. Try again, or remove it.'],
@@ -115,7 +115,7 @@ describe('the Keychain lines say what Nebula is using now (GM r28 item 2)', () =
       .toBe('Nebula removed your Replicate token from your Keychain but is still using it. Try again.');
   });
 
-  it('a newer refusal’s fix sentence replaces "Try again, or remove it." (GM r29 item 6)', () => {
+  it('a newer refusal’s fix sentence replaces "Try again, or remove it." (design)', () => {
     expect(keychainKeptLine('save-over', 'OPENAI_API_KEY', 'row', 'Fix “apiKeys” in ~/.nebula/settings.json, then try again.'))
       .toBe('Nebula couldn’t save this key and is still using the one it had. Your Keychain has the new one. '
         + 'Fix “apiKeys” in ~/.nebula/settings.json, then try again.');

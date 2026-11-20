@@ -5,11 +5,11 @@ import {
 } from '../../src/lib/errorCopy';
 
 /**
- * GM - Design (error-copy, 2026-10-22): "Never show raw error.message strings
- * in UI." A request that fails says one of GM's written lines, or the
- * backend's own 4xx `detail` (written copy). A 4xx with no detail says GM's
- * line for its status (the fallbacks GM wrote after the first build). The
- * table is GM's suggestion: error kind -> the line the person reads.
+ * Design (error-copy, 2026-10-22): "Never show raw error.message strings
+ * in UI." A request that fails says one of design's written lines, or the
+ * backend's own 4xx `detail` (written copy). A 4xx with no detail says design's
+ * line for its status (the fallbacks design wrote after the first build). The
+ * table is design's suggestion: error kind -> the line the person reads.
  */
 
 const LOST = "Nebula’s server isn’t answering. Make sure it’s running, then try again.";
@@ -18,7 +18,7 @@ const REFUSED = "Try again, or reload if it keeps happening.";
 const ACCESS = "You don’t have access to this anymore. Reload to sign in again.";
 const TOO_LARGE = "That’s too large to save.";
 
-describe('the lines are GM\'s, verbatim', () => {
+describe('the lines are design\'s, verbatim', () => {
   it('lost connection and no response', () => {
     expect(CONNECTION_LOST_COPY).toBe(LOST);
     expect(NO_RESPONSE_COPY).toBe(NO_ANSWER);
@@ -36,12 +36,12 @@ describe('error kind -> line', () => {
   const thrown: Array<[string, unknown, AbortSignal | undefined, string]> = [
     // typeerror (2026-10-24): fetch's no-answer is classified where fetch is
     // called (apiFetch, fetchUrl); a TypeError that reaches here unclassified
-    // is the browser's own failure, so GM's general line.
+    // is the browser's own failure, so design's general line.
     ['a TypeError nothing classified, even with fetch\'s words', new TypeError('Failed to fetch'), undefined, REFUSED],
     ['Safari\'s words, unclassified', new TypeError('Load failed'), undefined, REFUSED],
     ['an AbortError the caller didn\'t ask for', new DOMException('The operation was aborted.', 'AbortError'), undefined, LOST],
     ['a ConnectionLostError from apiFetch', new ConnectionLostError(new TypeError('Failed to fetch')), undefined, LOST],
-    ['anything else says GM\'s general line, never its own message', new Error('Unexpected token < in JSON'), undefined, REFUSED],
+    ['anything else says the general line, never its own message', new Error('Unexpected token < in JSON'), undefined, REFUSED],
     ['a thrown non-Error says it too', 'boom', undefined, REFUSED],
     ['the caller\'s own abort is not a lost connection either', new DOMException('aborted', 'AbortError'), caller.signal, REFUSED],
   ];
@@ -104,21 +104,21 @@ describe('ConnectionLostError keeps the original for debugging', () => {
 });
 
 /**
- * Round 2 (GM - Design, error-copy round 2): an error from a request carries
+ * Error-copy (design): an error from a request carries
  * its parts. The heading names what failed ("Couldn't save the moodboard."), the
- * reason line says why (GM's lines, the backend's written reason, or GM's
+ * reason line says why (design's lines, the backend's written reason, or design's
  * fallback for the status), and its kind. `message` is the one-line form
- * "<heading> <reason>" for alerts, toasts and status text. GM's WRAP rule:
+ * "<heading> <reason>" for alerts, toasts and status text. Design's WRAP rule:
  * "when the surface already has a retry button, the reason line drops its
  * 'try again'. The button is the retry."
  */
-describe('round 2: heading + reason + kind', async () => {
+describe('heading + reason + kind', async () => {
   const copy = await import('../../src/lib/errorCopy');
   const HEADING = "Couldn’t save the moodboard.";
   const WHAT = 'save the moodboard';
   const line = (clause: string) => `Nebula couldn’t ${WHAT} because ${clause}`;
 
-  it('the other round 2 lines, verbatim', () => {
+  it('the other lines, verbatim', () => {
     expect(copy.BACKEND_NOT_RUNNING_COPY).toBe("Nebula’s backend isn’t running. Start it, then reload.");
   });
 
@@ -187,11 +187,11 @@ describe('round 2: heading + reason + kind', async () => {
   });
 });
 
-describe('round 2: requestError reads the answer and keeps the status in the console', async () => {
+describe('requestError reads the answer and keeps the status in the console', async () => {
   const copy = await import('../../src/lib/errorCopy');
   afterEach(() => { vi.restoreAllMocks(); copy.resetFailureWarningsForTests(); });
 
-  it('reads the backend\'s detail; a FastAPI field list is no reason (GM\'s fallback), kept in detail', async () => {
+  it('reads the backend\'s detail; a FastAPI field list is no reason (design\'s fallback), kept in detail', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const list = [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }];
     const error = await copy.requestError("Couldn't save the moodboard.",
@@ -218,7 +218,7 @@ describe('round 2: requestError reads the answer and keeps the status in the con
 
 // shortLine is gone: a line beside a Try again button is built as becauseLine(parts, 'button'), and besideButton
 // swaps the ending of a line that is already in the because form.
-describe('round 2: the ending beside a retry button', () => {
+describe('the ending beside a retry button', () => {
   it('swaps the closing step for the button\'s own, and leaves anything else', async () => {
     const { becauseLine, besideButton } = await import('../../src/lib/errorCopy');
     expect(becauseLine({ heading: "Couldn’t load your projects.", reason: NO_ANSWER }, 'button'))

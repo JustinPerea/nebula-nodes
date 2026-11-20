@@ -1,5 +1,5 @@
 /**
- * PR #204 round 15 (GM r25, pane loads): a Commons pane's load that Nebula answered with no reason
+ * Design (PR #204): a Commons pane's load that Nebula answered with no reason
  * (a 5xx, 408 or 429) says it in the because form, under the pane's own words, verbatim:
  *   Agent review:         "Nebula couldn’t load Agent review because the server didn’t respond. Try again."
  *   reference detail:     "Nebula couldn’t load this reference because the server didn’t respond. Try again."
@@ -7,8 +7,8 @@
  *   Commons Settings:     "Nebula couldn’t load Commons settings because the server didn’t respond. Try again."
  * The pane names its load whichever of its requests failed (Settings reads three). These run the
  * real Commons API and apiFetch; only the browser's fetch is stubbed.
- * Round 17 (review 13 NIT-3): on fake time, each wait a fixed number of 50 ms steps.
- * Round 18d (review 14 live NIT-3): each test imports and renders a whole pane; under a loaded
+ * On fake time, each wait a fixed number of 50 ms steps.
+ * Each test imports and renders a whole pane; under a loaded
  * run that took 5.4 s once, so the file has the 30 s the held-status test got.
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -51,13 +51,13 @@ async function until(check: () => unknown, max = 3000): Promise<void> {
     await act(() => vi.advanceTimersByTimeAsync(50));
   }
 }
-/** The line shows, and (round 18, GM r28 1) in the neutral look: a load that got no answer
+/** The line shows, and in the neutral look (design): a load that got no answer
  * destroys nothing. Read through the app's stylesheets. */
 async function shows(words: string): Promise<void> {
-  // Round 18f (GM r35 4): a line ending "Try again." ends in its button, so the words span it.
+  // Design: a line ending "Try again." ends in its button, so the words span it.
   const find = () => [...document.querySelectorAll('[data-commons-line]')].find((el) => el.textContent === words);
   await until(() => expect(find(), words).toBeTruthy());
-  // Round 18b (GM r29 1): every load line is neutral, whatever its reason.
+  // Design: every load line is neutral, whatever its reason.
   const line = find()!;
   expect(line.hasAttribute('data-line-neutral'), words).toBe(true);
   expect(lineLook(line), words).toEqual(NEUTRAL);
@@ -79,13 +79,13 @@ describe('each pane load, no answer, verbatim', () => {
       await shows(REVIEW);
     });
   }
-  // Round 18d (GM r31): a rate limit has its own line.
+  // Design: a rate limit has its own line.
   it('Agent review (429): the server is busy', async () => {
     state.failing = '/api/commons/review'; state.status = 429;
     render(<CommonsReview />);
     await shows('Nebula couldn’t load Agent review because the server is busy. Try again in a moment.');
   });
-  // Round 18c (GM r30 3): the server's own error isn't "didn't respond".
+  // Design: the server's own error isn't "didn't respond".
   for (const code of [500, 501]) {
     it(`Agent review (${code}): the server hit an error`, async () => {
       state.failing = '/api/commons/review'; state.status = code;
@@ -115,9 +115,9 @@ describe('each pane load, no answer, verbatim', () => {
   }
 });
 
-describe('a failed settings read shows no form (GM r29: only the heading and the line)', () => {
+describe('a failed settings read shows no form (design: only the heading and the line)', () => {
   /** Every field and control the settings pane draws. */
-  // Round 18f (GM r35 4): the line's own "Try again" is part of the line, not the form.
+  // Design: the line's own "Try again" is part of the line, not the form.
   const controls = () => [...document.querySelectorAll('.commons-settings :is(button, input, select, textarea, form, fieldset, [role="button"])')]
     .filter((el) => !el.closest('[data-commons-line]'));
   for (const failing of ['/api/commons/settings', '/api/commons/folders', '/api/commons/vocabulary/candidates']) {
@@ -142,12 +142,12 @@ describe('a failed settings read shows no form (GM r29: only the heading and the
   });
 });
 
-describe('another cause: the because form, its clause or the 4xx line (GM r29 1, r30)', () => {
+describe('another cause: the because form, its clause or the 4xx line (design)', () => {
   const answer = (failing: string, status: number, detail: string) => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input instanceof Request ? input.url : input)).pathname;
     return path === failing ? json({ detail }, status) : backend(input);
   }));
-  it('a reason not listed: the 4xx line, neutral; the backend\'s words only in the console (GM r30)', async () => {
+  it('a reason not listed: the 4xx line, neutral; the backend\'s words only in the console (design)', async () => {
     state.failing = '';
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     answer('/api/commons/review', 409, 'The review set is closed.');

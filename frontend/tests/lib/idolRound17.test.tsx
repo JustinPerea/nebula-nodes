@@ -1,4 +1,4 @@
-// PR #203 round 17: GM r32. The card's route lines quote the node's name,
+// Design (PR #203): the card's route lines quote the node's name,
 // a refused run's card heading is the Agent log's "Nebula couldn’t start the
 // run.", two actions take a comma when the fix lists options, the switcher's
 // notes are curly, every switcher button's accessible name starts with its
@@ -47,7 +47,7 @@ afterEach(() => {
   usePricingStore.setState({ table: null, loading: false });
 });
 
-describe('the card quotes the node’s name (GM r32)', () => {
+describe('the card quotes the node’s name (design)', () => {
   it('a route’s missing key, as the card and the switcher say it', () => {
     const flux3 = NODE_DEFINITIONS['flux-3-image'];
     const stop = routeUnavailable(flux3, { _provider: 'replicate' }, { FAL_KEY: KEY });
@@ -68,12 +68,12 @@ describe('the card quotes the node’s name (GM r32)', () => {
   });
 });
 
-describe('two actions take a comma when the fix lists options (GM r32 item 1)', () => {
+describe('two actions take a comma when the fix lists options (design)', () => {
   const pick = (options: string[]) => ({ text: `Pick ${options.length === 1 ? options[0]
     : `${options.slice(0, -1).join(', ')} or ${options.at(-1)}`}`, options: options.length });
 
   it.each([
-    [['1K'], 'Pick 1K, or switch to fal.ai.', 'Pick 1K.'], // GM r37 item 1: the comma always
+    [['1K'], 'Pick 1K, or switch to fal.ai.', 'Pick 1K.'], // Design: the comma always
     [['1K', '2K'], 'Pick 1K or 2K, or switch to fal.ai.', 'Pick 1K or 2K.'],
     [['1K', '2K', '4K'], 'Pick 1K, 2K or 4K, or switch to fal.ai.', 'Pick 1K, 2K or 4K.'],
   ])('%j', (options, withSwitch, alone) => {
@@ -102,7 +102,7 @@ describe('two actions take a comma when the fix lists options (GM r32 item 1)', 
   });
 });
 
-describe('the switcher’s notes are curly, with the same words (GM r32 item 2)', () => {
+describe('the switcher’s notes are curly, with the same words (design)', () => {
   it('no row note, Auto label or stop line holds a straight apostrophe', () => {
     let notes = 0;
     for (const definition of [TABLE, ...Object.values(NODE_DEFINITIONS).filter((d) => routeSwitch(d))]) {
@@ -124,7 +124,7 @@ describe('the switcher’s notes are curly, with the same words (GM r32 item 2)'
   });
 });
 
-describe('Krea’s sign-in line names who can take the run (GM r32 item 4)', () => {
+describe('Krea’s sign-in line names who can take the run (design)', () => {
   const krea3 = () => NODE_DEFINITIONS['krea-3'];
   const plan = { _provider: 'krea', _kreaAuth: 'mcp' };
 
@@ -133,7 +133,7 @@ describe('Krea’s sign-in line names who can take the run (GM r32 item 4)', () 
     expect(state.message).toBe(`“${krea3().displayName}” runs on Krea, which needs you to sign in. Sign in from Settings, or switch to fal.ai.`);
   });
 
-  it('a renamed node: its own name in the quotes (GM r41 item 2)', () => {
+  it('a renamed node: its own name in the quotes (design)', () => {
     const state = providerSwitchState(krea3(), plan, { apiKeys: { FAL_KEY: KEY }, kreaSignedIn: false, pricing, name: 'Hero shot' });
     expect(state.message).toBe('“Hero shot” runs on Krea, which needs you to sign in. Sign in from Settings, or switch to fal.ai.');
   });
@@ -163,7 +163,7 @@ function visibleRun(element: HTMLElement): string {
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-describe('every switcher button’s name starts with its visible text as one run (GM r32 item 3)', () => {
+describe('every switcher button’s name starts with its visible text as one run (design)', () => {
   const definitions = () => [TABLE, ...Object.values(NODE_DEFINITIONS).filter((d) => routeSwitch(d) && d.id !== 'table')];
 
   it.each(['inspector', 'chip', 'pill'] as const)('%s', (variant) => {
@@ -207,7 +207,7 @@ describe('every switcher button’s name starts with its visible text as one run
   });
 });
 
-describe('one heading over a refused run: "Nebula couldn’t start the run." (GM r32)', () => {
+describe('one heading over a refused run: "Nebula couldn’t start the run." (design)', () => {
   const line = '“FLUX 3 Image” is set to Replicate, which needs your Replicate token. Add it in Settings, or switch to fal.ai.';
 
   it('the pre-call check’s reading says it refused the run', () => {
@@ -244,7 +244,7 @@ describe('one heading over a refused run: "Nebula couldn’t start the run." (GM
   });
 });
 
-describe('a route’s missing key names another provider only when its key is set (GM r33 item 4)', () => {
+describe('a route’s missing key names another provider only when its key is set (design)', () => {
   const flux2 = NODE_DEFINITIONS['flux-2-pro'];
   const line = '“FLUX.2” is set to Black Forest Labs, which needs your Black Forest Labs API key. Add it in Settings';
   it.each([
@@ -256,7 +256,7 @@ describe('a route’s missing key names another provider only when its key is se
   });
 });
 
-describe('the size and retired clauses read curly (review 16, N1)', () => {
+describe('the size and retired clauses read curly', () => {
   // The generator walks only the registry's route tables, where neither rule
   // is set today: a fixture route pins both.
   const fixtureRoute = (rule: 'size' | 'retires', value: unknown): ModelNodeDefinition => {

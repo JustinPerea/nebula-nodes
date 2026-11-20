@@ -6,7 +6,7 @@ import type { NodeData } from '../../src/types';
 
 /**
  * The cost shown before a run agrees with what the run will do with agents'
- * placeholders (Q125 item 3). GM - Design, 2026-10-25, verbatim: "the cost
+ * placeholders. Design, 2026-10-25, verbatim: "the cost
  * shown before the person's Run must count the placeholders it will run and
  * say so, with a line under the cost: “Includes 2 nodes Codex is still
  * setting up.” With several agents: “Includes 3 nodes the agents are still

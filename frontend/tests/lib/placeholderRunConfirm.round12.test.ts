@@ -3,12 +3,12 @@ import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import { modelNotChosenText, placeholderRunConfirm, rowSegments } from '../../src/lib/placeholderRunConfirm';
 
-/** Round 14 (review 13, M-1): the field is refused on the route that needs it, the Krea gateway here. */
+/** The field is refused on the route that needs it, the Krea gateway here. */
 const ON_KREA = { apiKeys: { KREA_API_TOKEN: '(set)' }, edges: [] };
 import { pendingIncludedLine, pendingSkipLine } from '../../src/lib/pendingNodes';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// GM - Design's round-12 rulings (2026-10-26) and addendum (b), verbatim.
+// The design rulings (2026-10-26) and their addendum, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 
@@ -23,7 +23,7 @@ const unpriced = summaryOf({});
 const row = (definitionId: string, params: Record<string, unknown>, label = 'Up') =>
   placeholderRunConfirm([node('k', label, codex, definitionId, params)], [], 'k', unpriced)!.rows[0];
 
-describe('addendum (b): a required model setting with nothing chosen', () => {
+describe('a required model setting with nothing chosen (the addendum)', () => {
   it('Topaz Standard reads "Model: not chosen" and keeps the rest of the row', () => {
     const topaz = row('krea-enhance-topaz-standard-enhance', {}, 'Clean plate');
     expect(topaz.setting).toBe('Model: not chosen');
@@ -41,7 +41,7 @@ describe('addendum (b): a required model setting with nothing chosen', () => {
   });
 
   it('the refusal names the node and the field', () => {
-    // Round 13 (GM: only the first missing field, in the card's order): its
+    // Design: only the first missing field, in the card's order. Its
     // Width and Height come first, so they are set here.
     expect(modelNotChosenText([node('t', 'Clean plate', codex, 'krea-enhance-topaz-standard-enhance', { width: 2048, height: 2048 })], undefined, ON_KREA))
       .toBe('Nothing ran. Choose a model for “Clean plate” first.');
@@ -52,7 +52,7 @@ describe('addendum (b): a required model setting with nothing chosen', () => {
   });
 });
 
-describe('GM round 12, item 2: Meshy\'s mesh type is named by its setting', () => {
+describe('Meshy\'s mesh type is named by its setting (design)', () => {
   it('"Mesh type: Smart topology · Meshy T2"', () => {
     expect(row('meshy-text-to-3d', { model_type: 'smart-topology' }).setting).toBe('Mesh type: Smart topology · Meshy T2');
     expect(row('meshy-image-to-3d', { model_type: 'smart-topology' }).setting).toBe('Mesh type: Smart topology · Meshy T2');
@@ -64,9 +64,9 @@ describe('GM round 12, item 2: Meshy\'s mesh type is named by its setting', () =
   });
 });
 
-// PR #200 fix round 1 (GM answer: canvas order on both placeholder-run lines):
+// Design (PR #200): canvas order on both placeholder-run lines:
 // the free node stays named, now in its canvas place, not after the rows.
-describe('GM round 12, item 3: a changed free node stays named (in canvas order since PR #200)', () => {
+describe('a changed free node stays named (in canvas order since PR #200; design)', () => {
   it('“Prompt” (free, no row, first on the canvas) before “Hero still” (a row)', () => {
     const model = placeholderRunConfirm([node('p', 'Prompt', codex, 'text-input'), node('h', 'Hero still', codex)],
       [wire('p', 'h')], 'h', unpriced, { changed: new Set(['p', 'h']) })!;
@@ -75,7 +75,7 @@ describe('GM round 12, item 3: a changed free node stays named (in canvas order 
   });
 });
 
-describe('GM round 12, item 1: "the agents" in the skip and included lines', () => {
+describe('"the agents" in the skip and included lines (design)', () => {
   it('Skipped 3 nodes the agents are still setting up.', () => {
     expect(pendingSkipLine({ count: 3, placeholders: 2, agents: ['Codex', 'Claude Code'] }))
       .toBe('Skipped 3 nodes the agents are still setting up.');
@@ -91,7 +91,7 @@ describe('GM round 12, item 1: "the agents" in the skip and included lines', () 
   });
 });
 
-describe('the bug in r11-topaz-rows: a row is made of whole segments', () => {
+describe('topaz rows: a row is made of whole segments', () => {
   it('each setting is its own segment', () => {
     expect(rowSegments({ nodeId: 'k', name: '“Up”', model: 'Topaz Bloom 2 (Krea)', modelKey: 'Topaz Bloom 2 (Krea)',
       setting: 'Variant: Large · Grain model: gaussian', price: 'on your Krea plan', agent: null }))

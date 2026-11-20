@@ -1,7 +1,7 @@
 /**
- * PR #204 round 12, GM r20 3: one rule for the general notice. A because line on screen sends it
+ * Design (PR #204): one rule for the general notice. A because line on screen sends it
  * away; a lock line alone keeps it; when both show, the because line wins. The rule is checked
- * here after a demote on the two sections GM named: the Commons (GM's shot 09 showed its because
+ * here after a demote on the two sections design named: the Commons (a design screenshot showed its because
  * line beside the notice) and Personal agents. `noticeBesideBecauseLine` is the ratchet: it fails
  * whenever the general notice shows while a registered because line is on screen (in view by the
  * observer, rendered). The live check runs the same rule on every screen it visits, and records
@@ -54,7 +54,7 @@ const copy = await import('../src/lib/errorCopy');
 
 const banner = () => document.querySelector('.person-required');
 
-/** The ratchet (GM r20 3): the general notice never shows beside a because line on screen. */
+/** The ratchet (design): the general notice never shows beside a because line on screen. */
 function noticeBesideBecauseLine(): string[] {
   if (!banner()) return [];
   return [...lines.registeredLines()]
@@ -88,7 +88,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('one rule for the general notice (GM r20 3)', () => {
+describe('one rule for the general notice (design)', () => {
   it('a demote, then the Commons: once the handover settles, only the because line shows', async () => {
     render(<><PersonRequiredBanner /><CommonsView /></>);
     await frames(200);
@@ -130,7 +130,7 @@ describe('one rule for the general notice (GM r20 3)', () => {
   });
 
   it('the ratchet fails a because line on screen beside the notice', async () => {
-    // The notice drawn by hand beside a registered because line: what GM's shot 09 showed.
+    // The notice drawn by hand beside a registered because line: what the design screenshot showed.
     const notice = document.createElement('div');
     notice.className = 'person-required';
     document.body.appendChild(notice);

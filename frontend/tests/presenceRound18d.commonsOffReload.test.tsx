@@ -1,11 +1,11 @@
 /**
- * PR #204 round 18d (GM r32 1): a tab opened on the Commons (a reload on #commons) while the
+ * Design (PR #204): a tab opened on the Commons (a reload on #commons) while the
  * backend runs without it opens to the Commons-off view, not the Projects home,
- * the same view the Commons turned off mid-visit shows (GM r31 layout M): only the way back, the
+ * the same view the Commons turned off mid-visit shows (design): only the way back, the
  * title and Updates, and the line "Commons is turned off for this Nebula.". Nothing of the
  * Commons is read or sent (the capability answered off). Only the backend's own "off" does this:
  * no answer says nothing about the Commons.
- * Round 18e (GM r33 3): with no project open (always so after a reload) its way back reads
+ * Design: with no project open (always so after a reload) its way back reads
  * "← Projects", named "Projects", and goes to the Projects home; with one open, "← Canvas".
  */
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';

@@ -1,4 +1,4 @@
-// #220 review 1 NIT-4: PinComposer's refit listener (onPinTextLoaded) leaves
+// PR #220: PinComposer's refit listener (onPinTextLoaded) leaves
 // with the component. A listener kept after unmount would set state on a dead
 // component at every later load and pile up across remounts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -24,7 +24,7 @@ const { PinComposer } = await import('../src/components/canvas/PinComposer');
 
 afterEach(cleanup);
 
-describe('#220 review 1 NIT-4: PinComposer unsubscribes from onPinTextLoaded on unmount', () => {
+describe('PinComposer unsubscribes from onPinTextLoaded on unmount (PR #220)', () => {
   it('one listener while mounted, none of its own after unmount, across remounts', () => {
     // The store's own listener registers as its module loads (before any render).
     const base = live.size;

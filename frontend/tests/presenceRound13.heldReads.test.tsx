@@ -1,8 +1,8 @@
 /**
- * PR #204 round 13, Settings' person-only lists (the agent apps, personal agents):
- * - Review 10 held-calls LOW-2 (M10): useReadAsPerson reads once per epoch. A quick reconnect
+ * PR #204: Settings' person-only lists (the agent apps, personal agents):
+ * - useReadAsPerson reads once per epoch. A quick reconnect
  *   (a hold shorter than the held rule's 150 ms) ends no held view, so it reads nothing again.
- * - Review 10 held-calls NIT-1: a load refused just as the tab lost the person registers its
+ * - A load refused just as the tab lost the person registers its
  *   retry, and a held view that then settles reads again on the promote too. The promote reads
  *   once: the view's new epoch when the held view settled, the retry when it didn't.
  */
@@ -48,7 +48,7 @@ const mount = async () => {
   await flush();
 };
 
-describe('useReadAsPerson reads once per epoch (review 10 LOW-2, M10)', () => {
+describe('useReadAsPerson reads once per epoch', () => {
   it('a quick reconnect (held 100 ms, then promoted) reads nothing again', async () => {
     await mount();
     expect(reads()).toEqual({ apps: 1, agents: 1 });
@@ -71,7 +71,7 @@ describe('useReadAsPerson reads once per epoch (review 10 LOW-2, M10)', () => {
   });
 });
 
-describe('a refused load reads once on the promote (review 10 NIT-1)', () => {
+describe('a refused load reads once on the promote', () => {
   /** The first read of each list is refused as the tab loses the person (a backend restart). */
   const refuseFirst = () => {
     for (const read of [api.getOutsideSpend, api.fetchPersonalAgents]) {

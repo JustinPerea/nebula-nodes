@@ -11,7 +11,7 @@ import {
 } from '../../src/lib/cardWidthSpring';
 
 /**
- * GM r107 (#226): a card whose width changes from its own content (an Image
+ * Design (PR #226): a card whose width changes from its own content (an Image
  * Input's preview landing) springs to its new width on the layout spring, the
  * same spring and timing as the Inspector's facing edge and height. A move,
  * pan or zoom never changes its layout width, so they stay rigid; reduced
@@ -79,7 +79,7 @@ afterEach(() => {
   delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
 });
 
-describe("a card's width springs when its own content widens it (GM r107)", () => {
+describe("a card's width springs when its own content widens it (design)", () => {
   it('runs on the layout spring panels.css gives the Inspector, so the card and the panel move as one', () => {
     const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const [, given] = css.match(/--inspector-layout-spring:\s*([^;]+);/)!;
@@ -161,7 +161,7 @@ describe("a card's width springs when its own content widens it (GM r107)", () =
   });
 });
 
-describe('reduced motion keeps the width it saw (review 5 LOW-1)', () => {
+describe('reduced motion keeps the width it saw', () => {
   it('turned off after a jump, the next change springs from where the card was, not from a stale width', () => {
     reduced = true;
     render(<Card />);
@@ -187,7 +187,7 @@ describe('reduced motion keeps the width it saw (review 5 LOW-1)', () => {
 });
 
 /**
- * GM r114: every content width change springs, and one that lands while a
+ * Design: every content width change springs, and one that lands while a
  * spring runs (typing a rename: a few px per keystroke) retargets it,
  * carrying on from the width and the speed the card has, never from rest.
  * The page is played a frame at a time: its card paints at its animation's
@@ -195,7 +195,7 @@ describe('reduced motion keeps the width it saw (review 5 LOW-1)', () => {
  * spring), and at its content's own width with the animation lifted
  * (effect.setKeyframes([]), which the hook uses to read it).
  */
-describe('a content change while the spring runs retargets it, keeping its speed (GM r114)', () => {
+describe('a content change while the spring runs retargets it, keeping its speed (design)', () => {
   const FRAME = 1000 / 60;
   const points = LAYOUT_SPRING_EASING.match(/linear\((.*)\)/)![1].split(',').map(Number);
   let now: number;
@@ -400,7 +400,7 @@ describe('a content change while the spring runs retargets it, keeping its speed
   });
 });
 
-describe('React Flow measures the node again as the spring starts (GM r107: the wire never shows the new width for a frame)', () => {
+describe('React Flow measures the node again as the spring starts (design: the wire never shows the new width for a frame)', () => {
   it('measures its node at once, forced, from the card\'s React Flow node', () => {
     const measured: Array<Map<string, { id: string; nodeElement: HTMLDivElement; force?: boolean }>> = [];
     let remeasure: ((card: HTMLElement) => void) | null = null;

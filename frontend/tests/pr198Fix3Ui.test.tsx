@@ -7,17 +7,17 @@ import { useState } from 'react';
 import { ReactFlow, ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
 
 /**
- * PR #198 fix round 3 (review 3, GM's r3 rulings):
- * - L4: a canvas card whose data is damaged never takes the canvas down:
+ * PR #198 and design's rulings:
+ * - A canvas card whose data is damaged never takes the canvas down:
  *   Cinema, Remotion and the editor read through it, and any card that
- *   throws anyway shows GM's line at card size, keeps its wires, and tries
+ *   throws anyway shows design's line at card size, keeps its wires, and tries
  *   again when its data changes.
- * - GM r3 (b): the studio boundary keeps the studio's header and replaces
- *   only the body; L6: the Commons' "Back to canvas" goes to the canvas.
- * - GM r3 (a): Composition's toolbar is a row under the offline row.
- * - G1: the context menu's Delete is disabled, with GM's tooltip, while a
+ * - Design: the studio boundary keeps the studio's header and replaces
+ *   only the body; the Commons' "Back to canvas" goes to the canvas.
+ * - Design: Composition's toolbar is a row under the offline row.
+ * - The context menu's Delete is disabled, with design's tooltip, while a
  *   scene has a shot rendering.
- * - N1: a load-failure notice doesn't flash back for a frame on reconnect.
+ * - A load-failure notice doesn't flash back for a frame on reconnect.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(),
@@ -73,12 +73,12 @@ function Flow({ nodes, nodeTypes = CANVAS_NODE_TYPES }: { nodes: Node[]; nodeTyp
   );
 }
 
-// -- L4: damaged data on a card ----------------------------------------------------------
+// -- A card whose data is damaged ----------------------------------------------------------
 
 // The less common cards load on demand (lib/deferredChunks.ts): bring them in first so each renders at once.
 beforeAll(async () => { await Promise.all(DEFERRED_CARD_PRELOADS.map((preload) => preload())); });
 
-describe('L4: a card whose data is damaged never takes the canvas down', () => {
+describe('a card whose data is damaged never takes the canvas down', () => {
   const SHAPES: [string, unknown][] = [
     ['scene a string', 'not a scene'],
     ['scene null', null],
@@ -116,7 +116,7 @@ describe('L4: a card whose data is damaged never takes the canvas down', () => {
     }
   });
 
-  it('a card that throws anyway: GM\'s line at card size, its handles kept, the Agent log told, and it tries again on new data', () => {
+  it('a card that throws anyway: design\'s line at card size, its handles kept, the Agent log told, and it tries again on new data', () => {
     const logged: string[] = [];
     const listen = (event: Event) => logged.push((event as CustomEvent<{ message: string }>).detail.message);
     window.addEventListener('nebula:agent-log-entry', listen);
@@ -132,7 +132,7 @@ describe('L4: a card whose data is damaged never takes the canvas down', () => {
     // React Flow hides a node it hasn't measured (no roles then): by attribute.
     const alert = document.querySelector('[data-node-card-boundary]')!;
     expect(alert.getAttribute('role')).toBe('alert');
-    // Fix round 4 (review 4, L3; GM r4 and r5): data that checks out reads
+    // Design: data that checks out reads
     // the neutral line under the card's kept header, and the log names the error.
     expect(alert.querySelector('.node-card-boundary__line')!.textContent)
       .toBe("Nebula couldn’t show “Hero still” because something went wrong drawing it, but its data is fine. Reload Nebula to try again.");
@@ -148,9 +148,9 @@ describe('L4: a card whose data is damaged never takes the canvas down', () => {
   });
 });
 
-// -- GM r3 (b) and L6: the studio boundary ---------------------------------------------------
+// -- The studio boundary ---------------------------------------------------
 
-describe('GM r3 (b): the studio boundary keeps the header; L6: Commons goes back to the canvas', () => {
+describe('the studio boundary keeps the header; Commons goes back to the canvas (design)', () => {
   const Boom = () => { throw new TypeError('broken'); };
 
   it('the studio\'s header (title, back to Canvas) stays and the line takes the body', () => {
@@ -177,9 +177,9 @@ describe('GM r3 (b): the studio boundary keeps the header; L6: Commons goes back
   });
 });
 
-// -- GM r3 (a): Composition's toolbar row ------------------------------------------------------
+// -- Composition's toolbar row ------------------------------------------------------
 
-describe('GM r3 (a): Composition\'s offline row sits under the top header, above the toolbar', () => {
+describe('Composition\'s offline row sits under the top header, above the toolbar (design)', () => {
   it('the toolbar is its own row after the header, and the grid orders header, offline, toolbar', () => {
     const view = source('components/video-editor/RemotionEditorView.tsx');
     expect(view).toMatch(/<WorkspaceHeader[^>]*\/>\s*\{\/\*[^]*?\*\/\}\s*<div className="remotion-editor-view__toolbar"/);
@@ -190,9 +190,9 @@ describe('GM r3 (a): Composition\'s offline row sits under the top header, above
   });
 });
 
-// -- G1: the disabled Delete ---------------------------------------------------------------------
+// -- The disabled Delete ---------------------------------------------------------------------
 
-describe('G1 / GM 1: Delete is disabled while the scene has a shot rendering', () => {
+describe('Delete is disabled while the scene has a shot rendering (design)', () => {
   const open = () => useUIStore.setState({ contextMenu: { visible: true, position: { x: 10, y: 10 }, nodeId: 'n4', flowPosition: null } } as never);
   const scene = (shots: unknown[]) => ({ version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots });
 
@@ -224,14 +224,14 @@ describe('G1 / GM 1: Delete is disabled while the scene has a shot rendering', (
   it('the Inspector and the selection toolbar read the same tooltip', () => {
     expect(source('components/panels/Inspector.tsx')).toMatch(/sceneDeleteDisabledTitle\(s, \[renderNodeId\]\)/);
     expect(source('components/SelectionToolbar.tsx')).toMatch(/sceneDeleteDisabledTitle\(state, ids\)/);
-    // Canvas's Delete key keeps every deleted node's wires out of React Flow's own removal (round 5).
+    // Canvas's Delete key keeps every deleted node's wires out of React Flow's own removal.
     expect(source('components/Canvas.tsx')).toMatch(/wiresDeletedWith\(/);
   });
 });
 
-// -- N1 ----------------------------------------------------------------------------------------------
+// -- A load-failure notice on reconnect ----------------------------------------------------------------------------------------------
 
-describe('N1: a load-failure notice doesn\'t flash back on reconnect', () => {
+describe('a load-failure notice doesn\'t flash back on reconnect', () => {
   it('the first render back online shows nothing; the check clears it, so it never shows', () => {
     const shown: string[] = [];
     function Probe() {

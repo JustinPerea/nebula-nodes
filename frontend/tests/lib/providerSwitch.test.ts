@@ -59,7 +59,7 @@ describe('providerSwitchState', () => {
     expect(state.message).toContain('can’t run on fal.ai');
   });
 
-  it("names keys by provider and never a route id or env-var name in the stop line (error copy round 3e)", () => {
+  it("names keys by provider and never a route id or env-var name in the stop line (error copy)", () => {
     const flux2 = NODE_DEFINITIONS['flux-2-pro'];
     const env = /[A-Z0-9]+_(API_KEY|API_TOKEN|TOKEN|KEY|CREDENTIALS|USAGE_KEY)\b/;
     const chosen = providerSwitchState(flux2, { _provider: 'bfl' }, context({}));
@@ -79,7 +79,7 @@ describe('providerSwitchState', () => {
   it('says when no provider has a key, and names the chosen route that lacks one', () => {
     expect(providerSwitchState(TABLE, {}, context({})).rows[0].label).toBe('Auto · needs a key');
     const chosen = providerSwitchState(TABLE, { _provider: 'replicate' }, context({ BFL_API_KEY: KEY }));
-    // Round 3g (GM, rule 9): the full name wherever it fits the chip.
+    // Design: the full name wherever it fits the chip.
     expect(chosen.chip).toBe('Replicate');
     expect(chosen.blocked).toBe(true);
     expect(chosen.rows.find((row) => row.id === 'replicate')?.selected).toBe(true);
@@ -112,7 +112,7 @@ describe('providerSwitchState', () => {
     expect(video.rows.map((row) => row.id)).toEqual(['auto', 'bfl', 'openrouter', 'krea-plan:plan']);
     const krea = providerSwitchState(routed['routes-krea'], { _kreaAuth: 'mcp' }, context({}, { kreaSignedIn: true }));
     expect(krea.rows[0].label).toBe('Auto · runs on Krea plan');
-    // GM, PR #203 r26 item 1: signed out, the Auto row promises no run that can't happen.
+    // Design (PR #203): signed out, the Auto row promises no run that can't happen.
     const signedOut = providerSwitchState(routed['routes-krea'], { _kreaAuth: 'mcp' }, context({}, { kreaSignedIn: false }));
     expect(signedOut.rows[0].label).toBe('Auto · Krea needs a sign-in');
     expect(krea.chip).toBe('Auto · Krea plan');

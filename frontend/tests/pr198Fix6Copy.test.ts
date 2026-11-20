@@ -11,16 +11,16 @@ import { OFFLINE_VERBS, offlineReason } from '../src/lib/useBackendOffline';
 import type { NodeData } from '../src/types';
 
 /**
- * PR #198 fix round 6: GM's words for round 5's placeholders (gm-pr198-r8),
- * verbatim, plus the Rerun verb (gm-pr200-r4 item 2) and the toast rule
+ * PR #198: design's words for the earlier placeholders,
+ * verbatim, plus the Rerun verb and the toast rule
  * ("Toasts wrap to 3 lines and never cut a sentence", app-wide).
  */
 
-describe('GM r8: the scene save lines', () => {
-  it('UNSAVED_MARK, the clash lines (GM r9) and SWITCHED_UNNAMED', () => {
+describe('the scene save lines (design)', () => {
+  it('UNSAVED_MARK, the clash lines (design) and SWITCHED_UNNAMED', () => {
     expect(scene.UNSAVED_MARK).toBe('Unsaved');
     expect(scene.sceneClashLine('Opening', { kind: 'agent', name: 'Codex' } as const)).toBe('Codex changed “Opening” while you were editing it.');
-    // Review 11, L-1: "another window" only for the person's own tab.
+    // "another window" only for the person's own tab.
     expect(scene.sceneClashLine('Opening', { kind: 'window' })).toBe('“Opening” was changed in another tab while you were editing it.');
     expect(scene.sceneClashLine('Opening', scene.UNKNOWN_WRITER)).toBe('“Opening” changed while you were editing it.');
     expect([scene.KEEP_MINE, scene.theirsLabel('Codex'), scene.theirsLabel(null)]).toEqual(['Keep mine', 'Use Codex’s', 'Use theirs']);
@@ -29,7 +29,7 @@ describe('GM r8: the scene save lines', () => {
   });
 });
 
-describe('GM r8: the "+ unpriced" tooltip lines', () => {
+describe('the "+ unpriced" tooltip lines (design)', () => {
   const one = (line: (names: string, several: boolean) => string) => line('“X”', false);
   const two = (line: (names: string, several: boolean) => string) => line('“A” and “B”', true);
 
@@ -47,12 +47,12 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
   it('a route that can\'t run, and a size Nebula couldn\'t read', () => {
     expect(one(unpriced.ROUTE_CANT_RUN)).toBe('“X” can’t run as it’s set up now, so it has no price.');
     expect(one(unpriced.SIZE_UNREADABLE)).toBe('“X” is priced by its input size, which Nebula couldn’t read.');
-    // Builder's plurals of GM's singular lines, for GM to confirm.
+    // Builder's plurals of design's singular lines, for design to confirm.
     expect(two(unpriced.ROUTE_CANT_RUN)).toBe('“A” and “B” can’t run as they’re set up now, so they have no price.');
     expect(two(unpriced.SIZE_UNREADABLE)).toBe('“A” and “B” are priced by their input sizes, which Nebula couldn’t read.');
   });
 
-  it('GM r118: an audio-priced node has its own wording for both reasons', () => {
+  it('an audio-priced node has its own wording for both reasons (design)', () => {
     expect(one(unpriced.AWAITING_AUDIO))
       .toBe('“X” isn’t priced yet because its audio hasn’t been made. Run the node that makes it, then run this one.');
     expect(one(unpriced.AUDIO_UNREADABLE)).toBe('“X” isn’t priced because Nebula couldn’t read its audio’s length.');
@@ -95,7 +95,7 @@ describe('GM r8: the "+ unpriced" tooltip lines', () => {
   });
 });
 
-describe('GM r8 deviation 3: the studio\'s Agent log line names the studio', () => {
+describe('the studio\'s Agent log line names the studio (design)', () => {
   it('damaged data opened in Cinema', () => {
     expect(studioBoundaryLogLine('X', 'n4', { field: 'scene.base', state: 'missing' }, 'cinema-editor'))
       .toBe("Couldn’t open “X” in Cinema, node n4. scene.base is missing.");
@@ -105,15 +105,15 @@ describe('GM r8 deviation 3: the studio\'s Agent log line names the studio', () 
   });
 });
 
-describe('GM (#200 r4 item 2): the offline Rerun verb', () => {
+describe('the offline Rerun verb (design, PR #200)', () => {
   it('"You can rerun it when Nebula reconnects."', () => {
     expect(offlineReason(OFFLINE_VERBS.rerun)).toBe('You can rerun it when Nebula reconnects.');
   });
 });
 
-describe('GM r8: no toast cuts a sentence', () => {
+describe('no toast cuts a sentence (design)', () => {
   // Every stylesheet; a toast or notice's text never sits on one line with an
-  // ellipsis, so it wraps (GM: up to 3 lines) instead of cutting. A toast's
+  // ellipsis, so it wraps (design: up to 3 lines) instead of cutting. A toast's
   // buttons (its action, "Back to …", ×) keep their own one-line rules.
   const root = join(__dirname, '../src');
   const files: string[] = [];
@@ -134,11 +134,11 @@ describe('GM r8: no toast cuts a sentence', () => {
     const cut = rules.filter((rule) => /(toast|notice)(?![\w-]*(dot|icon|close|action|button|dismiss|back))/i.test(rule.selector)
       && (/text-overflow:\s*ellipsis/.test(rule.body) || /white-space:\s*nowrap/.test(rule.body)))
       .map((rule) => `${rule.file}: ${rule.selector}`);
-    // The exceptions, GM - Design, PR #216: an Undo notice carrying the
-    // fold's count ("Moved “Hero shot” · Undo · 3 more", r8) cuts its name
+    // The exceptions, as design ruled in PR #216: an Undo notice carrying the
+    // fold's count ("Moved “Hero shot” · Undo · 3 more") cuts its name
     // so Undo and "3 more" fit on one line; and one kept to one line where
     // its full height leaves the proposal card short of Accept and Reject
-    // (r76, its full text in its aria-label).
+    // (its full text in its aria-label).
     expect(cut).toEqual(['styles/canvasProposals.css: .canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text,\n.canvas-undo-notice[data-notice-clipped] .canvas-undo-notice__text']);
   });
 });

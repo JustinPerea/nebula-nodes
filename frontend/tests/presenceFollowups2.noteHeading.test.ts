@@ -1,9 +1,9 @@
-// PR #200 follow-up 2, review 20 NIT-5: a name made only of "…" showed
+// PR #200 follow-up 2: a name made only of "…" showed
 // "………" when cut. The heading never leaves a run of "…".
 import { describe, expect, it } from 'vitest';
 import { fitNoteHeading, noteHeading, noteHeadingName } from '../src/lib/noteHeading';
 
-describe('review 20 NIT-5: never a run of "…"', () => {
+describe('never a run of "…"', () => {
   it.each([
     ['…………', 2, '…'],
     ['…………', 0, '…'],
@@ -27,10 +27,10 @@ describe('review 20 NIT-5: never a run of "…"', () => {
   });
 });
 
-// GM, PR #202 r1: a name made only of "…" keeps its single "…" (it is the
+// Design (PR #202): a name made only of "…" keeps its single "…" (it is the
 // name, in quotes); no truncation "…" is ever added after it, and no type-name
 // fallback replaces it.
-describe('GM PR #202 r1: a name made only of "…"', () => {
+describe('a name made only of "…" (design, PR #202)', () => {
   it('a one-"…" name shows as itself, whole or squeezed to any width', () => {
     expect(noteHeading('…')).toBe('Note for agents on “…”');
     for (const width of [0, 10, 60, 120, 400]) {
@@ -49,10 +49,10 @@ describe('GM PR #202 r1: a name made only of "…"', () => {
   });
 });
 
-// PR #202 review 1 NIT-5: the fold applies in every branch of the cut, so a
+// PR #202: the fold applies in every branch of the cut, so a
 // kept part never shows a run of the name's own "…", and a cut that reaches
 // the name's end shows it whole, with no truncation "…" after it.
-describe('PR #202 review 1 NIT-5: the "…" fold in every branch of the cut', () => {
+describe('the "…" fold in every branch of the cut (PR #202)', () => {
   it.each([
     ['“……”', 1, '“…”'],
     ['"……"x', 2, '"…"x'],

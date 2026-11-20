@@ -14,13 +14,12 @@ import shippedTable from '../../backend/data/model_pricing.json';
 import type { NodeData } from '../src/types';
 
 /**
- * PR #198 fix round 5, the money lane: review 5's N3 and N4, GM r6 items 2
- * and 3, and the "+ unpriced" chip (GM r6 "FROM THE SHOTS", r7 item 3).
- * - N3: a high end under the low end shows the low end on the chip too.
- * - N4: amounts above $10,000,000,000,000 read ">$10,000,000,000,000"
+ * PR #198: the money chips, and the "+ unpriced" chip (design "FROM THE SHOTS").
+ * - A high end under the low end shows the low end on the chip too.
+ * - Amounts above $10,000,000,000,000 read ">$10,000,000,000,000"
  *   (">$10,000,000,000,000.00" spent), never "1e+306" or "Infinity.NaN".
- * - r6 item 2: a range from $0 reads "Up to $0.43".
- * - r6 item 3: detail lines write each end in full: "$0.0047–$0.43".
+ * - A range from $0 reads "Up to $0.43".
+ * - Detail lines write each end in full: "$0.0047–$0.43".
  * - The "+" chip reads "<figure> + unpriced"; its tooltip leads with the
  *   priced part and gives one sentence per reason, no colons.
  */
@@ -32,7 +31,7 @@ const MONEY = JSON.parse(readFileSync(resolve(__dirname, '../../contracts/fixtur
 
 const BAD_NUMBER = /e\+|e-\d|Infinity|NaN|undefined/;
 
-describe('N3: a high end under the low end', () => {
+describe('a high end under the low end', () => {
   it.each([[0.43, -1], [0.43, 0], [0.43, 0.2], [0.43, Number.NEGATIVE_INFINITY]])('%s–%s reads the low end alone', (low, high) => {
     expect(formatChipEstimate(low, high, false)).not.toBe('~$0');
     if (Number.isFinite(high)) {
@@ -47,7 +46,7 @@ describe('N3: a high end under the low end', () => {
   });
 });
 
-describe('N4: a ceiling on absurd amounts', () => {
+describe('a ceiling on absurd amounts', () => {
   it('writes amounts above $10,000,000,000,000 as more than it', () => {
     expect(formatUsd(1e13)).toBe('$10,000,000,000,000');
     expect(formatUsd(1e14)).toBe('>$10,000,000,000,000');
@@ -91,7 +90,7 @@ describe('N4: a ceiling on absurd amounts', () => {
   });
 });
 
-describe('GM r6 item 2: a range from $0', () => {
+describe('a range from $0 (design)', () => {
   it.each([
     [0, 0.43, false, 'Up to $0.43', 'Up to $0.43.'],
     [0, 0.43, true, 'Up to $0.43 + unpriced', 'The priced part of this run costs up to $0.43.'],
@@ -108,7 +107,7 @@ describe('GM r6 item 2: a range from $0', () => {
   });
 });
 
-describe('GM r6 item 3: detail lines write each end in full', () => {
+describe('detail lines write each end in full (design)', () => {
   it.each([
     [0.0047, 0.43, '$0.0047–$0.43'],
     [0, 0.43, '$0–$0.43'],
@@ -127,7 +126,7 @@ describe('the "+ unpriced" chip label', () => {
     [9.5, 12, '$9.50–12.00 + unpriced', 'The priced part of this run costs between $9.50 and $12.00.'],
     [0.04, 0.04, '$0.04 + unpriced', 'The priced part of this run costs about $0.04.'],
     [0.004, 0.004, '<$0.01 + unpriced', 'The priced part of this run costs under $0.01.'],
-    // GM r8: a free priced part has no line of its own ($0 is a price).
+    // Design: a free priced part has no line of its own ($0 is a price).
     [0, 0, '$0 + unpriced', ''],
     [0.02, Number.NaN, '$0.02 + unpriced', 'The priced part of this run costs about $0.02.'],
   ])('%s–%s open: "%s"', (low, high, label, lead) => {
@@ -160,8 +159,8 @@ describe('the Run chip tooltip names each reason', () => {
     const summary = summarizeRunScope([priced('a', 'nano-banana', {}, 'Hero'), priced('c', 'claude-chat', {}, 'Writer')],
       [], { kind: 'graph' }, context);
     expect(runChipLabel(summary)).toBe('$0.05 + unpriced');
-    // Every cost tooltip leads with the paid nodes, priced or not (GM, PR
-    // #203 r17 item 3).
+    // Every cost tooltip leads with the paid nodes, priced or not (design, PR
+    // PR #203).
     expect(runChipTitle(summary)).toBe('“Hero” and “Writer” call paid providers. The priced part of this run costs about $0.05.'
       + '\n“Writer” has no listed price.');
   });
@@ -180,14 +179,14 @@ describe('the Run chip tooltip names each reason', () => {
     expect(runChipTitle(four)).toBe('5 nodes call paid providers. The priced part of this run costs about $0.05.\n4 nodes have no listed price.');
   });
 
-  it('GM r9: past the ceiling the priced part has no line; the reasons start the tooltip, one per line', () => {
+  it('past the ceiling the priced part has no line; the reasons start the tooltip, one per line (design)', () => {
     const huge = { pricing: { ...pricing, nodes: { ...pricing.nodes,
       'nano-banana': { currency: 'usd', per: 'image', rows: [{ match: { imageSize: '1K' }, price: 2e13 }] } } }, apiKeys: {} };
     const open = summarizeRunScope([priced('a', 'nano-banana'), priced('c', 'claude-chat', {}, 'A'), priced('d', 'claude-chat', {}, 'B')],
       [], { kind: 'graph' }, huge as never);
     expect(runChipTitle(open)).toBe('“Nano Banana”, “A” and “B” call paid providers.\n“A” and “B” have no listed price.');
     const closed = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, huge as never);
-    // The paid lead stays (GM, PR #203 r17 item 3: every cost tooltip).
+    // The paid lead stays (design, PR #203: every cost tooltip).
     expect(runChipTitle(closed)).toBe('“Nano Banana” calls a paid provider.');
   });
 
@@ -258,7 +257,7 @@ describe('the Run chip tooltip names each reason', () => {
     ].join('\n'));
     expect(title).not.toContain(':');
     expect(title).not.toMatch(/^Estimated cost$/m);
-    // GM r9 bug 2: one reason per line, under the priced part's.
+    // Design: one reason per line, under the priced part's.
     for (const sentence of title.split('\n')) expect(sentence).toMatch(/\.$/);
   });
 
@@ -273,7 +272,7 @@ describe('the Run chip tooltip names each reason', () => {
       + '\n“Writer” has no listed price.');
   });
 
-  it('a closed chip\'s tooltip is one sentence shape, no bare "Estimated cost" heading (GM, PR #203 r16 item 3)', () => {
+  it('a closed chip\'s tooltip is one sentence shape, no bare "Estimated cost" heading (design, PR #203)', () => {
     const summary = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, context);
     expect(runChipLabel(summary)).toBe('~$0.05');
     expect(runChipTitle(summary)).toBe('“Nano Banana” calls a paid provider. Estimated cost $0.05.');
@@ -284,14 +283,14 @@ describe('detail lines in the Run button title and the confirm', () => {
   it('write both ends in full', () => {
     const graph = [priced('e', 'gpt-image-2-edit', {}, 'Edit')];
     const summary = summarizeRunScope(graph, [], { kind: 'graph' }, context);
-    // The Run button's text is the chip's (GM, PR #203 r19 item 2); the confirm keeps each node's figure.
+    // The Run button's text is the chip's (design, PR #203); the confirm keeps each node's figure.
     expect(describeRunScope(summary)).toBe(`Runs 1 node.\n${runChipTitle(summary)}`);
     expect(runChipTitle(summary)).toContain('costs between $0.01 and $0.20.');
     expect(runCostConfirmMessage(summary)).toContain('• Edit: $0.01–$0.20');
   });
 });
 
-describe('GM r7 item 3: the reasons follow the canvas', () => {
+describe('the reasons follow the canvas (design)', () => {
   it('orders each reason by where its first node sits, left to right', async () => {
     const { runChipTitle } = await import('../src/lib/runScope');
     const title = runChipTitle({ total: 3, paid: ['A', 'B', 'C'], cost: { low: 0.02, high: 0.43, lines: [{ name: 'P', low: 0.02, high: 0.43, runs: [1, 1] }],

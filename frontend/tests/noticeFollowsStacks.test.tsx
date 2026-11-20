@@ -1,6 +1,6 @@
 /**
  * A notice whose Undo or Redo no longer applies clears when a new undo step
- * lands (GM - Design, 2026-10-23: "The stale-notice fix is approved as you
+ * lands (design, 2026-10-23: "The stale-notice fix is approved as you
  * describe it: a notice whose button no longer applies clears when a new
  * undo step lands").
  *

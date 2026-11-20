@@ -2,15 +2,15 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 14 (GM r22), rendered:
- * - Q2: after Try again saved the tab's edits as a recovered project, the
+ * PR #198, design's rulings, rendered:
+ * - After Try again saved the tab's edits as a recovered project, the
  *   banner's place holds a neutral notice with [Open] and ×: "Your latest
  *   edits were saved as their own project, “<name>”." Focus goes to its ×,
  *   never [Open]; [Open] opens that project.
- * - Q1: the "Unsaved" mark's popover, opened, takes the stop line with the
- *   same line and [Try again] off the canvas; closed, it is back (GM r28:
+ * - The "Unsaved" mark's popover, opened, takes the stop line with the
+ *   same line and [Try again] off the canvas; closed, it is back (design:
  *   the stop line is a state).
- * - GM r23 answer 2: the clash prompt asked again in place of the delete
+ * - Design: the clash prompt asked again in place of the delete
  *   toast has no ×, so focus goes to the prompt itself, never [Keep mine].
  */
 
@@ -38,8 +38,8 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
 const savedAs = { line: editsSavedAsProjectLine('Recovered canvas (recovered)'), restore: null,
   open: { id: 'p9', name: 'Recovered canvas (recovered)' } };
 
-describe('GM r22 Q2: the saved-as notice takes the banner’s place', () => {
-  it('GM’s line with the real name, [Open] and ×; focus on its ×, never [Open]', () => {
+describe('the saved-as notice takes the banner’s place (design)', () => {
+  it('the saved-as line (design) with the real name, [Open] and ×; focus on its ×, never [Open]', () => {
     expect(savedAs.line).toBe(LINE);
     const onOpenCopy = vi.fn();
     const { container, rerender } = render(<ProjectHome {...props({ error: BANNER, retry: 'reload' })} />);
@@ -76,8 +76,8 @@ describe('GM r22 Q2: the saved-as notice takes the banner’s place', () => {
   });
 });
 
-describe('GM r22 Q1: the popover open, the matching stop line steps aside', () => {
-  // GM r28 item 2 (round 19) changed "closing brings none back": the stop
+describe('the popover open, the matching stop line steps aside (design)', () => {
+  // Design changed "closing brings none back": the stop
   // line is a state in its own slot, so it is back once the popover closes.
   it('opening the mark’s popover takes the stop line with its [Try again] away; closing brings it back; other toasts stay', () => {
     const LINE_STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.';
@@ -99,7 +99,7 @@ describe('GM r22 Q1: the popover open, the matching stop line steps aside', () =
   });
 });
 
-describe('GM r23 answer 2: the clash asked again takes focus itself, never Keep mine', () => {
+describe('the clash asked again takes focus itself, never Keep mine (design)', () => {
   const CLASH = 'Codex changed “Opening” while you were editing it.';
   it('focus lost with the toast it replaced: on the prompt (tabindex -1), not a button; Enter there chooses nothing', () => {
     const resolve = vi.fn();

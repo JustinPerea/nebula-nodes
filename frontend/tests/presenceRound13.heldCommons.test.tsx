@@ -1,5 +1,5 @@
 /**
- * PR #204 round 13 (review 10 held-calls MEDIUM-2, LOW-2 M20):
+ * PR #204:
  * - A tab reloaded after a backend restart keeps its person token (sessionStorage: "a reload keeps
  *   it") and its socket refuses it, but this page was never promoted. The Commons held only on a
  *   demote seen on this page (personWasPromoted), so that tab sent its person-only reads with the
@@ -7,7 +7,7 @@
  *   live. It now holds on any hold that has lasted the held rule's 150 ms (personHeldSettled):
  *   nothing is sent, there is no Start, and the lines are a never-connected tab's. The token stays
  *   as it was: whether a tab drops a token its socket refuses is not this change's to decide.
- * - M20: the Commons view's flag goes with the view. Unmounted while demoted, then promoted, a
+ * - The Commons view's flag goes with the view. Unmounted while demoted, then promoted, a
  *   Commons call goes out (the view's flag no longer holds it).
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -60,7 +60,7 @@ async function heldTab({ token }: { token: boolean }) {
   await settle(1000);
 }
 
-describe('a reloaded tab with a stored token its socket refuses (review 10 MEDIUM-2)', () => {
+describe('a reloaded tab with a stored token its socket refuses', () => {
   it('the Commons sends nothing, has no Start, and says what a never-connected tab says; the token stays', async () => {
     await heldTab({ token: false });
     render(<CommonsView />);
@@ -132,7 +132,7 @@ describe('the Commons view switches on any settled hold (useDemotedView)', () =>
   });
 });
 
-describe('the Commons view\'s flag goes with the view (review 10 LOW-2, M20)', () => {
+describe('the Commons view\'s flag goes with the view', () => {
   it('unmounted while demoted, then promoted: a Commons call goes out', async () => {
     window.sessionStorage.setItem('nebula.person', STORED);
     act(() => { session.notePersonPromoted(); session.reportPersonRequired(); });

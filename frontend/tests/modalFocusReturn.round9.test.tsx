@@ -1,12 +1,12 @@
 /**
- * Review 8 of PR #203, copy NIT-2 and NIT-3 (mutants M18 and M19): the two
+ * PR #203: the two
  * halves of a dialog's focus return, each pinned.
  * - isReturningFocus: while a dialog's close puts focus back on its opener,
  *   a focus trap that is still listening (a comparison or the onboarding
  *   overlay under it) lets that one move through instead of pulling focus
  *   back inside. Any other focus that leaves the trap is still pulled back.
  * - focusVisible: the return asks for a visible ring wherever the close came
- *   from (GM, PR #203 r15 item 4). jsdom draws no ring, so the option is
+ *   from (design, PR #203). jsdom draws no ring, so the option is
  *   read off the focus call.
  */
 import { cleanup, render, screen } from '@testing-library/react';
@@ -41,7 +41,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('a dialog\'s focus return passes a trap that is still listening (NIT-2, M18)', () => {
+describe('a dialog\'s focus return passes a trap that is still listening', () => {
   it('the comparison pulls ordinary focus back, but not the return', () => {
     render(<ResultComparison items={pair()} onClose={() => {}} />);
     const close = screen.getByRole('button', { name: /close/i });
@@ -71,7 +71,7 @@ describe('a dialog\'s focus return passes a trap that is still listening (NIT-2,
   });
 });
 
-describe('the return asks for a visible ring (NIT-3, M19)', () => {
+describe('the return asks for a visible ring', () => {
   it('focuses with focusVisible and without scrolling', () => {
     const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     returnFocusTo(outside);

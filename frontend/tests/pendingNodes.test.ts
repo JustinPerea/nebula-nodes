@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { cleanPending, pendingIncludedLine, pendingSkipLine, placeholderLine, runSkips, skipSummaryOf } from '../src/lib/pendingNodes';
 
-// Placeholders (Q125 item 3). GM - Design, 2026-10-25, verbatim:
+// Placeholders. Design, 2026-10-25, verbatim:
 // "A line in the preview area: “Codex is setting this up.”"
 // "Run skip line. One node: “Skipped 1 node Codex is still setting up.”
-//  Several: “Skipped 3 nodes the agents are still setting up.” (count downstream too; round 12)"
+//  Several: “Skipped 3 nodes the agents are still setting up.” (count downstream too)"
 
 const codex = { agent: { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: false }, at: 1 };
 
@@ -29,14 +29,14 @@ describe('the copy', () => {
   it('says how many nodes Run skipped, naming the agent for one', () => {
     expect(pendingSkipLine({ count: 1, agents: ['Codex'] })).toBe('Skipped 1 node Codex is still setting up.');
     expect(pendingSkipLine({ count: 3, agents: ['Codex', 'Claude Code'] })).toBe('Skipped 3 nodes the agents are still setting up.');
-    // GM, 2026-10-25: name the agent when every skipped node is one agent's.
+    // Design, 2026-10-25: name the agent when every skipped node is one agent's.
     expect(pendingSkipLine({ count: 3, agents: ['Codex'] })).toBe('Skipped 3 nodes Codex is still setting up.');
     expect(pendingSkipLine(null)).toBeNull();
     expect(pendingSkipLine({ count: 0, agents: [] })).toBeNull();
   });
 });
 
-describe('the cost line before the person runs placeholders (GM - Design, 2026-10-25)', () => {
+describe('the cost line before the person runs placeholders (design, 2026-10-25)', () => {
   it('says how many nodes the run includes that an agent is still setting up', () => {
     expect(pendingIncludedLine({ count: 2, agents: ['Codex'] })).toBe('Includes 2 nodes Codex is still setting up.');
     expect(pendingIncludedLine({ count: 1, agents: ['Codex'] })).toBe('Includes 1 node Codex is still setting up.');

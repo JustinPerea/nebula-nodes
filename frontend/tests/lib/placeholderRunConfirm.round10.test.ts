@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { placeholderRunConfirm, PRICE_ON_KREA_PLAN } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// Review 9 (L-3, nits c and d) and GM - Design's round-10 rulings, verbatim.
+// The design rulings, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const claude = { id: 'ext:claude', name: 'Claude Code', color: '#8AB4F8', verified: true };
@@ -20,7 +20,7 @@ const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 3, paid
 const unpriced = summaryOf({});
 const SAVED = 'after the run was saved. The replay uses the saved settings.';
 
-describe('GM round 10, item 1: the replay sentence names the changed nodes', () => {
+describe('the replay sentence names the changed nodes (design)', () => {
   const priced = summaryOf({ low: 0.3, high: 0.3, lines: [line('g', 'Grade', 0.1, 0.1), line('w', 'Wide', 0.1, 0.1),
     line('x', 'Sky', 0.05, 0.05), line('o', 'Final', 0.05, 0.05)] });
   const four = [node('g', 'Grade'), node('w', 'Wide'), node('x', 'Sky'), node('o', 'Final')];
@@ -38,7 +38,7 @@ describe('GM round 10, item 1: the replay sentence names the changed nodes', () 
     expect(model.intro).toBe(`Codex changed “Grade” and “Wide” ${SAVED}`);
   });
 
-  it('four or more: a count (GM round 11: names up to 3, a count from 4)', () => {
+  it('four or more: a count (design: names up to 3, a count from 4)', () => {
     const model = placeholderRunConfirm(four, wires, 'o', priced,
       { shown: new Map([['g', codex], ['w', codex], ['x', codex], ['o', codex]]), changed: new Set(['g', 'w', 'x', 'o']) })!;
     expect(model.intro).toBe(`Codex changed 4 nodes ${SAVED}`);
@@ -78,7 +78,7 @@ describe('GM round 10, item 1: the replay sentence names the changed nodes', () 
   });
 });
 
-describe("GM round 10, item 2: a Krea node's sub-model setting is named in its row", () => {
+describe("a Krea node's sub-model setting is named in its row (design)", () => {
   const plan = (id: string) => summaryOf({ ids: { unpriced: [], plan: [id], awaitingInput: [] } });
 
   it('Krea 2: “Hero” · Krea 2 · Variant: Large · on your Krea plan', () => {
@@ -120,7 +120,7 @@ describe("GM round 10, item 2: a Krea node's sub-model setting is named in its r
   });
 });
 
-describe('review 9, L-3: the raw model name is kept for the seen key', () => {
+describe('the raw model name is kept for the seen key', () => {
   it('a node labelled with its model id still carries the model (modelKey), though the row hides the repeat', () => {
     const model = placeholderRunConfirm([node('u', 'openai/gpt-4o-mini', codex, 'openrouter-universal', { model: 'openai/gpt-4o-mini' })],
       [], 'u', unpriced)!;
@@ -129,7 +129,7 @@ describe('review 9, L-3: the raw model name is kept for the seen key', () => {
   });
 });
 
-describe("review 9, nit c: Krea Style Search's free-text model is a search filter", () => {
+describe("Krea Style Search's free-text model is a search filter", () => {
   it('its row never presents the filter as the model', () => {
     const model = placeholderRunConfirm([node('s', 'Find', codex, 'krea-style-search', { model: 'flux' })], [], 's', unpriced)!;
     expect(model.rows[0].model).toBe('Krea Style Search');
@@ -137,7 +137,7 @@ describe("review 9, nit c: Krea Style Search's free-text model is a search filte
   });
 });
 
-describe('review 9, nit d: the 80-character cut counts code points, as Python does', () => {
+describe('the 80-character cut counts code points, as Python does', () => {
   it('81 astral characters cut to 80 whole ones, never half a pair', () => {
     const long = '𝔸'.repeat(81);
     const model = placeholderRunConfirm([node('u', 'Writer', codex, 'openrouter-universal', { model: long })], [], 'u', unpriced)!;

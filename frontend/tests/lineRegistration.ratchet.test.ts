@@ -1,5 +1,5 @@
 /**
- * PR #204 round 9 (review 7 MEDIUM-1): the one-notice rule reads registrations, not the page's
+ * PR #204: the one-notice rule reads registrations, not the page's
  * text. A line counts only if the surface renders it through a component that registers it
  * (components/LineText, or FailureLines, CommonsErrorLine, CommonsPageLines and LineBox, which render through it). So this
  * ratchet takes the place of the old scan's "every surface counts":
@@ -31,7 +31,7 @@ function sourceFiles(dir = SRC, ext = /\.(ts|tsx)$/): string[] {
 
 /** The components that register what they're handed, and the prop that holds the line. */
 export const REGISTERS: Record<string, string> = { LineText: 'text', FailureLines: 'failure', CommonsErrorLine: 'line', LineBox: 'text',
-  // Round 12 (GM r20 1): the Commons' page-lines row, which hands its line to CommonsErrorLine.
+  // Design: the Commons' page-lines row, which hands its line to CommonsErrorLine.
   CommonsPageLines: 'line',
   // The Moodboard Studio's own wrapper (MoodboardStudioView FailureLine): a div around FailureLines.
   FailureLine: 'failure',
@@ -123,13 +123,13 @@ interface Shows { file: string; expr: string }
 /** The Commons: their refusals (lib/commonsApi sessionLost, lib/commonsChatAuthority) show here. */
 const COMMONS: Shows[] = [
   { file: 'components/commons/CommonsView.tsx', expr: 'shownError' },
-  // Round 18l: the line shown is `shownLine`, the error or the parent's lock line; a not-connected line locks, so it is always the one shown.
+  // The line shown is `shownLine`, the error or the parent's lock line; a not-connected line locks, so it is always the one shown.
   { file: 'components/commons/CommonsCloseBatch.tsx', expr: 'shownLine' },
   { file: 'components/commons/CommonsEvaluation.tsx', expr: 'error' },
   { file: 'components/commons/CommonsDetail.tsx', expr: 'error' },
   { file: 'components/commons/CommonsSettings.tsx', expr: 'error' },
   { file: 'components/commons/CommonsReview.tsx', expr: 'error' },
-  // Round 14 (GM r23 3): offline comes first, so these hand on the line useOfflineFirstBecause leaves.
+  // Design: offline comes first, so these hand on the line useOfflineFirstBecause leaves.
   { file: 'components/commons/CommonsEvaluation.tsx', expr: 'shownImageError' },
   { file: 'components/commons/CommonsMedia.tsx', expr: 'shownError' },
   { file: 'components/commons/CommonsReview.tsx', expr: 'shownError' },
@@ -153,7 +153,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'settings.apps': [{ file: 'components/panels/settings/ConnectedApps.tsx', expr: 'error' }],
   'settings.spend-load': [{ file: 'components/panels/settings/AgentSpendSection.tsx', expr: 'error' }],
   'settings.spend-load-retry': { none: 'a retry: its line is settings.spend-load' },
-  // Round 10 (GM r17 item 6): a demoted tab shows the never-connected line in the same place.
+  // Design: a demoted tab shows the never-connected line in the same place.
   'settings.agents-load': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'shownError' }],
   'settings.agents-load-retry': { none: 'a retry: its line is settings.agents-load' },
   'settings.agents': [{ file: 'components/panels/settings/PersonalAgentsSection.tsx', expr: 'shownError' }],
@@ -165,7 +165,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
     { file: 'components/panels/settings/StorageTab.tsx', expr: 'telemetryError' },
     { file: 'components/panels/settings/PreferencesTab.tsx', expr: 'costError' },
   ],
-  // Round 10 (GM r17 item 5): a favorite the server refused no longer drops silently.
+  // Design: a favorite the server refused no longer drops silently.
   'inspector.favorite': [{ file: 'components/panels/Inspector.tsx', expr: 'shownFavoriteError' }],
   'krea.connection': [{ file: 'components/panels/settings/KreaSignInRow.tsx', expr: 'problem' }],
   'krea.plans': [{ file: 'components/panels/settings/KreaSignInRow.tsx', expr: 'error' }],
@@ -215,10 +215,10 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
   'graph.run-start': [{ file: 'components/nodes/NodeError.tsx', expr: 'copy.reason' }],
   'graph.shot-start': [{ file: 'components/nodes/NodeError.tsx', expr: 'copy.reason' }],
   'cinema.scene-save-retry': { none: 'a retry: its line is the scene save\'s notify (graph.notify)' },
-  // Round 9: the Commons' lines clear on the promote (components/commons/useCommonsLine).
+  // The Commons' lines clear on the promote (components/commons/useCommonsLine).
   'commons.line': COMMONS,
   'commons.reload-retry': { none: 'a retry: the load runs again; its line is commons.line' },
-  // Round 14 (GM r22): the Commons page's load lines (useCommonsLoadLines), shown in its line row.
+  // Design: the Commons page's load lines (useCommonsLoadLines), shown in its line row.
   'commons.load-lines': [{ file: 'components/commons/CommonsView.tsx', expr: 'shownError' }],
   'commons.load-lines-retry': { none: 'a retry: the loads run again; their line is commons.load-lines' },
 };
@@ -243,7 +243,7 @@ const markerSites = (): string[] => {
 
 const read = (file: string) => readFileSync(join(SRC, file), 'utf8');
 
-describe('PR #204 round 9: every line that can be not-connected registers itself', () => {
+describe('every line that can be not-connected registers itself (PR #204)', () => {
   it('every site the trace keeps a line for says where it shows, and only those', () => {
     const sites = markerSites();
     expect(sites.length).toBeGreaterThan(40);
@@ -272,7 +272,7 @@ describe('PR #204 round 9: every line that can be not-connected registers itself
     for (const file of ['components/failure/FailureLines.tsx', 'components/commons/CommonsErrorLine.tsx', 'components/commons/CommonsPageLines.tsx', 'components/LineBox.tsx']) {
       expect(registeredExpressions(file, read(file)).length, file).toBeGreaterThan(0);
     }
-    // Round 10 (review 8 MEDIUM-3): registered once, its words updated in place.
+    // Registered once, its words updated in place.
     expect(read('components/LineText.tsx')).toMatch(/registerLine\(element, words\)/);
     expect(read('components/LineText.tsx')).toMatch(/registration\.current\?\.update\(words\)/);
   });
@@ -292,7 +292,7 @@ describe('PR #204 round 9: every line that can be not-connected registers itself
     expect(probe('const A = () => <span>{noticeText(shown.text, mono)}</span>;')).toEqual(['noticeText(shown.text, mono)']);
   });
 
-  it('round 10 (review 8 LOW-1, M22): every helper that words a not-connected line is one the scan follows', () => {
+  it('every helper that words a not-connected line is one the scan follows', () => {
     // Each helper of lib/errorCopy (and the lock helpers) whose words can say "connected as you".
     const helpers = ['notConnectedBecause', 'personRequiredCopy', 'personRequiredMessage', 'markReadRefusedCopy',
       'generateRefusedCopy', 'generateStartFailedCopy', 'commonsNotConnectedCopy', 'personLockLine', 'connectAgentLockCopy',

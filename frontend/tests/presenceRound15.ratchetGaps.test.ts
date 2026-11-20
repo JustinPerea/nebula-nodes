@@ -1,9 +1,9 @@
 /**
- * PR #204 round 15 (review 12 NIT-5): two blind spots in the line ratchets, closed.
+ * PR #204: two blind spots in the line ratchets, closed.
  *
  * 1. presenceRound6.ratchet's because rule passes a retry block when any one line it shows is in
  *    the because form, so a load's own line could lose the form while the page line beside it
- *    kept it (mutant X21). Here: in a function that retries on the promote, every line variable
+ *    kept it. Here: in a function that retries on the promote, every line variable
  *    worded from a failure (`line`, `page`, `…Line`) says a refusal for this tab in the because
  *    form: its initializer branches on isPersonRefusal(…) to notConnectedBecause(…) (or a helper
  *    in that form).
@@ -79,12 +79,12 @@ export function pageLoadLinesOutsideTheHook(files: { name: string; text: string 
     .map(({ name }) => name);
 }
 
-describe('review 12 NIT-5: the because rule reads each line, not one per block', () => {
+describe('the because rule reads each line, not one per block', () => {
   it('every refusal line in a retrying function says why in the because form', () => {
     expect(refusalLinesWithoutBecause(sources())).toEqual([]);
   });
 
-  it('catches a load\'s own line without the form beside a page line with it (mutant X21)', () => {
+  it('catches a load\'s own line without the form beside a page line with it', () => {
     const probe = (body: string) => refusalLinesWithoutBecause([{ name: 'P.ts', text: `const show = (error, heading) => { ${body} retryOnPromote(error, k, r); };` }]);
     expect(probe('const line = failureMessage(error, heading); const page = isPersonRefusal(error) ? notConnectedBecause(\'load Commons\') : failureUnder(error, H);')).toHaveLength(1);
     expect(probe('const line = isPersonRefusal(error) && what ? failureMessage(error, heading) : failureMessage(error, heading);')).toHaveLength(1);
@@ -102,7 +102,7 @@ describe('review 12 NIT-5: the because rule reads each line, not one per block',
   });
 });
 
-describe('review 12 NIT-5: pageLoadLines is the hook\'s', () => {
+describe('pageLoadLines is the hook\'s', () => {
   it('no other source uses it, so no screen draws its own words through it', () => {
     expect(pageLoadLinesOutsideTheHook(sources())).toEqual([]);
   });
@@ -112,7 +112,7 @@ describe('review 12 NIT-5: pageLoadLines is the hook\'s', () => {
   });
 });
 
-describe('review 12 NIT-6: curly apostrophes in the lines this PR wrote', () => {
+describe('curly apostrophes in the lines this PR wrote', () => {
   // The headings this PR wrote that render as written (no request heading of the same words on
   // main to disagree with). The rest wait for the wording batch with their lib/api.ts twins.
   const LINES: Array<[string, string]> = [
@@ -129,7 +129,7 @@ describe('review 12 NIT-6: curly apostrophes in the lines this PR wrote', () => 
   });
 });
 
-// Round 17 (review 13 NIT-3): the line surfaces in the first load name their attributes from
+// The line surfaces in the first load name their attributes from
 // lib/lineAttrs, so hooks/useFocusHandover (the reader) loads only with the screens that hand
 // focus over, and lib/lockPlacement (the rule's check) with nothing in the app at all.
 describe('the line attributes keep their readers out of the first load', () => {

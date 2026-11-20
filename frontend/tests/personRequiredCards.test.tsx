@@ -1,5 +1,5 @@
 /**
- * GM - Design, 2026-10-23 (Q116 a, round 2): "This change needs your OK, and
+ * Design, 2026-10-23: "This change needs your OK, and
  * this tab isn’t connected as you. Open the link Nebula printed when it
  * started, then try again." In the desktop app: "This change needs your OK,
  * and this window isn’t connected as you. Quit Nebula and open it again, then
@@ -8,7 +8,7 @@
  *
  * A node's refused start (a billing change, an approved run, the agents'
  * spending limits, refused because this tab isn't connected as the person) is
- * shown on its card: GM's line, and the backend's words, written for agents,
+ * shown on its card: design's line, and the backend's words, written for agents,
  * behind the card's collapsed Details toggle (components/failure/ErrorDetails).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe('a run start refused because this tab is not connected as the person', () => {
-  it("shows GM's line on the card, with the agents' text behind a closed Details", async () => {
+  it("shows design's line on the card, with the agents' text behind a closed Details", async () => {
     vi.spyOn(api, 'executeNode').mockRejectedValue(new ExecutionStartRejectedError(BILLING, 403,
       { heading: "Couldn't run the node.", detail: BILLING, code: 'person_required' } as never));
     await useGraphStore.getState().executeNode('n1');
@@ -74,7 +74,7 @@ describe('a run start refused because this tab is not connected as the person', 
     expect(container.querySelector('details')).toBeNull();
   });
 
-  it("in the desktop app the card says GM's app line, with the same Details", async () => {
+  it("in the desktop app the card says design's app line, with the same Details", async () => {
     // The preload's bridge (desktop/preload.cjs), as inDesktopShell() reads it.
     Object.defineProperty(window, 'nebulaDesktop', {
       value: { apiBaseUrl: 'http://127.0.0.1:56789' }, configurable: true, writable: true,

@@ -1,5 +1,5 @@
 /**
- * PR #204 round 10, review 8 LOW-2 with GM r16 Q3: a Generate start that fails for a reason other
+ * Design (PR #204): a Generate start that fails for a reason other
  * than this tab. Its nodes are already on the canvas, so the cards say so ("Nebula added the nodes
  * to the canvas but couldn’t start the generation." and the reason), and a fix that ends "try
  * again" becomes "then run them from the canvas": Generate again would add the nodes twice. The
@@ -48,7 +48,7 @@ describe('the rule: a fix that ends "try again" runs them from the canvas', () =
     expect(thenRunFromCanvas('Add a fal.ai key in Settings.')).toBe('Add a fal.ai key in Settings.');
   });
 
-  it('the not-connected case is worded through the same rule, unchanged (GM r13)', () => {
+  it('the not-connected case is worded through the same rule, unchanged (design)', () => {
     expect(generateRefusedCopy(true, false)).toBe('Nebula added the nodes to the canvas but couldn’t start the generation because this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.');
     expect(generateRefusedCopy(true, true, 'available')).toBe('Nebula added the nodes to the canvas but couldn’t start the generation because this window isn’t connected as you. Quit Nebula and open it again, then run them from the canvas.');
   });

@@ -18,7 +18,7 @@ const KEYLESS = (routeCases as unknown as { definitions: Record<string, ModelNod
 const TOKEN = 'fixture-only';
 const HEALTH: ProviderHealthState = { providers: {}, checkedAt: null, loading: false, error: null };
 
-describe('the Idol node runs free without a token, and on the person\'s allowance with one (PR #203 round 7, GM r12)', () => {
+describe('the Idol node runs free without a token, and on the person\'s allowance with one (design, PR #203)', () => {
   it('is one keyless maker route on the Space, the token optional, may bill with it', () => {
     expect(IDOL.envKeyName).toEqual([]);
     expect(IDOL.directKeyName).toEqual([]);
@@ -28,7 +28,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(IDOL.routes![0].missingKeyLine).toBeUndefined();
     expect(IDOL.outputPorts.map((port) => [port.id, port.dataType])).toEqual([['world', 'World']]);
     expect(IDOL.inputPorts.map((port) => [port.id, port.dataType, port.required])).toEqual([['image', 'Image', true]]);
-    // GM r12 item 4, word for word.
+    // Design: word for word.
     expect(IDOL.description).toBe('Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs '
       + 'free on Hugging Face. Add a Hugging Face token to use your own allowance.');
   });
@@ -64,7 +64,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(signedIn).toEqual({ label: 'Saved', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face token',
       detail: 'Idol uses your Hugging Face allowance.', tokenSaved: true });
-    // No allowance numbers and no run counts anywhere (GM r12).
+    // No allowance numbers and no run counts anywhere (design).
     for (const line of [anonymous?.detail, signedIn?.detail]) expect(line).not.toMatch(/\d/);
   });
 
@@ -92,7 +92,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(state.alternatives.map((alternative) => alternative.routeId)).toEqual(['hf-space']);
   });
 
-  it('Settings lists Idol under the Hugging Face token, as optional, with GM\'s r11 lines and r12 helper', () => {
+  it('Settings lists Idol under the Hugging Face token, as optional, with design\'s helper', () => {
     expect(nodesForKey('HF_TOKEN').map((node) => node.id)).toEqual(['speridlabs-idol']);
     expect(PROVIDER_KEY_SPECS.HF_TOKEN).toMatchObject({ label: 'Hugging Face', keyLink: 'Open Hugging Face tokens',
       note: 'Optional. Lets Idol use your own allowance.',
@@ -122,7 +122,7 @@ describe('the keyed-route machinery that stays for other nodes (on Idol made key
     expect(nodesKeyLockReason(nodes, ['b'], { loaded: true, apiKeys: {} })).toBeNull();
     expect(nodesKeyLockReason(nodes, ['a'], { loaded: false, apiKeys: {} })).toBeNull();
     expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: { HF_TOKEN: TOKEN } })).toBeNull();
-    // A keyed Space route says what is needed (GM r5 item 1).
+    // A keyed Space route says what is needed (design).
     expect(modelReadiness(keyed, {}, { apiKeys: {}, loaded: true }, HEALTH)).toMatchObject({
       label: 'Needed', connectionLabel: 'Hugging Face token' });
   });

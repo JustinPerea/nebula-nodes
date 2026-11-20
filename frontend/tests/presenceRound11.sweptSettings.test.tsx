@@ -1,9 +1,9 @@
 /**
- * PR #204 round 11, review 9 lock-sweep LOW-4: a behaviour test for each swept person-lock
+ * PR #204: a behaviour test for each swept person-lock
  * control in Settings. On a held tab each one is aria-disabled in place (still focusable), carries
  * data-person-lock, points at one `.person-lock-line` with its verb, has no tooltip, and a click,
  * change or submit sends nothing. The promote lifts all of it and the same action sends. Per group
- * (GM r17 item 1): every grouped control points at the one line, and no line shows twice.
+ * (design): every grouped control points at the one line, and no line shows twice.
  */
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -102,7 +102,7 @@ function expectUnlocked(element: HTMLElement) {
   expect(lockLinesOf(element)).toHaveLength(0);
 }
 
-/** GM r17 item 1: no section (nor the page) shows the same lock line twice. */
+/** Design: no section (nor the page) shows the same lock line twice. */
 function expectNoLineTwice() {
   const texts = [...document.querySelectorAll('.person-lock-line')].map((node) => node.textContent);
   expect(new Set(texts).size).toBe(texts.length);

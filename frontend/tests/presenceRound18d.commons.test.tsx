@@ -1,16 +1,15 @@
 /**
- * PR #204 round 18d: GM r31 and r32, and review 14's findings, on the real Commons screens with the
+ * PR #204 (design): tests on the real Commons screens with the
  * real Commons API (only apiFetch is stubbed).
- * - The Commons turned off (GM r31 layout M, GM r32 1): the header keeps only the way back, the
+ * - The Commons turned off (design): the header keeps only the way back, the
  *   title and Updates; no sections, Add to, Add, status, Start or Stop; one line, "Commons is
  *   turned off for this Nebula."; an action's 404 turns to that view; "Commons is disabled" never
- *   shows; going offline and back never brings the sections back (review 14 LOW-2).
- * - Add to after a failed re-read keeps its last good list, live, beside the neutral line (GM r32
- *   2, review 14 LOW-3).
- * - A settings write that landed, whose read-back failed (GM r32 3, review 14 LOW-1, probe P3).
- * - The grid says nothing while the collections haven't loaded (GM r32 4, live LOW-2).
- * - One loading look (GM r32 5, live NIT-2); a pane's load line hides offline (live LOW-1).
- * - Review 14 NIT-1's surviving mutants.
+ *   shows; going offline and back never brings the sections back.
+ * - Add to after a failed re-read keeps its last good list, live, beside the neutral line (design).
+ * - A settings write that landed, whose read-back failed (design).
+ * - The grid says nothing while the collections haven't loaded (design).
+ * - One loading look (design); a pane's load line hides offline.
+ * - Guards that mutation testing showed untested.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -132,7 +131,7 @@ function expectOffView(where: string) {
   expect(screen.getByRole('button', { name: 'Back to Canvas' }), where).toBeTruthy();
 }
 
-describe('the Commons turned off (GM r31 layout M, GM r32 1)', () => {
+describe('the Commons turned off (design)', () => {
   it('the header keeps only the way back and the title; one line; "Commons is disabled" never shows', async () => {
     commonsOff.on = true;
     render(<CommonsView />);
@@ -249,7 +248,7 @@ describe('the Commons turned off (GM r31 layout M, GM r32 1)', () => {
   });
 });
 
-describe('Add to after a failed re-read (GM r32 2, review 14 LOW-3)', () => {
+describe('Add to after a failed re-read (design)', () => {
   it('keeps the last good list, live, beside the neutral line; Try again re-reads', async () => {
     lists.collections = [{ id: 'c1', name: 'Refs', kind: 'manual' }];
     fails.search = [500];
@@ -290,12 +289,12 @@ describe('Add to after a failed re-read (GM r32 2, review 14 LOW-3)', () => {
     release();
     delete held.collections;
     await tick(500);
-    // GM r19 2: Add's menu comes back with the promote, once Add works again.
+    // Design: Add's menu comes back with the promote, once Add works again.
     expect(add()!.getAttribute('aria-expanded')).toBe('true');
   });
 });
 
-describe('the grid while the collections haven\'t loaded (GM r32 4, live LOW-2, NIT-1)', () => {
+describe('the grid while the collections haven\'t loaded (design)', () => {
   it('nothing in the grid: no "No matches", no drop hint', async () => {
     held.collections = new Promise(() => {});
     render(<CommonsView />);
@@ -320,7 +319,7 @@ describe('the grid while the collections haven\'t loaded (GM r32 4, live LOW-2, 
   });
 });
 
-describe('a settings write that landed, whose read-back failed (GM r32 3, review 14 LOW-1, probe P3)', () => {
+describe('a settings write that landed, whose read-back failed (design)', () => {
   const link = async () => {
     fireEvent.change(screen.getByPlaceholderText('/Users/you/Pictures/refs'), { target: { value: '/x' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
@@ -346,7 +345,7 @@ describe('a settings write that landed, whose read-back failed (GM r32 3, review
       expect(seen).not.toContain('ZZRAW');
       expect(seen).not.toContain('Try again');
       // The form stays, with the write's own message.
-      // Round 18e (GM r33): the folder's own name, its full path in the title.
+      // Design: the folder's own name, its full path in the title.
       expect(screen.getByText('Linked “x”. Scanning it now.')).toHaveAttribute('title', '/x');
       warn.mockRestore();
     });
@@ -366,7 +365,7 @@ describe('a settings write that landed, whose read-back failed (GM r32 3, review
   });
 });
 
-describe('New collection… landed, the list\'s read-back failed (review 14 LOW-1)', () => {
+describe('New collection… landed, the list\'s read-back failed', () => {
   it('the collections\' load line, neutral, never the action\'s', async () => {
     lists.collections = [{ id: 'c1', name: 'Refs', kind: 'manual' }];
     render(<CommonsView />);
@@ -387,7 +386,7 @@ describe('New collection… landed, the list\'s read-back failed (review 14 LOW-
   });
 });
 
-describe('one loading look (GM r32 5, live NIT-2)', () => {
+describe('one loading look (design)', () => {
   const expectLoading = async (words: string) => {
     await tick(250);
     expect(text()).not.toContain(words);
@@ -422,7 +421,7 @@ describe('one loading look (GM r32 5, live NIT-2)', () => {
   });
 });
 
-describe('a pane\'s load line hides beside "Nebula is offline" (live LOW-1)', () => {
+describe('a pane\'s load line hides beside "Nebula is offline"', () => {
   it('Agent review: the line goes offline and comes back online', async () => {
     fails.review = [500];
     render(<CommonsReview />);
@@ -452,7 +451,7 @@ describe('a pane\'s load line hides beside "Nebula is offline" (live LOW-1)', ()
   });
 });
 
-describe('Agent review back from another section (review 14 NIT-1, X13)', () => {
+describe('Agent review back from another section', () => {
   it('a failed load, away, then back: the read on return answers and the setup state shows at once', async () => {
     fails.review = [503];
     const view = render(<CommonsReview active />);
@@ -468,7 +467,7 @@ describe('Agent review back from another section (review 14 NIT-1, X13)', () => 
   });
 });
 
-describe('which lines are a load\'s (review 14 NIT-1, X4 and X6)', () => {
+describe('which lines are a load\'s', () => {
   it('only a line that starts as a load\'s: an action line naming a load later is not one', () => {
     expect(isLoadLine('Couldn’t save the settings. Nebula couldn’t load the list.')).toBe(false);
     expect(isLoadLine('Couldn’t save the settings. Saved. Nebula couldn’t load the settings back because x. Reload to see them.')).toBe(false);
@@ -484,7 +483,7 @@ describe('which lines are a load\'s (review 14 NIT-1, X4 and X6)', () => {
   });
 });
 
-describe('the bare-lines ratchet lets GM r31\'s two names, and only on a locked control', () => {
+describe('the bare-lines ratchet lets design\'s two names, and only on a locked control', () => {
   it('flags them anywhere else, and any other "connected as you" name', async () => {
     const { bareLinesIn } = await import('./helpers/bareLines');
     const { ADD_NOT_CONNECTED, ADD_TO_NOT_CONNECTED } = await import('../src/lib/commonsAddCopy');
@@ -498,7 +497,7 @@ describe('the bare-lines ratchet lets GM r31\'s two names, and only on a locked 
   });
 });
 
-describe('a linked folder\'s name (round 18e, GM r33)', () => {
+describe('a linked folder\'s name (design)', () => {
   it('the last segment, by either separator, trailing ones ignored; a root names itself; never empty', async () => {
     const { folderName, linkedFolderNotice } = await import('../src/lib/commonsFormat');
     expect(folderName('/private/tmp/x/moodboards')).toBe('moodboards');

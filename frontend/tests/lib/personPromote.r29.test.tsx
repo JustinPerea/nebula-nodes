@@ -1,4 +1,4 @@
-// PR #200 fix round 19, GM r29 item 3: the person hold (and the banner)
+// Design (PR #200): the person hold (and the banner)
 // follow the server's state both ways. The server promotes this tab's canvas
 // socket on a verified hello and only then sends it the person-only
 // `proposalSync` (backend websocket_endpoint); it demotes with `personRequired`
@@ -71,7 +71,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe('GM r29 item 3: the hold follows the server', () => {
+describe('the hold follows the server (design)', () => {
   it('a new link: the hold stays until the server promotes the hello it brings, then it and the banner clear', async () => {
     const { session, wsClient } = await fresh();
     const socket = await open(wsClient);
@@ -178,7 +178,7 @@ describe('GM r29 item 3: the hold follows the server', () => {
     wsClient.disconnect();
   });
 
-  it('a refused hello also tells the socket\'s subscribers (PR #211 r4: a demoted tab drops its numbered cursors)', async () => {
+  it('a refused hello also tells the socket\'s subscribers (PR #211: a demoted tab drops its numbered cursors)', async () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://localhost:8000' }));
     const { wsClient } = await fresh();
     const heard: string[] = [];
@@ -190,7 +190,7 @@ describe('GM r29 item 3: the hold follows the server', () => {
     wsClient.disconnect();
   });
 
-  it('a token forgotten before the reconnect: no hello, so the socket demotes as on a refused one (review 4, LOW-2)', async () => {
+  it('a token forgotten before the reconnect: no hello, so the socket demotes as on a refused one', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://localhost:8000' }));
     const { session, wsClient } = await fresh();
@@ -211,7 +211,7 @@ describe('GM r29 item 3: the hold follows the server', () => {
     wsClient.disconnect();
   });
 
-  it("a no-token answer for a socket that's no longer the tab's own doesn't demote the tab (review 5, N2)", async () => {
+  it("a no-token answer for a socket that's no longer the tab's own doesn't demote the tab", async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     // Each socket's token lookup, answered by hand.
     const answers: ((token: string | null) => void)[] = [];
@@ -241,7 +241,7 @@ describe('GM r29 item 3: the hold follows the server', () => {
     }
   });
 
-  it("a refusal on a socket that's no longer the tab's own doesn't demote the tab (review 4, NIT-2)", async () => {
+  it("a refusal on a socket that's no longer the tab's own doesn't demote the tab", async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://localhost:8000' }));
     const { wsClient } = await fresh();

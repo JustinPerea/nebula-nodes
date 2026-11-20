@@ -4,7 +4,7 @@ import type { Edge } from '@xyflow/react';
 import { describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 5, found by the live check: a multi-select Delete of a
+ * PR #198: found by the live check: a multi-select Delete of a
  * scene another window's run was rendering, with two Text nodes, kept the
  * scene (its DELETE got the 409) but lost the wire into it. React Flow sent
  * the scene's wires as their own DELETEs before the node's refusal came back.

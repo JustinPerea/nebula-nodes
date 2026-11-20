@@ -3,7 +3,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * The cause decides, not the position (GM - Design, PR #211 review 5, item
+ * The cause decides, not the position (design, PR #211, item
  * 5). The person's own moves of a node are recorded for the agent cursors,
  * which ride them at 0 px: a drag's drop and a keyboard nudge (React Flow's
  * position change with dragging false), Arrange and Arrange selected, and
@@ -85,7 +85,7 @@ describe('the person moves a node', () => {
     expect(placed('n2')).toBe(true);
   });
 
-  it("a sync's move isn't the person's, even back onto the person's spot (review 5, LOW-2)", async () => {
+  it("a sync's move isn't the person's, even back onto the person's spot", async () => {
     useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);
     expect(placed('n1')).toBe(true);
     await layoutSaved();
@@ -113,7 +113,7 @@ describe('the person moves a node', () => {
     expect(placed('n1')).toBe(false);
   });
 
-  // Review 6, LOW-3: each replacement forgets the record itself. New nodes
+  // Each replacement forgets the record itself. New nodes
   // couldn't match it anyway, so these ask about the very move recorded.
   it('a replacing sync (graphReplaced) forgets the record', async () => {
     useGraphStore.getState().onNodesChange([{ type: 'position', id: 'n1', position: { x: 20, y: 0 }, dragging: false }]);

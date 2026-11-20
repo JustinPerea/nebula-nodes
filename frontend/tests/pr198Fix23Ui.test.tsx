@@ -2,10 +2,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * PR #198 fix round 23, rendered:
- * - GM r34: the state lines and the card's "Unsaved" mark read the scene's
+ * PR #198: rendered:
+ * - Design: the state lines and the card's "Unsaved" mark read the scene's
  *   name live (a rename during a try shows at once; the mark too).
- * - Review 21 NIT-5: focus lands on a line with no [Try again] (the run's
+ * - Focus lands on a line with no [Try again] (the run's
  *   line) when the line focus was in, or an answered clash prompt, gives way
  *   to it.
  */
@@ -48,7 +48,7 @@ const CLASH = 'Codex changed “Opening” while you were editing it.';
 const base = { stoppedScenes: {}, sceneTries: {}, scenePopover: null, undoNotice: null, messageNotice: null, sceneClashes: {} };
 const shot2Stop = { cause: 'other', reason: 'Shot 2 has no model.', nebula: false, line: SHOT2('Opening') };
 
-describe('GM r34: names read live', () => {
+describe('names read live (design)', () => {
   it('the card’s mark says its stop’s line with the name the card shows now, not the one it had when the save failed', () => {
     const props = { id: 'n1', selected: false, type: 'cinemaSceneNode', dragging: false, zIndex: 0, isConnectable: true,
       positionAbsoluteX: 0, positionAbsoluteY: 0, selectable: true, deletable: true, draggable: true,
@@ -80,7 +80,7 @@ describe('GM r34: names read live', () => {
   });
 });
 
-describe('review 21 NIT-5: focus onto a line with no [Try again]', () => {
+describe('focus onto a line with no [Try again]', () => {
   const canvas = () => {
     const el = document.createElement('div');
     el.className = 'canvas-wrapper';

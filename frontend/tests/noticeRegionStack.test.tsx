@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import type { ProposalView } from '../src/lib/wsClient';
 
 /**
- * GM - Design, 2026-10-23:
+ * Design, 2026-10-23:
  * 2. "Yes, move the proposal bar into the region, stacked above the notices.
  *    Accept / Reject are decisions and must never sit under a panel. The order
  *    from the bottom up is notices, then the proposal bar."
@@ -107,7 +107,7 @@ const slotOf = (element: Element) => element.closest<HTMLElement>('[data-notice-
 /** True when `a` is drawn above `b` in the stack (earlier in the column). */
 const above = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-describe('the proposal bar in the region (GM 2)', () => {
+describe('the proposal bar in the region (design)', () => {
   it('stacks above the notices, in the same region, with no panel of its own', async () => {
     useCanvasProposalsStore.getState().open(proposal('p1'), 'key-a');
     useGraphStore.getState().notify('Imported. One note.', 'info');
@@ -136,7 +136,7 @@ describe('the proposal bar in the region (GM 2)', () => {
   }, SLOW);
 });
 
-describe('every toast joins the region (GM 3)', () => {
+describe('every toast joins the region (design)', () => {
   it('the canvas pin error toast', async () => {
     useCanvasPinsStore.setState({ error: "Couldn't save the note.", composer: null });
     withRegion('canvas', <PinComposer />);
@@ -285,7 +285,7 @@ describe('focus in the region leaves the screen its keys', () => {
   });
 });
 
-describe('nothing outside the region draws a toast (GM 3)', () => {
+describe('nothing outside the region draws a toast (design)', () => {
   /** The class on each toast's root (a class that ends in "toast"), and who renders it. */
   function toastRoots(): Map<string, string[]> {
     const roots = new Map<string, string[]>();

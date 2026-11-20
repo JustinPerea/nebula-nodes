@@ -1,10 +1,10 @@
 /**
- * PR #204 round 18f (GM r35 5): a tab that opened on the Commons while the backend ran without it
+ * Design (PR #204): a tab that opened on the Commons while the backend ran without it
  * asks the capability again when Nebula reconnects (no polling). Commons on: the off view opens
  * into the Commons with no reload, over the project this tab has loaded, and focus goes to the
  * heading, or stays on the way back when it was there. Off or no answer: the off view stays.
- * Review 15 NIT-3: App's off route needs the Commons off (M13); "a project open" needs the
- * workspace screen, not only a loaded project, which a reload has (M19).
+ * App's off route needs the Commons off; "a project open" needs the
+ * workspace screen, not only a loaded project, which a reload has.
  */
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { regionNoticesReady } from './helpers/regionNoticesReady';
@@ -75,7 +75,7 @@ function answer(path: string): Promise<Response> {
   return Promise.resolve(json({}));
 }
 
-// Round 18o (review 18 logic LOW-1): Chrome's focus fixup (CommonsView's handover runs here).
+// Runs under Chrome's focus fixup (withFocusFixup; CommonsView's handover runs here).
 withFocusFixup();
 beforeEach(() => {
   useUIStore.setState(initialUI, true);
@@ -105,7 +105,7 @@ async function reconnect() {
   await act(async () => {});
 }
 
-it('a loaded project on the Projects home is not open: the off view reads "← Projects" (M19)', async () => {
+it('a loaded project on the Projects home is not open: the off view reads "← Projects"', async () => {
   render(<App />);
   expect(await screen.findByText(OFF, {}, LOAD)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Projects' })).toBeTruthy();
@@ -179,7 +179,7 @@ it('with no project to show it over, the Commons coming back leaves for the Proj
   expect(useUIStore.getState().commonsOffShown).toBe(false);
 });
 
-it('the off route needs the Commons off: shown and enabled together is the Commons itself (M13)', async () => {
+it('the off route needs the Commons off: shown and enabled together is the Commons itself', async () => {
   useProjectStore.setState({ screen: 'workspace' });
   useUIStore.setState({ commonsOffShown: true, viewMode: 'commons' });
   capability.enabled = true;

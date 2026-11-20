@@ -1,6 +1,5 @@
 /**
- * ModalPortal, round 8 of PR #203 (GM r15 items 4 and 5; review 7, copy
- * LOW-2 and NITs 1, 2 and 5): one place for every dialog.
+ * ModalPortal, PR #203 (design): one place for every dialog.
  * - A press that closes a dialog doesn't then move focus: the press's own
  *   default (to <body>, or to whatever is under the pointer once the
  *   backdrop is gone) would undo the return to the opener. jsdom runs no
@@ -66,7 +65,7 @@ function PressDialog({ on }: { on: 'mousedown' | 'pointerdown' }) {
   );
 }
 
-describe('a press that closes a dialog leaves focus on the opener (GM, PR #203 r15 item 4)', () => {
+describe('a press that closes a dialog leaves focus on the opener (design, PR #203)', () => {
   it('mousedown on the backdrop: its default is stopped, focus is back on the opener', async () => {
     const { opener } = page();
     opener.focus();
@@ -111,7 +110,7 @@ function ClosingDialog({ onClose, label = 'Close' }: { onClose: () => void; labe
   );
 }
 
-describe('a dialog opened from a dialog returns focus up the chain (GM, PR #203 r15 item 5)', () => {
+describe('a dialog opened from a dialog returns focus up the chain (design, PR #203)', () => {
   it('palette, then Keyboard shortcuts from it: closing shortcuts lands on what opened the palette', async () => {
     page();
     function App() {
@@ -173,7 +172,7 @@ function Plain() {
   );
 }
 
-describe('stacked dialogs close in any order and leave the page as it was (review 7, LOW-2)', () => {
+describe('stacked dialogs close in any order and leave the page as it was', () => {
   const orders: Array<[number, number[]]> = [[2, [0, 1]], [2, [1, 0]], [3, [0, 1, 2]], [3, [2, 1, 0]], [3, [1, 0, 2]], [3, [0, 2, 1]]];
   it.each(orders)('%i dialogs, closed in order %j', async (count, order) => {
     const { root } = page();
@@ -191,8 +190,8 @@ describe('stacked dialogs close in any order and leave the page as it was (revie
   });
 });
 
-describe('the rest of review 7', () => {
-  it('StrictMode: the second mount keeps focus in the dialog (NIT-1)', async () => {
+describe('StrictMode, the opener\'s own onFocus, and a late aria-modal', () => {
+  it('StrictMode: the second mount keeps focus in the dialog', async () => {
     const { opener } = page();
     opener.focus();
     render(
@@ -208,7 +207,7 @@ describe('the rest of review 7', () => {
     expect(document.getElementById('page')).toHaveAttribute('inert', '');
   });
 
-  it('StrictMode, opened from a notice (which stays usable): the second mount still keeps focus in the dialog (NIT-1)', async () => {
+  it('StrictMode, opened from a notice (which stays usable): the second mount still keeps focus in the dialog', async () => {
     // The page behind goes inert, which alone would stop a stray return; a
     // notice's control doesn't, so only the cancelled return keeps focus here.
     const region = document.createElement('div');
@@ -231,7 +230,7 @@ describe('the rest of review 7', () => {
     expect(document.activeElement).toHaveTextContent('Close');
   });
 
-  it('the opener\'s own onFocus hears focus come back (NIT-5)', async () => {
+  it('the opener\'s own onFocus hears focus come back', async () => {
     page();
     const heard: string[] = [];
     function App() {
@@ -254,7 +253,7 @@ describe('the rest of review 7', () => {
     expect(heard).toEqual(['focus']);
   });
 
-  it('a dialog that becomes aria-modal after it mounts isolates the page (NIT-2)', async () => {
+  it('a dialog that becomes aria-modal after it mounts isolates the page', async () => {
     const { root } = page();
     function Late() {
       const [modal, setModal] = useState(false);

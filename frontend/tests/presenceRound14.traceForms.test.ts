@@ -1,12 +1,12 @@
 /**
- * PR #204 round 14, review 11 held-calls LOW-4: three imported-wrapper forms the trace
+ * PR #204: three imported-wrapper forms the trace
  * (tests/personGatedCallers) decided by the catch around them, so a caller that drops its line on a
  * `!res.ok` answer read as one that keeps it. Each probe sends POST /api/presets through a wrapper,
  * then `if (!res.ok) setLine(...)` with no marker, inside a try whose catch registers. Each must come
  * out `drops` (the wrapper is read) or be listed as untraced (it can't be), never `keeps`.
- * - P1, P1b: a default-exported wrapper (an arrow, `export default function`), and a name.
- * - P3: a wrapper that hands its path on to another file's wrapper (`post = (u) => send(u)`).
- * - P13: a wrapper a call returns (`usePost()('/api/…')`).
+ * - A default-exported wrapper (an arrow, `export default function`), and a name.
+ * - A wrapper that hands its path on to another file's wrapper (`post = (u) => send(u)`).
+ * - A wrapper a call returns (`usePost()('/api/…')`).
  */
 import { describe, expect, it } from 'vitest';
 import { callersOf, untracedApiText, withSources } from './personGatedCallers';
@@ -71,7 +71,7 @@ const PROBES: Record<string, { files: Record<string, string>; expect: 'drops' | 
   },
 };
 
-describe('review 11 LOW-4: imported-wrapper forms are read, or listed, never decided by the catch', () => {
+describe('imported-wrapper forms are read, or listed, never decided by the catch', () => {
   for (const [name, probe] of Object.entries(PROBES)) {
     it(name, { timeout: 60_000 }, () => {
       const out = trace(probe.files);

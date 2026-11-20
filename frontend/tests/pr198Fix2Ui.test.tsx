@@ -4,14 +4,14 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 2 (review 2 and GM's round-2 rulings):
+ * PR #198 and design's rulings:
  * - Banner: on every screen but the canvas it is a row of the layout under
  *   the top header, opening on the panel spring after the offline delay.
  * - Gating: the paid and saving actions are disabled offline, neutral, with
  *   one shared helper.
- * - M2: a scene without `base` opens; a studio that can't render shows a
+ * - A scene without `base` opens; a studio that can't render shows a
  *   contained line with Back to canvas instead of blanking the app.
- * - A shot that is rendering can't be removed (GM: block it).
+ * - A shot that is rendering can't be removed (design: block it).
  * - A screen's own load-failure notice hides while offline.
  * - The Agent log's time stays on one line.
  */
@@ -60,7 +60,7 @@ afterEach(() => {
 
 // -- the banner row --------------------------------------------------------------
 
-describe('GM: the banner is a row of each studio\'s layout, under its top header', () => {
+describe('the banner is a row of each studio\'s layout, under its top header (design)', () => {
   it('a brief drop doesn\'t open it; past the offline delay it opens and pushes content down; it closes on reconnect', () => {
     vi.useFakeTimers();
     render(<WorkspaceHeader title="Cinema" />);
@@ -104,7 +104,7 @@ describe('GM: the banner is a row of each studio\'s layout, under its top header
     // Each studio's grid names the row in its own stylesheet. That is checked
     // through the cascade, per studio, variant, skin and breakpoint, in
     // tests/studioGridAreas.test.ts; the text match that stood here passed for
-    // any rule naming the class (review 1 NIT-2), so it went.
+    // any rule naming the class, so it went.
     expect(css('App.css')).not.toMatch(/workspace-header-bottom/);
     expect(source('components/WorkspaceHeader.tsx')).not.toMatch(/usePublishedHeaderBottom/);
     expect(source('App.tsx')).toMatch(/placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\}/);
@@ -116,7 +116,7 @@ describe('GM: the banner is a row of each studio\'s layout, under its top header
 const SCENE: CinemaSceneSpec = { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9',
   shots: [{ id: 's1', prompt: 'a', output: { status: 'idle' } }, { id: 's2', prompt: 'b', output: { status: 'idle' } }] };
 
-describe('GM: Cinema, Create and Remotion actions are disabled offline, neutral, through one helper', () => {
+describe('Cinema, Create and Remotion actions are disabled offline, neutral, through one helper (design)', () => {
   const offline = () => act(() => noteBackendConnection('offline'));
   const gated = (button: HTMLElement) => {
     expect(button).toBeDisabled();
@@ -164,7 +164,7 @@ describe('GM: Cinema, Create and Remotion actions are disabled offline, neutral,
 
 // -- a shot that is rendering ----------------------------------------------------------
 
-describe('GM: a shot that is rendering can\'t be removed', () => {
+describe('a shot that is rendering can\'t be removed (design)', () => {
   const rail = () => render(<CinemaShotsRail cinemaNodeId="n1" scene={SCENE} selectedShotId="s1" onSelect={() => {}}
     onAddShot={() => {}} onRemoveShot={() => {}} onReorder={() => {}} />);
 
@@ -196,9 +196,9 @@ describe('GM: a shot that is rendering can\'t be removed', () => {
   });
 });
 
-// -- M2 -------------------------------------------------------------------------------
+// -- A scene without base opens; a studio that can't render is contained -------------------------------------------------------------------------------
 
-describe('M2: a scene without base opens; a studio that can\'t render is contained', () => {
+describe('a scene without base opens; a studio that can\'t render is contained', () => {
   it('the scene settings read through the defaults', () => {
     const bare = normalizeCinemaScene({ shots: [{ id: 's1', prompt: 'x' }] });
     expect(bare).toMatchObject({ version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9' });
@@ -206,7 +206,7 @@ describe('M2: a scene without base opens; a studio that can\'t render is contain
     expect(screen.getAllByText('Seedream 4.5').length).toBeGreaterThan(0);
   });
 
-  it('GM\'s line, Back to canvas, and the Agent log line', () => {
+  it('the studio-boundary line (design), Back to canvas, and the Agent log line', () => {
     const logged: string[] = [];
     const listen = (event: Event) => logged.push((event as CustomEvent<{ message: string }>).detail.message);
     window.addEventListener('nebula:agent-log-entry', listen);
@@ -220,7 +220,7 @@ describe('M2: a scene without base opens; a studio that can\'t render is contain
       "Nebula couldn’t open “Opening” because some of its data is missing or damaged.");
     fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }));
     expect(exit).toHaveBeenCalled();
-    // GM r8: a studio's line names the studio.
+    // Design: a studio's line names the studio.
     expect(logged).toEqual(['Couldn’t open “Opening” in Cinema, node n4. scene.base is missing.']);
   });
 
@@ -237,7 +237,7 @@ describe('M2: a scene without base opens; a studio that can\'t render is contain
 
 // -- load-failure notices offline -----------------------------------------------------
 
-describe('GM: a screen\'s own load-failure notice hides while offline', () => {
+describe('a screen\'s own load-failure notice hides while offline (design)', () => {
   function Probe({ notice, onReconnect }: { notice: string | null; onReconnect?: () => void }) {
     const shown = useOfflineHiddenNotice(notice, onReconnect);
     return <p>{shown ?? 'none'}</p>;
@@ -264,7 +264,7 @@ describe('GM: a screen\'s own load-failure notice hides while offline', () => {
 
 // -- the Agent log's time ---------------------------------------------------------------
 
-describe('GM: the Agent log\'s time never wraps', () => {
+describe('the Agent log\'s time never wraps (design)', () => {
   it('nowrap, in a column as wide as the time', () => {
     const rules = css('styles/slava-restraint.css');
     expect(rules).toMatch(/body\.app-slava-restraint \.agent-log__time\s*\{[^}]*white-space:\s*nowrap/);
@@ -272,10 +272,10 @@ describe('GM: the Agent log\'s time never wraps', () => {
   });
 });
 
-describe('M2: the Agent log names the field the studio couldn\'t read', () => {
+describe('the Agent log names the field the studio couldn\'t read', () => {
   it('a broken shot before a missing base (the base is filled in)', async () => {
     const { cinemaSceneProblem } = await import('../src/lib/studioBoundary');
-    // GM r6 item 4 (fix round 5): each with whether it is missing or damaged.
+    // Design: each with whether it is missing or damaged.
     expect(cinemaSceneProblem({ scene: { shots: [null] } })).toEqual({ field: 'scene.shots[0]', state: 'damaged' });
     expect(cinemaSceneProblem({ scene: { shots: 's1' } })).toEqual({ field: 'scene.shots', state: 'damaged' });
     expect(cinemaSceneProblem({ scene: { shots: [] } })).toEqual({ field: 'scene.base', state: 'missing' });

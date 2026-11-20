@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Round 8b (GM r16 on #208): Extract works out the palette in a worker. The
+// Design (PR #208): Extract works out the palette in a worker. The
 // worker runs the same pure runPaletteJob on pixels the page read, so the
 // result must be the same as on the page, byte for byte.
 const reads = vi.hoisted(() => ({ next: [] as ((value: unknown) => void)[], page: [] as Blob[] }));
@@ -37,7 +37,7 @@ vi.setConfig({ testTimeout: 120_000 });
 type FakeOptions = {
   ready?: boolean;
   crash?: boolean;
-  /** Says it reads files itself (round 8c), and answers a file so. */
+  /** Says it reads files itself, and answers a file so. */
   reads?: boolean;
   file?: (id: number) => PaletteReply | null;
   /** Answers a job this many ms late; null: never. */
@@ -117,7 +117,7 @@ afterEach(() => {
   resetPaletteWorkerForTests();
 });
 
-describe('the palette worker gives what the page gives (round 8b)', () => {
+describe('the palette worker gives what the page gives', () => {
   it('returns the same palette as runPaletteJob on the page, opaque and with transparency', async () => {
     useWorker();
     for (const make of [opaqueJob, clearJob]) {
@@ -155,7 +155,7 @@ describe('the palette worker gives what the page gives (round 8b)', () => {
   });
 });
 
-describe('without a worker, the page works out the palette (round 8b)', () => {
+describe('without a worker, the page works out the palette', () => {
   it('falls back when a worker cannot be made (a CSP, an old browser), and tries once', async () => {
     FakeWorker.made = 0;
     resetPaletteWorkerForTests(() => { FakeWorker.made++; throw new Error('blocked'); });
@@ -198,7 +198,7 @@ describe('without a worker, the page works out the palette (round 8b)', () => {
   });
 });
 
-describe('a later Extract wins (round 8b)', () => {
+describe('a later Extract wins', () => {
   const result = (hex: string): PaletteResult => ({ ok: true, colors: [hex] });
   const settle = () => new Promise((done) => setTimeout(done, 0));
 
@@ -214,7 +214,7 @@ describe('a later Extract wins (round 8b)', () => {
     expect(await first).toBeNull();
   });
 
-  it('forgets a key once its Extract is done (review 8 NIT)', async () => {
+  it('forgets a key once its Extract is done', async () => {
     useWorker();
     const file = new Blob([]);
     const first = extractPaletteLatest('n1:palette', file);
@@ -246,7 +246,7 @@ describe('a later Extract wins (round 8b)', () => {
   });
 });
 
-describe('the worker module (round 8b)', () => {
+describe('the worker module', () => {
   it('says it is ready, then answers each job with runPaletteJob, and "other" for one that throws', async () => {
     const posted: PaletteReply[] = [];
     const scope = { onmessage: null as ((event: MessageEvent<PaletteRequest>) => void) | null, postMessage: (m: PaletteReply) => posted.push(m) };
@@ -269,8 +269,8 @@ describe('the worker module (round 8b)', () => {
   });
 });
 
-describe('the hand-off holds (review 7 L2, round 8c)', () => {
-  it("pins GM's start-up limit and the job deadline", () => {
+describe('the hand-off holds', () => {
+  it("pins design's start-up limit and the job deadline", () => {
     expect(WORKER_READY_MS).toBe(3000);
     expect(JOB_DEADLINE_MS).toBe(30_000);
   });
@@ -372,7 +372,7 @@ describe('the hand-off holds (review 7 L2, round 8c)', () => {
   });
 });
 
-describe('the worker reads the file itself (GM r18 5, round 8c)', () => {
+describe('the worker reads the file itself (design)', () => {
   const file = () => new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
 
   it('sends the file, not pixels, to a worker that reads files; the page reads nothing', async () => {
@@ -428,7 +428,7 @@ describe('the worker reads the file itself (GM r18 5, round 8c)', () => {
     expect(FakeWorker.made).toBe(1);
   });
 
-  it("does the file on the page when the worker's script can't load, saying nothing new (GM r20)", async () => {
+  it("does the file on the page when the worker's script can't load, saying nothing new (design)", async () => {
     useWorker({ ready: false, reads: true });
     const picked = file();
     const done = paletteOfFile(picked);
