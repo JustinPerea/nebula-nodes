@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { createApi, TOKEN_HEADER } from './api'
 import { CONFIRM_LINE, ReadSection } from './ReadSection'
 import { MeasuredLines } from './RecordView'
 import { RegionOverlay } from './RegionOverlay'
 import { ReadingSection, RegionsSection, ShowsSection, SpacingSection, TextSection } from './Sections'
-import { axisFill } from './read'
+import { axisFill, ROLE_LABELS, valueLabel } from './read'
 import { applied, readRecord } from './testRecord'
 import type { Correction } from './types'
 
@@ -35,17 +35,17 @@ describe('RegionOverlay', () => {
 
   it('shows a role label only on a hovered, focused or selected box', () => {
     const { unmount } = overlay(null, null)
-    expect(screen.queryByText('button')).toBeNull()
-    expect(screen.queryByText('header')).toBeNull()
+    expect(screen.queryByText('Button')).toBeNull()
+    expect(screen.queryByText('Header')).toBeNull()
     unmount()
     const hovered = overlay('r2', null)
-    expect(within(box('r2')).getByText('button')).toBeTruthy()
-    expect(screen.queryByText('header')).toBeNull()
+    expect(within(box('r2')).getByText('Button')).toBeTruthy()
+    expect(screen.queryByText('Header')).toBeNull()
     hovered.unmount()
     overlay(null, 'r1')
-    expect(within(box('r1')).getByText('header')).toBeTruthy()
+    expect(within(box('r1')).getByText('Header')).toBeTruthy()
     expect(box('r1').className).toContain('ex-box-selected')
-    expect(screen.queryByText('button')).toBeNull()
+    expect(screen.queryByText('Button')).toBeNull()
   })
 
   it('reports hovering and a click to select', () => {
@@ -183,6 +183,22 @@ describe('sections', () => {
     expect(screen.queryByText('ui')).toBeNull()
   })
 
+  it('labels the role and weight choices, never the stored words', () => {
+    render(
+      <>
+        <RegionsSection {...props()} />
+        <TextSection {...props()} />
+      </>,
+    )
+    const roles = within(screen.getByLabelText('Role of r1')).getAllByRole('option').map((o) => o.textContent)
+    expect(roles).toContain('Header')
+    expect(roles).toContain('Text block')
+    expect(roles.every((name) => /^[A-Z]/.test(name ?? ''))).toBe(true)
+    const weights = within(screen.getByLabelText('Weight of t1')).getAllByRole('option').map((o) => o.textContent)
+    expect(weights).toEqual(['Light', 'Regular', 'Medium', 'Bold'])
+    expect(valueLabel(ROLE_LABELS, 'a_new_role')).toBe('A new role')
+  })
+
   it('wraps a region label and a statement in a field that grows', () => {
     render(
       <>
@@ -250,7 +266,34 @@ describe('sections', () => {
     expect(field.tagName).toBe('TEXTAREA')
     expect(field.rows).toBe(1)
     expect(field.value).toBe(record.structure.read!.text.t1.content)
-    expect(field.style.height).not.toBe('')
+  })
+
+  it('fits a growing field again when its width changes, border included', () => {
+    const watchers: Array<() => void> = []
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { watchers.push(callback) }
+      observe() {}
+      disconnect() {}
+    })
+    // The words need 40px at the first width and 60px once the field narrows; the border adds 2px.
+    let width = 200
+    const spies = [
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width),
+      vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(() => (width === 200 ? 40 : 60)),
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => 26),
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => 24),
+    ]
+    try {
+      render(<RegionsSection {...props()} />)
+      const field = screen.getByLabelText('Label of r1') as HTMLTextAreaElement
+      expect(field.style.height).toBe('42px')
+      width = 150
+      act(() => watchers.forEach((run) => run()))
+      expect(field.style.height).toBe('62px')
+    } finally {
+      spies.forEach((spy) => spy.mockRestore())
+      vi.unstubAllGlobals()
+    }
   })
 
   it('selects a region from its id button or its row, and not from a click in a field', () => {

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { AXIS_LABELS, enumValueLabel, type EnumField } from '../lib/commonsTypes'
 import { RowOrigin, SectionLabel } from './Origin'
-import { axisFill, inOrder, isPaletteId, modelTag, originAt, ROLES, showOrigin, usableRegions, usableRuns, WEIGHTS, words } from './read'
+import { axisFill, inOrder, isPaletteId, modelTag, originAt, ROLE_LABELS, ROLES, showOrigin, usableRegions, usableRuns, valueLabel, WEIGHT_LABELS, WEIGHTS, words } from './read'
 import type { CodeGap, ExtractionRecord, Region, Show, TextRun } from './types'
 
 export type Correct = (path: string, value: unknown) => void
@@ -30,12 +30,26 @@ function EditableText({ value, label, onCommit, multiline = false }: {
   const [draft, setDraft] = useState<string | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
   const shown = draft ?? value
-  // Grow to the words: reset, then take the height the text needs.
+  // Grow to the words: reset, then take the height the text needs plus the border (the box is
+  // border-box). Fit again when the field's width changes, as when a row's origin tag appears
+  // after a correction, or the last line would be cut off.
   useLayoutEffect(() => {
     const field = area.current
-    if (!field) return
-    field.style.height = 'auto'
-    field.style.height = `${field.scrollHeight}px`
+    if (!field) return undefined
+    const fit = () => {
+      field.style.height = 'auto'
+      field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`
+    }
+    fit()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    let width = field.clientWidth
+    const watch = new ResizeObserver(() => {
+      if (field.clientWidth === width) return
+      width = field.clientWidth
+      fit()
+    })
+    watch.observe(field)
+    return () => watch.disconnect()
   }, [shown])
   const commit = () => {
     const next = (draft ?? value).trim()
@@ -64,9 +78,10 @@ function EditableText({ value, label, onCommit, multiline = false }: {
   )
 }
 
-function Choose({ value, options, label, onPick }: {
+function Choose({ value, options, labels, label, onPick }: {
   value: string
   options: readonly string[]
+  labels: Record<string, string>
   label: string
   onPick: (next: string) => void
 }) {
@@ -75,7 +90,7 @@ function Choose({ value, options, label, onPick }: {
     <select className="ex-select" value={value} aria-label={label} onChange={(event) => onPick(event.target.value)}>
       {all.map((option) => (
         <option key={option} value={option}>
-          {words(option)}
+          {valueLabel(labels, option)}
         </option>
       ))}
     </select>
@@ -111,7 +126,7 @@ export function RegionsSection({ record, view, hovered, selected, onHover, onSel
               <button type="button" className="ex-id ex-id-button" aria-pressed={selected === id} aria-label={`Select ${id}`}>
                 {id}
               </button>
-              <Choose value={region.role} options={ROLES} label={`Role of ${id}`} onPick={(role) => onCorrect(`${path}.role`, role)} />
+              <Choose value={region.role} options={ROLES} labels={ROLE_LABELS} label={`Role of ${id}`} onPick={(role) => onCorrect(`${path}.role`, role)} />
               <EditableText multiline value={region.label} label={`Label of ${id}`} onCommit={(label) => onCorrect(`${path}.label`, label)} />
               <RowOrigin tag={originAt(record.corrections, path, base)} base={base} />
               {swatch ? <span className="ex-swatch ex-swatch-small" title="Most common color in this box, measured by code" style={{ backgroundColor: swatch }} /> : null}
@@ -143,7 +158,7 @@ export function TextSection({ record, view, onCorrect }: Props) {
               <span className="ex-id">{id}</span>
               <EditableText multiline value={run.content} label={`Words of ${id}`} onCommit={(content) => onCorrect(`${path}.content`, content)} />
               <span className="ex-approx" data-testid="text-size" role="img" aria-label={`estimated ${run.size_px.value} pixels`}>≈ {run.size_px.value} px</span>
-              <Choose value={run.weight} options={WEIGHTS} label={`Weight of ${id}`} onPick={(weight) => onCorrect(`${path}.weight`, weight)} />
+              <Choose value={run.weight} options={WEIGHTS} labels={WEIGHT_LABELS} label={`Weight of ${id}`} onPick={(weight) => onCorrect(`${path}.weight`, weight)} />
               <RowOrigin tag={originAt(record.corrections, path, base)} base={base} />
             </li>
           )
