@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { BatchRunInspection } from '../src/components/panels/BatchRunInspection';
+import { openOutputLabel } from '../src/lib/openOutputLabel';
 import type { RunRecord } from '../src/lib/runHistory';
 import { getBackendBaseUrl } from '../src/lib/backend';
 import { useGraphStore } from '../src/store/graphStore';
@@ -22,9 +23,17 @@ describe('historical batch result access', () => {
     expect(screen.getByText('model · Result 1')).toBeInTheDocument();
     expect(screen.getByText('model · Result 2')).toBeInTheDocument();
     expect(screen.getByText('First caption')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open image · image' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/first.png');
-    expect(screen.getByRole('link', { name: 'Open video · video' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/second.mp4');
+    expect(screen.getByRole('link', { name: 'Open image' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/first.png');
+    expect(screen.getByRole('link', { name: 'Open video' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/second.mp4');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('names the port only when it says something the kind does not', () => {
+    expect(openOutputLabel('Image', 'image')).toBe('Open image');
+    expect(openOutputLabel('Image', 'mask')).toBe('Open image · mask');
+    expect(openOutputLabel('SVG', 'svg')).toBe('Open SVG');
+    expect(openOutputLabel('SVG', 'logo')).toBe('Open SVG · logo');
+    expect(openOutputLabel('Mesh', 'Mesh')).toBe('Open mesh');
   });
 
   it('does not turn saved text or unsafe schemes into executable links', () => {
