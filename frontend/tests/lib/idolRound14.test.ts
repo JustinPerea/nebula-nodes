@@ -1,4 +1,4 @@
-// PR #203 round 14: GM r27 items 4 and 7, review 13 copy NIT-3.
+// Design (PR #203): same-named nodes with one reason merge into one line in the proposal bar, the Accept line ignores the count, and the details toggle says Show or Hide the details.
 import { describe, expect, it } from 'vitest';
 import { type ProposalNotReady } from '../../src/lib/canvasProposals';
 import { DETAILS_DISCLOSURE, detailsDisclosure, NOT_READY_DISCLOSURE, mergedNotReadyLine, notReadyShown } from '../../src/lib/canvasProposalsBar';
@@ -9,8 +9,8 @@ const row = (ref: string, name: string, person: string, extra: Partial<ProposalN
 
 const KREA = '“Krea 2” needs your Krea plan. Sign in to Krea in Settings.';
 
-describe('same-named nodes say one line (GM, PR #203 r27 item 7)', () => {
-  it('puts the count in front, with the reason’s own plural (round 15: from the backend’s table)', () => {
+describe('same-named nodes say one line (design, PR #203)', () => {
+  it('puts the count in front, with the reason’s own plural (from the backend’s table)', () => {
     expect(mergedNotReadyLine(['Krea 2', 'Krea 2'], reasonFor(KREA)!))
       .toBe('2 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.');
     const notSetUp = { one: 'isn’t set up to run here yet. Check its provider in Settings.',
@@ -44,7 +44,7 @@ describe('same-named nodes say one line (GM, PR #203 r27 item 7)', () => {
   });
 });
 
-describe('the Accept line stays whatever the count (review 13, copy NIT-3)', () => {
+describe('the Accept line stays whatever the count', () => {
   const ACCEPT = 'You can accept this after you add your Hugging Face token in Settings.';
   it.each([3, 4, 5])('keeps it in view with %i nodes', (count) => {
     const rows = Array.from({ length: count }, (_, index) =>
@@ -54,7 +54,7 @@ describe('the Accept line stays whatever the count (review 13, copy NIT-3)', () 
   });
 });
 
-describe('the details toggle (GM, PR #203 r26; r27 item 4)', () => {
+describe('the details toggle (design, PR #203)', () => {
   it.each([
     [{ list: true, changes: false, note: false }, NOT_READY_DISCLOSURE],
     [{ list: true, changes: true, note: false }, DETAILS_DISCLOSURE],

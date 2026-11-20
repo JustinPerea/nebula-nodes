@@ -1,10 +1,10 @@
 /**
- * PR #204 round 18i (GM r39 Fix B, GM r32): while a pane's latest read has failed, it shows only
+ * Design (PR #204): while a pane's latest read has failed, it shows only
  * its failure line, until a read succeeds. No "Prepare the reference set in Blind labeling first."
  * and no "0 / 15 reviewed · 0 grades ready" under "Nebula couldn’t load Agent review…": those
  * would be stale. Agent review's 5 s poll can fail after a read answered, with a batch or without.
  * (Blind labeling never reads by itself once answered; Settings keeps its saved values on a failed
- * re-read, GM r32 3; a reference's detail has nothing to show until it reads.) These run the real
+ * re-read, design; a reference's detail has nothing to show until it reads.) These run the real
  * Commons API; only fetch is stubbed.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';

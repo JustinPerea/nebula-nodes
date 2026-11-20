@@ -5,12 +5,12 @@ import type { RunRecord } from '../../src/lib/runHistory';
 import type { NodeData } from '../../src/types';
 import { keyIdolInEachTest } from '../helpers/keyedSpace';
 
-// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
-// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+// PR #203: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (tests/helpers/keyedSpace.ts).
 keyIdolInEachTest();
 
 /**
- * GM, PR #203 r8 items 1-3: a Run history replay locks only when the run it
+ * Design (PR #203): a Run history replay locks only when the run it
  * replays includes a real Idol, with Idol's line. A whole-canvas replay skips
  * an agent's placeholder, as a canvas run does; a node's replay runs it.
  */
@@ -52,7 +52,7 @@ describe('historyRunKeyLock', () => {
   });
 });
 
-describe('placeholderKey (review r5 NIT-1)', () => {
+describe('placeholderKey', () => {
   it('changes when a placeholder comes or goes, never when a node moves', () => {
     const moved = live(true).map((node) => ({ ...node, position: { x: 400, y: 90 } }));
     expect(placeholderKey(moved)).toBe(placeholderKey(live(true)));

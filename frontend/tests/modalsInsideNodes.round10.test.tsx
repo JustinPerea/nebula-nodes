@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ReactFlow, ReactFlowProvider, applyNodeChanges, type Node, type NodeChange, type NodeProps } from '@xyflow/react';
 
 /**
- * Review 9, M-1 (live LD1/LD2): the Mesh and World previews portal their
+ * The Mesh and World previews portal their
  * modal dialogs from inside the node card, and React bubbles a portal's
  * events to its React parents, so React Flow's node handlers saw them:
  * arrows on the Mesh preview's Close moved the node, Enter and Space

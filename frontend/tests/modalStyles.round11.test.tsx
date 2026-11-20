@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/react';
 import { PromptDialog } from '../src/components/commons/CommonsPrompt';
 import { resolvedStyle, styleDifferences } from './helpers/cssCascade';
 
-// Review 10, M-1: Commons' prompt ("Add to → New collection…", "Why?
+// Commons' prompt ("Add to → New collection…", "Why?
 // (optional…)", "Label this region", "Rename region") moved to the body with
 // ModalPortal, outside .commons-view, which its field, button-focus and type
 // rules were scoped to. Its field turned into the browser's white box (Arial

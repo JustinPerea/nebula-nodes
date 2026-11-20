@@ -33,7 +33,7 @@ describe('createPresets client', () => {
       refImages: ['https://x.example/a.png'], scope: 'global', paramsVersion: 1 })).rejects.toThrow(detail);
   });
 
-  it('createPreset names the action and says GM\'s line when the refusal has no reason (error-copy round 2)', async () => {
+  it('createPreset names the action and says design\'s line when the refusal has no reason (error-copy)', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500, json: async () => { throw new Error('not json'); } });
     await expect(createPreset({ name: 'B', category: 'Style', prompt: 'x', params: {}, modelId: 'nano-banana',
       refImages: [], scope: 'global', paramsVersion: 1 })).rejects.toThrow("Nebula couldn’t save the style because the server hit an error. Try again.");

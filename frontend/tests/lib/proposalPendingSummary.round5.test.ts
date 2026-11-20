@@ -4,7 +4,7 @@ import type { ProposalView } from '../../src/lib/wsClient';
 
 /**
  * The "runs nothing until Codex finishes N nodes" line is the backend's plan
- * line now (backend tests/test_proposal_plan_line.py). GM - Design, round 5, item 3: when accepting doesn't start
+ * line now (backend tests/test_proposal_plan_line.py). Design: when accepting doesn't start
  * or queue a run, the button reads "Accept".
  */
 function view(cost: Partial<ProposalView['cost']>): ProposalView {
@@ -14,12 +14,12 @@ function view(cost: Partial<ProposalView['cost']>): ProposalView {
   } as unknown as ProposalView;
 }
 
-describe('a proposal whose run waits on placeholders (round 5)', () => {
+describe('a proposal whose run waits on placeholders', () => {
   it('its button reads "Accept": accepting starts nothing and queues nothing', () => {
     expect(acceptLabel(view({ pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } }))).toBe('Accept');
   });
 
-  it('keeps "Accept and run" when something still runs (GM, PR #203 r11 item 2: the count is its own chip)', () => {
+  it('keeps "Accept and run" when something still runs (design, PR #203: the count is its own chip)', () => {
     expect(acceptLabel(view({ freeRuns: 1, pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } }))).toBe('Accept and run');
     expect(acceptLabel(view({ paidRuns: 1 }))).toBe('Accept and run');
     expect(acceptCountChip(view({ paidRuns: 1 }))).toBe('1 paid');

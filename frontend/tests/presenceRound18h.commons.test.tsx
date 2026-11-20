@@ -1,10 +1,10 @@
 /**
- * PR #204 round 18h: review 16's mutation gaps on the Commons screen (logic NIT-2), with round
- * 18f's harness (the real Commons API; only apiFetch is stubbed).
- * - N20: the page row's Try again reads every page load again (status and references too).
- * - N22: the spring never shows while the Commons is off.
- * - N12: the opening mark is used once: a later ordinary entry neither springs nor takes focus.
- * - N21: the Commons turning off is part of the handover's change: it alone moves focus on.
+ * PR #204: mutation gaps on the Commons screen, with the harness of
+ * presenceRound18f.commons (the real Commons API; only apiFetch is stubbed).
+ * - The page row's Try again reads every page load again (status and references too).
+ * - The spring never shows while the Commons is off.
+ * - The opening mark is used once: a later ordinary entry neither springs nor takes focus.
+ * - The Commons turning off is part of the handover's change: it alone moves focus on.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,7 +41,7 @@ const commonsOff = { on: false };
 /** Status reads still answered before the rest hang (null: all answer). */
 const statusGate = { answers: null as number | null };
 const postFails: Record<string, number> = {};
-/** Round 18f: the next answers for every Commons call, in place of the usual (status, detail). */
+/** The next answers for every Commons call, in place of the usual (status, detail). */
 const every = { answer: null as [number, unknown] | null };
 /** The search's rows, and whether a reference's detail read fails. */
 const rows = { list: [] as unknown[] };
@@ -82,7 +82,7 @@ async function answer(path: string, init?: RequestInit): Promise<Response> {
 const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 const commonsLines = () => [...document.querySelectorAll('[data-commons-line]')].map((line) => line.textContent ?? '');
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers();
@@ -139,8 +139,8 @@ const tab = (name: string) => screen.getByRole('tab', { name });
 const retry = () => screen.queryByRole('button', { name: 'Try again' });
 const reads = (load: string) => transport.fetch.mock.calls.filter(([path, init]) => String(path).endsWith(`/${load}`) && (init as RequestInit | undefined)?.method !== 'POST').length;
 
-describe('review 16 NIT-2: the page row and the opening', () => {
-  it('N20: the page row\'s Try again reads the status and the references again, not only the collections', async () => {
+describe('the page row and the opening', () => {
+  it('the page row\'s Try again reads the status and the references again, not only the collections', async () => {
     fails.status = [503];
     render(<CommonsView />);
     await tick(3000);
@@ -158,7 +158,7 @@ describe('review 16 NIT-2: the page row and the opening', () => {
     expect(reads('collections')).toBe(collections + 1);
   });
 
-  it('N22: the spring shows when the Commons comes back, and never while it is off', async () => {
+  it('the spring shows when the Commons comes back, and never while it is off', async () => {
     render(<CommonsView />);
     await tick(1000);
     const view = () => document.querySelector('.commons-view');
@@ -174,7 +174,7 @@ describe('review 16 NIT-2: the page row and the opening', () => {
     expect(view()!.hasAttribute('data-commons-opening')).toBe(false);
   });
 
-  it('N12: the opening mark is used once; a later entry neither springs nor takes focus', async () => {
+  it('the opening mark is used once; a later entry neither springs nor takes focus', async () => {
     markCommonsOpening('heading');
     const first = render(<CommonsView />);
     await tick(1000);
@@ -188,7 +188,7 @@ describe('review 16 NIT-2: the page row and the opening', () => {
     expect(document.querySelector('.commons-view')!.hasAttribute('data-commons-opening')).toBe(false);
   });
 
-  it('N21: the Commons turning off alone (no offline, no new view) moves focus from a tab to the heading', async () => {
+  it('the Commons turning off alone (no offline, no new view) moves focus from a tab to the heading', async () => {
     render(<CommonsView />);
     await tick(1000);
     act(() => tab('Inbox').focus());

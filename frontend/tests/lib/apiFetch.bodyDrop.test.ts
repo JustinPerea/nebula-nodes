@@ -10,7 +10,7 @@ import {
  * typeerror2 (2026-10-24): apiFetch answered, then the connection dropped
  * while the caller read the body. The read rejects with fetch's own
  * TypeError ("network error"). The first pass made a bare TypeError read as
- * GM's general line, so this case lost the connection line. The read is now
+ * design's general line, so this case lost the connection line. The read is now
  * classified where apiFetch (and fetchUrl) hand out the Response: fetch's
  * own body-read failure becomes a ConnectionLostError; a used or locked body,
  * a JSON SyntaxError and the caller's own abort keep their class.

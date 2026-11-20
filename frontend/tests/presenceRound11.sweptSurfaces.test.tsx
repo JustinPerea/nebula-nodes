@@ -1,5 +1,5 @@
 /**
- * PR #204 round 11, review 9 lock-sweep LOW-4: behaviour tests for the swept person-lock controls
+ * PR #204: behaviour tests for the swept person-lock controls
  * outside Settings: the personal-agent warning's accept, Create's Enhance, the asset and project
  * trash, and the Inspector's model picker and favorite star. On a held tab each control is
  * aria-disabled in place (still focusable), carries data-person-lock, points at one
@@ -312,7 +312,7 @@ describe('the Inspector: "change the model" and "save favorites"', () => {
     expect(star().getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('a refused save puts the star back and says why (GM r17 item 5)', async () => {
+  it('a refused save puts the star back and says why (design)', async () => {
     api.updateSettings.mockRejectedValue(Object.assign(new Error('Only the person can do this.'), { code: PERSON_REQUIRED_CODE }));
     setUp('acme/one');
     await flush();
@@ -324,7 +324,7 @@ describe('the Inspector: "change the model" and "save favorites"', () => {
   });
 });
 
-describe('the Inspector: Replicate\'s Fetch schema has its own line (GM 2026-11-05)', () => {
+describe('the Inspector: Replicate\'s Fetch schema has its own line (design 2026-11-05)', () => {
   it('locks only the fetch, says "fetch the schema", and leaves Model ID editable', async () => {
     const fetchSchema = vi.fn();
     useGraphStore.setState({

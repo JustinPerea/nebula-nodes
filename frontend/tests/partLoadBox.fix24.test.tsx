@@ -1,5 +1,5 @@
 /**
- * PR #199 round 25, GM r24 (c): a press whose chunk didn't load says GM's
+ * Design (PR #199): a press whose chunk didn't load says design's
  * line, once, with [Try again] in the neutral notice colour (never the
  * danger box, and never "Try again" in the sentence beside the button).
  */
@@ -12,8 +12,8 @@ const base = { projects: [], loading: false, busy: false, error: null,
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() } satisfies ProjectHomeProps;
 afterEach(cleanup);
 
-describe('GM r24 (c): the chunk-failure box', () => {
-  it('says GM’s line verbatim, in the neutral notice, with [Try again] as its only button', () => {
+describe('the chunk-failure box (design)', () => {
+  it('says design’s line verbatim, in the neutral notice, with [Try again] as its only button', () => {
     const onRetry = vi.fn();
     const { container } = render(<ProjectHome {...base} onRetry={onRetry} retry="partLoad" error={PART_LOAD_LINE} />);
     expect(PART_LOAD_LINE).toBe('Nebula couldn’t open the project because part of the app didn’t load. If it keeps happening, reload the page.');

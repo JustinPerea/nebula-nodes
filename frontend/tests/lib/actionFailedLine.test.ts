@@ -3,7 +3,7 @@ import {
   CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY, RequestFailedError, actionFailedLine, becauseLine,
 } from '../../src/lib/errorCopy';
 
-// GM 2026-11 copy sweep: a failure line shown with a Try again button ends in "Try again.", in the because form,
+// Design 2026-11 copy sweep: a failure line shown with a Try again button ends in "Try again.", in the because form,
 // and has no "Try again." when retrying cannot help.
 describe('actionFailedLine', () => {
   const cases: [string, unknown, string, boolean][] = [

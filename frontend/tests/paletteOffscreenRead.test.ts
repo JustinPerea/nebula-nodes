@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BITMAP_OPTIONS, offscreenReadsSame, readPaletteJobOffscreen } from '../src/lib/paletteExtract';
 
-// Round 8c (GM r18 5): the worker reads the picked file with
+// Design: the worker reads the picked file with
 // createImageBitmap and an OffscreenCanvas, for the formats where Chrome
-// gives the page's pixels byte for byte (measured: notes, round 8c).
+// gives the page's pixels byte for byte (measured in Chrome).
 
 const png = (depth: number) => {
   const head = new Uint8Array(32);

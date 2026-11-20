@@ -1,5 +1,5 @@
 /**
- * PR #204 round 15 (review 12 LOW-1; GM r23 3, offline comes first): a because line is hidden
+ * Design (PR #204): offline comes first. A because line is hidden
  * while Nebula is offline wherever it is drawn, one rule in <LineText>, not per screen. That covers
  * the action-refusal lines no screen filtered (the Updates list's dismiss, Settings writes,
  * Connected apps, Trash, Pins, the proposal decide lines, the questions form and the rest). Back
@@ -81,7 +81,7 @@ describe('LineText: offline first', () => {
   });
 });
 
-describe('an action refusal no screen filtered (review 12 probe zzR12NotesOffline)', () => {
+describe('an action refusal no screen filtered', () => {
   it('the Updates list\'s refused dismiss: hidden offline, back online', () => {
     const line = failureMessage(new RequestFailedError('Couldn’t dismiss the note.', 403, { code: PERSON_REQUIRED_CODE, detail: 'x' }), 'Couldn’t dismiss the note.');
     expect(isBecauseLine(line)).toBe(true);
@@ -96,11 +96,11 @@ describe('an action refusal no screen filtered (review 12 probe zzR12NotesOfflin
   });
 });
 
-// Round 17 (review 13 LOW-3): a toast or bar whose only line is a because line holds nothing but
+// A toast or bar whose only line is a because line holds nothing but
 // its controls offline (the pin toast's ×, Settings' Undo). Hiding the line's span left an empty
 // box, so these ask the one rule (hooks/useOfflineFirstBecause) for the line before they show at
 // all: offline the box isn't there; back online it is, if the line still applies.
-describe('a toast whose only line is hidden offline doesn\'t show (review 13 LOW-3)', () => {
+describe('a toast whose only line is hidden offline doesn\'t show', () => {
   const pinToast = () => document.querySelector<HTMLElement>('.canvas-pin-toast--notice');
   const pinError = (error: string) => useCanvasPinsStore.setState({ pins: [], composer: null, composerCanvas: null, removing: {}, error,
     errorProject: null, errorPersonGate: null, draft: '', drafts: {}, kept: [] } as never);

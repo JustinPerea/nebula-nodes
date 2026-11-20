@@ -2,16 +2,16 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { getBackendBaseUrl } from '../../src/lib/backend';
 
 /**
- * error-copy round 2, item 6 (GM - Design): every request in the app names
+ * error-copy (design): every request in the app names
  * its action and says the reason, never a status code: "Couldn't {verb}
  * {object}." then the reason line; one-line surfaces (alerts, toasts,
  * status text) get "Couldn't {verb} {object}. {reason}" in one string,
  * which is the error's message. "Never 'failed:', '(HTTP 503)' or status
- * codes in the UI. Keep them in the console." Headings are GM's where GM gave
+ * codes in the UI. Keep them in the console." Headings are design's where design gave
  * one ("Couldn't cancel the run.", "Couldn't start the shot.", "Couldn't
  * check Codex status.", "Couldn't load the 3D preview.", "Couldn't load the
  * world.", "Couldn't download the world.", "Couldn't restore the asset."),
- * the rest to GM's pattern. On 1fc3d846 each of these said "<Action> failed:
+ * the rest to design's pattern. On 1fc3d846 each of these said "<Action> failed:
  * 503" or "(503)". Only the browser's fetch is stubbed.
  */
 
@@ -43,13 +43,13 @@ const png = () => new File([new Uint8Array([137, 80, 78, 71])], 'ref.png', { typ
 const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't check the run.", () => api.getExecutionStatus('r1')],
   ["Couldn't cancel the run.", () => api.cancelExecution('r1')],
-  // Round 3 (GM): "Name the action with the label the person clicked." The
+  // Design: "Name the action with the label the person clicked." The
   // status bar's "I’ve checked Marble" unlocks a node; Run history's
   // "Forget ID" forgets the node's "World Labs recovery safeguard" (labels
-  // since round 13 of PR #114).
+  // since PR #114).
   ["Couldn't unlock the node.", () => api.acknowledgeProviderStartAmbiguity('video' as never, 'n1', 'r1')],
   ["Couldn't forget the recovery safeguard.", () => api.deleteProviderRecovery('r1', 'n1', { resumeOperationId: 'op1' } as never)],
-  // GM, round 3, verbatim: "Couldn't keep your brief." -> "Couldn't save your brief."
+  // Design, verbatim: "Couldn't keep your brief." -> "Couldn't save your brief."
   ["Couldn't save your brief.", () => api.keepMoodboardBriefOverride('b1')],
   ["Couldn't start the run.", () => api.executeGraph([], [])],
   ["Couldn't run the node.", () => api.executeNode([], [], 'n1')],
@@ -71,7 +71,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't start the ChatGPT sign-in.", () => api.startCodexChatGPTLogin()],
   ["Couldn't check the ChatGPT sign-in.", () => api.fetchCodexChatGPTLoginState()],
   ["Couldn't load the Quiver models.", () => api.fetchQuiverModels()],
-  // GM PR #205 r8 item 3: the same heading as Load canvas.
+  // Design (PR #205): the same heading as Load canvas.
   ['Nebula couldn’t load the canvas.', () => api.fetchCLIGraph()],
   ["Couldn't load the Replicate schema.", () => api.fetchReplicateSchema('o', 'm')],
   ["Couldn't load the characters.", () => api.fetchCharacters('global')],
@@ -88,7 +88,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't save the note.", () => pins.createPin('x', { nodeId: 'n1' })],
   ["Couldn't delete the note.", () => pins.deletePin('p1')],
   ["Couldn't load the updates.", () => notes.fetchAgentNotes({ kind: 'canvas', projectId: null } as never)],
-  // GM, round 3, verbatim.
+  // Design, verbatim.
   ["Couldn't mark the updates as read.", () => notes.markAgentNotesRead({ kind: 'canvas', projectId: null } as never)],
   ["Couldn't dismiss the update.", () => notes.dismissAgentNote({ kind: 'canvas', projectId: null } as never, 'u1')],
   ["Couldn't accept the proposal.", () => assetProposals.acceptAssetProposal('a1', 'k')],
@@ -138,7 +138,7 @@ describe('every request names its action and says the reason, never the status',
   });
 });
 
-describe('direct asset fetches (not apiFetch): GM\'s headings', () => {
+describe('direct asset fetches (not apiFetch): design\'s headings', () => {
   it('the world preview: "Couldn\'t load the world."', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })));
     expect((await reject(() => worldSplat.fetchWorldSplatBytes('/api/outputs/w.spz'))).message)
@@ -159,7 +159,7 @@ describe('direct asset fetches (not apiFetch): GM\'s headings', () => {
 });
 
 describe('the chat image chip (one short line under the file name)', () => {
-  it('a refused upload shows the backend\'s reason or GM\'s line, never "Upload failed (503)"', async () => {
+  it('a refused upload shows the backend\'s reason or design\'s line, never "Upload failed (503)"', async () => {
     const { chatUploadChipError } = await import('../../src/lib/chatUploadCopy');
     expect(chatUploadChipError(413, undefined)).toBe('Image > 20MB');
     expect(chatUploadChipError(415, undefined)).toBe('Not an image');

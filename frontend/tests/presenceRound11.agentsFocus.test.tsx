@@ -1,5 +1,5 @@
 /**
- * PR #204 round 11 (review 9 lock-sweep MEDIUM-3, GM r19 item 2): a demote that takes away the
+ * Design (PR #204): a demote that takes away the
  * focused personal agent row (the list goes to what a never-connected tab shows) moves focus to
  * the section's not-connected line (tabIndex -1), never to the page; a demote while focus is on a
  * control that stays (the Add form) leaves it there.
@@ -29,7 +29,7 @@ const flush = async () => { await act(async () => { for (let i = 0; i < 5; i++) 
 const demote = () => act(() => { session.notePersonPromoted(); session.reportPersonRequired(); });
 const passFrames = async () => { await act(async () => { vi.advanceTimersByTime(200); await Promise.resolve(); }); };
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] });
@@ -38,7 +38,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); act(() => session.notePersonPromoted()); vi.useRealTimers(); });
 
-describe('focus across a demote in Personal agents (GM r19 item 2)', () => {
+describe('focus across a demote in Personal agents (design)', () => {
   it('the focused row goes: focus moves to the section\'s line, which can take it', async () => {
     render(<PersonalAgentsSection />);
     await flush();

@@ -3,14 +3,14 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 /**
- * GM - Design, 2026-10-23 (round 3, answer 5): "Two-line notices: keep
+ * Design, 2026-10-23: "Two-line notices: keep
  * notices to one line in the copy. Cap their width at 560 px, and let a rare
  * second line overlap a panel's edge while it shows. Don't grow the band."
  *
  * Every item in the region's one stack (lib/noticeSlots.ts) is capped by one
  * token, the region's `--notice-max-w` (560 px): the canvas notice and the
  * late count, the toasts, the person-required line, the proposal's run-later
- * notice and the proposal bar, which is a stack item too (round 2 moved it
+ * notice and the proposal bar, which is a stack item too (moved
  * into the region's top slot). An item may be narrower (the pin error toast
  * stays 420 px); none may be wider. The band keeps `--notice-h`.
  */
@@ -24,7 +24,7 @@ const ITEM_ROOTS = [
 ];
 const WIDTH_PROPS = ['width', 'max-width', '--proposal-bar-w', '--proposal-bar-max-w'];
 
-/** The proposal card's own cap (GM - Design, 2026-11-01, the card redesign:
+/** The proposal card's own cap (design, 2026-11-01, the card redesign:
  * "Width: min(600px, the region's width) ... 600 is the cap so the note keeps
  * a reading measure"). The one item allowed past 560; its run-later notice
  * stays at the region's cap. */
@@ -93,7 +93,7 @@ describe('notices are capped at 560 px', () => {
           if (prop === 'width' && /^var\(--proposal-bar-w\)$/.test(value)) continue;
           if (prop === 'width' && value === 'max-content') continue;
           if (prop === '--proposal-bar-max-w' && selector === '.proposal-bar' && value === PROPOSAL_CARD_CAP) continue;
-          // Above the Agent log (PR #216 r1) the card is held to the same token.
+          // Above the Agent log (PR #216) the card is held to the same token.
           if (prop === 'max-width' && value === 'var(--proposal-bar-max-w)') continue;
           if (!withinCap(value)) wide.push(`${relative(SRC, file)}: ${selector} { ${prop}: ${value} }`);
         }
@@ -110,7 +110,7 @@ describe('notices are capped at 560 px', () => {
     expect(declarations(notice)).toContainEqual(['--proposal-bar-max-w', 'var(--notice-max-w, 560px)']);
   });
 
-  // GM r13 (2), PR #204 round 9, supersedes round 3's "Don't grow the band": "The band reserves
+  // Design (PR #204): supersedes an earlier ruling's "Don't grow the band": "The band reserves
   // the tallest single notice (three lines)." A one-line item is still --notice-h.
   it('the band is the tallest single notice (three lines) plus its gap', () => {
     const css = readFileSync(join(SRC, 'styles/noticeRegion.css'), 'utf8');

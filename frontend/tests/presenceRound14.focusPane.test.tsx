@@ -1,5 +1,5 @@
 /**
- * PR #204 round 14 (review 11 MEDIUM-1): the focus handover (hooks/useFocusHandover) takes as
+ * PR #204: the focus handover (hooks/useFocusHandover) takes as
  * "the same control" only a new element, one that wasn't there when focus was taken, with the
  * same label in the same pane (the nearest data-focus-scope or labelled region). A look-alike
  * that was there all along (the filter column's Role, beside an open reference's Role) is another
@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { withFocusFixup } from './helpers/focusFixup';
 import { FOCUS_LINE_ATTR, FOCUS_SCOPE_ATTR, useFocusHandover } from '../src/hooks/useFocusHandover';
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 afterEach(cleanup);
 
@@ -36,7 +36,7 @@ function Commons({ view }: { view: string }) {
 
 const which = () => (document.activeElement as HTMLElement | null)?.getAttribute('data-which') ?? document.activeElement?.tagName;
 
-describe('two Role selects in two panes (review 11 probe zzR11LabelCollide)', () => {
+describe('two Role selects in two panes', () => {
   it('focus on the detail\'s Role goes to the line on a demote, and back to the detail\'s Role on the promote', () => {
     const view = render(<Commons view="live-0" />);
     act(() => document.querySelector<HTMLElement>('[data-which="detail"]')!.focus());
@@ -110,7 +110,7 @@ describe('both panes remount (new elements both): the twin in the same pane', ()
   });
 });
 
-// ── The real CommonsView (review 11 probe zzR11DetailRole) ───────────────────
+// ── The real CommonsView ───────────────────
 
 const net = vi.hoisted(() => ({ rows: [] as unknown[], detail: null as unknown }));
 vi.mock('../src/lib/backend', async (original) => {

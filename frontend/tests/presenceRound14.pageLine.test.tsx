@@ -1,12 +1,12 @@
 /**
- * PR #204 round 14, GM r22: the Commons page's load lines, one rule and no ranking between loads
+ * Design (PR #204): the Commons page's load lines, one rule and no ranking between loads
  * (components/commons/useCommonsLine useCommonsLoadLines, pageLoadLines).
  * - A tab that isn't connected as you (never connected, demoted, a stale token): one line for the
  *   page, "Nebula couldn’t load Commons because this tab isn’t connected as you. …", and no
  *   load's own line ever appears.
  * - A connected tab: one load failing alone shows its own line; every load failing for one reason
  *   shows the page line with that reason; different reasons show one line per failed load, in the
- *   page's order (GM confirmed both).
+ *   page's order (design confirmed both).
  * Add's lock line still comes after the page line (its x is the live check's).
  */
 import { act, cleanup, render } from '@testing-library/react';
@@ -66,7 +66,7 @@ beforeEach(() => {
 });
 afterEach(() => { watcher?.disconnect(); cleanup(); act(() => notePersonPromoted()); vi.useRealTimers(); });
 
-/** Round 15 (CI on d2040a0f): fake time moves only when the test moves it, so a line's arrival
+/** Fake time moves only when the test moves it (CI on d2040a0f), so a line's arrival
  * doesn't depend on the machine's speed. `until` moves it 50 ms at a time, up to `max` ms. */
 const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 async function until(check: () => void, max = 3000): Promise<void> {
@@ -78,7 +78,7 @@ async function until(check: () => void, max = 3000): Promise<void> {
 
 const LOAD_WORDS = /check Commons status|load the references|search the library|load the collections|library status/;
 
-describe('pageLoadLines (GM r22)', () => {
+describe('pageLoadLines (design)', () => {
   const failure = (line: string, page: string, person = false) => ({ line, page, person });
   it('a refusal for this tab: the page line only, whatever else failed', () => {
     expect(pageLoadLines([failure('status because', PAGE, true)])).toEqual([PAGE]);
@@ -92,7 +92,7 @@ describe('pageLoadLines (GM r22)', () => {
   });
 });
 
-describe('a tab that isn\'t connected as you: one page line, never a load\'s own (GM r22)', () => {
+describe('a tab that isn\'t connected as you: one page line, never a load\'s own (design)', () => {
   const expectPageLineOnly = async () => {
     await until(() => expect(shownLines()).toEqual([PAGE]));
     // The status poll and the loads keep refusing for a while: still the one line.
@@ -130,13 +130,13 @@ describe('a tab that isn\'t connected as you: one page line, never a load\'s own
   });
 });
 
-describe('a connected tab (GM r22, confirmed)', () => {
+describe('a connected tab (design, confirmed)', () => {
   it('one load failing alone shows its own line', async () => {
     transport.token = TOKEN;
-    fails.search = 503; // round 18c: a 500 is "hit an error" (GM r30 3); 503 is the no-response case
+    fails.search = 503; // A 500 is "hit an error" (design); 503 is the no-response case
     render(<CommonsView />);
     await until(() => expect(shownLines()).toHaveLength(1));
-    // Round 15 (GM r24 c), verbatim.
+    // Design: verbatim.
     expect(shownLines()[0]).toBe('Nebula couldn’t load the references because the server didn’t respond. Try again.');
   });
 
@@ -162,7 +162,7 @@ describe('a connected tab (GM r22, confirmed)', () => {
     await until(() => expect(shownLines()).toHaveLength(2));
     const [first, second] = shownLines();
     expect(first).toBe('Nebula couldn’t check Commons status because the server didn’t respond. Try again.');
-    // Round 18b (GM r29 1): a load's other reason is a Nebula-subject load line too.
+    // Design: a load's other reason is a Nebula-subject load line too.
     expect(second).toMatch(/^Nebula couldn’t load the references[. ]/);
     expect(second).not.toMatch(/respond/);
   });

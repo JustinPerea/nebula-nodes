@@ -4,18 +4,18 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * GM on PR #205, round 2 (and review 1's lock-line NITs):
- * - Item 3: the command palette's Run, Save and Load are "Run canvas", "Save
+ * Design (PR #205): the lock lines.
+ * - The command palette's Run, Save and Load are "Run canvas", "Save
  *   canvas", "Load canvas". Locked by the run, each row stays in place,
  *   greyed, with its lock line as its own secondary text (a tooltip doesn't
  *   show on a row reached by the arrow keys), and aria-describedby on it.
- * - Item 4: Cmd+D "You can duplicate “X” when the run finishes." (names as
+ * - Cmd+D "You can duplicate “X” when the run finishes." (names as
  *   Delete names them), Cmd+V "You can paste when the run finishes.", where
  *   the Delete, Undo and Redo lines show.
- * - Item 5: a wire dropped during a run opens no picker; the drop says "You
+ * - A wire dropped during a run opens no picker; the drop says "You
  *   can add a node when the run finishes." (Canvas; the live check), and a
  *   picker open when a run starts says it on a press, and closes.
- * - Review 1 NIT-3: the deferred notice keeps "… now." through its exit.
+ * - The deferred notice keeps "… now." through its exit.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(),
@@ -56,7 +56,7 @@ function textNode(id: string, label: string, selected = false): Node<NodeData> {
 }
 const store = () => useGraphStore.getState();
 
-describe('GM r2 item 4: Cmd+D and Cmd+V during a run say their lock line', () => {
+describe('Cmd+D and Cmd+V during a run say their lock line (design)', () => {
   it('the lines: one name, several by the name-list rule, no name; paste', () => {
     expect(runLockedLine('duplicate', 1, '“Brief”')).toBe('You can duplicate “Brief” when the run finishes.');
     expect(runLockedLine('duplicate', 2, undefined, ['Brief', 'Note'])).toBe('You can duplicate “Brief” and “Note” when the run finishes.');
@@ -94,7 +94,7 @@ describe('GM r2 item 4: Cmd+D and Cmd+V during a run say their lock line', () =>
   });
 });
 
-describe('GM r2 item 3: the command palette', () => {
+describe('the command palette (design)', () => {
   const ctx = (running: boolean) => ({ addNodeAtCenter: vi.fn(), runGraph: vi.fn(), save: vi.fn(), load: vi.fn(), fitView: vi.fn(),
     enterCreateView: vi.fn(), togglePanel: vi.fn(), startAgentQuery: vi.fn(), canRun: !running, canSave: !running, canLoad: !running,
     running, canvasNodes: [], focusNode: vi.fn() });
@@ -126,7 +126,7 @@ describe('GM r2 item 3: the command palette', () => {
     expect(rows.slice(0, 3).map((row) => row.querySelector('.command-palette__item-title')?.textContent)).toEqual(Object.keys(lines));
     for (const [name, line] of Object.entries(lines)) {
       const row = rows.find((button) => button.querySelector('.command-palette__item-title')?.textContent === name)!;
-      // Review 2 (lines LOW-1): locked, not native disabled, so the arrows reach it.
+      // Locked, not native disabled, so the arrows reach it.
       expect(row).toHaveAttribute('aria-disabled', 'true');
       expect(row).not.toBeDisabled();
       expect(row).not.toHaveAttribute('title');
@@ -170,7 +170,7 @@ describe('GM r2 item 3: the command palette', () => {
   });
 });
 
-describe('review 1 NIT-3: the deferred notice keeps its line through its exit', () => {
+describe('the deferred notice keeps its line through its exit', () => {
   const realGetAnimations = Element.prototype.getAnimations;
   beforeEach(() => {
     // jsdom runs no CSS: a leaving notice runs its -out animation.
@@ -200,7 +200,7 @@ describe('review 1 NIT-3: the deferred notice keeps its line through its exit', 
     expect(notice.querySelector('.proposal-bar__summary')?.textContent).toBe('You can run “Brief” now.');
   });
 
-  it('while it shows, the line still follows the run (the r40 swap)', () => {
+  it('while it shows, the line still follows the run', () => {
     useGraphStore.setState({ nodes: [textNode('n3', 'Brief')], edges: [], isExecuting: true });
     useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds: ['n3'] } } as never);
     render(<DeferredRunNotice />);
@@ -210,7 +210,7 @@ describe('review 1 NIT-3: the deferred notice keeps its line through its exit', 
   });
 });
 
-describe('GM r2 item 5: the run lock line for a dropped wire', () => {
+describe('the run lock line for a dropped wire (design)', () => {
   it('sayRunLocked shows the line where the key presses\' lines show', () => {
     useGraphStore.setState({ undoNotice: null, messageNotice: null });
     act(() => { store().sayRunLocked('You can add a node when the run finishes.'); });
@@ -218,7 +218,7 @@ describe('GM r2 item 5: the run lock line for a dropped wire', () => {
   });
 });
 
-describe('review 1 NIT-4: Canvas actions gives each control its true reason', () => {
+describe('Canvas actions gives each control its true reason', () => {
   it.each([
     [{ createLaunchingIds: ['p'] }, 'when Nebula finishes preparing the run'],
     [{ createLaunchingIds: ['p'], isExecuting: true }, 'when the run finishes'],

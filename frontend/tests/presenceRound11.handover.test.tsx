@@ -1,5 +1,5 @@
 /**
- * PR #204 round 11 (review 9 lock-sweep MEDIUM-2): a because line handing over to another
+ * PR #204: a because line handing over to another
  * element in one commit (A unregisters, B registers) used to drop the answer until B's first
  * observer entry, so the general notice flashed back (about 330 ms live) and was announced again.
  * Now the answer on screen holds until that entry (lib/notConnectedLine settle). Both shapes:
@@ -77,7 +77,7 @@ async function start(shown: Shown, selector: string) {
   await waitFor(() => expect(banner()).toBeNull());
 }
 
-describe('a because line handing over to another element (review 9 MEDIUM-2)', () => {
+describe('a because line handing over to another element', () => {
   it('A on one card, then B on another in one commit: no flash, nothing announced again (as a change of words)', async () => {
     await start({ at: 'a', text: lineA }, '.line-a');
     const watch = watchBanner();

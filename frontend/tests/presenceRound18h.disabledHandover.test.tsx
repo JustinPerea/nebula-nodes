@@ -1,12 +1,12 @@
 /**
- * PR #204 round 18h (review 16 MEDIUM-1, GM r38 2 and 3e): going offline disables a focused
+ * Design (PR #204): going offline disables a focused
  * control in place. Chrome's focus fixup then drops focus to <body>, and the handover used to act
  * only when the control left the page. Now a control that is disabled, or sits under [inert],
  * counts as gone: focus goes to the heading at once, and on reconnect, while focus is still where
  * the hook put it, back to that very control. jsdom has no focus fixup, so these tests install
- * tests/helpers/focusFixup (round 18l), which blurs a disabled or inert focused control as Chrome does.
+ * tests/helpers/focusFixup, which blurs a disabled or inert focused control as Chrome does.
  *
- * Review 16 LOW-2: focus never waits on <body> for a line that may come; the heading holds it.
+ * Focus never waits on <body> for a line that may come; the heading holds it.
  */
 import { useRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -113,7 +113,7 @@ describe('a focused control disabled in place counts as gone', () => {
   });
 });
 
-describe('review 16 LOW-2: focus never waits on <body>', () => {
+describe('focus never waits on <body>', () => {
   it('a removed control with no line yet: the heading at once, then the line when it comes', async () => {
     const { rerender } = render(<Pane offline={false} />);
     act(() => field().focus());
@@ -124,7 +124,7 @@ describe('review 16 LOW-2: focus never waits on <body>', () => {
     expect(document.activeElement).toBe(document.querySelector('[data-focus-line]'));
   });
 
-  it('H5: the person moving off the waiting heading stops the wait, with no change to restart it', async () => {
+  it('the person moving off the waiting heading stops the wait, with no change to restart it', async () => {
     const { rerender } = render(<Pane offline={false} />);
     act(() => field().focus());
     rerender(<Pane offline={false} removed />);

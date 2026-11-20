@@ -8,7 +8,7 @@ import { FONT_CDN_HOSTS, REQUIRED_FACES, parseFontFaces } from '../scripts/check
 import { inlineAssetUnlessFont } from '../vite-plugins/assetInline';
 
 /**
- * The app ships its own Inter and JetBrains Mono (Justin, Q103: "Ship them with
+ * The app ships its own Inter and JetBrains Mono (Justin: "Ship them with
  * the app, so it asks no outside server when it opens"). These pin the source
  * side; scripts/check-built-fonts.mjs (run by the build budget step) pins the
  * built dist.

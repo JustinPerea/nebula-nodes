@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Review 8, L-d: every document- or window-wide key listener yields while a
+// Every document- or window-wide key listener yields while a
 // modal dialog is open, wherever focus is (the page included), through one
 // shared guard (lib/canvasShortcutScope.ts keyBlockedByModal). A dialog's or
 // popup's own keys yield only to a modal dialog on top of it.

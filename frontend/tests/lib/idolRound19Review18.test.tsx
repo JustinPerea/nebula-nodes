@@ -1,6 +1,6 @@
-// PR #203 round 19, sections 2 and 3: review 18's copy-ui NIT-2 (F8), the
-// settings_busy 409 (copy-ui LOW-3; GM r38 item 3) and settings.restored's
-// line at the top of Settings until dismissed (GM r38 item 5's fallback).
+// PR #203: the Auto row for a route chosen with no block, the
+// settings_busy 409 (copy-ui, design) and settings.restored's
+// line at the top of Settings until dismissed (design's fallback).
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +33,7 @@ afterEach(() => {
   dismissNotice.mockReset();
 });
 
-describe('the Auto row for a route chosen with no block (F8)', () => {
+describe('the Auto row for a route chosen with no block', () => {
   it('says which provider needs a key', () => {
     expect(autoLabel(FLUX3, { routeId: 'fal', missing: ['FAL_KEY'], block: undefined, alternatives: [], fixes: [],
       message: '' } as unknown as Parameters<typeof autoLabel>[1], {})).toBe('Auto · fal.ai needs a key');

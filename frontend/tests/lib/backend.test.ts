@@ -203,7 +203,7 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(fetchSpy.mock.calls.flat().some((value) => String(value).includes('connectorSession'))).toBe(false);
   });
 
-  // GM's question (round 2, Q116): can the app's backend answer before the
+  // A question from design: can the app's backend answer before the
   // shell's token lookup lands? No: nothing is sent until it does, so no
   // refusal can come back while the lookup is pending, and the banner never
   // reads a half-finished one.
@@ -544,7 +544,7 @@ describe('browser/Vite mode unchanged when bridge absent (VAL-TRANSPORT-010)', (
     expect(window.localStorage.getItem('nebula:backendBaseUrl')).toBe('http://127.0.0.1:8000');
   });
 
-  it('round 2: not found says GM\'s line (plain tab), the ports stay in the error\'s detail for the console', async () => {
+  it('not found says design\'s line (plain tab), the ports stay in the error\'s detail for the console', async () => {
     vi.stubEnv('MODE', 'production');
     window.localStorage.removeItem('nebula:backendBaseUrl');
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response));
@@ -567,7 +567,7 @@ describe('browser/Vite mode unchanged when bridge absent (VAL-TRANSPORT-010)', (
     }) as Response));
 
     const backend = await import('../../src/lib/backend');
-    // The ports message is the console's (round 2): the person reads GM's line.
+    // The ports message is the console's: the person reads design's line.
     await expect(backend.getBackendBaseUrl()).rejects.toMatchObject({ detail: expect.stringMatching(/Nebula backend not found/) });
   });
 });
@@ -815,7 +815,7 @@ describe('browser person link', () => {
     await backend.apiFetch('/api/agent/spend');
     await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
     await backend.apiFetch('/api/canvas/proposals/p_1/accept', { method: 'POST', body: '{}' });
-    // Only the app gets saved keys' endings (Justin, Q55 a), so its Settings read says it is the person.
+    // Only the app gets saved keys' endings (Justin), so its Settings read says it is the person.
     await backend.apiFetch('/api/settings');
     const header = (index: number) => {
       const init = fetchSpy.mock.calls[index][1] as RequestInit | undefined;
@@ -828,7 +828,7 @@ describe('browser person link', () => {
     expect(header(3)).toBe(TOKEN);
     expect(fetchSpy.mock.calls[4][0]).toBe('http://127.0.0.1:8131/api/settings');
     expect(header(4)).toBe(TOKEN);
-    // The line at the top of Settings is the person's only (PR #203 round 19, GM r38 item 5).
+    // The line at the top of Settings is the person's only (design, PR #203).
     await backend.apiFetch('/api/settings/notice');
     expect(fetchSpy.mock.calls[5][0]).toBe('http://127.0.0.1:8131/api/settings/notice');
     expect(header(5)).toBe(TOKEN);
@@ -887,7 +887,7 @@ describe('browser person link', () => {
     wsClient.disconnect();
   });
 
-  it("after its hello the person's socket says which project the canvas shows, and each change (GM r11, 2)", async () => {
+  it("after its hello the person's socket says which project the canvas shows, and each change (design)", async () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
     const sockets: Array<{ sent: string[]; onopen: (() => void) | null }> = [];
     class MockWS {
@@ -911,7 +911,7 @@ describe('browser person link', () => {
     sockets[0].onopen?.();
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
     expect(sockets[0].sent.map((frame) => JSON.parse(frame).type)).toEqual(['hello', 'viewing']);
-    // GM r13 on PR #199, 1: only a screen the person opened themselves is said.
+    // Design (PR #199): only a screen the person opened themselves is said.
     expect(JSON.parse(sockets[0].sent[1])).toEqual({ type: 'viewing', projectId: 'p1', openedBy: 'person' });
     wsClient.setViewing('p1');
     wsClient.setViewing(null);
@@ -919,7 +919,7 @@ describe('browser person link', () => {
     wsClient.disconnect();
   });
 
-  it("the person's own acts go on the promoted socket, once each, after its hello (GM r13 on PR #199, 1)", async () => {
+  it("the person's own acts go on the promoted socket, once each, after its hello (design, PR #199)", async () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
     const sockets: Array<{ sent: string[]; onopen: (() => void) | null }> = [];
     class MockWS {
@@ -954,7 +954,7 @@ describe('browser person link', () => {
     wsClient.disconnect();
   });
 
-  it('the kept canvas is said on the promoted socket, after every hello and on change (GM r16 on PR #199)', async () => {
+  it('the kept canvas is said on the promoted socket, after every hello and on change (design, PR #199)', async () => {
     sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
     const sockets: Array<{ sent: string[]; onopen: (() => void) | null }> = [];
     class MockWS {

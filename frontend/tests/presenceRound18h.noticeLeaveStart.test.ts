@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18h (GM r38 3d): when a notice that held focus leaves and nothing else can take
+ * Design (PR #204): when a notice that held focus leaves and nothing else can take
  * it, focus goes to the start of the page (the canvas, a screen's <main>) only so it never drops
  * to <body>. That start carries data-focus-start while it holds that focus, so it draws no ring
  * (styles/slava-restraint.css; the rule is pinned in tests/focusRingCss.test.ts); the mark goes

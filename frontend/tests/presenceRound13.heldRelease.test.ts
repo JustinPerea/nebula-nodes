@@ -1,5 +1,5 @@
 /**
- * PR #204 round 13 (review 10 held-calls NIT-3): a held run's release (DELETE
+ * PR #204: a held run's release (DELETE
  * /api/canvas/approvals/{id}, person-only) keys on personUnconfirmed(), the check accept and
  * reject use: before the socket's first answer it waits too, and goes once on the promote. On
  * 8651112c it keyed on personGateHeld(), so a release in that window went out.
@@ -31,7 +31,7 @@ afterEach(() => {
   useCanvasProposalsStore.setState({ deferredRun: null, deferredQueue: [] } as never);
 });
 
-describe('releases wait while the tab is unconfirmed (review 10 NIT-3)', () => {
+describe('releases wait while the tab is unconfirmed', () => {
   it('Dismiss before the first answer sends nothing; the promote releases it once', () => {
     expect(session.personUnconfirmed()).toBe(true);
     hold('ra_a');

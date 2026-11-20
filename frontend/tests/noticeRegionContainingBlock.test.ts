@@ -6,7 +6,7 @@ const SRC = resolve(__dirname, '../src');
 const rule = (css: string, selector: string) =>
   css.match(new RegExp(`(?:^|\\n)${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
 
-// Round 22 of PR #203: the region is `position: absolute` (not fixed, so it is no stacking
+// PR #203: the region is `position: absolute` (not fixed, so it is no stacking
 // context: the proposal bar sits under modals while notices stay above). Absolute is placed
 // against its containing block, so the body, where NoticeRegion portals it, is one explicit:
 // full window, positioned, never scrolled. Live check (Puppeteer, 1440x900): with a body-level

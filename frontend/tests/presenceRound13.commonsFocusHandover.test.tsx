@@ -1,5 +1,5 @@
 /**
- * PR #204 round 13 (review 10 MEDIUM-2): useFocusHandover finds "the same control" again by more
+ * PR #204: useFocusHandover finds "the same control" again by more
  * than aria-label, name or id. A keyed pane still remounts on a demote and the promote (a
  * reference's detail, Commons Settings), and its fields often have none of those: a select or
  * checkbox inside a <label>, or a field named by aria-labelledby. Focus on one comes back to its
@@ -36,7 +36,7 @@ function Harness({ view }: { view: string }) {
   );
 }
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 afterEach(cleanup);
 

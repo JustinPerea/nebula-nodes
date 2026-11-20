@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18i (GM r39 1c): media inside a tile or a keyframe tab has no button (a button
+ * Design (PR #204): media inside a tile or a keyframe tab has no button (a button
  * can't go inside a button), so its line drops "Try again." and reads again by itself: on
  * reconnect, and once each time it scrolls back into view (an IntersectionObserver, no polling,
  * one read per entry). "Try again." always means a button.
@@ -110,7 +110,7 @@ it('media outside a control keeps its Try again button', async () => {
   expect([...FakeObserver.all].some((observer) => observer.targets.size > 0)).toBe(false);
 });
 
-it('round 18l (review 17 live NIT-2): a reconnect reads each failed tile once, then nothing more', async () => {
+it('a reconnect reads each failed tile once, then nothing more', async () => {
   render(<>{[0, 1, 2, 3, 4, 5].map((n) => <Tile key={n} />)}</>);
   await waitFor(() => expect(document.querySelectorAll('[data-commons-line]')).toHaveLength(6));
   expect(reads).toHaveBeenCalledTimes(6);
@@ -127,7 +127,7 @@ it('round 18l (review 17 live NIT-2): a reconnect reads each failed tile once, t
   expect(reads).toHaveBeenCalledTimes(12);
 });
 
-it('round 18l (review 17 logic N19): the tile\'s observer is disconnected on unmount', async () => {
+it('the tile\'s observer is disconnected on unmount', async () => {
   const { unmount } = render(<Tile />);
   await waitFor(() => expect(line()).not.toBeNull());
   const watching = FakeObserver.all.filter((observer) => observer.targets.size > 0);

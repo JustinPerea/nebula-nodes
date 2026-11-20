@@ -1,5 +1,5 @@
 /**
- * PR #204 round 11: a held tab sends no person-only request on its own. The app loads as a tab
+ * PR #204: a held tab sends no person-only request on its own. The app loads as a tab
  * that isn't connected as the person (its socket refused), with every request recorded at the
  * transport (lib/backend apiFetch). Then each surface opens the way a person would: Settings
  * (each tab), the chat, the Updates corner with its Agents panel, the Commons, Creator Studio,
@@ -9,12 +9,12 @@
  * PUT /api/settings went out at load and again on Settings, and the agent apps and personal
  * agents lists were read and refused.
  *
- * Round 13 (review 10 held-calls LOW-1): the walk runs as three tabs, each held: one that never
+ * The walk runs as three tabs, each held: one that never
  * connected (no token), one demoted (promoted on this page, then refused), and one that kept a
  * token across a reload after a backend restart (a stored token, never promoted on this page).
  * The project has an unread update when the Updates corner opens, and another arrives while it is
- * open (review 10 MEDIUM-1: each sent the mark-read, refused). The stale-token tab's Commons sent
- * its reads with the old token (review 10 MEDIUM-2): any request a held tab sends with the
+ * open (each sent the mark-read, refused). The stale-token tab's Commons sent
+ * its reads with the old token: any request a held tab sends with the
  * person's token fails the test too (the Commons' reads take any actor, so the gate's list
  * doesn't name them; the token is what the backend refuses).
  */
@@ -45,7 +45,7 @@ vi.mock('../src/lib/backend', async (original) => {
       net.sent.push(`${method} ${bare}`);
       // The gate refuses a person-only route while this tab isn't the person's (held).
       const { personGateHeld } = await import('../src/lib/personSession');
-      // Round 13: a request carrying the person's token (the Commons' reads) from a held tab is
+      // A request carrying the person's token (the Commons' reads) from a held tab is
       // one the backend refuses too (401: it no longer knows the token).
       const bearer = /^Bearer /.test(String((init?.headers as Record<string, string> | undefined)?.Authorization ?? ''));
       if (bearer && personGateHeld()) {
@@ -58,7 +58,7 @@ vi.mock('../src/lib/backend', async (original) => {
           { status: 403, headers: { 'content-type': 'application/json' } });
       }
       // A fresh settings.json: no run-cost choice saved yet, so the carry-over has work to do.
-      // The open project has one unread update (round 13).
+      // The open project has one unread update.
       const body = bare.endsWith('/projects') ? { projects: [], activeProjectId: null }
         : method === 'GET' && bare === '/api/settings' ? { apiKeys: {}, routing: {}, ...net.saved }
           : method === 'GET' && bare === '/api/canvas/agent-notes' ? { projectId: 'p1', notes: net.notes, unread: net.notes.length, keptWith: 'project' }
@@ -110,8 +110,8 @@ const { resetRunCostConfirmMigration } = await import('../src/lib/runCostConfirm
 const { lockPlacementProblems } = await import('../src/lib/lockPlacement');
 const { resetCommonsSessionForTests } = await import('../src/lib/commonsApi');
 
-/** GM r18 c: every because line on screen sits in the shared box (components/LineBox, or a
- * surface's own `data-line-box`). GM r18: every lock line follows the one placement rule. */
+/** Design: every because line on screen sits in the shared box (components/LineBox, or a
+ * surface's own `data-line-box`). Design: every lock line follows the one placement rule. */
 const screenProblems = (where: string) => [
   ...[...document.querySelectorAll('[data-line-because]')].filter((line) => !line.closest('[data-line-box]'))
     .map((line) => `${where}: because line outside a box: ${line.textContent?.trim()}`),
@@ -133,7 +133,7 @@ const personOnlySent = () => net.sent.filter((request) => net.personOnly.some((r
 const STORED = { token: 'stale-person-token-0123456789', backend: 'http://127.0.0.1:8000' };
 const stored = () => window.sessionStorage.getItem('nebula.person');
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   net.sent = [];
@@ -217,7 +217,7 @@ async function walk(): Promise<string[]> {
   await settle(400);
   expect(document.querySelector('[data-note-id="an_2"]'), 'the arrival is in the open list').not.toBeNull();
   problems.push(...screenProblems('updates'));
-  // Nothing went, and nothing says so (round 13: the updates stay unread until the tab connects).
+  // Nothing went, and nothing says so (the updates stay unread until the tab connects).
   const notes = useAgentNotesStore.getState();
   if (notes.error !== null) problems.push(`updates: a line: ${notes.error}`);
   if (notes.lists['canvas:p1']?.unread !== 2) problems.push(`updates: ${notes.lists['canvas:p1']?.unread} unread, not 2`);
@@ -253,7 +253,7 @@ async function walk(): Promise<string[]> {
   return problems;
 }
 
-describe('a held tab sends no person-only request on its own (PR #204 round 11, round 13)', () => {
+describe('a held tab sends no person-only request on its own (PR #204)', () => {
   for (const held of ['never connected', 'demoted', 'stale token'] as const) {
     it(`${held}: the load, Settings (each tab), the chat, Updates and its Agents panel, the Commons, Creator Studio and Projects: nothing the gate would refuse`,
       { timeout: 120_000 }, async () => {

@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18l (review 17 MEDIUM-2, GM r43 Q7), in Agent review itself with the real Commons
+ * Design (PR #204): in Agent review itself with the real Commons
  * API (only apiFetch is stubbed): a grade the pane sees running locks the open dialog's close with
  * the grade line (an aria lock, focusable, never native), and the grade line from a refused close
  * goes on the pane's own 5 s poll once it reads no grade running; the dialog asks nothing itself.

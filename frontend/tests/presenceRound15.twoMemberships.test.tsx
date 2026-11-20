@@ -1,5 +1,5 @@
 /**
- * PR #204 round 15 (review 12 MEDIUM-1): the focus handover never guesses between look-alikes in
+ * PR #204: the focus handover never guesses between look-alikes in
  * one pane. When several new elements share the lost control's key, it takes the one at the
  * control's own place among them (its ordinal at the snapshot), and goes to the line when their
  * count changed. In the Commons, each membership is its own pane (data-focus-scope), so a demote
@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { withFocusFixup } from './helpers/focusFixup';
 import { FOCUS_LINE_ATTR, FOCUS_SCOPE_ATTR, useFocusHandover } from '../src/hooks/useFocusHandover';
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 afterEach(cleanup);
 
@@ -102,7 +102,7 @@ describe('the element at its place was there all along', () => {
   });
 });
 
-// ── The real Commons: one reference in two collections (review 12 probe) ───────
+// ── The real Commons: one reference in two collections ───────
 
 const net = vi.hoisted(() => ({ rows: [] as unknown[], detail: null as unknown }));
 vi.mock('../src/lib/backend', async (original) => {
@@ -169,7 +169,7 @@ for (const field of ['select', 'why'] as const) {
 }
 });
 
-// ── Round 17 (review 13 LOW-1): a labelled region inside a membership stays that membership's ──
+// ── A labelled region inside a membership stays that membership's ──
 // Each membership's comment field sits in "Comments in <collection name>", and two manual
 // collections may share a name. The pane is the membership's scope and that region, so a same-count
 // reorder of same-named collections never hands m2's "Add a comment" to m3's (a comment there is

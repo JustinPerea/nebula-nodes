@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { extractPaletteFromImage, paletteFromPixels } from '../src/lib/paletteExtract';
 import { paletteNotice } from '../src/lib/paletteNotice';
 
-// Why an image gave no colours (fix/drop-followups, 2026-10-24). GM: "If the
+// Why an image gave no colours (fix/drop-followups, 2026-10-24). Design: "If the
 // two cases can't be told apart, use only the heading. Don't guess the reason."
 
 function pixels(...rgba: number[][]): Uint8ClampedArray {
@@ -19,7 +19,7 @@ describe('paletteFromPixels', () => {
     expect(paletteFromPixels(pixels([10, 20, 30, 0], [0, 0, 0, 0]))).toEqual({ ok: false, reason: 'transparent' });
   });
 
-  it('gives a faint image the same reason as a clear one (GM r5 on #208)', () => {
+  it('gives a faint image the same reason as a clear one (design, PR #208)', () => {
     // Every pixel under the visibility cut (alpha 16, as the backend), but not all of them clear.
     expect(paletteFromPixels(pixels([10, 20, 30, 15], [0, 0, 0, 0]))).toEqual({ ok: false, reason: 'transparent' });
   });
@@ -50,7 +50,7 @@ describe('extractPaletteFromImage', () => {
     expect(result).toEqual({ ok: false, reason: 'decode' });
   });
 
-  it('reads the canvas as rows of its width, so a 1 px horizontal seam folds as an edge (round 4)', async () => {
+  it('reads the canvas as rows of its width, so a 1 px horizontal seam folds as an edge', async () => {
     // 40x40: black above (22 rows), white below (17), one grey row between them.
     const w = 40;
     const data = new Uint8ClampedArray(w * w * 4);

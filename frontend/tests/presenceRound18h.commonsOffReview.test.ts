@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18h (GM r37, r38 1): Review on a Commons proposal while the Commons is off says
+ * Design (PR #204): Review on a Commons proposal while the Commons is off says
  * why and how, with no parens: "Commons is turned off because Nebula started without it.
  * Restart Nebula with NEBULA_COMMONS_ENABLED=1 to review this proposal." Both ways a tab learns
  * it is off: it loaded with the capability off, or its Commons calls heard it since (a restart

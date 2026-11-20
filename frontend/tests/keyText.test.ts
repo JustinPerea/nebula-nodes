@@ -1,6 +1,6 @@
 /**
  * One "the key is set" for the agent gate, the run's handler and Settings
- * (review 7 of PR #203, NIT-4). Before, a token of only a byte-order mark or
+ * (PR #203). Before, a token of only a byte-order mark or
  * a zero-width space was "may bill" to the gate (Python strip keeps them),
  * a bad character to the handler, and unset in Settings (JS trim strips a
  * BOM). The backend's twin (node_route.key_text) reads the same cases.

@@ -85,7 +85,7 @@ afterEach(async () => {
   setProjectContext(null);
 });
 
-// Error copy round 3c (GM - Design): "Reasons in parentheses: move each into
+// Error copy (design): "Reasons in parentheses: move each into
 // its own sentence after the heading. No parentheses in error copy." Before:
 // "… couldn't be saved as a recovered project yet (<error.message>). …" and
 // "… but this window couldn't follow (<error.message>). Try again to load it."
@@ -123,13 +123,13 @@ describe('a backend at a newer params version', () => {
     expect(state.dirty).toBe(false);
   });
 
-  it('saves unsaved work once as a recovered copy at the tab\'s own version, then waits for [Reload Nebula] (GM r9)', async () => {
+  it('saves unsaved work once as a recovered copy at the tab\'s own version, then waits for [Reload Nebula] (design)', async () => {
     editCanvas();
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
     // A refusal and a second sync arrive while it is handled: no second copy or reload.
     reportParamsOutdated(NEXT);
     emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
-    // GM r9 decision 1: never a reload by itself while edits are kept: the
+    // Design: never a reload by itself while edits are kept: the
     // line and [Reload Nebula] wait for the person.
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
       "Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”."));
@@ -170,9 +170,9 @@ describe('a backend at a newer params version', () => {
     editCanvas();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(new Error('Recovery disk full'));
     reportParamsOutdated(NEXT);
-    // Error copy round 3c (GM): no reason in parentheses, and never an error's
+    // Error copy (design): no reason in parentheses, and never an error's
     // own message: a failure that isn't a request's says no reason at all here
-    // (GM's general line would say "reload", which drops these edits).
+    // (design's general line would say "reload", which drops these edits).
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(
       "Nebula was updated while this tab was open. Nebula couldn’t save your edits as a project. Try again before you reload, or they’ll be lost."));
     expect(reloadPage).not.toHaveBeenCalled();
@@ -281,7 +281,7 @@ describe('graphSync from another workspace or version is not merged', () => {
   });
 });
 
-describe('review round 2', () => {
+describe('refused Runs, backends without a params version, blocked sessionStorage', () => {
   const refusal = () => new Response(JSON.stringify({ code: 'params_outdated', detail: 'Reload the tab',
     paramsVersion: NEXT }), { status: 409 });
 
@@ -552,8 +552,8 @@ describe('a params stop that an Open moved past', () => {
   });
 });
 
-// PR #198 fix round 7 (GM r9 decision 1): back from the reload, the tab opens
-// the recovered copy with GM's notice; it never lands on Projects silently.
+// Design (PR #198): back from the reload, the tab opens
+// the recovered copy with design's notice; it never lands on Projects silently.
 describe('after a reload for an update', () => {
   async function reloadedTab(listed: SavedProject[], trash: unknown[] = []) {
     unsubscribe?.(); unsubscribe = null;
@@ -580,7 +580,7 @@ describe('after a reload for an update', () => {
     expect(window.sessionStorage.getItem('nebula:recoveredForUpdate')).toBeNull();
   });
 
-  it('a copy deleted for good: GM r12\'s neutral notice, × only (the reload left the tab none of the edits)', async () => {
+  it('a copy deleted for good: design\'s neutral notice, × only (the reload left the tab none of the edits)', async () => {
     await reloadedTab([project()]);
     expect(projects.openProject).not.toHaveBeenCalled();
     const state = useProjectStore.getState();
@@ -594,7 +594,7 @@ describe('after a reload for an update', () => {
     expect(projects.listProjects).toHaveBeenCalledTimes(listed);
   });
 
-  it('a copy in Recently deleted: GM r12\'s neutral notice with Restore, which restores and opens it', async () => {
+  it('a copy in Recently deleted: design\'s neutral notice with Restore, which restores and opens it', async () => {
     const trashed = { ...project('recovered'), name: 'alpha (recovered)', deletedAt: '2026-10-28T00:00:00Z', purgeAt: '2026-11-27T00:00:00Z' };
     const said = await reloadedTab([project()], [trashed]);
     const state = useProjectStore.getState();

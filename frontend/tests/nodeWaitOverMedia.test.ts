@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /**
- * GM - Design, PR #212 round 5, ruling 2: on a card whose header sits over
+ * Design (PR #212): on a card whose header sits over
  * media (a preview pulled up under the title) the header's wait tint is a pill
  * behind the label only, where the model chip sits, so the preview stays
  * visible; a header row on the card surface keeps the full-row tint.

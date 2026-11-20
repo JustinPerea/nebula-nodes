@@ -1,4 +1,4 @@
-// PR #203 round 20, section 1 (GM r39) and section E (GM r40): the agent stop's
+// Design (PR #203): the agent stop's
 // neutral card, every neutral Settings line in the row's muted colour, the
 // dismiss failure, and a renamed node's own route line.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -53,7 +53,7 @@ afterEach(() => {
   useSettingsDraftStore.setState({ errors: {}, neutral: {}, pending: {} });
 });
 
-describe('the agent stop card (GM r39 item 1, r40 item 5)', () => {
+describe('the agent stop card (design)', () => {
   it('waits under its own heading, its body the person line', () => {
     const copy = nodeErrorCopy({ raw: 'agent text', category: WAITING_CATEGORY, person: STOP });
     expect(WAITING_HEADING).toBe('Waiting for you to run it');
@@ -80,7 +80,7 @@ describe('the agent stop card (GM r39 item 1, r40 item 5)', () => {
   });
 });
 
-describe('neutral Settings lines (GM r39: neutral in colour too)', () => {
+describe('neutral Settings lines (design: neutral in colour too)', () => {
   it('the lock-wait line is a polite status in the muted colour', async () => {
     updateSettings.mockRejectedValue(new RequestFailedError('Couldn’t save.', 409, { detail: BUSY, code: 'settings_busy' }));
     await act(async () => { await saveField('outputPath', '/tmp/out'); });
@@ -110,8 +110,8 @@ describe('neutral Settings lines (GM r39: neutral in colour too)', () => {
   });
 });
 
-describe('a dismiss that fails (GM r40 item 4)', () => {
-  it('puts the notice back with GM’s line', async () => {
+describe('a dismiss that fails (design)', () => {
+  it('puts the notice back with design’s line', async () => {
     const line = 'Nebula restored your settings from its saved copy because the last save didn’t finish.';
     getNotice.mockResolvedValue({ kind: 'restored', line, path: '' });
     dismissNotice.mockRejectedValue(new Error('offline'));
@@ -130,7 +130,7 @@ describe('a dismiss that fails (GM r40 item 4)', () => {
   });
 });
 
-describe("a renamed node's route line (GM r39 item 8)", () => {
+describe("a renamed node's route line (design)", () => {
   const FLUX3 = NODE_DEFINITIONS['flux-3-image'] as ModelNodeDefinition;
   const keys = { FAL_KEY: 'fal-test-fake', REPLICATE_API_TOKEN: 'r8-test-fake' } as never;
 

@@ -1,4 +1,4 @@
-"""Every backend route behind the person gate, read with ast (PR #204 rounds 6 to 10).
+"""Every backend route behind the person gate, read with ast (PR #204).
 
 Run by tests/personGatedCallers.ts (gatedRoutes, unreadableRouteForms). Prints JSON:
 
@@ -18,11 +18,11 @@ lambda, decorator or Depends() dependency in those files:
 
 - a call of require_person, _person_only_refusal, stop_refusal or person_only, or one passed as a
   value (a callback, Depends(person_only));
-- outside services/person_gate.py: PersonGateError (or a class whose bases lead to it, round 9)
-  built or raised (an `except PersonGateError` or an isinstance() isn't a gate, round 8),
+- outside services/person_gate.py: PersonGateError (or a class whose bases lead to it)
+  built or raised (an `except PersonGateError` or an isinstance() isn't a gate),
   PERSON_REQUIRED written, or the refusal code "person_required" anywhere outside a comparison or
-  a docstring, written or through a string constant (the chat socket's refusals, rounds 8 and 9),
-  or built by +, an f-string, %, .format() or "_".join([...]) of those (round 10);
+  a docstring, written or through a string constant (the chat socket's refusals),
+  or built by +, an f-string, %, .format() or "_".join([...]) of those;
 - Depends(...) on a gate in the route's dependencies=, a parameter default, its router's
   APIRouter(dependencies=[...]), an include_router(..., dependencies=[...]) that mounts it, or the
   app's FastAPI(dependencies=[...]);
@@ -42,22 +42,22 @@ an app or a router it can read; a path or prefix it can't evaluate to a string; 
 read (method "*"); dependencies= it can't read; an endpoint it can't find; include_router of
 something it can't read as a router, or onto something that isn't an app or router; an app or
 router mounted with mount() (and each route on it: its path is under the mount's); a handler that
-reads a gate out of a container by subscript (CHECKS["p"](...), round 8) or uses such a container
-any other way (a for loop over it, CHECKS.get("p"), handing it on: round 9), also one held as a
+reads a gate out of a container by subscript (CHECKS["p"](...)) or uses such a container
+any other way (a for loop over it, CHECKS.get("p"), handing it on), also one held as a
 class attribute (K.CHECKS) or filled after it is made at module level (CHECKS.append(gate) and the
-like, CHECKS[k] = gate, CHECKS += [gate]: round 10; a container local to a function counts only
+like, CHECKS[k] = gate, CHECKS += [gate]; a container local to a function counts only
 in that function, one around it or one inside it, never pooled by its bare name across the
-backend: round 11); an unknown decorator on an app or router; a middleware that reaches a gate (it would gate routes the list can't
+backend); an unknown decorator on an app or router; a middleware that reaches a gate (it would gate routes the list can't
 name); a file that doesn't parse.
 
-personOnly (PR #204 round 10, the person-only control sweep): the routes that refuse anyone but
+personOnly (PR #204, the person-only control sweep): the routes that refuse anyone but
 the person every time, so the controls that send them lock (tests/personLockSweep.ratchet). A
 route is person-only when require_person, person_only or the Commons' human_dep (STRONG) is
 reached unconditionally: a Depends() on one in its dependencies=, a parameter default or its
 router's or app's dependencies=, or a call of one (or of a function that is person-only itself)
 in a statement the handler always runs before any return, raise or branch: its top level, a
 `with` body, an assignment or `await`, a `try` body whose every `except` raises again, and past an
-`if` whose branches can't return (a validation guard that only raises or falls through: round 11,
+`if` whose branches can't return (a validation guard that only raises or falls through,
 POST /api/trash/empty). A gate behind a condition (a spend limit, an approval, a cover the
 person pinned) is only gated, not person-only: those controls stay live. Not read as person-only
 (a gap is a missing lock, so the ratchet's own probes pin each form): a gate inside an if, after
@@ -211,7 +211,7 @@ def register(module: Module) -> None:
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     ENT[f"{cq}.{item.name}"] = Entity("def", module, item, cls=cq)
-                # Round 10 (review 8 NIT-1): a container held as a class attribute (K.CHECKS).
+                # A container held as a class attribute (K.CHECKS).
                 elif isinstance(item, (ast.Assign, ast.AnnAssign)) and isinstance(item.value, CONTAINERS):
                     for target in item.targets if isinstance(item, ast.Assign) else [item.target]:
                         if isinstance(target, ast.Name):
@@ -247,7 +247,7 @@ FILLS: dict[str, list[tuple[Module, ast.AST]]] = {}  # a container's qualified n
 
 def fill_pairs(inner: ast.AST) -> list[tuple[ast.AST, ast.AST]]:
     """(container, value) for each value one node puts in a container after it is made: .append(x)
-    and the like, CHECKS[k] = x, CHECKS += [x] (round 10, review 8 NIT-1)."""
+    and the like, CHECKS[k] = x, CHECKS += [x]."""
     if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and inner.func.attr in FILL_METHODS:
         return [(inner.func.value, value) for value in [*inner.args, *[k.value for k in inner.keywords]]]
     if isinstance(inner, ast.Assign):
@@ -258,7 +258,7 @@ def fill_pairs(inner: ast.AST) -> list[tuple[ast.AST, ast.AST]]:
 
 
 FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-# Round 11 (review 9 LOW-1): a container local to a function (`out`, `lines`) is keyed by that
+# A container local to a function (`out`, `lines`) is keyed by that
 # function, never pooled under its bare name with every other function's `out`.
 LOCAL_FILLS: dict[str, list[tuple[int, Module, ast.AST]]] = {}  # bare name -> (function, module, value)
 ENCLOSING: dict[int, list[int]] = {}  # a function -> the functions around it, innermost first
@@ -520,7 +520,7 @@ def names_gate_error(module: Module, node: ast.AST | None, cls: str | None, loca
 
 
 def is_gate_error(q: str | None, depth: int = 0) -> bool:
-    """PersonGateError, or a class in the files whose bases lead to it (round 9)."""
+    """PersonGateError, or a class in the files whose bases lead to it."""
     if not q or depth > 20:
         return False
     if q.split(".")[-1] == GATE_ERROR:
@@ -553,7 +553,7 @@ def read_only(root: ast.AST) -> set[int]:
 def inline_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
     """A gate written in the def itself: PersonGateError built or raised, PERSON_REQUIRED, or the
     "person_required" refusal code as a value. Not in services/person_gate.py, which defines them.
-    Round 9: the code counts anywhere outside a comparison or a docstring (a subscript set, a local,
+    The code counts anywhere outside a comparison or a docstring (a subscript set, a local,
     a positional argument), written or through a string constant."""
     if module.rel == GATE_FILE:
         return False
@@ -584,7 +584,7 @@ def inline_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
 def holds_gate(module: Module | None, node: ast.AST | None, cls: str | None, local: dict[str, str],
                literals: dict[str, ast.AST], depth: int = 0, scope: ast.AST | None = None) -> bool:
     """A container literal with a gate in it, or a name for one (module-level, or assigned in the
-    def). `scope`: the def being read, whose own containers' fills count (round 11)."""
+    def). `scope`: the def being read, whose own containers' fills count."""
     if module is None or node is None or depth > 10:
         return False
     if isinstance(node, ast.Subscript):
@@ -623,7 +623,7 @@ def container_names(node: ast.AST) -> dict[str, ast.AST]:
 
 
 def held_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
-    """Round 9: the def uses a container that holds a gate some other way (a for loop over it,
+    """The def uses a container that holds a gate some other way (a for loop over it,
     CHECKS.get("p"), handing it on): fail safe, the route is listed as unreadable."""
     local = local_scope(module, node, cls)
     literals = container_names(node)
@@ -642,7 +642,7 @@ def held_gate(module: Module, node: ast.AST, cls: str | None = None) -> bool:
 
 GATED: set[str] = set()
 SUBSCRIPTED: set[str] = set()  # defs that reach a gate read by subscript
-HELD: set[str] = set()  # defs that reach a gate container used some other way (round 9)
+HELD: set[str] = set()  # defs that reach a gate container used some other way
 
 
 def reaches(module: Module, node: ast.AST, cls: str | None) -> bool:
@@ -702,7 +702,7 @@ def reraises(handler: ast.ExceptHandler) -> bool:
 
 
 def never_returns(stmts: list[ast.stmt]) -> bool:
-    """Round 11 (review 9 NIT-2): statements that can only fall through or raise: no `return`
+    """Statements that can only fall through or raise: no `return`
     (outside a def or class written inside them), no `yield`. A validation guard
     (`if kind is not None: _trash_kind(kind)`, `if not ok: raise HTTPException(...)`) is one: what
     follows it runs whenever the request goes on."""
@@ -845,7 +845,7 @@ def eval_str(module: Module | None, node: ast.AST | None, local: dict[str, str] 
         left = eval_str(module, node.left, local, depth + 1)
         right = eval_str(module, node.right, local, depth + 1)
         return left + right if left is not None and right is not None else None
-    # Round 10 (review 8 NIT-1): "%s_required" % "person", "_".join([...]), "{}_required".format(...).
+    # "%s_required" % "person", "_".join([...]), "{}_required".format(...).
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
         template = eval_str(module, node.left, local, depth + 1)
         values = [eval_str(module, v, local, depth + 1) for v in (node.right.elts if isinstance(node.right, ast.Tuple) else [node.right])]

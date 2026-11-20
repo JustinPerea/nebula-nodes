@@ -1,5 +1,5 @@
 /**
- * PR #204 round 10 (GM r15, r16 Q2 and Q4, r17): the person-only control sweep. One lock
+ * Design (PR #204): the person-only control sweep. One lock
  * (src/hooks/usePersonLock, components/PersonLock): aria-disabled in place, the line under the
  * control or once under its group's heading (each control points at it), no tooltip, unlocked on
  * the promote, a demoted tab locked too; "window" in the app through one word. The agent apps and
@@ -65,7 +65,7 @@ const flush = () => act(async () => { await Promise.resolve(); await Promise.res
 /** A tab the server promoted, then demoted (its socket's personRequired). */
 const demote = () => act(() => { notePersonPromoted(); reportPersonRequired(); });
 
-describe('one lock line, one word (GM r16 Q2, review 8 NIT-2)', () => {
+describe('one lock line, one word (design)', () => {
   it('"tab" in a browser, "window" in the app, for every lock', () => {
     expect(personLockLine('change keys', false)).toBe('You can change keys when this tab is connected as you.');
     expect(personLockLine('change keys', true)).toBe('You can change keys when this window is connected as you.');
@@ -77,7 +77,7 @@ describe('one lock line, one word (GM r16 Q2, review 8 NIT-2)', () => {
   });
 });
 
-describe('Add under "Add an ACP agent" (GM r15)', () => {
+describe('Add under "Add an ACP agent" (design)', () => {
   it('locked in place with its own line; a submit sends nothing; the promote unlocks it', async () => {
     act(() => reportPersonRequired());
     render(<PersonalAgentsSection />);
@@ -97,7 +97,7 @@ describe('Add under "Add an ACP agent" (GM r15)', () => {
   });
 });
 
-describe('a listed agent locks as a group (GM r17 item 4)', () => {
+describe('a listed agent locks as a group (design)', () => {
   it('its switch points at "change your agents", and a change sends nothing until the promote', async () => {
     render(<PersonalAgentsSection />);
     await flush();
@@ -115,7 +115,7 @@ describe('a listed agent locks as a group (GM r17 item 4)', () => {
   });
 });
 
-describe('a group shares one line under its heading (GM r17 item 1)', () => {
+describe('a group shares one line under its heading (design)', () => {
   it('Agent spending: every limit points at the one line, and a change sends nothing', () => {
     useSettingsDraftStore.setState({
       saved: { ...(useSettingsDraftStore.getState().saved ?? {}), agentSpend: { sessionUsd: 5, models: {} } } as never,
@@ -137,7 +137,7 @@ describe('a group shares one line under its heading (GM r17 item 1)', () => {
   });
 });
 
-describe('the person-only lists on a demote (GM r17 item 6)', () => {
+describe('the person-only lists on a demote (design)', () => {
   it('past 150 ms the personal agents list shows what a never-connected tab shows, and reads again on the promote', async () => {
     vi.useFakeTimers();
     render(<PersonalAgentsSection />);

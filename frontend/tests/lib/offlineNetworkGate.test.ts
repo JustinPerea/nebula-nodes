@@ -7,7 +7,7 @@ import { copyForError, failureCopy, failureUnder } from '../../src/lib/errorCopy
 import { CANVAS_NOTICE_EVENT, showNotice } from '../../src/lib/canvasNotice';
 
 /**
- * Round 15 of PR #114 (review 14, M2: "one gate" was not one gate). The
+ * PR #114: "one gate" was not one gate. The
  * network layer is the gate every write passes: while Nebula is offline,
  * apiFetch sends no request but GET and HEAD, throws an OfflineRefusal and
  * pulses the banner; the refusal has no words of its own (no toast).

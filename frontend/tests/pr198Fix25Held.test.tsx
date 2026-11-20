@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 
 /**
- * PR #198 round 25 (review 23 NIT-5): GM r30's 150 ms rule for a held
+ * The 150 ms rule from design (PR #198) for a held
  * [Try again], held against regression in the repo, not only in the live
- * harness (held21, choice 8). The real store sends the try to a fake
+ * harness. The real store sends the try to a fake
  * backend whose answer the test lets go; a MutationObserver notes, on one
  * clock, when the button is held, when its grey shows and when the answer
  * lands. The rule is about order, so no machine's speed decides it: the
@@ -152,7 +152,7 @@ async function settleNoAdvance(rounds = 5) {
   }
 }
 
-describe('review 23 NIT-5: the 150 ms rule, by the order of events', () => {
+describe('the 150 ms rule, by the order of events', () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it('no answer for 150 ms: held at once with no grey (data-held-pending), grey only once 150 ms pass, gone with the answer', async () => {

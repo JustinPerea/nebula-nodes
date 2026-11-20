@@ -1,5 +1,5 @@
 /**
- * GM - Design, 2026-10-23 (Q116 a), for a tab that isn't connected as the
+ * Design, 2026-10-23, for a tab that isn't connected as the
  * person, verbatim:
  *
  *   "This change needs your OK, and this tab isn’t connected as you.
@@ -7,7 +7,7 @@
  *   "Use it for every person-only refusal, not just Krea billing. The agents'
  *   text stays behind Details."
  *
- * Round 2 (GM, 2026-10-23): "line 3 shouldn't depend on the notice being
+ * Design, 2026-10-23: "line 3 shouldn't depend on the notice being
  * there, since it can be dismissed", and the desktop app gets its own line 3
  * and banner, verbatim:
  *
@@ -19,7 +19,7 @@
  * chosen by the app's existing flag (personSession's inDesktopShell(): the
  * preload bridge's apiBaseUrl). "The browser banner stays as I sent it."
  *
- * and the notice (PersonRequiredBanner) itself, round 4 (one line, since it
+ * and the notice (PersonRequiredBanner) itself (one line, since it
  * stays up): "This tab isn’t connected as you. Open the link Nebula printed
  * when it started."
  *
@@ -44,7 +44,7 @@ const GM_LINE = "This change needs your OK, and this tab isn’t connected as yo
 // Each as the one because line a heading's action makes of it (the reason itself stays GM_LINE/APP_LINE).
 const because = (what: string, tab: boolean) => `Nebula couldn’t ${what} because ${tab ? 'this tab isn’t connected as you. Open the link Nebula printed when it started.' : 'this window isn’t connected as you. Quit Nebula and open it again.'}`;
 const APP_LINE = "This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.";
-// GM, round 4 (2026-10-23), verbatim: the banners stay up, so each fits one line.
+// Design (2026-10-23), verbatim: the banners stay up, so each fits one line.
 const APP_BANNER = "This window isn’t connected as you. Quit Nebula and open it again.";
 const BANNER = "This tab isn’t connected as you. Open the link Nebula printed when it started.";
 const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the change instead with propose_change (`nebula propose`); the person accepts it on the canvas.";
@@ -60,7 +60,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
-describe("GM's line for a person-only refusal", () => {
+describe("the line for a person-only refusal (design)", () => {
   it('is the reason of any request refused with code person_required; the agents\' text stays on the error', async () => {
     const error = await requestError("Couldn't recover the project.", personRequired());
     expect(error.reason).toBe(GM_LINE);
@@ -129,7 +129,7 @@ describe("GM's line for a person-only refusal", () => {
   });
 });
 
-describe("GM's banner line", () => {
+describe("the banner line (design)", () => {
   it('is the notice a browser tab shows when it isn\'t connected as the person', () => {
     expect(personRequiredMessage('not-connected')).toBe(BANNER);
   });
@@ -149,7 +149,7 @@ function inTheApp(person?: { token: () => Promise<unknown> }) {
   });
 }
 
-describe("GM's app lines (round 2), chosen by the desktop flag", () => {
+describe("the app lines (design), chosen by the desktop flag", () => {
   beforeEach(() => resetPersonSessionForTests());
   afterEach(() => {
     delete (window as unknown as Record<string, unknown>).nebulaDesktop;
@@ -193,7 +193,7 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
     expect(personRequiredMessage('not-connected')).toBe(APP_BANNER);
   });
 
-  // GM, round 3 (2026-10-23), verbatim: in the two developer setups line 3
+  // Design (2026-10-23), verbatim: in the two developer setups line 3
   // points to the banner, which already gives the real fix.
   it('line 3 points to the banner with a debug port open or the dev renderer', async () => {
     const DEV_LINE = "This change needs your OK, and this window isn’t connected as you. The notice below says why.";
@@ -214,7 +214,7 @@ describe("GM's app lines (round 2), chosen by the desktop flag", () => {
     expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(APP_LINE);
   });
 
-  it("GM's one-line debug and dev-renderer banners (round 4)", () => {
+  it("the one-line debug and dev-renderer banners (design)", () => {
     expect(personRequiredMessage('debug-port')).toBe(
       'A debugging port is open, so Settings, proposals and chats are off.');
     expect(personRequiredMessage('dev-renderer')).toBe(

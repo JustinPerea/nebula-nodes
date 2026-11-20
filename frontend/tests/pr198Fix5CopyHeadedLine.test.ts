@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { headedLine, isGenericHeading, isNamedLine } from '../src/lib/errorCopy';
 
 /**
- * PR #198 fix round 5, review 5 L4 and N5; GM r5 item 3 and GM r7 ("A
- * specific line replaces the generic one, never both").
+ * PR #198, design's ruling ("A specific line replaces the generic one, never both").
  *
  * headedLine decides "generic or specific" by the heading's role, not by
  * curly quotes: a generic heading names nothing the reason could add to
@@ -14,11 +13,11 @@ import { headedLine, isGenericHeading, isNamedLine } from '../src/lib/errorCopy'
 const SHOT_RUNNING = "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.";
 const AGENT_SCENE = "Couldn't delete “Agent scene”. “Shot 2” is still running. Stop the run first.";
 
-/** Every pair from review 5's probe (fu5_money_probe "headedLine"), then the
+/** Every pair tried against headedLine, then the
  * call sites' own headings over the backend's named lines. `alone` means the
  * reason shows by itself; `both` means "<heading> <reason>". */
 const TABLE: [heading: string, reason: string, shown: 'alone' | 'both', why: string][] = [
-  // Review 5's probe pairs.
+  // The pairs first tried.
   ["Couldn't run the graph.", "Couldn't reach the provider. Check your connection and try again.", 'both',
     'the heading names the run; the reason is its cause'],
   ["Couldn't run the canvas.", "Couldn't reach TypeSafe. Check your connection and try again.", 'both',
@@ -57,11 +56,11 @@ const TABLE: [heading: string, reason: string, shown: 'alone' | 'both', why: str
     'the backend line repeats the heading in another form'],
   ["Couldn't refresh the source.", "Paper can’t find the object. Link it again.", 'both',
     'the heading names the refresh; the reason is its cause'],
-  ["Couldn't run “Hero still”.", "Couldn't reach Krea.", 'both', 'round 4\'s own case'],
+  ["Couldn't run “Hero still”.", "Couldn't reach Krea.", 'both', 'a heading that names a thing keeps its place over a reason that names another'],
   ["Couldn't delete the node.", 'It is locked.', 'both', 'not a line of its own'],
 ];
 
-describe('L4: headedLine decides by the heading\'s role', () => {
+describe('headedLine decides by the heading\'s role', () => {
   it.each(TABLE)('%s + %s → %s (%s)', (heading, reason, shown) => {
     expect(headedLine(heading, reason)).toBe(shown === 'alone' ? reason : `${heading} ${reason}`);
   });
@@ -85,7 +84,7 @@ describe('L4: headedLine decides by the heading\'s role', () => {
   });
 });
 
-describe('N5: isNamedLine knows every form a backend person line takes', () => {
+describe('isNamedLine knows every form a backend person line takes', () => {
   // Real backend person lines (backend/, 2026-10-27).
   it.each([
     "Couldn't delete “Agent scene”. “Shot 2” is still running. Stop the run first.",

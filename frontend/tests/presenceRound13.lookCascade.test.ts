@@ -1,14 +1,14 @@
 /**
- * PR #204 round 13 (review 10 MEDIUM-1, LOW-4): the lock look resolved through the cascade, the
+ * PR #204: the lock look resolved through the cascade, the
  * way the browser picks it (tests/helpers/cssCascade), not read from the rule's text.
  *
- * Round 11's lock rule tied the filled list at (0,3,0) and came later in the sheet, so every
+ * An earlier version's lock rule tied the filled list at (0,3,0) and came later in the sheet, so every
  * locked filled button (Connect, Add, a red Delete forever confirm, Accept) turned ghost. Its
  * element part is now :where(), and its block sits above the filled list: a locked filled button
- * keeps --disabled-fill with --disabled-fill-label (GM r33), at rest, on hover and while pressed
+ * keeps --disabled-fill with --disabled-fill-label (design), at rest, on hover and while pressed
  * from the keyboard; a ghost keeps the ghost tokens; a class in no list takes the lock's own look.
  *
- * Also (LOW-4): a locked field's edge (mutant L4), and the because line's sans face (mutant L20).
+ * Also: a locked field's edge, and the because line's sans face.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -61,7 +61,7 @@ function locked(className: string, tag = 'button'): HTMLElement {
 beforeEach(() => { document.body.className = 'app-slava-restraint'; });
 afterEach(() => { document.body.innerHTML = ''; document.body.className = ''; });
 
-describe('the lock look through the cascade (review 10 MEDIUM-1)', () => {
+describe('the lock look through the cascade', () => {
   it('reads the two lists (the parse works)', () => {
     expect(FILLED).toEqual(expect.arrayContaining([
       'settings__button--primary', 'asset-trash__button--danger', 'project-home__danger', 'settings__confirm--danger',
@@ -96,13 +96,13 @@ describe('the lock look through the cascade (review 10 MEDIUM-1)', () => {
     expect(wrong).toEqual([]);
   }, 60_000);
 
-  it('every ghost class, locked: no fill, the grey label and the 0.06 edge (GM r20 item 4)', () => {
+  it('every ghost class, locked: no fill, the grey label and the 0.06 edge (design)', () => {
     const wrong: string[] = [];
     for (const name of GHOST) {
       const button = locked(name);
       for (const state of ['', ':hover', ':active']) {
         const background = look(button, 'background', state);
-        // The swatch's × keeps its dark bubble, locked or not (its own rule, GM r7 answer 1).
+        // The swatch's × keeps its dark bubble, locked or not (its own rule, as design specified).
         if (name === 'cinema-shared-controls__swatch-remove' && background === 'rgba(0, 0, 0, 0.7)') continue;
         const label = look(button, 'color', state);
         const edge = look(button, 'border-color', state);
@@ -140,7 +140,7 @@ describe('the lock look through the cascade (review 10 MEDIUM-1)', () => {
     expect(look(button, 'background')).not.toBe('transparent');
   });
 
-  it('a locked select keeps its value in --disabled-label with the 0.06 edge (mutant L4)', () => {
+  it('a locked select keeps its value in --disabled-label with the 0.06 edge', () => {
     for (const tag of ['select', 'input', 'textarea']) {
       const field = locked('', tag);
       for (const state of ['', ':hover', ':active']) {
@@ -152,7 +152,7 @@ describe('the lock look through the cascade (review 10 MEDIUM-1)', () => {
   });
 });
 
-describe('a because line is sans, inside a box that sets mono (review 10 LOW-4, mutant L20; GM r18 c)', () => {
+describe('a because line is sans, inside a box that sets mono (design)', () => {
   it('the words and their box resolve to --sr-ui, over the card error box\'s mono', () => {
     document.body.innerHTML = `<div class="model-node__error" data-line-box="">
       <span class="model-node__error-message"><span data-line-because="">Nebula couldn’t run this because …</span></span>

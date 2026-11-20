@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18 (GM r28 2): the notice stack is centred above the bottom bar like every toast,
+ * Design (PR #204): the notice stack is centred above the bottom bar like every toast,
  * and moves clear of an open side panel, or narrows to fit, never drawing over one. The region
  * (components/NoticeRegion) measures the side panels that reach its band while it holds a notice
  * (lib/noticeSides.ts) and noticeRegion.css places it from what they take. The CSS is read from
@@ -116,7 +116,7 @@ describe('what a side panel takes (lib/noticeSides)', () => {
     const { region } = page([['chat-panel', rect(1060, 300, 364, 520)], ['panel workspace-dock-panel panel--exiting', rect(72, 140, 344, 700)]]);
     expect(sideClearance(region, 1440)).toEqual({ left: 0, right: 1440 - 1060 + SIDE_PANEL_GAP });
   });
-  // Round 18d (review 14 NIT-1, X16): a panel drawn at no size (hidden, display: none) takes nothing.
+  // A panel drawn at no size (hidden, display: none) takes nothing.
   it('a hidden panel (no width, or no height, inside the band) takes nothing', () => {
     const { region } = page([['panel workspace-dock-panel', rect(0, 140, 0, 700)], ['chat-panel', rect(1060, 800, 364, 0)]]);
     expect(sideClearance(region, 1440)).toEqual({ left: 0, right: 0 });

@@ -8,7 +8,7 @@ import { titleCharsShown, waitLabelIsShort, WAIT_HYSTERESIS_PX, WAIT_MIN_TITLE_C
 import type { NodeWait } from '../src/lib/nodeWait';
 
 /**
- * GM - Design, PR #212 round 6, ruling 2: "When the full label would cut the
+ * Design (PR #212): "When the full label would cut the
  * title to fewer than 8 characters, ellipsis included, the label shortens to
  * 'Waiting'. The accessible description and tooltip keep 'Waiting for your OK'."
  *

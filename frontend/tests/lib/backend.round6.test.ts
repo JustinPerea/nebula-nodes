@@ -1,5 +1,5 @@
 /**
- * PR #204 round 6 (review 4 LOW-1, NIT-2, survivor M16): every answer apiFetch returns carries the
+ * PR #204: every answer apiFetch returns carries the
  * promote count its request went out under, the discovery replay's too, and gets the one
  * person-gate check; "sent before the promote" is read when asked, not when the answer landed.
  */
@@ -50,7 +50,7 @@ describe('the discovery replay is stamped and checked like the first answer', ()
   });
 });
 
-describe('review 4 LOW-1: the stamp is read against the promote when it is asked', () => {
+describe('the stamp is read against the promote when it is asked', () => {
   it('a promote while the refusal\'s body is parsed: the old state\'s answer holds nothing', async () => {
     vi.resetModules();
     const backend = await import('../../src/lib/backend');
@@ -82,9 +82,9 @@ describe('review 4 LOW-1: the stamp is read against the promote when it is asked
   });
 });
 
-// Round 8 (review 6 gates LOW-2): review 5 NIT-2 pinned in a committed test. The replay takes its
+// Pinned in a committed test: the replay takes its
 // own stamp when it goes out, and discovery that finds the same backend sends nothing again.
-describe('review 5 NIT-2: the replay\'s own stamp, and no second send to the same backend', () => {
+describe('the replay\'s own stamp, and no second send to the same backend', () => {
   const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
   async function production(stored: string | null) {
     vi.resetModules();

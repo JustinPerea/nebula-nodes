@@ -177,7 +177,7 @@ describe('object framing (a World v2 object splat: Idol)', () => {
   });
 });
 
-describe('object framing at the extremes (PR #203 r2 review, LOW 1 to 3)', () => {
+describe('object framing at the extremes (PR #203)', () => {
   const shellOf = (radius: number, center = { x: 0, y: 0, z: 0 }) => Array.from({ length: 200 }, (_, index) => {
     const z = (index / 199) * 2 - 1;
     const ring = Math.sqrt(1 - z * z);

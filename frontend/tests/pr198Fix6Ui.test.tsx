@@ -4,13 +4,13 @@ import { ReactFlowProvider, type Node, type NodeProps } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * PR #198 fix round 6, rendered:
- * - GM r8 MERGE REGRESSION: one toolbar with both #195's follow lock and
+ * PR #198: rendered:
+ * - Merge regression (design): one toolbar with both #195's follow lock and
  *   #198's run lock; while the person's own run goes, the run lock's reason
  *   wins on the controls it locks, and the follow lock's on the rest.
- * - GM r8 UNSAVED_MARK: "Not saved" is a small label in the card header,
+ * - UNSAVED_MARK (design): "Not saved" is a small label in the card header,
  *   its tooltip the toast's sentence.
- * - GM (#200 r4 item 2): offline, Rerun reads "You can rerun it when
+ * - Design (PR #200): offline, Rerun reads "You can rerun it when
  *   Nebula reconnects."
  */
 
@@ -39,7 +39,7 @@ afterEach(() => {
 const textNode = (id: string, label: string) => ({ id, type: 'model-node', position: { x: 0, y: 0 }, selected: true,
   data: { label, definitionId: 'text-input', params: {}, outputs: {}, state: 'idle' } }) as unknown as Node<NodeData>;
 
-describe('GM r8: the follow lock and the run lock in one toolbar', () => {
+describe('the follow lock and the run lock in one toolbar (design)', () => {
   const WAIT = 'Wait for “Second canvas” to open.';
   const titled = (name: RegExp) => screen.getAllByRole('button').find((b) => name.test(b.getAttribute('aria-label') ?? b.textContent ?? ''));
 
@@ -47,7 +47,7 @@ describe('GM r8: the follow lock and the run lock in one toolbar', () => {
     useGraphStore.setState({ nodes: [textNode('n1', 'Brief'), textNode('n2', 'Note')], edges: [], isExecuting: true });
     act(() => setFollowingSwitch({ projectName: 'Second canvas', agent: 'Codex' }));
     render(<SelectionToolbar />);
-    // GM r39 item 2: each by its own verb, "them" for the two selected.
+    // Design: each by its own verb, "them" for the two selected.
     for (const [name, verb] of [[/^Run/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Arrange/i, 'arrange'], [/^Delete/i, 'delete']] as const) {
       const button = titled(name);
       expect(button, String(name)).toBeDefined();
@@ -72,7 +72,7 @@ describe('GM r8: the follow lock and the run lock in one toolbar', () => {
   });
 });
 
-describe('GM r9: "Unsaved" under the scene card\'s header', () => {
+describe('"Unsaved" under the scene card\'s header (design)', () => {
   it('a small label under the header, its tooltip the toast\'s sentence', () => {
     const line = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
     useGraphStore.setState({ unsavedScenes: { n4: line } } as never);
@@ -84,13 +84,13 @@ describe('GM r9: "Unsaved" under the scene card\'s header', () => {
     const mark = container.querySelector('.cinema-scene-node__unsaved');
     expect(mark?.textContent).toBe('Unsaved');
     expect(mark?.getAttribute('title')).toBe(line);
-    // Under the header, never inside it, so it can't wrap the card's name (L8).
+    // Under the header, never inside it, so it can't wrap the card's name.
     expect(mark?.closest('.cinema-scene-node__title')).toBeNull();
     expect(mark?.closest('.cinema-scene-node__unsaved-row')).not.toBeNull();
   });
 });
 
-describe('GM (#200 r4 item 2): offline, Rerun says it can rerun when Nebula reconnects', () => {
+describe('offline, Rerun says it can rerun when Nebula reconnects (design, PR #200)', () => {
   it('"You can rerun it when Nebula reconnects."', () => {
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
     const record: RunRecord = { id: 'r1', status: 'complete', trigger: 'graph', startedAt: Date.now(),
