@@ -93,8 +93,13 @@ describe('App project startup and explicit workspace entry', () => {
       expect(screen.queryByRole('button', { name })).toBeNull();
     }
     // Settings is the one shared dock home keeps (opened from its header), so keys can be added before a project exists.
-    expect(screen.getByRole('button', { name: 'Canvas settings fixture' })).toBeTruthy();
+    // Closed, it draws nothing and its chunk is not mounted; the first open brings it in.
+    expect(screen.queryByRole('button', { name: 'Canvas settings fixture' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Settings' }).getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByRole('button', { name: 'Canvas settings fixture' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Settings' }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(screen.queryByTestId('canvas-onboarding')).toBeNull();
     expect(useGraphStore.getState().nodes).toBe(authored);
     expect(mocks.open).not.toHaveBeenCalled();

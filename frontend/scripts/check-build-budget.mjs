@@ -74,6 +74,11 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // set. The classes now live in lib/versionConflicts.ts (both files re-export them). The set went from
 // 1,869,797 / 491,059 to 1,864,463 / 489,179 (-5,334 raw / -1,880 gzip), still 45 chunks, with no change
 // to the limits below.
+// Settings dock deferral (docs/notes/2026-11-20-perf-startup-trim-settings.md): the Settings
+// dock (Settings.tsx, its draft store, tab strip, notice bar and row helpers) now loads on idle
+// and mounts on its first open. Measured against 1,867,746 / 490,322 (entry 410,679 / 131,387):
+// startup set 1,855,680 / 486,639 in 45 chunks (-12,066 raw / -3,683 gzip), entry 398,613 /
+// 127,703 (-12,066 / -3,684), with no change to the limits below.
 const MAX_STARTUP_BYTES = 1_870_000;
 const MAX_STARTUP_GZIP_BYTES = 491_400;
 const startup = await startupSet(distDir);
