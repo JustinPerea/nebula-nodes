@@ -132,10 +132,10 @@ describe('ProviderSwitcher on Idol\'s keyless Space route (GM PR #203 r1, r4 and
   it('without the token: "Auto · free", "Free on Hugging Face." and no "Add token →" (GM r12 item 2)', () => {
     withKeys({});
     renderIdol();
-    const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
+    const space = row(/^Hugging Face/).closest('[data-provider-row]') as HTMLElement;
     expect(within(space).queryByRole('menuitem', { name: /^Add/ })).toBeNull();
     expect(within(space).queryByText(/Optional|Connected/)).toBeNull();
-    expect(row(/^Speridlabs/)).toHaveTextContent('Free on Hugging Face.');
+    expect(row(/^Hugging Face/)).toHaveTextContent('Free on Hugging Face.');
     expect(row(/^Auto/)).toHaveTextContent(/^Auto · free/);
   });
 
@@ -150,11 +150,11 @@ describe('ProviderSwitcher on Idol\'s keyless Space route (GM PR #203 r1, r4 and
   it('with the token: the green dot and "Connected", "Uses your Hugging Face allowance." and plain "Auto"', () => {
     withKeys({ HF_TOKEN: KEY });
     renderIdol();
-    const space = row(/^Speridlabs/).closest('[data-provider-row]') as HTMLElement;
+    const space = row(/^Hugging Face/).closest('[data-provider-row]') as HTMLElement;
     const cell = space.querySelector('.provider-switcher__key--connected');
     expect(cell).toHaveTextContent(/^Connected$/);
     expect(cell?.querySelector('.provider-switcher__dot')).toHaveAttribute('aria-hidden', 'true');
-    expect(row(/^Speridlabs/)).toHaveTextContent('Uses your Hugging Face allowance.');
+    expect(row(/^Hugging Face/)).toHaveTextContent('Uses your Hugging Face allowance.');
     expect(row(/^Auto/)).not.toHaveTextContent(/free/);
   });
 });

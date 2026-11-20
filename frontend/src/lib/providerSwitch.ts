@@ -74,6 +74,10 @@ export interface SwitchState {
   /** The chip with every provider named in full ("Auto · Black Forest Labs"),
    * for its title and aria-label (GM, round 3g). */
   chipName: string;
+  /** The chip's title: "Auto runs it on Black Forest Labs. Change provider",
+   * "Runs on Fal. Change provider" for a hand-picked route; the block's
+   * message while the run can't start (design). */
+  title: string | undefined;
   /** The run can't start as saved: the chip turns accent with a warning glyph. */
   blocked: boolean;
   /** Why, in the router's words (routeUnavailable), or the Krea sign-in. */
@@ -89,7 +93,7 @@ export interface SwitchState {
 
 /** Short names for the 10px card chip, used only where the full name can't
  * fit (chipText); anything else has only its full label. */
-const SHORT: Readonly<Record<string, string>> = { bfl: 'BFL', fal: 'fal', replicate: 'Rep', openrouter: 'OR', krea: 'Krea' };
+const SHORT: Readonly<Record<string, string>> = { bfl: 'BFL', fal: 'fal', replicate: 'Rep', openrouter: 'OR', krea: 'Krea', huggingface: 'HF' };
 
 export function shortProvider(provider: string | null | undefined): string {
   return provider && Object.hasOwn(SHORT, provider) ? SHORT[provider] : providerLabel(provider);
@@ -181,6 +185,14 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
   return `${label} ${note.charAt(0).toLowerCase()}${note.slice(1, -1)}`;
 }
 
+/** The name a person sees for a route they can pick or read about: its
+ * provider's full name, except a keyless Space route (Idol's), which is named
+ * for where it runs, "Hugging Face", never its maker (design). The chip, the
+ * menu row and the alternatives all use this. */
+export function routeDisplayName(spec: RouteSpec | undefined): string {
+  return providerLabel(spec?.handler === 'hf-space' && isKeylessRoute(spec) ? 'huggingface' : spec?.provider);
+}
+
 /** A keyless Space route's row line, GM's PR #203 r12 item 2: "Free on
  * Hugging Face." without its token, "Uses your Hugging Face allowance." with
  * it. No allowance numbers (GM r12). */
@@ -250,6 +262,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const autoRoute = selectRoute(definition, { ...routed, [PROVIDER_PARAM]: AUTO }, context.apiKeys);
   const autoUnavailable = routeUnavailable(definition, { ...routed, [PROVIDER_PARAM]: AUTO }, context.apiKeys);
   const autoSpec = autoRoute.routeId ? routeById(definition, autoRoute.routeId) : undefined;
+  const isSpace = (spec: RouteSpec | undefined) => Boolean(spec && isKeylessRoute(spec) && spec.handler === 'hf-space');
   const autoName = autoRoute.kind === 'plan' ? 'Krea plan' : providerLabel(autoSpec?.provider);
 
   const rows: ProviderRow[] = [{
@@ -257,7 +270,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
     label: autoUnavailable ? autoLabel(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })
       // GM, PR #203 r12 item 2: a keyless Space route (Idol's) reads "Auto ·
       // free" without its token and plain "Auto" with it.
-      : autoSpec && isKeylessRoute(autoSpec) && autoSpec.handler === 'hf-space'
+      : isSpace(autoSpec)
         ? (autoRoute.key ? 'Auto' : 'Auto · free')
         // GM, PR #203 r26 item 1: signed out, a plan run can't happen, so the row doesn't promise it.
         : autoRoute.kind === 'plan' && !context.kreaSignedIn ? 'Auto · Krea needs a sign-in'
@@ -272,7 +285,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
     const keyless = isKeylessRoute(spec);
     const setupKey = keyless ? spec.optionalKeys?.[0] : spec.keys[0];
     const keyed = (keyless ? spec.optionalKeys ?? [] : spec.keys).some((key) => isSet(context.apiKeys, key));
-    const label = providerLabel(spec.provider);
+    const label = routeDisplayName(spec);
     if (spec.plan !== 'only') {
       const both = spec.plan === 'optional';
       rows.push({
@@ -309,19 +322,37 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const signInNeeded = planRun && !context.kreaSignedIn;
   const shownSpec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const shownProvider = shownSpec?.provider ?? route.provider;
+  // Design: a chip never names the maker of a keyless Space route (Idol's "Speridlabs", cut off
+  // by the chip's room), only where it runs: "Auto · free" with no token, "Auto · Hugging Face"
+  // (short "Auto · HF") on the person's token, "Hugging Face" when picked.
+  const runsOn = (spec: RouteSpec | undefined, provider: string | null | undefined) => (
+    isSpace(spec) ? 'huggingface' : provider);
+  const autoFree = isSpace(autoSpec) && !autoRoute.key;
   const named = (name: (provider: string | null | undefined) => string) => (choice === AUTO
-    ? (autoRoute.routeId ? `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : name(autoSpec?.provider)}` : 'Auto')
-    : routeById(definition, choice) ? (route.kind === 'plan' ? 'Krea plan' : name(shownProvider)) : 'Unknown');
+    ? (autoRoute.routeId
+      ? (autoFree ? 'Auto · free'
+        : `Auto · ${autoRoute.kind === 'plan' ? 'Krea plan' : name(runsOn(autoSpec, autoSpec?.provider))}`)
+      : 'Auto')
+    : routeById(definition, choice)
+      ? (route.kind === 'plan' ? 'Krea plan' : name(runsOn(shownSpec, shownProvider))) : 'Unknown');
   const blocked = Boolean(unavailable) || signInNeeded;
   const chipName = named(providerLabel);
+  const autoTitle = `Auto runs it ${autoRoute.kind === 'plan' ? 'on your Krea plan'
+    : isSpace(autoSpec) ? (autoRoute.key ? 'on Hugging Face with your token' : 'free on Hugging Face')
+      : `on ${providerLabel(autoSpec?.provider)}`}. Change provider`;
+  const message = unavailable?.message ?? (signInNeeded ? kreaSignInLine(definition, routed, route.routeId ?? null, context) : null);
+  const title = blocked ? message ?? undefined
+    : choice === AUTO ? (autoRoute.routeId ? autoTitle : 'Change provider')
+      : `Runs on ${chipName}. Change provider`;
   return {
     rows,
     chip: chipText(chipName, named(shortProvider), blocked),
     chipName,
+    title,
     blocked,
-    message: unavailable?.message ?? (signInNeeded ? kreaSignInLine(definition, routed, route.routeId ?? null, context) : null),
+    message,
     alternatives: (unavailable?.alternatives ?? []).map((routeId) => ({
-      routeId, label: providerLabel(routeById(definition, routeId)?.provider),
+      routeId, label: routeDisplayName(routeById(definition, routeId)),
       writes: billingWrites(definition, routeId, false),
     })),
     fixes: (unavailable?.fixes ?? []).map((fix) => ({ ...fix, label: fixLabel(definition, fix) })),
@@ -335,7 +366,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
  * knows (r32 item 4); "or choose another provider" only when no route can. */
 function kreaSignInLine(definition: ModelNodeDefinition, routed: Params, planRouteId: string | null, context: SwitchContext): string {
   const others = routesThatCanTake(definition, routed, context.apiKeys, planRouteId)
-    .map((routeId) => providerLabel(routeById(definition, routeId)?.provider));
+    .map((routeId) => routeDisplayName(routeById(definition, routeId)));
   const switchTo = others.length ? `switch to ${orList([...new Set(others)])}` : 'choose another provider';
   return `“${context.name || definition.displayName}” runs on Krea, which needs you to sign in. Sign in from Settings, or ${switchTo}.`;
 }
