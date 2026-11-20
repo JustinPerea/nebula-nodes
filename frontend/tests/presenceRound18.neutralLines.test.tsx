@@ -215,6 +215,12 @@ describe('design: one look for every warning notice, a fill and no edge', () => 
     expect(read, 'a status look that is not the warning one').toEqual([]);
     box.remove();
   });
+  it('project-home__notice: the Projects notice is a fill, no border (design)', () => {
+    const box = boxOf('project-home__notice');
+    expect([...cascaded(box)].filter(([prop, win]) => DRAWN(prop, win.value)).map(([prop]) => prop), 'a border').toEqual([]);
+    expect(lineFill(box)).toBe('var(--sr-canvas-elevated)');
+    box.remove();
+  });
   it.each(['inspector__notice', 'inspector__notice inspector__notice--key', 'personal-agents__terms'])('%s: a neutral note is a fill, no border', (className) => {
     const box = boxOf(className);
     expect([...cascaded(box)].filter(([prop, win]) => DRAWN(prop, win.value)).map(([prop]) => prop), 'a border').toEqual([]);

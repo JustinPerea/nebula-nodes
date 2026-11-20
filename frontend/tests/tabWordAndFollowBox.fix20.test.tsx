@@ -95,10 +95,10 @@ describe('GM r29, 1 and fix 1: the boot-follow box on Projects', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('the neutral box’s rule: the notice’s border and fill, not the error’s', () => {
+  it('the neutral box’s rule: the notice’s fill with no border (design), not the error’s', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/project-home.css'), 'utf8');
     const rule = css.split('\n').find((line) => line.startsWith('body.app-slava-restraint .project-home__notice {'))!;
-    expect(rule).toContain('border: 1px solid var(--sr-edge-strong)');
+    expect(rule).not.toMatch(/border:\s*1px/);
     expect(rule).toContain('background: var(--sr-canvas-elevated)');
   });
 
