@@ -490,3 +490,37 @@ def test_a_keyword_spelled_differently_is_still_a_persons_choice(read_record):
     for spelling in (word.upper(), f"  {word.title()}  ", word.replace("_", " ")):
         with pytest.raises(rec.RecordInvalid, match="person"):
             _fix(person, [{"path": "structure.read.reader_1.keywords", "op": "add", "value": spelling}], "agent")
+
+
+def _filled(read_record, count):
+    one = rec.add_corrections(read_record, [{"path": "brand", "op": "set", "value": "acme"}], "agent",
+                              clock=CLOCK)["corrections"][0]
+    record = copy.deepcopy(read_record)
+    record["corrections"] = [dict(one) for _ in range(count)]
+    return record
+
+
+def test_agents_cant_use_the_persons_reserve(read_record):
+    edge = rec.MAX_CORRECTIONS_PER_RECORD - rec.PERSON_RESERVE
+    label = {"path": "structure.read.regions.r1.label", "op": "set", "value": "Top bar"}
+    assert len(_fix(_filled(read_record, edge - 1), [label], "agent")["corrections"]) == edge
+    with pytest.raises(rec.RecordInvalid, match=f"last {rec.PERSON_RESERVE} are kept for the person"):
+        _fix(_filled(read_record, edge), [label], "agent")
+    # The person can still go up to the record's limit.
+    assert len(_fix(_filled(read_record, edge), [label], "person")["corrections"]) == edge + 1
+    assert len(_fix(_filled(read_record, rec.MAX_CORRECTIONS_PER_RECORD - 1), [label], "person")["corrections"]) == \
+        rec.MAX_CORRECTIONS_PER_RECORD
+    with pytest.raises(rec.RecordInvalid, match="at most 1000"):
+        _fix(_filled(read_record, rec.MAX_CORRECTIONS_PER_RECORD), [label], "person")
+
+
+def test_a_synonym_is_still_a_persons_choice_both_ways(read_record):
+    path = "structure.read.reader_1.keywords"
+    # The person adds monochrome; the agent can't remove it as "Monochromatic".
+    added = _fix(read_record, [{"path": path, "op": "add", "value": "monochrome"}], "person")
+    with pytest.raises(rec.RecordInvalid, match="person"):
+        _fix(added, [{"path": path, "op": "remove", "value": "Monochromatic"}], "agent")
+    # The person removes it; the agent can't add it back as a synonym.
+    removed = _fix(added, [{"path": path, "op": "remove", "value": "monochrome"}], "person")
+    with pytest.raises(rec.RecordInvalid, match="person"):
+        _fix(removed, [{"path": path, "op": "add", "value": "single colour"}], "agent")

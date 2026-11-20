@@ -374,8 +374,22 @@ def modify(target: str | os.PathLike[str], change: Callable[[dict[str, Any]], di
 def correct(target: str | os.PathLike[str], corrections: Iterable[dict[str, Any]], actor: str, *,
             clock: rec.Clock | None = None) -> dict[str, Any]:
     """Load a record, add corrections and save it, under the record's lock. Returns the updated record."""
+    return correct_reporting(target, corrections, actor, clock=clock)[0]
+
+
+def correct_reporting(target: str | os.PathLike[str], corrections: Iterable[dict[str, Any]], actor: str, *,
+                      clock: rec.Clock | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """``correct``, also returning the entries this call appended, counted inside the lock, so a write by
+    someone else just before it is never reported as this caller's."""
     items = list(corrections)
-    return modify(target, lambda record: rec.add_corrections(record, items, actor, clock=clock))
+    added: list[dict[str, Any]] = []
+
+    def change(record: dict[str, Any]) -> dict[str, Any]:
+        updated = rec.add_corrections(record, items, actor, clock=clock)
+        added[:] = updated["corrections"][len(record["corrections"]):]
+        return updated
+
+    return modify(target, change), added
 
 
 def request_read(target: str | os.PathLike[str], reason: str, *, clock: rec.Clock | None = None) -> dict[str, Any]:

@@ -781,8 +781,9 @@ The server exposes these tools for building and running (see
   leaves of `structure.read.*` (a region's `role` or `label`, a text run's `content`, `weight` or
   `type_style`, a `reader_1.<field>.value` that is text or an enum, and `reader_1.keywords` with add or
   remove) or on `shows.*`; a whole region, run or box can't be set, and a refusal names what can. A
-  person's choices stay: an agent can't remove or rewrite a show a person wrote or kept, or set a path
-  a person corrected last, and adds its own show or asks for a read instead. Values are at most 2,000
+  person's choices stay: an agent can't remove or rewrite a show a person wrote or kept, or change a path
+  a person corrected, or its parent or child, whoever wrote last, and adds its own show or asks for a
+  read instead. The last 200 of a record's 1,000 corrections are kept for the person. Values are at most 2,000
   characters, and a write that would make `record.json` over 5 MB is refused. Records take an
   advisory lock (`<id>/.lock`) across each change, so the page and agents can write at once. Measured values (`structure.measured`,
   `rendering`, `source`), the id and the schema can't be corrected, and approval

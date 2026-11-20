@@ -2711,8 +2711,10 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     is `set` on `shows.<id>` with a statement and `evidence`, ids such as P0 from the
     palette; who added it, its status and its decision link are set for you). A whole
     region, text run or box can't be set, and a refusal names what can. A person's choices
-    stay: you can't remove or rewrite a show a person wrote or kept, or set a path a person
-    corrected last; add your own show under another id, or ask with `extraction_request_read`.
+    stay: you can't remove or rewrite a show a person wrote or kept, or change a path a person
+    corrected, or its parent or child, whoever wrote last; add your own show under another id,
+    or ask with `extraction_request_read`. The last 200 of a record's 1,000 corrections are
+    kept for the person.
     Values are at most 2,000 characters. Everything is checked first; one refusal adds none. Values code measured
     (`structure.measured`, `rendering`, `source`), the id and the schema are facts and
     can't be corrected, and neither can a record a person approved. Approval isn't a correction: `status`, `approved_by` and
@@ -2723,9 +2725,8 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     from extraction import store
 
     path = _extraction_path(record)
-    before = len(_extraction_call(store.load, path)["corrections"])
-    updated = _extraction_call(store.correct, path, corrections, "agent")
-    return {"id": updated["id"], "added": updated["corrections"][before:], "effective": rec.effective(updated)}
+    updated, added = _extraction_call(store.correct_reporting, path, corrections, "agent")
+    return {"id": updated["id"], "added": added, "effective": rec.effective(updated)}
 
 
 @_tool(annotations=_EDIT)

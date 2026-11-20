@@ -36,6 +36,8 @@ STATUSES = ("proposal", "approved")
 SHOW_FIELDS = frozenset({"statement", "evidence"})
 MAX_CORRECTIONS_PER_CALL = 50
 MAX_CORRECTIONS_PER_RECORD = 1000
+# The last corrections a record can take are the person's, so agents can't use up the page's room.
+PERSON_RESERVE = 200
 # The limits fit together: a stored correction is at most MAX_CORRECTION_BYTES as it sits in record.json
 # (indentation included), so 1000 of them take about 4 MB and the largest valid record stays under the
 # 5 MB the store reads back (store.MAX_RECORD_BYTES). The store also refuses any write over that size.
@@ -475,7 +477,12 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
         raise RecordInvalid("There are no corrections to add.")
     if len(incoming) > MAX_CORRECTIONS_PER_CALL:
         raise RecordInvalid(f"Add at most {MAX_CORRECTIONS_PER_CALL} corrections at a time.")
-    if len(record["corrections"]) + len(incoming) > MAX_CORRECTIONS_PER_RECORD:
+    total = len(record["corrections"]) + len(incoming)
+    if actor == "agent" and total > MAX_CORRECTIONS_PER_RECORD - PERSON_RESERVE:
+        raise RecordInvalid(f"An agent can add corrections up to {MAX_CORRECTIONS_PER_RECORD - PERSON_RESERVE} on a "
+                            f"record; the last {PERSON_RESERVE} are kept for the person. Ask with "
+                            "extraction_request_read, or leave the rest to them.")
+    if total > MAX_CORRECTIONS_PER_RECORD:
         raise RecordInvalid(f"A record keeps at most {MAX_CORRECTIONS_PER_RECORD} corrections.")
     at = _stamp(clock)
     updated = copy.deepcopy(record)

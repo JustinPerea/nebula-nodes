@@ -221,3 +221,28 @@ def test_the_descriptions_tell_an_agent_which_scale_lightness_and_saturation_use
         assert re.search(r"L\*,? 0-100", text)
         for needle in ("HSV saturation", "units", "0-255"):
             assert needle in text, needle
+
+
+
+def test_correct_reports_only_the_entries_this_call_added(image, folder, monkeypatch):
+    from extraction import store
+
+    saved = mcp_server.extraction_measure(str(image), str(folder))
+    record_dir = os.path.join(str(folder), saved["record"]["id"])
+    real_modify = store.modify
+    raced = []
+
+    def person_writes_first(target, change):
+        # A person's save lands after the tool was called and before its write takes the lock.
+        if not raced:
+            raced.append(True)
+            real_modify(target, lambda record: store.rec.add_corrections(
+                record, [{"path": "brand", "op": "set", "value": None}], "person"))
+        return real_modify(target, change)
+
+    monkeypatch.setattr(store, "modify", person_writes_first)
+    out = mcp_server.extraction_correct(record_dir, [
+        {"path": "shows.a1", "op": "set", "value": {"statement": "A pale ground", "evidence": ["P0"]}}])
+    assert [entry["path"] for entry in out["added"]] == ["shows.a1"]
+    assert all(entry["actor"] == "agent" for entry in out["added"])
+    assert [entry["actor"] for entry in store.load(record_dir)["corrections"]] == ["person", "agent"]
