@@ -38,6 +38,12 @@ function formatInput(input: unknown): string {
   }
 }
 
+/** Whole seconds as minutes and seconds: 599 reads "9:59", 42 reads "0:42". */
+function countdownText(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
 /** A personal agent asking before it acts (ACP session/request_permission).
  * Nebula offers only "Allow once" and "Deny": an "always" choice would write a
  * rule into the agent's own config, so it's never offered. No answer denies. */
@@ -93,7 +99,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
           <button type="button" className={`permission-card__deny${tabHeld ? ' agent-notes-btn--held' : ''}`} disabled={!open}
             {...lockProps} onClick={() => decide('deny')}>Deny</button>
           <span className="permission-card__timer" aria-live="off">
-            {open ? `No answer in ${left}s denies it` : 'Sending…'}
+            {open ? `No answer in ${countdownText(left)} denies it` : 'Sending…'}
           </span>
         </div>
         <PersonLockLine lock={lock} place="control" className="permission-card__held-line" />

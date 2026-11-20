@@ -2209,7 +2209,7 @@ export function ChatPanel() {
             </div>
           </details>
         )}
-        {notice && <div className="chat-panel__notice" data-chat-notice="true"><LineText text={notice} /></div>}
+        {notice && <div className="chat-panel__notice" data-chat-notice="true"><LineText text={notice} code /></div>}
         {pendingImages.length > 0 && (
           <div className="chat-panel__chips">
             {pendingImages.map((chip) => (
@@ -2234,7 +2234,7 @@ export function ChatPanel() {
                   </>
                 )}
                 {chip.status === 'error' && (
-                  <div className="chat-panel__chip-error"><LineText text={chip.error} /></div>
+                  <div className="chat-panel__chip-error"><LineText text={chip.error} code /></div>
                 )}
                 <button
                   type="button"

@@ -95,7 +95,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
         {ambiguities.length > 1 && (
           <> {moreNodesNeedCheck(ambiguities.length - 1)}</>
         )}
-        {unlockError && <span className="provider-recovery-status__error"> <LineText text={unlockError} /></span>}
+        {unlockError && <span className="provider-recovery-status__error"> <LineText text={unlockError} code /></span>}
       </span>
       {ambiguity ? (
         <button

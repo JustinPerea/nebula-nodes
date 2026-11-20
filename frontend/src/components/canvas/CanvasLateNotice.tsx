@@ -38,7 +38,7 @@ export function CanvasLateNotice() {
       aria-live="polite"
       {...holdHandlers} {...leave.props}
     >
-      <LineText className="canvas-undo-notice__text" text={shown.text} />
+      <LineText className="canvas-undo-notice__text" text={shown.text} code />
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×
       </button>

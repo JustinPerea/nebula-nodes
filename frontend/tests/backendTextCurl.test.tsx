@@ -16,6 +16,7 @@
  *    listed file fails too. Agent files get a second check: the agent's own words are never read inside a LineText,
  *    becauseLine, oneLine, FailureLines or curlApostrophes (an AST check), and two of them are mounted.
  */
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor as eventually } from '@testing-library/react';
 import { vi } from 'vitest';
@@ -115,6 +116,9 @@ export const FIXTURE = "Krea's key doesn't work";
 /** A fixture with a quoted name, a path, a file name and a code span that must not change. */
 export const KEEP = ['“Bob\'s file”', '/Users/me/Krea\'s/key.json', "Bob's_notes.txt", '`don\'t_touch`'];
 export const FIXTURE_WITH_CODE = `${FIXTURE} in ${KEEP.join(' and ')}`;
+/** A reason that names a path in backticks: the span draws as code, its apostrophe untouched, and the prose around it is curled. */
+export const CODE_FIXTURE = "Couldn't read `~/it's/file.png` because it isn't there";
+export const CODE_SPAN_TEXT = "~/it's/file.png";
 
 type Mode = 'curl' | 'raw' | 'agent';
 interface Row {
@@ -131,6 +135,14 @@ interface Row {
   keep?: string[];
   /** Straight-apostrophe words the row shows on purpose (a path it adds itself). */
   straight?: string[];
+  /**
+   * A row whose files render the words through LineText or FailureLines says whether code spans are on there:
+   * `true` (the row's render must draw a backticked span as code, the apostrophe inside it unchanged), or the reason they are not
+   * (the words are Nebula's own fixed copy, or the path is not a LineText: an attribute, a plain element, a pure function).
+   */
+  code?: true | string;
+  /** The code-span fixture for a row that builds a sentence out of the text and cannot carry a file name's dot (like `keep`). */
+  codeFixture?: { text: string; span: string };
 }
 
 /** The reads of an agent's own words in `file` that sit inside a call or element that curls (curledAgentReads), through the compiler's resolution of each name. */
@@ -255,9 +267,9 @@ function workingLineFor(event: Partial<AgentPresenceEvent>): string {
 
 export const RENDER_PATHS: Row[] = [
   // Request-failure lines
-  { id: 'canvas notice, the prose around a mono model id', mode: 'curl', files: ['components/canvas/CanvasUndoNotice.tsx'],
+  { id: 'canvas notice, the prose around a mono model id', mode: 'curl', code: true, files: ['components/canvas/CanvasUndoNotice.tsx'],
     show: (t) => { useGraphStore.setState({ undoNotice: { id: 1, text: `${t} for model-x and ${t}`, offer: null, mono: 'model-x' } } as never); return shown(<CanvasUndoNotice />); } },
-  { id: 'Commons error line, the stem before its Try again button', mode: 'curl', files: ['components/commons/CommonsErrorLine.tsx'],
+  { id: 'Commons error line, the stem before its Try again button', mode: 'curl', code: true, files: ['components/commons/CommonsErrorLine.tsx'],
     show: (t) => shown(<CommonsErrorLine line={`Nebula couldn't load Commons because ${t}. Try again.`} onRetry={() => {}} />) },
   { id: 'LineText', mode: 'curl', files: ['components/LineText.tsx'], show: (t) => shown(<LineText text={t} />) },
   { id: 'LineText string children', mode: 'curl', files: ['components/LineText.tsx'], show: (t) => shown(<LineText text="x">{t}</LineText>) },
@@ -265,7 +277,7 @@ export const RENDER_PATHS: Row[] = [
   { id: 'becauseLine, heading not "Couldn’t x."', mode: 'curl', files: ['lib/errorCopy.ts'], show: (t) => becauseLine({ heading: 'Save failed', reason: t }) },
   { id: 'becauseLine, unreadable heading in a named reason', mode: 'curl', files: ['lib/errorCopy.ts'], show: (t) => becauseLine({ heading: '', reason: `Couldn't read ${t}` }), keep: KEEP.filter((kept) => !kept.includes('.')) },
   { id: 'becauseLine, a sentence reason (already curled)', mode: 'curl', files: ['lib/errorCopy.ts'], show: (t) => becauseLine({ heading: 'Couldn’t save the project.', reason: t }) },
-  { id: 'chat image chip error', mode: 'curl', fields: ['call:copyForStatus', 'call:readDetail'], files: ['lib/chatUploadCopy.ts', 'components/panels/ChatPanel.tsx'], show: (t) => chatUploadChipError(400, t) },
+  { id: 'chat image chip error', mode: 'curl', code: 'a pure function row; the chat panel draws the chip error through LineText with code on', fields: ['call:copyForStatus', 'call:readDetail'], files: ['lib/chatUploadCopy.ts', 'components/panels/ChatPanel.tsx'], show: (t) => chatUploadChipError(400, t) },
   { id: 'dropped-files reasons', mode: 'curl', files: ['lib/canvasFileDrop.ts'],
     show: (t) => dropNoticeText([{ kind: 'upload', name: 'a.png', line: 'x', reason: t }, { kind: 'upload', name: 'b.png', line: 'x', reason: t }], 2) ?? '' },
   { id: 'scene-save refusal, a rendering stop', mode: 'curl', fields: ['RequestFailedError.reason', 'RequestFailedError.detail', 'call:copyForAnswer', 'call:detailText', 'call:readRefusal'], files: ['store/graphStore.ts'],
@@ -276,7 +288,7 @@ export const RENDER_PATHS: Row[] = [
   { id: 'keychain-kept fix sentence', mode: 'curl', fields: ['RequestFailedError.fix'], files: ['lib/settingsWrites.ts', 'lib/errorCopy.ts'],
     show: (t) => `${keychainKeptLine('removal', 'openai', 'row', t)}|${keychainKeptLine('save-over', 'openai', 'row', t)}|${keychainKeptLine('save-new', 'openai', 'row', t)}` },
   // The store keeps a refused accept's reason raw (the backend's whole sentence: it opens "Nebula couldn’t accept this because"); the strip draws it through LineText.
-  { id: 'asset proposal accept refusal (store and strip)', mode: 'curl', fields: ['RequestFailedError.reason'], files: ['store/assetProposalsStore.ts', 'components/proposals/AssetProposalStrip.tsx'],
+  { id: 'asset proposal accept refusal (store and strip)', mode: 'curl', code: true, fields: ['RequestFailedError.reason'], files: ['store/assetProposalsStore.ts', 'components/proposals/AssetProposalStrip.tsx'],
     show: async (t) => {
       net.acceptProposal.mockRejectedValueOnce(new AssetProposalError(409, `Nebula couldn’t accept this because ${t}.`, { heading: 'Couldn’t accept the proposal.' }));
       useAssetProposalsStore.getState().open(coverProposal(), 'k1');
@@ -287,10 +299,10 @@ export const RENDER_PATHS: Row[] = [
     } },
   // Node run state
   { id: 'waiting stop', mode: 'curl', files: ['lib/nodeErrorCopy.ts'], show: (t) => nodeErrorCopy({ category: 'waiting', person: t }).reason },
-  { id: 'run failure (already curled)', mode: 'curl', fields: ['NodeData.error', 'NodeData.errorFriendly', 'NodeData.errorPerson', 'CinemaShot.error', 'CinemaShot.errorFriendly', 'CinemaShot.errorPerson'], files: ['lib/nodeErrorCopy.ts', 'components/nodes/NodeError.tsx', 'components/nodes/ModelNode.tsx', 'components/nodes/DynamicNode.tsx', 'components/nodes/BatchNode.tsx',
+  { id: 'run failure (already curled)', mode: 'curl', code: 'a pure function row; NodeError draws it with code on (the NodeError rows)', fields: ['NodeData.error', 'NodeData.errorFriendly', 'NodeData.errorPerson', 'CinemaShot.error', 'CinemaShot.errorFriendly', 'CinemaShot.errorPerson'], files: ['lib/nodeErrorCopy.ts', 'components/nodes/NodeError.tsx', 'components/nodes/ModelNode.tsx', 'components/nodes/DynamicNode.tsx', 'components/nodes/BatchNode.tsx',
     'components/cinema-studio/CinemaShotPanel.tsx', 'components/create-studio/ResultCard.tsx'], show: (t) => nodeErrorCopy({ category: 'unknown', person: t }).reason },
-  { id: 'NodeError, rendered', mode: 'curl', files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="unknown" person={t} />) },
-  { id: 'NodeError, a waiting stop, rendered', mode: 'curl', files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="waiting" person={t} />) },
+  { id: 'NodeError, rendered', mode: 'curl', code: true, files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="unknown" person={t} />) },
+  { id: 'NodeError, a waiting stop, rendered', mode: 'curl', code: true, files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="waiting" person={t} />) },
   { id: 'ErrorDetails, the raw words behind a project error', mode: 'raw', fields: ['call:failureDetails'], files: ['components/projects/ProjectHome.tsx', 'components/failure/ErrorDetails.tsx', 'store/projectStore.ts', 'store/graphStore.ts'], show: (t) => shown(<ErrorDetails raw={t} />) },
   { id: 'NodeError raw Details, rendered', mode: 'raw', files: ['components/nodes/NodeError.tsx'], show: (t) => shown(<NodeError category="unknown" raw={t} person="It stopped." providerText />) },
   { id: 'NodeError raw Details', mode: 'raw', files: ['lib/nodeErrorCopy.ts'], show: (t) => nodeErrorCopy({ category: 'unknown', raw: t, person: 'It stopped.', providerText: true }).details ?? '' },
@@ -325,20 +337,20 @@ export const RENDER_PATHS: Row[] = [
   { id: 'Updates card outcome, source agent', mode: 'curl', fields: ['AgentNote.outcome'], files: ['lib/agentNotesView.ts'], show: (t) => stateLabel(nebulaNote('agent', t)) ?? '' },
 
   // Provider hold box
-  { id: 'provider hold box', mode: 'curl', fields: ['ProviderStartAmbiguity.message', 'ProviderRecoveryCheckpoint.warning'], files: ['components/ProviderRecoveryStatus.tsx', 'lib/runHistory.ts'],
+  { id: 'provider hold box', mode: 'curl', code: 'the recovery warning and the start message are plain text in the box; only its unlock error goes through LineText, with code on', fields: ['ProviderStartAmbiguity.message', 'ProviderRecoveryCheckpoint.warning'], files: ['components/ProviderRecoveryStatus.tsx', 'lib/runHistory.ts'],
     show: (t) => { useGraphStore.setState({ providerRecoveryWarning: t }); return shown(<ProviderRecoveryStatus />); } },
   // Run history
   { id: 'run history status note', mode: 'curl', fields: ['RunRecord.statusNote'], files: ['components/panels/RunHistoryPanel.tsx', 'lib/runHistory.ts'], show: (t) => historyText({ statusNote: t }) },
   { id: 'run history skipped-nodes tooltip', mode: 'curl', fields: ['RunRecord.skippedNodes'], files: ['components/panels/RunHistoryPanel.tsx', 'lib/runHistory.ts'],
     show: (t) => { historyText({ skippedNodes: { n1: t } }); return document.querySelector('.run-history__skipped')?.getAttribute('title') ?? ''; }, keep: KEEP },
   // Chat panel
-  { id: 'model picker unavailable line', mode: 'curl', fields: ['ChatModelCatalog.error', 'ChatModelCatalog.message'], files: ['components/panels/ChatModelPicker.tsx', 'lib/api.ts'], show: (t) => pickerText({ error: t }) },
-  { id: 'agent status hover title', mode: 'curl', fields: ['ClaudeStatus.message', 'CodexStatus.message', 'CodexChatGPTLoginState.message'], files: ['components/panels/ChatPanel.tsx', 'lib/api.ts'], show: (t) => agentStatusTitle(t, 'a session') ?? '' },
-  { id: 'model picker, a personal agent’s note', mode: 'curl', fields: ['PersonalAgent.note'], files: ['components/panels/ChatModelPicker.tsx'],
+  { id: 'model picker unavailable line', mode: 'curl', code: true, fields: ['ChatModelCatalog.error', 'ChatModelCatalog.message'], files: ['components/panels/ChatModelPicker.tsx', 'lib/api.ts'], show: (t) => pickerText({ error: t }) },
+  { id: 'agent status hover title', mode: 'curl', code: 'a title attribute: it can only show text, so no code span', fields: ['ClaudeStatus.message', 'CodexStatus.message', 'CodexChatGPTLoginState.message'], files: ['components/panels/ChatPanel.tsx', 'lib/api.ts'], show: (t) => agentStatusTitle(t, 'a session') ?? '' },
+  { id: 'model picker, a personal agent’s note', mode: 'curl', code: 'a plain element in the picker (curled); it is not a LineText', fields: ['PersonalAgent.note'], files: ['components/panels/ChatModelPicker.tsx'],
     show: (t) => pickerText({ agent: 'personal:x', personalAgents: [{ ...personalAgent({ note: t }) }] }) },
-  { id: 'Inspector last-run notes', mode: 'curl', fields: ['NodeData.runNotes', 'NodeData.skipReason'], files: ['components/panels/Inspector.tsx'], show: (t) => shown(<LastRunNotes notes={[t]} />) },
+  { id: 'Inspector last-run notes', mode: 'curl', code: 'a plain element (curled); it is not a LineText', fields: ['NodeData.runNotes', 'NodeData.skipReason'], files: ['components/panels/Inspector.tsx'], show: (t) => shown(<LastRunNotes notes={[t]} />) },
   // Moodboard and Commons
-  { id: 'undo toast kept lines', mode: 'curl', files: ['components/moodboard-studio/MoodboardStudioView.tsx', 'components/moodboard-studio/BoardUndoToast.tsx'],
+  { id: 'undo toast kept lines', mode: 'curl', code: 'a plain span in the toast (curled); it is not a LineText', files: ['components/moodboard-studio/MoodboardStudioView.tsx', 'components/moodboard-studio/BoardUndoToast.tsx'],
     show: (t) => shown(<BoardUndoToast toast={{ id: 1, text: 'Removed', skipped: skippedLines({ applied: [{ skipped: [{ message: t }] }] } as never), action: { label: 'Undo', run: () => {} } }} onDismiss={() => {}} />) },
   { id: 'colour clash reasons', mode: 'curl', fields: ['MoodboardClash.reason', 'MoodboardClash.reasons'], files: ['components/moodboard-studio/MoodboardBrief.tsx'],
     show: (t) => { const { container } = render(<BriefPanel brief={clashBrief(t)} override={null} saving={false} busy={false} onEdit={() => {}} onKeep={() => {}} onRegenerate={() => {}} />);
@@ -347,23 +359,23 @@ export const RENDER_PATHS: Row[] = [
     show: (t) => { const { container } = render(<BoardSwatches label="Palette" role="dominant" analysis={{ palette: ['#ff0000'], accents: [] } as never}
       leftOut={[{ hex: '#ff0000', role: 'palette', level: 'conflict', reason: t, reasons: [t], why: 'check', foundBy: ['words'] }]} />);
       return container.querySelector('[role="listitem"]')?.getAttribute('title') ?? ''; } },
-  { id: 'Commons folder device error', mode: 'curl', fields: ['FolderLink.error'], files: ['components/commons/CommonsSettings.tsx'],
+  { id: 'Commons folder device error', mode: 'curl', code: true, fields: ['FolderLink.error'], files: ['components/commons/CommonsSettings.tsx'],
     show: (t) => shown(<ul><FolderRow link={{ id: 'l', path: '/refs', ignores: [], last_scan_at: null, last_scan_summary: null, device_states: [{ path: '/refs', state: 'error', error: t }] }} run={async () => true} /></ul>) },
-  { id: 'Commons grade slot error', mode: 'curl', fields: ['ReviewItem.error'], files: ['components/commons/CommonsReview.tsx'], show: (t) => reviewText({ proposal: null, status: 'failed', error: t }) },
-  { id: 'borrowing fidelity title', mode: 'curl', files: ['components/commons/CommonsDetail.tsx'],
+  { id: 'Commons grade slot error', mode: 'curl', code: true, fields: ['ReviewItem.error'], files: ['components/commons/CommonsReview.tsx'], show: (t) => reviewText({ proposal: null, status: 'failed', error: t }) },
+  { id: 'borrowing fidelity title', mode: 'curl', code: 'a title attribute: it can only show text, so no code span', files: ['components/commons/CommonsDetail.tsx'],
     show: (t) => render(<FidelityBadge fidelity={{ status: 'failed', reason: t }} />).container.firstElementChild?.getAttribute('title') ?? '' },
   { id: 'Commons analysis failure Details', mode: 'raw', fields: ['AssetDetail.last_error'], files: ['components/commons/CommonsDetail.tsx'],
     show: async (t) => { const { container } = await commonsDetail({ last_error: t, analysis_state: 'analysis_failed', last_error_kind: 'other' }); return container.querySelector('.commons-analysis-failure__details')?.textContent ?? ''; } },
-  { id: 'Commons detail: the stage image alt (the model-read summary)', mode: 'curl', fields: ['EffectiveFields.summary'], files: ['components/commons/CommonsDetail.tsx'],
+  { id: 'Commons detail: the stage image alt (the model-read summary)', mode: 'curl', code: 'an alt attribute: it can only show text, so no code span', fields: ['EffectiveFields.summary'], files: ['components/commons/CommonsDetail.tsx'],
     show: async (t) => { const { container } = await commonsDetail({}, { summary: { value: t } }); return container.querySelector('.commons-stage [data-commons-media]')?.getAttribute('alt') ?? ''; } },
   // Settings
-  { id: 'settings top notice (rendered)', mode: 'curl', files: ['components/panels/settings/SettingsTopNotice.tsx'], straight: ["/Users/me/Krea's/settings.json"],
+  { id: 'settings top notice (rendered)', mode: 'curl', code: 'the notice line is plain spans around its path (curled); the one LineText on this surface is Nebula\'s fixed dismiss-failed copy', files: ['components/panels/settings/SettingsTopNotice.tsx'], straight: ["/Users/me/Krea's/settings.json"],
     show: async (t) => { net.settingsNotice.mockResolvedValue({ kind: 'restored', line: `${t} /Users/me/Krea's/settings.json`, path: "/Users/me/Krea's/settings.json" });
       const { container } = render(<SettingsTopNotice visible />); await eventually(() => expect(container.querySelector('.settings-top-notice__line')).not.toBeNull());
       return container.querySelector('.settings-top-notice__line')?.textContent ?? ''; } },
-  { id: 'Connect your agent: why a checkout can’t be pointed at', mode: 'curl', fields: ['OutsideSpend.reason'], files: ['components/panels/settings/ConnectedApps.tsx', 'lib/api.ts'],
+  { id: 'Connect your agent: why a checkout can’t be pointed at', mode: 'curl', code: 'a plain paragraph (curled); it is not a LineText', fields: ['OutsideSpend.reason'], files: ['components/panels/settings/ConnectedApps.tsx', 'lib/api.ts'],
     show: (t) => shown(<ConnectedApps view={{ outside: { spentUsd: 0, kreaPlanRuns: 0 }, apps: [], connect: { clients: [{ id: 'c', label: 'C' }], available: false, reason: t } }} loadError={null} onChanged={() => {}} />) },
-  { id: 'setup panel steps, warnings and where', mode: 'curl', fields: ['AgentSetup.steps', 'AgentSetup.warnings', 'AgentSetup.where'], files: ['components/panels/settings/ConnectedApps.tsx'],
+  { id: 'setup panel steps, warnings and where', mode: 'curl', code: 'plain elements (curled); the setup text has its own code blocks', fields: ['AgentSetup.steps', 'AgentSetup.warnings', 'AgentSetup.where'], files: ['components/panels/settings/ConnectedApps.tsx'],
     show: (t) => { const { container } = render(<SetupPanel name="App" setup={setup(t)} onDone={() => {}} onError={() => {}} />);
       return ['.settings-apps__steps', '.settings-pref__description', '.settings-apps__warnings'].flatMap((css) => [...container.querySelectorAll(css)].map((node) => node.textContent)).join('|'); } },
   { id: 'setup panel code, command and path', mode: 'raw', files: ['components/panels/settings/ConnectedApps.tsx'],
@@ -374,8 +386,8 @@ export const RENDER_PATHS: Row[] = [
       const { container } = render(<PersonalAgentsSection />); await eventually(() => expect(container.querySelector('.personal-agents__terms')).not.toBeNull());
       return [...container.querySelectorAll('.personal-agents__terms, .personal-agents__fine, .personal-agents__progress, .settings-row__error, .settings-pref__description')].map((node) => node.textContent).join('|'); } },
   // Agent-written and model-read words
-  { id: 'moodboard analysis summary', mode: 'curl', fields: ['MoodboardAnalysis.summary'], files: ['components/moodboard-studio/MoodboardStudioView.tsx'], show: (t) => shown(<AnalysisSummary text={t} />) },
-  { id: 'Commons read fields: summary, notes, why', mode: 'curl', fields: ['Explained.why', 'ReviewItem.composition_notes', 'ReviewItem.summary'], files: ['components/commons/CommonsReview.tsx'], show: (t) => reviewText({}, t) },
+  { id: 'moodboard analysis summary', mode: 'curl', code: 'model-read prose in a plain element (curled); it is not a LineText', fields: ['MoodboardAnalysis.summary'], files: ['components/moodboard-studio/MoodboardStudioView.tsx'], show: (t) => shown(<AnalysisSummary text={t} />) },
+  { id: 'Commons read fields: summary, notes, why', mode: 'curl', code: 'model-read prose in plain elements (curled); not a LineText', fields: ['Explained.why', 'ReviewItem.composition_notes', 'ReviewItem.summary'], files: ['components/commons/CommonsReview.tsx'], show: (t) => reviewText({}, t) },
   { id: 'Commons grid caption', mode: 'curl', fields: ['SearchRow.summary'], files: ['components/commons/CommonsGrid.tsx'],
     show: (t) => { const { container } = render(<CommonsGrid rows={[{ ...gridRow, summary: t }]} selectedId={null} loading={false} emptyHint="" onOpen={() => {}} onDropFiles={() => {}} />);
       const tile = container.querySelector('[data-commons-tile]')!; return `${tile.textContent}|${tile.getAttribute('title')}|${tile.getAttribute('aria-label')}`; } },
@@ -400,7 +412,7 @@ export const RENDER_PATHS: Row[] = [
   // The rest are too large to mount here: an AST check (agentWords, below) fails when a read of the agent's fields sits inside a call or element that curls.
   ...AGENT_FILES.map(([id, file]): Row => ({ id, mode: 'agent', ...(file === 'components/canvas/ProposalBar.tsx' ? { fields: ['ProposalView.note'] } : {}), files: [file],
     show: (t) => { const reads = agentWordsCurled(file); return reads.length ? `CURLED: ${reads.join('; ')}` : t; } })),
-  { id: 'chat system line (through LineText)', mode: 'curl', files: ['components/panels/ChatPanel.tsx'],
+  { id: 'chat system line (through LineText)', mode: 'curl', code: true, files: ['components/panels/ChatPanel.tsx'],
     show: (t) => shown(<AssistantBubble message={{ role: 'assistant', id: 'm', streaming: false, parts: [{ kind: 'system', text: t, because: false }] } as never} agentName="Claude" onPermission={() => {}} />) },
 ];
 
@@ -419,6 +431,26 @@ describe('the render-path table: backend text is curled where it renders', () =>
     expect(out.toLowerCase(), row.id).toContain('krea’s key doesn’t work');
     // A code span is drawn without its backticks by LineText, so compare its inside.
     for (const kept of row.keep ?? KEEP) expect(out, `${row.id}: ${kept}`).toContain(kept.replace(/^`|`$/g, ''));
+  });
+
+  it.each(rows.filter((row) => row.code === true).map((row) => [row.id, row] as const))('%s draws a backticked path as a code span and curls the prose around it', async (_id, row) => {
+    const { text, span } = row.codeFixture ?? { text: CODE_FIXTURE, span: CODE_SPAN_TEXT };
+    const out = await row.show(text);
+    expect(out, row.id).not.toContain('`');
+    expect(out, row.id).toContain(span);
+    // A row that reads the reason through becauseLine opens "Nebula couldn’t"; one that shows it raw keeps "Couldn’t".
+    expect(out, row.id).toMatch(/(?:Nebula c|C)ouldn’t read/);
+    expect(out, row.id).toContain('isn’t there');
+    const spans = [...document.querySelectorAll('code.code-span, code.canvas-undo-notice__mono')].filter((node) => node.classList.contains('code-span'));
+    expect(spans.map((node) => node.textContent), row.id).toContain(span);
+  });
+
+  // The tripwire: a row whose files render through LineText or FailureLines says code is on, or why not.
+  it('every row that renders through LineText or FailureLines says whether code spans are on', () => {
+    const rendersLine = (file: string) => /\.tsx$/.test(file) && /<(?:LineText|FailureLines)\b/.test(readFileSync(join(SRC, file), 'utf8'));
+    const silent = RENDER_PATHS.filter((row) => row.mode === 'curl' && row.files.some(rendersLine) && row.code === undefined).map((row) => row.id);
+    expect(silent, 'Set `code: true` on the row (and make its surface pass `code`), or `code: "why not"`').toEqual([]);
+    for (const row of RENDER_PATHS) if (typeof row.code === 'string') expect(row.code.length, row.id).toBeGreaterThan(15);
   });
 
   it.each(RENDER_PATHS.filter((row) => row.mode !== 'curl').map((row) => [row.id, row] as const))('%s stays as it came', async (_id, row) => {

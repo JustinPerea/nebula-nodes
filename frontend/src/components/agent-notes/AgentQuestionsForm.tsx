@@ -148,7 +148,7 @@ export function AgentQuestionsForm({
         {view.note && <p className="agent-questions-form__note">{view.note}</p>}
         {view.questions.map(question)}
       </div>
-      {error && <div className="agent-notes-panel__error" role="alert"><LineText text={error} /></div>}
+      {error && <div className="agent-notes-panel__error" role="alert"><LineText text={error} code /></div>}
       <div className="agent-questions-form__foot">
         <button type="button" className={`agent-notes-btn${lockClass}`} disabled={busy} {...lockProps}
           onClick={() => void dismiss()}>

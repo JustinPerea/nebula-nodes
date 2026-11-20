@@ -100,6 +100,11 @@ describe('check-badge-tone: capitals', () => {
     '.thing__state { font-variant-caps: all-small-caps; }',
     '.pill-badge { text-transform: UPPERCASE; }',
     '.a, .thing__badge { text-transform: uppercase; }',
+    '.permission-card__kind { text-transform: uppercase; }',
+    '.permission-card__kind { text-transform: lowercase; }',
+    '.permission-card__kind { text-transform: capitalize; }',
+    'body.app-slava-restraint .permission-card__kind { font-size: 10px; text-transform: LOWERCASE; }',
+    '.permission-card__kind { font-variant: small-caps; }',
   ];
   it.each(capitalised)('catches %s', (css) => {
     expect(caps(css)).toHaveLength(1);
@@ -112,6 +117,8 @@ describe('check-badge-tone: capitals', () => {
     '.inspector__section-title { text-transform: uppercase; letter-spacing: 0.08em; }',
     '.thing__statement { text-transform: uppercase; }',
     '.thing__badge { text-transform: capitalize; }',
+    '.permission-card__kind { text-transform: none; font-size: 10px; }',
+    '.permission-card__title { text-transform: lowercase; }',
   ];
   it.each(fine)('passes %s', (css) => {
     expect(caps(css)).toHaveLength(0);

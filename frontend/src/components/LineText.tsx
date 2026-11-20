@@ -1,19 +1,9 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
 import { curlApostrophes, isBecauseFailure } from '../lib/errorCopy';
-import { withCodeSpans } from '../lib/codeSpans';
+import { curledWithCodeSpans } from '../lib/codeSpans';
 import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
-
-/**
- * A line in `code` mode: code spans are found first, on the words as they came, and only the prose between them is curled,
- * so a span (`cmd's`) is never changed whichever way curlApostrophes would have paired the backticks.
- */
-function curledWithCodeSpans(text: string): ReactNode {
-  const node = withCodeSpans(text);
-  if (typeof node === 'string') return curlApostrophes(node);
-  return Array.isArray(node) ? node.map((part) => (typeof part === 'string' ? curlApostrophes(part) : part)) : node;
-}
 
 const ANCHOR_STYLE = { display: 'none' } as const;
 export const BECAUSE_ATTR = 'data-line-because';
@@ -54,7 +44,8 @@ export function LineText({ text, className, children, tone, code }: { text: stri
   // Code spans, quoted names and paths stay as they are (curlApostrophes); a registered line is matched on its words
   // with either apostrophe (lib/notConnectedLine), so a curled line still matches a straight registration.
   const words = text ? curlApostrophes(text) : null;
-  const body = typeof children === 'string' ? curlApostrophes(children) : children;
+  // A string child is curled like `text`, and takes code spans when `code` is on.
+  const body = typeof children === 'string' ? (code ? curledWithCodeSpans(children) : curlApostrophes(children)) : children;
   // The one offline-first rule (hooks/useOfflineFirstBecause): it gives null for a because line
   // while Nebula is offline. LineText never reads offline on its own (tests/round22Surfaces).
   const shown = useOfflineFirstBecause(words);

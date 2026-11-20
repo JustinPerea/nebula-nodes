@@ -650,8 +650,8 @@ function specifiesGeneric(heading: string, reason: string): boolean {
   if (!isGenericHeading(heading)) return false;
   const verb = failedVerb(heading);
   if (verb !== null && verb === failedVerb(reason)) return true;
-  const firstSentence = /^(?:[^.“]|“[^”]*”)*\./.exec(reason.trim())?.[0] ?? reason;
-  return verb === 'save' && /“[^”]+”/.test(firstSentence);
+  const first = firstSentence(reason.trim())?.sentence ?? reason;
+  return verb === 'save' && /“[^”]+”/.test(first);
 }
 
 /** The one-line form, for alerts, toasts, tooltips and status text (GM:
@@ -684,9 +684,15 @@ export function curlApostrophes(text: string): string {
   }).join('');
 }
 
+/** One unit of a sentence for the splitters below: a backtick code span or a “…” quote (each whole, so a dot
+ * inside is never a sentence end), a dot that is not followed by whitespace or the end ("photo.png", "fal.ai",
+ * "Flux 1.1"), a lone backtick or quote with no partner, or any other character. A sentence ends only at a
+ * dot that is followed by whitespace or the end of the text. */
+const SENTENCE_UNIT = '`[^`]*`|“[^”]*”|`(?![^`]*`)|“(?![^”]*”)|\\.(?!\\s|$)|[^.`“]';
+
 /** A heading of the form "Couldn’t ‹x›." (or "Nebula couldn’t ‹x›."), either apostrophe. The period
  * inside a file name or a quoted name is not the sentence's end. */
-const FAILED_HEADING = /^(?:Nebula )?[Cc]ouldn['’]t ((?:[^.“]|“[^”]*”|\.(?=\w))+)\.$/;
+const FAILED_HEADING = new RegExp(`^(?:Nebula )?[Cc]ouldn['’]t ((?:${SENTENCE_UNIT})+)\\.$`);
 
 /**
  * What a failure's heading says Nebula was doing: "Couldn’t load the character." gives "load the
@@ -723,6 +729,16 @@ const GONE_FROM_TRASH_LINE = /^That .+? isn['’]t in Recently deleted anymore\.
 /** A clause from the status rows, the table or the pattern rows; null when the reason is none of them. */
 function clauseFromTables(reason: string, status: number | undefined, beside: 'alone' | 'button'): string | null {
   const said = reason.trim();
+  // By design a reason with no closing full stop reads as it does with one, so the tables are tried both ways.
+  const bare = said.replace(/\.$/, '');
+  for (const text of bare === said ? [said, `${said}.`] : [said, bare]) {
+    const clause = clauseFromRows(text, status, beside);
+    if (clause !== null) return clause;
+  }
+  return null;
+}
+
+function clauseFromRows(said: string, status: number | undefined, beside: 'alone' | 'button'): string | null {
   const byStatus = statusClause(said, status, beside);
   if (byStatus !== null) return byStatus;
   const row = FOLDED_CLAUSES.get(foldApostrophes(said));
@@ -793,16 +809,27 @@ export function clauseFor(source: unknown, beside: 'alone' | 'button' = 'alone')
 /** A reason that is a whole line of Nebula's, already in the because form. */
 const FULL_BECAUSE = new RegExp(`${NEBULA_COULDNT.source}.+ because `);
 const OWN_FAILURE = NEBULA_COULDNT;
-const FIRST_SENTENCE = /^((?:[^.“]|“[^”]*”|\.(?=\w))+\.)\s*([\s\S]*)$/;
+const FIRST_SENTENCE = new RegExp(`^((?:${SENTENCE_UNIT})+)(?:\\.(?=\\s|$)\\s*([\\s\\S]*)|$)`);
+
+/** A reason's first sentence (with its full stop) and what follows it. By design the end of the text closes a
+ * sentence like a full stop does: a reason with none is one sentence, read as it would be with one. Null when
+ * the text ends in other closing punctuation ("?", "!", a closing quote after a stop) and holds no sentence end. */
+function firstSentence(reason: string): { sentence: string; rest: string } | null {
+  const match = FIRST_SENTENCE.exec(reason);
+  if (!match) return null;
+  const closed = match[0].length > match[1].length;
+  if (!closed && ENDS_A_SENTENCE.test(match[1])) return null;
+  return { sentence: `${match[1]}.`, rest: match[2] ?? '' };
+}
 
 /** A reason that is a line of its own ("Couldn’t download the result. Its link may have expired. Run the node
  * again."), as one line in the because form: its first sentence says what, the rest says why. */
 function namedLine(reason: string, beside: 'alone' | 'button'): string {
-  if (FULL_BECAUSE.test(reason)) return curlApostrophes(reason);
-  const split = FIRST_SENTENCE.exec(reason);
-  const what = failedWhat(sameFailureForm(split ? split[1] : reason));
+  if (FULL_BECAUSE.test(reason)) return endedSentence(curlApostrophes(reason));
+  const split = firstSentence(reason);
+  const what = failedWhat(sameFailureForm(split ? split.sentence : reason));
   if (what === null) return curlApostrophes(reason);
-  const rest = (split?.[2] ?? '').trim();
+  const rest = (split?.rest ?? '').trim();
   const clause = rest ? clauseFor(rest, beside) : null;
   if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
   return rest ? `Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(rest))}` : `Nebula couldn’t ${what}.`;
@@ -818,8 +845,8 @@ export function endedSentence(text: string): string {
 function reasonAction(reason: string): string | null {
   const full = /^(?:Saved\. )?Nebula couldn['’]t (.+?) because /.exec(reason);
   if (full) return curlApostrophes(full[1]);
-  const split = FIRST_SENTENCE.exec(reason);
-  return failedWhat(sameFailureForm(split ? split[1] : reason));
+  const split = firstSentence(reason);
+  return failedWhat(sameFailureForm(split ? split.sentence : reason));
 }
 
 /** A refusal because this tab isn't the person's says so in the one form every such line has. */
@@ -854,7 +881,7 @@ export function becauseLine(parts: BecauseParts, beside: 'alone' | 'button' = 'a
   const what = given ?? failedWhat(heading);
   if (parts.clause?.trim() && what !== null) return `Nebula couldn’t ${what} because ${parts.clause.trim()}`;
   if (!reason) return what === null ? heading : `Nebula couldn’t ${what}.`;
-  if (!heading && given === undefined) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : curlApostrophes(reason);
+  if (!heading && given === undefined) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : endedSentence(curlApostrophes(reason));
   if (what === null) return curlApostrophes(headedLine(heading, reason));
   const person = personRequiredLine(what, reason);
   if (person !== null) return person;

@@ -213,7 +213,7 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
       {view.note && <p className="asset-proposal__note">{view.note}</p>}
       {view.kind === 'project' && <CoverChange view={view} />}
       {view.kind === 'commons' && <CommonsChange view={view} names={names} />}
-      {error && <p className="asset-proposal__error" role="alert"><LineText text={error} /></p>}
+      {error && <p className="asset-proposal__error" role="alert"><LineText text={error} code /></p>}
       <div className="asset-proposal__foot">
         <span className="asset-proposal__expires">{closing ? '' : minutesLeft(view, Math.max(now, shownAt))}</span>
         <button type="button" className="asset-proposal__button" disabled={busy} {...gate.control()}

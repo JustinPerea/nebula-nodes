@@ -568,7 +568,7 @@ function FailureLine({ failure, className, id, retry = false, alert = false, neu
   if (!failure || !failureText(failure, retry)) return null;
   return (
     <div id={id} className={className} role={alert ? 'alert' : neutral ? 'status' : undefined} {...(neutral ? { 'data-line-neutral': '' } : {})}>
-      <FailureLines failure={failure} retry={retry} />
+      <FailureLines failure={failure} retry={retry} code />
     </div>
   );
 }
@@ -3536,9 +3536,9 @@ function MoodboardRail({
       <button type="button" className="moodboard-rail__new" disabled={noProject}
         title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New moodboard</button>
       <div className="moodboard-rail__list" ref={rows}>
-        {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status"><LineText text={notice} /></div>}
+        {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status"><LineText text={notice} code /></div>}
         {busy && <div className="moodboard-rail__empty">Loading…</div>}
-        {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error"><LineText text={failed} /></div>}
+        {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error"><LineText text={failed} code /></div>}
         {!busy && !failed && shown.length === 0 && (
           <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>
         )}

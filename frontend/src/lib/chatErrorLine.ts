@@ -1,4 +1,5 @@
 import { endedSentence, curlApostrophes } from './errorCopy';
+import { PROVIDER_LABELS } from './directRoute';
 
 /**
  * The chat's line for a stream error (design): "Claude stopped because the connection was refused."
@@ -42,10 +43,25 @@ function cleaned(message: string): string {
   return message.replace(/\s+/g, ' ').trim().replace(/^error\s*:\s*/i, '').replace(/\s*:+$/, '').trim();
 }
 
-/** The first letter lower case, unless the first word is a name, an acronym or has capitals of its own. */
+/** The provider names the app shows (directRoute.PROVIDER_LABELS), except the local-tools stand-in, which is not a name. */
+const PROVIDER_NAMES: readonly string[] = Object.entries(PROVIDER_LABELS).filter(([key]) => key !== 'utility').map(([, label]) => label);
+
+/** True when the text opens with one of these names (a provider or an agent), alone or as a possessive ("Krea’s reader"), compared without case. */
+function opensWithName(text: string, names: readonly string[]): boolean {
+  const lower = text.toLowerCase();
+  return names.some((name) => {
+    const own = name.toLowerCase();
+    if (!lower.startsWith(own)) return false;
+    const after = lower.slice(own.length);
+    return after === '' || /^(?:[’']s)?(?![\w-])/.test(after);
+  });
+}
+
+/** The first letter lower case, unless the first word is a name (a provider or an agent, also as "Krea’s"), an acronym or has capitals of its own. */
 function lowerFirst(text: string, names: readonly string[]): string {
   const first = (text.split(' ', 1)[0] ?? '').replace(/[,;:]+$/, '');
-  const kept = KEPT_WORDS.has(first.toLowerCase()) || names.some((name) => name.toLowerCase().split(' ')[0] === first.toLowerCase());
+  const kept = KEPT_WORDS.has(first.toLowerCase()) || names.some((name) => name.toLowerCase().split(' ')[0] === first.toLowerCase())
+    || opensWithName(text, [...PROVIDER_NAMES, ...names]);
   return !first || kept || /[A-Z]/.test(first.slice(1)) || /^I[’']/.test(first) ? text : text.charAt(0).toLowerCase() + text.slice(1);
 }
 
@@ -55,10 +71,10 @@ function upperFirst(text: string): string {
   return /^[a-z][a-z’']*$/.test(first) ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
-/** The agent's own name (the chat's, or its command's) and a colon off the front of a fragment. */
+/** The agent's own name (the chat's, or its command's) and a colon off the front of a fragment. A possessive ("Atlas’s host") is a name used in the reason, so it stays. */
 function withoutAgentName(text: string, names: readonly string[]): string {
   const escaped = [...names].sort((a, b) => b.length - a.length).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const lead = new RegExp(`^(?:${escaped.join('|')})(?![\\w-])\\s*[:\\-–—]?\\s*`, 'i');
+  const lead = new RegExp(`^(?:${escaped.join('|')})(?![\\w-])(?![’']s(?![\\w-]))\\s*[:\\-–—]?\\s*`, 'i');
   return text.replace(lead, '').trim();
 }
 

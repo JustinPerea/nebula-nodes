@@ -1,6 +1,7 @@
 import { useContext, useLayoutEffect, useRef, type Ref } from 'react';
 import { isBecauseLine } from '../../lib/notConnectedLine';
-import { curlApostrophes, isBecauseFailure, isLoadLine, retryStem } from '../../lib/errorCopy';
+import { isBecauseFailure, isLoadLine, retryStem } from '../../lib/errorCopy';
+import { curledWithCodeSpans } from '../../lib/codeSpans';
 import { LineText } from '../LineText';
 import { CommonsLeaveFailure } from './commonsLeave';
 import { FOCUS_LINE_ATTR } from '../../lib/lineAttrs';
@@ -93,10 +94,10 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
       {...(neutral ? { 'data-line-neutral': '' } : {})}
       // Round 11 (GM r19 2): a not-connected line can take focus when a demote removes the control.
       {...(person ? { tabIndex: -1, [FOCUS_LINE_ATTR]: '' } : {})}>
-      {stem === null ? <LineText text={words} /> : (
-        <LineText text={line}>
+      {stem === null ? <LineText text={words} code /> : (
+        <LineText text={line} code>
           <span className="commons-notice__text">
-            {curlApostrophes(stem)} <RetryButton onRetry={onRetry!} />.
+            {curledWithCodeSpans(stem)} <RetryButton onRetry={onRetry!} />.
           </span>
         </LineText>
       )}

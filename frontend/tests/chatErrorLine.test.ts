@@ -113,4 +113,16 @@ describe('the chat stream error line', () => {
     expect(line('claude_cli went away', { source: 'system' })).toBe('claude_cli went away.');
     expect(line('JSON was invalid', { source: 'system' })).toBe('JSON was invalid.');
   });
+  it('keeps a provider or agent name capital, also as a possessive, and lower-cases other words', () => {
+    expect(line('Krea’s reader can’t open it')).toBe('Claude stopped because Krea’s reader can’t open it.');
+    expect(line("Krea's reader can't open it")).toBe('Claude stopped because Krea’s reader can’t open it.');
+    expect(line('Krea can’t read the file')).toBe('Claude stopped because Krea can’t read the file.');
+    expect(line('KREA’s reader can’t open it')).toBe('Claude stopped because KREA’s reader can’t open it.');
+    expect(line('Black Forest Labs can’t read the file')).toBe('Claude stopped because Black Forest Labs can’t read the file.');
+    expect(line('Hugging Face’s Space is asleep')).toBe('Claude stopped because Hugging Face’s Space is asleep.');
+    expect(line('Your Codex’s session is gone', { agentName: 'Your Codex' })).toBe('Your Codex stopped because Your Codex’s session is gone.');
+    expect(line('Atlas’s host is gone', { agentName: 'Nova' })).toBe('Nova stopped because atlas’s host is gone.');
+    expect(line('The file is too large')).toBe('Claude stopped because the file is too large.');
+    expect(line('Kreator can’t help')).toBe('Claude stopped because kreator can’t help.');
+  });
 });

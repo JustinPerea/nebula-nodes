@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { curlApostrophes } from './errorCopy';
 
 /**
  * Design: a `…` span in a chat or error line is inline code (the mono face, no line break inside),
@@ -48,4 +49,14 @@ export function withCodeSpans(text: string): ReactNode {
   if (out.length === 0) return text;
   if (last < text.length) out.push(text.slice(last));
   return out;
+}
+
+/**
+ * A line in `code` mode: code spans are found first, on the words as they came, and only the prose between them is curled,
+ * so a span (`cmd's`) is never changed whichever way curlApostrophes would have paired the backticks.
+ */
+export function curledWithCodeSpans(text: string): ReactNode {
+  const node = withCodeSpans(text);
+  if (typeof node === 'string') return curlApostrophes(node);
+  return Array.isArray(node) ? node.map((part) => (typeof part === 'string' ? curlApostrophes(part) : part)) : node;
 }

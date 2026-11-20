@@ -242,7 +242,7 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
             ))}
           </div>
         )}
-        {saveError && <div className="result-card__save-error" role="alert"><LineText text={saveError} /></div>}
+        {saveError && <div className="result-card__save-error" role="alert"><LineText text={saveError} code /></div>}
       </div>
     </div>
   );

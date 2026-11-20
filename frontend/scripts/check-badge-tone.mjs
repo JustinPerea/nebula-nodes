@@ -174,7 +174,12 @@ const noAccentClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) 
 const BADGE_SUFFIX = /(?:__(?:badge|tag|state|status)(?![a-zA-Z0-9_])|-badge)/;
 const CAPS_PROP = /^(?:text-transform|font-variant|font-variant-caps)$/i;
 const CAPS_VALUE = /(?:^|\s)(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)(?![\w-])/i;
-const isBadgeClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
+// A tag whose words are written as they show (the permission card's kind: "Edit", "Switch mode"): CSS may not
+// force any case on it, lower or capitalised as well as upper, or the written word and the shown one part ways.
+const WRITTEN_CASE_TAGS = new Set(['permission-card__kind']);
+const WRITTEN_CASE_VALUE = /(?:^|\s)(?:lowercase|capitalize|full-width|full-size-kana)(?![\w-])/i;
+const writtenCaseTag = (name) => WRITTEN_CASE_TAGS.has(name.replace(/--[\w-]+$/, ''));
+const isBadgeClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) || writtenCaseTag(name) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
 
 /** True when a rule nested in this body selects a badge class and sets capitals, at any depth. */
 function nestedCapsUnderBadge(body) {
@@ -203,8 +208,11 @@ export function findCapsBadges(source, file) {
     }
     if (badgeParts.length === 0) continue;
     for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
-      if (CAPS_PROP.test(declaration.prop) && CAPS_VALUE.test(declaration.value)) {
-        hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector: badgeParts.map((part) => part.trim()).join(', '), decl: `${declaration.prop}: ${compact(declaration.value)}` });
+      const written = badgeParts.some((part) => [...part.matchAll(CLASS)].some((m) => writtenCaseTag(m[1])));
+      const upper = CAPS_PROP.test(declaration.prop) && CAPS_VALUE.test(declaration.value);
+      const forcedOther = written && declaration.prop.toLowerCase() === 'text-transform' && WRITTEN_CASE_VALUE.test(declaration.value);
+      if (upper || forcedOther) {
+        hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector: badgeParts.map((part) => part.trim()).join(', '), decl: `${declaration.prop}: ${compact(declaration.value)}`, reason: upper ? undefined : 'this tag is written as it shows: no forced case' });
       }
     }
   }

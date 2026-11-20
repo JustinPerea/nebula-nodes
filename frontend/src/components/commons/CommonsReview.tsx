@@ -324,7 +324,7 @@ export function ReviewForm({ batch, item, dirty, saving, generating, onDirty, on
   useEffect(() => { draftRef.current = labels ? { save: () => onAccept(labels), discard } : null; });
   useEffect(() => () => { draftRef.current = null; }, [draftRef]);
   if (!item.proposal || !labels) return <div className="evaluation-form"><h3 className="evaluation-step">{item.status === 'failed' ? 'Grade unavailable' : item.status === 'running' ? 'The agent is looking…' : 'Waiting for a grade'}</h3>
-    <p><LineText text={item.error ?? 'The complete grade will appear here. There is nothing to fill out first.'} /></p></div>;
+    <p><LineText text={item.error ?? 'The complete grade will appear here. There is nothing to fill out first.'} code /></p></div>;
   const change = (patch: Partial<EvaluationLabels>) => { setLabels({ ...labels, ...patch }); onDirty(true); };
   const fields = item.proposal.fields;
   // The model's reasons are prose a person reads: curled where they show (design).
