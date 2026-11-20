@@ -30,13 +30,18 @@ import {
 //      or through other custom properties, whose own value leads with a face rule 1 does not allow.
 //   4. The base rule. src/App.css (imported by App.tsx, so it loads for every surface) must hold, as a
 //      top-level rule (not inside @media, @layer or @supports), a rule whose selector is
-//      :where(button, input, select, textarea), in any order, declaring `font-family: inherit` and
-//      `font-size: var(--sr-type-control)`. A button or field does not inherit the page font on its
-//      own (Chrome gives it Arial at 13.33px); that rule puts the app face and the skin's control size
-//      on every control, and its zero specificity lets any class that sets its own size keep it.
-//      Weight and line height stay the browser's. Any other top-level rule in any sheet whose
-//      selector is a :where() over only those tags and that sets font, font-family or font-size is a
-//      hit, since it would undo or shadow the base rule.
+//      :where(button, input, select, textarea), in any order, declaring exactly `font-family: inherit`
+//      and `font-size: var(--sr-type-control)`, in either order, in any case and spacing, and nothing
+//      else. A button or field does not inherit the page font on its own (Chrome gives it Arial at
+//      13.33px); that rule puts the app face and the skin's control size on every control, and its zero
+//      specificity lets any class that sets its own size keep it. Two things break that promise, and
+//      each is a hit that names the declaration:
+//        - `!important` on either declaration: every class's own size on a control would lose;
+//        - any extra declaration (line-height, font-weight, font, letter-spacing, a repeat of one of
+//          the two): weight and line height stay the browser's, and a class's own values win.
+//      Any other rule in any sheet whose selector is a :where() over only those tags and that sets
+//      font, font-family or font-size is a hit, since it would undo or shadow the base rule. That
+//      includes such a rule inside @media, @supports or @layer, at any depth of at-rules.
 //   5. An inline style in a .ts or .tsx file under src, `fontFamily: '<string literal>'`, whose first
 //      family rule 1 does not allow, unless the file and family are in INLINE_EXCEPTIONS below.
 //
@@ -45,7 +50,8 @@ import {
 // app's skin or App.css, so its face is that page's own decision.
 //
 // Known limits (a text check, not a CSS engine):
-//   - nested CSS rules (`&`, or a `{` between declarations) are skipped;
+//   - nested CSS rules (`&`, or a `{` between declarations) are skipped, and so is an at-rule written
+//     inside a style rule; at-rules around a rule (@media, @supports, @layer, any depth) are read;
 //   - inline styles are read only when the value is a plain string literal; template literals and
 //     computed values (`fontFamily: `${x}``, `fontFamily: face`) are not read;
 //   - only `font-family` and `font` declare a face: a custom property that is never used as a first
@@ -264,35 +270,66 @@ export function findFontTokenHits(files) {
   return hits;
 }
 
-/** The tags of a top-level rule whose selector is :where(...) over tags, lower-cased and sorted; null for any other rule. */
-function whereTags(rule) {
-  if (rule.nested || rule.group !== '') return null;
+/** The tags of a rule whose selector is :where(...) over tags, lower-cased and sorted; null for any other rule. A rule inside an at-rule counts only with `grouped`. */
+function whereTags(rule, grouped = false) {
+  if (rule.nested || (!grouped && rule.group !== '')) return null;
   const inner = /^:where\(([^()]*)\)$/i.exec(rule.selector.trim());
   if (!inner) return null;
   return inner[1].split(',').map((tag) => tag.trim().toLowerCase()).sort();
 }
 
 const isBaseFile = (file) => file.split(sep).join('/') === BASE_RULE_FILE;
-const clean = (value) => value.replace(/!important\s*$/i, '').trim();
+const IMPORTANT = /!\s*important\s*$/i;
+const clean = (value) => value.replace(IMPORTANT, '').trim();
+const BASE_TAGS_KEY = [...BASE_RULE_TAGS].sort().join();
 
-/** True when src/App.css has the base rule as a top-level rule, any tag order and spacing. */
-export function hasBaseRule(files) {
+/** The top-level rules of src/App.css whose selector is the base rule's, as { rule, decls } with decls read from the sheet. */
+function baseCandidates(files) {
+  const out = [];
   for (const { file, source } of files) {
     if (!isBaseFile(file)) continue;
-    for (const rule of parseRules(stripComments(source))) {
+    const css = stripComments(source);
+    const lineStarts = computeLineStarts(css);
+    for (const rule of parseRules(css)) {
       const tags = whereTags(rule);
-      if (!tags || tags.join() !== [...BASE_RULE_TAGS].sort().join()) continue;
-      const decls = parseDeclarations(rule.body, 0);
-      const family = decls.find((decl) => decl.prop === 'font-family');
-      const size = decls.find((decl) => decl.prop === 'font-size');
-      if (decls.some((decl) => decl.prop === 'font')) continue;
-      if (family && size && clean(family.value).toLowerCase() === 'inherit' && clean(size.value).replace(/\s+/g, '') === 'var(--sr-type-control)') return true;
+      if (!tags || tags.join() !== BASE_TAGS_KEY) continue;
+      out.push({ file, rule, line: lineForOffset(lineStarts, rule.bodyStart), decls: parseDeclarations(rule.body, rule.bodyStart) });
     }
   }
-  return false;
+  return out;
 }
 
-/** Top-level :where() rules over the four tags, other than the base rule itself, that set a font property. */
+/** The faults of one candidate: an `!important`, or a declaration beyond font-family and font-size (a repeat counts). */
+function faultsOf(candidate) {
+  const faults = [];
+  const seen = new Set();
+  for (const decl of candidate.decls) {
+    const text = `${decl.prop}: ${clean(decl.value)}`;
+    if (IMPORTANT.test(decl.value)) faults.push({ file: candidate.file, line: candidate.line, kind: 'important', declaration: `${text} !important` });
+    if ((decl.prop !== 'font-family' && decl.prop !== 'font-size') || seen.has(decl.prop)) faults.push({ file: candidate.file, line: candidate.line, kind: 'extra', declaration: text });
+    seen.add(decl.prop);
+  }
+  return faults;
+}
+
+const isExactBase = (candidate) => {
+  if (candidate.decls.length !== 2 || faultsOf(candidate).length > 0) return false;
+  const family = candidate.decls.find((decl) => decl.prop === 'font-family');
+  const size = candidate.decls.find((decl) => decl.prop === 'font-size');
+  return Boolean(family && size && clean(family.value).toLowerCase() === 'inherit' && clean(size.value).replace(/\s+/g, '') === 'var(--sr-type-control)');
+};
+
+/** True when src/App.css has the base rule as a top-level rule: exactly the two declarations, no !important, any order, case and spacing. */
+export function hasBaseRule(files) {
+  return baseCandidates(files).some(isExactBase);
+}
+
+/** The `!important` and extra declarations that break the base rule's promise, in src/App.css's base-rule-shaped rules: { file, line, kind, declaration }. */
+export function findBaseRuleFaults(files) {
+  return baseCandidates(files).flatMap(faultsOf);
+}
+
+/** :where() rules over the four tags, at the top level or inside any at-rule, other than the base rule itself, that set a font property. */
 export function findBaseRuleShadows(files) {
   const shadows = [];
   for (const { file, source } of files) {
@@ -300,17 +337,17 @@ export function findBaseRuleShadows(files) {
     const lineStarts = computeLineStarts(css);
     let seenBase = false;
     for (const rule of parseRules(css)) {
-      const tags = whereTags(rule);
+      const tags = whereTags(rule, true);
       if (!tags || tags.length === 0 || !tags.every((tag) => BASE_RULE_TAGS.includes(tag))) continue;
       const decls = parseDeclarations(rule.body, rule.bodyStart);
       const fontDecls = decls.filter((decl) => decl.prop === 'font' || decl.prop === 'font-family' || decl.prop === 'font-size');
       if (fontDecls.length === 0) continue;
-      const isBase = isBaseFile(file) && !seenBase && hasBaseRule([{ file, source: `${rule.selector} {${rule.body}}` }]);
+      const isBase = isBaseFile(file) && !seenBase && rule.group === '' && isExactBase({ file, decls });
       if (isBase) {
         seenBase = true;
         continue;
       }
-      shadows.push({ file, line: lineForOffset(lineStarts, fontDecls[0].offset), selector: rule.selector, prop: fontDecls[0].prop, value: fontDecls[0].value });
+      shadows.push({ file, line: lineForOffset(lineStarts, fontDecls[0].offset), selector: rule.selector, prop: fontDecls[0].prop, value: fontDecls[0].value, group: rule.group !== '' });
     }
   }
   return shadows;
@@ -344,7 +381,13 @@ export const FONT_TOKEN_MESSAGE =
 export const MISSING_BASE_MESSAGE = `The base rule is missing from src/${BASE_RULE_FILE}: ${BASE_RULE_TEXT} (design). It must be a top-level rule in src/${BASE_RULE_FILE}, the sheet App.tsx imports, not inside @media or @layer and not in another file. Without it a button or field is set in the browser's Arial at 13.33px, not in the app face at the control size.`;
 
 export const BASE_SHADOW_MESSAGE =
-  'A :where(button, input, select, textarea) rule other than the base rule sets font, font-family or font-size (design). It undoes or shadows the base rule in src/App.css. Put the face and size on the class that needs them, or edit the base rule in src/App.css.';
+  'A :where(button, input, select, textarea) rule other than the base rule sets font, font-family or font-size (design), at the top level or inside @media, @supports or @layer. It undoes or shadows the base rule in src/App.css. Put the face and size on the class that needs them, or edit the base rule in src/App.css.';
+
+export const BASE_IMPORTANT_MESSAGE =
+  'The base rule in src/App.css has !important on a declaration (design). Its zero specificity is what lets a class set its own size on a control; with !important every class\'s own size would lose to the control size. Remove the !important.';
+
+export const BASE_EXTRA_MESSAGE =
+  'The base rule in src/App.css declares more than font-family: inherit and font-size: var(--sr-type-control) (design). Weight and line height stay the browser\'s and a class\'s own values win; an extra declaration changes every control that sets none of its own. Put it on the class that needs it.';
 
 export const INLINE_MESSAGE =
   'An inline fontFamily string leads with a face the app does not allow (design). Use var(--sr-ui) or var(--sr-mono), or add the file and family to INLINE_EXCEPTIONS in scripts/check-system-fonts.mjs with the reason, when the text is drawn into rendered content and not into the app.';
@@ -355,6 +398,7 @@ export function scan(files, sourceFiles = []) {
     undefinedTokens: findUndefinedFontTokens(files),
     fontTokens: findFontTokenHits(files),
     baseRule: hasBaseRule(files),
+    baseRuleFaults: findBaseRuleFaults(files),
     baseRuleShadows: findBaseRuleShadows(files),
     inlineHits: findInlineFonts(sourceFiles),
   };
@@ -388,12 +432,12 @@ export function collectAppSources(srcDir) {
 function main() {
   const files = collectAppSheets(SRC);
   const result = scan(files, collectAppSources(SRC));
-  const { hits, undefinedTokens, fontTokens, baseRule, baseRuleShadows, inlineHits } = result;
+  const { hits, undefinedTokens, fontTokens, baseRule, baseRuleFaults, baseRuleShadows, inlineHits } = result;
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify(result, null, 1));
     return;
   }
-  const failed = hits.length + undefinedTokens.length + fontTokens.length + baseRuleShadows.length + inlineHits.length > 0 || !baseRule;
+  const failed = hits.length + undefinedTokens.length + fontTokens.length + baseRuleFaults.length + baseRuleShadows.length + inlineHits.length > 0 || !baseRule;
   if (failed) {
     if (hits.length > 0) {
       console.error(FAILURE_MESSAGE);
@@ -407,7 +451,13 @@ function main() {
       console.error(FONT_TOKEN_MESSAGE);
       for (const hit of fontTokens) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}`);
     }
-    if (!baseRule) console.error(MISSING_BASE_MESSAGE);
+    if (!baseRule && baseRuleFaults.length === 0) console.error(MISSING_BASE_MESSAGE);
+    for (const [kind, message] of [['important', BASE_IMPORTANT_MESSAGE], ['extra', BASE_EXTRA_MESSAGE]]) {
+      const faults = baseRuleFaults.filter((fault) => fault.kind === kind);
+      if (faults.length === 0) continue;
+      console.error(message);
+      for (const fault of faults) console.error(`  src/${fault.file}:${fault.line} ${fault.declaration}`);
+    }
     if (baseRuleShadows.length > 0) {
       console.error(BASE_SHADOW_MESSAGE);
       for (const hit of baseRuleShadows) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}`);

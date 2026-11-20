@@ -8,6 +8,7 @@ import { computeLineStarts, lineForOffset, parseDeclarations } from '../scripts/
 import {
   collectAppSheets,
   collectAppSources,
+  findBaseRuleFaults,
   findBaseRuleShadows,
   findFontTokenHits,
   findInlineFonts,
@@ -172,7 +173,7 @@ describe('check-system-fonts: custom properties used as a font family', () => {
 
 describe('check-system-fonts: the base rule', () => {
   it('passes when the rule is a top-level rule in App.css', () => {
-    expect(scan(app(BASE))).toEqual({ hits: [], undefinedTokens: [], fontTokens: [], baseRule: true, baseRuleShadows: [], inlineHits: [] });
+    expect(scan(app(BASE))).toEqual({ hits: [], undefinedTokens: [], fontTokens: [], baseRule: true, baseRuleFaults: [], baseRuleShadows: [], inlineHits: [] });
   });
 
   it('fails when it is absent', () => {
@@ -204,8 +205,50 @@ describe('check-system-fonts: the base rule', () => {
     expect(hasBaseRule(app(source))).toBe(false);
   });
 
-  it('accepts any tag order, spacing and !important', () => {
-    expect(hasBaseRule(app(':where(textarea,select,input,button){font-size:var(--sr-type-control) !important;font-family:inherit}'))).toBe(true);
+  it.each([
+    ['reordered tags and declarations', ':where(textarea,select,input,button){font-size:var(--sr-type-control);font-family:inherit}'],
+    ['upper-case properties and values', ':where(BUTTON, Input, select, textarea) { FONT-FAMILY: INHERIT; Font-Size: var(--sr-type-control); }'],
+    ['extra whitespace and line breaks', ':where( button ,\n  input ,\n select , textarea )\n{\n   font-family :   inherit  ;\n\n   font-size :  var( --sr-type-control )  ;\n}'],
+    ['a missing final semicolon', ':where(button, input, select, textarea) { font-family: inherit; font-size: var(--sr-type-control) }'],
+  ])('accepts %s', (_name, source) => {
+    expect(hasBaseRule(app(source))).toBe(true);
+    expect(findBaseRuleFaults(app(source))).toEqual([]);
+  });
+
+  describe('faults in the base rule', () => {
+    const rule = (extra: string) => `:where(button, input, select, textarea) { font-family: inherit; font-size: var(--sr-type-control); ${extra} }`;
+
+    it.each([
+      ['!important on the size', ':where(button, input, select, textarea) { font-family: inherit; font-size: var(--sr-type-control) !important; }', 'font-size: var(--sr-type-control) !important'],
+      ['!important on the family', ':where(button, input, select, textarea) { font-family: inherit !important; font-size: var(--sr-type-control); }', 'font-family: inherit !important'],
+      ['upper-case ! IMPORTANT with a space', ':where(button, input, select, textarea) { font-family: inherit; font-size: var(--sr-type-control) ! IMPORTANT; }', 'font-size: var(--sr-type-control) !important'],
+    ])('fails with %s', (_name, source, declaration) => {
+      expect(hasBaseRule(app(source))).toBe(false);
+      const faults = findBaseRuleFaults(app(source));
+      expect(faults).toHaveLength(1);
+      expect(faults[0]).toMatchObject({ kind: 'important', declaration, file: 'App.css', line: 1 });
+      expect(scan(app(source)).baseRuleFaults).toHaveLength(1);
+    });
+
+    it.each([
+      ['line-height', rule('line-height: 1.2;'), 'line-height: 1.2'],
+      ['font-weight', rule('font-weight: 500;'), 'font-weight: 500'],
+      ['font', rule('font: inherit;'), 'font: inherit'],
+      ['letter-spacing', rule('letter-spacing: 0.01em;'), 'letter-spacing: 0.01em'],
+      ['color, an unrelated property', rule('color: red;'), 'color: red'],
+      ['a repeat of font-size', rule('font-size: 20px;'), 'font-size: 20px'],
+    ])('fails with an extra %s and names it', (_name, source, declaration) => {
+      expect(hasBaseRule(app(source))).toBe(false);
+      const faults = findBaseRuleFaults(app(source));
+      expect(faults).toHaveLength(1);
+      expect(faults[0]).toMatchObject({ kind: 'extra', declaration });
+    });
+
+    it('has a message for each that says why', async () => {
+      const { BASE_IMPORTANT_MESSAGE, BASE_EXTRA_MESSAGE } = await import('../scripts/check-system-fonts.mjs');
+      expect(BASE_IMPORTANT_MESSAGE).toContain('own size');
+      expect(BASE_EXTRA_MESSAGE).toContain('line height');
+    });
   });
 
   it('says in its message which file must hold the rule', async () => {
@@ -237,6 +280,24 @@ describe('check-system-fonts: the base rule', () => {
 
     it('is part of scan()', () => {
       expect(scan(app(BASE + ':where(button, input, select, textarea) { font: initial; }')).baseRuleShadows).toHaveLength(1);
+    });
+
+    it.each([
+      ['@media', '@media (min-width: 1px) { :where(button, input, select, textarea) { font-size: 20px; } }'],
+      ['@supports', '@supports (display: grid) { :where(button, input) { font-family: Arial; } }'],
+      ['@layer', '@layer base { :where(select, textarea) { font: initial; } }'],
+      ['@layer inside @media', '@media (min-width: 1px) { @layer base { :where(button) { font-size: 20px; } } }'],
+    ])('fails a shadow inside %s, in App.css or another sheet', (_name, group) => {
+      for (const sheets of [app(BASE + group), [...app(BASE), { file: 'styles/x.css', source: group }]]) {
+        const found = findBaseRuleShadows(sheets);
+        expect(found).toHaveLength(1);
+        expect(found[0].group).toBe(true);
+      }
+      expect(scan(app(BASE + group)).baseRuleShadows).toHaveLength(1);
+    });
+
+    it('passes a grouped :where() rule that sets no font property', () => {
+      expect(shadows(app(BASE + '@media (min-width: 1px) { :where(button, input) { cursor: pointer; } }'))).toEqual([]);
     });
 
     it.each([
@@ -396,6 +457,6 @@ describe('css-scan: line numbers', () => {
 describe('check-system-fonts: the real stylesheets', () => {
   it('pass, with every rule satisfied', () => {
     const out = execFileSync('node', ['scripts/check-system-fonts.mjs', '--json'], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
-    expect(JSON.parse(out)).toEqual({ hits: [], undefinedTokens: [], fontTokens: [], baseRule: true, baseRuleShadows: [], inlineHits: [] });
+    expect(JSON.parse(out)).toEqual({ hits: [], undefinedTokens: [], fontTokens: [], baseRule: true, baseRuleFaults: [], baseRuleShadows: [], inlineHits: [] });
   });
 });
