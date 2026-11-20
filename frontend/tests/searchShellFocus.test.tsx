@@ -1,15 +1,28 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { appRules, resolvedStyle } from './helpers/cssCascade';
+import { appRules, parseRules, resolvedStyle } from './helpers/cssCascade';
+import { componentSources, discoverSearch } from './helpers/searchShells';
 
 // Design: a search field that sits bare inside a visible box (a shell) never draws
 // its own ring or native box. The shell takes the focus ring, so the ring follows
 // the shell's shape. Each field is rendered in its real component, so a broad
 // ancestor rule (`.project-home input:focus-visible`) is matched the way the app
-// matches it. A field that is itself the box is not listed here.
+// matches it. A field that is itself the box is not listed in SHELLS.
+//
+// Finding new shells: tests/helpers/searchShells.ts reads every component under src/
+// and reports each search field by two rules.
+//   1. A wrapper element, not an input, whose class has "search" in it and which holds
+//      an input is a shell.
+//   2. An input that is type="search", has role searchbox, or has a placeholder or
+//      aria-label starting "Search": when its direct parent has "search" in its class
+//      or a class that gives it a border or a fill at rest, that parent is a shell.
+//      Otherwise the input is reported as a field of its own.
+// Every shell or field found must be in SHELLS (checked below) or in SELF_BOX (fields
+// that are the box themselves, each with a reason). A new one in neither fails with
+// its name, so adding a search box means choosing here how it takes focus.
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(), subscribe: vi.fn(() => () => {}) } }));
 vi.mock('../src/lib/backend', async (original) => ({
@@ -65,6 +78,17 @@ const SHELLS: Array<{ shell: string; name: string; mount: () => void }> = [
   } },
 ];
 
+/** Search fields that are the box themselves, or sit in a surface the field fills; each draws its own ring. */
+const SELF_BOX: Record<string, string> = {
+  'connection-popup__search': 'the input has its own border and its own focus-visible rule',
+  'panel__search': 'the node library field is an input with its own border and focus rule',
+  'assets-panel__search': 'the assets field is an input with its own border and focus-visible rule',
+  'command-palette__panel': 'the dialog surface; its input fills it with a bottom hairline and rings itself (inset)',
+  'CommonsFilters.tsx: calm grid, warm serif…': 'a Commons filter input in a plain label; the input is the box',
+  'CommonsEvaluation.tsx: Search keywords': 'a Commons evaluation keyword input; the input is the box',
+  'CommonsReview.tsx: Search keywords': 'a Commons review keyword input; the input is the box',
+};
+
 beforeEach(() => {
   document.body.className = 'app-slava-restraint';
   useSettingsDraftStore.setState({ ...initialDraft, saved: SAVED, keyDrafts: {}, fieldDrafts: {}, openRow: null, pending: {}, errors: {} });
@@ -87,6 +111,12 @@ describe('search shells carry the focus ring', () => {
       const ring = rules.filter((r) => /:has\(\s*input:focus-visible\s*\)|:focus-within/.test(r.selector)
         && r.decls.some((d) => d.prop === 'outline' && d.value.includes('--sr-focus-outline')));
       expect(ring.length, `${name} shell has no ring rule`).toBeGreaterThan(0);
+      // The ring rule has to reach the element the component renders, not only exist in the CSS.
+      const reaches = ring.filter((r) => {
+        const stateless = r.selector.replace(/:focus-visible/g, '').replace(/:focus-within/g, '');
+        try { return shellEl.matches(stateless); } catch { return false; }
+      });
+      expect(reaches.length, `${name}: no ring rule matches the rendered .${shell}: ${ring.map((r) => r.selector).join(' | ')}`).toBeGreaterThan(0);
     });
   }
 
@@ -104,12 +134,36 @@ describe('search shells carry the focus ring', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  it('every search field in the list is the first input of its shell in the real component', () => {
+  it('each listed shell renders exactly one input, as its direct child', () => {
     for (const { shell, mount } of SHELLS) {
       mount();
-      expect(screen.queryAllByRole('searchbox').length + screen.queryAllByRole('textbox').length).toBeGreaterThan(0);
-      expect(document.querySelector(`.${shell} > input`), shell).not.toBeNull();
+      const shellEl = document.querySelector(`.${shell}`) as HTMLElement;
+      expect(shellEl.querySelectorAll('input').length, `${shell} inputs`).toBe(1);
+      expect(shellEl.querySelector(':scope > input'), `${shell} input is not a direct child`).not.toBeNull();
       cleanup();
     }
+  });
+
+  it('every search shell or field in the components is in SHELLS or SELF_BOX', () => {
+    const known = new Set([...SHELLS.map((s) => s.shell), ...Object.keys(SELF_BOX)]);
+    const missing = discoverSearch(componentSources(join(__dirname, '../src')), appRules()).filter((f) => !known.has(f.id));
+    expect(missing.map((f) => `${f.id} (${f.kind}, ${f.file})`), 'search fields found that are in neither SHELLS nor SELF_BOX').toEqual([]);
+  });
+
+  it('every SELF_BOX entry is still found, so the list cannot go stale', () => {
+    const ids = new Set(discoverSearch(componentSources(join(__dirname, '../src')), appRules()).map((f) => f.id));
+    expect(Object.keys(SELF_BOX).filter((id) => !ids.has(id))).toEqual([]);
+  });
+
+  it('discovery flags a new shell that is in neither list', () => {
+    const css = '.foo__box { border: 1px solid #333; border-radius: 6px; } .foo__box input { border: 0; background: transparent; }';
+    const sources = [
+      { file: 'fake/Foo.tsx', text: 'export const A = () => <div className="foo__search"><input value="" /></div>;' },
+      { file: 'fake/Bar.tsx', text: 'export const B = () => <div className="foo__box"><input type="search" /></div>;' },
+      { file: 'fake/Baz.tsx', text: 'export const C = () => <input placeholder="Search things" />;' },
+      { file: 'fake/Quiet.tsx', text: 'export const D = () => <div className="foo__row"><input type="text" /></div>;' },
+    ];
+    const found = discoverSearch(sources, parseRules(css)).map((f) => `${f.kind}:${f.id}`);
+    expect(found).toEqual(['shell:foo__search', 'shell:foo__box', 'field:Baz.tsx: Search things']);
   });
 });
