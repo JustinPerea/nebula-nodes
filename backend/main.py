@@ -5554,6 +5554,9 @@ class ConnectionManager:
         # The marker lines already printed (each said once a run).
         self._marker_said: set[str] = set()
         self._grace_seq = itertools.count()
+        # One send at a time per socket: Starlette's send isn't safe from two
+        # tasks, and two broadcasts must reach a socket in the order they began.
+        self._send_locks: dict[WebSocket, asyncio.Lock] = {}
 
     @property
     def kept_grace_until(self) -> float | None:
@@ -5563,6 +5566,7 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
+        self._send_locks[websocket] = asyncio.Lock()
         self.share_views[websocket] = _socket_share_view(websocket)
 
     def share_view(self, websocket: WebSocket) -> dict[str, Any]:
@@ -5826,6 +5830,24 @@ class ConnectionManager:
             self._remember_kept()
             self._settle_kept_later(KEPT_GRACE_SECONDS)
         self.share_views.pop(websocket, None)
+        self._send_locks.pop(websocket, None)
+
+    def _send_lock(self, websocket: WebSocket) -> asyncio.Lock:
+        """The socket's send lock. A socket listed without connect() (a test's
+        fake) gets one on first use; one already gone from the manager gets a
+        throwaway, so a late send never re-adds a dropped socket."""
+        lock = self._send_locks.get(websocket)
+        if lock is None:
+            lock = asyncio.Lock()
+            if websocket in self.active_connections or websocket in self.browser_connections:
+                self._send_locks[websocket] = lock
+        return lock
+
+    async def send_direct(self, websocket: WebSocket, text: str) -> None:
+        """A send to one managed socket outside a broadcast (a hello's syncs):
+        waits its turn behind any broadcast writing to it. Raises as send_text does."""
+        async with self._send_lock(websocket):
+            await websocket.send_text(text)
 
     async def broadcast(self, event: ExecutionEvent) -> None:
         data = _event_to_camel(event)
@@ -5856,9 +5878,14 @@ class ConnectionManager:
 
     async def _send_bounded(self, connection: WebSocket, text: str) -> bool:
         """Send ``text``; False (the socket closed) when it fails or takes
-        longer than socket_send_timeout(its size)."""
+        longer than socket_send_timeout(its size). The wait for the socket's
+        send lock counts toward that bound, so a stalled socket holds no
+        sender past it. Tasks started in order take the lock in that order
+        (asyncio.Lock wakes waiters first come, first served)."""
         try:
-            await asyncio.wait_for(connection.send_text(text), timeout=socket_send_timeout(len(text)))
+            async with asyncio.timeout(socket_send_timeout(len(text))):
+                async with self._send_lock(connection):
+                    await connection.send_text(text)
             return True
         except Exception:  # noqa: BLE001 - a stalled or broken socket is dropped, never raised
             try:
@@ -5887,11 +5914,15 @@ class ConnectionManager:
         """Send to every socket that isn't the person's canvas (CLI/MCP listeners)."""
         forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
+        sends: list[tuple[WebSocket, str]] = []
         for connection in [c for c in self.active_connections if c not in self.browser_connections]:
             try:
-                await connection.send_text(self._form(connection, data, forms))
+                sends.append((connection, self._form(connection, data, forms)))
             except Exception:
                 disconnected.append(connection)
+        # Every listener's send at once, each bounded, as broadcast_raw does.
+        results = await asyncio.gather(*(self._send_bounded(c, text) for c, text in sends))
+        disconnected.extend(connection for (connection, _text), sent in zip(sends, results) if not sent)
         for conn in disconnected:
             self.disconnect(conn)
 
@@ -6243,9 +6274,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if not await manager._send_bounded(websocket, sync_text):
                 return
         # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
-        await websocket.send_text(json.dumps(_pins_message()))
+        await manager.send_direct(websocket, json.dumps(_pins_message()))
         await _settle_proposal_updates()
-        await websocket.send_text(json.dumps(manager.for_socket(websocket, _canvas_notes_message())))
+        await manager.send_direct(websocket, json.dumps(manager.for_socket(websocket, _canvas_notes_message())))
         while True:
             raw = await websocket.receive_text()
             if manager.is_browser(websocket):
@@ -6280,21 +6311,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 # clears the tab's person hold and banner (GM r29 item 3 of
                 # PR #200; frontend lib/wsClient). personRequired below is the
                 # demote. Keep the two in step if this changes.
-                await websocket.send_text(json.dumps(_proposal_sync_message()))
-                await websocket.send_text(json.dumps(await _asset_proposal_sync_message()))
+                await manager.send_direct(websocket, json.dumps(_proposal_sync_message()))
+                await manager.send_direct(websocket, json.dumps(await _asset_proposal_sync_message()))
                 # Open question sets with their answer keys (Q125 item 1), same rule.
                 await _send_questions_sync(websocket)
                 # Who listens to the canvas (channel readiness), person form (before
                 # the pins and the replay, which stay the last syncs).
-                await websocket.send_text(json.dumps(_channel_listeners_message()))
+                await manager.send_direct(websocket, json.dumps(_channel_listeners_message()))
                 # The Message box's thread, person form (services/person_thread.py).
-                await websocket.send_text(json.dumps(await asyncio.to_thread(_thread_sync_message)))
+                await manager.send_direct(websocket, json.dumps(await asyncio.to_thread(_thread_sync_message)))
                 # Where each World Labs record was written (PR #199 round
                 # 23): the graphSync this socket got first was the agents' form.
-                await websocket.send_text(json.dumps({"type": "providerRecoveryPlaces",
+                await manager.send_direct(websocket, json.dumps({"type": "providerRecoveryPlaces",
                                                       "places": _person_recovery_places()}))
                 # Now the person's canvas: their pins with registered variants kept.
-                await websocket.send_text(json.dumps(_pins_message(person=True)))
+                await manager.send_direct(websocket, json.dumps(_pins_message(person=True)))
                 # Every live cursor, person form, for this tab only (GM -
                 # Design, PR #211 r3): numbers match across tabs because each
                 # shows the backend's. Built here, after the other syncs, so
@@ -6302,10 +6333,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 # event built before it can still reach this tab after it
                 # (broadcast_raw picks each socket's form at send time); it
                 # carries the same key and number, so nothing doubles.
-                await websocket.send_text(json.dumps({"type": "agentPresenceReplay",
+                await manager.send_direct(websocket, json.dumps({"type": "agentPresenceReplay",
                                                       "cursors": agent_presence.replay()}))
             else:
-                await websocket.send_text(json.dumps({
+                await manager.send_direct(websocket, json.dumps({
                     "type": "personRequired",
                     "message": "This tab isn’t connected as you, so it can’t accept or reject proposals.",
                 }))
@@ -12237,7 +12268,7 @@ async def _send_questions_sync(websocket: WebSocket) -> None:
         message = _questions_sync_message()
     except ProjectStoreError:
         return
-    await websocket.send_text(json.dumps(message))
+    await manager.send_direct(websocket, json.dumps(message))
 
 
 def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None = None) -> None:
