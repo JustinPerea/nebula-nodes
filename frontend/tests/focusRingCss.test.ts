@@ -118,10 +118,6 @@ describe('the focus ring token (GM: a light neutral, 2px at a 2px offset)', () =
     expect(tokenBlock()).toMatch(/--sr-ink: rgba\(255, 255, 255, 0\.92\);\s*\/\* primary type \*\//);
   });
 
-  it('has a dark twin for the one light surface a ring sits on (the evaluation form)', () => {
-    expect(token('--sr-focus-outline-on-light')).toBe('2px solid var(--sr-canvas)');
-  });
-
   it('is the ring wherever nothing else draws one (the browser default is replaced)', () => {
     const base = rules.find((r) => r.selectors.includes(':where(body.app-slava-restraint :focus-visible)'));
     expect(base, 'a zero-specificity baseline').toBeTruthy();
@@ -209,9 +205,10 @@ describe('the ring clears 3:1 on every surface it sits on (WCAG 2.2 1.4.11)', ()
     }
   });
 
-  it('the form\'s focus rule reads the one ring token, with no override', () => {
+  it('the form\'s controls get the pane rule\'s ring: the one ring token, with no override of its own', () => {
+    expect(evaluationCss).toMatch(/\.commons-evaluation :focus-visible \{\s*outline:var\(--sr-focus-outline\);/);
+    expect(evaluationCss).not.toMatch(/\.evaluation-form :focus-visible/);
     expect(evaluationCss).not.toMatch(/focus-outline-on-light/);
-    expect(evaluationCss).toMatch(/\.evaluation-form :focus-visible \{\s*outline:var\(--sr-focus-outline\);/);
   });
 
   it('is not orange: it differs from the accent and the agent outline in hue', () => {

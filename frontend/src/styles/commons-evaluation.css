@@ -42,8 +42,8 @@
   --evaluation-primary-edge:var(--sr-accent-border);
   --evaluation-control-accent:var(--sr-accent);
   --evaluation-meter-track:var(--sr-node-progress-track);
-  /* The review meters fill in ink, not the accent: they share the form card with the red Discard
-   * changes, and nothing on a red control's card takes the accent (design). */
+  /* The review meters fill in ink, not the accent: the fill stays ink so the primary stays the one
+   * orange action on the card, and grey reads better on the track (design). */
   --evaluation-meter-fill:var(--sr-ink-light);
   --evaluation-chip-edge:var(--sr-edge-strong);
   /* --sr-ink-faint (white at .20) used as an edge, the only token at that strength */
@@ -283,13 +283,9 @@
 .evaluation-hash {
   overflow-wrap:anywhere;
 }
-/* Focus: the app's neutral ring, on the page and on the form card alike. Both rules beat the
+/* Focus: the app's neutral ring, on the page and on the form card alike. The rule beats the
  * Commons view's own focus rule. */
 body.app-slava-restraint .commons-view .commons-evaluation :focus-visible {
-  outline:var(--sr-focus-outline);
-  outline-offset:3px;
-}
-body.app-slava-restraint .commons-view .commons-evaluation .evaluation-form :focus-visible {
   outline:var(--sr-focus-outline);
   outline-offset:3px;
 }
@@ -363,6 +359,7 @@ body.app-slava-restraint .commons-evaluation select,body.app-slava-restraint .co
   background:var(--evaluation-field-fill);
   color:var(--evaluation-field-ink);
   border:1px solid var(--evaluation-field-edge);
+  color-scheme:dark;
 }
 body.app-slava-restraint .commons-evaluation input::placeholder {
   color:var(--evaluation-card-muted-ink);
@@ -396,9 +393,7 @@ body.app-slava-restraint .commons-evaluation input::placeholder {
 .evaluation-close .review-actions .commons-button--primary {
   margin:0;
 }
-/* A panel's Save with "Unsaved" beside it while the draft is unsaved
- * (commons-leave), in the panel's own muted ink and the section eyebrow's
- * letterforms (#157's heading pattern, .commons-eyebrow). */
+/* A panel's Save with "Unsaved" beside it while the draft is unsaved (commons-leave). */
 .evaluation-save {
   display:flex;
   flex-wrap:wrap;

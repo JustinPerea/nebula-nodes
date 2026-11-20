@@ -24,6 +24,8 @@ import {
 // .commons-badge and .commons-source rules are held to the same rule, and box-shadow, text-shadow,
 // border-image and the other colour-bearing properties count. Known limit: a colour reached
 // through another custom property (`--x: var(--sr-accent)`) or set from TSX is not followed.
+// The no-accent check sees only a literal `var(--sr-accent…)`: a badge whose colour reads an alias
+// token (like `--evaluation-unsaved-ink`) is not checked for the accent.
 // CSS nesting under a badge selector is not read, so it fails.
 // Role badges (`commons-badge--role-*`: Attract, Avoid) are neutral by rule: design says a role is a
 // category, not good or bad news, so a role rule may not set color, border or background at all
