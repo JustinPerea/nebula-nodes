@@ -95,8 +95,13 @@ function Question({ asked, fieldText }: { asked: string | null; fieldText: strin
   if (!echo) return null;
   return (
     <p className="jev-result__question" title={echo.text} data-testid="jev-asked">
-      {echo.earlier && <span className="jev-result__muted">Asked </span>}
-      {echo.text}
+      {echo.earlier ? (
+        <>
+          <span className="jev-result__muted">Asked </span>
+          {/* Design: the question it asked is a quote, so it takes curly quotes. */}
+          {`\u201C${echo.text}\u201D`}
+        </>
+      ) : echo.text}
     </p>
   );
 }

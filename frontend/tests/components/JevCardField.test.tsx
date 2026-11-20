@@ -145,11 +145,11 @@ describe('Jev result under the card field', () => {
     renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
     const edited = `Check this catalog shot. ${String(s.params?.question)}`;
     fireEvent.change(screen.getByLabelText('Question'), { target: { value: edited } });
-    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked Judge this product photo against the full brief/);
+    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked \u201CJudge this product photo against the full brief/);
     cleanup();
     // Trimmed to its first 120 characters, it is a different question too.
     renderLive(node('j2', JEV_DECIDE, { question: String(s.params?.question).slice(0, 120) }, s.outputs, 'complete'));
-    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked Judge this product photo/);
+    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked \u201CJudge this product photo/);
   });
 
   it('treats a blank Pick Best question as its default, which is what it asked', () => {
@@ -163,7 +163,7 @@ describe('Jev result under the card field', () => {
     renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
     fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
     const asked = screen.getByTestId('jev-asked');
-    expect(asked).toHaveTextContent('Asked Is the product on a plain white background?');
+    expect(asked).toHaveTextContent('Asked \u201CIs the product on a plain white background?\u201D');
     expect(screen.getByTestId('jev-result')).toBeInTheDocument();
   });
 
