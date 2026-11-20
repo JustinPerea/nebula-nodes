@@ -410,6 +410,10 @@ reason (only the person can add a key).
 ```bash
 nebula run n5          # a node and what feeds it; waits up to 100 s
 nebula run-all         # the whole canvas
+# A string, or a dict or list whose JSON is over 200 characters, prints as one line ("“Preview” ·
+# moodboard bundle, 51 KB. Add --verbose to print it."; “Preview”’s images · … when the node
+# has more than one port of results); add --verbose to run, run-all or result to
+# print it whole, or --json for the raw result.
 nebula result <run-id> --wait 100   # a run still going (exit 2 = still running)
 nebula cancel <run-id>
 nebula path n5         # the local file of a node's image

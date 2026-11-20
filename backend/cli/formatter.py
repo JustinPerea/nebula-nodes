@@ -5,6 +5,7 @@ from collections import Counter
 from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
+from services.wording import collapsed_owner, collapsed_summary, port_words
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_name_in_sentence import in_sentence
 from services.agent_params import ASSET_PARAM_TYPES
@@ -545,6 +546,31 @@ def catalog_restore_lines(restore: dict[str, Any], *, canvas_block: bool = False
     return lines
 
 
+def tab_state_line(view: Any, node_count: int | None = None) -> str:
+    """Whether anyone is looking at the canvas, in the design’s three states: no
+    tab, a tab whose view report is over 30 s old (``view.stale``), or watching,
+    which says what the view shows from ``view.onScreen`` (a count, sent when the
+    visible area is known) and the canvas’s ``node_count``. A payload from before
+    ``view.connected`` reads as no tab while stale."""
+    view = view if isinstance(view, dict) else {}
+    stale = bool(view.get("stale", True))
+    if not view.get("connected", not stale):
+        return "No Nebula tab is open."
+    if stale:
+        return "A tab is open, but its view is more than 30 s old."
+    if node_count == 0:
+        return "Watching: an empty canvas."
+    on_screen = view.get("onScreen")
+    if node_count is None or not isinstance(on_screen, int) or isinstance(on_screen, bool):
+        return "Watching: the canvas."
+    on_screen = max(0, min(on_screen, node_count))
+    if on_screen == node_count:
+        return "Watching: the one node on screen." if node_count == 1 else f"Watching: all {node_count} nodes on screen."
+    if on_screen == 0:
+        return "Watching: the one node is off screen." if node_count == 1 else f"Watching: none of the {node_count} nodes on screen."
+    return f"Watching: {on_screen} of {node_count} nodes on screen."
+
+
 def format_start(start: dict[str, Any]) -> str:
     """Render GET /api/agent/start (services/agent_start.py) for `nebula context`:
     the canvas, pins, proposals, boards, the nodes that run here with prices,
@@ -567,9 +593,9 @@ def format_start(start: dict[str, Any]) -> str:
         lines.append(f"CANVAS NOT SAVED AS A PROJECT ({state}): {waiting['note']}")
     canvas = start.get("canvas") or {}
     project = canvas.get("project") or {}
-    watching = "no browser watching" if (canvas.get("view") or {}).get("stale") else "open in the browser"
     title = f"{project.get('name')} ({project.get('id')})" if project else "no project open"
-    lines.append(f"CANVAS: {title}, {counted(canvas.get('nodeCount', 0), 'node')}, {watching}")
+    lines.append(f"CANVAS: {title}, {counted(canvas.get('nodeCount', 0), 'node')}")
+    lines.append(f"  {tab_state_line(canvas.get('view'), canvas.get('nodeCount'))}")
     selection = canvas.get("selection") or []
     lines.append(f"  selected: {', '.join(selection) if selection else 'nothing'}")
     if canvas.get("tabOnlyNote"):
@@ -699,18 +725,54 @@ def format_start(start: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def format_run_results(results: dict[str, Any], node_defs: dict[str, dict[str, Any]] | None = None) -> str:
-    """Format execution results."""
+def collapsed_line(name: str, summary: str, port: str | None = None) -> str:
+    """Design: “Preview” · moodboard bundle, 51 KB. Add --verbose to print it.
+    With ``port`` (a node with more than one port of results): “Preview”’s images · list of 12, 3 KB. …"""
+    return f"{collapsed_owner(name, port)} · {summary}. Add --verbose to print it."
+
+
+def format_run_results(results: dict[str, Any], node_defs: dict[str, dict[str, Any]] | None = None, *,
+                       verbose: bool = False, names: Any = None, port_labels: Any = None) -> str:
+    """Format execution results. A dict, a list or a string over 200 characters
+    prints as one summary line unless ``verbose``. ``names`` is the node names as
+    the canvas shows them: a dict, or a function that returns one (called only
+    when a value collapses); a node it doesn’t know shows by its id. ``port_labels``
+    is {node id: {port id: label}} the same way: a node with more than one port of
+    results names the port in each summary line."""
     outputs = results.get("results", {})
     errors = results.get("errors", {})
     duration = results.get("duration", 0)
+
+    shown_names: dict[str, str] | None = None
+
+    def name_of(nid: str) -> str:
+        nonlocal shown_names
+        if shown_names is None:
+            found = names() if callable(names) else names
+            shown_names = dict(found or {})
+        return shown_names.get(nid) or nid
+
+    shown_labels: dict[str, dict[str, str]] | None = None
+
+    def port_of(nid: str, port_id: str) -> str:
+        nonlocal shown_labels
+        if shown_labels is None:
+            found = port_labels() if callable(port_labels) else port_labels
+            shown_labels = dict(found or {})
+        return port_words((shown_labels.get(nid) or {}).get(port_id), port_id)
 
     lines: list[str] = []
     for nid, node_outputs in outputs.items():
         if isinstance(node_outputs, dict):
             for port_id, port_val in node_outputs.items():
                 val = port_val.get("value", "") if isinstance(port_val, dict) else port_val
-                lines.append(f"{nid}: {val}")
+                port_type = port_val.get("type") if isinstance(port_val, dict) else None
+                summary = None if verbose else collapsed_summary(port_type, val)
+                if summary:
+                    port = port_of(nid, str(port_id)) if len(node_outputs) > 1 else None
+                    lines.append(collapsed_line(name_of(nid), summary, port))
+                else:
+                    lines.append(f"{nid}: {val}")
         else:
             lines.append(f"{nid}: done")
 
@@ -797,14 +859,14 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
         lines.append("VIEW: no browser has reported the canvas yet (positions/states unknown)")
     else:
         age = view.get("secondsAgo")
-        stale = " — STALE, the canvas may be closed" if view.get("stale") else ""
+        stale = f". {tab_state_line(view)}" if view.get("stale") else ""
         zoom = f"zoom {viewport['zoom']:.2f}" if viewport else "zoom ?"
         if area:
             span = (f"showing x {area['x']:.0f}…{area['x'] + area['width']:.0f}, "
                     f"y {area['y']:.0f}…{area['y'] + area['height']:.0f}")
         else:
             span = "visible area unknown"
-        lines.append(f"VIEW: {zoom}, {span} (reported {age}s ago{stale})")
+        lines.append(f"VIEW: {zoom}, {span} (reported {age}s ago){stale}")
 
     selection = snapshot.get("selection") or []
     lines.append(f"SELECTED: {', '.join(selection) if selection else 'nothing'}")
@@ -887,7 +949,7 @@ def _surface_words(target: dict[str, Any], names: Any = None) -> str:
     names = names if isinstance(names, dict) else {}
     shown = clean_name(names.get(key))  # the server cleans it already; an older one may not
     name = shown or clean_name(item_id) or "?"
-    words = f"{noun} \u201c{name}\u201d" if shown else f"{noun} {name}"
+    words = f"{noun} “{name}”" if shown else f"{noun} {name}"
     if sub_id and sub_word:
         words += f", {sub_word} {names.get(sub_word) or sub_id}"
     if target.get("part"):

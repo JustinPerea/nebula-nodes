@@ -186,6 +186,19 @@ def _node_entry(node: Mapping[str, Any]) -> dict[str, Any]:
     return entry
 
 
+def _view_part(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    """`stale`, `connected` and, when the browser reported its visible area,
+    `onScreen`: how many nodes are in it."""
+    view = snapshot.get("view")
+    view = view if isinstance(view, Mapping) else {}
+    stale = bool(view.get("stale", True))
+    part: dict[str, Any] = {"stale": stale, "connected": bool(view.get("connected", not stale))}
+    if view.get("visibleArea"):
+        part["onScreen"] = sum(1 for node in snapshot.get("nodes") or []
+                               if isinstance(node, Mapping) and node.get("onScreen") is True)
+    return part
+
+
 def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | None, caller_id: str | None,
                 via: str) -> dict[str, Any]:
     """The project, whether a browser is watching, the selection (with
@@ -209,7 +222,11 @@ def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | Non
     total = int(snapshot.get("nodeCount") or len(nodes))
     part: dict[str, Any] = {
         "project": dict(project) if project else None,
-        "view": {"stale": bool((snapshot.get("view") or {}).get("stale", True))},
+        # `connected`: a person's tab has its socket open now; `stale`: its last
+        # view report is over 30 s old (design: no tab, a tab with an old view,
+        # or watching); `onScreen` counts the nodes in the visible area, only when the
+        # browser reported it. A snapshot without `connected` reads as "no tab" while stale.
+        "view": _view_part(snapshot),
         "selection": selection,
         # Nodes the person selected that only their tab has (a duplicate or
         # a paste): counted, never listed (review 17 agents-docs LOW-2).

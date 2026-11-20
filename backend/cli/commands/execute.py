@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from typing import Any
 
@@ -27,7 +28,58 @@ def _limit(value: Any) -> str:
     return limit_usd(value)
 
 
-def _report(result: dict[str, Any]) -> int:
+def _canvas_lookup(client: NebulaClient | None) -> tuple[Any, Any]:
+    """Two functions, read once and only when a value collapses: the canvas node
+    names as the canvas shows them (their own name, else the card title) and
+    each node’s output port labels from its definition. A node it can’t name
+    shows by its id, a port it can’t label by its id in words."""
+    found: dict[str, Any] = {}
+
+    def read() -> dict[str, Any]:
+        if not found:
+            names: dict[str, str] = {}
+            labels: dict[str, dict[str, str]] = {}
+            try:
+                from services import node_route
+
+                definitions = {d.get("id"): d for d in client.get_nodes().get("nodes") or []} if client else {}
+                for n in (client.get_graph().get("nodes") or []) if client else []:
+                    definition = definitions.get(n.get("definitionId"))
+                    names[str(n["id"])] = node_route.node_name(definition, n.get("label"),
+                                                              str(n.get("definitionId") or n["id"]))
+                    labels[str(n["id"])] = {str(p.get("id")): p.get("label") for p in (definition or {}).get("outputPorts") or []
+                                            if isinstance(p, dict)}
+            except Exception:  # noqa: BLE001 - the summary falls back to ids
+                pass
+            found.update(names=names, labels=labels)
+        return found
+
+    return (lambda: read()["names"]), (lambda: read()["labels"])
+
+
+def _exit_code(result: dict[str, Any]) -> int:
+    """_report’s exit code for a result, without printing it."""
+    status = result.get("status")
+    if status == "waiting":
+        return EXIT_WAITING
+    if status == "running":
+        return EXIT_RUNNING
+    if status == "failed" or (status != "cancelled" and result.get("noRecord")):
+        return 1
+    if status == "cancelled":
+        return EXIT_CANCELLED
+    return 0
+
+
+def _report(result: dict[str, Any], client: NebulaClient | None = None, *, verbose: bool = False,
+            as_json: bool = False) -> int:
+    """Print a run’s result. A big output value prints as one line unless
+    ``verbose``; ``as_json`` prints the raw result and keeps the exit codes."""
+    if as_json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return _exit_code(result)
+    names, port_labels = _canvas_lookup(client)
+    show = {"verbose": verbose, "names": names, "port_labels": port_labels}
     status = result.get("status")
     run_id = result.get("runId", "")
     if result.get("canvasSync") == "deferred":
@@ -36,7 +88,7 @@ def _report(result: dict[str, Any]) -> int:
         print(f"note: {result.get('canvasSyncDetail') or 'The run started; open canvases catch up shortly.'}",
               file=sys.stderr)
     if status == "waiting":
-        print(result.get("message") or f"Waiting for the person\u2019s OK. Sent as proposal {result.get('proposalId')}. "
+        print(result.get("message") or f"Waiting for the person’s OK. Sent as proposal {result.get('proposalId')}. "
               "Check it with nebula proposals.")
         daily = result.get("dailyTotal") or {}
         if daily:
@@ -56,7 +108,7 @@ def _report(result: dict[str, Any]) -> int:
         print(f"error: run {run_id} failed: {result.get('error', 'unknown error')}", file=sys.stderr)
         if result.get("errors") or result.get("results"):
             # Each node's message (also on its card), and what the rest made.
-            print(format_run_results({**result, "duration": result.get("duration")}))
+            print(format_run_results({**result, "duration": result.get("duration")}, **show))
         return 1
     if result.get("noRecord"):
         # Round 17 of PR #114: no record here; it may have run before a restart.
@@ -68,23 +120,27 @@ def _report(result: dict[str, Any]) -> int:
         print(f"Run {run_id} was stopped before it started, so nothing ran and nothing was spent.")
         return EXIT_CANCELLED
     if status == "cancelled":
-        made = format_run_results({**result, "duration": None})
+        made = format_run_results({**result, "duration": None}, **show)
         print(f"Run {run_id} was stopped." + (f" Finished before the stop:\n{made}" if result.get("nodesExecuted") else ""))
         return EXIT_CANCELLED
-    print(format_run_results(result))
+    print(format_run_results(result, **show))
     return 0
 
 
-def run_node(client: NebulaClient, node_ref: str, wait: float = DEFAULT_WAIT) -> int:
-    return _report(client.run_graph(target_node_id=node_ref, wait=wait))
+def run_node(client: NebulaClient, node_ref: str, wait: float = DEFAULT_WAIT, *, verbose: bool = False,
+             as_json: bool = False) -> int:
+    return _report(client.run_graph(target_node_id=node_ref, wait=wait), client, verbose=verbose, as_json=as_json)
 
 
-def run_all(client: NebulaClient, wait: float = DEFAULT_WAIT) -> int:
-    return _report(client.run_graph(wait=wait))
+def run_all(client: NebulaClient, wait: float = DEFAULT_WAIT, *, verbose: bool = False,
+            as_json: bool = False) -> int:
+    return _report(client.run_graph(wait=wait), client, verbose=verbose, as_json=as_json)
 
 
-def run_result(client: NebulaClient, run_id: str, wait: float = 0) -> int:
-    return _report(client.get_run(run_id, wait=max(0.0, min(wait, MAX_RESULT_WAIT))))
+def run_result(client: NebulaClient, run_id: str, wait: float = 0, *, verbose: bool = False,
+               as_json: bool = False) -> int:
+    return _report(client.get_run(run_id, wait=max(0.0, min(wait, MAX_RESULT_WAIT))), client,
+                   verbose=verbose, as_json=as_json)
 
 
 def run_cancel(client: NebulaClient, run_id: str) -> int:

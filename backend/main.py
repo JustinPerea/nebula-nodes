@@ -9564,6 +9564,13 @@ async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _mark_tab_connected(snapshot: dict[str, Any]) -> None:
+    """Add ``view.connected``: a person's tab has its socket open now. ``stale``
+    stays "no view report in 30 s", so a tab that is open but quiet reads as
+    connected and stale (design: three states in `nebula context`)."""
+    snapshot.setdefault("view", {})["connected"] = bool(manager.browser_connections)
+
+
 @app.get("/api/canvas/snapshot")
 async def get_canvas_snapshot() -> dict[str, Any]:
     """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors.
@@ -9572,6 +9579,7 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     read = selection_context.snapshot(cli_graph, node_registry)
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
     snapshot.update(tab_only_fields(read))
+    _mark_tab_connected(snapshot)
     # Why a node's last run failed, as its card says it (services/node_errors.py).
     key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
@@ -9725,6 +9733,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
     # The selection's nodes only the person's tab has, counted (review 17 agents-docs LOW-2).
     snapshot.update(tab_only_fields(read))
+    _mark_tab_connected(snapshot)
     catalog = project_store.read()  # every project's name, for the boards part
     active_id = catalog.get("activeProjectId")
     projects = catalog.get("projects") or {}
