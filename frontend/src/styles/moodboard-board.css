@@ -632,6 +632,9 @@ html body .moodboard-board-panel .moodboard-def__row {
 .moodboard-board-toast__line {
   min-width: 0;
   overflow-wrap: anywhere;
+  /* Design: a wrapped line breaks evenly, so no word is left alone on the
+     last line (the app's other notices do the same). */
+  text-wrap: pretty;
 }
 
 .moodboard-board-toast__line--skipped {

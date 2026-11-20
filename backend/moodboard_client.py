@@ -741,7 +741,7 @@ def undo_ops(data: Any) -> list[dict[str, Any]]:
 
 
 def skipped_messages(result: dict[str, Any]) -> list[str]:
-    """What a restore left as it was, in the route’s words ("Image 2 changed since, left as is")."""
+    """What a restore left as it was, in the route’s words ("Image 2 changed after that step, so Nebula left it as it is.")."""
     return [str(item.get("message")) for entry in result.get("applied") or [] if isinstance(entry, dict)
             for item in entry.get("skipped") or [] if isinstance(item, dict) and item.get("message")]
 
@@ -969,7 +969,7 @@ def _send(api: NebulaAPI, method: str, path: str, *, person_brief: str | None = 
 BOARD_WRITE_TRIES = 3
 
 _FIELD_LABELS = {
-    "name": "The name", "notes": "Notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
+    "name": "The name", "notes": "The notes", "mode": "The mode", "strength": "The strength", "direction": "The direction",
     "avoid": "The Avoid list", "pinnedColors": "The pinned colours", "clashMode": "The clash mode",
     "colorChoices": "The colour choices", "sendNotes": "“Moodboard notes to generators”",
     "briefOverride": "The hand-written brief",
@@ -1107,8 +1107,8 @@ def undo_board(api: NebulaAPI, ref: str, undo: Any, *, fallback: dict[str, Any] 
     (POST /api/moodboards/{id}/edits) that puts back what the change
     changed, image settings, cards, images it took off and the board's own
     fields alike, in one write. A part someone changed since the change is
-    left as they set it, and said so: "Direction changed since, left as
-    is", "#2's weight changed since, left as is".
+    left as they set it, and said so: "The direction changed after that
+    step, so Nebula left it as it is.", "Nebula couldn’t undo the change to image 2 because image 2’s weight changed after that.".
 
     Returns (board, the URLs the undo took off the board, `previous` for
     undoing the undo, what was left as is). `fallback` is the rest of

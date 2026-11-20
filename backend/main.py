@@ -220,7 +220,7 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, nothing_went_back,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, kept_lines, nothing_went_back,
     plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
@@ -19973,10 +19973,24 @@ def _undo_ran_since(record: Any) -> dict[str, list[dict[str, Any]]]:
     return ran
 
 
+def _undo_param_label(definition_id: str, key: str) -> str:
+    """A param's label as its node's definition gives it, else its key in words
+    (the kept lines name the setting that stayed)."""
+    param = next((p for p in (node_registry.get_all().get(definition_id) or {}).get("params") or []
+                  if isinstance(p, dict) and p.get("key") == key), None)
+    return str((param or {}).get("label") or "").split(" \u00b7 ")[0].strip() or _undo_key_words(key)
+
+
+def _undo_key_words(key: str) -> str:
+    """A param key in lower-case words: filePath and file_path both give "file path"."""
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key).replace("_", " ").lower()
+
+
 def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
-    """The parts an undo left, in its reply's message."""
-    messages = [str(item.get("message") or item.get("reason") or "") for item in skipped]
-    return "Left as is: " + "; ".join(message for message in messages if message) + "."
+    """The parts an undo left, in its reply's message: the kept lines are
+    sentences already, so they join with a space and take no lead-in. A line
+    that isn't a full sentence (a ran-since or moved-since note) gets its stop."""
+    return " ".join(line if line.endswith((".", "!", "?")) else line + "." for line in kept_lines(skipped))
 
 
 @app.post("/api/graph/apply/undo")
@@ -20036,7 +20050,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
                      cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
-                     ran=_undo_ran_since(record))
+                     ran=_undo_ran_since(record), name_of=_node_label, param_label=_undo_param_label)
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:

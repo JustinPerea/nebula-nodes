@@ -54,16 +54,16 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: { HF_TOKEN: TOKEN } })).toBeNull();
   });
 
-  it('reads "Hugging Face · Free" without the token and "Hugging Face token · Saved" with it, in GM\'s r12 words', () => {
+  it('reads "Hugging Face · free" without the token and "Hugging Face token · Saved" with it, in GM\'s r12 words', () => {
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
-    expect(anonymous).toEqual({ label: 'Free', tone: 'neutral',
+    expect(anonymous).toEqual({ label: 'free', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face',
       detail: 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add a Hugging Face token in Settings '
         + 'to use your own allowance.' });
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
     expect(signedIn).toEqual({ label: 'Saved', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face token',
-      detail: 'Idol uses your Hugging Face allowance.' });
+      detail: 'Idol uses your Hugging Face allowance.', tokenSaved: true });
     // No allowance numbers and no run counts anywhere (GM r12).
     for (const line of [anonymous?.detail, signedIn?.detail]) expect(line).not.toMatch(/\d/);
   });

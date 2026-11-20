@@ -153,7 +153,7 @@ describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost
     // Line 1 and the reason line naming the same nodes are one (GM, PR #203 r20 item 2).
     expect(runChipTitle(summary)).toBe('“A” and “B” call paid providers that have no listed price.\n'
       + '“Krea 2” runs on your Krea plan.\n'
-      + 'Idol can use your Hugging Face credits.');
+      + '“Idol” may use your Hugging Face credits');
   });
 
   it('beside a priced part: the amount for the paid nodes, the plan apart', () => {

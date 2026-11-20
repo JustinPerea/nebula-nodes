@@ -27,6 +27,9 @@ interface CinemaSceneNodeData {
 /** The scene's category colour (CATEGORY_COLORS, as every model card reads it). */
 const SCENE_CATEGORY_COLOR = CATEGORY_COLORS[NODE_DEFINITIONS['cinema-scene'].category] ?? '#424242';
 
+/** What the ⚠ beside a failed shot's port says (design): the tooltip and the accessible name. */
+const shotFailedLine = (number: number) => `Shot ${number} failed. Open Studio to see why.`;
+
 export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const enterCinemaEditor = useUIStore((s) => s.enterCinemaEditor);
   // Edits on screen that the backend didn't take (GM, PR #198 r6 item 1):
@@ -130,7 +133,8 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
         <div className="cinema-scene-node__shot-ports">
           {shots.map((shot, idx) => (
             <div key={shot.id} className="cinema-scene-node__shot-port-row">
-              <span className="cinema-scene-node__shot-label">
+              <span className="cinema-scene-node__shot-label"
+                {...(shot.failed ? { role: 'img', title: shotFailedLine(idx + 1), 'aria-label': shotFailedLine(idx + 1) } : {})}>
                 {idx + 1}
                 {shot.failed ? ' ⚠' : ''}
               </span>

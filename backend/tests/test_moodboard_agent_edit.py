@@ -99,7 +99,7 @@ def test_mcp_moodboard_edit_undo_skips_what_the_person_moved_since(app, client, 
     undone = mcp_server.moodboard_edit(BOARD_ID, done["undo"]["ops"])
     assert _cards(undone) == {"pl-a": (0, 0), "pl-b": (1200, 1200)}
     skipped = undone["applied"][0]["skipped"]
-    assert [item["message"] for item in skipped] == ["Image 2 changed since, left as is"]
+    assert [item["message"] for item in skipped] == ["Image 2 changed after that step, so Nebula left it as it is."]
 
 
 def test_mcp_moodboard_edit_refuses_a_stale_base_version_and_a_bad_batch_whole(app, client, root):
@@ -168,7 +168,7 @@ def test_cli_edit_says_what_it_did_and_how_to_undo_it(app, client, root, capsys,
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(first)))
     out = _cli(app, capsys, BOARD_ID, "--undo", "-")
     assert "Nothing on Placed (placedboard01) was put back:" in out
-    assert "Image 2 changed since, left as is." in out
+    assert "Image 2 changed after that step, so Nebula left it as it is." in out
     assert _cards(boards.get_board(app.api, BOARD_ID))["pl-b"] == (1500, 0)
 
 
