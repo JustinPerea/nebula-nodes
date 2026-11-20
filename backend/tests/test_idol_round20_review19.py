@@ -306,9 +306,10 @@ def test_the_done_bubble_says_whole_sentences_and_the_log_the_whole_line(world):
     assert renamed.status_code == 200, renamed.text
     _graph_run(world, CLAUDE)
     [line] = [m for m in world.sent if m.get("type") == "agentPresence" and "is waiting for you" in (m.get("log") or "")]
-    assert line["log"] == ("Claude Code finished 1 of 3 nodes. “Chair splat for the client deck” is waiting for you to "
+    # The run's own row (design r211 item 3): what ran, then the whole waiting sentence, never cut.
+    assert line["log"] == ("Ran “Image Input” in under 1 s. “Chair splat for the client deck” is waiting for you to "
                            "run it because it could bill your Hugging Face account.")
-    assert line["say"] == "Claude Code finished 1 of 3 nodes."
+    assert line["say"] == "Ran “Image Input” in under 1 s."
 
 
 def test_a_tab_not_connected_as_the_person_gets_its_own_card_body(world):

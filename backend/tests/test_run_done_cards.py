@@ -118,6 +118,31 @@ def test_the_copy():
         "Codex’s run of 3 nodes failed.", "failure")
 
 
+def test_the_line_for_a_surface_that_shows_the_agent_says_no_name_and_one_without_says_it():
+    """Design r211: where the agent's name is on the card or row (Updates' header, the Agent log row), the
+    line doesn't repeat it ("Run of 4 nodes failed."); a toast has no header and keeps "Codex’s run of 4 nodes
+    failed." (done_text's default)."""
+    one = {"n1": "Hero shots"}
+    four = {f"n{i}": f"Node {i}" for i in range(1, 5)}
+    plain = {"agent_name": "Codex", "named": False}
+    assert done_text(labels=four, planned=list(four), succeeded=[], failed=list(four), **plain) == (
+        "Run of 4 nodes failed.", "failure")
+    assert done_text(labels=four, planned=list(four), succeeded=[], failed=list(four), agent_name="Codex") == (
+        "Codex’s run of 4 nodes failed.", "failure")
+    assert done_text(labels=one, planned=["n1"], succeeded=["n1"], failed=[], **plain) == (
+        "Finished “Hero shots”.", "success")
+    assert done_text(labels=four, planned=list(four), succeeded=["n1", "n2"], failed=["n3"], **plain)[0] == (
+        "Finished 2 of 4 nodes. “Node 3” failed.")
+    assert done_text(labels=one, planned=["n1"], succeeded=[], failed=["n1"], stopped=["n1"], **plain) == (
+        "Run didn’t finish. “Hero shots” is waiting for you to run it because it could bill your Hugging Face "
+        "account.", "failure")
+    assert done_text(labels=four, planned=list(four), succeeded=[], failed=["n1"], stopped=["n1"], **plain)[0] == (
+        "Run of 4 nodes didn’t finish. “Node 1” is waiting for you to run it because it could bill your Hugging "
+        "Face account.")
+    assert done_text(labels=four, planned=list(four), succeeded=[], failed=["n1"], stopped=["n1"],
+                     agent_name="Codex")[0].startswith("Codex’s run of 4 nodes didn’t finish. ")
+
+
 def test_the_possessive_always_adds_apostrophe_s():
     assert possessive("Codex") == "Codex’s"
     assert possessive("Claude Code") == "Claude Code’s"
@@ -132,7 +157,7 @@ def test_a_successful_one_node_run_posts_one_card(done):
     result = _run(done, target=node)
     assert result["status"] == "finished"
     (card,) = _cards(done)
-    assert card["text"] == "Claude Code finished “Hero shots”."
+    assert card["text"] == "Finished “Hero shots”."
     assert card["source"] == "nebula" and card["author"]["kind"] == "agent"
     assert card["author"]["name"] == "Claude Code" and card["author"]["id"] == "ext:claude-code"
     assert card["author"]["verified"] is False
@@ -155,7 +180,7 @@ def test_a_successful_run_of_several_nodes(done):
     done.outputs[ids[-1]] = _image(done, "up")
     _run(done)
     (card,) = _cards(done)
-    assert card["text"] == "Claude Code finished 3 nodes."
+    assert card["text"] == "Finished 3 nodes."
     assert card["run"]["lastNodeId"] == ids[-1] and card["refs"] == [ids[-1]]
     assert card["run"]["nodeIds"] == ids
     assert card["run"]["thumbnail"]["url"].endswith("/up.png")
@@ -168,7 +193,7 @@ def test_a_partial_run_names_the_one_that_failed_and_shows_the_last_output_that_
     result = _run(done)
     assert result["status"] == "failed"
     (card,) = _cards(done)
-    assert card["text"] == "Claude Code finished 2 of 3 nodes. “Upscale” failed."
+    assert card["text"] == "Finished 2 of 3 nodes. “Upscale” failed."
     assert card["run"]["outcome"] == "partial"
     assert card["run"]["thumbnail"]["url"].endswith("/mid.png")
     assert card["run"]["thumbnail"]["nodeId"] == ids[1]
@@ -183,7 +208,7 @@ def test_a_partial_run_with_several_failures_counts_them(done):
     done.fail.update(ids[2:])
     _run(done)
     (card,) = _cards(done)
-    assert card["text"] == "Claude Code finished 2 of 5 nodes. 3 failed."
+    assert card["text"] == "Finished 2 of 5 nodes. 3 failed."
 
 
 def _log_lines(api, name: str) -> list[str]:
@@ -199,7 +224,7 @@ def test_a_failed_cli_run_gets_a_card_and_one_agent_log_row_the_run_row(done):
     done.fail.add(node)
     _run(done, headers=CODEX, target=node)
     (card,) = _cards(done)
-    assert card["text"] == "Codex’s run of “Hero shots” failed."
+    assert card["text"] == "Run of “Hero shots” failed."
     assert card["run"]["outcome"] == "failure"
     assert card["run"].get("thumbnail") is None
     assert _log_lines(done, "Codex") == ["Running “Hero shots”", "Ran “Hero shots” in under 1 s. “Hero shots” failed."] or (
@@ -239,13 +264,13 @@ def test_a_failed_canvas_run_has_no_run_row_so_the_cards_line_is_its_one_agent_l
     """The canvas routes (execute, execute-node, the cinema shot) say no run row of their own, so the done
     card's line stays the Agent log's only row for the run."""
     text = _finish_failed_run(done, run_row_follows=False)
-    assert text == "Codex’s run of “Hero shots” failed."
+    assert text == "Run of “Hero shots” failed."
     assert _log_lines(done, "Codex") == [text]
 
 
 def test_a_run_that_has_its_own_row_drops_the_cards_echo_but_keeps_the_card(done):
     text = _finish_failed_run(done, run_row_follows=True)
-    assert text == "Codex’s run of “Hero shots” failed."
+    assert text == "Run of “Hero shots” failed."
     assert _log_lines(done, "Codex") == []
 
 
@@ -254,7 +279,7 @@ def test_a_failed_run_of_several_nodes(done):
     done.fail.add(ids[0])
     _run(done, headers=CODEX)
     (card,) = _cards(done)
-    assert card["text"] == "Codex’s run of 3 nodes failed."
+    assert card["text"] == "Run of 3 nodes failed."
 
 
 def test_runs_the_person_starts_post_no_card(done):
@@ -274,7 +299,7 @@ def test_an_agents_canvas_run_posts_a_card_too(done):
     response = done.client.post("/api/execute-node", headers=CLAUDE,
                                 json={"nodes": nodes, "edges": edges, "targetNodeId": node})
     assert response.status_code == 200, response.text
-    assert [card["text"] for card in _cards(done)] == ["Claude Code finished “Hero shots”."]
+    assert [card["text"] for card in _cards(done)] == ["Finished “Hero shots”."]
 
 
 def test_a_new_card_for_the_same_node_and_agent_replaces_the_older_one(done):

@@ -1058,8 +1058,8 @@ agent's proposal notes. MCP: `set_status`, `list_agents`.
 While your run is on a node, the person sees your mark above it ("Running
 FLUX.2 [pro] · 0:41"); `nebula agents` lists each agent's running nodes and
 placeholders too. When a run you started ends, Nebula posts your done card
-in Updates ("Codex finished “Hero shots”.", "Codex finished 2 of 3 nodes.
-“Upscale” failed.") with a thumbnail and Show on canvas; read it with
+in Updates, under your name ("Finished “Hero shots”.", "Finished 2 of 3
+nodes. “Upscale” failed.", "Run of 3 nodes failed.") with a thumbnail and Show on canvas; read it with
 `nebula notes` (MCP `list_notes`, `about: "run"`). You don't post it
 yourself, and a newer card for the same node replaces yours.
 

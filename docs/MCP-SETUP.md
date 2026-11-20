@@ -162,8 +162,10 @@ The server exposes these tools for building and running (see
   `look_at_canvas` and `nebula look` show the node with `stopped` and the
   text whole. The person's card says "Waiting for you to run it" in the
   notice style, and Claude Code's done line says the node is waiting
-  ("Claude Code finished 1 of 3 nodes. “Idol” is waiting for you to run it
-  because it could bill your Hugging Face account."). A run whose origin
+  ("Finished 1 of 3 nodes. “Idol” is waiting for you to run it because it
+  could bill your Hugging Face account."; its Agent log row says
+  "Ran “Image” in 4 s. “Idol” is waiting for you to run it because it could
+  bill your Hugging Face account." and never says the node failed). A run whose origin
   Nebula can't tell stops there too.
   The CLI sends `X-Nebula-Surface: cli` on every request and prints a
   refusal exactly as it came; any other caller reads MCP words. The header
@@ -1182,7 +1184,13 @@ is logged as the Message box's working line shows it: one node names up to
 three settings ("Changed “Prompt”, “Seed” and “Size” on “Hero shot”", from
 four "Changed 4 settings on “Hero shot”"); several nodes are named without
 their settings ("Changed “Hero shot” and “Sky”", from four "Changed 4
-nodes"), with the verb they share, else "Changed". A `nebula move` of several nodes
+nodes"), with the verb they share, else "Changed"; nodes with the same name
+are counted ("Added 2 “Combine Text” nodes"), and one rename says from what
+("Renamed “Combine Text” to “Prefix”"). An apply that adds, changes, renames
+and moves nothing still has its row: "Connected “A” to “B”", "Disconnected
+“A” from “B”", "Removed “A” and “B”" (from four "Removed 4 nodes"), "Made
+“A” ready"; several kinds in one apply say "Changed" over the nodes they
+touched. A `nebula move` of several nodes
 names each one that moved ("Moved “A” and “B”", from four "Moved 4 nodes").
 Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside image 1 on
@@ -3529,15 +3537,17 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   a node (`set_status(text, node_id)`) shows the same pill.
 - **Done cards:** when a run an agent started ends (finished, partly
   failed or failed; not stopped), Nebula posts one Update for it under that
-  agent's name (`source: "nebula"`, `about: "run"`): "Codex finished
-  “Hero shots”.", "Codex finished 2 of 3 nodes. “Upscale” failed.",
-  "Codex's run of 3 nodes failed." Its `run` is `{id, nodeIds, lastNodeId,
+  agent's name (`source: "nebula"`, `about: "run"`), without repeating the
+  name the header has: "Finished “Hero shots”.", "Finished 2 of 3 nodes.
+  “Upscale” failed.", "Run of 3 nodes failed." Its `run` is `{id, nodeIds, lastNodeId,
   outcome, thumbnail?}`; `refs` is the last node, which **Show on canvas**
   flies to. The thumbnail links an output Nebula already keeps
   (`/api/outputs/...`, never a provider URL or a copy): the last node's
   first output for a success, the last output that succeeded for a
   partial run, none for a failure or a text or audio output. A failed run
-  also gets an Agent log line. A newer card for the same node and agent
+  also gets an Agent log line (a run started with `nebula run` has its own
+  row instead, which lists what ran and what failed or is waiting for the
+  person's OK). A newer card for the same node and agent
   replaces the older one. The agent reads its own with `list_notes`. Runs
   the person starts get no card.
 

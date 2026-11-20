@@ -319,3 +319,159 @@ def test_no_agent_log_row_an_agent_action_makes_holds_a_node_id_or_a_definition_
     for text in [*rows, *chat_lines]:
         assert not NODE_ID.search(text), text
         assert not any(re.search(rf"(?<![\w-]){re.escape(definition)}(?![\w-])", text) for definition in definitions), text
+
+
+# -- round 3: the rows that were missing, and the lines design r211 words ---------------------------------
+
+def _label(api, node_id: str, name: str) -> str:  # noqa: F811
+    api.graph.set_label(node_id, name)
+    return node_id
+
+
+def test_a_run_row_survives_the_agents_token_going_away_mid_run(api, monkeypatch, chat_lines):  # noqa: F811
+    """The identity is the one recorded when the run was admitted: a chat turn's token is revoked when the turn
+    ends, so a lookup at the end of the run would find nobody."""
+    import main as main_module
+    from models.events import ErrorEvent
+
+    bad = _label(api, api.graph.add_node("text-input", {"value": "hi"}), "Sky")
+    real = main_module.identify_agent
+    state = {"revoked": False}
+    monkeypatch.setattr(main_module, "identify_agent",
+                        lambda headers: None if state["revoked"] else real(headers))
+
+    async def fake(**kwargs):
+        state["revoked"] = True
+        await kwargs["emit"](ErrorEvent(node_id=bad, error="boom"))
+
+    monkeypatch.setattr(main_module, "_run_graph", fake)
+    response = api.client.post("/api/graph/run", json={"wait": 5}, headers=AGENT)
+    assert response.status_code == 200, response.text
+    assert _rows(api)[-1] == ("Claude Code", "Ran “Sky” in under 1 s. “Sky” failed.")
+    assert chat_lines == []
+
+
+def test_a_stopped_run_row_is_kept_under_the_recorded_agent_too(api, monkeypatch, chat_lines):  # noqa: F811
+    import main as main_module
+    from models.events import ExecutedEvent
+
+    ok = _label(api, api.graph.add_node("text-input", {"value": "hi"}), "Hero shot")
+    real = main_module.identify_agent
+    state = {"revoked": False}
+    monkeypatch.setattr(main_module, "identify_agent",
+                        lambda headers: None if state["revoked"] else real(headers))
+
+    async def fake(**kwargs):
+        await kwargs["emit"](ExecutedEvent(node_id=ok, outputs={}))
+        state["revoked"] = True
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(main_module, "_run_graph", fake)
+    api.client.post("/api/graph/run", json={"wait": 5}, headers=AGENT)
+    assert _rows(api)[-1] == ("Claude Code", "Stopped after “Hero shot” ran")
+
+
+def test_a_node_waiting_for_the_persons_ok_is_never_a_failure_in_the_run_row(api):  # noqa: F811
+    import main as main_module
+
+    ids = [api.graph.add_node("text-input", {"value": str(i)}) for i in range(3)]
+    for node_id, name in zip(ids, ("A", "B", "Idol")):
+        api.graph.set_label(node_id, name)
+    a, b, idol = ids
+    line = main_module._cli_run_line
+    waiting = (" “Idol” is waiting for you to run it because it could bill your Hugging Face account.")
+    assert line({a: {}, b: {}}, {idol: "x"}, [], 4, None, stopped=[idol]) == (
+        "Ran “A” and “B” in 4 s." + waiting)
+    # A real failure in the same run keeps its own sentence; the stopped node is not counted in it.
+    assert line({a: {}}, {b: "boom", idol: "x"}, [], 4, None, stopped=[idol]) == (
+        "Ran “A” and “B” in 4 s. “B” failed." + waiting)
+    assert line({}, {idol: "x"}, [], 1, None, stopped=[idol]) == "Nothing ran." + waiting
+    # The same words as the done card, from the same source.
+    from services.run_done_cards import waiting_text
+    assert waiting_text({idol: "Idol"}, [idol]).startswith("“Idol” is waiting for you to run it because")
+
+
+def test_the_run_row_names_a_node_that_left_the_canvas_never_by_its_id(api):  # noqa: F811
+    import main as main_module
+
+    line = main_module._cli_run_line
+    assert line({"n3": {}, "n4": {}}, {}, [], 40, None, names={"n3": "Hero shot", "n4": "Sky"}) == (
+        "Ran “Hero shot” and “Sky” in 40 s")
+    assert line({}, {"n3": "boom"}, [], 40, None, names={"n3": "Hero shot"}) == (
+        "Ran “Hero shot” in 40 s. “Hero shot” failed.")
+
+
+def test_a_node_deleted_during_a_run_is_still_named_in_its_row(api, monkeypatch):  # noqa: F811
+    import main as main_module
+    from models.events import ExecutedEvent
+
+    gone = _label(api, api.graph.add_node("text-input", {"value": "a"}), "Hero shot")
+    kept = _label(api, api.graph.add_node("text-input", {"value": "b"}), "Sky")
+
+    async def fake(**kwargs):
+        await kwargs["emit"](ExecutedEvent(node_id=gone, outputs={}))
+        await kwargs["emit"](ExecutedEvent(node_id=kept, outputs={}))
+        api.graph.remove_node(gone)
+
+    monkeypatch.setattr(main_module, "_run_graph", fake)
+    response = api.client.post("/api/graph/run", json={"wait": 5}, headers=AGENT)
+    assert response.status_code == 200, response.text
+    row = _rows(api)[-1][1]
+    assert row == "Ran “Hero shot” and “Sky” in under 1 s"
+    assert not NODE_ID.search(row)
+
+
+def test_an_apply_that_only_connects_removes_or_disconnects_has_a_row(api):  # noqa: F811
+    a = _label(api, api.graph.add_node("text-input", {"value": "a"}), "Prefix")
+    b = _label(api, api.graph.add_node("gpt-image-2-5-generate", {}), "Hero shot")
+    spare = _label(api, api.graph.add_node("text-input", {"value": "s"}), "Spare")
+    other = _label(api, api.graph.add_node("text-input", {"value": "o"}), "Other")
+    wire = {"source": a, "sourceHandle": "text", "target": b, "targetHandle": "prompt"}
+    _apply(api, {"edges": [wire]})
+    assert _rows(api)[-1] == ("Claude Code", "Connected “Prefix” to “Hero shot”")
+    assert [e.get("nodeIds") for e in _events(api)][-1] == [a, b]
+    _apply(api, {"unwire": [wire]})
+    assert _rows(api)[-1] == ("Claude Code", "Disconnected “Prefix” from “Hero shot”")
+    _apply(api, {"remove": [spare, other]})
+    assert _rows(api)[-1] == ("Claude Code", "Removed “Spare” and “Other”")
+    assert [e.get("nodeIds") for e in _events(api)][-1] == [spare, other]
+    # Several kinds in one apply say "Changed" over the nodes they touched, as the focus row does.
+    extra = _label(api, api.graph.add_node("text-input", {"value": "x"}), "Extra")
+    _apply(api, {"edges": [wire], "remove": [extra]})
+    assert _rows(api)[-1] == ("Claude Code", "Changed “Prefix”, “Hero shot” and “Extra”")
+
+
+def test_an_apply_removing_four_nodes_counts_them(api):  # noqa: F811
+    ids = [api.graph.add_node("text-input", {"value": str(i)}) for i in range(4)]
+    _apply(api, {"remove": ids})
+    assert _rows(api)[-1] == ("Claude Code", "Removed 4 nodes")
+
+
+def test_an_agents_node_delete_has_a_row_when_no_tab_reported_where_it_is(api):  # noqa: F811
+    node = _label(api, api.graph.add_node("text-input", {"value": "a"}), "Spare")
+    import main as main_module
+    assert main_module.agent_presence.last_point(node) is None
+    assert api.client.delete(f"/api/graph/node/{node}", headers=AGENT).status_code == 200
+    assert _rows(api)[-1] == ("Claude Code", "Removed “Spare”")
+    assert _events(api)[-1]["nodeIds"] == [node]
+
+
+def test_nodes_with_the_same_name_are_counted_and_a_rename_says_from_what(api):  # noqa: F811
+    applied = _apply(api, {"nodes": [{"ref": "+a", "definitionId": "text-input", "params": {"value": "x"}},
+                                     {"ref": "+b", "definitionId": "text-input", "params": {"value": "y"}}]})
+    assert _rows(api)[-1] == ("Claude Code", "Added 2 “Text Input” nodes")
+    first = next(iter(applied["idMap"].values()))
+    _apply(api, {"rename": {first: "Prefix"}})
+    assert _rows(api)[-1] == ("Claude Code", "Renamed “Text Input” to “Prefix”")
+    # The single-rename route says it the same way.
+    assert api.client.put(f"/api/graph/node/{first}/label", headers=AGENT, json={"label": "Suffix"}).status_code == 200
+    assert _rows(api)[-1] == ("Claude Code", "Renamed “Prefix” to “Suffix”")
+    # Two different names stay named; a mix counts the repeats.
+    one = _label(api, api.graph.add_node("text-input", {"value": "1"}), "A")
+    two = _label(api, api.graph.add_node("text-input", {"value": "2"}), "B")
+    three = _label(api, api.graph.add_node("text-input", {"value": "3"}), "A")
+    _apply(api, {"params": [{"nodeId": one, "params": {"value": "q"}}, {"nodeId": two, "params": {"value": "q"}}]})
+    assert _rows(api)[-1] == ("Claude Code", "Changed “A” and “B”")
+    _apply(api, {"params": [{"nodeId": one, "params": {"value": "r"}}, {"nodeId": three, "params": {"value": "r"}},
+                            {"nodeId": two, "params": {"value": "r"}}]})
+    assert _rows(api)[-1] == ("Claude Code", "Changed 2 “A” nodes and “B”")

@@ -49,13 +49,26 @@ const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 
 /**
  * A stored date written out (design): "November 20", with the year only when it isn't the current
- * one ("November 20, 2025"). Reads the stored date part as written (`2026-11-20…`), so the day
- * doesn't shift with the time zone. A value with no date in front is returned as it came.
+ * one ("November 20, 2025"). A timestamp ('…T02:00:00Z', a comment's `created_at`) is the person's
+ * local calendar day, and its year is compared with the local year, so a comment written on
+ * December 31 in the evening doesn't read as January 1 of next year. A date with no time
+ * (`2026-11-20`, a source's own date) is read as written: there is no moment to convert. A value
+ * with no date in front is returned as it came.
  */
 export function writtenDate(stored: string, now: Date = new Date()): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(stored);
-  const month = match ? LONG_MONTHS[Number(match[2]) - 1] : undefined;
-  if (!match || !month) return stored;
-  const day = Number(match[3]);
-  return Number(match[1]) === now.getFullYear() ? `${month} ${day}` : `${month} ${day}, ${match[1]}`;
+  const match = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(stored);
+  if (!match || !LONG_MONTHS[Number(match[2]) - 1]) return stored;
+  let year = Number(match[1]);
+  let month = Number(match[2]) - 1;
+  let day = Number(match[3]);
+  if (match[4]) {
+    const moment = new Date(stored);
+    if (!Number.isNaN(moment.getTime())) {
+      year = moment.getFullYear();
+      month = moment.getMonth();
+      day = moment.getDate();
+    }
+  }
+  const name = `${LONG_MONTHS[month]} ${day}`;
+  return year === now.getFullYear() ? name : `${name}, ${year}`;
 }

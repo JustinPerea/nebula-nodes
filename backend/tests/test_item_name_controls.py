@@ -342,7 +342,7 @@ def test_an_asset_proposal_summary_and_update_name_a_cleaned_board():
         id="p1", agent=identify(AGENT), kind="moodboard", target_id="b1", target_name=HOSTILE, change={}, before={},
         note="", created_at=0.0, expires_at=1.0)
     assert asset_proposals.summary(proposal) == f"turn on “Moodboard notes to generators” for “{CLEAN}”"
-    assert f"for {CLEAN}" in asset_proposals.update_text(proposal)
+    assert f"for “{CLEAN}”" in asset_proposals.update_text(proposal)
     assert ESC not in asset_proposals.update_text(proposal)
 
 

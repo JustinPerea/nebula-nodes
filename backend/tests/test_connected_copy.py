@@ -104,7 +104,7 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
     node = graph.add_node("text-input", {"value": "a"})
     assert client.put(f"/api/graph/node/{node}/label", headers=AGENT,
                       json={"label": "Hero shots"}).status_code == 200
-    assert _says(sent)[-1] == "Renamed “Hero shots”"
+    assert _says(sent)[-1] == "Renamed “Text Input” to “Hero shots”"
     assert client.put("/api/graph/layout", headers=AGENT,
                       json={"positions": {node: {"x": 900, "y": 640}}}).status_code == 200
     assert _says(sent)[-1] == "Moved “Hero shots”"

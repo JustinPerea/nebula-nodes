@@ -272,7 +272,7 @@ from services import channel_listeners
 from services import person_thread
 from services import push_ledger
 from services import pending_nodes
-from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
+from services.run_done_cards import AgentRunBook, done_text, thumbnail_for, waiting_text
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -7915,7 +7915,7 @@ async def _show_agent(
 
 async def _say_agent_action(say: str, *, target: dict[str, Any] | None = None, action: str = "click",
                             names: dict[str, Any] | None = None, nodes: Sequence[str] | None = None,
-                            agent: AgentIdentity | None = None) -> None:
+                            agent: AgentIdentity | None = None, log: str | None = None) -> None:
     """Tell open canvases what the calling agent did. With no ``target``
     (a run of the whole canvas, a board's delete), no cursor can go: it is
     the cursor's own event without a target, so the Agent log lists it under
@@ -7935,14 +7935,17 @@ async def _say_agent_action(say: str, *, target: dict[str, Any] | None = None, a
     is the agent the row belongs to when it is not the caller: the person
     accepting a proposal makes the request, and the row is under the agent
     that proposed it. ``nodes`` are the canvas nodes the action touched, a
-    structured field of the event (``nodeIds``), as in _show_agent.
+    structured field of the event (``nodeIds``), as in _show_agent. ``log``
+    is Nebula's own whole line for the Agent log when ``say`` (the bubble,
+    cut at its width) holds less of it; it is never cut.
     """
     headers = current_request_headers()
     identity = agent or identify_agent(headers)
     if identity is None:
         return
     try:
-        event = _point(identity, target=target, action=action, say=say, names=names, node_ids=nodes)
+        whole = {"log": log, "log_whole": True} if log and log != say else {}
+        event = _point(identity, target=target, action=action, say=say, names=names, node_ids=nodes, **whole)
         # With no target the person form is the event and its id (the Agent
         # log lists it once by it); with one, the session's numbered cursor.
         await _broadcast_presence(event, _person_form(event, identity, headers))
@@ -8541,20 +8544,39 @@ def _named_nodes(node_ids: Sequence[str]) -> str:
 
 
 def _cli_run_line(results: Mapping[str, Any], errors: Mapping[str, Any], gated: Iterable[str], seconds: float,
-                  pending_note: str | None) -> str:
+                  pending_note: str | None, *, stopped: Iterable[str] = (),
+                  names: Mapping[str, str] | None = None) -> str:
     """The agent's row for a finished CLI run (design), in canvas words and
     whole seconds: "Ran “Hero shot” and “Sky” in 12 s"; with a failure "Ran 4
     nodes in 12 s. “Hero shot” failed."; nodes a gate skipped "“Sky” was
     skipped by a gate", then the placeholders' skip line. One sentence has no
-    period; two or more end each with one."""
+    period; two or more end each with one.
+
+    ``stopped`` are the nodes that stopped at a call only the person may make
+    (a proposal, r211 item 3): they didn't run and didn't fail, so they are
+    neither in the ran list nor the failed sentence; the row says what the
+    done card says, "“Idol” is waiting for you to run it because it could bill
+    your Hugging Face account." (run_done_cards.waiting_text). ``names`` are
+    the run's own node names by id, taken when the run was admitted: a node
+    that has left the canvas since is still named, never by its id."""
+    waiting = [node_id for node_id in errors if node_id in set(stopped)]
+    failed = [node_id for node_id in errors if node_id not in set(waiting)]
     gone = list(gated)
-    ran = [*results, *errors]
+    ran = [*results, *failed]
+    known = dict(names or {})
+
+    def listed(node_ids: Sequence[str]) -> str:
+        return node_names.node_name_list([known.get(node_id) or _node_label(node_id) for node_id in node_ids])
+
     took = "under 1 s" if seconds < 0.5 else f"{round(seconds)} s"
-    sentences = [f"Ran {_named_nodes(ran)} in {took}" if ran else "Nothing ran"]
-    if errors:
-        sentences.append(f"{_named_nodes(list(errors))} failed")
+    sentences = [f"Ran {listed(ran)} in {took}" if ran else "Nothing ran"]
+    if failed:
+        sentences.append(f"{listed(failed)} failed")
+    if waiting:
+        sentences.append(waiting_text({node_id: known.get(node_id) or _node_label(node_id) for node_id in waiting},
+                                      waiting).rstrip("."))
     if gone:
-        sentences.append(f"{_named_nodes(gone)} {'was' if len(gone) == 1 else 'were'} skipped by a gate")
+        sentences.append(f"{listed(gone)} {'was' if len(gone) == 1 else 'were'} skipped by a gate")
     if pending_note:
         sentences.append(pending_note.rstrip("."))
     return sentences[0] if len(sentences) == 1 else " ".join(f"{sentence}." for sentence in sentences)
@@ -16756,8 +16778,10 @@ async def _finish_agent_run(run_id: str, *, cancelled: bool = False, run_row_fol
 
 async def _post_run_done(run: Any, succeeded: list[str], failed: list[str], *, log_echo: bool = True) -> None:
     labels = {node_id: _node_label(node_id) for node_id in run.planned}
+    # The card sits under the agent's header in Updates, and the Agent log row has its own: the line
+    # doesn't repeat the name (design r211).
     text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed,
-                              stopped=run.stopped)
+                              stopped=run.stopped, named=False)
     last = run.planned[-1]
     ref: dict[str, Any] = {"id": run.run_id, "nodeIds": list(run.planned), "lastNodeId": last, "outcome": outcome}
     if outcome != "failure" and succeeded:
@@ -18027,8 +18051,50 @@ def _names_and(names: Sequence[str]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
+def _plain_edit_line(*, connected: Sequence[tuple[tuple[str, str], tuple[str, str]]],
+                     disconnected: Sequence[tuple[tuple[str, str], tuple[str, str]]],
+                     removed: Sequence[tuple[str, str]], readied: Sequence[tuple[str, str]]) -> tuple[str, list[str]]:
+    """The Agent log row (and the nodes it touched, for the zoom manifest) of
+    an apply that adds, changes, renames and moves nothing: it only connects,
+    disconnects, removes or makes placeholders ready (design r211 item 4).
+    Nodes are (id, name), wires ((id, name), (id, name)) from the source to
+    the target. One kind says its own words ("Connected “A” to “B”",
+    "Disconnected “A” from “B”", "Removed “A” and “B”", "Removed 4 nodes",
+    "Made “A” ready"); several wires of one kind name the nodes they join;
+    several kinds share the verb "Changed" over every node they touched, as
+    the row of an edit with a focus node does (_edit_log_line)."""
+    def distinct(pairs: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
+        return list({node_id: (node_id, name) for node_id, name in pairs}.values())
+
+    def listed(pairs: Sequence[tuple[str, str]]) -> str:
+        return node_names.node_name_list([name for _, name in pairs])
+
+    wired = distinct(end for wire in connected for end in wire)
+    unwired = distinct(end for wire in disconnected for end in wire)
+    kinds = [kind for kind in (("Connected", wired), ("Disconnected", unwired), ("Removed", distinct(removed)),
+                               ("Made", distinct(readied))) if kind[1]]
+    touched = distinct(end for _, group in kinds for end in group)
+    ids = [node_id for node_id, _ in touched]
+    if len(kinds) != 1:
+        return (f"Changed {listed(touched)}" if kinds else ""), ids
+    verb, group = kinds[0]
+    if verb == "Connected":
+        if len(connected) == 1:
+            (_, source), (_, target) = connected[0]
+            return f"Connected {_quoted(source)} to {_quoted(target)}", ids
+        return f"Connected {listed(group)}", ids
+    if verb == "Disconnected":
+        if len(disconnected) == 1:
+            (_, source), (_, target) = disconnected[0]
+            return f"Disconnected {_quoted(source)} from {_quoted(target)}", ids
+        return f"Disconnected {listed(group)}", ids
+    if verb == "Made":
+        return f"Made {listed(group)} ready", ids
+    return f"Removed {listed(group)}", ids
+
+
 def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
-                   others: Sequence[tuple[str, str]] = ()) -> str:
+                   others: Sequence[tuple[str, str]] = (), renamed_from: str | None = None) -> str:
     """An edit_canvas with no note, as the Agent log and the Message box's
     working line word it (GM r83.1; never the bubble's terse "changed 1",
     never an "and N more" hybrid). ``others`` are the edit's other nodes, as
@@ -18039,13 +18105,17 @@ def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
     Several nodes name the nodes and drop the settings: "Changed “Hero
     shot” and “Sky”", "Changed “Hero shot”, “Sky” and “Prompt”", from 4
     "Changed 4 nodes". Their verb is the one they all share, else
-    "Changed"."""
+    "Changed". Nodes with the same name are counted ("Added 2 “Combine Text”
+    nodes"), the names rule of node_names.node_name_list (design r211). One
+    rename says from what: "Renamed “Combine Text” to “Prefix”" (``renamed_from``
+    is the old name)."""
     node = _quoted(_node_label(node_id))
     if others:
         verbs = {verb, *(other_verb for other_verb, _ in others)}
         word = verb if len(verbs) == 1 else "Changed"
-        names = [node, *(_quoted(name) for _, name in others)]
-        return f"{word} {len(names)} nodes" if len(names) >= 4 else f"{word} {_names_and(names)}"
+        return f"{word} {node_names.node_name_list([_node_label(node_id), *(name for _, name in others)])}"
+    if verb == "Renamed" and renamed_from and renamed_from != _node_label(node_id):
+        return f"Renamed {_quoted(renamed_from)} to {node}"
     if verb != "Changed" or not keys:
         return f"{verb} {node}"
     record = cli_graph.nodes.get(node_id) or {}
@@ -18295,8 +18365,8 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     if current != previous:
         # An agent's rename is an action like any edit (the Agents panel's
         # line, Q125 item 2); a no-op for the person's own.
-        await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(current)}", did=_did("Renamed", node_id),
-                          nodes=[node_id])
+        await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(previous)} to {_quoted(current)}",
+                          did=_did("Renamed", node_id), nodes=[node_id])
     return {"id": node_id, "label": current}
 
 
@@ -18923,6 +18993,10 @@ async def delete_graph_node(node_id: str) -> dict:
     if last_point is not None:
         await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label},
                           nodes=[node_id])
+    else:
+        # No tab has reported where the node was drawn (the canvas is hidden, or
+        # no tab shows it): the agent's row still goes, without a cursor.
+        await _say_agent_action(f"Removed {_quoted(label)}", nodes=[node_id])
     # What the delete removed, for its undo (POST /api/graph/restore `removals`).
     # `label` is its name as the canvas showed it (the type's name when it has none): `nebula delete` says it.
     # `syncSeq`: the graphSync that sent it (_synced_seq).
@@ -19189,6 +19263,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         for change in additions.params
     }
     labels_before = {key: _node_label(key) for key in spec.rename if not key.startswith("+")}
+    # The wires an apply cuts, named as the canvas shows their nodes now: a node that goes in the same edit has no name after.
+    unwired_names = [((edge.source, _node_label(edge.source)), (edge.target, _node_label(edge.target)))
+                     for edge in spec.unwire]
     undo_before = _canvas_undo_before(spec, shown)
 
     removed: list[dict[str, Any]] = []
@@ -19368,9 +19445,22 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # Agent log and the Message box's working line get the person's
         # words (GM r79.2: "Changed “Prompt” on “Hero shot”").
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
-                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []), others),
+                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []), others,
+                                                               renamed_from=labels_before.get(focus)),
                           person_say=None if note else said,
                           shows="type" if verb == "Changed" else None)
+    else:
+        # No node was added, changed, renamed or moved: a connect, a disconnect,
+        # a remove or a placeholder made ready is still the agent's action and
+        # has its row (design r211 item 4).
+        plain, plain_ids = _plain_edit_line(
+            connected=[((wire["source"], _node_label(wire["source"])), (wire["target"], _node_label(wire["target"])))
+                       for wire in wired_rows],
+            disconnected=unwired_names,
+            removed=[(str(gone["id"]), str(gone["name"])) for gone in removed],
+            readied=[(node_id, _node_label(node_id)) for node_id in made_ready])
+        if plain:
+            await _say_agent_action(additions.note if note else plain, nodes=plain_ids)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
     return {
@@ -26825,6 +26915,13 @@ async def _execute_cli_run(
     # route put agents' placeholders (and what needs them) here already.
     skipped: dict[str, str] = outcome.setdefault("skipped", {})
     gated: set[str] = set()
+    # Who started the run and what its nodes are called, taken as the run is
+    # admitted: the row at the end can't look either up again (the agent's
+    # token may be revoked by then, a node may have left the canvas).
+    recorded = agent_runs.get(run_id)
+    run_agent = recorded.agent if recorded is not None else None
+    name_of = _run_names(sub_nodes)
+    node_names_at_start = {node.id: name_of(node.id) for node in sub_nodes}
     # Set once the run came through whole: its own Agent log row is said below.
     run_row_follows = False
 
@@ -26868,11 +26965,14 @@ async def _execute_cli_run(
         )
         if _execution_is_cancelling(run_id):
             raise asyncio.CancelledError
-        run_row_follows = True
+        # With no agent recorded there is no row to rely on: the done card keeps its echo.
+        run_row_follows = run_agent is not None
     except asyncio.CancelledError:
         await _finalize_cancelled_execution(sub_nodes, run_id)
-        await _say_agent_action(f"Stopped after {_named_nodes(list(results))} ran" if results
-                                else "Stopped before any node ran")
+        stopped_after = node_names.node_name_list([node_names_at_start.get(node_id) or _node_label(node_id)
+                                                   for node_id in results])
+        await _say_agent_action(f"Stopped after {stopped_after} ran" if results else "Stopped before any node ran",
+                                agent=run_agent)
         raise
     except Exception as exc:
         if _execution_is_cancelling(run_id):
@@ -26895,8 +26995,11 @@ async def _execute_cli_run(
     # Agents' placeholders the run skipped, in GM's skip line (Q125 item 3).
     pending_note = pending_nodes.skip_line(pending_summary)
     # The agent's own row; a run with no agent name (no marker) shows none.
-    await _say_agent_action(_cli_run_line(results, errors, gated, duration, pending_note),
-                            nodes=list(errors) or None)
+    # The bubble keeps the whole sentences that fit; the Agent log the whole row (a stop for the
+    # person's OK is a sentence of its own that must never be cut: GM r39).
+    row = _cli_run_line(results, errors, gated, duration, pending_note,
+                        stopped=outcome.get("stopped") or (), names=node_names_at_start)
+    await _say_agent_action(_whole_sentences(row), log=row, nodes=list(errors) or None, agent=run_agent)
 
     return {
         "results": results,
