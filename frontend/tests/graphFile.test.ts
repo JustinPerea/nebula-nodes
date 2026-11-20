@@ -825,7 +825,7 @@ describe('graph import memory ceiling', () => {
     // Round 16 (GM: lead with what the person pressed): Load graph's own
     // heading, then the reason, never "(HTTP 503)"; on 1fc3d846 this said
     // "Failed to load graph: Asset restore failed (HTTP 503)", and on fc906cb6
-    // "Couldn't restore the asset.".
+    // "Couldn’t restore the asset.".
     [new Response('', { status: 503 }), "Nebula couldn’t load the canvas because the server didn’t respond. Try again."],
     // A refusal with no code reads as a damaged file, never the backend's
     // words (review 8 of PR #205, limits LOW-4).

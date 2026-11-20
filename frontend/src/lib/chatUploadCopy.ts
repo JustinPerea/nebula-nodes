@@ -1,4 +1,4 @@
-import { copyForStatus } from './errorCopy';
+import { copyForStatus, curlApostrophes } from './errorCopy';
 
 /** The line under a chat image chip whose upload was refused (the chip
  * already shows the file's name). Its two written chip lines stay; else the
@@ -7,5 +7,5 @@ import { copyForStatus } from './errorCopy';
 export function chatUploadChipError(status: number, detail: unknown): string {
   if (status === 413) return 'Image > 20MB';
   if (status === 415) return 'Not an image';
-  return copyForStatus(status, detail);
+  return curlApostrophes(copyForStatus(status, detail));
 }

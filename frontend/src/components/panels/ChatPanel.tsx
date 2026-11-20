@@ -51,7 +51,7 @@ import {
 import { onPersonConnected, personPromotions, personUnconfirmed, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import { agentNameInSentence } from '../../lib/personalAgentName';
-import { chatErrorLine } from '../../lib/chatErrorLine';
+import { agentStatusTitle, chatErrorLine } from '../../lib/chatErrorLine';
 import {
   chatCancellationDisconnectNotice,
   chatCancellationNotice,
@@ -318,7 +318,7 @@ function formatToolInput(input: unknown): string {
   }
 }
 
-function AssistantBubble({ message, agentName, onPermission }: {
+export function AssistantBubble({ message, agentName, onPermission }: {
   message: Extract<ChatMessage, { role: 'assistant' }>;
   agentName: string;
   onPermission: (requestId: string, decision: 'allow' | 'deny') => void;
@@ -833,7 +833,7 @@ export function ChatPanel() {
       }
       const detail = codexStatus?.mode === 'api'
         ? 'Codex is using API billing. Switch to ChatGPT account login for subscription access.'
-        : "Sign in through Codex's local ChatGPT OAuth flow. Nebula starts it and keeps checking status.";
+        : "Sign in through Codex’s local ChatGPT OAuth flow. Nebula starts it and keeps checking status.";
       return {
         agent: 'codex' as const,
         open: needsConnection,
@@ -959,7 +959,7 @@ export function ChatPanel() {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
           const detail = await readDetail(resp);
-          warnFailure("Couldn't upload the image.", resp.status, detail);
+          warnFailure("Couldn’t upload the image.", resp.status, detail);
           const errMsg = chatUploadChipError(resp.status, detail);
           setPendingImages((prev) => {
             const prior = prev.find((p) => p.id === chipId);
@@ -2043,7 +2043,7 @@ export function ChatPanel() {
                 {agentDisplayName}
               </span>
             ) : (
-              <span title={[agent === 'claude' ? claudeMessage || claudeStatusError : codexStatus?.message || codexStatusError, sessionTitle].filter(Boolean).join(' · ') || undefined}>
+              <span title={agentStatusTitle(agent === 'claude' ? claudeMessage || claudeStatusError : codexStatus?.message || codexStatusError, sessionTitle)}>
                 {agent === 'claude' ? claudeStatusLabel : codexStatusLabel}
               </span>
             )}

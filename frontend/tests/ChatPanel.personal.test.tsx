@@ -428,7 +428,7 @@ describe('Chat /clear: the system line says what happened to the canvas', () => 
     await connected();
     apiMocks.apiFetch.mockResolvedValue(new Response('{"detail":"A run is going."}', { status: 409 }));
     await sendText('/clear');
-    expect(await systemLine("Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.")).toBeInTheDocument();
+    expect(await systemLine("Session cleared. Next message starts a fresh conversation. The canvas wasn’t cleared.")).toBeInTheDocument();
     expect(screen.queryByText(/with an empty canvas/)).toBeNull();
   });
 
@@ -436,13 +436,13 @@ describe('Chat /clear: the system line says what happened to the canvas', () => 
     await connected();
     apiMocks.apiFetch.mockResolvedValue(new Response('{}', { status: 500 }));
     await sendText('/clear');
-    expect(await systemLine("Session cleared. Next message starts a fresh conversation. Nebula didn't confirm the canvas was cleared.")).toBeInTheDocument();
+    expect(await systemLine("Session cleared. Next message starts a fresh conversation. Nebula didn’t confirm the canvas was cleared.")).toBeInTheDocument();
   });
 
   it('no answer: the same', async () => {
     await connected();
     apiMocks.apiFetch.mockRejectedValue(new TypeError('Failed to fetch'));
     await sendText('/clear');
-    expect(await systemLine("Session cleared. Next message starts a fresh conversation. Nebula didn't confirm the canvas was cleared.")).toBeInTheDocument();
+    expect(await systemLine("Session cleared. Next message starts a fresh conversation. Nebula didn’t confirm the canvas was cleared.")).toBeInTheDocument();
   });
 });

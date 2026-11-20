@@ -189,21 +189,21 @@ async function request<T>(heading: string, path: string, init?: RequestInit): Pr
 const json = (method: string, body: unknown): RequestInit => ({
   method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 });
-export const listProjects = () => request<ProjectList>("Couldn't load your projects.", '/api/projects');
+export const listProjects = () => request<ProjectList>("Couldn’t load your projects.", '/api/projects');
 /** Whether Nebula would refuse to replace the open canvas now, and why
  * (review 19 item 1: the tab's reopen lock reads Nebula's own verdict). */
 export const getOpenHold = () => request<{ hold?: unknown }>("Nebula couldn’t load your projects.", '/api/projects/open-hold');
-export const getProject = (id: string) => request<SavedProject>("Couldn't load the project.", `/api/projects/${encodeURIComponent(id)}`);
+export const getProject = (id: string) => request<SavedProject>("Couldn’t load the project.", `/api/projects/${encodeURIComponent(id)}`);
 export const createProject = (name: string | undefined, workspaceRevision: string) =>
-  request<ProjectActivation>("Couldn't create the project.", '/api/projects', json('POST', { name, workspaceRevision }));
+  request<ProjectActivation>("Couldn’t create the project.", '/api/projects', json('POST', { name, workspaceRevision }));
 export const openProject = (id: string, workspaceRevision: string) =>
-  request<ProjectActivation>("Couldn't open the project.", `/api/projects/${encodeURIComponent(id)}/open`, json('POST', { workspaceRevision }));
+  request<ProjectActivation>("Couldn’t open the project.", `/api/projects/${encodeURIComponent(id)}/open`, json('POST', { workspaceRevision }));
 /** `pending` (round 20, H1): the handoff after an agent's switch names the
  * settings and renames Nebula may not have; Nebula merges exactly those onto
  * its copy of the project left (backend `_save_handoff`). */
 export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevision: string,
   pending?: { params: Record<string, Record<string, unknown>>; labels: Record<string, string>; deleted?: string[] }) =>
-  request<ProjectActivation>("Couldn't save the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', {
+  request<ProjectActivation>("Couldn’t save the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', {
     snapshot, workspaceRevision,
     ...(pending && Object.keys(pending.params).length > 0 ? { pendingParams: pending.params } : {}),
     ...(pending && Object.keys(pending.labels).length > 0 ? { pendingLabels: pending.labels } : {}),
@@ -223,17 +223,17 @@ export const saveProject = (id: string, snapshot: ProjectSnapshot, workspaceRevi
     return { ...result.project, ...(kept.length > 0 ? { deletesKept: kept } : {}), ...(held.length > 0 ? { deletesHeld: held } : {}) };
   });
 export const renameProject = (id: string, name: string) =>
-  request<ProjectActivation>("Couldn't rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
+  request<ProjectActivation>("Couldn’t rename the project.", `/api/projects/${encodeURIComponent(id)}`, json('PUT', { name })).then((result) => result.project);
 export const deleteProject = (id: string, workspaceRevision: string) =>
-  request<ProjectDeletion>("Couldn't delete the project.", `/api/projects/${encodeURIComponent(id)}`, json('DELETE', { workspaceRevision }));
+  request<ProjectDeletion>("Couldn’t delete the project.", `/api/projects/${encodeURIComponent(id)}`, json('DELETE', { workspaceRevision }));
 export const restoreProject = (id: string) =>
-  request<{ project: ProjectSummary; workspaceRevision: string }>("Couldn't restore the project.", `/api/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' }).then((result) => result.project);
+  request<{ project: ProjectSummary; workspaceRevision: string }>("Couldn’t restore the project.", `/api/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' }).then((result) => result.project);
 export const purgeTrashedProject = (id: string) =>
-  request<{ trash: TrashedProject[] }>("Couldn't delete the project for good.", `/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
+  request<{ trash: TrashedProject[] }>("Couldn’t delete the project for good.", `/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
 /** Deletes for good only `ids` (what the list showed), so a project an agent
  * deleted after it loaded stays restorable. */
 export const emptyProjectTrash = (ids: string[]) =>
-  request<{ trash: TrashedProject[] }>("Couldn't empty Recently deleted.", '/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
+  request<{ trash: TrashedProject[] }>("Couldn’t empty Recently deleted.", '/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
 /** The person closed the restore notice (×): the backend doesn't list it again. */
 /** The person closed the notice that held canvases couldn't be read (GM r9). */
 export const dismissCanvasHeldUnreadable = (at: string) =>
@@ -241,10 +241,10 @@ export const dismissCanvasHeldUnreadable = (at: string) =>
 export const dismissCatalogRestore = (id: string) =>
   request<{ dismissed: boolean }>("Nebula couldn’t close the notice.", '/api/projects/catalog-restore/dismiss', json('POST', { id }));
 export const listCoverChoices = (id: string) =>
-  request<CoverChoices>("Couldn't load the cover choices.", `/api/projects/${encodeURIComponent(id)}/covers`);
+  request<CoverChoices>("Couldn’t load the cover choices.", `/api/projects/${encodeURIComponent(id)}/covers`);
 /** Pin one of the project's images as its cover, or `null` for automatic. */
 export const pinProjectCover = (id: string, url: string | null) =>
-  request<{ project: ProjectSummary }>("Couldn't set the cover.", `/api/projects/${encodeURIComponent(id)}/cover`, json('PUT', { url })).then((result) => result.project);
+  request<{ project: ProjectSummary }>("Couldn’t set the cover.", `/api/projects/${encodeURIComponent(id)}/cover`, json('PUT', { url })).then((result) => result.project);
 /** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
  * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
 /** `sourceName`: the project's name as this tab knew it, for a copy whose
@@ -276,7 +276,7 @@ export type RecoveredProject = SavedProject & { renumbered?: Record<string, stri
  * an Undo of a delete may. A stale tab's recovery sends none. */
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number,
   sourceName?: string, kept = false) =>
-  request<ProjectActivation & { renumbered?: unknown; droppedWires?: unknown; sourceName?: unknown }>("Couldn't recover the project.", '/api/projects/recover',
+  request<ProjectActivation & { renumbered?: unknown; droppedWires?: unknown; sourceName?: unknown }>("Couldn’t recover the project.", '/api/projects/recover',
     json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion, ...(sourceName ? { sourceName } : {}), ...(kept ? { kept: true } : {}) }))
     .then((result): RecoveredProject => {
       const renumbered = result.renumbered && typeof result.renumbered === 'object' && !Array.isArray(result.renumbered)

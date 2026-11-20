@@ -41,7 +41,7 @@ import { RequestFailedError } from '../../lib/errorCopy';
 import { disposeSparkQuietly, disposeSparkWhenSettled } from '../../lib/sparkDispose';
 
 /** Error copy round 3e (GM): the SPZ format check's line on the card. */
-const WORLD_SPZ_FORMAT_LINE = "This world's preview file is damaged or in a format Nebula can't open. "
+const WORLD_SPZ_FORMAT_LINE = "This world’s preview file is damaged or in a format Nebula can’t open. "
   + 'Use the panorama or the downloaded splat in a 3D viewer.';
 /** GM (PR #203 r1): the same check's line for a World v2 PLY splat (Idol),
  * which has no panorama, and its too-large line. */

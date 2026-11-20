@@ -140,7 +140,7 @@ export function isStringLengthLimit(error: unknown): boolean {
  * "Couldn't download a copy." for that case. It matches Save graph's "It's too
  * big to save in a browser.", so the two read as a pair with only the verb
  * changed. */
-export const TOO_BIG_TO_DOWNLOAD = "It's too big to download in a browser.";
+export const TOO_BIG_TO_DOWNLOAD = "It’s too big to download in a browser.";
 
 /** A download whose .nebula text is past the browser's string cap. */
 export class BrowserStringLimitError extends GraphStructureLimitError {
@@ -455,7 +455,7 @@ export async function saveBlobWithPicker(blob: Blob, suggestedName: string, type
 /** A write that failed after the person chose the file (saveBlobWithPicker's
  * `reportWriteFailure`); `cause` is the browser's own error. */
 class SaveFileWriteError extends Error {
-  constructor(cause: unknown) { super("Couldn't write the file.", { cause }); this.name = 'SaveFileWriteError'; }
+  constructor(cause: unknown) { super("Couldn’t write the file.", { cause }); this.name = 'SaveFileWriteError'; }
 }
 
 /** Characters no file name may hold on macOS, Windows or Linux. */

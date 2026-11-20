@@ -343,6 +343,13 @@ export function textsOf(expr, consts = null) {
     } else if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) out.push({ text: e.text, node: e });
     else if (ts.isTemplateExpression(e)) {
       out.push({ text: e.head.text + e.templateSpans.map((s) => `{}${s.literal.text}`).join(''), node: e });
+      // A string or template inside a substitution (`${open ? "it's" : ''}`) is copy of the same line: it is read too,
+      // for the straight-apostrophe rule only (nested: its other rules are judged on the whole line).
+      for (const span of e.templateSpans) {
+        const before = out.length;
+        walk(span.expression);
+        for (let i = before; i < out.length; i += 1) out[i].nested = true;
+      }
     } else if (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isSatisfiesExpression(e) || ts.isNonNullExpression(e)) walk(e.expression);
     else if (ts.isConditionalExpression(e)) {
       walk(e.whenTrue);
@@ -418,7 +425,7 @@ export function extractStrings(source, relPath, rules) {
     seen.add(item.node.pos);
     // A bare placeholder or key, a number or a symbol is not copy.
     if (!WORD_RE.test(item.text)) return;
-    found.push({ text: item.text.replace(/\s+/g, ' ').trim(), raw: item.text, kind, line: lineOf(item.node), source: source2 });
+    found.push({ text: item.text.replace(/\s+/g, ' ').trim(), raw: item.text, kind, line: lineOf(item.node), source: source2, ...(item.nested ? { nested: true } : {}) });
   };
   const mark = (e) => {
     // Every literal inside e is accounted for, so the generic copy-module pass skips it.
@@ -508,7 +515,8 @@ export function scan({ frontend = FRONTEND, repo = REPO, rules = loadRules(), ct
     for (const m of markers) if (!m.block || m.reason !== 'end') markerReport.push({ file: rel, ...m });
     for (const s of extractStrings(source, rel, rules)) {
       if (exempt.has(s.line)) continue;
-      for (const rule of check(s.raw ?? s.text, s.kind, ctx)) violations.push({ file: `frontend/${rel}`, line: s.line, rule, text: s.text });
+      // A nested string answers only to the straight-apostrophe rule (the line it sits in answers to the rest).
+      for (const rule of check(s.raw ?? s.text, s.kind, ctx)) if (!s.nested || rule === 'straight-quote') violations.push({ file: `frontend/${rel}`, line: s.line, rule, text: s.text });
     }
   }
   return { violations, markers: markerReport };

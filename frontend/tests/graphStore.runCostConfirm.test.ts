@@ -212,7 +212,7 @@ describe('run cost confirmation', () => {
         }).mockResolvedValueOnce(null);
         await useGraphStore.getState().executeNode('b');
         expect(askMock).toHaveBeenCalledTimes(2);
-        expect(askMock.mock.calls[1][0]).toMatchObject({ heading: "Run with Codex's changes?", runLabel: 'Run for $1.80' });
+        expect(askMock.mock.calls[1][0]).toMatchObject({ heading: "Run with Codex’s changes?", runLabel: 'Run for $1.80' });
         expect(confirm).not.toHaveBeenCalled();
         expect(execute).not.toHaveBeenCalled();
       });

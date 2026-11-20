@@ -276,7 +276,7 @@ describe('the close waits for a running grade, and offline (GM r41)', () => {
 
   it('N22: only the grade line waits; another lock line never asks', async () => {
     vi.useFakeTimers();
-    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there’s nothing to close."));
     render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
     fireEvent.click(screen.getByText('Close without sealing…'));
     fireEvent.click(screen.getByText('Close without sealing'));
@@ -298,7 +298,7 @@ describe('the close waits for a running grade, and offline (GM r41)', () => {
     expect(reviewApi.get).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText('Cancel'));
     fireEvent.click(screen.getByText('Close without sealing…'));
-    api.close.mockRejectedValueOnce(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    api.close.mockRejectedValueOnce(failed(409, "These labels are sealed as blind ground truth, so there’s nothing to close."));
     fireEvent.click(screen.getByText('Close without sealing'));
     await settle();
     const sealed = 'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.';
@@ -490,7 +490,7 @@ describe('Escape and Cancel (GM r43 Q6, review 17 LOW-4)', () => {
   });
 
   it('N8: Cancel takes the line with it: reopened, no line and the close live', async () => {
-    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there’s nothing to close."));
     render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
     fireEvent.click(screen.getByText('Close without sealing…'));
     fireEvent.click(screen.getByText('Close without sealing'));
@@ -684,7 +684,7 @@ describe('a lock line and offline together (GM r43 Q3, Q4)', () => {
   const SEALED = 'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.';
   it('Q3: both reasons, the lock line first, the offline row only once it shows; the line stays through the reconnect', async () => {
     vi.useFakeTimers();
-    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there’s nothing to close."));
     render(<><StudioOfflineRow /><CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} /></>);
     fireEvent.click(screen.getByText('Close without sealing…'));
     const close = screen.getByText('Close without sealing');

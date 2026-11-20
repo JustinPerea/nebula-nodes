@@ -74,7 +74,7 @@ const ANSWER_LOCK = 'You can answer this when this tab is connected as you.';
 const CARD_ANSWER_LOCK = 'You can answer or dismiss this when this tab is connected as you.';
 const GREY = 'var(--disabled-label, rgba(255, 255, 255, 0.55))';
 
-const refused = () => new RequestFailedError("Couldn't mark the updates as read.", 403,
+const refused = () => new RequestFailedError("Couldn’t mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.' });
 
 /** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
@@ -304,7 +304,7 @@ describe('GM r3 items 1 and 3, GM r23 item 5: a truthful header, a silent retry 
   });
 
   it('a read refused for another reason keeps its line and isn\'t retried on the promote', async () => {
-    notesApi.markAgentNotesRead.mockRejectedValue(new RequestFailedError("Couldn't mark the updates as read.", 500, { detail: 'boom' }));
+    notesApi.markAgentNotesRead.mockRejectedValue(new RequestFailedError("Couldn’t mark the updates as read.", 500, { detail: 'boom' }));
     render(<AppAgentNotes />);
     sync();
     const list = openList();

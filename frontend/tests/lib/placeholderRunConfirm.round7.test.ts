@@ -25,7 +25,7 @@ describe('GM round 7, item 1: "finished setting up this node / these nodes"', ()
   it('one finished node: "Codex finished setting up this node."', () => {
     const nodes = [node('h', 'Hero still'), node('p', 'Plate'), node('o', 'Final', undefined, 'image-compare')];
     const model = placeholderRunConfirm(nodes, edges, 'o', priced, { shown: new Map([['h', codex]]) })!;
-    expect(model.heading).toBe("Run with Codex's changes?");
+    expect(model.heading).toBe("Run with Codex’s changes?");
     expect(model.intro).toBe('Codex finished setting up this node.');
     expect(model.leftLine).toBeNull();
   });
@@ -39,7 +39,7 @@ describe('GM round 7, item 1: "finished setting up this node / these nodes"', ()
   it('several agents: "The agents finished setting up these nodes."', () => {
     const nodes = [node('h', 'Hero still'), node('p', 'Plate'), node('o', 'Final', undefined, 'image-compare')];
     const model = placeholderRunConfirm(nodes, edges, 'o', priced, { shown: new Map([['h', codex], ['p', claude]]) })!;
-    expect(model.heading).toBe("Run with the agents' changes?");
+    expect(model.heading).toBe("Run with the agents’ changes?");
     expect(model.intro).toBe('The agents finished setting up these nodes.');
   });
 });
@@ -52,7 +52,7 @@ describe('review 6, L-b (GM answer): placeholders the dialog showed that left th
     const nodes = [node('p', 'Plate'), node('o', 'Final', undefined, 'image-compare')];
     const model = placeholderRunConfirm(nodes, [wire('p', 'o')], 'o', priced, { shown: new Map([['h', codex]]) })!;
     expect(model.heading).toBe('Run without the node Codex was setting up?');
-    expect(model.intro).toBe("It's no longer in this run.");
+    expect(model.intro).toBe("It’s no longer in this run.");
     expect(model.leftLine).toBeNull();
     expect(model.rows.map((row) => row.nodeId)).toEqual(['p']);
     expect(model.runLabel).toBe('Run for $0.07');
@@ -63,21 +63,21 @@ describe('review 6, L-b (GM answer): placeholders the dialog showed that left th
     // h is still a placeholder on the canvas, but disconnected from o's run.
     const model = placeholderRunConfirm(nodes, [wire('p', 'o')], 'o', priced, { shown: new Map([['h', codex], ['g', codex]]) })!;
     expect(model.heading).toBe('Run without the nodes Codex was setting up?');
-    expect(model.intro).toBe("They're no longer in this run.");
+    expect(model.intro).toBe("They’re no longer in this run.");
   });
 
   it('several agents: "Run without the nodes the agents were setting up?"', () => {
     const nodes = [node('p', 'Plate'), node('o', 'Final', undefined, 'image-compare')];
     const model = placeholderRunConfirm(nodes, [wire('p', 'o')], 'o', priced, { shown: new Map([['h', codex], ['g', claude]]) })!;
     expect(model.heading).toBe('Run without the nodes the agents were setting up?');
-    expect(model.intro).toBe("They're no longer in this run.");
+    expect(model.intro).toBe("They’re no longer in this run.");
   });
 
   it('some finished, one left: the changes heading, the finished count, then "1 node Codex was setting up is no longer in this run."', () => {
     const nodes = [node('h', 'Hero still'), node('p', 'Plate'), node('o', 'Final', undefined, 'image-compare')];
     const model = placeholderRunConfirm(nodes, [wire('h', 'o'), wire('p', 'o')], 'o', priced,
       { shown: new Map([['h', codex], ['g', codex]]) })!;
-    expect(model.heading).toBe("Run with Codex's changes?");
+    expect(model.heading).toBe("Run with Codex’s changes?");
     expect(model.intro).toBe('Codex finished setting up this node.');
     expect(model.leftLine).toBe('1 node Codex was setting up is no longer in this run.');
   });

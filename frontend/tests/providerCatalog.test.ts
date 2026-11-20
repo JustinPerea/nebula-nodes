@@ -28,7 +28,7 @@ describe('provider catalog', () => {
     // BytePlus Service Specific Terms: "The BytePlus Model Services are not
     // available in the United States." Models need activating first.
     const byteplus = PROVIDER_KEYS.find((spec) => spec.key === 'BYTEPLUS_API_KEY');
-    expect(byteplus?.caveat).toMatch(/doesn't offer its model services in the United States/);
+    expect(byteplus?.caveat).toMatch(/doesn’t offer its model services in the United States/);
     expect(byteplus?.caveat).toMatch(/activate each model/);
     expect(byteplus?.caveat).toMatch(/USD 30/);
     expect(nodesForKey('BYTEPLUS_API_KEY').map((node) => node.id)).toContain('seedream-4-5');

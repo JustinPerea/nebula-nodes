@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { useGraphStore } from '../store/graphStore';
 import { UNLOCK_NODE_HEADING } from '../lib/api';
-import { failureMessage } from '../lib/errorCopy';
+import { failureMessage, curlApostrophes } from '../lib/errorCopy';
 import {
   UNLOCK_LABEL, UNLOCK_TITLE, WORLD_LABS_RUN_NEEDS_CHECK, WORLD_LABS_RUN_STATUS_UNKNOWN, moreNodesNeedCheck, recordNodeName, unlockAriaLabel, UNLOCK_RUN_ARIA,
 } from '../lib/worldLabsWaiting';
@@ -87,7 +87,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
         <strong>{ambiguity
           ? WORLD_LABS_RUN_NEEDS_CHECK
           : uncertainRunId ? WORLD_LABS_RUN_STATUS_UNKNOWN : 'Recovery ID not saved.'}</strong>
-        {' '}{ambiguity?.message ?? warning}
+        {' '}{curlApostrophes(ambiguity?.message ?? warning ?? '')}
         {ambiguity && !ambiguity.durable && (
           // GM, round 3f.
           <> Nebula couldn’t save the hold, so keep Nebula running until this run finishes.</>

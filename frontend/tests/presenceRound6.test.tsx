@@ -79,7 +79,7 @@ const CANVAS = update('u_canvas', CURSOR, 'proposal', { proposal: { id: 'p_canva
   actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'p_canvas', target: 'canvas', targetId: 'p1' } }] });
 const UPDATES = [COVER, QUESTION, CANVAS];
 
-const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn't mark the updates as read.", 403,
+const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn’t mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.', ...options });
 
 /** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read

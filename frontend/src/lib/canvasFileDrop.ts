@@ -18,7 +18,7 @@
 import { apiRequest } from './apiRequest';
 import { refuseEditWhileFollowing } from './canvasFollow';
 import { refuseEditWhileKept } from './keptCanvas';
-import { becauseLine, failureCopy, failureMessage } from './errorCopy';
+import { becauseLine, curlApostrophes, failureCopy, failureMessage } from './errorCopy';
 import { useGraphStore } from '../store/graphStore';
 import { refuseEditWhileOffline } from './backendConnection';
 import { quoted } from './quoted';
@@ -148,7 +148,7 @@ export type DropFailure =
  * when none failed. */
 export function dropNoticeText(failures: readonly DropFailure[], total: number): string | null {
   if (failures.length === 0) return null;
-  const reasonOf = (failure: DropFailure) => (failure.kind === 'upload' ? failure.reason : DROP_TYPES_LINE);
+  const reasonOf = (failure: DropFailure) => (failure.kind === 'upload' ? curlApostrophes(failure.reason) : DROP_TYPES_LINE);
   if (failures.length === 1) {
     const [failure] = failures;
     return failure.kind === 'upload' ? failure.line : becauseLine({ heading: `Couldn’t add ${quoted(failure.name)}.`, reason: DROP_TYPE_REASON });

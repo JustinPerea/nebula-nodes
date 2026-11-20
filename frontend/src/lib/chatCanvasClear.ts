@@ -54,7 +54,7 @@ export async function clearCanvasFromChat(options: {
       await options.onRefused?.(response);
       return 'refused';
     }
-    if (response) warnFailure("Couldn't clear the canvas.", response.status, await readDetail(response));
+    if (response) warnFailure("Couldn’t clear the canvas.", response.status, await readDetail(response));
     return 'unconfirmed';
   } finally {
     useGraphStore.getState().endUndoStep(undoStep);

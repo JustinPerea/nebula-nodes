@@ -100,7 +100,7 @@ describe('Create style saving', () => {
     fireEvent.click(view.getByRole('button', { name: 'OK' }));
     await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledTimes(1));
     expect(view.getByRole('button', { name: 'Saving…' })).toBeDisabled();
-    await act(async () => { reject(new RequestFailedError("Couldn't save the style.", 409, { reason: 'Preset storage unavailable.' })); });
+    await act(async () => { reject(new RequestFailedError("Couldn’t save the style.", 409, { reason: 'Preset storage unavailable.' })); });
     expect(mocks.graph.notify).toHaveBeenCalledWith(expect.stringContaining('Preset storage unavailable'), 'error', expect.anything());
     // Not in the toolbar row (GM r6): the row keeps its layout.
     expect(view.container.querySelector('.create-view__topbar [role="alert"]')).toBeNull();
@@ -164,7 +164,7 @@ describe('Create result save delegation', () => {
     expect(mocks.saveToFolder).toHaveBeenCalledExactlyOnceWith('/api/outputs/result.png');
     expect(view.getByTitle('Saving…')).toBeDisabled();
     expect(view.queryByTitle('Saved!')).toBeNull();
-    await act(async () => { reject(new RequestFailedError("Couldn't save the output.", 409, { reason: 'Export storage unavailable.' })); });
+    await act(async () => { reject(new RequestFailedError("Couldn’t save the output.", 409, { reason: 'Export storage unavailable.' })); });
     expect(view.getByRole('alert')).toHaveTextContent('Export storage unavailable');
     expect(view.getByTitle('Save to folder')).toBeEnabled();
     expect(view.queryByTitle('Saved!')).toBeNull();

@@ -1,4 +1,5 @@
 import { apiRequest } from './apiRequest';
+import { curlApostrophes } from './errorCopy';
 
 /** The line Settings shows at its top until the person dismisses it
  * (GET /api/settings/notice, the person's only): today settings.restored's
@@ -26,6 +27,7 @@ export const DISMISS_FAILED = { heading: 'Nebula couldn’t dismiss this notice'
  * selectable (GM, PR #203 r38 item 5); no path in the line, no split. */
 export function noticeParts(notice: SettingsNotice): { before: string; path: string; after: string } {
   const at = notice.path ? notice.line.indexOf(notice.path) : -1;
-  if (at < 0) return { before: notice.line, path: '', after: '' };
-  return { before: notice.line.slice(0, at), path: notice.path, after: notice.line.slice(at + notice.path.length) };
+  // Design: the sentence around the path is prose and is curled where it shows; the path stays as it is.
+  if (at < 0) return { before: curlApostrophes(notice.line), path: '', after: '' };
+  return { before: curlApostrophes(notice.line.slice(0, at)), path: notice.path, after: curlApostrophes(notice.line.slice(at + notice.path.length)) };
 }

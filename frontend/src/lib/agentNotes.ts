@@ -313,7 +313,7 @@ function base(surface: AgentNotesSurface): string {
 export async function fetchAgentNotes(surface: AgentNotesSurface): Promise<AgentNotesListing> {
   // This tab says it is a tab (X-Nebula-Tab, which agents never send), so a shared Update keeps
   // what it stands for here even before the tab is connected as the person (PR #204 round 4).
-  const response = await apiRequest("Couldn't load the updates.", base(surface), { headers: { [TAB_HEADER]: TAB_ID } });
+  const response = await apiRequest("Couldn’t load the updates.", base(surface), { headers: { [TAB_HEADER]: TAB_ID } });
   return (await response.json()) as AgentNotesListing;
 }
 
@@ -323,7 +323,7 @@ export async function markAgentNotesRead(
   upTo?: string,
   ids?: string[],
 ): Promise<{ ids: string[]; unread: number; projectId?: string | null }> {
-  const response = await apiRequest("Couldn't mark the updates as read.", `${base(surface)}/read`, {
+  const response = await apiRequest("Couldn’t mark the updates as read.", `${base(surface)}/read`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ids ? { ids } : upTo ? { upTo } : {}),
@@ -335,6 +335,6 @@ export async function dismissAgentNote(
   surface: AgentNotesSurface,
   id: string,
 ): Promise<{ note?: unknown; unread: number }> {
-  const response = await apiRequest("Couldn't dismiss the update.", `${base(surface)}/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
+  const response = await apiRequest("Couldn’t dismiss the update.", `${base(surface)}/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
   return (await response.json()) as { note?: unknown; unread: number };
 }

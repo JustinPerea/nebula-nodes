@@ -133,18 +133,6 @@
       "text": "Connect an image and run the upstream node first — the mask must match its exact dimensions."
     },
     {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
-      "rule": "straight-quote",
-      "text": "Couldn't load the upstream image for painting."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
-      "rule": "straight-quote",
-      "text": "Paint the region to change. Polarity is applied by the node's “Painted Area Means” setting at run time."
-    },
-    {
       "family": "em-dashes",
       "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
       "rule": "em-dash",
@@ -154,13 +142,7 @@
       "family": "sentence-punctuation",
       "file": "frontend/src/components/panels/settings/NousRow.tsx",
       "rule": "sentence-punctuation",
-      "text": "and choose Nous Portal. It signs in through Hermes in your browser; there's no key to paste."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/components/panels/settings/NousRow.tsx",
-      "rule": "straight-quote",
-      "text": "and choose Nous Portal. It signs in through Hermes in your browser; there's no key to paste."
+      "text": "and choose Nous Portal. It signs in through Hermes in your browser; there’s no key to paste."
     },
     {
       "family": "title-case-labels",
@@ -387,42 +369,6 @@
       "file": "frontend/src/lib/errorCopy.ts",
       "rule": "sentence-punctuation",
       "text": "no UI session: open Nebula from the desktop app or use the dev link"
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "That reference isn't in this held-out set. Reload to get the latest references."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "That reference isn't there anymore. Reload to get the latest references."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "The held-out set doesn't match what was saved, so Nebula stopped and changed nothing."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "There's no held-out set yet. Prepare a folder first."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "These labels are sealed as blind ground truth, so there's nothing to close."
-    },
-    {
-      "family": "straight-quotes",
-      "file": "frontend/src/lib/errorCopy.ts",
-      "rule": "straight-quote",
-      "text": "Those filters didn't work. Clear them and try again."
     },
     {
       "family": "sentence-punctuation",

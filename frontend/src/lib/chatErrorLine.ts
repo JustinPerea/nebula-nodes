@@ -1,4 +1,4 @@
-import { endedSentence } from './errorCopy';
+import { endedSentence, curlApostrophes } from './errorCopy';
 
 /**
  * The chat's line for a stream error (design): "Claude stopped because the connection was refused."
@@ -75,9 +75,9 @@ export function chatErrorLine({ message, code, source, agentName }: {
 }): ChatErrorLine {
   const raw = (message ?? '').trim();
   const text = cleaned(raw);
-  const because = (reason: string): ChatErrorLine => ({ text: `${agentName} stopped because ${endedSentence(reason)}`, because: true });
+  const because = (reason: string): ChatErrorLine => ({ text: `${agentName} stopped because ${curlApostrophes(endedSentence(reason))}`, because: true });
   if (!text) return because('of an unknown error');
-  const whole = (line: string): ChatErrorLine => ({ text: endedSentence(upperFirst(line)), because: false });
+  const whole = (line: string): ChatErrorLine => ({ text: curlApostrophes(endedSentence(upperFirst(line))), because: false });
   if (source === 'system' || WHOLE_LINE_CODES.has(String(code))) return whole(text);
   const stands = () => ({ ...because('its command failed'), details: raw });
   if (/\n/.test(raw)) return stands();
@@ -99,3 +99,9 @@ export function chatErrorLine({ message, code, source, agentName }: {
   if (OWN_SUBJECT.test(rest)) return because(`its ${lowerFirst(rest, names)}`);
   return because(lowerFirst(rest, names));
 }
+
+/** The agent's status hover: the CLI's own message (prose, curled where it shows) and the session. */
+export function agentStatusTitle(message: string | null | undefined, sessionTitle: string | null | undefined): string | undefined {
+  return curlApostrophes([message, sessionTitle].filter(Boolean).join(' · ')) || undefined;
+}
+

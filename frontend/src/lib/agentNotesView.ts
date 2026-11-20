@@ -1,4 +1,5 @@
 import { MAX_NOTE_BUTTONS, type AgentNote, type AgentNoteAbout, type AgentNoteAction, type AgentNoteAuthor } from './agentNotes';
+import { curlApostrophes } from './errorCopy';
 
 /**
  * How the Updates corner draws an update: header labels, clock time, author
@@ -128,7 +129,7 @@ const PRIMARY_KINDS = new Set(['suggestion.accept', 'proposal.accept']);
 /** What a greyed update says in place of its edit actions, or null while they stand. */
 export function stateLabel(note: AgentNote, actionState?: (action: AgentNoteAction) => string | null): string | null {
   // An asset proposal's Update: how the proposal ended, in place of Review.
-  if (note.outcome) return note.outcome;
+  if (note.outcome) return note.source === 'nebula' ? curlApostrophes(note.outcome) : note.outcome;
   if (note.resolvedAt) return 'Done';
   if (note.actedAt) return (note.actedWith && ACTED_STATE[note.actedWith]) || 'Done';
   if (dismissGreys(note)) return 'Not now';

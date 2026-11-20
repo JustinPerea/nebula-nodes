@@ -19,7 +19,7 @@ export async function renderPreview(req: { sourceUrl: string; clips: EditClip[] 
     sourceUrl: req.sourceUrl,
     clips: req.clips.map(augmentForBackend),
   };
-  const response = await apiRequest("Couldn't render the preview.", '/api/video-edit/preview-render', {
+  const response = await apiRequest("Couldn’t render the preview.", '/api/video-edit/preview-render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

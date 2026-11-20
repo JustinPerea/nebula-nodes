@@ -46,7 +46,7 @@ const SAVE_GRAPH = "Nebula couldn’t save the canvas.";
 const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
 /** GM - Design, 2026-10-24: "Nebula couldn’t save the canvas. It's too big to save in
  * a browser." (under SAVE_GRAPH). */
-const TOO_BIG_FOR_THE_BROWSER = "It's too big to save in a browser.";
+const TOO_BIG_FOR_THE_BROWSER = "It’s too big to save in a browser.";
 
 
 /**

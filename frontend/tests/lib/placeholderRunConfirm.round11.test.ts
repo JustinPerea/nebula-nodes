@@ -88,7 +88,7 @@ describe('GM round 11, item 6: "the agents" in the heading and the left line', (
     const model = placeholderRunConfirm(nodes, [wire('a', 'o'), wire('b', 'o'), wire('c', 'o')], 'o', unpriced)!;
     expect(model.heading).toBe('Run 3 nodes the agents are still setting up?');
     // The body stays as it was.
-    expect(model.intro).toBe("Agents haven't finished these, so their settings may not be final.");
+    expect(model.intro).toBe("Agents haven’t finished these, so their settings may not be final.");
   });
 
   it('Run without the nodes the agents were setting up?', () => {

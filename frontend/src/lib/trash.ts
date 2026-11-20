@@ -53,25 +53,25 @@ async function query(filter: TrashFilter): Promise<string> {
 const NOUN: Record<TrashKind, string> = { moodboard: 'moodboard', character: 'character', style: 'style', project: 'project' };
 
 export async function fetchTrash(filter: TrashFilter = {}): Promise<TrashedItem[]> {
-  const response = await apiRequest("Couldn't load Recently deleted.", `/api/trash${await query(filter)}`);
+  const response = await apiRequest("Couldn’t load Recently deleted.", `/api/trash${await query(filter)}`);
   const body = await response.json() as { items?: TrashedItem[] };
   return body.items ?? [];
 }
 
 export async function restoreTrashed(kind: TrashKind, id: string): Promise<void> {
-  await apiRequest(`Couldn't restore the ${NOUN[kind]}.`, `/api/trash/${kind}/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+  await apiRequest(`Couldn’t restore the ${NOUN[kind]}.`, `/api/trash/${kind}/${encodeURIComponent(id)}/restore`, { method: 'POST' });
 }
 
 /** Delete for good. The backend allows only the person. */
 export async function purgeTrashed(kind: TrashKind, id: string): Promise<void> {
-  await apiRequest(`Couldn't delete the ${NOUN[kind]} for good.`, `/api/trash/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await apiRequest(`Couldn’t delete the ${NOUN[kind]} for good.`, `/api/trash/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 /** Delete for good the `shown` items (what the list showed the person) that
  * `fetchTrash(filter)` still lists. Person only. Sending `shown` keeps an
  * agent's delete that landed after the list loaded restorable. */
 export async function emptyTrash(filter: TrashFilter, shown: Array<Pick<TrashedItem, 'kind' | 'id'>>): Promise<void> {
-  await apiRequest("Couldn't empty Recently deleted.", `/api/trash/empty${await query(filter)}`, {
+  await apiRequest("Couldn’t empty Recently deleted.", `/api/trash/empty${await query(filter)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items: shown.map(({ kind, id }) => ({ kind, id })) }),

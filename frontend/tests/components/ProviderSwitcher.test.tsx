@@ -341,7 +341,7 @@ describe('Inspector and pills show only the route options', () => {
     expect(screen.getByRole('option', { name: '1.5k (not on fal.ai)' })).toBeDisabled();
     fireEvent.click(pills.firstElementChild!);
     fireEvent.click(row(/^fal\.ai/));
-    expect(screen.getByRole('status')).toHaveTextContent("1.5k isn't on fal.ai: set to 2k");
+    expect(screen.getByRole('status')).toHaveTextContent("1.5k isn’t on fal.ai: set to 2k");
     expect((screen.getByTitle('Resolution').querySelector('select') as HTMLSelectElement).value).toBe('2k');
   });
 });
@@ -502,7 +502,7 @@ describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
     fireEvent.change(screen.getByTitle('Model').querySelector('select')!, { target: { value: 'klein-9b' } });
     expect(changes.at(-1)).toEqual({ _provider: 'fal', model: 'klein-9b', safety_tolerance: '2' });
     expect(screen.queryByTitle('Safety')).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent("Safety 5 · permissive isn't on fal.ai with FLUX.2 [klein] 9B: back to 2");
+    expect(screen.getByRole('status')).toHaveTextContent("Safety 5 · permissive isn’t on fal.ai with FLUX.2 [klein] 9B: back to 2");
   });
 });
 
@@ -521,9 +521,9 @@ describe('the card', () => {
     expect(chip).toHaveClass('model-node__provider-chip--blocked');
     expect(document.querySelector('.model-node__badge--warning')).toBeNull();
     act(() => useProviderNoteStore.getState().show('n1', ["1.5k isn't on fal.ai: set to 2k"]));
-    expect(screen.getByText("1.5k isn't on fal.ai: set to 2k")).toBeVisible();
+    expect(screen.getByText("1.5k isn’t on fal.ai: set to 2k")).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss provider note' }));
-    expect(screen.queryByText("1.5k isn't on fal.ai: set to 2k")).toBeNull();
+    expect(screen.queryByText("1.5k isn’t on fal.ai: set to 2k")).toBeNull();
   });
 
   it('a pick from the chip writes the node and leaves the note on the card', () => {

@@ -14,7 +14,7 @@ const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true
 
 const model = (rows: number): PlaceholderRunConfirm => ({
   heading: 'Run 34 nodes Codex is still setting up?',
-  intro: "Codex hasn't finished these, so their settings may not be final.",
+  intro: "Codex hasn’t finished these, so their settings may not be final.",
   leftLine: null,
   rows: Array.from({ length: rows }, (_, i) => ({ nodeId: `n${i}`, name: `“Still ${i + 1}”`, model: 'FLUX.2 [pro]', price: '$0.03', agent: codex })),
   freeLine: null,

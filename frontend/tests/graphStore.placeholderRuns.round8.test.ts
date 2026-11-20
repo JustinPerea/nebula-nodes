@@ -117,7 +117,7 @@ describe("review 7: the person's direct run once the placeholder dialog has show
       }).mockResolvedValue(null);
       await useGraphStore.getState().rerunHistoryRecord('saved');
       const last = pushed.at(-1)!;
-      expect(last).toMatchObject({ heading: 'Run without the node Codex was setting up?', intro: "It's no longer in this run.",
+      expect(last).toMatchObject({ heading: 'Run without the node Codex was setting up?', intro: "It’s no longer in this run.",
         leftLine: null, runLabel: 'Run for $1.20' });
       // The row keeps the name the dialog showed, with no agent dot.
       expect(last.rows.map((row) => [row.nodeId, row.name, row.agent])).toEqual([['a', '“a”', null], ['b', '“b”', null]]);

@@ -35,10 +35,10 @@ afterEach(() => {
 
 describe('a canvas notice for an error', () => {
   it('is announced as an alert and dismissed with a button', () => {
-    useGraphStore.getState().notify("Couldn't save the graph. Try again, or reload if it keeps happening.");
+    useGraphStore.getState().notify("Couldn’t save the graph. Try again, or reload if it keeps happening.");
     render(<CanvasUndoNotice />);
     const notice = screen.getByRole('alert');
-    expect(notice).toHaveTextContent("Couldn't save the graph. Try again, or reload if it keeps happening.");
+    expect(notice).toHaveTextContent("Couldn’t save the graph. Try again, or reload if it keeps happening.");
     const dismiss = screen.getByRole('button', { name: 'Dismiss' });
     dismiss.focus();
     expect(document.activeElement).toBe(dismiss);
@@ -54,9 +54,9 @@ describe('a canvas notice for an error', () => {
   });
 
   it('shows on a studio screen too, without an agent edit\'s Undo', () => {
-    useGraphStore.getState().notify("Couldn't add Veo 3.1. Reconnect, then add it again.");
+    useGraphStore.getState().notify("Couldn’t add Veo 3.1. Reconnect, then add it again.");
     render(<StudioNotice />);
-    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't add Veo 3.1.");
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn’t add Veo 3.1.");
   });
 });
 

@@ -54,11 +54,11 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
       ['load Agent review', 502, undefined, noResponseBecause('load Agent review')],
       ['load Agent review', 500, 'Internal Server Error', 'Nebula couldn’t load Agent review because the server hit an error. Try again.'],
       ['load Commons', 0, undefined, 'Nebula couldn’t load Commons because the server isn’t answering. Check that Nebula is running, then try again.'],
-      ['load this reference', 404, "That reference isn't there anymore. Reload to get the latest references.",
+      ['load this reference', 404, "That reference isn’t there anymore. Reload to get the latest references.",
         'Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references.'],
-      ['load this reference', 409, "That reference isn't in this held-out set. Reload to get the latest references.",
+      ['load this reference', 409, "That reference isn’t in this held-out set. Reload to get the latest references.",
         'Nebula couldn’t load this reference because it isn’t in this held-out set. Reload to get the latest references.'],
-      ['load the references', 422, "Those filters didn't work. Clear them and try again.",
+      ['load the references', 422, "Those filters didn’t work. Clear them and try again.",
         'Nebula couldn’t load the references because those filters didn’t work. Clear them and try again.'],
       ['load this image', 404, 'not found', 'Nebula couldn’t load this image because the file isn’t there anymore.'],
       ['load this video', 404, 'not found', 'Nebula couldn’t load this video because the file isn’t there anymore.'],
@@ -268,7 +268,8 @@ describe('the reasons mapped here are the backend\'s own words (round 18c)', () 
     for (const detail of LOAD_BECAUSE.keys()) {
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).
       if (detail === 'not found') continue;
-      if (detail.startsWith('That reference isn\'t there anymore')) { expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}."); continue; }
+      // The keys may be written with either apostrophe (the backend's template uses the straight one).
+      if (detail.replace(/’/g, "'").startsWith('That reference isn\'t there anymore')) { expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}."); continue; }
       expect(backend, detail).toContain(detail.replace(/’/g, "'"));
     }
   });

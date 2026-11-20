@@ -291,7 +291,7 @@ clearsOnPromoteIf(failure, () => { set({ line: null }); void useGraphStore.getSt
 
 describe('review 5 LOW-2: the because rule reads each retry\'s own line', () => {
   it('K4: a generic line beside an unreachable notConnectedBecause still fails it', () => {
-    const k4 = fixture(`function f(err) { setError(failureMessage(err, "Couldn't save the style.")); if (false) notConnectedBecause('x'); retryOnPromote(err, 'k', () => go()); }`);
+    const k4 = fixture(`function f(err) { setError(failureMessage(err, "Couldn’t save the style.")); if (false) notConnectedBecause('x'); retryOnPromote(err, 'k', () => go()); }`);
     expect(retriesWithoutBecause([k4])).toHaveLength(1);
   });
   it('a retry whose line another function words names it, and that function must use the because form', () => {

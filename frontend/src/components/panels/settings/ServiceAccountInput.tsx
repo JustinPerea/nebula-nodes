@@ -28,7 +28,7 @@ export function ServiceAccountInput({ label, value, fileName, onChange, onSubmit
     setFileError(null);
     if (file.size > MAX_KEY_FILE_BYTES) { setFileError('That file is too large to be a key file.'); return; }
     try { onChange(await file.text(), file.name); }
-    catch { setFileError("That file couldn't be read."); }
+    catch { setFileError("That file couldn’t be read."); }
   }
 
   function onDrop(event: DragEvent) {

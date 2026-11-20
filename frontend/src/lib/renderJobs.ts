@@ -32,7 +32,7 @@ export async function startVideoExport(input: {
   quality: VideoExportQuality;
 }): Promise<RenderJob> {
   const clips = input.clips.map((clip) => ({ ...clip, speed: clipSpeed(clip) }));
-  return job("Couldn't export the video.", '/api/video-edit/export', {
+  return job("Couldn’t export the video.", '/api/video-edit/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...input, clips }),
@@ -40,7 +40,7 @@ export async function startVideoExport(input: {
 }
 
 export async function startRemotionRender(manifest: VideoGraphManifest): Promise<RenderJob> {
-  return job("Couldn't start the render.", '/api/remotion-render', {
+  return job("Couldn’t start the render.", '/api/remotion-render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ manifest }),
@@ -48,11 +48,11 @@ export async function startRemotionRender(manifest: VideoGraphManifest): Promise
 }
 
 export async function getRenderJob(jobId: string): Promise<RenderJob> {
-  return job("Couldn't check the render.", `/api/render-jobs/${encodeURIComponent(jobId)}`);
+  return job("Couldn’t check the render.", `/api/render-jobs/${encodeURIComponent(jobId)}`);
 }
 
 export async function cancelRenderJob(jobId: string): Promise<RenderJob> {
-  return job("Couldn't cancel the render.", `/api/render-jobs/${encodeURIComponent(jobId)}`, {
+  return job("Couldn’t cancel the render.", `/api/render-jobs/${encodeURIComponent(jobId)}`, {
     method: 'DELETE',
   });
 }

@@ -36,7 +36,7 @@ function headline(view: AssetProposalView): string {
 
 function labels(view: AssetProposalView): { accept: string; reject: string } {
   if (view.kind === 'moodboard') return { accept: 'Send them', reject: 'Keep them here' };
-  if (view.kind === 'commons') return { accept: editCount(view) === 1 ? 'Apply' : 'Apply all', reject: "Don't" };
+  if (view.kind === 'commons') return { accept: editCount(view) === 1 ? 'Apply' : 'Apply all', reject: "Don’t" };
   const accept = view.change.cover?.to ? 'Use this cover' : 'Use automatic';
   return { accept, reject: view.change.cover?.fromBy?.kind === 'person' ? 'Keep mine' : 'Keep this one' };
 }

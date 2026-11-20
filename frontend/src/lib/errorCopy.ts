@@ -187,13 +187,13 @@ export interface ReasonClause {
 const SESSION_ENDED = 'this tab’s session ended. Reload to sign in again.';
 export const REASON_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map<string, ReasonClause>([
   // The reference detail's 404 (backend refusal_copy.gone, GM error-copy round 3).
-  [backendText("That reference isn't there anymore. Reload to get the latest references."),
+  [backendText("That reference isn’t there anymore. Reload to get the latest references."),
     { alone: 'it isn’t there anymore. Reload to get the latest references.' }],
   // A labeling image's position that isn't in the set (backend evaluation.REFERENCE_GONE).
-  [backendText("That reference isn't in this held-out set. Reload to get the latest references."),
+  [backendText("That reference isn’t in this held-out set. Reload to get the latest references."),
     { alone: 'it isn’t in this held-out set. Reload to get the latest references.' }],
   // The references' search with filters the backend can't read (backend person_copy.BAD_FILTERS).
-  [backendText("Those filters didn't work. Clear them and try again."), { alone: 'those filters didn’t work. Clear them and try again.' }],
+  [backendText("Those filters didn’t work. Clear them and try again."), { alone: 'those filters didn’t work. Clear them and try again.' }],
   // A reference's image or video the blob route can't find (backend routes/commons get_blob).
   [backendText('not found'), { alone: 'the file isn’t there anymore.' }],
   // The UI session's 401s (backend commons/actors.py resolve_actor): design says "tab".
@@ -298,16 +298,16 @@ export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
   [backendText('A grading attempt is still running. Close after it finishes.'),
     'a grade is still running. Close the batch again when it finishes.'],
   // Sealed in another window meanwhile.
-  [backendText("These labels are sealed as blind ground truth, so there's nothing to close."),
+  [backendText("These labels are sealed as blind ground truth, so there’s nothing to close."),
     'its labels were already sealed as blind ground truth. Reload to see them.'],
   // The batch changed somewhere else (a stale revision).
   [backendText('Labels changed in another tab. Reload before saving.'),
     'it changed somewhere else. Reload, then close the batch again.'],
   // The batch was cleared meanwhile.
-  [backendText("There's no held-out set yet. Prepare a folder first."),
+  [backendText("There’s no held-out set yet. Prepare a folder first."),
     'its held-out set no longer exists. Reload to get the latest references.'],
   // The integrity check (backend evaluation.INTEGRITY).
-  [backendText("The held-out set doesn't match what was saved, so Nebula stopped and changed nothing."),
+  [backendText("The held-out set doesn’t match what was saved, so Nebula stopped and changed nothing."),
     'the held-out set doesn’t match what was saved. Nothing was changed. Reload to check it again.'],
 ]);
 /** The 409 a grade still running gives (CLOSE_BECAUSE's first): the close waits for it. */
@@ -468,7 +468,7 @@ export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
 
 /** The "because" form's reason, whatever it was doing (GM r6; GM r13's "Nebula added … but
  * couldn’t … because"): a line of that shape. */
-const NOT_CONNECTED_BECAUSE = new RegExp(`(?:${NEBULA_COULDNT.source}|^Nebula added .+ but couldn['’]t ).+ because this (?:tab|window) isn’t connected as you\\. `);
+const NOT_CONNECTED_BECAUSE = new RegExp(`(?:${NEBULA_COULDNT.source}|^Nebula added .+ but couldn['’]t ).+ because this (?:tab|window) isn['’]t connected as you\\. `);
 
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
@@ -476,8 +476,10 @@ const isPersonRequiredCopy = (line: string) =>
 /** Whether a written line carries GM's person-required reason (any of the three
  * forms, alone or after a heading): its only reason was this tab (lib/clearsOnPromote). */
 export function saysPersonRequired(line: string): boolean {
-  return line.includes(PERSON_REQUIRED_COPY) || line.includes(PERSON_REQUIRED_APP_COPY)
-    || line.includes(PERSON_REQUIRED_DEV_COPY) || NOT_CONNECTED_BECAUSE.test(line);
+  // Either apostrophe: a line a straight backend sentence made and the same line curled match alike.
+  const said = foldApostrophes(line);
+  return said.includes(foldApostrophes(PERSON_REQUIRED_COPY)) || said.includes(foldApostrophes(PERSON_REQUIRED_APP_COPY))
+    || said.includes(foldApostrophes(PERSON_REQUIRED_DEV_COPY)) || NOT_CONNECTED_BECAUSE.test(line);
 }
 
 /** GM - Design, round 16 of PR #114: the one line for "no answer" wherever
@@ -794,7 +796,7 @@ function namedLine(reason: string, beside: 'alone' | 'button'): string {
   if (FULL_BECAUSE.test(reason)) return curlApostrophes(reason);
   const split = FIRST_SENTENCE.exec(reason);
   const what = failedWhat(sameFailureForm(split ? split[1] : reason));
-  if (what === null) return reason;
+  if (what === null) return curlApostrophes(reason);
   const rest = (split?.[2] ?? '').trim();
   const clause = rest ? clauseFor(rest, beside) : null;
   if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
@@ -847,8 +849,8 @@ export function becauseLine(parts: BecauseParts, beside: 'alone' | 'button' = 'a
   const what = given ?? failedWhat(heading);
   if (parts.clause?.trim() && what !== null) return `Nebula couldn’t ${what} because ${parts.clause.trim()}`;
   if (!reason) return what === null ? heading : `Nebula couldn’t ${what}.`;
-  if (!heading && given === undefined) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : reason;
-  if (what === null) return headedLine(heading, reason);
+  if (!heading && given === undefined) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : curlApostrophes(reason);
+  if (what === null) return curlApostrophes(headedLine(heading, reason));
   const person = personRequiredLine(what, reason);
   if (person !== null) return person;
   const clause = clauseFromTables(reason, parts.status, beside);

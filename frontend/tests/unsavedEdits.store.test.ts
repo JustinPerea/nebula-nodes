@@ -58,7 +58,7 @@ import { notePersonPromoted } from '../src/lib/personSession';
 
 const NEXT = GRAPH_PARAMS_VERSION + 1;
 const TOO_LARGE = 'These edits are too large for Nebula to save. Download them so nothing is lost, or continue without them.';
-const RECOVER = "Couldn't recover the project.";
+const RECOVER = "Couldn’t recover the project.";
 const initial = useProjectStore.getState();
 
 function project(id = 'alpha', name = id === 'alpha' ? 'Glass campaign' : id): SavedProject {
@@ -310,7 +310,7 @@ describe('every path that sends the held copy', () => {
   it('an Open whose answer was lost: the screen, then the projects and the open it was finishing', async () => {
     vi.mocked(projects.openProject).mockImplementationOnce(async () => {
       editCanvas('Edited while it opened');
-      throw new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn't open the project." });
+      throw new ConnectionLostError(new TypeError('Failed to fetch'), { heading: "Couldn’t open the project." });
     });
     await useProjectStore.getState().open('beta');
     vi.mocked(projects.recoverProject).mockRejectedValue(tooLarge());
@@ -392,7 +392,7 @@ describe("GM's lines in the store", () => {
     projectErrorDetails?: (state: unknown) => string | null }).projectErrorDetails?.(state()) ?? null;
 
   // PR #204 r6 (GM r7 2): the load screen's because form, no Try again; Details as before.
-  it("a person-only refusal under \"Couldn't recover the project.\": the because line, the backend's words behind Details", async () => {
+  it("a person-only refusal under \"Couldn’t recover the project.\": the because line, the backend's words behind Details", async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(
       new projects.ProjectRequestError(BILLING, 403, { heading: RECOVER, detail: BILLING, code: 'person_required' }));
@@ -401,7 +401,7 @@ describe("GM's lines in the store", () => {
     expect(errorDetails()).toBe(BILLING);
     expect(projectRetryOffer(state())).toBe('none');
     // Another line later doesn't carry these Details.
-    useProjectStore.setState({ error: "Couldn't load your projects." });
+    useProjectStore.setState({ error: "Couldn’t load your projects." });
     expect(errorDetails()).toBeNull();
   });
 

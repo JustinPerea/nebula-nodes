@@ -153,10 +153,10 @@ function savedInputs(run: RunRecord, model: RunSnapshotNode, definition?: ModelN
     }
     if (port.id === textPort?.id) {
       if (input?.type === 'Text' && typeof input.value === 'string') prompt = input.value;
-      else unavailable ??= "Nebula couldn't recover the saved prompt input. Open the saved run in Run history.";
+      else unavailable ??= "Nebula couldn’t recover the saved prompt input. Open the saved run in Run history.";
     } else {
       if (images) reusableRefs = port.multiple ? [...reusableRefs, ...images] : images;
-      else unavailable ??= "Nebula couldn't recover a saved image input. Open the saved run in Run history.";
+      else unavailable ??= "Nebula couldn’t recover a saved image input. Open the saved run in Run history.";
     }
   }
   if (imagePort && !imagePort.multiple && reusableRefs.length > 1) {

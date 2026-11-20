@@ -22,9 +22,9 @@ import { useProjectStore } from '../src/store/projectStore';
 describe('run history notes', () => {
   it('say what happened in words', () => {
     expect(WORLD_LABS_RECOVERY_VOLATILE_NOTE).toBe(
-      "World Labs sent back the job's ID, but Nebula couldn't save it. Keep this tab open and copy the ID before you reload.");
+      "World Labs sent back the job’s ID, but Nebula couldn’t save it. Keep this tab open and copy the ID before you reload.");
     expect(providerRecoveryWarningText({ durable: false })).toBe(WORLD_LABS_RECOVERY_VOLATILE_NOTE);
-    expect(WORLD_LABS_RECONNECTING_NOTE).toBe('Reconnecting to this World Labs run. You can\'t run it again until Nebula hears back about it.');
+    expect(WORLD_LABS_RECONNECTING_NOTE).toBe('Reconnecting to this World Labs run. You can’t run it again until Nebula hears back about it.');
     expect(EXECUTION_RECONNECTING_NOTE).toBe('Reconnecting to this run. It stays active until Nebula hears back about it.');
     for (const note of [WORLD_LABS_RECOVERY_VOLATILE_NOTE, WORLD_LABS_RECONNECTING_NOTE, EXECUTION_RECONNECTING_NOTE]) {
       expect(note).not.toMatch(/backend status|durabl|remains locked|could not/i);
@@ -36,7 +36,7 @@ describe('provider readiness', () => {
   const cache = { loaded: true, apiKeys: { OPENAI_API_KEY: 'set' } };
   it("a check that didn't run says Couldn't", () => {
     const failed = keyReadiness('OPENAI_API_KEY', cache, { providers: {}, checkedAt: null, loading: false, error: 'x' } as never);
-    expect(failed.detail).toBe("OpenAI is configured, but Nebula couldn't check the connections. Use Check connections to try again.");
+    expect(failed.detail).toBe("OpenAI is configured, but Nebula couldn’t check the connections. Use Check connections to try again.");
     const errored = keyReadiness('OPENAI_API_KEY', cache, {
       providers: { OpenAI: { status: 'error', last_checked: new Date().toISOString() } },
       checkedAt: Date.now(), loading: false, error: null,
@@ -46,13 +46,13 @@ describe('provider readiness', () => {
 });
 
 describe('a step written in the browser', () => {
-  // Plain Errors with written lines ("The project didn't open. Try again.")
+  // Plain Errors with written lines ("The project didn’t open. Try again.")
   // read GM's general line once their catch went through failureMessage; a
   // writtenLine keeps its words and takes no heading.
   it('reads word for word under any catch', () => {
-    expect(failureMessage(writtenLine("The project didn't open. Try again."), "Couldn't update the note."))
-      .toBe("The project didn't open. Try again.");
-    expect(failureMessage(new Error("The project didn't open. Try again."), "Couldn't update the note."))
+    expect(failureMessage(writtenLine("The project didn’t open. Try again."), "Couldn't update the note."))
+      .toBe("The project didn’t open. Try again.");
+    expect(failureMessage(new Error("The project didn’t open. Try again."), "Couldn't update the note."))
       .toBe("Nebula couldn’t update the note because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 

@@ -1,5 +1,6 @@
 import type { useCanvasProposalsStore } from '../store/canvasProposalsStore';
 import { proposalHoldLine, withHoldLine } from './ledgerHold';
+import { curlApostrophes } from './errorCopy';
 
 /** What a node's header shows while a run the daily total holds waits on it. */
 export interface NodeWait {
@@ -34,7 +35,7 @@ export function waitFor(state: Pick<ProposalsState, 'proposals'>, nodeId: string
   const lines: string[] = [];
   let holdEnd: number | undefined;
   for (const view of waiting) {
-    const bar = view.wait?.barLine ?? '';
+    const bar = curlApostrophes(view.wait?.barLine ?? '');
     if (!bar) continue;
     // The hold sentence the bar adds for sighted readers (review of PR #242 round 2, L6).
     const held = proposalHoldLine(view.wait?.ledgerHold, now);

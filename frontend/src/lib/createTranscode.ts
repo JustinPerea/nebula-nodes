@@ -10,7 +10,7 @@ export type DownloadFormat = (typeof DOWNLOAD_FORMATS)[number];
  * readable message on failure.
  */
 export async function downloadTranscoded(url: string, format: DownloadFormat): Promise<void> {
-  const res = await apiRequest("Couldn't convert the image.", '/api/transcode-image', {
+  const res = await apiRequest("Couldn’t convert the image.", '/api/transcode-image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, format }),

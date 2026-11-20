@@ -76,7 +76,7 @@ describe('many rows scroll inside the dialog', () => {
 
 describe('the line for placeholders that left the run', () => {
   it('shows under the intro, before the changed line and the rows', () => {
-    render(<PlaceholderRunDialog changed model={model(1, { heading: "Run with Codex's changes?",
+    render(<PlaceholderRunDialog changed model={model(1, { heading: "Run with Codex’s changes?",
       intro: 'Codex finished setting up this node.', leftLine: '1 node Codex was setting up is no longer in this run.' })} onDone={() => {}} />);
     const lines = [...document.querySelectorAll('.placeholder-run__body .prompt-dialog__line')].map((el) => el.textContent);
     expect(lines.slice(0, 3)).toEqual(['Codex finished setting up this node.', '1 node Codex was setting up is no longer in this run.',

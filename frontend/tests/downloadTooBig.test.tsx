@@ -3,8 +3,8 @@
  * (saveEditsToFile) and "Download a copy" (saveProjectCopyToFile) past V8's
  * string cap. JSON.stringify throws RangeError("Invalid string length") for a
  * canvas over 2^29 - 24 characters, the case #190 handles for Save graph
- * ("Nebula couldn’t save the canvas. It's too big to save in a browser."). GM: the
- * headings stay, and the body is "It's too big to download in a browser.",
+ * ("Nebula couldn’t save the canvas. It’s too big to save in a browser."). GM: the
+ * headings stay, and the body is "It’s too big to download in a browser.",
  * so the two read as a pair with only the verb changed.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,7 @@ import { isStringLengthLimit, saveEditsToFile, saveProjectCopyToFile } from '../
 import { UnsavedEditsNotice } from '../src/components/projects/UnsavedEditsNotice';
 
 const SNAPSHOT = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } };
-const TOO_BIG = "It's too big to download in a browser.";
+const TOO_BIG = "It’s too big to download in a browser.";
 
 /** JSON.stringify of a whole .nebula file throws as V8 does past its string cap. */
 function capTheFile(message = 'Invalid string length') {

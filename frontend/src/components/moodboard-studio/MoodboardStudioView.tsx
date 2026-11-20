@@ -16,7 +16,7 @@ import {
 import { RecentlyDeletedAssets, UndoDeleteToast, type TrashOpenRequest } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiRequest } from '../../lib/apiRequest';
-import { failureCopy, failureMessage, failureText, isBackendUnreachable, type FailureCopy } from '../../lib/errorCopy';
+import { failureCopy, failureMessage, failureText, isBackendUnreachable, type FailureCopy, curlApostrophes } from '../../lib/errorCopy';
 import { quoted } from '../../lib/quoted';
 import { isBackendOffline, isOfflineRefusal, probeOffline, refuseEditWhileOffline, waitUntilOnline } from '../../lib/backendConnection';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
@@ -56,7 +56,7 @@ import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { patchSteers } from './steering';
 import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
 import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, opKey, opSteers, queueOps, rebaseDraft, sameValue, sendableBatch,
-  fieldChanges, type BoardFieldKey, type MoodboardEditResult, type MoodboardOp } from '../../lib/moodboardEdits';
+  fieldChanges, skippedLines, type BoardFieldKey, type MoodboardOp } from '../../lib/moodboardEdits';
 import { TAB_ID } from '../../lib/tabId';
 import { batchesOf, useBoardUndoStore, type BoardUndoStep } from '../../lib/boardUndo';
 import { provisionalForCreate, readImageAspect } from '../../lib/boardDrop';
@@ -1092,14 +1092,10 @@ function imagePatchLabel(patch: Partial<MoodboardImage>, number: number): string
   return `Changed the note on image ${number}`;
 }
 
-/** What an undo left as it was, in the server's words (contract 07, 1.12),
- *  each once: a field step that saved twice undoes in two restores. */
-function skippedLines(edited: MoodboardEditResult): string[] {
-  return [...new Set(edited.applied.flatMap((entry) => {
-    const skipped = Array.isArray(entry.skipped) ? entry.skipped as Array<{ message?: unknown; number?: unknown }> : [];
-    return skipped.map((slice) => (typeof slice.message === 'string' && slice.message ? slice.message
-      : typeof slice.number === 'number' ? `Image ${slice.number} changed after that step, so Nebula left it as it is.` : 'Part of it changed after that step, so Nebula left it as it is.'));
-  }))];
+
+/** What a model read of the board: prose a person reads, curled where it shows (design). */
+export function AnalysisSummary({ text }: { text: string }) {
+  return <div className="moodboard-analysis__summary">{curlApostrophes(text)}</div>;
 }
 
 export function MoodboardStudioView() {
@@ -3279,7 +3275,7 @@ export function MoodboardStudioView() {
           <BoardSwatches label="Palette" role="dominant" analysis={analysis} leftOut={brief?.leftOut} />
           <BoardSwatches label="Accents" role="accent" analysis={analysis} leftOut={brief?.leftOut} />
           <SourcesOutdated analysis={analysis} />
-          <div className="moodboard-analysis__summary">{analysis.summary}</div>
+          <AnalysisSummary text={analysis.summary} />
           <AnalysisOutdated analysis={analysis} />
         </div>
       ) : (

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
-import { isBecauseFailure } from '../lib/errorCopy';
+import { curlApostrophes, isBecauseFailure } from '../lib/errorCopy';
 import { withCodeSpans } from '../lib/codeSpans';
 import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
@@ -25,7 +25,7 @@ export type LineTone = 'failure' | 'because';
  * surface's own element (its role, class and tooltip unchanged), and an empty anchor that never
  * displays finds that element, which is what registers. With a `className` they render in a span
  * of that class, which registers. `children` lays the same words out differently (a name in
- * monospace); `text` is what registers. No text renders nothing.
+ * monospace; a string child is curled like `text`, any other child is left alone); `text` is what registers. No text renders nothing.
  *
  * GM r14 (4): a because line marks the element it registers on (`data-line-because`), and one
  * shared sheet (styles/becauseLine.css) keeps it out of the warning colour on every surface.
@@ -40,7 +40,11 @@ export function LineText({ text, className, children, tone, code }: { text: stri
   const ref = useRef<HTMLSpanElement>(null);
   const own = className !== undefined;
   const registration = useRef<LineRegistration | null>(null);
-  const words = text || null;
+  // Design: a line is prose, and a line's apostrophes are curled where it renders (backend text arrives straight).
+  // Code spans, quoted names and paths stay as they are (curlApostrophes); a registered line is matched on its words
+  // with either apostrophe (lib/notConnectedLine), so a curled line still matches a straight registration.
+  const words = text ? curlApostrophes(text) : null;
+  const body = typeof children === 'string' ? curlApostrophes(children) : children;
   // The one offline-first rule (hooks/useOfflineFirstBecause): it gives null for a because line
   // while Nebula is offline. LineText never reads offline on its own (tests/round22Surfaces).
   const shown = useOfflineFirstBecause(words);
@@ -80,6 +84,6 @@ export function LineText({ text, className, children, tone, code }: { text: stri
     return () => { element.hidden = false; };
   }, [own, hide]);
   if (!text) return null;
-  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? (code ? withCodeSpans(text) : text)}</span>;
-  return <>{hide ? null : children ?? (code ? withCodeSpans(text) : text)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
+  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : body ?? (code ? withCodeSpans(words ?? '') : words)}</span>;
+  return <>{hide ? null : body ?? (code ? withCodeSpans(words ?? '') : words)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
 }

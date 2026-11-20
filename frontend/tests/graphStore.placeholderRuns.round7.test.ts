@@ -158,7 +158,7 @@ describe("review 6: the person's direct run once the placeholder dialog has show
         return null;
       });
       await useGraphStore.getState().executeNode('b');
-      expect(pushed.at(-1)).toMatchObject({ heading: 'Run without the node Codex was setting up?', intro: "It's no longer in this run.",
+      expect(pushed.at(-1)).toMatchObject({ heading: 'Run without the node Codex was setting up?', intro: "It’s no longer in this run.",
         leftLine: null, runLabel: 'Run for $0.60' });
     });
 
@@ -172,7 +172,7 @@ describe("review 6: the person's direct run once the placeholder dialog has show
         return pushed.at(-1) ?? null;
       });
       await useGraphStore.getState().executeNode('b');
-      expect(pushed.at(-1)).toMatchObject({ heading: 'Run without the node Codex was setting up?', intro: "It's no longer in this run." });
+      expect(pushed.at(-1)).toMatchObject({ heading: 'Run without the node Codex was setting up?', intro: "It’s no longer in this run." });
       expect(askMock).toHaveBeenCalledOnce();
       expect(execute).toHaveBeenCalledOnce();
       expect(execute.mock.calls[0][7]).toBe(0.6);
@@ -205,7 +205,7 @@ describe("review 6: the person's direct run once the placeholder dialog has show
         return null;
       });
       await useGraphStore.getState().executeNode('b');
-      expect(pushed.at(-1)).toMatchObject({ heading: "Run with Codex's changes?", intro: 'Codex finished setting up this node.',
+      expect(pushed.at(-1)).toMatchObject({ heading: "Run with Codex’s changes?", intro: 'Codex finished setting up this node.',
         leftLine: '1 node Codex was setting up is no longer in this run.' });
     });
   });

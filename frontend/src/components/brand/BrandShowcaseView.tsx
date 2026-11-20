@@ -56,7 +56,7 @@ const STATE_MAP: { mode: MarkMode; state: string; use: string }[] = [
   {
     mode: 'drift',
     state: aside('Ambient', 'subtle'),
-    use: "Footer wordmark, distant marks. Motion you'd only notice if it stopped.",
+    use: "Footer wordmark, distant marks. Motion you’d only notice if it stopped.",
   },
 ];
 

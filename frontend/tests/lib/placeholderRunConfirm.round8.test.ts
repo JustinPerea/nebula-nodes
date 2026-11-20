@@ -24,7 +24,7 @@ describe('GM round 8, item 2: the left line under the still-setting-up heading t
     const priced = summaryOf({ low: 0.43, high: 0.43, lines: [line('h', 'Hero still', 0.43, 0.43)] });
     const model = placeholderRunConfirm(nodes, [wire('h', 'o')], 'o', priced, { shown: new Map([['h', codex], ['g', codex]]) })!;
     expect(model.heading).toBe('Run 1 node Codex is still setting up?');
-    expect(model.intro).toBe("Codex hasn't finished this, so its settings may not be final.");
+    expect(model.intro).toBe("Codex hasn’t finished this, so its settings may not be final.");
     expect(model.leftLine).toBe('1 node Codex was setting up is no longer in this run.');
   });
 
@@ -54,7 +54,7 @@ describe("review 7, L1: a replay's saved copy of a placeholder that is no longer
     const model = placeholderRunConfirm(nodes, [wire('h', 'o')], 'o', priced,
       { shown: new Map([['h', codex]]), gone: new Set(['h']) } as never)!;
     expect(model.heading).toBe('Run without the node Codex was setting up?');
-    expect(model.intro).toBe("It's no longer in this run.");
+    expect(model.intro).toBe("It’s no longer in this run.");
     expect(model.rows.map((row) => [row.nodeId, row.agent])).toEqual([['h', null], ['o', null]]);
     expect(model.runLabel).toBe('Run for $1.20');
   });
@@ -63,7 +63,7 @@ describe("review 7, L1: a replay's saved copy of a placeholder that is no longer
     const nodes = [node('h', 'Hero still'), node('p', 'Plate'), node('o', 'Final')];
     const model = placeholderRunConfirm(nodes, [wire('h', 'o'), wire('p', 'o')], 'o', priced,
       { shown: new Map([['h', codex], ['p', codex]]), gone: new Set(['h']) } as never)!;
-    expect(model.heading).toBe("Run with Codex's changes?");
+    expect(model.heading).toBe("Run with Codex’s changes?");
     expect(model.intro).toBe('Codex finished setting up this node.');
     expect(model.leftLine).toBe('1 node Codex was setting up is no longer in this run.');
     expect(model.rows.find((row) => row.nodeId === 'p')?.agent).toEqual(codex);

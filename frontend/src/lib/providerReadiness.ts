@@ -78,7 +78,7 @@ function checkedReadiness(provider: string, target: ProviderSetupTarget, health:
     case 'invalid': return { ...base, label: `${Word} rejected`, tone: 'warning',
       detail: `${provider} rejected the saved ${word}. Update it in setup before running.` };
     case 'unauthorized': return { ...base, label: 'Authorization required', tone: 'warning',
-      detail: `${provider} denied access to the ${word} check. Review the account's API access in setup.` };
+      detail: `${provider} denied access to the ${word} check. Review the account’s API access in setup.` };
     case 'insufficient_credits': return { ...base, label: 'Credits required', tone: 'warning',
       detail: `${provider} reported insufficient credits during the check. Review the provider account before running.` };
     case 'rate_limited': return { ...base, label: 'Check rate limited', tone: 'warning',
@@ -101,7 +101,7 @@ export function keyReadiness(key: string, cache: CredentialReadiness, health: Pr
   const checked = checkedReadiness(provider, target, health);
   if (checked) return checked;
   return { label: health.error ? 'Check unavailable' : 'Configured · not checked', tone: health.error ? 'warning' : 'neutral',
-    detail: health.error ? `${provider} is configured, but Nebula couldn't check the connections. Use Check connections to try again.`
+    detail: health.error ? `${provider} is configured, but Nebula couldn’t check the connections. Use Check connections to try again.`
       : `${provider} ${credentialNounFor(key) === 'token' ? 'token' : 'API key'} is saved. Use Check connections to verify it without generating.`, setupTarget: target };
 }
 
@@ -253,10 +253,10 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
   }
   if (block.reason === 'unsupported') {
     // directRoute.accepts / rejects / rejectsWhen: "resolution 4K", "1080p at 10 seconds".
-    return `${directName}'s own API doesn't take ${block.detail}, so it runs on ${fallbackName}. Change ${block.param} to run on ${directName}.`;
+    return `${directName}’s own API doesn’t take ${block.detail}, so it runs on ${fallbackName}. Change ${block.param} to run on ${directName}.`;
   }
   if (block.reason === 'size') {
-    return `${directName} can't render this recipe's ${block.param} exactly, so it runs on ${fallbackName}. Pick a size ${directName} takes to run on ${directName}.`;
+    return `${directName} can’t render this recipe’s ${block.param} exactly, so it runs on ${fallbackName}. Pick a size ${directName} takes to run on ${directName}.`;
   }
   return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
 }
@@ -286,7 +286,7 @@ function routeDetail(def: ModelNodeDefinition, route: NodeRoute, key: string, di
   const fallbackKey = fallback === 'KREA_API_TOKEN' ? 'Krea API key' : `${PROVIDER_KEY_LABELS[fallback] ?? fallback} key`;
   const fallbackCopy = `${fallbackName} with your ${fallbackKey}${kreaToken ? ' (API balance)' : ''}`;
   if (route.kind === 'direct') {
-    return `Runs on ${directName}'s own API with your ${PROVIDER_KEY_LABELS[key] ?? key} key, billed by ${directName}.`;
+    return `Runs on ${directName}’s own API with your ${PROVIDER_KEY_LABELS[key] ?? key} key, billed by ${directName}.`;
   }
   if (route.kind === 'fallback') {
     const directLabel = PROVIDER_KEY_LABELS[direct] ?? direct;

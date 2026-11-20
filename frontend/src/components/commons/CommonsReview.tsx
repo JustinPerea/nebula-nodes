@@ -18,7 +18,7 @@ import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './u
 import { ReviewAxisMeter } from './ReviewAxisMeter';
 import { axisLabel, axisValue, enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
-import { isLoadLine } from '../../lib/errorCopy';
+import { isLoadLine, curlApostrophes } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 
 /**
@@ -304,7 +304,7 @@ function ReferenceImage({ item, headingRef }: { item: ReviewItem; headingRef: { 
   </div>;
 }
 
-function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept, draftRef, statusLineId, onDiscarded }: {
+export function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept, draftRef, statusLineId, onDiscarded }: {
   batch: ReviewBatch; item: ReviewItem; dirty: boolean; saving: boolean; generating: boolean;
   onDirty: (dirty: boolean) => void; onAccept: (labels: EvaluationLabels, from?: AcceptFrom) => Promise<SaveResult>;
   draftRef: { current: DraftActions | null };
@@ -327,7 +327,8 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     <p><LineText text={item.error ?? 'The complete grade will appear here. There is nothing to fill out first.'} /></p></div>;
   const change = (patch: Partial<EvaluationLabels>) => { setLabels({ ...labels, ...patch }); onDirty(true); };
   const fields = item.proposal.fields;
-  const reason = (key: string) => (fields[key] as { why?: string } | undefined)?.why;
+  // The model's reasons are prose a person reads: curled where they show (design).
+  const reason = (key: string) => { const why = (fields[key] as { why?: string } | undefined)?.why; return typeof why === 'string' ? curlApostrophes(why) : why; };
   // Round 18o (GM r51 Q4): while it saves it is aria-busy and aria-disabled, never natively disabled
   // (Chrome would drop its focus to the page); native only while the pane grades, or offline.
   const agreement = <><button className="commons-button commons-button--primary" disabled={generating || offline} {...offlineMark(offline)}
@@ -336,7 +337,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     {dirty && !saving && <span className="commons-unsaved">Unsaved</span>}</>;
   return <div className="evaluation-form">
     <small>{item.reviewed_at ? 'YOUR SAVED REVIEW' : 'PROPOSED BY THE AGENT'}</small>
-    <h3 className="evaluation-step">{fields.summary.value}</h3><p>{fields.composition_notes.value}</p>
+    <h3 className="evaluation-step">{curlApostrophes(fields.summary.value)}</h3><p>{curlApostrophes(fields.composition_notes.value)}</p>
     <div className="review-actions">{agreement}<button className="commons-button" disabled={disabled} onClick={() => setEditing(!editing)}>{editing ? 'Hide editing controls' : 'Edit grades'}</button></div>
     <fieldset disabled={disabled}>
       <h4 className="evaluation-subhead">Structure</h4>{Object.entries(batch.fields).map(([key, values]) => <div className="review-grade" key={key}>
@@ -350,7 +351,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} />
             : <ReviewAxisMeter axis={key} value={labels.axes[key]} />}
         </label><div className="review-axis-ends"><span>−1 {key.split('_')[0]}</span><span>+1 {key.split('_')[1]}</span></div>
-        <p className="review-reason">Agent: {fields.axes[key].why}</p>
+        <p className="review-reason">Agent: {curlApostrophes(fields.axes[key].why)}</p>
       </div>)}
       <h4 className="evaluation-subhead">Color roles</h4>{item.palette?.map((p) => <label key={p.index} className="evaluation-role"><span style={{ background: p.hex }} title={p.hex} />
         <span className="review-swatch-label">P{p.index} · {p.share * 100 < 0.1 ? '<0.1' : (p.share * 100).toFixed(1)}%</span>

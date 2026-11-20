@@ -12,6 +12,7 @@ import { floatingBottomLimit } from '../../lib/bottomBar';
 import { useCanvasLock } from '../../lib/canvasLock';
 import '../../styles/provider-switcher.css';
 import { useCappedPopover } from '../../lib/noticeWaiting';
+import { curlApostrophes } from '../../lib/errorCopy';
 
 /**
  * The provider switcher of a route-table node (docs/PROVIDER-ROUTES.md,
@@ -185,7 +186,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
           <button type="button" role="menuitemradio" aria-checked={row.selected}
             tabIndex={inline && index === active ? 0 : -1}
             className="provider-switcher__item"
-            {...lock.act({ title: row.block ?? row.info, offline: true, kept: 'live' })}
+            {...lock.act({ title: row.block ?? (row.info && curlApostrophes(row.info)), offline: true, kept: 'live' })}
             onClick={() => { onPick(row); onClose?.(true); }}>
             <span className="provider-switcher__check" aria-hidden="true">
               {row.selected && <Check size={12} strokeWidth={2} />}
@@ -198,7 +199,7 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
               {row.block && <>{' '}<span className="provider-switcher__block">{row.block}</span></>}
             </span>
             {' '}<span className="provider-switcher__price" title={row.priceTitle}>{row.price}</span>
-            {row.info && <>{' '}<span className="provider-switcher__info">{row.info}</span></>}
+            {row.info && <>{' '}<span className="provider-switcher__info">{curlApostrophes(row.info)}</span></>}
           </button>
           {row.routeId !== null && keyCell(row, setup)}
         </div>

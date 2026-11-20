@@ -139,9 +139,9 @@ describe('review 5, H1 (GM copy answer): once no placeholder is left', () => {
     expect(placeholderRunConfirm(nodes, edges, 'o', priced)).toBeNull();
   });
 
-  it('"Run with Codex\'s changes?" and "Codex finished setting up this node." with its rows as usual', () => {
+  it('"Run with Codex’s changes?" and "Codex finished setting up this node." with its rows as usual', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', priced, { shown: new Map([['h', codex]]) })!;
-    expect(model.heading).toBe("Run with Codex's changes?");
+    expect(model.heading).toBe("Run with Codex’s changes?");
     // One finished node: "this node" (GM - Design, round 7, item 1).
     expect(model.intro).toBe('Codex finished setting up this node.');
     expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 · 3.1 Flash · $9.00', '“Plate” · Nano Banana 2 · 3.1 Flash · $0.07']);
@@ -153,13 +153,13 @@ describe('review 5, H1 (GM copy answer): once no placeholder is left', () => {
 
   it('several agents: "Run with the agents\' changes?" / "The agents finished setting up these nodes."', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', priced, { shown: new Map([['h', codex], ['p', claude]]) })!;
-    expect(model.heading).toBe("Run with the agents' changes?");
+    expect(model.heading).toBe("Run with the agents’ changes?");
     expect(model.intro).toBe('The agents finished setting up these nodes.');
   });
 
   it('from Cinema: the same heading, with the Generate button', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', priced, { shown: new Map([['h', codex]]), verb: 'Generate' })!;
-    expect(model.heading).toBe("Run with Codex's changes?");
+    expect(model.heading).toBe("Run with Codex’s changes?");
     expect(model.runLabel).toBe('Generate for $9.07');
   });
 
@@ -167,7 +167,7 @@ describe('review 5, H1 (GM copy answer): once no placeholder is left', () => {
     const left = [node('h', 'Hero still'), node('p', 'Plate', codex), node('o', 'Final', undefined, 'image-compare')];
     const model = placeholderRunConfirm(left, edges, 'o', priced, { shown: new Map([['h', codex], ['p', codex]]) })!;
     expect(model.heading).toBe('Run 1 node Codex is still setting up?');
-    expect(model.intro).toBe("Codex hasn't finished this, so its settings may not be final.");
+    expect(model.intro).toBe("Codex hasn’t finished this, so its settings may not be final.");
     expect(model.confirmIds).toEqual(['p']);
   });
 });

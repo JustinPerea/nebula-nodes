@@ -31,7 +31,7 @@ const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 const pin = (id: string) => ({ id, text: 'note', anchor: { nodeId: 'n1' }, position: null, status: 'open' as const,
   createdAt: '2026-10-29T00:00:00+00:00', detached: false, reply: null });
-const refused = (status: number, code?: string) => new RequestFailedError("Couldn't save the note.", status, { detail: 'x', code: code ?? null });
+const refused = (status: number, code?: string) => new RequestFailedError("Couldn’t save the note.", status, { detail: 'x', code: code ?? null });
 
 beforeEach(() => {
   useCanvasPinsStore.setState({ pins: [], composer: null, composerCanvas: null, removing: {}, error: null, errorProject: null,

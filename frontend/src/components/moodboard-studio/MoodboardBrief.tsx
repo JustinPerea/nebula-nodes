@@ -4,6 +4,7 @@ import { BRIEF_LIMITS } from './briefLimits';
 import { agentAnchor } from '../../lib/agentAnchors';
 import { useStudioBoardId } from './useStudioBoardId';
 import { ASIDE_DOT } from '../../lib/labelAside';
+import { curlApostrophes } from '../../lib/errorCopy';
 
 // The person's side of a board's brief (design-canvas gap 14): Direction,
 // Avoid and pinned colours, plus the brief generators get and its optional
@@ -168,7 +169,7 @@ function BriefClashes({
  *  shouldn't hide that. */
 function reasonText(item: MoodboardClash): string {
   const reasons = (item.reasons ?? []).filter(Boolean);
-  return (reasons.length ? reasons : [item.reason]).join(' · ');
+  return curlApostrophes((reasons.length ? reasons : [item.reason]).join(' · '));
 }
 
 function ClashList({

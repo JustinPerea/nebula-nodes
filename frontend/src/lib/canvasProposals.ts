@@ -73,7 +73,7 @@ export async function acceptProposal(
   acceptKey: string,
   positions: Record<string, Point>,
 ): Promise<AcceptedProposal> {
-  const heading = "Couldn't accept the proposal.";
+  const heading = "Couldn’t accept the proposal.";
   const response = await apiRequest(heading, `/api/canvas/proposals/${encodeURIComponent(id)}/accept`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
@@ -97,7 +97,7 @@ export async function acceptProposal(
 }
 
 export async function rejectProposal(id: string, acceptKey: string, reason?: string): Promise<void> {
-  await apiRequest("Couldn't reject the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/reject`, {
+  await apiRequest("Couldn’t reject the proposal.", `/api/canvas/proposals/${encodeURIComponent(id)}/reject`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(reason ? { reason } : {}),
