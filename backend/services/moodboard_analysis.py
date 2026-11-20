@@ -898,6 +898,16 @@ def _measure_file(path: str, version: tuple[int, int, int, int], accent_min_chro
     # and _image_stats count it out). An opaque image reads as RGB, as before.
     with Image.open(path) as pil:
         image = as_rgba(pil) if has_transparency(pil) else as_rgb(pil)
+    return measure_image_stats(image, accent_min_chroma=accent_min_chroma, accent_separation=accent_separation,
+                               merge_delta_e=merge_delta_e)
+
+
+def measure_image_stats(image: Image.Image, *, accent_min_chroma: float = ACCENT_MIN_CHROMA,
+                        accent_separation: float = ACCENT_SEPARATION,
+                        merge_delta_e: float = MERGE_DELTA_E) -> dict[str, Any]:
+    """Measure one decoded image (RGB, or RGBA when it has transparency, as
+    ``_measure_file`` reads a file): width, height, colours, lightness and
+    saturation. ``_measure_file`` is this on a file."""
     measured = measure_image(image, accent_min_chroma=accent_min_chroma, accent_separation=accent_separation,
                              merge_delta_e=merge_delta_e)
     lightness, saturation = _image_stats(image)

@@ -1,0 +1,350 @@
+/* The extraction page. Nebula's own look: a #111 ground, #ccc text, the system font stack,
+   small type, quiet greys. Everything is scoped under .ex-app so it can move into Nebula later. */
+
+html, body, #root { height: 100%; margin: 0; }
+body { background: #111; }
+
+.ex-app {
+  --ex-bg: #111;
+  --ex-text: #ccc;
+  --ex-strong: #e6e6e6;
+  --ex-muted: #888;
+  --ex-fill: #191919;
+  --ex-fill-hover: #202020;
+  --ex-fill-selected: #272727;
+  --ex-line: #262626;
+  /* One tint per tone: the warning text sits on the warning soft tint (the app's --sr-warning-soft). */
+  --ex-notice: color-mix(in srgb, var(--ex-warning) 12%, transparent);
+  --ex-notice-text: var(--ex-warning);
+  /* palette-exempt: the app's --sr-warning, copied once; the app's tokens live under body.app-slava-restraint (slava-restraint.css), which this standalone page doesn't load */
+  --ex-warning: #F5C518;
+  /* palette-exempt: the app's --sr-accent, copied once, for the selected region box; same reason as --ex-warning */
+  --ex-accent: #FF5A1F;
+  --ex-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --ex-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-width: 960px;
+  background: var(--ex-bg);
+  color: var(--ex-text);
+  font: 13px/1.45 var(--ex-font);
+}
+
+.ex-app *, .ex-app *::before, .ex-app *::after { box-sizing: border-box; }
+
+.ex-app button, .ex-app input, .ex-app textarea { font: inherit; color: inherit; }
+.ex-app :focus-visible { outline: var(--sr-focus-outline, 2px solid #e8e6e1); outline-offset: var(--sr-focus-offset, 2px); }
+
+.ex-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ex-line);
+}
+.ex-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--ex-strong); }
+.ex-folder { display: flex; gap: 8px; flex: 0 1 460px; }
+.ex-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ex-line);
+  border-radius: 6px;
+  background: var(--ex-fill);
+}
+.ex-input::placeholder { color: #5f5f5f; }
+.ex-using { flex: 1; display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0; color: var(--ex-muted); }
+.ex-using-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.ex-using-count { flex: none; }
+
+.ex-button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--ex-fill-selected, #272727);
+  color: var(--ex-strong, #e6e6e6);
+  cursor: pointer;
+}
+.ex-button:hover:not(:disabled) { background: #323232; }
+/* The disabled look is the app's shared one (styles/disabled-buttons.css). */
+.ex-button:disabled { cursor: default; }
+/* The label is the page's text grey, brighter than the shared disabled grey, so a disabled quiet
+   button reads dimmer than an enabled one (the app raised its dim buttons the same way). */
+.ex-button-quiet { background: transparent; color: var(--ex-text, #ccc); }
+.ex-button-quiet:hover:not(:disabled) { background: var(--ex-fill); color: var(--ex-text); }
+
+.ex-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 0; }
+
+.ex-side-list { min-height: 0; overflow-y: auto; border-right: 1px solid var(--ex-line); }
+.ex-list-head { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 12px 6px; }
+.ex-busy { color: var(--ex-muted); }
+.ex-list { list-style: none; margin: 0; padding: 0 6px 12px; display: grid; gap: 2px; }
+
+.ex-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.ex-row:hover { background: var(--ex-fill-hover); }
+.ex-row.ex-selected { background: var(--ex-fill-selected); }
+.ex-row-broken { display: flex; align-items: center; gap: 10px; padding: 6px; color: var(--ex-muted); }
+.ex-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  background: var(--ex-fill-hover);
+  overflow: hidden;
+}
+.ex-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ex-row-text { display: grid; min-width: 0; }
+.ex-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ex-strong); }
+.ex-row-sub { font-size: 11px; color: var(--ex-muted); }
+
+.ex-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 16px; }
+.ex-main.ex-dragging::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+
+.ex-notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--ex-notice);
+  color: var(--ex-notice-text);
+}
+.ex-quiet { margin: 0; color: var(--ex-muted); }
+.ex-pad { padding: 4px 0; }
+
+.ex-drop {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-radius: 10px;
+  background: var(--ex-fill);
+}
+.ex-drop-active { background: var(--ex-fill-hover); }
+.ex-drop-line { margin: 0; font-size: 14px; color: var(--ex-strong); }
+
+.ex-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ex-muted);
+}
+.ex-list-head .ex-label { margin: 0; }
+.ex-label-origin { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+.ex-record { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; min-height: 0; }
+.ex-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 10px;
+  background: var(--ex-fill);
+  overflow: hidden;
+}
+.ex-rendering { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.ex-side { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 22px; }
+.ex-side-head { display: flex; align-items: center; justify-content: space-between; }
+.ex-status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ex-fill-selected);
+  font-size: 11px;
+  color: var(--ex-strong);
+}
+
+.ex-status-fake {
+  background: var(--ex-notice);
+  color: var(--ex-notice-text);
+}
+
+.ex-bar { display: flex; height: 22px; margin-bottom: 10px; border-radius: 6px; overflow: hidden; }
+.ex-seg { position: relative; height: 100%; transform-origin: left center; }
+.ex-seg-accent::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: #fff;
+  mix-blend-mode: difference;
+}
+
+.ex-colors { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ex-colors li { display: grid; grid-template-columns: 16px 64px 40px 1fr auto; align-items: center; gap: 10px; padding: 3px 0; }
+.ex-swatch { width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.ex-hex { font-family: var(--ex-mono); font-size: 12px; color: var(--ex-strong); }
+.ex-share { text-align: right; color: var(--ex-text); }
+.ex-accent-tag { color: var(--ex-muted); }
+
+.ex-app dl { margin: 0; }
+.ex-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; }
+.ex-line dt { color: var(--ex-muted); }
+.ex-line dd { margin: 0; display: flex; align-items: baseline; gap: 8px; min-width: 0; text-align: right; }
+.ex-value { overflow-wrap: anywhere; color: var(--ex-strong); }
+.ex-mono { font-family: var(--ex-mono); font-size: 12px; }
+
+.ex-origin {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ex-fill-selected);
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--ex-muted);
+}
+
+/* Springs: arrivals use the POP spring from lib/springs (the CSS variables come from the page root). */
+@keyframes ex-row-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ex-seg-in {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.ex-arrived { animation: ex-row-in var(--spring-pop-ms) var(--spring-pop) both; }
+.ex-seg { animation: ex-seg-in var(--spring-pop-ms) var(--spring-pop) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-arrived, .ex-seg { animation: none; }
+}
+
+/* Region overlay: the frame is the image's drawn size (the stage is a size container), boxes are
+   positioned in percentages of it. 1px outlines only. */
+.ex-stage { container-type: size; }
+.ex-frame {
+  position: relative;
+  width: min(100cqw, calc(100cqh * var(--ex-ratio, 1.6)));
+  aspect-ratio: var(--ex-ratio, 1.6);
+  flex: none;
+}
+.ex-frame .ex-rendering { width: 100%; height: 100%; max-width: none; max-height: none; }
+.ex-overlay { position: absolute; inset: 0; pointer-events: none; }
+/* A bare box is a two-tone line: 1px white inside its edge, 1px black just outside it, so one of the two
+   holds 3:1 against any pixel under it (white against L* up to about 60, black from about 30 up). */
+.ex-box {
+  position: absolute;
+  outline: 1px solid #fff;
+  outline-offset: -1px;
+  box-shadow: 0 0 0 1px #000;
+  pointer-events: auto;
+  cursor: pointer;
+  transform-origin: center;
+  animation: ex-box-in var(--spring-pop-ms) var(--spring-pop) both;
+}
+.ex-box-role {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 14px;
+  background: #000;
+  color: #fff;
+}
+.ex-box-on { background: color-mix(in srgb, var(--ex-accent) 16%, transparent); z-index: 1; }
+/* The outline carries the state, since any fill colour vanishes over some image: a hovered or focused
+   box keeps the 1px double outline, a selected one doubles it to 2px. */
+.ex-box-selected {
+  outline-width: 2px;
+  outline-offset: -2px;
+  box-shadow: 0 0 0 2px #000;
+  background: color-mix(in srgb, var(--ex-accent) 24%, transparent);
+}
+
+/* Read section and rows */
+.ex-read-line { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; flex-wrap: wrap; }
+.ex-request { margin: 0 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--ex-fill); color: var(--ex-strong); overflow-wrap: anywhere; }
+.ex-confirm { display: grid; gap: 8px; padding: 10px; border-radius: 8px; background: var(--ex-fill); }
+.ex-confirm p { margin: 0; color: var(--ex-strong); }
+.ex-confirm-actions { display: flex; gap: 6px; }
+
+.ex-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ex-row-item2 { display: flex; align-items: center; gap: 8px; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; flex-wrap: wrap; }
+.ex-row-item2:hover, .ex-row-on { background: var(--ex-fill-hover); }
+.ex-id { flex: none; width: 26px; font-family: var(--ex-mono); font-size: 11px; color: var(--ex-muted); }
+.ex-app .ex-id-button { padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; font: 11px var(--ex-mono); color: var(--ex-muted); }
+.ex-app .ex-id-button[aria-pressed="true"] { color: var(--ex-strong); }
+.ex-input.ex-textarea { height: auto; min-height: 0; padding: 3px 6px; resize: none; line-height: 1.45; font: inherit; color: inherit; }
+.ex-grow { flex: 1; min-width: 0; }
+.ex-approx { color: var(--ex-strong); white-space: nowrap; }
+.ex-input-small { height: 24px; flex: 1; min-width: 80px; padding: 0 6px; }
+.ex-select {
+  height: 24px;
+  max-width: 120px;
+  padding: 0 4px;
+  border: 1px solid var(--ex-line);
+  border-radius: 6px;
+  background: var(--ex-fill);
+  font: inherit;
+  color: inherit;
+}
+.ex-swatch-small { width: 12px; height: 12px; }
+.ex-origin-you { background: #2b3550; color: #cfe0ff; }
+.ex-origin-agent { background: #3a2f4d; color: #e2d0ff; }
+.ex-color-on { background: var(--ex-fill-hover); border-radius: 6px; }
+.ex-summary { margin: 0 0 8px; color: var(--ex-strong); }
+
+.ex-axes { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 4px; }
+.ex-axes li { display: grid; grid-template-columns: 72px 1fr 72px; align-items: center; gap: 8px; }
+.ex-axis-end { font-size: 11px; color: var(--ex-muted); }
+.ex-axis-end:last-child { text-align: right; }
+.ex-axis { position: relative; height: 6px; border-radius: 3px; background: var(--ex-fill-selected); }
+.ex-axis::after { content: ""; position: absolute; left: 50%; top: -2px; width: 1px; height: 10px; background: var(--ex-muted); }
+.ex-axis-fill { position: absolute; top: 0; height: 100%; border-radius: 3px; background: var(--ex-strong); }
+
+.ex-chips { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.ex-chip { padding: 1px 8px; border-radius: 999px; background: var(--ex-fill-selected); font-size: 11px; color: var(--ex-text); }
+.ex-chip-button { border: 0; cursor: pointer; font-family: var(--ex-mono); }
+.ex-chip-button:hover { background: #323232; color: var(--ex-strong); }
+.ex-show { padding: 6px; margin: 0 -6px; border-radius: 6px; }
+.ex-show:hover { background: var(--ex-fill-hover); }
+.ex-show-line { display: flex; align-items: center; gap: 8px; }
+
+@keyframes ex-box-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ex-pop-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ex-pop { animation: ex-pop-in var(--spring-pop-ms) var(--spring-pop) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-box, .ex-pop { animation: none; }
+}

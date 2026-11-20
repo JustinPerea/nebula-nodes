@@ -1,0 +1,397 @@
+"""Records as plain files in a folder the person names.
+
+Layout: ``<folder>/<id>/record.json``, ``rendering.png`` and ``source.<ext>``.
+
+The folder must already exist and be a directory. It can't be, or sit inside,
+the Nebula state folder (``~/.nebula``, or ``NEBULA_STATE_DIR`` when set) or
+this repo's own tree. A record directory or file that is a symlink is refused,
+and every path read or written is checked to stay inside the folder's real
+path. Files are written to a temporary name in the same directory and moved
+into place with ``os.replace``, with ``record.json`` last, so a record whose
+``record.json`` exists is complete.
+
+Every change to an existing record (``save`` with ``replace``, ``correct``, ``request_read``, ``modify``)
+holds an advisory lock, ``flock`` on ``<id>/.lock``, across load, change and write, so two writers (an agent's
+MCP process and the page's server) can't lose each other's work. The lock file is created without following
+a symlink and is refused if it is one. A write over ``MAX_RECORD_BYTES`` is refused, so a record the store
+writes is one it can read back.
+"""
+from __future__ import annotations
+
+import contextlib
+import copy
+import fcntl
+import json
+import os
+import re
+import stat
+import tempfile
+import unicodedata
+from pathlib import Path
+from typing import Any, Callable, Iterable, Iterator
+
+from extraction import record as rec
+from extraction.errors import StoreRefused
+
+SOURCE_EXTS = ("jpg", "png", "gif", "webp", "heic")
+MAX_RECORD_BYTES = 5 * 1024 * 1024
+MAX_RENDERING_BYTES = 128 * 1024 * 1024
+_PNG = b"\x89PNG\r\n\x1a\n"
+_DIR_NAME = re.compile(r"^ex_[0-9a-f]{16}$")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+# -- folder safety ----------------------------------------------------------------------------
+
+
+def _forbidden_roots() -> list[tuple[str, Path]]:
+    roots: list[tuple[str, Path]] = []
+    homes = {Path.home()}
+    try:
+        import pwd
+        homes.add(Path(pwd.getpwuid(os.getuid()).pw_dir))
+    except (ImportError, KeyError, OSError):
+        pass
+    for home in homes:
+        roots.append(("Nebula’s own state folder", (home / ".nebula").resolve()))
+    state = os.environ.get("NEBULA_STATE_DIR")
+    if state:
+        roots.append(("Nebula’s own state folder", Path(state).resolve()))
+    roots.append(("the Nebula source folder", REPO_ROOT.resolve()))
+    return roots
+
+
+def _folded(path: str) -> str:
+    # macOS volumes usually ignore case and Unicode normalization, so
+    # ~/.Nebula is ~/.nebula. Compare the folded spellings, as file_access does.
+    return unicodedata.normalize("NFD", path).casefold()
+
+
+def _inside(path: str, root: Path) -> bool:
+    folded_root = _folded(str(root))
+    try:
+        return os.path.commonpath([_folded(path), folded_root]) == folded_root
+    except ValueError:
+        return False
+
+
+def resolve_folder(folder: str | os.PathLike[str]) -> str:
+    """The folder's real path, or ``StoreRefused`` saying why it can't be used."""
+    raw = os.path.expanduser(os.fspath(folder))
+    if not raw or "\0" in raw:
+        raise StoreRefused("Name a folder for the records.")
+    real = os.path.realpath(raw)
+    if not os.path.exists(real):
+        raise StoreRefused("That folder doesn’t exist. Create it first, then try again.")
+    if not os.path.isdir(real):
+        raise StoreRefused("That path is a file, not a folder.")
+    for label, root in _forbidden_roots():
+        if _inside(real, root):
+            raise StoreRefused(f"That folder is inside {label}. Pick a folder of your own.")
+    return real
+
+
+def _contained(path: str, root: str) -> str:
+    real = os.path.realpath(path)
+    if not _inside(real, Path(root)):
+        raise StoreRefused("That path leads outside the records folder.")
+    return real
+
+
+def _record_dir(folder_real: str, record_id: str) -> str:
+    if not _DIR_NAME.match(record_id):
+        raise StoreRefused("That isn’t a record id.")
+    path = os.path.join(folder_real, record_id)
+    if os.path.islink(path):
+        raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
+    return path
+
+
+def _atomic_write(directory: str, name: str, data: bytes) -> None:
+    final = os.path.join(directory, name)
+    if os.path.islink(final):
+        raise StoreRefused(f"{name} is a symlink, so it won’t be overwritten.")
+    _contained(final, directory)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, final)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _dump(record: dict[str, Any]) -> bytes:
+    """The bytes of ``record.json``. Refused when a read would refuse them, so the record stays readable."""
+    data = (json.dumps(record, indent=2, ensure_ascii=False, sort_keys=False) + "\n").encode("utf-8")
+    if len(data) > MAX_RECORD_BYTES:
+        raise StoreRefused("That change would make the record too large to read back, so it wasn’t saved. "
+                           "The record is as it was.")
+    return data
+
+
+LOCK_NAME = ".lock"
+
+
+@contextlib.contextmanager
+def _locked(directory: str) -> Iterator[None]:
+    """Hold the record's advisory lock (``<directory>/.lock``) until the block ends.
+
+    Opened with ``O_NOFOLLOW`` so a symlink in its place is refused, and checked to be a regular file."""
+    path = os.path.join(directory, LOCK_NAME)
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except OSError as exc:
+        raise StoreRefused("That record’s lock file couldn’t be opened (is it a link?), so the record "
+                           "wasn’t changed.") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise StoreRefused("That record’s lock file isn’t a regular file, so the record wasn’t changed.")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)  # closing releases the lock
+
+
+# -- reading ----------------------------------------------------------------------------------
+
+
+def _read_record_file(directory: str) -> dict[str, Any]:
+    path = os.path.join(directory, "record.json")
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        raise StoreRefused("There’s no record.json there.") from None
+    if stat.S_ISLNK(info.st_mode):
+        raise StoreRefused("That record.json is a symlink, so it won’t be read.")
+    if not stat.S_ISREG(info.st_mode):
+        raise StoreRefused("That record.json isn’t a regular file.")
+    if info.st_size > MAX_RECORD_BYTES:
+        raise StoreRefused("That record.json is too large to read.")
+    _contained(path, directory)
+    try:
+        with open(path, "rb") as handle:
+            record = json.loads(handle.read(MAX_RECORD_BYTES + 1))
+    except (OSError, ValueError):
+        raise StoreRefused("That record.json couldn’t be read as JSON.") from None
+    try:
+        rec.validate(record)
+    except rec.RecordInvalid as exc:
+        raise StoreRefused(str(exc)) from None
+    if os.path.basename(directory) != record["id"]:
+        raise StoreRefused("That record’s folder name doesn’t match its id.")
+    return record
+
+
+def _locate(target: str | os.PathLike[str]) -> str:
+    """The record directory (real path, checked) for a record dir or a record.json path."""
+    raw = os.path.expanduser(os.fspath(target))
+    if os.path.basename(raw) == "record.json":
+        raw = os.path.dirname(raw) or "."
+    raw = raw.rstrip("/") or "/"
+    if os.path.islink(raw):
+        raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
+    parent = resolve_folder(os.path.dirname(os.path.abspath(raw)))
+    name = os.path.basename(os.path.abspath(raw))
+    directory = _record_dir(parent, name)
+    if not os.path.isdir(directory):
+        raise StoreRefused("That isn’t a record folder.")
+    return directory
+
+
+def load(target: str | os.PathLike[str]) -> dict[str, Any]:
+    """Read a record from its folder or its record.json."""
+    return _read_record_file(_locate(target))
+
+
+def rendering_bytes(target: str | os.PathLike[str]) -> bytes:
+    """The saved ``rendering.png`` of a record (its folder or its record.json), checked like ``load``."""
+    directory = _locate(target)
+    _read_record_file(directory)  # only a good record's rendering is served
+    path = os.path.join(directory, "rendering.png")
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        raise StoreRefused("That record has no rendering.") from None
+    if stat.S_ISLNK(info.st_mode):
+        raise StoreRefused("That rendering is a symlink, so it won’t be read.")
+    if not stat.S_ISREG(info.st_mode):
+        raise StoreRefused("That rendering isn’t a regular file.")
+    if info.st_size > MAX_RENDERING_BYTES:
+        raise StoreRefused("That rendering is too large to read.")
+    _contained(path, directory)
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(MAX_RENDERING_BYTES + 1)
+    except OSError:
+        raise StoreRefused("That rendering couldn’t be read.") from None
+    if not data.startswith(_PNG):
+        raise StoreRefused("That rendering isn’t a PNG.")
+    return data
+
+
+def list_records(folder: str | os.PathLike[str]) -> list[dict[str, Any]]:
+    """One summary per record in ``folder``, newest read first. A record folder that can't
+    be read is listed with an ``error`` instead of being skipped."""
+    real = resolve_folder(folder)
+    rows: list[dict[str, Any]] = []
+    with os.scandir(real) as entries:
+        names = sorted(e.name for e in entries if _DIR_NAME.match(e.name))
+    for name in names:
+        directory = os.path.join(real, name)
+        try:
+            if os.path.islink(directory):
+                raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
+            record = _read_record_file(directory)
+        except StoreRefused as exc:
+            rows.append({"id": name, "error": str(exc)})
+            continue
+        rows.append(summary(record))
+    rows.sort(key=lambda r: (r.get("read_at") or "", r["id"]), reverse=True)
+    return rows
+
+
+def summary(record: dict[str, Any]) -> dict[str, Any]:
+    palette = record["structure"]["measured"].get("palette") or []
+    return {
+        "id": record["id"], "status": record["status"], "name": record["source"].get("name"),
+        "width": record["rendering"]["width"], "height": record["rendering"]["height"],
+        "colors": len(palette), "accents": sum(1 for p in palette if p.get("is_accent")),
+        "corrections": len(record["corrections"]), "read_at": record["source"]["read_at"],
+    }
+
+
+# -- writing ----------------------------------------------------------------------------------
+
+
+def save(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, source_ext: str,
+         folder: str | os.PathLike[str], *, replace: bool = False, image: Any = None) -> dict[str, Any]:
+    """Write a record to ``<folder>/<id>/``.
+
+    Saving an id that is already there keeps the existing record and returns it
+    with ``existed: True``. ``replace=True`` measures again: the rendering, the
+    source details and ``structure.measured`` are new, and everything else is
+    kept (``record.carry_over``): the reading, every show, read requests,
+    corrections, brand. With ``image`` the reading's regions are measured again
+    too. A show whose evidence no longer exists is dropped and listed.
+
+    Returns ``{"record", "dir", "existed", "dropped_shows"}``.
+    """
+    rec.validate(record)
+    if source_ext not in SOURCE_EXTS:
+        raise StoreRefused("The original’s file type isn’t one the store keeps.")
+    if not rendering_png.startswith(_PNG):
+        raise StoreRefused("The rendering isn’t a PNG.")
+    real = resolve_folder(folder)
+    directory = _record_dir(real, record["id"])
+    made = False
+    if os.path.lexists(directory):
+        if not os.path.isdir(directory):
+            raise StoreRefused("A file with that record’s name is in the way.")
+    else:
+        os.mkdir(directory)
+        made = True
+    try:
+        with _locked(directory):
+            return _save_locked(record, rendering_png, source_bytes, source_ext, real, directory,
+                                replace=replace, image=image)
+    except BaseException:
+        if made:
+            with contextlib.suppress(OSError):
+                if not os.path.lexists(os.path.join(directory, "record.json")):
+                    for name in os.listdir(directory):
+                        if name in (LOCK_NAME,) or name.startswith(".tmp-"):
+                            os.unlink(os.path.join(directory, name))
+                    os.rmdir(directory)  # nothing was saved: leave no empty folder
+        raise
+
+
+def _save_locked(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, source_ext: str, real: str,
+                 directory: str, *, replace: bool, image: Any) -> dict[str, Any]:
+    existing: dict[str, Any] | None = None
+    if os.path.lexists(os.path.join(directory, "record.json")):
+        existing = _read_record_file(directory)
+    if existing is not None and not replace:
+        return {"record": existing, "dir": directory, "existed": True, "dropped_shows": []}
+    to_write = copy.deepcopy(record)
+    dropped: list[dict[str, Any]] = []
+    if existing is not None:
+        if existing["status"] != "proposal":
+            raise StoreRefused("That record is approved, so it won’t be replaced.")
+        remeasure = None
+        if image is not None:
+            from extraction import reader
+
+            def remeasure(regions: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+                return reader.measure_regions(image, regions), reader.region_gaps(regions)
+        to_write, dropped = rec.carry_over(record, existing, remeasure=remeasure)
+    data = _dump(to_write)  # before any file changes: a record too large to read back isn't written
+    _contained(directory, real)
+    if os.path.islink(directory):
+        raise StoreRefused("That record’s folder is a symlink, so it won’t be used.")
+    _atomic_write(directory, "rendering.png", rendering_png)
+    _atomic_write(directory, f"source.{source_ext}", source_bytes)
+    _atomic_write(directory, "record.json", data)
+    return {"record": to_write, "dir": directory, "existed": existing is not None, "dropped_shows": dropped}
+
+
+def _write_unlocked(directory: str, record: dict[str, Any]) -> None:
+    rec.validate(record)
+    if os.path.basename(directory) != record["id"]:
+        raise StoreRefused("That record’s folder name doesn’t match its id.")
+    data = _dump(record)
+    _read_record_file(directory)  # the one there must be a good record
+    _atomic_write(directory, "record.json", data)
+
+
+def write(target: str | os.PathLike[str], record: dict[str, Any]) -> None:
+    """Rewrite an existing record's record.json atomically, under the record's lock.
+
+    Prefer ``modify`` when the new record comes from the one on disk: it loads inside the lock."""
+    directory = _locate(target)
+    with _locked(directory):
+        _write_unlocked(directory, record)
+
+
+def modify(target: str | os.PathLike[str], change: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any]:
+    """Load a record, pass it to ``change`` and save what that returns, all under the record's lock.
+
+    Whatever ``change`` raises leaves the record as it was. Returns the saved record."""
+    directory = _locate(target)
+    with _locked(directory):
+        updated = change(_read_record_file(directory))
+        _write_unlocked(directory, updated)
+    return updated
+
+
+def correct(target: str | os.PathLike[str], corrections: Iterable[dict[str, Any]], actor: str, *,
+            clock: rec.Clock | None = None) -> dict[str, Any]:
+    """Load a record, add corrections and save it, under the record's lock. Returns the updated record."""
+    return correct_reporting(target, corrections, actor, clock=clock)[0]
+
+
+def correct_reporting(target: str | os.PathLike[str], corrections: Iterable[dict[str, Any]], actor: str, *,
+                      clock: rec.Clock | None = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """``correct``, also returning the entries this call appended, counted inside the lock, so a write by
+    someone else just before it is never reported as this caller's."""
+    items = list(corrections)
+    added: list[dict[str, Any]] = []
+
+    def change(record: dict[str, Any]) -> dict[str, Any]:
+        updated = rec.add_corrections(record, items, actor, clock=clock)
+        added[:] = updated["corrections"][len(record["corrections"]):]
+        return updated
+
+    return modify(target, change), added
+
+
+def request_read(target: str | os.PathLike[str], reason: str, *, clock: rec.Clock | None = None) -> dict[str, Any]:
+    """Append an agent's read request to a record and save it, under the record's lock. Returns the updated record."""
+    return modify(target, lambda record: rec.add_read_request(record, reason, clock=clock))

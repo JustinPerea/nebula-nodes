@@ -138,10 +138,16 @@ def build_message(png: bytes, palette: list[dict], fewshots: list[dict]) -> dict
 
 
 async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, vocab, timeout: float = 300,
-                     spawn=spawn_agent_process) -> ReaderResult:
+                     spawn=spawn_agent_process, system_prompt: str | None = None, schema: dict | None = None,
+                     message: dict | None = None) -> ReaderResult:
+    """Read one image. ``system_prompt``, ``schema`` and ``message`` are for another
+    reader that shares everything else here (the command's flags, the environment, the
+    no-tools check, the timeout and tree kill, the error kinds); all three left out,
+    this is reader-1."""
     started = time.monotonic()
-    cmd = build_command(SYSTEM_PROMPT, analysis_schema(vocab, len(palette)))
-    payload = (json.dumps(build_message(png, palette, fewshots)) + "\n").encode()
+    cmd = build_command(system_prompt if system_prompt is not None else SYSTEM_PROMPT,
+                        schema if schema is not None else analysis_schema(vocab, len(palette)))
+    payload = (json.dumps(message if message is not None else build_message(png, palette, fewshots)) + "\n").encode()
     with tempfile.TemporaryDirectory(prefix="commons-reader-") as cwd:
         try:
             proc = await spawn(*cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,

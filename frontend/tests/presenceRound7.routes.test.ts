@@ -11,7 +11,7 @@
  *    services/) and skips tests/, __pycache__/ and virtualenvs.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -27,11 +27,22 @@ const unreadKey = (form: UnreadableRouteForm) => `${form.file} ${form.handler ??
 /**
  * Every unreadable route form in today's backend, keyed `file handler form`, with why it is fine.
  * An undeclared one fails (read it, then declare it here or teach the script the form); a
- * declared one that is gone fails too. Today there are none: main.py's
- * `@app.get(backend_address.PROOF_PATH)` is read now (PROOF_PATH is a string constant in
- * services/backend_address.py) and is ungated, so it is in neither list.
+ * declared one that is gone fails too. main.py's `@app.get(backend_address.PROOF_PATH)` is read
+ * now (PROOF_PATH is a string constant in services/backend_address.py) and is ungated, so it is in
+ * neither list. The only declared ones are the extraction page's routes: backend/extraction/server.py
+ * builds its own FastAPI app inside a function (its own port and token), so the scan can't tell which
+ * app they belong to. They are fine only while nothing in the app backend mounts or imports that
+ * server, which the test after this one checks.
  */
-const DECLARED: Record<string, string> = {};
+const DECLARED: Record<string, string> = {
+  'extraction/server.py server.folder_records @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.add_record @app.post on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.get_record @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.get_rendering @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.add_corrections @app.post on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.read_record @app.post on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.page @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+};
 
 describe('round 7: the real backend', () => {
   it('the gated route set is exactly the snapshot', { timeout: 60_000 }, () => {
@@ -55,6 +66,30 @@ describe('round 7: the real backend', () => {
     expect(undeclared).toEqual([]);
     const seen = new Set(found.map(unreadKey));
     expect(Object.keys(DECLARED).filter((declared) => !seen.has(declared))).toEqual([]);
+  });
+
+  // The extraction declarations hold only while its server stays its own app. Any backend module
+  // outside backend/extraction that imports it (to mount it, include its routes or call its
+  // factory) fails here, so its routes go through the person-gate scan and get declared again.
+  it('nothing in the app backend mounts or imports the extraction server', () => {
+    const BACKEND = join(__dirname, '..', '..', 'backend');
+    const skip = new Set(['extraction', 'tests', '__pycache__', 'node_modules', '.venv', 'venv']);
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) { if (!skip.has(entry.name) && !entry.name.startsWith('.')) walk(join(dir, entry.name)); continue; }
+        if (entry.name.endsWith('.py')) files.push(join(dir, entry.name));
+      }
+    };
+    walk(BACKEND);
+    expect(files.some((file) => file.endsWith(join('backend', 'main.py')))).toBe(true);
+    const reaches = /\bextraction\.server\b|from\s+extraction\s+import\s+[^\n(]*\bserver\b|from\s+extraction\s+import\s*\([^)]*\bserver\b|import_module\(\s*['"]extraction/;
+    const offenders = files.filter((file) => reaches.test(readFileSync(file, 'utf8'))).map((file) => file.slice(BACKEND.length + 1));
+    expect(offenders).toEqual([]);
+    for (const line of ['from extraction.server import create_app', 'from extraction import server', 'from extraction import (\n    store,\n    server,\n)', 'import extraction.server as s', "importlib.import_module('extraction.server')"]) {
+      expect(reaches.test(line), line).toBe(true);
+    }
+    expect(reaches.test('from extraction import store, record as rec')).toBe(false);
   });
 });
 
