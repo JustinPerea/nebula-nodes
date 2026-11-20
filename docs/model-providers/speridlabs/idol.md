@@ -70,7 +70,7 @@ Readiness, the provider switcher and Settings say which (GM PR #203 r12):
 
 | | Readiness | Switcher | Auto row |
 |---|---|---|---|
-| No token | "Hugging Face · Free": "Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add your Hugging Face token in Settings to use your own allowance." | "Free on Hugging Face." | "Auto · free" |
+| No token | "Hugging Face · free": "Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add your Hugging Face token in Settings to use your own allowance." | "Free on Hugging Face." | "Auto · free" |
 | Token set | "Hugging Face token · Saved": "Idol uses your Hugging Face allowance." | "Uses your Hugging Face allowance." | "Auto" |
 
 The Settings row's helper is "Optional. Gives Idol your own Hugging Face
@@ -222,7 +222,7 @@ $0 and spend tracking never counts it as paid.
     figure stays apart. The backend gives the same reasons, so the Accept
     chip merges the same way (`pricing_cases.json` `classCases` pin
     `reasons` and the `title`). Idol's sentence comes last: "“A” and “B” call paid providers.
-    Estimated cost $0.13. Idol can use your Hugging Face credits." The
+    Estimated cost $0.13. “Idol” may use your Hugging Face credits" (one account ends the title with no full stop; two or more are sentences, each with its stop). The
     order is the paid lead, the figure (paid nodes only), the reason lines
     (a plan run's "“Krea 2” runs on your Krea plan." among them), then
     Idol's sentence. A reason kind the canvas doesn't know reads as "has
@@ -239,10 +239,13 @@ $0 and spend tracking never counts it as paid.
     wraps and the chip goes onto its own line under "Accept and run",
     never clipped (GM r19 item 8). The bar's line 1 counts plan runs
     outside paid: "runs 2 paid models · 1 on Krea plan".
-  - The bar (GM r14 item 2): "Runs Idol · may use your Hugging Face credits",
-    or with paid models "Runs 2 paid models and Idol · Idol may use your
-    Hugging Face credits", no provider tag, and the amount leads the line
-    under it: "~$0.13 · List prices, not a quote · expires in 14:59".
+  - The plan line (design; `canvas_proposals.plan_line`): "Runs “Idol” · may use your Hugging Face credits"
+    when Idol is all the plan runs, and with other runs the segment names the
+    node, as in "Runs “A”, “B” and “Idol” · 2 paid runs · “Idol” may use your
+    Hugging Face credits · ~$0.13" (two paid runs and Idol; with a free run
+    instead: "Runs “Idol” and “Splat” · “Idol” may use your Hugging Face
+    credits"). It has no final stop and no provider tag; the chip under it
+    reads "List prices, not a quote · expires in 14:59".
   - The ghost card (GM r15 item 1): "may cost · Hugging Face" with the
     token, "free · Hugging Face" without. Its tag is in the node's cost
     class (`canvas_proposals._ghost_cost`, review 10, NIT-3): the run

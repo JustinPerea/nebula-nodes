@@ -317,9 +317,21 @@ describe('a drag on the board', () => {
     await openStudio({ view: 'board' });
     act(() => board.props!.onMove([{ placement: 'c-i2', x: 900, y: 0 }]));
     await waitFor(() => expect(server.edits).toHaveLength(1));
-    server.skip = [{ part: 'card', image: 'i2', number: 2, reason: 'changed since', message: '#2 changed since, left as is' }];
+    server.skip = [{ part: 'card', image: 'i2', number: 2, numberBefore: 2, reason: 'changed since', message: '#2 changed after that step, so Nebula left it as it is.' }];
     press('z', { metaKey: true });
-    expect(await screen.findByText('#2 changed since, left as is')).toBeTruthy();
+    // Some of it went back and image 2 stayed: one line, naming it (design), with the Redo.
+    expect(await screen.findByText('Undid “Moved image 2” except image 2, which changed after that.')).toBeTruthy();
+    expect(screen.queryByText(/left it as it is/)).toBeNull();
+  });
+
+  it('a step whose look and field changed since names both, the look by the board’s name for it', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i2', x: 900, y: 0 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1));
+    server.board = { ...server.board, frames: [{ id: 'f1', name: 'Dusk', kind: 'look', x: 0, y: 0, w: 10, h: 10 }] } as Moodboard;
+    server.skip = [{ part: 'frame', frame: 'f1', reason: 'changed since' }, { part: 'fields', field: 'direction', reason: 'changed since' }];
+    press('z', { metaKey: true });
+    expect(await screen.findByText('Undid “Moved image 2” except the direction and “Dusk”, which changed after that.')).toBeTruthy();
   });
 
   it('each step goes as its own batch, so one undo undoes only its own step', async () => {
@@ -399,7 +411,7 @@ describe('the cover (#123) in undo', () => {
       server.edits.push(ops);
       return { board: clone(server.board), version: server.board.version,
         applied: [{ index: 0, op: 'restore', status: 'unchanged', removed: [],
-          skipped: [{ part: 'fields', field: 'coverImageId', reason: 'changed since', message: 'The cover changed since, left as is' }] }],
+          skipped: [{ part: 'fields', field: 'coverImageId', reason: 'changed since', message: 'The cover changed after that step, so Nebula left it as it is.' }] }],
         undo: { ops: [] } };
     });
     press('z', { metaKey: true });
@@ -424,14 +436,14 @@ describe('an undo kept because an image changed after the step (design r161)', (
       server.edits.push(ops);
       return { board: clone(server.board), version: server.board.version,
         applied: [{ index: 0, op: 'restore', status: 'unchanged', removed: [],
-          skipped: [{ part: 'image', image: 'i2', number: 2, reason: 'changed since', message: 'Image 2 changed since, left as is' }] }],
+          skipped: [{ part: 'image', image: 'i2', number: 2, reason: 'changed since', message: 'Image 2 changed after that step, so Nebula left it as it is.' }] }],
         undo: { ops: [] } };
     });
     press('z', { metaKey: true });
     const line = await screen.findByText('Nebula couldn’t undo “Made image 2 the cover” because image 2 changed after that.');
     const toast = line.closest('[role="status"]') as HTMLElement;
     expect(toast.textContent).not.toMatch(/Undid/);
-    expect(toast.textContent).not.toContain('left as is');
+    expect(toast.textContent).not.toContain('left it as it is');
     expect(within(toast).queryByRole('button', { name: 'Redo' })).toBeNull();
   });
 });

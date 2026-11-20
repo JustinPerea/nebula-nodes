@@ -23,7 +23,9 @@ describe('the panel\'s lock reason names the uploads to try again or remove', ()
   });
   it('control: an upload still on its way keeps the wait line', () => {
     useCinemaUploadStore.getState().setUploads(() => [failed('ref.png'), failed('next.png', { status: 'uploading' })]);
-    expect(getCinemaUploadIssue('scene')).toBe('Wait for reference uploads to finish before generating.');
+    expect(getCinemaUploadIssue('scene')).toBe('You can generate when the reference uploads finish.');
+    // Generate all names the same wait in its own verb (design).
+    expect(getCinemaUploadIssue('scene', undefined, true, 'generate all')).toBe('You can generate all when the reference uploads finish.');
   });
 });
 

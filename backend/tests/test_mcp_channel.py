@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import random
 import re
+import sys
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -2698,6 +2699,7 @@ class _Journal:
         self.pin_checks = 0  # GET /api/canvas/pins: the listener's check before a push that holds pins
         self.pins_hang = threading.Event()  # set: the pins listing hangs until pins_released
         self.pins_released = threading.Event()
+        self.closing = threading.Event()  # set at teardown: a blocked long-poll answers now and ends
         self.beats: list[dict] = []  # POST /api/agent/channel: the listener's readiness beats
         self.goodbyes = 0  # DELETE /api/agent/channel: its session ended
         self.questions: dict[str, dict] = {}  # GET /api/canvas/questions/{id}: an answered set, by id
@@ -2711,6 +2713,22 @@ class _Journal:
         with self.cond:
             self.events.append(ev(len(self.events) + 1, kind, actor=actor, **kwargs))
             self.cond.notify_all()
+
+
+class _FakeNebulaServer(ThreadingHTTPServer):
+    """The fake server. Its handler threads are joined by server_close() (not
+    daemon threads), and a write to a client that has gone (a long-poll the
+    client gave up on) is swallowed: socketserver would print its traceback to
+    stderr from the thread, into whichever later test is capturing. Any other
+    exception still goes to socketserver's loud default."""
+
+    daemon_threads = False
+    block_on_close = True
+
+    def handle_error(self, request, client_address) -> None:
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def _fake_nebula(journal: _Journal):
@@ -2736,7 +2754,7 @@ def _fake_nebula(journal: _Journal):
                         fresh = [e for e in journal.events[after:]
                                  if query.get("self") == "1" or e["actor"].get("name") != me]
                         left = deadline - time.monotonic()
-                        if fresh or left <= 0:
+                        if fresh or left <= 0 or journal.closing.is_set():
                             break
                         journal.cond.wait(left)
                     cursor = len(journal.events)
@@ -2751,7 +2769,7 @@ def _fake_nebula(journal: _Journal):
                 with journal.cond:
                     while journal.runs.get(run_id, {}).get("status") == "running":
                         left = deadline - time.monotonic()
-                        if left <= 0:
+                        if left <= 0 or journal.closing.is_set():
                             break
                         journal.cond.wait(left)
                     answer = dict(journal.runs.get(run_id) or {"status": "running"})
@@ -2814,9 +2832,9 @@ def _fake_nebula(journal: _Journal):
 @pytest.fixture
 def nebula(monkeypatch):
     journal = _Journal()
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _fake_nebula(journal))
-    server.daemon_threads = True
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    server = _FakeNebulaServer(("127.0.0.1", 0), _fake_nebula(journal))
+    serve_thread = threading.Thread(target=server.serve_forever, name="fake-nebula-serve", daemon=True)
+    serve_thread.start()
     for name in ("NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", "NEBULA_AGENT_NAME"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(mcp_server, "_base_url", f"http://127.0.0.1:{server.server_address[1]}")
@@ -2830,8 +2848,35 @@ def nebula(monkeypatch):
     try:
         yield journal
     finally:
+        # Wake every blocked handler (long-polls, the hanging pins listing), stop
+        # accepting, then join the handler threads and the serve thread.
+        journal.closing.set()
+        journal.pins_released.set()
+        with journal.cond:
+            journal.cond.notify_all()
         server.shutdown()
         server.server_close()
+        serve_thread.join(10)
+
+
+@pytest.fixture(autouse=True)
+def _no_server_thread_outlives_its_test():
+    """Fails a test in this file that leaves a fake-server thread alive: the
+    serve thread, or a handler thread (socketserver names those Thread-N
+    (process_request_thread)) that started during the test."""
+    def mine() -> set[threading.Thread]:
+        return {t for t in threading.enumerate()
+                if t.name == "fake-nebula-serve" or "process_request_thread" in t.name}
+
+    before = mine()
+    yield
+    deadline = time.monotonic() + 5
+    while True:
+        leaked = {t for t in mine() - before if t.is_alive()}
+        if not leaked or time.monotonic() > deadline:
+            break
+        time.sleep(0.05)
+    assert not leaked, f"fake-server threads still alive after teardown: {sorted(t.name for t in leaked)}"
 
 
 @asynccontextmanager

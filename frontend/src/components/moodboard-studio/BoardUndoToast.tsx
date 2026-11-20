@@ -13,7 +13,7 @@ export interface BoardToast {
   id: number;
   /** What happened: "Removed #1", "Undid “Moved #3”". */
   text: string;
-  /** Slices an undo left as they are: "#12 changed since, left as is". */
+  /** Slices an undo left as they are: "#12 changed after that step, so Nebula left it as it is.". */
   skipped?: string[];
   /** The button: Undo (a step of this tab's) or Redo. */
   action?: { label: 'Undo' | 'Redo'; run: () => void };

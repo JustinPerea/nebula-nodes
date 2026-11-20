@@ -184,7 +184,7 @@ describe('the Accept chip carries the Run chip\'s reason lines, by one formatter
     expect(run).toBe('“A”, “B” and “Edit” call paid providers. The priced part of this run costs between $0.14 and $0.33.\n'
       + '“B” has no listed price.\n'
       + '“Edit” may cost more for its input images, which the estimate leaves out.\n'
-      + 'Idol can use your Hugging Face credits.');
+      + '“Idol” may use your Hugging Face credits');
     const view = asProposal([
       { ref: '+a', definitionId: 'nano-banana', name: 'A', x: 0, kind: 'paid', price: { low: 0.13, high: 0.13 } },
       { ref: '+b', definitionId: 'claude-chat', name: 'B', x: 100, kind: 'paid', reason: { kind: 'noPrice' } },
@@ -202,7 +202,7 @@ describe('the Accept chip carries the Run chip\'s reason lines, by one formatter
       { ref: '+i', definitionId: 'speridlabs-idol', name: 'Idol', x: 200, kind: 'mayCost' },
     ], null);
     expect(acceptChipTitle(view, () => null)).toBe('“B” and “Flux” call paid providers.\n“B” has no listed price.\n'
-      + '“Flux” can’t be priced until its fal.ai API key is added.\nIdol can use your Hugging Face credits.');
+      + '“Flux” can’t be priced until its fal.ai API key is added.\n“Idol” may use your Hugging Face credits');
   });
 
   it('reads the reasons left to right, a canvas node where it sits', () => {
@@ -235,7 +235,7 @@ describe('the Accept chip carries the Run chip\'s reason lines, by one formatter
     const title = costTitle({ paid: ['A', 'B'], estimate: { low: 0.13, high: 0.13, open: true },
       reasons: [{ name: 'B', reason: { kind: 'noPrice' } }], mayCost: [{ name: 'Idol', account: 'Hugging Face' }] })!;
     expect(title.split('\n')).toEqual(['“A” and “B” call paid providers. The priced part of this run costs about $0.13.',
-      '“B” has no listed price.', 'Idol can use your Hugging Face credits.']);
+      '“B” has no listed price.', '“Idol” may use your Hugging Face credits']);
   });
 });
 

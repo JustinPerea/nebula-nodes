@@ -70,7 +70,7 @@ describe('the Run description puts Idol\'s sentence after the estimate (review 7
     const { edges } = placed;
     const text = describeRunScope(summarizeRunScope(nodes, edges, { kind: 'graph' }, { pricing: PRICING, apiKeys: { ...TOKEN, GEMINI_API_KEY: 'k' }, sizes: {} }));
     const estimate = text.indexOf('Estimated');
-    const idol = text.indexOf('Idol can use your Hugging Face credits');
+    const idol = text.indexOf('“Idol” may use your Hugging Face credits');
     expect(estimate).toBeGreaterThan(-1);
     expect(idol).toBeGreaterThan(estimate);
   });

@@ -6410,7 +6410,7 @@ nebula moodboard delete <board>
   (`edit --json` prints it, the plain output prints the command): sent back
   (`moodboard_edit(board, undo["ops"])`, `edit --undo FILE` or `-`), it
   puts back only what is still as the edit left it and names the rest ("Image 12
-  changed since, left as is"). A `PUT` keeps what it leaves out (images
+  changed after that step, so Nebula left it as it is."). A `PUT` keeps what it leaves out (images
   merge by id), keeps the saved cards of images already on the board, and
   takes `baseVersion` too.
 - Two writers never overwrite each other: an add from the CLI or MCP is one
@@ -6663,7 +6663,7 @@ nebula moodboard delete <board>
   set <board> --restore <file>` with the saved `set --json` output (or just
   `previous`). Its `undo` goes as one checked write: a setting someone
   changed again since is left as they set it, and the result's `skipped`
-  says so ("Direction changed since, left as is", "Nebula couldn’t undo the
+  says so ("The direction changed after that step, so Nebula left it as it is.", "Nebula couldn’t undo the
   change to image 2 because image 2’s weight changed after that."; the CLI
   prints each line; a client keys on `reason`, `field` and `settings`, never
   on `message`, which is for people). Images the change took off

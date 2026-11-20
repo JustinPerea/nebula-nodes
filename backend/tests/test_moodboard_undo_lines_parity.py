@@ -78,3 +78,10 @@ def test_a_look_named_with_quotes_is_said_in_one_pair_of_quotes():
     assert edits.quoted("Say “hi”") == "“Say ‘hi’”"
     with pytest.raises(edits.EditError, match="no frame “Say ‘hi’”"):
         _batch({}).frame("Say “hi”")
+
+
+def test_an_image_with_no_number_is_kept_in_the_same_form():
+    """Design: "An image changed after that step, so Nebula left it as it is.\""""
+    report = _batch({})._skip_report({"part": "image", "image": "gone"}, "changed since")
+    assert report["message"] == "An image changed after that step, so Nebula left it as it is."
+    assert report["reason"] == "changed since" and "number" not in report
