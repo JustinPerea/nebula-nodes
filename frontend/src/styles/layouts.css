@@ -99,7 +99,6 @@ body.app-slava-restraint.agent-log-open.agent-log-empty {
 
 .toolbar__icon {
   display: inline-block !important;
-  flex-shrink: 0;
 }
 
 .toolbar__label {
@@ -167,21 +166,6 @@ body.app-slava-restraint.agent-log-open.agent-log-empty {
 .panel-launcher__icon {
   display: block;
   flex-shrink: 0;
-}
-
-body:not(.app-slava-restraint) .panel-launcher {
-  background: rgba(20, 20, 20, 0.92);
-  border: 1px solid #333;
-  border-radius: 12px;
-  color: #bbb;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-}
-
-body:not(.app-slava-restraint) .panel-launcher:hover,
-body:not(.app-slava-restraint) .panel-launcher--active {
-  border-color: #555;
-  background: #252525;
-  color: #eee;
 }
 
 /* =============== Chat panel: right column =============== */
@@ -347,7 +331,6 @@ body.agent-log-reserved .project-switch-toast {
 
 .agent-log {
   position: fixed;
-  z-index: 11;
   right: var(--page-gutter);
   /* Docked above the chat launcher, clear of it. */
   bottom: calc(var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm));
@@ -387,17 +370,6 @@ body.agent-log-reserved .project-switch-toast {
   to { opacity: 1; transform: none; }
 }
 
-body:not(.app-slava-restraint) .agent-log {
-  background: rgba(20, 20, 20, 0.92);
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: #ccc;
-  backdrop-filter: blur(8px);
-}
-
 /* Height follows --agent-log-h (set on body by state above), so the gap
  * to the chat stays the same however much is inside. */
 
@@ -420,38 +392,19 @@ body:not(.app-slava-restraint) .agent-log {
   justify-content: center;
   width: 26px;
   height: 26px;
-  margin-right: 8px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
   background: transparent;
-  color: inherit;
   cursor: pointer;
-  transition: transform 220ms var(--agent-log-spring);
 }
 
 .agent-log__hide:active {
   transform: scale(0.92);
 }
 
-body:not(.app-slava-restraint) .agent-log__hide {
-  color: #888;
-}
-
-body:not(.app-slava-restraint) .agent-log__hide:hover {
-  background: #252525;
-  color: #eee;
-}
-
-body:not(.app-slava-restraint) .agent-log__hide:focus-visible {
-  outline: 2px solid #7aa9ff;
-  outline-offset: 1px;
-}
-
 /* "Agent log hidden · Show again": in the log's docked spot, a few seconds. */
 .agent-log-hidden-notice {
   position: fixed;
-  z-index: 11;
   right: var(--page-gutter);
   bottom: calc(var(--chat-launcher-bottom) + var(--chat-launcher-size) + var(--stack-gap-sm));
   display: inline-flex;
@@ -470,44 +423,13 @@ body:not(.app-slava-restraint) .agent-log__hide:focus-visible {
 .agent-log-hidden-notice__action {
   height: 28px;
   padding: 0 12px;
-  border: 0;
   border-radius: 8px;
   font: inherit;
   cursor: pointer;
-  transition: transform 220ms var(--agent-log-spring);
 }
 
 .agent-log-hidden-notice__action:active {
   transform: scale(0.96);
-}
-
-body:not(.app-slava-restraint) .agent-log-hidden-notice {
-  background: rgba(20, 20, 20, 0.92);
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: #ccc;
-  backdrop-filter: blur(8px);
-}
-
-body:not(.app-slava-restraint) .agent-log-hidden-notice__sep {
-  color: #666;
-}
-
-body:not(.app-slava-restraint) .agent-log-hidden-notice__action {
-  background: #2a2a2a;
-  color: #eee;
-}
-
-body:not(.app-slava-restraint) .agent-log-hidden-notice__action:hover {
-  background: #333;
-}
-
-body:not(.app-slava-restraint) .agent-log-hidden-notice__action:focus-visible {
-  outline: 2px solid #7aa9ff;
-  outline-offset: 1px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -516,10 +438,6 @@ body:not(.app-slava-restraint) .agent-log-hidden-notice__action:focus-visible {
     animation: none;
   }
 
-  .agent-log__hide,
-  .agent-log-hidden-notice__action {
-    transition: none;
-  }
 }
 
 .agent-log__drag-row:active {
@@ -531,54 +449,20 @@ body:not(.app-slava-restraint) .agent-log-hidden-notice__action:focus-visible {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 10px 14px;
-  background: none;
   border: none;
   color: inherit;
   cursor: pointer;
   font-family: inherit;
 }
 
-body:not(.app-slava-restraint) .agent-log__header {
-  font-size: 12px;
-}
-
-.agent-log__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-body:not(.app-slava-restraint) .agent-log__title {
-  letter-spacing: 0.4px;
-  color: #ddd;
-}
-
-.agent-log__telemetry,
-.agent-log__entry-marker,
-.agent-log__empty-grid,
-.agent-log__empty-status {
-  display: none;
-}
-
 .agent-log__icon {
   display: inline-block;
 }
 
-body:not(.app-slava-restraint) .agent-log__icon {
-  color: #7aa9ff;
-  transform: rotate(-15deg);
-}
-
 .agent-log__chevron {
   display: inline-block;
-  transition: transform 0.18s ease;
   font-size: 14px;
   line-height: 1;
-}
-
-body:not(.app-slava-restraint) .agent-log__chevron {
-  color: #888;
 }
 
 .agent-log__chevron--open {
@@ -683,21 +567,6 @@ body:not(.app-slava-restraint) .agent-log__chevron {
   overflow-y: auto;
 }
 
-body:not(.app-slava-restraint) .agent-log__body {
-  border-top: 1px solid #222;
-  padding: 8px 12px 12px;
-}
-
-.agent-log__empty {
-  padding: 14px 4px;
-  text-align: center;
-}
-
-body:not(.app-slava-restraint) .agent-log__empty {
-  color: #666;
-  font-style: italic;
-}
-
 .agent-log__list {
   list-style: none;
   margin: 0;
@@ -707,57 +576,16 @@ body:not(.app-slava-restraint) .agent-log__empty {
   gap: 6px;
 }
 
-.agent-log__entry {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: 8px;
-  align-items: baseline;
-  padding: 4px 0;
-  font-size: 11px;
-}
-
-body:not(.app-slava-restraint) .agent-log__entry {
-  color: #bbb;
-}
-
-body:not(.app-slava-restraint) .agent-log__time {
-  color: #666;
-}
-
 .agent-log__time {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
   /* Times vary in width ("3:06 PM", "12:59 PM"); a fixed minimum keeps the source column from shifting. */
   min-width: 8ch;
   text-align: right;
 }
 
-body:not(.app-slava-restraint) .agent-log__source {
-  color: #888;
-}
-
-.agent-log__source {
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.4px;
-}
-
-/* An agent's action names the agent in its cursor colour (agentLogStore). */
-body:not(.app-slava-restraint) .agent-log__entry--agent .agent-log__source {
-  color: var(--agent-log-name-color, var(--agent-log-source-color));
-}
-
-/* Spelled as the agent's cursor spells it, in every skin. */
+/* An agent's action names the agent in its cursor colour (agentLogStore),
+   spelled as the agent's cursor spells it. */
 body .agent-log .agent-log__entry--agent .agent-log__source {
   text-transform: none;
-}
-
-body:not(.app-slava-restraint) .agent-log__msg {
-  color: #ddd;
-}
-
-.agent-log__msg {
-  word-break: break-word;
 }
 
 /* Group shared docks without introducing another stacking context. */

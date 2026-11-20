@@ -63,7 +63,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   // Review 3 LOW-3 (GM: "the bar goes on top, same as the other editors"):
   // while following, the pill sits above a full-screen modal's scrim (the
   // mask painter's), so the bar that says why it is read-only shows
-  // (CanvasTabs.css .canvas-tabs-wrap[data-following]).
+  // (slava-restraint.css .canvas-tabs-wrap[data-following]).
   useLayoutEffect(() => {
     const wrap = bar.current?.closest<HTMLElement>('.canvas-tabs-wrap');
     if (!wrap || !following) return;

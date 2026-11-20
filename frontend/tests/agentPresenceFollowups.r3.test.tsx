@@ -211,7 +211,7 @@ describe('LOW-3: the mask painter while following', () => {
     expect(wrap).not.toHaveAttribute('data-following');
     follow();
     expect(wrap).toHaveAttribute('data-following');
-    const raised = cssRules(read('components/CanvasTabs.css')).find(({ selector }) => selector === '.canvas-tabs-wrap[data-following]');
+    const raised = cssRules(read('styles/slava-restraint.css')).find(({ selector }) => selector === 'body.app-slava-restraint .canvas-tabs-wrap[data-following]');
     const painter = Number(/z-index:\s*(\d+)/.exec(cssRules(read('styles/mask-painter.css')).find(({ selector }) => selector === '.mask-painter__overlay')!.body)?.[1]);
     expect(Number(/z-index:\s*(\d+)/.exec(raised?.body ?? '')?.[1])).toBeGreaterThan(painter);
     act(() => setFollowingSwitch(null));
@@ -227,7 +227,7 @@ describe('LOW-3: the mask painter while following', () => {
     const rules = (readdirSync(SRC, { recursive: true }) as string[]).filter((file) => file.endsWith('.css'))
       .flatMap((file) => cssRules(read(file)).flatMap(({ selector, body }) => selector.split(',').map((one) => ({ one: one.trim(), body }))));
     const layering = rules.filter(({ one, body }) => one.endsWith('.canvas-tabs-wrap') && /z-index\s*:/.test(body)).map(({ one }) => one);
-    expect(layering.length).toBeGreaterThanOrEqual(2);
+    expect(layering.length).toBeGreaterThanOrEqual(1);
     for (const one of layering) {
       const twin = rules.find((rule) => rule.one === `${one}[data-following]`);
       expect(twin, one).toBeDefined();

@@ -505,19 +505,6 @@ body.app-slava-restraint {
   }
 }
 
-/* Transient class is added only for transitions where Slava is the previous
- * or next skin. It is intentionally not nested under .app-slava-restraint so
- * the mask survives the frame where the Slava body class is being removed. */
-body.app-skin-switching-slava #root {
-  animation: slava-skin-switch-mask 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.app-skin-switching-slava #root {
-    animation: none;
-  }
-}
-
 body.app-slava-restraint .react-flow,
 body.app-slava-restraint .react-flow__pane {
   background: transparent;
@@ -595,6 +582,7 @@ body.app-slava-restraint .chat-panel.chat-panel--exiting {
 }
 
 body.app-slava-restraint .panel {
+  /* The launcher badge's ring for a row or tab in this panel: its own surface, not the rail's. */
   --agent-launcher-surface: rgb(22, 22, 24);
   z-index: var(--sr-layer-panel);
   background: var(--sr-glass);
@@ -4268,10 +4256,11 @@ body.app-slava-restraint .canvas-tabs-wrap {
   gap: 6px;
 }
 
-/* While following, above the mask painter's scrim (1000) and agent cursors
-   (1001), as CanvasTabs.css raises it; this skin rule is more specific, so
-   it needs its own twin (fix round 3 of PR #200, LOW-3: live, the scrim
-   still covered the bar). */
+/* While following an agent's switch, the pill (and its "Opening “X”…" bar)
+   sits above a full-screen modal's scrim, the mask painter's (z-index 1000)
+   and agent cursors (1001), as it does over the other editors, so the bar
+   that says why the canvas is read-only shows. Below dialogs (10000) and
+   the offline row. */
 body.app-slava-restraint .canvas-tabs-wrap[data-following] {
   z-index: 1002;
 }

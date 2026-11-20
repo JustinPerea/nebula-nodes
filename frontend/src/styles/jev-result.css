@@ -673,20 +673,8 @@ body.app-slava-restraint .jev-details__notes {
 }
 
 .model-node__jev-field-label {
-  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #777;
-}
-
-.model-node__jev-field-note {
-  font-size: 10px;
-  color: #777;
-}
-
-body:not(.app-slava-restraint) .model-node__jev-field .model-node__jev-input {
-  min-height: 0;
-  resize: none;
 }
 
 body.app-slava-restraint .model-node__jev-field {

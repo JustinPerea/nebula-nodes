@@ -12,8 +12,6 @@
 }
 
 .editor-view--empty {
-  align-items: center;
-  justify-content: center;
   gap: 16px;
 }
 
@@ -27,8 +25,6 @@
 
 .editor-view__button-icon,
 .editor-preview__button-icon {
-  width: 14px;
-  height: 14px;
   flex: 0 0 auto;
 }
 
@@ -131,26 +127,16 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 0;
   background: transparent;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.editor-transport__btn--icon {
-  width: 28px;
-  padding-inline: 0;
-}
-
 .editor-transport__icon {
-  width: 14px;
-  height: 14px;
   flex: 0 0 auto;
 }
 
 .editor-transport__btn:disabled,
-.editor-transport__tool:disabled,
-.editor-transport__preset:disabled,
 .editor-transport__range:disabled {
   cursor: not-allowed;
 }
@@ -350,177 +336,6 @@
   bottom: 0;
   width: 2px;
   pointer-events: auto;
-}
-
-body:not(.app-slava-restraint) .editor-view {
-  background: #000;
-  background-image: radial-gradient(circle at 1px 1px, rgba(201, 202, 200, 0.15) 1px, transparent 0);
-  background-size: 16px 16px;
-  color: rgba(255, 255, 255, 0.92);
-  font-family: system-ui, sans-serif;
-}
-
-body:not(.app-slava-restraint) .editor-view--empty {
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 14px;
-}
-
-body:not(.app-slava-restraint) .editor-view--empty button,
-body:not(.app-slava-restraint) .editor-preview--error button {
-  padding: 7px 12px;
-  color: rgba(255, 255, 255, 0.92);
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 6px;
-}
-
-body:not(.app-slava-restraint) .editor-view__too-small,
-body:not(.app-slava-restraint) .editor-breadcrumb__vfr {
-  color: rgba(255, 255, 255, 0.88);
-  background: rgba(255, 90, 31, 0.10);
-  border: 1px solid rgba(255, 90, 31, 0.28);
-  border-radius: 6px;
-  font-size: 11px;
-}
-
-body:not(.app-slava-restraint) .editor-breadcrumb {
-  color: rgba(255, 255, 255, 0.56);
-  font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.1em;
-}
-
-body:not(.app-slava-restraint) .editor-breadcrumb__source {
-  color: rgba(255, 255, 255, 0.88);
-}
-
-body:not(.app-slava-restraint) .editor-breadcrumb__edit {
-  padding: 2px 8px;
-  color: #ff5a1f;
-  background: rgba(255, 90, 31, 0.10);
-  border: 1px solid rgba(255, 90, 31, 0.28);
-  border-radius: 4px;
-}
-
-body:not(.app-slava-restraint) .editor-preview,
-body:not(.app-slava-restraint) .editor-transport,
-body:not(.app-slava-restraint) .editor-tl {
-  background: rgba(28, 28, 31, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-}
-
-body:not(.app-slava-restraint) .editor-preview__hud {
-  padding: 3px 10px;
-  color: rgba(255, 255, 255, 0.92);
-  background: rgba(20, 20, 22, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-body:not(.app-slava-restraint) .editor-transport {
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 10px;
-}
-
-body:not(.app-slava-restraint) .editor-transport__btn,
-body:not(.app-slava-restraint) .editor-transport__tool,
-body:not(.app-slava-restraint) .editor-transport__preset {
-  min-height: 28px;
-  padding: 5px 9px;
-  color: rgba(255, 255, 255, 0.62);
-  border-radius: 6px;
-}
-
-body:not(.app-slava-restraint) .editor-transport__btn:hover:not(:disabled),
-body:not(.app-slava-restraint) .editor-transport__tool:hover:not(:disabled),
-body:not(.app-slava-restraint) .editor-transport__preset:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-body:not(.app-slava-restraint) .editor-transport__btn--primary,
-body:not(.app-slava-restraint) .editor-transport__btn--render {
-  color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-body:not(.app-slava-restraint) .editor-transport__btn--render {
-  background: rgba(255, 90, 31, 0.10);
-  border-color: rgba(255, 90, 31, 0.28);
-}
-
-body:not(.app-slava-restraint) .editor-transport__divider {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-body:not(.app-slava-restraint) .editor-transport__value,
-body:not(.app-slava-restraint) .editor-transport__summary {
-  color: rgba(255, 255, 255, 0.90);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-body:not(.app-slava-restraint) .editor-tl__ruler-thumb,
-body:not(.app-slava-restraint) .editor-tl__track-body {
-  background: rgba(0, 0, 0, 0.40);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-}
-
-body:not(.app-slava-restraint) .editor-tl__ruler-thumb-placeholder {
-  background: repeating-linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.04),
-    rgba(255, 255, 255, 0.04) 4px,
-    transparent 4px,
-    transparent 8px
-  );
-}
-
-body:not(.app-slava-restraint) .editor-tl__ruler,
-body:not(.app-slava-restraint) .editor-tl__track-label,
-body:not(.app-slava-restraint) .editor-tl__clip-vol {
-  color: rgba(255, 255, 255, 0.45);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9px;
-}
-
-body:not(.app-slava-restraint) .editor-tl__clip {
-  color: rgba(255, 255, 255, 0.92);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.10));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-  font-size: 8px;
-}
-
-body:not(.app-slava-restraint) .editor-tl__clip--edited {
-  background: linear-gradient(135deg, rgba(255, 90, 31, 0.30), rgba(255, 90, 31, 0.18));
-  border-color: rgba(255, 90, 31, 0.28);
-}
-
-body:not(.app-slava-restraint) .editor-tl__clip--selected {
-  outline: 1px solid #ff5a1f;
-  outline-offset: 1px;
-}
-
-body:not(.app-slava-restraint) .editor-tl__clip-handle {
-  background: rgba(255, 255, 255, 0.10);
-}
-
-body:not(.app-slava-restraint) .editor-tl__clip--edited .editor-tl__clip-handle,
-body:not(.app-slava-restraint) .editor-tl__playhead {
-  background: #ff5a1f;
-}
-
-body:not(.app-slava-restraint) .editor-tl__clip-speed {
-  color: #ff5a1f;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 7px;
-}
-
-body:not(.app-slava-restraint) .editor-tl__playhead {
-  box-shadow: 0 0 6px rgba(255, 90, 31, 0.6);
 }
 
 .editor-transport__zoom {

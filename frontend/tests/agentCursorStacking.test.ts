@@ -145,7 +145,7 @@ describe('the cursor layer paints inside the canvas', () => {
   });
 });
 
-describe.each(['classic', 'slava'] as const)('the chrome sits above the canvas in the %s skin', (skin) => {
+describe.each(['slava'] as const)('the chrome sits above the canvas in the %s skin', (skin) => {
   it.each(CHROME)('.%s (%s) is fixed at a z-index above the canvas', (cls) => {
     const applied = rulesFor(cls).filter((r) => inSkin(r.selector, skin));
     const positions = applied.flatMap((r) => decls(r.body, 'position')).map((p) => p.replace(/\s*!important$/, ''));

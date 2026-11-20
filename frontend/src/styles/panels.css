@@ -1,25 +1,11 @@
 .panel {
-  /* The launcher badge's ring for a row or tab in this panel: its own surface, not the rail's. */
-  --agent-launcher-surface: #1a1a1a;
   position: fixed;
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 32px);
 }
 
-body:not(.app-slava-restraint) .panel {
-  z-index: 10;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: #ccc;
-}
-
 .panel--settings {
-  z-index: 30;
   width: 320px;
 }
 
@@ -27,46 +13,19 @@ body:not(.app-slava-restraint) .panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
   cursor: grab;
   user-select: none;
 }
 
-body:not(.app-slava-restraint) .panel__header {
-  border-bottom: 1px solid #2a2a2a;
-}
-
 .panel__header:active { cursor: grabbing; }
 
-body:not(.app-slava-restraint) .panel__title {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #888;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-body:not(.app-slava-restraint) .panel__close {
-  background: none;
-  border: none;
-  color: #666;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 0 4px;
-  line-height: 1;
-}
-
-body:not(.app-slava-restraint) .panel__close:hover { color: #ccc; }
-
 .panel__body {
-  padding: 8px;
   overflow-y: auto;
   flex: 1;
 }
 
 .panel__body--library {
   display: flex;
-  min-height: 0;
   flex-direction: column;
 }
 
@@ -250,24 +209,12 @@ body.app-slava-restraint :is(.node-library__count, .node-library__metadata, .nod
   cursor: grabbing;
 }
 
-body:not(.app-slava-restraint) .node-inspector-popover {
-  z-index: 11;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: #ccc;
-}
-
 .node-inspector-popover__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex: 0 0 auto;
   gap: 8px;
-  padding: 7px 10px;
   user-select: none;
 }
 
@@ -275,19 +222,6 @@ body:not(.app-slava-restraint) .node-inspector-popover {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-
-body:not(.app-slava-restraint) .node-inspector-popover__header {
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.node-inspector-popover__pin--active {
-  opacity: 1;
-}
-
-body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
-  color: #ccc;
-  background: #252525;
 }
 
 .node-inspector-popover__body {
@@ -301,7 +235,6 @@ body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 10px;
   overscroll-behavior: contain;
   scroll-padding-bottom: var(--scroll-fade-size);
 }
@@ -321,7 +254,6 @@ body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
    whole (InspectorFoot.tsx; GM - Design, 2026-10-23). */
 .node-inspector-popover__foot {
   flex: 0 0 auto;
-  padding: 0 10px 10px;
 }
 
 .node-inspector-popover__foot:empty {
@@ -339,22 +271,11 @@ body:not(.app-slava-restraint) .node-inspector-popover__pin--active {
 
 .panel__search {
   width: 100%;
-  padding: 6px 8px;
   outline: none;
   margin-bottom: 8px;
   box-sizing: border-box;
 }
 
-body:not(.app-slava-restraint) .panel__search {
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: #ccc;
-  font-size: 12px;
-}
-
-body:not(.app-slava-restraint) .panel__search:focus { border-color: #555; }
-body:not(.app-slava-restraint) .panel__search::placeholder { color: #555; }
 
 .panel__group { margin-bottom: 8px; }
 
@@ -365,42 +286,15 @@ body:not(.app-slava-restraint) .panel__search::placeholder { color: #555; }
   padding: 4px 4px 2px;
 }
 
-body:not(.app-slava-restraint) .panel__group-label {
-  font-size: 10px;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
 .panel__group-label--button {
   width: 100%;
-  background: transparent;
-  border: none;
   cursor: pointer;
   font-family: inherit;
-  padding: 5px 4px;
-}
-
-body:not(.app-slava-restraint) .panel__group-label--button {
-  border-radius: 4px;
-  transition: background 0.08s, color 0.08s;
-}
-
-body:not(.app-slava-restraint) .panel__group-label--button:hover {
-  background: #202020;
-  color: #aaa;
-}
-
-body:not(.app-slava-restraint) .panel__group-chevron {
-  font-size: 8px;
-  color: #555;
 }
 
 .panel__group-chevron {
-  width: 8px;
   display: inline-block;
   text-align: center;
-  flex-shrink: 0;
 }
 
 .panel__group-text {
@@ -408,57 +302,25 @@ body:not(.app-slava-restraint) .panel__group-chevron {
   text-align: left;
 }
 
-body:not(.app-slava-restraint) .panel__group-count {
-  font-size: 9px;
-  color: #444;
-  background: #222;
-  border-radius: 8px;
-}
-
 .panel__group-count {
-  padding: 1px 6px;
-  text-transform: none;
   letter-spacing: 0;
   min-width: 16px;
   text-align: center;
 }
 
 .panel__group-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
   flex-shrink: 0;
 }
 
 .panel__item {
   display: block;
   width: 100%;
-  padding: 5px 8px;
-  border: 0;
-  background: transparent;
-  color: inherit;
   cursor: grab;
   font: inherit;
   text-align: left;
 }
 
-body:not(.app-slava-restraint) .panel__item {
-  border-radius: 4px;
-  color: #bbb;
-  transition: background 0.1s;
-}
-
-body:not(.app-slava-restraint) .panel__item:hover {
-  background: #252525;
-  color: #eee;
-}
-
 .panel__item:active { cursor: grabbing; }
-
-body:not(.app-slava-restraint) .panel__item:focus-visible {
-  outline: 2px solid var(--sr-accent);
-  outline-offset: -2px;
-}
 
 .inspector__node-header {
   display: flex;
@@ -478,12 +340,6 @@ body:not(.app-slava-restraint) .panel__item:focus-visible {
   flex: 1;
 }
 
-body:not(.app-slava-restraint) .inspector__node-name {
-  color: #eee;
-  font-weight: 500;
-  font-size: 13px;
-}
-
 .inspector__section { margin-bottom: 12px; }
 
 .inspector__section--param {
@@ -495,36 +351,15 @@ body:not(.app-slava-restraint) .inspector__node-name {
   padding-top: 8px;
 }
 
-body:not(.app-slava-restraint) .inspector__section--separated {
-  border-top: 1px solid #2a2a2a;
-}
-
-body:not(.app-slava-restraint) .inspector__label {
-  font-size: 10px;
-  color: #666;
-  text-transform: uppercase;
-}
-
 .inspector__label {
   margin-bottom: 4px;
 }
 
 .inspector__field {
   width: 100%;
-  padding: 6px 8px;
   outline: none;
   box-sizing: border-box;
 }
-
-body:not(.app-slava-restraint) .inspector__field {
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: #ccc;
-  font-size: 12px;
-}
-
-body:not(.app-slava-restraint) .inspector__field:focus { border-color: #555; }
 
 .inspector__field--stacked {
   margin-top: 4px;
@@ -533,39 +368,11 @@ body:not(.app-slava-restraint) .inspector__field:focus { border-color: #555; }
 .inspector__control-stack {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   min-width: 0;
 }
 
 .inspector__notice {
   margin-bottom: 12px;
-  padding: 7px 8px;
-}
-
-body:not(.app-slava-restraint) .inspector__notice {
-  border: 1px solid #3a2f1d;
-  border-radius: 4px;
-  background: rgba(197, 139, 58, 0.10);
-  color: #c58b3a;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-/* A missing key is something to do, not a failure: the notice in neutral
-   grey, not the warning amber (copy sweep item 12). The Slava skin's notice
-   is already neutral. */
-body:not(.app-slava-restraint) .inspector__notice--key {
-  border-color: #34343a;
-  background: rgba(255, 255, 255, 0.04);
-  color: #a9a9b0;
-}
-
-/* The same on a node card: the run error for a missing key draws as the
-   neutral notice (NodeError `missingKey`), not the error red. The Slava
-   skin's rule is `.model-node__error--key` in slava-restraint.css. */
-body:not(.app-slava-restraint) .model-node__error.model-node__error--key {
-  color: #a3a3a3;
-  background: rgba(255, 255, 255, 0.04);
 }
 
 .inspector__model-error {
@@ -573,21 +380,10 @@ body:not(.app-slava-restraint) .model-node__error.model-node__error--key {
   line-height: 1.4;
 }
 
-body:not(.app-slava-restraint) .inspector__model-error {
-  color: var(--line-warning, #c58b3a);
-  font-size: 10px;
-}
-
 .inspector__model-selection {
   display: flex;
   align-items: center;
-  gap: 4px;
   margin-top: 2px;
-}
-
-body:not(.app-slava-restraint) .inspector__model-selection {
-  color: #666;
-  font-size: 10px;
 }
 
 .inspector__model-selection-text {
@@ -609,19 +405,11 @@ body:not(.app-slava-restraint) .inspector__model-selection {
   cursor: pointer;
 }
 
-body:not(.app-slava-restraint) .inspector__favorite-button {
-  color: #555;
-}
-
 .inspector__favorite-icon,
 .inspector__info-icon,
 .inspector__action-icon {
   display: block;
   flex: 0 0 auto;
-}
-
-body:not(.app-slava-restraint) .inspector__favorite-button--active {
-  color: #FFC107;
 }
 
 .inspector__file-button {
@@ -631,14 +419,6 @@ body:not(.app-slava-restraint) .inspector__favorite-button--active {
   gap: 6px;
   padding: 4px 10px;
   cursor: pointer;
-}
-
-body:not(.app-slava-restraint) .inspector__file-button {
-  border: 1px solid #555;
-  border-radius: 4px;
-  background: #333;
-  color: #ccc;
-  font-size: 12px;
 }
 
 .inspector__file-input {
@@ -688,12 +468,7 @@ body:not(.app-slava-restraint) .inspector__file-button {
 /* GM r46 Q2: under the file's name when there is no preview: quiet,
    secondary text, neutral. */
 .inspector__file-no-preview {
-  font-size: 12px;
   line-height: 1.4;
-}
-
-body:not(.app-slava-restraint) .inspector__file-no-preview {
-  color: #888;
 }
 
 body.app-slava-restraint .inspector__file-no-preview {
@@ -702,23 +477,11 @@ body.app-slava-restraint .inspector__file-no-preview {
   font-size: var(--sr-type-body);
 }
 
-body:not(.app-slava-restraint) .inspector__file-preview {
-  border-radius: 4px;
-}
-
 /* Palette param control — editable hex swatch list (cinematic nodes). */
 .inspector__palette-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.inspector__palette-empty {
-  font-size: 11px;
-}
-
-body:not(.app-slava-restraint) .inspector__palette-empty {
-  color: #666;
 }
 
 .inspector__palette-row {
@@ -735,14 +498,8 @@ body:not(.app-slava-restraint) .inspector__palette-empty {
      the 2 px gap), so it is the same full colour enabled or disabled; the
      native swatch on top is that colour too. */
   padding: 2px;
-  border: none;
   background-clip: content-box;
   cursor: pointer;
-}
-
-body:not(.app-slava-restraint) .inspector__palette-color {
-  border: 1px solid #333;
-  border-radius: 4px;
 }
 
 .inspector__palette-color::-webkit-color-swatch-wrapper {
@@ -757,7 +514,6 @@ body:not(.app-slava-restraint) .inspector__palette-color {
 .inspector__palette-hex {
   flex: 1 1 auto;
   min-width: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .inspector__palette-remove {
@@ -771,14 +527,6 @@ body:not(.app-slava-restraint) .inspector__palette-color {
   border: none;
   background: none;
   cursor: pointer;
-}
-
-body:not(.app-slava-restraint) .inspector__palette-remove {
-  color: #777;
-}
-
-body:not(.app-slava-restraint) .inspector__palette-remove:hover:not(:disabled, [aria-disabled='true']) {
-  color: #ddd; /* GM r12: removing a swatch is an edit, so neutral */
 }
 
 .inspector__palette-actions {
@@ -822,11 +570,6 @@ body:not(.app-slava-restraint) .inspector__palette-remove:hover:not(:disabled, [
   pointer-events: none;
 }
 
-body:not(.app-slava-restraint) .inspector__palette-actions .inspector__file-button:has(.inspector__file-input:focus-visible) {
-  outline: 2px solid rgba(255, 255, 255, 0.6);
-  outline-offset: 1px;
-}
-
 body.app-slava-restraint .inspector__palette-actions .inspector__file-button:has(.inspector__file-input:focus-visible) {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
@@ -837,18 +580,11 @@ body.app-slava-restraint .inspector__palette-actions .inspector__file-button:has
 .inspector__palette-pending {
   display: flex;
   align-items: center;
-  min-height: 28px;
   margin: 0;
-  font-size: 12px;
-}
-
-body:not(.app-slava-restraint) .inspector__palette-pending {
-  color: #888;
 }
 
 /* GM r23 on #208: focus moved to the line by code (from the row it
    replaced) shows no ring; the line isn't a control. */
-body:not(.app-slava-restraint) .inspector__palette-pending:focus,
 body.app-slava-restraint .inspector__palette-pending:focus {
   outline: none;
 }
@@ -860,13 +596,7 @@ body.app-slava-restraint .inspector__palette-pending:focus {
 .inspector__palette-cant-run,
 .inspector__palette-note {
   margin: 0;
-  font-size: 12px;
   line-height: 1.4;
-}
-
-body:not(.app-slava-restraint) .inspector__palette-cant-run,
-body:not(.app-slava-restraint) .inspector__palette-note {
-  color: #888;
 }
 
 /* GM r18 4 on #208: Extract's status region, always mounted and read by a
@@ -887,18 +617,9 @@ body:not(.app-slava-restraint) .inspector__palette-note {
   gap: 6px;
 }
 
-body:not(.app-slava-restraint) .inspector__checkbox-row {
-  color: #aaa;
-}
-
 .inspector__checkbox-copy {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-body:not(.app-slava-restraint) .inspector__state-value {
-  color: #888;
-  font-size: 11px;
 }
 
 .inspector__actions {
@@ -906,10 +627,6 @@ body:not(.app-slava-restraint) .inspector__state-value {
   gap: 6px;
   margin-top: 12px;
   padding-top: 8px;
-}
-
-body:not(.app-slava-restraint) .inspector__actions {
-  border-top: 1px solid #2a2a2a;
 }
 
 .inspector__action-button--full {
@@ -922,7 +639,6 @@ body:not(.app-slava-restraint) .inspector__actions {
 
 .toolbar {
   position: fixed;
-  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -931,47 +647,13 @@ body:not(.app-slava-restraint) .inspector__actions {
   padding: 6px 16px;
 }
 
-body:not(.app-slava-restraint) .toolbar {
-  z-index: 10;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-}
-
 .toolbar__button {
   background: none;
-  border: none;
   cursor: pointer;
-  padding: 4px 8px;
-  font-family: inherit;
-}
-
-body:not(.app-slava-restraint) .toolbar__button {
-  color: #999;
-  font-size: 12px;
-  border-radius: 4px;
-  transition: background 0.1s, color 0.1s;
-}
-
-body:not(.app-slava-restraint) .toolbar__button:hover {
-  background: #252525;
-  color: #eee;
-}
-
-body:not(.app-slava-restraint) .toolbar__button--active,
-body:not(.app-slava-restraint) .toolbar__button--active:hover {
-  background: #2a2a2a;
-  color: #fff;
 }
 
 .toolbar__divider {
-  width: 1px;
   height: 16px;
-}
-
-body:not(.app-slava-restraint) .toolbar__divider {
-  background: #333;
 }
 
 /* Settings panel styles live in settings.css. */
@@ -981,17 +663,6 @@ body:not(.app-slava-restraint) .toolbar__divider {
 .context-menu {
   position: fixed;
   min-width: 180px;
-  padding: 4px;
-}
-
-body:not(.app-slava-restraint) .context-menu {
-  z-index: var(--sr-layer-transient, 59);
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 6px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
 }
 
 .context-menu__item {
@@ -1003,34 +674,12 @@ body:not(.app-slava-restraint) .context-menu {
   background: none;
   border: none;
   cursor: pointer;
-  font-family: inherit;
   text-align: left;
-}
-
-body:not(.app-slava-restraint) .context-menu__item {
-  border-radius: 4px;
-  color: #ccc;
-  font-size: 12px;
-  transition: background 0.1s;
-}
-
-body:not(.app-slava-restraint) .context-menu__item:hover:not(:disabled) {
-  background: #252525;
 }
 
 .context-menu__item:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-body:not(.app-slava-restraint) .context-menu__item--danger:hover:not(:disabled) {
-  background: var(--sr-danger-tint);
-  color: var(--sr-danger-ink, #ff887d);
-}
-
-body:not(.app-slava-restraint) .context-menu__shortcut {
-  color: #555;
-  font-size: 11px;
 }
 
 .context-menu__shortcut {
@@ -1041,20 +690,6 @@ body:not(.app-slava-restraint) .context-menu__shortcut {
 
 .connection-popup {
   position: fixed;
-  width: 260px;
-  max-height: 420px;
-  display: flex;
-  flex-direction: column;
-}
-
-body:not(.app-slava-restraint) .connection-popup {
-  z-index: var(--sr-layer-transient, 59);
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
 }
 
 .connection-popup__header {
@@ -1062,10 +697,6 @@ body:not(.app-slava-restraint) .connection-popup {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-}
-
-body:not(.app-slava-restraint) .connection-popup__header {
-  border-bottom: 1px solid #2a2a2a;
 }
 
 .connection-popup__type-dot {
@@ -1082,18 +713,7 @@ body:not(.app-slava-restraint) .connection-popup__header {
   outline: none;
 }
 
-body:not(.app-slava-restraint) .connection-popup__search {
-  color: #ddd;
-  font-size: 12px;
-  font-family: inherit;
-}
-
-body:not(.app-slava-restraint) .connection-popup__search::placeholder {
-  color: #555;
-}
-
 .connection-popup__list {
-  overflow-y: auto;
   padding: 4px;
 }
 
@@ -1102,19 +722,8 @@ body:not(.app-slava-restraint) .connection-popup__search::placeholder {
   text-align: center;
 }
 
-body:not(.app-slava-restraint) .connection-popup__empty {
-  color: #555;
-}
-
 .connection-popup__category-label {
   padding: 6px 10px 3px;
-}
-
-body:not(.app-slava-restraint) .connection-popup__category-label {
-  color: #666;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .connection-popup__category-label--button {
@@ -1130,34 +739,12 @@ body:not(.app-slava-restraint) .connection-popup__category-label {
   text-align: left;
 }
 
-body:not(.app-slava-restraint) .connection-popup__category-label--button {
-  border-radius: 4px;
-  color: #888;
-  transition: background 0.1s, color 0.1s;
-}
-
-body:not(.app-slava-restraint) .connection-popup__category-label--button:hover {
-  background: #202020;
-  color: #ccc;
-}
-
-body:not(.app-slava-restraint) .connection-popup__category-chevron {
-  color: #555;
-  font-size: 9px;
-}
-
 .connection-popup__category-chevron {
-  width: 10px;
   display: inline-block;
 }
 
 .connection-popup__category-text {
   flex: 1;
-}
-
-body:not(.app-slava-restraint) .connection-popup__category-count {
-  color: #555;
-  font-size: 9px;
 }
 
 .connection-popup__category-count {
@@ -1179,19 +766,6 @@ body:not(.app-slava-restraint) .connection-popup__category-count {
   cursor: pointer;
 }
 
-body:not(.app-slava-restraint) .connection-popup__close {
-  border: none;
-  border-radius: 4px;
-  color: #666;
-  font-size: 16px;
-  transition: background 0.1s, color 0.1s;
-}
-
-body:not(.app-slava-restraint) .connection-popup__close:hover {
-  background: #252525;
-  color: #ccc;
-}
-
 .connection-popup__item {
   display: flex;
   align-items: center;
@@ -1201,19 +775,7 @@ body:not(.app-slava-restraint) .connection-popup__close:hover {
   background: transparent;
   border: none;
   cursor: pointer;
-  font-family: inherit;
   text-align: left;
-}
-
-body:not(.app-slava-restraint) .connection-popup__item {
-  border-radius: 4px;
-  color: #ccc;
-  font-size: 12px;
-  transition: background 0.1s;
-}
-
-body:not(.app-slava-restraint) .connection-popup__item:hover {
-  background: #252525;
 }
 
 .connection-popup__item-dot {
@@ -1227,11 +789,6 @@ body:not(.app-slava-restraint) .connection-popup__item:hover {
   flex: 1;
 }
 
-body:not(.app-slava-restraint) .connection-popup__item-port {
-  color: #555;
-  font-size: 10px;
-}
-
 /* ---------- Inspector action buttons ---------- */
 
 .inspector__action-button {
@@ -1242,39 +799,11 @@ body:not(.app-slava-restraint) .connection-popup__item-port {
   flex: 1;
   padding: 5px 0;
   cursor: pointer;
-  font-family: inherit;
-}
-
-body:not(.app-slava-restraint) .inspector__action-button {
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: #aaa;
-  font-size: 11px;
-  transition: background 0.1s, color 0.1s;
-}
-
-.inspector__action-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-body:not(.app-slava-restraint) .inspector__action-button:hover:not(:disabled) {
-  background: #333;
-  color: #eee;
-}
-
-body:not(.app-slava-restraint) .inspector__action-button--danger:hover:not(:disabled) {
-  background: var(--sr-danger-tint);
-  color: var(--sr-danger-ink, #ff887d);
-  border-color: var(--sr-danger-edge);
 }
 
 /* ---------- Inspector info button & panel ---------- */
 
 .inspector__info-button {
-  width: 20px;
-  height: 20px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
@@ -1283,32 +812,9 @@ body:not(.app-slava-restraint) .inspector__action-button--danger:hover:not(:disa
   flex-shrink: 0;
 }
 
-body:not(.app-slava-restraint) .inspector__info-button {
-  border-radius: 50%;
-  border: 1px solid #444;
-  background: transparent;
-  color: #888;
-  font-size: 11px;
-  font-style: italic;
-  font-family: Georgia, serif;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-body:not(.app-slava-restraint) .inspector__info-button:hover {
-  border-color: #888;
-  color: #ccc;
-}
-
 .inspector__info-panel {
   padding: 10px;
   margin-bottom: 12px;
-}
-
-body:not(.app-slava-restraint) .inspector__info-panel {
-  background: #151515;
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  font-size: 11px;
 }
 
 .inspector__info-section {
@@ -1317,14 +823,6 @@ body:not(.app-slava-restraint) .inspector__info-panel {
 
 .inspector__info-section:last-of-type {
   margin-bottom: 6px;
-}
-
-body:not(.app-slava-restraint) .inspector__info-heading {
-  color: #666;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid #222;
 }
 
 .inspector__info-heading {
@@ -1339,10 +837,6 @@ body:not(.app-slava-restraint) .inspector__info-heading {
   padding: 2px 0;
 }
 
-body:not(.app-slava-restraint) .inspector__info-row {
-  color: #aaa;
-}
-
 .inspector__info-dot {
   width: 6px;
   height: 6px;
@@ -1350,23 +844,8 @@ body:not(.app-slava-restraint) .inspector__info-row {
   flex-shrink: 0;
 }
 
-body:not(.app-slava-restraint) .inspector__info-name {
-  color: #ccc;
-}
-
 .inspector__info-name {
   flex: 1;
-}
-
-body:not(.app-slava-restraint) .inspector__info-type {
-  color: #666;
-  font-size: 10px;
-}
-
-body:not(.app-slava-restraint) .inspector__info-meta {
-  color: #555;
-  font-size: 10px;
-  border-top: 1px solid #222;
 }
 
 .inspector__info-meta {
@@ -1386,17 +865,6 @@ body:not(.app-slava-restraint) .inspector__info-meta {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-body:not(.app-slava-restraint) .chat-panel {
-  z-index: 10;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 12px;
-  color: #ccc;
 }
 
 .chat-panel__resize-handle {
@@ -1427,16 +895,6 @@ body:not(.app-slava-restraint) .chat-panel {
   pointer-events: none;
 }
 
-body:not(.app-slava-restraint) .chat-panel__resize-handle--left::before {
-  background: #3a3a3a;
-}
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--left:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--left:active::before {
-  background: #6a8bb5;
-  height: 60px;
-}
-
 .chat-panel__resize-handle--bottom {
   left: 0;
   right: 0;
@@ -1456,16 +914,6 @@ body:not(.app-slava-restraint) .chat-panel__resize-handle--left:active::before {
   border-radius: 2px;
   transition: background 0.12s, width 0.12s;
   pointer-events: none;
-}
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--bottom::before {
-  background: #3a3a3a;
-}
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--bottom:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--bottom:active::before {
-  background: #6a8bb5;
-  width: 60px;
 }
 
 /* Right and top edges — mirrors of left and bottom */
@@ -1490,16 +938,6 @@ body:not(.app-slava-restraint) .chat-panel__resize-handle--bottom:active::before
   pointer-events: none;
 }
 
-body:not(.app-slava-restraint) .chat-panel__resize-handle--right::before {
-  background: #2a2a2a;
-}
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--right:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--right:active::before {
-  background: #6a8bb5;
-  height: 60px;
-}
-
 .chat-panel__resize-handle--top {
   left: 0;
   right: 0;
@@ -1519,16 +957,6 @@ body:not(.app-slava-restraint) .chat-panel__resize-handle--right:active::before 
   border-radius: 1px;
   transition: background 0.12s, width 0.12s;
   pointer-events: none;
-}
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--top::before {
-  background: #2a2a2a;
-}
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--top:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--top:active::before {
-  background: #6a8bb5;
-  width: 60px;
 }
 
 /* Corners — 16×16 pinned to each corner, each with its own cursor */
@@ -1560,28 +988,10 @@ body:not(.app-slava-restraint) .chat-panel__resize-handle--top:active::before {
   pointer-events: none;
 }
 
-body:not(.app-slava-restraint) .chat-panel__resize-handle--tl::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--tr::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--bl::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--br::before {
-  border-color: #2a2a2a;
-}
-
 .chat-panel__resize-handle--tl::before { top: 3px; left: 3px; border-top-width: 2px; border-left-width: 2px; }
 .chat-panel__resize-handle--tr::before { top: 3px; right: 3px; border-top-width: 2px; border-right-width: 2px; }
 .chat-panel__resize-handle--bl::before { bottom: 3px; left: 3px; border-bottom-width: 2px; border-left-width: 2px; }
 .chat-panel__resize-handle--br::before { bottom: 3px; right: 3px; border-bottom-width: 2px; border-right-width: 2px; }
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--tl:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--tl:active::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--tr:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--tr:active::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--bl:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--bl:active::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--br:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--br:active::before {
-  border-color: #6a8bb5;
-}
 
 /* Legacy --corner class kept for backward compat (unused in JSX now) */
 .chat-panel__resize-handle--corner {
@@ -1607,52 +1017,10 @@ body:not(.app-slava-restraint) .chat-panel__resize-handle--br:active::before {
   pointer-events: none;
 }
 
-body:not(.app-slava-restraint) .chat-panel__resize-handle--corner::before {
-  border-color: #555;
-}
-
-body:not(.app-slava-restraint) .chat-panel__resize-handle--corner:hover::before,
-body:not(.app-slava-restraint) .chat-panel__resize-handle--corner:active::before {
-  border-color: #6a8bb5;
-}
-
 .chat-panel__header {
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 12px;
   user-select: none;
-  cursor: grab;
-}
-
-body:not(.app-slava-restraint) .chat-panel__header {
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.chat-panel__header:active {
-  cursor: grabbing;
-}
-
-body:not(.app-slava-restraint) .chat-panel__title {
-  font-size: 11px;
-  text-transform: uppercase;
-  color: #aaa;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.chat-panel__title {
-  margin-bottom: 2px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__meta {
-  font-size: 10px;
-  color: #666;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-body:not(.app-slava-restraint) .chat-panel__session {
-  color: #555;
 }
 
 .chat-panel__session {
@@ -1662,43 +1030,16 @@ body:not(.app-slava-restraint) .chat-panel__session {
 .chat-panel__messages {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.chat__empty {
-  padding: 32px 16px;
-}
-
-body:not(.app-slava-restraint) .chat__empty {
-  color: #666;
-  text-align: center;
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .chat__empty p {
   margin: 0 0 8px 0;
 }
 
-body:not(.app-slava-restraint) .chat__empty-hint {
-  color: #555;
-  font-size: 11px;
-}
-
 .chat__empty-hint {
   margin-top: 12px !important;
-}
-
-body:not(.app-slava-restraint) .chat__empty code {
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 3px;
-  color: #aaa;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
 }
 
 .chat__empty code {
@@ -1711,34 +1052,15 @@ body:not(.app-slava-restraint) .chat__empty code {
   white-space: pre-wrap;
 }
 
-body:not(.app-slava-restraint) .chat__bubble {
-  border-radius: 8px;
-  line-height: 1.45;
-}
-
 .chat__bubble--user {
   align-self: flex-end;
-  max-width: 85%;
-}
-
-body:not(.app-slava-restraint) .chat__bubble--user {
-  background: #2a3b4f;
-  color: #d8e8f5;
-}
-
-body:not(.app-slava-restraint) .chat__bubble--assistant {
-  background: #1e1e1e;
-  border: 1px solid #2a2a2a;
-  color: #ccc;
 }
 
 .chat__bubble--assistant {
   align-self: flex-start;
-  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-left: 10px;
 }
 
 .chat__text {
@@ -1751,12 +1073,6 @@ body:not(.app-slava-restraint) .chat__bubble--assistant {
   overflow: hidden;
 }
 
-body:not(.app-slava-restraint) .chat__codeblock {
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  background: #141414;
-}
-
 .chat__codeblock-body {
   margin: 0;
   padding: 10px 12px;
@@ -1764,13 +1080,6 @@ body:not(.app-slava-restraint) .chat__codeblock {
   word-break: break-word;
   max-height: 320px;
   overflow-y: auto;
-}
-
-body:not(.app-slava-restraint) .chat__codeblock-body {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: #d0d0d0;
-  line-height: 1.5;
 }
 
 .chat__codeblock-apply {
@@ -1781,62 +1090,14 @@ body:not(.app-slava-restraint) .chat__codeblock-body {
   cursor: pointer;
 }
 
-body:not(.app-slava-restraint) .chat__codeblock-apply {
-  background: #1e2a3a;
-  border-top: 1px solid #2a2a2a;
-  color: #9fc1e7;
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  transition: background 0.1s, color 0.1s;
-}
-
-body:not(.app-slava-restraint) .chat__codeblock-apply:hover {
-  background: #253247;
-  color: #c8dcf2;
-}
-
-body:not(.app-slava-restraint) .chat__system {
-  color: #888;
-  font-style: italic;
-  font-size: 11px;
-}
-
-body:not(.app-slava-restraint) .chat__system--error {
-  color: #d48b8b;
-}
-
-body:not(.app-slava-restraint) .chat__system--success {
-  color: #8fc89d;
-}
-
 .chat__cursor {
   animation: chat-blink 1s step-end infinite;
   font-weight: normal;
   align-self: flex-start;
 }
 
-body:not(.app-slava-restraint) .chat__cursor {
-  color: #888;
-  font-size: 10px;
-}
-
 @keyframes chat-blink {
   50% { opacity: 0; }
-}
-
-body:not(.app-slava-restraint) .chat__tool {
-  background: #151515;
-  border: 1px solid #2a2a2a;
-  border-radius: 5px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-}
-
-body:not(.app-slava-restraint) .chat__tool--error {
-  border-color: #4a1f1f;
 }
 
 .chat__tool-header {
@@ -1853,33 +1114,6 @@ body:not(.app-slava-restraint) .chat__tool--error {
   text-align: left;
 }
 
-body:not(.app-slava-restraint) .chat__tool-header {
-  color: #aaa;
-}
-
-body:not(.app-slava-restraint) .chat__tool-header:hover {
-  background: #1e1e1e;
-}
-
-body:not(.app-slava-restraint) .chat__tool-icon {
-  color: #666;
-  font-size: 9px;
-}
-
-.chat__tool-icon {
-  width: 10px;
-}
-
-body:not(.app-slava-restraint) .chat__tool-name {
-  color: #d0a060;
-  font-weight: 500;
-}
-
-body:not(.app-slava-restraint) .chat__tool-status {
-  color: #666;
-  font-size: 10px;
-}
-
 .chat__tool-status {
   margin-left: auto;
   font-style: italic;
@@ -1892,10 +1126,6 @@ body:not(.app-slava-restraint) .chat__tool-status {
   gap: 6px;
 }
 
-body:not(.app-slava-restraint) .chat__tool-body {
-  border-top: 1px solid #2a2a2a;
-}
-
 .chat__tool-input,
 .chat__tool-output {
   margin: 0;
@@ -1906,49 +1136,14 @@ body:not(.app-slava-restraint) .chat__tool-body {
   overflow-y: auto;
 }
 
-body:not(.app-slava-restraint) .chat__tool-input,
-body:not(.app-slava-restraint) .chat__tool-output {
-  background: #0e0e0e;
-  border: 1px solid #222;
-  border-radius: 3px;
-  color: #bbb;
-  font-size: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-body:not(.app-slava-restraint) .chat__tool--error .chat__tool-output {
-  color: #e89090;
-  border-color: #4a1f1f;
-}
-
 .chat-panel__input {
-  --chat-composer-gap: 6px;
-  --chat-composer-control: 36px;
-  --chat-composer-action: 30px;
-  --chat-composer-pad-x: 8px;
-  --chat-composer-pad-y: 8px;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: var(--chat-composer-pad-y) var(--chat-composer-pad-x);
-}
-
-body:not(.app-slava-restraint) .chat-panel__input {
-  border-top: 1px solid #2a2a2a;
-  background: #151515;
 }
 
 .chat-panel__connect {
   margin: 0 0 6px 0;
   overflow: hidden;
-}
-
-body:not(.app-slava-restraint) .chat-panel__connect {
-  border: 1px solid #2b3440;
-  border-radius: 7px;
-  background: #1b222a;
-  color: #b9c4cf;
-  font-size: 11px;
 }
 
 .chat-panel__connect-summary {
@@ -1965,20 +1160,10 @@ body:not(.app-slava-restraint) .chat-panel__connect {
   display: none;
 }
 
-body:not(.app-slava-restraint) .chat-panel__connect-summary {
-  color: #d2dae4;
-}
-
 .chat-panel__connect-status {
   min-width: 0;
   text-align: right;
   overflow-wrap: anywhere;
-}
-
-body:not(.app-slava-restraint) .chat-panel__connect-status {
-  color: #8ea5bc;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
 }
 
 .chat-panel__connect-body {
@@ -1986,11 +1171,6 @@ body:not(.app-slava-restraint) .chat-panel__connect-status {
   flex-direction: column;
   gap: 6px;
   padding: 0 8px 8px 8px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__connect-body {
-  color: #9ca9b6;
-  line-height: 1.35;
 }
 
 .chat-panel__connect-actions {
@@ -2012,19 +1192,6 @@ body:not(.app-slava-restraint) .chat-panel__connect-body {
   cursor: pointer;
 }
 
-body:not(.app-slava-restraint) .chat-panel__connect-btn {
-  border: 1px solid #3a4550;
-  border-radius: 6px;
-  background: #141a21;
-  color: #d8e3ee;
-}
-
-body:not(.app-slava-restraint) .chat-panel__connect-btn--primary {
-  border-color: #8a3f24;
-  background: #7b2d16;
-  color: #fff7f2;
-}
-
 .chat-panel__connect-btn:disabled {
   cursor: default;
   opacity: 0.58;
@@ -2043,10 +1210,6 @@ body:not(.app-slava-restraint) .chat-panel__connect-btn--primary {
   overflow-wrap: anywhere;
 }
 
-body:not(.app-slava-restraint) .chat-panel__connect-progress {
-  color: #c0cad5;
-}
-
 .chat-panel__connect-link {
   display: inline-flex;
   align-items: center;
@@ -2055,21 +1218,8 @@ body:not(.app-slava-restraint) .chat-panel__connect-progress {
   text-decoration: none;
 }
 
-body:not(.app-slava-restraint) .chat-panel__connect-link {
-  color: #ffc29d;
-}
-
 .chat-panel__connect-code {
   padding: 2px 5px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__connect-code {
-  border: 1px solid #415064;
-  border-radius: 4px;
-  background: #0e141a;
-  color: #f2f7ff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
 }
 
 .chat-panel__connect-commands {
@@ -2084,15 +1234,6 @@ body:not(.app-slava-restraint) .chat-panel__connect-code {
   padding: 2px 5px;
 }
 
-body:not(.app-slava-restraint) .chat-panel__connect-commands code {
-  border: 1px solid #344253;
-  border-radius: 4px;
-  background: #10161d;
-  color: #d5dfeb;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
-}
-
 .chat-panel__input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--chat-composer-action);
@@ -2103,104 +1244,34 @@ body:not(.app-slava-restraint) .chat-panel__connect-commands code {
   box-sizing: border-box;
 }
 
-body:not(.app-slava-restraint) .chat-panel__input-row {
-  border: 1px solid #333;
-  border-radius: 7px;
-  background: #252525;
-}
-
-body:not(.app-slava-restraint) .chat-panel__input-row:focus-within {
-  border-color: #555;
-}
-
 .chat-panel__textarea {
   width: 100%;
   min-width: 0;
-  min-height: calc(var(--chat-composer-control) - 8px);
   max-height: 140px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 5px 6px;
-  font-family: inherit;
-  outline: none;
   resize: none;
   box-sizing: border-box;
   overflow-y: auto;
 }
 
-body:not(.app-slava-restraint) .chat-panel__textarea {
-  color: #ccc;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.chat-panel__textarea:focus {
-  border-color: transparent;
-}
-
-.chat-panel__textarea:disabled {
-  opacity: 0.5;
-}
-
 .chat-panel__send {
-  cursor: pointer;
-  padding: 0 14px;
-  font-family: inherit;
   /* Composer controls use a shared size so text inputs and icon buttons align. */
   align-self: center;
-  height: var(--chat-composer-action);
   flex: 0 0 auto;
-}
-
-body:not(.app-slava-restraint) .chat-panel__send {
-  background: #2a3b4f;
-  border: 1px solid #3a5070;
-  border-radius: 5px;
-  color: #d8e8f5;
-  font-size: 12px;
-  transition: background 0.1s;
 }
 
 .chat-panel__send--submit {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--chat-composer-action);
-  min-width: var(--chat-composer-action);
-  padding: 0;
 }
 
 .chat-panel__send-icon {
-  display: block;
   font-size: 17px;
-  line-height: 1;
-  transform: translateY(-1px);
-}
-
-body:not(.app-slava-restraint) .chat-panel__send:hover:not(:disabled) {
-  background: #334a66;
-}
-
-.chat-panel__send:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-body:not(.app-slava-restraint) .chat-panel__send--stop {
-  background: #4a1f1f;
-  border-color: #6a2f2f;
-  color: #e8b8b8;
-}
-
-body:not(.app-slava-restraint) .chat-panel__send--stop:hover {
-  background: #5a2a2a;
 }
 
 .chat-panel__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
   padding: 0 0 6px 0;
 }
 
@@ -2211,21 +1282,11 @@ body:not(.app-slava-restraint) .chat-panel__send--stop:hover {
   overflow: hidden;
 }
 
-body:not(.app-slava-restraint) .chat-panel__chip {
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
 .chat-panel__chip--error {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__chip--error {
-  border-color: rgba(255, 99, 99, 0.6);
 }
 
 .chat-panel__chip-thumb {
@@ -2245,12 +1306,6 @@ body:not(.app-slava-restraint) .chat-panel__chip--error {
   pointer-events: none;
 }
 
-body:not(.app-slava-restraint) .chat-panel__chip-label {
-  font-size: 10px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-}
-
 .chat-panel__chip-spinner {
   position: absolute;
   inset: 0;
@@ -2259,30 +1314,8 @@ body:not(.app-slava-restraint) .chat-panel__chip-label {
   justify-content: center;
 }
 
-body:not(.app-slava-restraint) .chat-panel__chip-spinner {
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(2px);
-}
-
-body:not(.app-slava-restraint) .chat-panel__chip-spinner::after {
-  content: '';
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: chat-chip-spin 0.8s linear infinite;
-}
 @keyframes chat-chip-spin {
   to { transform: rotate(360deg); }
-}
-
-body:not(.app-slava-restraint) .chat-panel__chip-error {
-  font-size: 9px;
-  color: #ffb3b3;
-  text-align: center;
-  line-height: 1.1;
-  padding: 2px;
 }
 
 .chat-panel__chip-close {
@@ -2296,27 +1329,12 @@ body:not(.app-slava-restraint) .chat-panel__chip-error {
   opacity: 0;
 }
 
-body:not(.app-slava-restraint) .chat-panel__chip-close {
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(0, 0, 0, 0.8);
-  color: #fff;
-  font-size: 12px;
-  line-height: 14px;
-  transition: opacity 80ms ease;
-}
 .chat-panel__chip:hover .chat-panel__chip-close {
   opacity: 1;
 }
 .chat-panel__chip:focus-within .chat-panel__chip-close,
 .chat-panel__chip-close:focus-visible {
   opacity: 1;
-}
-
-body:not(.app-slava-restraint) .chat-panel__chip:focus-within .chat-panel__chip-close,
-body:not(.app-slava-restraint) .chat-panel__chip-close:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.6);
-  outline-offset: 1px;
 }
 
 .chat__bubble-thumbs {
@@ -2332,84 +1350,14 @@ body:not(.app-slava-restraint) .chat-panel__chip-close:focus-visible {
   object-fit: cover;
 }
 
-body:not(.app-slava-restraint) .chat__bubble-thumb {
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-body:not(.app-slava-restraint) .chat-panel__notice {
-  color: var(--line-warning, #ffd27a);
-  font-size: 11px;
-  background: var(--line-warning-soft, rgba(255, 210, 122, 0.08));
-  border-top: 1px solid var(--line-warning-edge, rgba(255, 210, 122, 0.15));
-}
-
 .chat__bubble-text {
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.chat-panel__notice {
-  padding: 4px 8px;
-}
-
-.chat-panel__agent-selector {
-  display: inline-flex;
-  gap: 2px;
-  margin: 2px 0 4px;
-  padding: 2px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__agent-selector {
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.chat-panel__agent-btn,
-.chat-panel__agent-btn--active {
-  padding: 4px 10px;
-  border: none;
-  cursor: pointer;
-  background: transparent;
-  color: inherit;
-}
-
-body:not(.app-slava-restraint) .chat-panel__agent-btn,
-body:not(.app-slava-restraint) .chat-panel__agent-btn--active {
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__agent-btn--active {
-  background: var(--chat-accent, rgba(255, 255, 255, 0.15));
-  color: white;
-  font-weight: 600;
-}
-
 .chat-panel__system-line {
   margin: 4px 0;
   padding: 4px 8px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__system-line {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  font-style: italic;
-}
-
-/* Per-agent accent palette. --chat-accent drives the agent-selector active
- * state and the thinking stream. Swaps based on the chat-panel--agent-* modifier
- * class on the panel root. */
-body:not(.app-slava-restraint) .chat-panel--agent-claude {
-  --chat-accent: #7c6bef; /* indigo */
-  --chat-accent-bg: rgba(124, 107, 239, 0.08);
-  --chat-accent-border: rgba(124, 107, 239, 0.4);
-}
-
-body:not(.app-slava-restraint) .chat-panel--agent-codex {
-  --chat-accent: #28a0b8; /* blue-green */
-  --chat-accent-bg: rgba(40, 160, 184, 0.08);
-  --chat-accent-border: rgba(40, 160, 184, 0.4);
 }
 
 /* Thinking-progress stream (the agent's canvas actions and reasoning).
@@ -2420,34 +1368,11 @@ body:not(.app-slava-restraint) .chat-panel--agent-codex {
   margin: 4px 0 8px;
   padding: 0;
   overflow: hidden;
-  flex-shrink: 0;
-}
-
-body:not(.app-slava-restraint) .chat-panel__thinking {
-  border: 2px solid var(--chat-accent);
-  border-radius: 6px;
-  background: var(--chat-accent-bg);
-  font-size: 12px;
-  box-shadow: 0 0 0 1px var(--chat-accent-border);
-}
-
-.chat-panel__thinking {
   /* The messages container is a flex column. With overflow:hidden above,
    * thinking bubbles would otherwise be shrunk to their border (2px) once
    * the list outgrows the panel — flex children default to flex-shrink:1.
    * Pin shrink to 0 so the parent scrolls instead. */
-}
-
-body:not(.app-slava-restraint) .chat-panel__thinking--completed {
-  opacity: 0.78;
-  border-width: 1px;
-  border-color: var(--chat-accent-border);
-  box-shadow: none;
-  transition: opacity 140ms ease;
-}
-
-body:not(.app-slava-restraint) .chat-panel__thinking--completed:hover {
-  opacity: 1;
+  flex-shrink: 0;
 }
 
 @keyframes chat-thinking-pulse {
@@ -2464,25 +1389,13 @@ body:not(.app-slava-restraint) .chat-panel__thinking--completed:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: inherit;
   font-size: 12px;
   font-family: inherit;
   text-align: left;
 }
 
-body:not(.app-slava-restraint) .chat-panel__thinking-header:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
 .chat-panel__thinking-indicator {
   opacity: 0.8;
-}
-
-body:not(.app-slava-restraint) .chat-panel__thinking-indicator {
-  font-family: monospace;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--chat-accent);
 }
 
 /* Pulse the indicator while ACTIVE so the user can see the box is live.
@@ -2499,17 +1412,6 @@ body:not(.app-slava-restraint) .chat-panel__thinking-indicator {
   opacity: 1;
 }
 
-body:not(.app-slava-restraint) .chat-panel__thinking-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--chat-accent);
-}
-
-body:not(.app-slava-restraint) .chat-panel__thinking--completed .chat-panel__thinking-label {
-  font-weight: 500;
-  opacity: 0.75;
-}
-
 .chat-panel__thinking-caret {
   opacity: 0.6;
   font-size: 10px;
@@ -2521,23 +1423,8 @@ body:not(.app-slava-restraint) .chat-panel__thinking--completed .chat-panel__thi
   padding: 4px 12px 8px;
 }
 
-body:not(.app-slava-restraint) .chat-panel__thinking-body {
-  border-top: 1px solid var(--chat-accent-border);
-  font-family: 'SFMono-Regular', Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .chat-panel__thinking-line {
   padding: 2px 0;
-}
-
-body:not(.app-slava-restraint) .chat-panel__thinking-line {
-  color: rgba(230, 230, 230, 0.75);
-}
-
-body:not(.app-slava-restraint) .chat-panel__thinking-line:last-child {
-  color: inherit; /* brighten most recent line */
 }
 
 /* Commons scope controls exist only after backend capability opt-in. */

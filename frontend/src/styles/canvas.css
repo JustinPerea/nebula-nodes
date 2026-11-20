@@ -3,38 +3,6 @@
   height: 100vh;
 }
 
-body:not(.app-slava-restraint) .canvas-wrapper {
-  background: #111;
-}
-
-body:not(.app-slava-restraint) .react-flow {
-  --xy-background-color: #111;
-  --xy-edge-stroke-default: #555;
-  --xy-edge-stroke-width-default: 2;
-  --xy-node-border-radius-default: 6px;
-  --xy-handle-background-color-default: #4CAF50;
-  --xy-handle-border-color-default: rgba(255, 255, 255, 0.3);
-  --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.6);
-}
-
-body:not(.app-slava-restraint) .react-flow__selection {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-}
-
-body:not(.app-slava-restraint) .react-flow__controls button {
-  background: #1c1c1c !important;
-  border-color: #333 !important;
-  color: #999 !important;
-  fill: #999 !important;
-}
-
-body:not(.app-slava-restraint) .react-flow__controls button:hover {
-  background: #252525 !important;
-  color: #ccc !important;
-  fill: #ccc !important;
-}
-
 /* --- Large-graph performance affordances (P0.1) --- */
 
 .react-flow__minimap {
@@ -75,10 +43,6 @@ body:not(.app-slava-restraint) .react-flow__controls button:hover {
   .canvas-wrapper[data-dock-open="true"] .canvas-minimap-panel { display: none; }
 }
 
-body:not(.app-slava-restraint) .react-flow__minimap {
-  background: #141414 !important;
-  border: 1px solid #2a2a2a;
-}
 body.app-slava-restraint .react-flow__minimap {
   background: var(--sr-canvas, #090909);
   border: 1px solid var(--sr-edge);
@@ -277,11 +241,6 @@ body.app-slava-restraint .react-flow__minimap {
   height: 100%;
   object-fit: contain;
   pointer-events: none;
-}
-
-body:not(.app-slava-restraint) .react-flow__edge.animated path {
-  stroke-dasharray: 5;
-  animation: edge-flow 0.5s linear infinite;
 }
 
 @keyframes edge-flow {

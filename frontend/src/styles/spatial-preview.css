@@ -1,6 +1,4 @@
 .spatial-preview {
-  /* palette-exempt: the category tint of a node card, not a status */
-  --spatial-preview-accent: var(--node-category-color, #65a9ff);
   display: grid;
   gap: 8px;
   width: 100%;
@@ -10,10 +8,6 @@
   padding: 10px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 7px;
-  background:
-    radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--spatial-preview-accent) 14%, transparent), transparent 52%),
-    #151515;
-  color: #d8d8d8;
   font-size: 11px;
   line-height: 1.35;
 }
@@ -64,7 +58,6 @@
 
 .spatial-preview__eyebrow {
   overflow: hidden;
-  color: var(--sr-ink-light);
   font-size: 9px;
   font-weight: 650;
   letter-spacing: 0.09em;
@@ -77,7 +70,6 @@
   display: block;
   min-width: 0;
   overflow: hidden;
-  color: #f2f2f2;
   font-size: 12px;
   font-weight: 620;
   letter-spacing: -0.01em;
@@ -88,7 +80,6 @@
 .spatial-preview__subtitle {
   display: -webkit-box;
   overflow: hidden;
-  color: #909090;
   font-size: 10px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -108,7 +99,6 @@
   padding: 6px 7px;
   border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 5px;
-  background: rgb(255 255 255 / 3%);
 }
 
 .spatial-preview__metric dt {
@@ -123,7 +113,6 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: var(--sr-ink);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
   text-overflow: ellipsis;
@@ -157,7 +146,6 @@
 }
 
 .spatial-preview__assets-label {
-  color: var(--sr-ink-meta);
   font-size: 8px;
   font-weight: 650;
   letter-spacing: 0.06em;
@@ -173,8 +161,6 @@
   padding: 4px 6px;
   border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 4px;
-  background: rgb(255 255 255 / 3%);
-  color: var(--sr-ink);
   cursor: pointer;
 }
 
@@ -198,23 +184,15 @@
 }
 
 .spatial-preview__asset small {
-  color: var(--sr-ink-meta);
   font-size: 8px;
 }
 
 .spatial-preview__asset-overflow {
-  color: var(--sr-ink-meta);
   font-size: 8px;
 }
 
 .spatial-preview--invalid {
   max-height: 120px;
-  border-color: var(--sr-error-border);
-  background: var(--sr-error-soft);
-}
-
-.spatial-preview--invalid .spatial-preview__eyebrow {
-  color: var(--sr-error);
 }
 
 body.app-slava-restraint .spatial-preview {
