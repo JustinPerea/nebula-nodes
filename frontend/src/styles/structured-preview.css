@@ -395,8 +395,7 @@ body.app-slava-restraint .structured-preview--full .structured-preview__swatch {
 
 body.app-slava-restraint .structured-preview__swatch-more,
 body.app-slava-restraint .structured-preview__note,
-body.app-slava-restraint .structured-preview .structured-preview__reason,
-body.app-slava-restraint .structured-preview__item--more {
+body.app-slava-restraint .structured-preview .structured-preview__reason {
   color: var(--sr-ink-meta);
   font-size: 11px;
 }
@@ -427,6 +426,12 @@ body.app-slava-restraint .structured-preview__status-item + .structured-preview_
 
 body.app-slava-restraint .structured-preview__item {
   color: var(--sr-ink-light);
+}
+
+/* Design: the "+N more" line is meta ink; it follows the base item rule so it wins. */
+body.app-slava-restraint .structured-preview__item--more {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
 }
 
 body.app-slava-restraint .structured-preview__field dt {

@@ -19,11 +19,8 @@ export const ALLOWLIST = [
   { file: 'styles/canvas.css', selector: '.nn-splash__wordmark-line--warm', reason: 'brand splash wordmark (the crab warm colour and its fallback)' },
   { file: 'styles/settings.css', selector: '.settings-apps__swatch--auto', reason: 'conic gradient of the per-agent identity colours (ConnectedApps.tsx)' },
   { file: 'styles/paper-source-node.css', selector: '.paper-source-node__handle', reason: 'the Paper output handle is drawn in its port colour' },
-  // A standalone theme: the Commons labelling page has its own olive ground and redefines
-  // --sr-accent, --sr-ink and --sr-edge on body.commons-labeling-page. Design: left alone.
-  { file: 'styles/commons-evaluation.css', whole: true, reason: 'the Commons labelling page is a standalone olive theme (design); every rule in the file is that theme' },
-  { file: 'styles/commons-review.css', whole: true, reason: 'the Commons labelling page is a standalone olive theme (design); every rule in the file is that theme' },
-  { file: 'styles/commons-labeling-page.css', whole: true, reason: 'the Commons labelling page theme itself' },
+  { file: 'styles/commons-evaluation.css', whole: true, reason: 'the Blind labeling and Agent review panes are painted in an olive palette (design)' },
+  { file: 'styles/commons-review.css', whole: true, reason: 'the Blind labeling and Agent review panes are painted in an olive palette (design)' },
   { file: 'components/brand/BrandShowcase.css', whole: true, reason: 'the brand showcase page is painted in the brand colours (--nn-crab-*), a brand surface and not product UI' },
 ];
 

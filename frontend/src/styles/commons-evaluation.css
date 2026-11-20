@@ -8,6 +8,11 @@
   color:#e5e9df;
   padding:28px;
   font-size:13px;
+  /* Design: this page paints its own olive palette inside the app theme; these hold the olive
+   * values the current-reference button and the unsaved mark keep. */
+  --evaluation-current-fill:#3b4b2e;
+  --evaluation-current-edge:#afcc85;
+  --evaluation-unsaved-ink:#6d7a63;
 }
 .evaluation-heading {
   display:flex;
@@ -103,8 +108,8 @@
   justify-content:space-between;
 }
 .evaluation-workspace nav button[aria-current] {
-  background:color-mix(in srgb, var(--sr-accent) 18%, transparent);
-  border-color:var(--sr-accent);
+  background:var(--evaluation-current-fill);
+  border-color:var(--evaluation-current-edge);
 }
 .evaluation-workspace button:disabled,
 /* PR #204 round 18o (GM r51 Q3): a reference button locked by unsaved edits stays focusable
@@ -378,7 +383,7 @@ body.app-slava-restraint .evaluation-save .commons-button--primary,
   margin:0;
 }
 .commons-unsaved {
-  color:color-mix(in srgb, var(--sr-ink) 55%, transparent);
+  color:var(--evaluation-unsaved-ink);
   font-size:10px;
   letter-spacing:1.5px;
   text-transform:uppercase;

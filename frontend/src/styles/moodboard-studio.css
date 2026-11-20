@@ -129,16 +129,6 @@ body.app-slava-restraint .moodboard-studio-toolbar__state--error {
   color: var(--sr-error);
 }
 
-body.app-slava-restraint .moodboard-palette__empty--error,
-body.app-slava-restraint .moodboard-rail__empty--error {
-  color: var(--sr-error);
-}
-
-/* The open board is another project's: say where, above the list. */
-body.app-slava-restraint .moodboard-rail__empty--notice {
-  color: var(--sr-ink-meta);
-}
-
 body.app-slava-restraint .moodboard-rail__new:disabled {
   opacity: 0.45;
   cursor: default;
@@ -552,6 +542,17 @@ body.app-slava-restraint .moodboard-palette__empty {
   font-size: 11px;
   line-height: 1.4;
   padding: 4px 2px;
+}
+
+/* Design: a failed board list reads in the warning token; it follows the base rule so it wins. */
+body.app-slava-restraint .moodboard-palette__empty--error,
+body.app-slava-restraint .moodboard-rail__empty--error {
+  color: var(--sr-error);
+}
+
+/* The open board is another project's: say where, above the list. */
+body.app-slava-restraint .moodboard-rail__empty--notice {
+  color: var(--sr-ink-meta);
 }
 
 body.app-slava-restraint .moodboard-rail__item,

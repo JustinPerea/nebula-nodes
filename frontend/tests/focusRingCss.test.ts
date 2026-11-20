@@ -183,7 +183,7 @@ const SURFACES: Array<[string, string[]]> = [
   ['an input (--sr-surface-control-focus on --sr-glass-strong)', [canvas, 'var(--sr-glass-strong)', 'var(--sr-surface-control-focus)']],
   ['a node card (--sr-node-pill-bg, the lightest node chrome)', [canvas, 'var(--sr-node-pill-bg)']],
   ['the Commons evaluation panel (commons-evaluation.css)', ['#1c211d']],
-  ['an evaluation nav button, current (commons-evaluation.css: --sr-accent at 18% on the panel)', ['#1c211d', 'rgba(207, 229, 156, 0.18)']],
+  ['an evaluation nav button, current (commons-evaluation.css)', ['#3b4b2e']],
   ['the provider recovery banner (App.css)', [canvas, 'rgba(39, 23, 13, 0.97)']],
 ];
 

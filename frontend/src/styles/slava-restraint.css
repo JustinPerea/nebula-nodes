@@ -818,7 +818,7 @@ body.app-slava-restraint .context-menu {
 
 body.app-slava-restraint .context-menu__item,
 body.app-slava-restraint .connection-popup__item,
-body.app-slava-restraint .connection-popup__category-label--button {
+body.app-slava-restraint .connection-popup__category-label--button { /* order-shadow-exempt: the button label's colour, font and size are a design call (item look or the meta label look); left for review */
   border-radius: var(--sr-radius-control);
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
@@ -1815,10 +1815,6 @@ body.app-slava-restraint .chat-panel__chip-spinner::before {
   animation: slava-dot-matrix-beam 960ms steps(4, end) infinite;
 }
 
-body.app-slava-restraint .toolbar__button--executing {
-  position: relative;
-}
-
 body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
   opacity: 0;
 }
@@ -2341,6 +2337,10 @@ body.app-slava-restraint .toolbar__button {
     border-color 120ms ease,
     box-shadow 120ms ease,
     transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body.app-slava-restraint .toolbar__button--executing {
+  position: relative;
 }
 
 body.app-slava-restraint .toolbar__button::after {

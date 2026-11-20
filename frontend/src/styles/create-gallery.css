@@ -87,7 +87,6 @@ body.app-slava-restraint .results-gallery__comparison button {
 }
 body.app-slava-restraint .result-card__recipe-actions button:hover:not(:disabled),
 body.app-slava-restraint .results-gallery__comparison button:hover:not(:disabled) { border-color: var(--sr-edge-strong); }
-body.app-slava-restraint .result-card--compared,
 body.app-slava-restraint .result-card__recipe-actions button[aria-pressed="true"] { border-color: var(--sr-accent); }
 body.app-slava-restraint .result-card__recipe-actions button:disabled,
 body.app-slava-restraint .results-gallery__comparison button:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -401,6 +400,9 @@ body.app-slava-restraint .result-card {
   background: var(--sr-glass);
   overflow: hidden;
 }
+
+/* Design: a result picked for comparing takes the accent edge; it follows the base rule so it wins. */
+body.app-slava-restraint .result-card--compared { border-color: var(--sr-accent); }
 
 body.app-slava-restraint .result-card__media {
   position: relative;

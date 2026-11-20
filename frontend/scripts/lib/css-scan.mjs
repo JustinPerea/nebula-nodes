@@ -30,7 +30,7 @@ export function collectCssFiles(dir) {
   return out;
 }
 
-export function parseRules(css, baseOffset = 0) {
+export function parseRules(css, baseOffset = 0, group = '') {
   const rules = [];
   let cursor = 0;
   while (cursor < css.length) {
@@ -45,12 +45,14 @@ export function parseRules(css, baseOffset = 0) {
     const body = css.slice(open + 1, close);
 
     if (selector.startsWith('@')) {
-      rules.push(...parseRules(body, baseOffset + open + 1));
+      rules.push(...parseRules(body, baseOffset + open + 1, `${group}${selector}@${baseOffset + open};`));
     } else if (selector) {
       rules.push({
         selector,
         body,
         bodyStart: baseOffset + open + 1,
+        // The at-rule blocks this rule sits in ('' at the top level), one entry per block, so two rules share a block only when this matches.
+        group,
         // Nested CSS (`&` rules, or a `{` between declarations): the declaration reader below can't split it.
         nested: bodyHasBrace(body),
       });
