@@ -110,6 +110,10 @@ function upperFirst(text: string): string {
 function withoutAgentName(text: string, names: readonly string[]): string {
   const escaped = [...names].sort((a, b) => b.length - a.length).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const lead = new RegExp(`^(?:${escaped.join('|')})(?![\\w-])(?![’']s(?![\\w-]))\\s*[:\\-–—]?\\s*`, 'i');
+  // A capital word right after the name, with no separator, is more of a name ("Claude Code crashed" for an agent
+  // called Claude): the name stays and the reason opens with it.
+  const match = lead.exec(text);
+  if (match && !/[:\-–—]/.test(match[0]) && /^\p{Lu}/u.test(text.slice(match[0].length))) return text.trim();
   return text.replace(lead, '').trim();
 }
 
@@ -124,7 +128,8 @@ function agentIsSubject(text: string, names: readonly string[]): boolean {
 
 export type ChatErrorLine = {
   text: string;
-  /** The line is in the "<Agent> stopped because …" form: drawn neutral (LineText tone="because"). */
+  /** The line is in a "stopped because" form: drawn neutral (LineText tone="because"). Both of design's forms count:
+   * "<Agent> stopped because …" and the same line as two sentences, "<Agent> stopped. <Reason>." */
   because: boolean;
   /** The raw message, for the Details disclosure, when the line is a short stand-in for it. */
   details?: string;

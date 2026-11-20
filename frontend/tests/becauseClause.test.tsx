@@ -12,7 +12,7 @@ import {
   ACCESS_LOST_COPY, BACKEND_NOT_RUNNING_COPY, CONNECTION_LOST_COPY, ConnectionLostError, FailureNotice, NEBULA_NOT_ANSWERING_COPY,
   NO_RESPONSE_COPY, PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_COPY, PERSON_REQUIRED_DEV_COPY, REASON_CLAUSES, REFUSED_FALLBACK_COPY,
   RequestFailedError, TOO_LARGE_COPY, becauseLine, besideButton, clauseFor, curlApostrophes, failedWhat, failureCopy, failureMessage,
-  endedSentence, foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
+  couldntLine, endedSentence, foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
 } from '../src/lib/errorCopy';
 import { nodeErrorCopy } from '../src/lib/nodeErrorCopy';
 import { createWhileFollowingLine, runWhileFollowingLine } from '../src/lib/canvasFollow';
@@ -612,6 +612,18 @@ describe('becauseLine: ellipses, abbreviations, trailing links and colons', () =
     expect(line("Couldn't connect at 9 a.m. It is down.")).toBe('Nebula couldn’t connect at 9 a.m. because it is down.');
     expect(line("Couldn't read the files, fonts, etc. It is gone.")).toBe('Nebula couldn’t read the files, fonts, etc. because it is gone.');
     expect(line("Couldn't connect at 3 p.m.")).toBe('Nebula couldn’t connect at 3 p.m.');
+  });
+  it('a kept abbreviation dot or an ellipsis is the full stop: no second one goes after it', () => {
+    // The heading-only path (no reason), and a reason that follows the action as its own sentence.
+    expect(becauseLine({ heading: "Couldn't connect at 3 p.m.", reason: '' })).toBe('Nebula couldn’t connect at 3 p.m.');
+    expect(becauseLine({ heading: "Couldn't read the files, fonts, etc.", reason: '' })).toBe('Nebula couldn’t read the files, fonts, etc.');
+    expect(becauseLine({ heading: "Couldn't connect at 3 p.m.", reason: 'Wait a moment' })).toBe('Nebula couldn’t connect at 3 p.m. Wait a moment.');
+    expect(becauseLine({ heading: "Couldn't connect at 3 p.m.", reason: '', what: 'connect…' })).toBe('Nebula couldn’t connect…');
+    expect(becauseLine({ heading: "Couldn't load the file.", reason: '' })).toBe('Nebula couldn’t load the file.');
+    // A node card's text that is not a clause follows the action as its own sentence.
+    expect(couldntLine('connect at 3 p.m.')).toBe('Nebula couldn’t connect at 3 p.m.');
+    expect(couldntLine('connect…')).toBe('Nebula couldn’t connect…');
+    expect(couldntLine('load the file')).toBe('Nebula couldn’t load the file.');
   });
   it('e.g., i.e., vs. and U.S. before a capital stay one sentence, as before', () => {
     expect(line("Couldn't reach the U.S. It is down.")).toBe('Nebula couldn’t reach the U.S. It is down.');

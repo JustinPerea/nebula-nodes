@@ -173,10 +173,19 @@ describe('the chat stream error line', () => {
     expect(line('Nova - couldn’t read the file', { agentName: 'Nova' })).toBe('Nova stopped. Couldn’t read the file.');
     expect(line('claude couldn’t read the file')).toBe('Claude stopped because it couldn’t read the file.');
     // A capital after the name is more of a name, not a verb.
-    expect(line('Claude Code crashed')).toBe('Claude stopped. Code crashed.');
+    expect(line('Claude Code crashed')).toBe('Claude stopped because Claude Code crashed.');
+    // A separator still strips the name.
+    expect(line('Claude: Code crashed')).toBe('Claude stopped. Code crashed.');
+    expect(line('Claude - Code crashed')).toBe('Claude stopped. Code crashed.');
     // No reason at all.
     expect(line('')).toBe('Claude stopped because of an unknown error.');
     expect(line('Error:')).toBe('Claude stopped because of an unknown error.');
+  });
+  it('a reason that is only a subject, with no verb, still joins "because" (known limit)', () => {
+    // Known limit: there is no verb detection, so a reason that is just a noun phrase reads as a broken clause.
+    // It did the same before the copy-name work. Pinned so a later change is deliberate.
+    expect(line('An error')).toBe('Claude stopped because an error.');
+    expect(line('Replicate')).toBe('Claude stopped because Replicate.');
   });
   it('writes a kept provider name as the app spells it', () => {
     expect(line('Fal.ai/x.png missing')).toBe('Claude stopped because fal.ai/x.png missing.');

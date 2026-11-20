@@ -170,6 +170,27 @@ describe('check-badge-tone: capitals', () => {
     expect(found).toHaveLength(1);
   });
 
+  it('counts a reset only when it holds for the tag everywhere', () => {
+    const forced = '.permission-card { text-transform: lowercase; }';
+    const notResets = [
+      '.permission-card__kind:hover { text-transform: none; }',
+      '.permission-card__kind:not(.x) { text-transform: none; }',
+      '.permission-card__kind--wide { text-transform: none; }',
+      '.permission-card__kind.is-open { text-transform: none; }',
+      '.permission-card .permission-card__kind { text-transform: none; }',
+      '@media (min-width: 600px) { .permission-card__kind { text-transform: none; } }',
+      '@supports (display: grid) { .permission-card__kind { text-transform: none; } }',
+      '@container (min-width: 20em) { .permission-card__kind { text-transform: none; } }',
+    ];
+    for (const css of notResets) {
+      expect(resetsTagCase(css), css).toBe(false);
+      expect(findCapsBadges(forced, 'fixture.css', [css].some(resetsTagCase)), css).toHaveLength(1);
+    }
+    // The plain rule in another file still counts, also beside other selectors.
+    expect(resetsTagCase('.permission-card__kind { text-transform: none; }')).toBe(true);
+    expect(resetsTagCase('.a, .permission-card__kind { text-transform: none !important; }')).toBe(true);
+  });
+
   it('reports the line and the selector', () => {
     const [hit] = caps('.a { color: red; }\n\n.x__badge {\n  color: red;\n  text-transform: uppercase;\n}\n');
     expect(hit).toMatchObject({ file: 'fixture.css', line: 5, selector: '.x__badge' });

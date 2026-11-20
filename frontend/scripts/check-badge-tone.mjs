@@ -213,12 +213,18 @@ function nestedCapsUnderBadge(body) {
 const CAPS_TEXT = /(?:text-transform|font-variant(?:-caps)?)\s*:\s*[^;}]*(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)/i;
 
 /** True when this stylesheet resets the tag's inherited case itself: `.permission-card__kind { text-transform: none }`.
- * CSS cascades across files, so the caller reads every stylesheet and passes the result to findCapsBadges. */
+ * CSS cascades across files, so the caller reads every stylesheet and passes the result to findCapsBadges. A reset
+ * counts only where it holds for the tag everywhere: a rule whose selector is the tag's own class and nothing else (no
+ * pseudo-class, no :not(), no modifier class, no ancestor), outside @media, @supports and @container. */
 export function resetsTagCase(source) {
-  return parseRules(stripComments(source)).some((rule) => !rule.nested && rule.selector.split(',').some((part) => {
-    const last = part.trim().split(/[\s>+~]+/).pop() ?? '';
-    return [...last.matchAll(CLASS)].some((m) => writtenCaseTag(m[1]));
-  }) && parseDeclarations(rule.body, rule.bodyStart).some((d) => d.prop.toLowerCase() === 'text-transform' && /^\s*none\s*(?:!important)?\s*$/i.test(d.value)));
+  const conditional = /@(?:media|supports|container)\b/i;
+  const tagItself = (part) => {
+    const match = /^\.([\w-]+)$/.exec(part.trim());
+    return match !== null && WRITTEN_CASE_TAGS.has(match[1]);
+  };
+  return parseRules(stripComments(source)).some((rule) => !rule.nested && !conditional.test(rule.group ?? '')
+    && rule.selector.split(',').some(tagItself)
+    && parseDeclarations(rule.body, rule.bodyStart).some((d) => d.prop.toLowerCase() === 'text-transform' && /^\s*none\s*(?:!important)?\s*$/i.test(d.value)));
 }
 
 /** Every declaration that capitalises a badge or tag: { file, line, selector, decl }. `resetElsewhere` is true when

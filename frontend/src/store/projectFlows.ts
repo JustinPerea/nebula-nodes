@@ -20,7 +20,7 @@ import { refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
 import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, waitUntilOnline } from '../lib/backendConnection';
-import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, FIRST_LOAD_RETRYING_COPY, isBackendUnreachable, isNoAnswer, nodeNameList, OPEN_TIMEOUT_MS, openTimedOutLine, notConnectedBecause, oneLine } from '../lib/errorCopy';
+import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, couldntLine, failureCopy, FIRST_LOAD_RETRYING_COPY, isBackendUnreachable, isNoAnswer, nodeNameList, OPEN_TIMEOUT_MS, openTimedOutLine, notConnectedBecause, oneLine } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
@@ -1090,7 +1090,7 @@ function clauseBeforeTryAgain(error: unknown): string | null {
 function becauseThen(heading: string, error: unknown, ...then: string[]): string {
   const what = failedWhat(heading) ?? heading.replace(/\.$/, '');
   const clause = clauseBeforeTryAgain(error);
-  return sentences(clause === null ? `Nebula couldn’t ${what}.` : `Nebula couldn’t ${what} because ${clause}`, ...then);
+  return sentences(clause === null ? couldntLine(what) : `Nebula couldn’t ${what} because ${clause}`, ...then);
 }
 
 /** The follow-failed line: what happened, then that the page could not follow it, then because and the reason (no because when no reason is known). */
@@ -3045,7 +3045,7 @@ export const actions = {
         const general = copy.cause === REFUSED_FALLBACK_COPY;
         const line = error instanceof RequestFailedError && error.storageFull
           ? oneLine({ heading: LOAD_HEADING, reason: LOAD_DISK_FULL }) : copy.reason;
-        const shown = core.pendingRecovery && general ? `Nebula couldn’t ${failedWhat(LOAD_HEADING)}.` : line;
+        const shown = core.pendingRecovery && general ? couldntLine(failedWhat(LOAD_HEADING) ?? '') : line;
         // Design: no server yet (not a refusal): try again by itself, 1, 2, 4, 8 and 16 s later,
         // with its own line; after those, today's line and "Try again".
         const unreachable = isBackendUnreachable(error);

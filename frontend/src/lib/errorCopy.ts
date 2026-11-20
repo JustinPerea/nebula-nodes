@@ -868,6 +868,12 @@ export function endedSentence(input: string): string {
   return ENDS_A_SENTENCE.test(text) || /:$/.test(text) || /\bhttps?:\/\/[^\s`]+$/i.test(text) ? text : `${text}.`;
 }
 
+/** A line made of "Nebula couldn’t ‹what›" with its full stop. An action that already ends in a dot (the abbreviation's
+ * "p.m.", see failedWhat) or an ellipsis is closed as it is, so no second stop goes after it. */
+export function couldntLine(what: string): string {
+  return `Nebula couldn’t ${what}${/[.…]$/.test(what) ? '' : '.'}`;
+}
+
 /** The action a reason's first sentence says Nebula could not do, or its whole because line ("Nebula couldn’t save
  * the project because …" says "save the project"); null when it names none. */
 function reasonAction(reason: string): string | null {
@@ -908,7 +914,7 @@ export function becauseLine(parts: BecauseParts, beside: 'alone' | 'button' = 'a
   const given = parts.what || undefined;
   const what = given ?? failedWhat(heading);
   if (parts.clause?.trim() && what !== null) return `Nebula couldn’t ${what} because ${parts.clause.trim()}`;
-  if (!reason) return what === null ? heading : `Nebula couldn’t ${what}.`;
+  if (!reason) return what === null ? heading : couldntLine(what);
   if (!heading && given === undefined) return /^(?:Nebula )?[Cc]ouldn['’]t /.test(reason) ? namedLine(reason, beside) : endedSentence(curlApostrophes(reason));
   if (what === null) return curlApostrophes(headedLine(heading, reason));
   const person = personRequiredLine(what, reason);
@@ -928,7 +934,7 @@ export function becauseLine(parts: BecauseParts, beside: 'alone' | 'button' = 'a
   if (ownReplaces || (isNamedLine(reason) && same)) return namedLine(reason, beside);
   const sentence = sentenceClause(reason);
   if (sentence !== null) return `Nebula couldn’t ${what} because ${sentence}`;
-  return `Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(reason))}`;
+  return `${couldntLine(what)} ${endedSentence(curlApostrophes(reason))}`;
 }
 
 /**
