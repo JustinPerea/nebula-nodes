@@ -102,6 +102,22 @@ describe('check-badge-tone: capitals', () => {
     expect(caps(css)).toHaveLength(0);
   });
 
+  const nested = [
+    '.x__badge { &--y { text-transform: uppercase; } }',
+    '.card { .x__badge { text-transform: uppercase; } }',
+    '.card { .inner { .x__badge { text-transform: uppercase; } } }',
+  ];
+  it.each(nested)('fails nested CSS: %s', (css) => {
+    const found = caps(css);
+    expect(found).toHaveLength(1);
+    expect(found[0].reason).toMatch(/nested CSS isn't read/);
+  });
+
+  it('lets nested CSS that touches no badge capitals pass', () => {
+    expect(caps('.card { .x__label { text-transform: uppercase; } }')).toHaveLength(0);
+    expect(caps('.card { .x__badge { color: red; } }')).toHaveLength(0);
+  });
+
   it('reports the line and the selector', () => {
     const [hit] = caps('.a { color: red; }\n\n.x__badge {\n  color: red;\n  text-transform: uppercase;\n}\n');
     expect(hit).toMatchObject({ file: 'fixture.css', line: 5, selector: '.x__badge' });

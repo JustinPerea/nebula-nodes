@@ -51,7 +51,7 @@ function main() {
   }
   if (capsHits.length > 0) {
     console.error('A badge or tag is drawn in capitals. A badge reads in sentence case; only a field label keeps its caps (design).');
-    for (const hit of capsHits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }`);
+    for (const hit of capsHits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }${hit.reason ? `  (${hit.reason})` : ''}`);
     process.exit(1);
   }
   if (hits.length > 0) {
@@ -115,6 +115,16 @@ const CAPS_PROP = /^(?:text-transform|font-variant|font-variant-caps)$/i;
 const CAPS_VALUE = /(?:^|\s)(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)(?![\w-])/i;
 const isBadgeClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
 
+/** True when a rule nested in this body selects a badge class and sets capitals, at any depth. */
+function nestedCapsUnderBadge(body) {
+  return parseRules(body).some((inner) => {
+    const badge = inner.selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
+    if (inner.nested) return nestedCapsUnderBadge(inner.body) || (badge && CAPS_TEXT.test(inner.body));
+    return badge && CAPS_TEXT.test(inner.body);
+  });
+}
+const CAPS_TEXT = /(?:text-transform|font-variant(?:-caps)?)\s*:\s*[^;}]*(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)/i;
+
 /** Every declaration that capitalises a badge or tag: { file, line, selector, decl }. */
 export function findCapsBadges(source, file) {
   const css = stripComments(source);
@@ -123,6 +133,13 @@ export function findCapsBadges(source, file) {
   for (const rule of parseRules(css)) {
     const selector = compact(rule.selector);
     const badgeParts = selector.split(',').filter((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
+    // Design: nested CSS isn't read, so it fails the same way findAccentBadges does: a nested block
+    // under a badge selector, or a badge selector nested under another rule that sets capitals.
+    if (rule.nested) {
+      const nestedBadge = badgeParts.length > 0 || nestedCapsUnderBadge(rule.body);
+      if (nestedBadge) hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
+      continue;
+    }
     if (badgeParts.length === 0) continue;
     for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
       if (CAPS_PROP.test(declaration.prop) && CAPS_VALUE.test(declaration.value)) {

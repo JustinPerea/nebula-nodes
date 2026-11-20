@@ -165,6 +165,40 @@ describe('Jev result under the card field', () => {
     expect(asked.lastElementChild?.textContent).toBe('\u201D');
   });
 
+  const closingQuotes = (root: HTMLElement) =>
+    [...root.querySelectorAll('span')].filter((node) => node.children.length === 0 && node.textContent === '\u201D');
+
+  it('puts the closing quote inline right after the text when the question is not cut', () => {
+    const s = sample(fixture.decide, 'longer than the report line');
+    renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
+    const asked = screen.getByTestId('jev-asked');
+    expect(asked).not.toHaveAttribute('data-clamped');
+    const text = asked.querySelector('.jev-result__question-text');
+    expect(closingQuotes(asked)).toHaveLength(1);
+    expect(text?.nextElementSibling?.textContent).toBe('\u201D');
+    expect(text?.nextElementSibling).toBe(asked.lastElementChild);
+  });
+
+  it('renders the separate quote after the clamp when the text is cut, and only one quote', () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(80);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(40);
+    try {
+      const s = sample(fixture.decide, 'longer than the report line');
+      renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
+      fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
+      const asked = screen.getByTestId('jev-asked');
+      expect(asked).toHaveAttribute('data-clamped', 'true');
+      expect(asked).not.toHaveAttribute('data-measure');
+      expect(closingQuotes(asked)).toHaveLength(1);
+      expect(asked.lastElementChild?.className).toContain('jev-result__question-close');
+      expect(asked.title).toMatch(/\u201D$/);
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
+
   it('treats a blank Pick Best question as its default, which is what it asked', () => {
     const s = sample(fixture.pickBest, 'a clear winner');
     renderLive(node('p1', JEV_PICK_BEST, { question: '' }, s.outputs, 'complete'));

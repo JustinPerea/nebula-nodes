@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { parseJevNumber, type JevBoxResult, type JevDecideResult, type JevPickBestResult, type JevResult } from '../../lib/jev';
 import { backendAssetUrlSync } from '../../lib/backend';
 import {
@@ -92,17 +92,50 @@ function Footer({ confidence, model, label = 'Confidence' }: { confidence: strin
 
 function Question({ asked, fieldText }: { asked: string | null; fieldText: string | null | undefined }) {
   const echo = echoedText(asked, fieldText);
+  const paragraph = useRef<HTMLParagraphElement>(null);
+  const text = useRef<HTMLSpanElement>(null);
+  const [clamped, setClamped] = useState(false);
+  const quotedText = echo && echo.earlier ? echo.text : null;
+
+  // Design: the closing quote follows the last word while the question fits, and sits after the
+  // ellipsis only when the text is cut. Truncation is measured in the clamped layout, forced for the
+  // read (no paint in between), so the answer doesn't depend on which form is showing and a card
+  // resizing past the clamp point can't flip back and forth. Without ResizeObserver (jsdom) the
+  // inline form stays.
+  useLayoutEffect(() => {
+    const outer = paragraph.current;
+    const inner = text.current;
+    if (!outer || !inner) return undefined;
+    const measure = () => {
+      outer.setAttribute('data-measure', '');
+      const truncated = inner.scrollHeight > inner.clientHeight + 1;
+      outer.removeAttribute('data-measure');
+      setClamped(truncated);
+    };
+    measure();
+    if (typeof ResizeObserver !== 'function') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(outer);
+    return () => observer.disconnect();
+  }, [quotedText]);
+
   if (!echo) return null;
   if (!echo.earlier) {
     return <p className="jev-result__question" title={echo.text} data-testid="jev-asked">{echo.text}</p>;
   }
-  // Design: the question it asked is a quote, so it takes curly quotes. Only the question text is
-  // clamped (its own span), so a long question keeps its closing quote visible.
+  // Design: the question it asked is a quote, so it takes curly quotes. One closing quote is
+  // rendered, and it is never hidden: inline after the text, or after the clamp when truncated.
   return (
-    <p className="jev-result__question jev-result__question--quoted" title={`\u201C${echo.text}\u201D`} data-testid="jev-asked">
+    <p
+      ref={paragraph}
+      className="jev-result__question jev-result__question--quoted"
+      title={`\u201C${echo.text}\u201D`}
+      data-testid="jev-asked"
+      data-clamped={clamped ? 'true' : undefined}
+    >
       <span className="jev-result__muted">Asked </span>
       <span>{'\u201C'}</span>
-      <span className="jev-result__question-text">{echo.text}</span>
+      <span ref={text} className="jev-result__question-text">{echo.text}</span>
       <span className="jev-result__question-close">{'\u201D'}</span>
     </p>
   );

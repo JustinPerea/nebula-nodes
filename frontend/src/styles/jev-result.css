@@ -111,23 +111,29 @@ body.app-slava-restraint .jev-result__question {
   overflow-wrap: anywhere;
 }
 
-/* A quoted question clamps only its text; the quotes sit outside the clamp so the closing one stays visible. */
+/* A quoted question reads as one line of text with its closing quote right after the last word.
+   Only when the text is cut (data-clamped, set from a measurement; data-measure forces the same
+   layout for that read) does it clamp its text alone, with the quote after the ellipsis. */
 body.app-slava-restraint .jev-result__question--quoted {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+body.app-slava-restraint .jev-result__question--quoted:is([data-clamped], [data-measure]) {
   display: flex;
   white-space: pre;
 }
 
-body.app-slava-restraint .jev-result__question-text {
+body.app-slava-restraint .jev-result__question--quoted:is([data-clamped], [data-measure]) .jev-result__question-text {
   display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   white-space: normal;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  overflow-wrap: anywhere;
 }
 
-body.app-slava-restraint .jev-result__question-close { align-self: flex-end; }
+body.app-slava-restraint .jev-result__question--quoted:is([data-clamped], [data-measure]) .jev-result__question-close { align-self: flex-end; }
 
 body.app-slava-restraint .jev-result__muted { color: var(--sr-ink-meta); }
 

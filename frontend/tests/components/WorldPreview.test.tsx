@@ -3,13 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorldEnvironmentViewerProps } from '../../src/components/nodes/WorldEnvironmentViewer';
 
 vi.mock('../../src/components/nodes/WorldEnvironmentViewer', () => ({
-  WorldEnvironmentViewer: ({ src, navigationMode, resetToken }: WorldEnvironmentViewerProps) => (
+  WorldEnvironmentViewer: ({ src, navigationMode, resetToken, onStatusChange }: WorldEnvironmentViewerProps) => (
     <div
       data-testid="world-environment-viewer"
       data-src={src}
       data-navigation={navigationMode}
       data-reset={resetToken}
-    />
+    >
+      <button type="button" onClick={() => onStatusChange?.('ready')}>mock ready</button>
+      <button type="button" onClick={() => onStatusChange?.('error')}>mock error</button>
+    </div>
   ),
 }));
 
@@ -52,8 +55,12 @@ describe('WorldPreview', () => {
     render(<WorldPreview value={world} />);
     fireEvent.click(screen.getByRole('button', { name: 'Explore 3D world: Moonlit courtyard' }));
     await screen.findByTestId('world-environment-viewer');
-    const status = screen.getAllByRole('status').find((node) => node.classList.contains('world-modal__status'));
-    expect(status?.textContent).toMatch(/ · (loading|ready|couldn’t load)$/);
+    const statusText = () => screen.getAllByRole('status').find((node) => node.classList.contains('world-modal__status'))?.textContent ?? '';
+    expect(statusText()).toMatch(/ · loading$/);
+    fireEvent.click(screen.getByRole('button', { name: 'mock ready' }));
+    expect(statusText()).toMatch(/ · ready$/);
+    fireEvent.click(screen.getByRole('button', { name: 'mock error' }));
+    expect(statusText()).toMatch(/ · couldn\u2019t load$/);
   });
 
   it('stays thumbnail-only until expanded, then defaults desktop to the 500K splat', async () => {

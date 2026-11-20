@@ -456,9 +456,10 @@ body.app-slava-restraint .character-def__ref-badge {
   letter-spacing: 0.06em;
   text-align: center;
   padding: 1px 0;
-  background: rgba(0, 0, 0, 0.55);
-  /* Design: Cover is a lasting property of the reference, a kind of badge, not the current selection. */
-  color: var(--sr-ink-meta);
+  background: rgba(0, 0, 0, 0.76);
+  /* Design: Cover is a lasting property of the reference, a kind of badge, not the current selection.
+     The darker backing keeps the label at 4.5:1 or better over any image (design). */
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .character-def__ref-remove {
