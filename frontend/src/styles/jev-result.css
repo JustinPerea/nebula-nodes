@@ -16,8 +16,8 @@ body.app-slava-restraint {
   --jev-rest: rgba(255, 255, 255, 0.24);
   --jev-pass: var(--sr-success);
   --jev-pass-soft: var(--sr-success-soft);
-  --jev-fail: var(--sr-accent);
-  --jev-fail-soft: var(--sr-accent-soft);
+  --jev-fail: var(--sr-error);
+  --jev-fail-soft: var(--sr-error-soft);
   --jev-unsure: var(--sr-warning);
   --jev-unsure-soft: var(--sr-warning-soft);
 }

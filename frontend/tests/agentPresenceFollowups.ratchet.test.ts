@@ -3080,7 +3080,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.x__erase:hover { color: #ff5a1f; }',
       '.x__forget:hover { color: #ff5a1f; }',
       '.x__bin:hover { color: #ff5a1f; }',
-      '.x__delete:hover { color: var(--sr-danger); }',
+      '.x__delete:hover { color: var(--sr-error); }',
       '.x__remove:hover { color: var(--sr-danger-ink, #ff887d); }',
       '.x__reset:hover { color: var(--sr-accent); }',
     ];
@@ -3097,6 +3097,8 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.x__danger { background: var(--sr-danger-fill, #ff887d); color: var(--sr-on-danger, #1f1f1f); }',
       '.x--danger:hover { background: var(--sr-danger-tint); border-color: var(--sr-danger-edge); color: var(--sr-danger-ink, #ff887d); }',
       '.x__delete:active { color: var(--sr-danger-ink-hover, #ff9a91); }',
+      // Design: the bare --sr-danger is the destructive red now (it was an alias of the orange error).
+      '.x__delete:hover { color: var(--sr-danger); }',
       '.x__remove:hover { background: var(--sr-surface-control-hover); color: var(--sr-ink-bold); }',
       '.x__remove { background: rgba(0, 0, 0, 0.6); color: #fff; }',
     ];

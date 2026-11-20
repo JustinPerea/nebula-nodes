@@ -30,6 +30,7 @@
   --sr-accent-hover: var(--sr-ink-light);
   --sr-error: var(--sr-ink-light);
   --sr-danger: var(--sr-ink-light);
+  --sr-danger-hover: var(--sr-ink-light);
   --sr-danger-ink: var(--sr-ink-light);
   --sr-danger-ink-hover: var(--sr-ink-light);
   --sr-warning: var(--sr-ink-light);

@@ -208,8 +208,9 @@
 }
 
 /* error: one sideways shake, and the halo flashes danger once. The spec
-   names --sr-danger, but in Slava that bare alias is the orange accent;
-   the danger red is --sr-danger-ink (the destructive-colour ratchet, GM r11). */
+   names --sr-danger; the flash reads --sr-danger-ink, the destructive red
+   (the destructive-colour ratchet). It marks an agent error, not a destructive
+   action, so design may move it to the error tone. */
 .agent-cursor__shake {
   animation: agent-cursor-shake var(--agent-cursor-shake) both;
 }

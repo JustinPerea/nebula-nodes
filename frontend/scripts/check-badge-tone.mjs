@@ -17,8 +17,9 @@ import {
 //
 // This reads every stylesheet under src and fails on a rule whose selector holds one of those
 // state modifiers and sets color, border (any side), outline-color, background or a fill to the accent:
-// var(--sr-accent...), var(--sr-error...) or var(--sr-danger...) (the last two alias the
-// accent), or the literal #FF5A1F (with or without alpha) / rgba(255, 90, 31, ...). The base
+// var(--sr-accent...) or the literal #FF5A1F (with or without alpha) / rgba(255, 90, 31, ...),
+// or the destructive red var(--sr-danger...): a badge is a state, never a destructive action.
+// --sr-error is the warning tone, so a failure badge may use it. The base
 // .commons-badge and .commons-source rules are held to the same rule, and box-shadow, text-shadow,
 // border-image and the other colour-bearing properties count. Known limit: a colour reached
 // through another custom property (`--x: var(--sr-accent)`) or set from TSX is not followed.
@@ -33,7 +34,8 @@ const MODIFIER = /\.commons-(?:badge|source)--[\w-]+/;
 const BADGE = /\.commons-(?:badge|source)(?![\w])/;
 const COLOUR_PROP = /^(?:color|fill|stroke|background(?:-color|-image)?|outline(?:-color)?|border(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?(?:-color)?|border-image(?:-source)?|box-shadow|text-shadow|accent-color|caret-color|text-decoration(?:-color)?|column-rule(?:-color)?)$/i;
 const ROLE = /\.commons-badge--role-[\w-]+/;
-const ACCENT_VAR = /var\(\s*--sr-(?:accent|error|danger)(?![\w])[\w-]*/i;
+const ACCENT_VAR = /var\(\s*--sr-accent(?![\w])[\w-]*/i;
+const DANGER_VAR = /var\(\s*--sr-danger(?![\w])[\w-]*/i;
 // #FF5A1F, with or without an alpha pair (#FF5A1FCC), and rgb()/rgba() of 255 90 31.
 const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
 
@@ -67,7 +69,9 @@ export function findAccentBadges(source, file) {
       const reason = ROLE.test(selector)
         ? 'a role badge is neutral: it takes the plain badge colours'
         : ACCENT_VAR.test(declaration.value)
-        ? 'the accent, or a token that aliases it'
+        ? 'the brand accent'
+        : DANGER_VAR.test(declaration.value)
+        ? 'the destructive red: a badge is a state, not a destructive action'
         : ACCENT_LITERAL.test(declaration.value)
           ? 'the literal accent colour'
           : null;

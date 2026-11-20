@@ -12,7 +12,7 @@ body.app-slava-restraint .provider-readiness {
 }
 
 body.app-slava-restraint .provider-readiness__label { overflow-wrap: anywhere; }
-body.app-slava-restraint .provider-readiness--warning .provider-readiness__label { color: var(--sr-accent); }
+body.app-slava-restraint .provider-readiness--warning .provider-readiness__label { color: var(--sr-warning); }
 body.app-slava-restraint .provider-readiness--success .provider-readiness__label { color: var(--sr-ink); }
 
 body.app-slava-restraint .provider-readiness__setup {
