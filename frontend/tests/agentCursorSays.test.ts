@@ -12,9 +12,9 @@ import {
 } from '../src/lib/agentCursorSays';
 import { AGENT_CURSOR_ERROR_CAUSE_MS } from '../src/lib/agentCursorTuning';
 
-/** The default say lines, as GM approved them (r54, 2026-11-03). */
+/** The default say lines, as design approved them (2026-11-03). */
 describe('default say lines', () => {
-  it('match GM r54 word for word', () => {
+  it('match design word for word', () => {
     expect(DEFAULT_SAY_EXAMPLES.map(({ action, line }) => `${action}: ${line}`)).toEqual([
       'look: Looking at “Brief”',
       'look: Looking here',
@@ -40,12 +40,12 @@ describe('default say lines', () => {
     expect(defaultSay('click', { node: 'Brief' })).toBe('');
   });
 
-  it('a drag to a spot with no start pulls no wire, so it says nothing, like move (r54 item 3)', () => {
+  it('a drag to a spot with no start pulls no wire, so it says nothing, like move', () => {
     expect(defaultSay('drag', { node: null, pulled: false })).toBe('');
     expect(defaultSay('drag', { node: null, pulled: true })).toBe('Connecting');
   });
 
-  it('error says what failed: a run, a change, or neither (r54 item 2)', () => {
+  it('error says what failed: a run, a change, or neither', () => {
     expect(defaultSay('error', { node: 'FLUX.2', cause: 'run' })).toBe('Couldn’t run “FLUX.2”');
     expect(defaultSay('error', { node: 'FLUX.2', cause: 'change' })).toBe('Couldn’t change “FLUX.2”');
     expect(defaultSay('error', { node: 'FLUX.2', cause: null })).toBe('Couldn’t do that');
@@ -60,7 +60,7 @@ describe('default say lines', () => {
     }
   });
 
-  it('the module writes no straight apostrophe or straight double quote in its lines (GM r56 item E)', () => {
+  it('the module writes no straight apostrophe or straight double quote in its lines', () => {
     // The code with its comments taken out: the lines' own text, and code.
     const code = readFileSync(resolve(__dirname, '../src/lib/agentCursorSays.ts'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -100,7 +100,7 @@ describe('what an error failed at', () => {
   });
 });
 
-describe('how long a say holds (r54)', () => {
+describe('how long a say holds', () => {
   it('max(3 s, 60 ms × characters), capped at 8 s', () => {
     expect(sayHoldMs('')).toBe(3000);
     expect(sayHoldMs('x'.repeat(50))).toBe(3000);

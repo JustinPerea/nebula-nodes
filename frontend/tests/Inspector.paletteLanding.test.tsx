@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Round 8e of #208 (review 8 MEDIUM-1 / LOW-1 / LOW-2, GM r22): a palette is
+// #208 (design): a palette is
 // written only to the canvas it was made for (project, graph generation,
 // the node's definition, an unlocked canvas); one dropped for a switch or a
 // lock is said on its node when the person is back; one extract per
@@ -94,7 +94,7 @@ afterEach(() => {
   useGraphStore.setState(initialGraph, true);
 });
 
-describe('a palette lands only on the canvas it was made for (review 8 MEDIUM-1, GM r22 Q1)', () => {
+describe('a palette lands only on the canvas it was made for', () => {
   it('pins the lines', () => {
     expect(PALETTE_PROJECT_CHANGED).toBe(PROJECT_LINE);
     expect(PALETTE_OFFLINE_DROPPED).toBe(OFFLINE_LINE);
@@ -108,13 +108,13 @@ describe('a palette lands only on the canvas it was made for (review 8 MEDIUM-1,
     await finish({ ok: true, colors: ['#ff0000', '#00ff00'] });
     await wait(PALETTE_LINE_MIN_MS);
     expect(nodeParams()).toEqual({ value: 'project B prompt' });
-    // A redefined node: no line, no status, no toast (LOW-2).
+    // A redefined node: no line, no status, no toast.
     expect(status(container) ?? '').toBe('');
     expect(container.textContent).not.toMatch(/Extracted|couldn’t add/);
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
-  it('a deleted node gets no "Extracted N colors." (LOW-2)', async () => {
+  it('a deleted node gets no "Extracted N colors."', async () => {
     const { container } = show(['#000000']);
     const finish = later();
     await extractFrom(container);
@@ -275,7 +275,7 @@ describe('a palette lands only on the canvas it was made for (review 8 MEDIUM-1,
     expect(note(container)?.textContent).toBe(OFFLINE_LINE);
     expect(status(container)).toBe(OFFLINE_LINE);
     expect(container.textContent).not.toContain('Extracted');
-    // GM r23: it stays after the reconnect, until the next Extract or a
+    // Design: it stays after the reconnect, until the next Extract or a
     // swatch edit, as the project line does.
     act(() => noteBackendConnection('online'));
     await wait(10);
@@ -285,7 +285,7 @@ describe('a palette lands only on the canvas it was made for (review 8 MEDIUM-1,
   });
 });
 
-describe('one extract per project, graph and node (review 8 LOW-1, GM r22 Q2)', () => {
+describe('one extract per project, graph and node', () => {
   it('an Inspector opened again shows the line, read-only swatches at full colour, Strength live', async () => {
     const first = show(['#ff285a', '#3759c7']);
     const finish = later();
@@ -314,7 +314,7 @@ describe('one extract per project, graph and node (review 8 LOW-1, GM r22 Q2)', 
   });
 });
 
-describe('focus across an extract (GM r22 Q3)', () => {
+describe('focus across an extract', () => {
   it('a focused swatch keeps focus, aria-disabled and described by the line; landing keeps the index, clamped', async () => {
     const { container } = show(['#aaaaaa', '#bbbbbb', '#cccccc']);
     const finish = later();
@@ -352,7 +352,7 @@ describe('focus across an extract (GM r22 Q3)', () => {
     expect(document.activeElement).toBe(container.querySelectorAll('.inspector__palette-remove')[0]);
   });
 
-  it('focus on Add goes to the line while it shows, then back to Add, not Extract (GM r23)', async () => {
+  it('focus on Add goes to the line while it shows, then back to Add, not Extract', async () => {
     const { container } = show(['#aaaaaa']);
     const finish = later();
     const add = () => [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Add')!;

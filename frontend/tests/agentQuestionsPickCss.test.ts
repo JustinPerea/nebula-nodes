@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// GM - Design, 2026-10-24: the picked option uses a NEUTRAL ring for every
+// Design, 2026-10-24: the picked option uses a NEUTRAL ring for every
 // agent: "the light ink ring with a faint fill, the same weight as now, just
 // not the agent's color. The pick is the person's choice, not the agent's.
 // And an orange agent would put orange on a selection." The agent's colour
@@ -33,7 +33,7 @@ describe('a picked option in the answer form', () => {
     expect(percent).toBeLessThanOrEqual(12);
   });
 
-  // GM: "a picked option keeps its full border when hovered. If it dims, it
+  // Design: "a picked option keeps its full border when hovered. If it dims, it
   // reads as if hovering un-picks it." The hover dim is for unpicked options.
   it('keeps its full border on hover; only unpicked options dim', () => {
     const hovers = [...css.matchAll(/([^{}]*\.agent-questions-form__option[^{}]*:hover[^{}]*)\{/g)].map((m) => m[1].trim());

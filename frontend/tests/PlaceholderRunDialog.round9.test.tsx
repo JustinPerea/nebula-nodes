@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
-// GM - Design on review 8 L-b: under the still-setting-up heading, the
+// Design: under the still-setting-up heading, the
 // "Codex changed…" sentence goes under its body, before the left line and the
 // changed line.
 
@@ -29,7 +29,7 @@ describe('the replay sentence in the dialog', () => {
     expect(lines.slice(0, 5)).toEqual([model.intro, SAVED, model.leftLine, 'This run changed since you last reviewed it.', 'rows']);
   });
 
-  it('a change to it alone counts as a change in place: Run is held; no changed line, since no node moved (GM round 17)', () => {
+  it('a change to it alone counts as a change in place: Run is held; no changed line, since no node moved', () => {
     const answers: boolean[] = [];
     const view = render(<PlaceholderRunDialog model={{ ...model, savedLine: null }} onDone={(ok) => answers.push(ok)} />);
     view.rerender(<PlaceholderRunDialog model={model} onDone={(ok) => answers.push(ok)} />);

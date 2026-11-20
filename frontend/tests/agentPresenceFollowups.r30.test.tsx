@@ -1,15 +1,15 @@
-// PR #200 fix round 20.
-// - GM r30 item 1: a heading too long for its line is cut inside the quotes,
+// PR #200.
+// - Design: a heading too long for its line is cut inside the quotes,
 //   by grapheme in JS (never CSS text-overflow), no space before "…", the
 //   closing ” kept: "Note for agents on “A lighthouse prompt with…”"; the full
 //   name in the tooltip; fitted to the width there is.
-// - GM r30 item 2: a delete refused by the person gate while the banner shows
-//   says only "Your note wasn’t deleted."; the full Q116a line once the banner
+// - Design: a delete refused by the person gate while the banner shows
+//   says only "Your note wasn’t deleted."; the full person-only line once the banner
 //   is gone; short again when it comes back (Send's rule).
-// - GM r30 item 3: Send note is disabled while the field holds no note (empty,
+// - Design: Send note is disabled while the field holds no note (empty,
 //   or only what the counter doesn't count), "You can send this once you
 //   write a note."
-// - Review 17 LOW-1: the server promoting the tab clears a person-gate
+// - The server promoting the tab clears a person-gate
 //   refusal's toast (add and delete); it never turns into the full line.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { lockLine } from './helpers/personLock';
@@ -55,10 +55,10 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); vi.restoreAllMocks(); });
 
-describe('GM r30 item 1: the heading is cut by grapheme, its closing quote kept', () => {
+describe('the heading is cut by grapheme, its closing quote kept', () => {
   const fits = (title: string, available: number) => fitNoteHeading(title, available, textWidth);
 
-  it('GM\'s example: "Note for agents on “A lighthouse prompt with…”", no space before "…"', () => {
+  it('design\'s example: "Note for agents on “A lighthouse prompt with…”", no space before "…"', () => {
     const title = 'A lighthouse prompt with warm light on the rocks at dusk';
     const available = textWidth('Note for agents on “A lighthouse prompt with…”') + 4;
     expect(fits(title, available)).toBe('Note for agents on “A lighthouse prompt with…”');
@@ -67,13 +67,13 @@ describe('GM r30 item 1: the heading is cut by grapheme, its closing quote kept'
     expect(fits(title, 10_000)).toBe(`Note for agents on “${title}”`);
   });
 
-  // Review 18 NIT-2 (fix round 22): literal expectations, measured with the
+  // Literal expectations, measured with the
   // test's own segmenter (TEST_SEG), never the module's graphemesOf, so a cut
   // that split a ZWJ family, a flag, a skin tone or a mark would fail.
   it.each([
     ['emoji with ZWJ, skin tones and flags', "👨‍👩‍👧‍👦 family trip 👍🏽 to 🇯🇵 and 🏴󠁧󠁢󠁳󠁣󠁴󠁿 with 🧑🏾‍🚀 friends and more", { 200: 'Note for agents on “👨‍👩‍👧‍👦…”', 260: 'Note for agents on “👨‍👩‍👧‍👦 family…”', 330: 'Note for agents on “👨‍👩‍👧‍👦 family trip 👍🏽…”', 420: 'Note for agents on “👨‍👩‍👧‍👦 family trip 👍🏽 to 🇯🇵 and…”' }],
     ['CJK', "灯台のプロンプト、夕暮れの岩に暖かい光が差し込む長い説明文です", { 200: 'Note for agents on “灯…”', 260: 'Note for agents on “灯台のプロ…”', 330: 'Note for agents on “灯台のプロンプト、夕…”', 420: 'Note for agents on “灯台のプロンプト、夕暮れの岩に…”' }],
-    ['Hangul and a combining mark (Korean steps back to a space, GM r32)', "등대 프롬프트 저녁 바위 위의 따뜻한 빛 é̂ 그리고 더 긴 설명", { 200: 'Note for agents on “등…”', 260: 'Note for agents on “등대…”', 330: 'Note for agents on “등대 프롬프트 저녁…”', 420: 'Note for agents on “등대 프롬프트 저녁 바위 위의…”' }],
+    ['Hangul and a combining mark (Korean steps back to a space)', "등대 프롬프트 저녁 바위 위의 따뜻한 빛 é̂ 그리고 더 긴 설명", { 200: 'Note for agents on “등…”', 260: 'Note for agents on “등대…”', 330: 'Note for agents on “등대 프롬프트 저녁…”', 420: 'Note for agents on “등대 프롬프트 저녁 바위 위의…”' }],
   ] as Array<[string, string, Record<number, string>]>)('%s: whole graphemes only, the longest that fits, the quote outside the cut', (_label, title, expected) => {
     for (const [available, heading] of Object.entries(expected)) {
       expect(fits(title, Number(available)), `${available}px`).toBe(heading);
@@ -120,7 +120,7 @@ describe('GM r30 item 1: the heading is cut by grapheme, its closing quote kept'
   });
 });
 
-describe('GM r30 item 2: a refused delete defers to the banner, as Send does', () => {
+describe('a refused delete defers to the banner, as Send does', () => {
   const seed = () => useCanvasPinsStore.setState({ pins: [{ id: 'pin_a', text: 'a note', anchor: { nodeId: 'n1' }, position: null,
     status: 'open', createdAt: '', detached: false, reply: null }] } as never);
 
@@ -143,7 +143,7 @@ describe('GM r30 item 2: a refused delete defers to the banner, as Send does', (
   });
 });
 
-describe('GM r30 item 3: Send note waits for a note', () => {
+describe('Send note waits for a note', () => {
   it.each([
     ['empty', ''],
     ['spaces', '   '],
@@ -177,7 +177,7 @@ describe('GM r30 item 3: Send note waits for a note', () => {
   });
 });
 
-describe('review 17 LOW-1: the server promoting the tab clears a person-gate refusal', () => {
+describe('the server promoting the tab clears a person-gate refusal', () => {
   it('a refused add: its short toast goes as the banner does, never the full line', async () => {
     api.createPin.mockImplementation(async () => { session.reportPersonRequired(); throw gate(); });
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));

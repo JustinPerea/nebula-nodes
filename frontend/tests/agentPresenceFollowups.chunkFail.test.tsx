@@ -1,5 +1,4 @@
-// Review 14 MEDIUM-1 (PR #200 fix round 16) and GM r26's check (fix round 17):
-// a failed Unicode chunk never freezes the tab. The import settles as failed,
+// PR #200, and design's check: a failed Unicode chunk never freezes the tab. The import settles as failed,
 // the strict fallbacks stand (every selector, tag run and non-basic chain
 // hidden or counted apart, so the count errs toward refusing), pins apply in
 // that form at once, the chunk loads again the next time it's needed (spaced
@@ -22,7 +21,7 @@ const pin = (id: string, text: string) => ({ id, text, anchor: { nodeId: 'n1' },
 const settle = () => act(async () => { for (let i = 0; i < 5; i += 1) await new Promise((done) => setTimeout(done, 0)); });
 afterEach(cleanup);
 
-describe('review 14 MEDIUM-1 + GM r26: a failed Unicode chunk', () => {
+describe('a failed Unicode chunk', () => {
   it('settles as failed; pins apply in the fallback form at once; timers still fire', async () => {
     await pins.pinTextReady;
     expect(pins.pinTextSettled()).toBe(true);
@@ -37,7 +36,7 @@ describe('review 14 MEDIUM-1 + GM r26: a failed Unicode chunk', () => {
     expect(pins.pinDisplayText('葛\u{E0100} ❤️ \u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F} warmer')).toBe('葛 ❤ \u{1F3F4} warmer');
   });
 
-  it('GM r26: the counter treats E0100-E01EF as hidden and counts a non-basic chain apart (errs toward refusing)', () => {
+  it('the counter treats E0100-E01EF as hidden and counts a non-basic chain apart (errs toward refusing)', () => {
     expect(pins.pinTextIsLoaded()).toBe(false);
     for (let selector = 0xe0100; selector <= 0xe01ef; selector += 0x2f) {
       expect(pins.pinDisplayText(`葛${String.fromCodePoint(selector)}`)).toBe('葛');
@@ -49,7 +48,7 @@ describe('review 14 MEDIUM-1 + GM r26: a failed Unicode chunk', () => {
     expect(pins.noteLength(family)).toBeGreaterThan(1);
   });
 
-  it('GM r26: loads the chunk again the next time it is needed, at most once per gap', async () => {
+  it('loads the chunk again the next time it is needed, at most once per gap', async () => {
     const before = loads.count;
     // Just failed: a burst of needs within the gap fetches nothing.
     pins.retryPinText();
@@ -68,7 +67,7 @@ describe('review 14 MEDIUM-1 + GM r26: a failed Unicode chunk', () => {
     expect(loads.count).toBe(before + 2);
   });
 
-  it('GM r26: the note dialog opens and counts, and the person sees no error of their own', async () => {
+  it('the note dialog opens and counts, and the person sees no error of their own', async () => {
     const errors = vi.spyOn(console, 'error');
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<PinComposer />);

@@ -47,7 +47,7 @@ vi.mock('../src/lib/api', () => ({
   antigravityAction: vi.fn(),
 }));
 
-// The line at the top of Settings (settings.restored, GM, PR #203 r38 item 5)
+// The line at the top of Settings (settings.restored, design, PR #203)
 // has its own module and tests (tests/lib/idolRound19Review18.test.tsx):
 // none here, so the fetch counts below stay the panel's own.
 vi.mock('../src/lib/settingsNotice', async (original) => ({
@@ -166,7 +166,7 @@ async function renderSettings(settings: Record<string, unknown> = { apiKeys: {} 
   getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, ...settings });
   const rendered = render(<Settings />);
   // The file's first render loads the panel's modules: under load it can
-  // pass findByRole's 1 s default (review 11 of PR #203, NIT-6).
+  // pass findByRole's 1 s default (PR #203).
   await screen.findByRole('searchbox', { name: 'Search providers and models' }, { timeout: 5000 });
   return rendered;
 }
@@ -236,8 +236,8 @@ describe('Settings shell', () => {
     expect(screen.getByRole('tab', { name: 'Storage' })).toHaveAttribute('tabindex', '-1');
   });
 
-  // Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
-  // the backend is on this computer." No answer reads GM's server line; an
+  // Design: ""Check your connection" sends people to their Wi-Fi, but
+  // the backend is on this computer." No answer reads design's server line; an
   // answer reads its own reason, never "the backend isn't running".
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch')),
@@ -256,16 +256,16 @@ describe('Settings shell', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: /Providers/ })).toHaveTextContent('Providers3'));
   });
 
-  // error-copy round 2 (GM): a retry surface shows the heading and the short
+  // error-copy (design): a retry surface shows the heading and the short
   // reason ("the button is the retry"); on 1fc3d846 this always said
   // "Settings couldn't load. Check that the Nebula backend is running."
   it.each([
-    // Round 16 (GM): with no answer, the unified line in full.
+    // Design: with no answer, the unified line in full.
     [new ConnectionLostError(new TypeError('Failed to fetch'), { heading: 'Couldn’t load your API keys.' }),
       'Nebula couldn’t load your API keys because the server isn’t answering. Try again.'],
     [new RequestFailedError('Couldn’t load your API keys.', 503), 'Nebula couldn’t load your API keys because the server didn’t respond. Try again.'],
     [new RequestFailedError('Couldn’t load your API keys.', 400), 'Nebula couldn’t load your API keys because the server didn’t accept it. Try again.'],
-    // Review 12 of PR #203, LOW-3: a settings file the backend can't read says so, with its path
+    // PR #203: a settings file the backend can't read says so, with its path
     // (the backend's 409 line; it used to answer a cut-short file with a 500).
     [new RequestFailedError('Couldn’t load your API keys.', 409, { detail: 'Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.' }),
       'Nebula couldn’t load your API keys. Nebula can’t read ~/.nebula/settings.json. Fix the file, then try again.'],
@@ -467,7 +467,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(updateSettingsMock.mock.calls).toEqual([[{ apiKeys: { OPENAI_API_KEY: 'fixture-new' } }]]);
   });
 
-  it('names the Hugging Face credential a token, optional, with GM\'s r12 helper and r11 lines in order (PR #203 round 7)', async () => {
+  it('names the Hugging Face credential a token, optional, with design\'s helper line and its other lines in order (PR #203)', async () => {
     await renderSettings({ apiKeys: {} });
     const hf = row('Hugging Face');
     expect(hf).toHaveTextContent('Optional. Lets Idol use your own allowance.');
@@ -476,7 +476,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(await screen.findByLabelText('Hugging Face token')).toBeInTheDocument();
     expect(screen.queryByLabelText('Hugging Face API key')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show Hugging Face token' })).toBeInTheDocument();
-    // GM r11 item 1: the instruction, the link (opening outside Nebula), then the r3 caveat.
+    // Design: the instruction, the link (opening outside Nebula), then the caveat.
     const link = screen.getByRole('link', { name: /^Open Hugging Face tokens/ });
     expect(link).toHaveAttribute('href', 'https://huggingface.co/settings/tokens');
     expect(link).toHaveAttribute('target', '_blank');
@@ -485,7 +485,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     const order = [
       'Create a fine-grained token in your Hugging Face settings and give it no repository access. Nebula uses it only for Idol’s GPU time on Hugging Face.',
       'Open Hugging Face tokens',
-      // GM, PR #203 r14 item 1, verbatim.
+      // Design, PR #203, verbatim.
       'With your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your allowance uses your prepaid Hugging Face credits.',
     ].map((line) => text.indexOf(line));
     expect(order.every((at) => at >= 0)).toBe(true);
@@ -495,7 +495,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
       .toEqual(['https://huggingface.co/settings/tokens']);
   });
 
-  it('trims a pasted Hugging Face token\'s spaces and line breaks without a word (GM, PR #203 r2)', async () => {
+  it('trims a pasted Hugging Face token\'s spaces and line breaks without a word (PR #203)', async () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
     await renderSettings({ apiKeys: {} });
     fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' }));
@@ -507,7 +507,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(document.querySelector('.settings-row__error')).toBeNull();
   });
 
-  it('trims a byte-order mark and zero-width spaces as the agent gate and the run do (review 7 of PR #203, NIT-4)', async () => {
+  it('trims a byte-order mark and zero-width spaces as the agent gate and the run do (PR #203)', async () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
     await renderSettings({ apiKeys: {} });
     fireEvent.click(within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' }));
@@ -536,7 +536,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
       expect(screen.getByLabelText('Hugging Face token')).toHaveValue(bad);
     });
 
-  it('wraps the Hugging Face helper and a long name list instead of cutting them (GM, PR #203 r14 item 1; design, copy sweep)', async () => {
+  it('wraps the Hugging Face helper and a long name list instead of cutting them (PR #203; design, copy sweep)', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const summary = row('Hugging Face').querySelector('.settings-row__summary');
     expect(summary).toHaveTextContent('Optional. Lets Idol use your own allowance.');
@@ -552,21 +552,21 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(rule).toMatch(/text-overflow:\s*clip/);
   });
 
-  it('opens Hugging Face tokens from the manage view with a token set (GM, PR #203 r14 item 5)', async () => {
+  it('opens Hugging Face tokens from the manage view with a token set (PR #203)', async () => {
     await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa', OPENAI_API_KEY: '***bbbb' } });
     fireEvent.click(screen.getByRole('button', { name: 'Manage Hugging Face' }));
     const link = within(row('Hugging Face')).getByRole('link', { name: 'Open Hugging Face tokens' });
     expect(link).toHaveAttribute('href', 'https://huggingface.co/settings/tokens');
     expect(link).toHaveTextContent('Open Hugging Face tokens ↗');
     expect(within(row('Hugging Face')).getAllByRole('link')).toHaveLength(1);
-    // Every other key is named the same way, by its provider (GM, PR #203 r19 item 5).
+    // Every other key is named the same way, by its provider (design, PR #203).
     fireEvent.click(screen.getByRole('button', { name: 'Manage OpenAI' }));
     expect(within(row('OpenAI')).getByRole('link', { name: 'Open OpenAI keys' })).toHaveTextContent('Open OpenAI keys ↗');
   });
 
-  it('keeps the actions on the key together and puts its page on its own line, every provider (GM, PR #203 r16 item 5)', async () => {
+  it('keeps the actions on the key together and puts its page on its own line, every provider (PR #203)', async () => {
     await renderSettings({ apiKeys: { HF_TOKEN: '***aaaa', OPENAI_API_KEY: '***bbbb' } });
-    // Each in its provider's own noun (GM, PR #203 r23): a Hugging Face token.
+    // Each in its provider's own noun (design, PR #203): a Hugging Face token.
     for (const [name, words, noun] of [['Hugging Face', 'Open Hugging Face tokens', 'token'], ['OpenAI', 'Open OpenAI keys', 'key']] as const) {
       fireEvent.click(screen.getByRole('button', { name: `Manage ${name}` }));
       const manage = row(name).querySelector('.settings-row__manage')!;
@@ -626,7 +626,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect(rowNames(list(/^Connected/))).toContain('OpenAI');
   });
 
-  // GM r22 item 3: a 409 for a settings file Nebula can't read names the file
+  // Design: a 409 for a settings file Nebula can't read names the file
   // by its full path, in the row, as the backend said it.
   const UNREADABLE = 'Nothing was saved because Nebula can’t read the keys saved in /Users/fixture/.nebula/settings.json. Fix “apiKeys” in that file, then try again.';
   const unreadable = () => new RequestFailedError('Couldn’t save your settings.', 409, { detail: UNREADABLE, code: 'keys_unreadable' });
@@ -646,7 +646,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(UNREADABLE);
   });
 
-  // GM, PR #203 r28 item 4: a file Nebula may read but not change. The
+  // Design, PR #203: a file Nebula may read but not change. The
   // line is picked by the code beside it, never by its words.
   const UNWRITABLE = 'Nothing was saved because Nebula isn’t allowed to change ~/.nebula/settings.json. '
     + 'Check the file’s permissions, then try again.';
@@ -688,7 +688,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   });
 });
 
-describe('Settings — a key changed elsewhere while the panel is open (GM, PR #203 r19 items 5 to 7)', () => {
+describe('Settings — a key changed elsewhere while the panel is open (PR #203)', () => {
   const remote = (keys: string[]) => window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail: { source: 'remote', keys } }));
 
   it('updates in place: other rows move with the spring, the row the person is in stays, and the draft is kept', async () => {
@@ -752,10 +752,10 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
     expect(within(row('OpenAI')).queryByText('Connected')).not.toBeInTheDocument();
   });
 
-  it('names every provider\'s page by the provider\'s own word, in the edit and the manage view (GM, PR #203 r19 item 5)', async () => {
+  it('names every provider\'s page by the provider\'s own word, in the edit and the manage view (PR #203)', async () => {
     // Every row has its name: "Open <provider> keys", or the provider's own
-    // word for it (review 10, copy NIT-2). One row per view is rendered: the
-    // views read the same field (review 10, NIT-8: one render per provider
+    // word for it. One row per view is rendered: the
+    // views read the same field (one render per provider
     // took 33 s under load).
     for (const spec of PROVIDER_KEYS) expect(spec.keyLink, spec.key).toMatch(/^Open .+ (keys|tokens|service accounts)$/);
     const own = Object.fromEntries(PROVIDER_KEYS.map((spec) => [spec.key, spec.keyLink]));
@@ -773,7 +773,7 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
     expect(manage).toHaveTextContent('Open fal.ai keys ↗');
   });
 
-  it('moves rows with the spring, and not under reduced motion (review 10, copy NIT-2)', async () => {
+  it('moves rows with the spring, and not under reduced motion', async () => {
     const css = (await import('node:fs')).readFileSync(`${process.cwd()}/src/styles/settings.css`, 'utf8');
     expect(css).toMatch(/\.settings-row--moved\s*\{\s*animation:\s*settings-row-moved var\(--settings-spring\)/);
     const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
@@ -781,12 +781,12 @@ describe('Settings — a key changed elsewhere while the panel is open (GM, PR #
   });
 });
 
-describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 2 to 4; review 10)', () => {
+describe('Settings — a key changed elsewhere (PR #203)', () => {
   const remote = (keys: string[]) => window.dispatchEvent(new CustomEvent(SETTINGS_SAVED_EVENT, { detail: { source: 'remote', keys } }));
   const badge = () => screen.getByRole('tab', { name: /^Providers/ }).querySelector('.settings-tabs__count')?.textContent ?? '0';
   const heading = () => screen.getByRole('heading', { name: /^Connected · / }).textContent;
 
-  it('keeps keyboard focus when the person saves a row held by a change elsewhere (review 10, copy MEDIUM-1)', async () => {
+  it('keeps keyboard focus when the person saves a row held by a change elsewhere', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add Replicate token' }));
     const input = await screen.findByLabelText('Replicate token');
@@ -803,7 +803,7 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     expect(document.activeElement).not.toBe(document.body);
   });
 
-  it('turns a manage view into the edit view when its key is removed elsewhere, with focus in the field (GM r21 item 2)', async () => {
+  it('turns a manage view into the edit view when its key is removed elsewhere, with focus in the field', async () => {
     await renderSettings({ apiKeys: { GOOGLE_API_KEY: '***gggg', OPENAI_API_KEY: '***aaaa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Manage Google · Gemini API' }));
     await waitFor(() => expect(within(row('Google · Gemini API')).getByRole('button', { name: 'Replace key' })).toHaveFocus());
@@ -834,7 +834,7 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     expect(within(row('Google · Gemini API')).queryByRole('button', { name: 'Replace key' })).toBeNull();
   });
 
-  it('holds a row whose edit view is open while focus is elsewhere, and keeps its draft (review 10, copy LOW-2)', async () => {
+  it('holds a row whose edit view is open while focus is elsewhere, and keeps its draft', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add Replicate token' }));
     fireEvent.change(await screen.findByLabelText('Replicate token'), { target: { value: 'r8_my_draft_typed' } });
@@ -847,7 +847,7 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     expect(screen.getByLabelText('Replicate token')).toHaveValue('r8_my_draft_typed');
   });
 
-  it('counts the tab badge by the sections as shown while a row is held (GM r21 item 3)', async () => {
+  it('counts the tab badge by the sections as shown while a row is held', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     act(() => { screen.getByRole('button', { name: 'Add Replicate token' }).focus(); });
     getSettingsMock.mockResolvedValue({ runCostConfirmUsd: 1, apiKeys: { OPENAI_API_KEY: '***aaaa', REPLICATE_API_TOKEN: '***dddd' } });
@@ -860,7 +860,7 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     expect(badge()).toBe('2');
   });
 
-  it('says a key changed elsewhere once, politely, without saying where (GM r21 item 4)', async () => {
+  it('says a key changed elsewhere once, politely, without saying where', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const said = () => document.querySelector('[data-key-changes]');
     expect(said()).toHaveAttribute('aria-live', 'polite');
@@ -878,14 +878,14 @@ describe('Settings — a key changed elsewhere, round 11 (GM, PR #203 r21 items 
     expect(document.body).not.toHaveTextContent(/another tab/);
   });
 
-  it('labels the Krea row by its link’s word, "Krea · API key" (GM r21 item 7)', async () => {
+  it('labels the Krea row by its link’s word, "Krea · API key"', async () => {
     await renderSettings();
     expect(row('Krea · API key')).toBeInTheDocument();
     expect(() => row('Krea · API token')).toThrow();
   });
 });
 
-describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
+describe('Settings — a key changed elsewhere during the person’s own write (PR #203)', () => {
   // The backend's signal as the socket delivers it (store/settingsChangedSocket.ts).
   const signal = (keys: string[], origin?: string) => act(async () => {
     (wsClient as unknown as { dispatch: (event: unknown) => void }).dispatch({ type: 'settingsChanged', keys, ...(origin ? { origin } : {}) });
@@ -915,7 +915,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
   };
 
   for (const when of ['before', 'after'] as const) {
-    it(`never announces the person's own save again when its echo lands ${when} the answer (copy MEDIUM-1)`, async () => {
+    it(`never announces the person's own save again when its echo lands ${when} the answer`, async () => {
       providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
       await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
       const heard = listen();
@@ -935,7 +935,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
       heard.stop();
     });
 
-    it(`never announces the person's own removal again when its echo lands ${when} the answer (copy MEDIUM-1)`, async () => {
+    it(`never announces the person's own removal again when its echo lands ${when} the answer`, async () => {
       await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa', HF_TOKEN: '***0123' } });
       const heard = listen();
       const answer = deferred();
@@ -955,7 +955,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     });
   }
 
-  it('announces a change made elsewhere during the person’s own write, once (copy MEDIUM-1)', async () => {
+  it('announces a change made elsewhere during the person’s own write, once', async () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const heard = listen();
@@ -976,7 +976,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     heard.stop();
   });
 
-  it('drops a read from before the person’s own write that lands during it, and reads again once it settles (copy MEDIUM-1)', async () => {
+  it('drops a read from before the person’s own write that lands during it, and reads again once it settles', async () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({ 'Hugging Face': 'valid' }));
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const heard = listen();
@@ -1003,7 +1003,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     heard.stop();
   });
 
-  // GM, PR #203 r24 item 4: Hugging Face's own noun on its buttons.
+  // Design, PR #203: Hugging Face's own noun on its buttons.
   it('says “token” on the Hugging Face row’s buttons: Add token, Save token, Replace token', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const add = within(row('Hugging Face')).getByRole('button', { name: 'Add Hugging Face token' });
@@ -1025,7 +1025,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     await waitFor(() => expect(said()).toBe('Hugging Face token saved.'));
   });
 
-  it('keeps focus on the tab after re-adding a key that was removed elsewhere (copy LOW-1)', async () => {
+  it('keeps focus on the tab after re-adding a key that was removed elsewhere', async () => {
     await renderSettings({ apiKeys: { GOOGLE_API_KEY: '***gggg', OPENAI_API_KEY: '***aaaa' } });
     fireEvent.click(screen.getByRole('button', { name: 'Manage Google · Gemini API' }));
     await waitFor(() => expect(within(row('Google · Gemini API')).getByRole('button', { name: 'Replace key' })).toHaveFocus());
@@ -1049,7 +1049,7 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     expect(screen.getByRole('tab', { name: /^Providers/ })).toHaveFocus();
   });
 
-  it('counts the badge and "Connected · N" from one source: Krea while it signs in, and Nous (copy NIT-2)', async () => {
+  it('counts the badge and "Connected · N" from one source: Krea while it signs in, and Nous', async () => {
     getKreaConnectionMock.mockResolvedValue({ status: 'connecting', authorizationUrl: KREA_URL });
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     await waitFor(() => expect(rowNames(list(/^Connected/))).toContain('Krea · sign-in'));
@@ -1065,12 +1065,12 @@ describe('Settings — round 12 (review 11 of PR #203; GM r23)', () => {
     expect(rowNames(list(/^Connected/)).length).toBe(3);
   });
 
-  it('says the Krea sign-in row’s summary in GM’s words, with no period (GM r23)', async () => {
+  it('says the Krea sign-in row’s summary in design’s words, with no period', async () => {
     await renderSettings();
     expect(row('Krea · sign-in').querySelector('.settings-row__summary')?.textContent).toBe('Uses your Krea plan instead of an API key');
   });
 
-  // Review 12 of PR #203, LOW-4: every change made elsewhere is said once,
+  // PR #203: every change made elsewhere is said once,
   // none lost and none doubled, whatever lands within its two frames.
   const frame = () => act(async () => { await new Promise((done) => requestAnimationFrame(done)); });
   const timesSaid = (lines: string[], line: string) => lines.join(' ').split(line).length - 1;
@@ -1243,12 +1243,12 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     // Only the backend's check ran: nothing was written to it.
     expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', 'fixture-openai', { check: true }]]);
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
-    // Review 14, keychain LOW-3: the Keychain write changed nothing, so nothing is put back.
+    // The Keychain write changed nothing, so nothing is put back.
     expect(credentials.revert).not.toHaveBeenCalled();
     expect(credentials.commit).not.toHaveBeenCalled();
   });
 
-  // Review 12 of PR #203, LOW-3: both or neither. The backend refuses a key
+  // PR #203: both or neither. The backend refuses a key
   // while it can't read the settings file, so the Keychain is never written.
   const CANT_READ = 'Nothing was saved because Nebula can’t read ~/Library/Application Support/Nebula/settings.json. Fix the file, then try again.';
   it('writes nothing to the Keychain when the backend can’t read the settings file, and says why', async () => {
@@ -1272,7 +1272,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     expect(credentials.clear).not.toHaveBeenCalled();
   });
 
-  // Review 13 of PR #203, LOW-1: both or neither whatever the call order. A
+  // PR #203: both or neither whatever the call order. A
   // refusal between the Keychain write and the backend's own call puts the
   // Keychain back; when it can't, the row says the Keychain kept the change.
   function refuseTheSecondCall() {
@@ -1288,7 +1288,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     await addKey('OpenAI', 'fixture-openai');
     expect(await screen.findByRole('alert')).toHaveTextContent(CANT_READ);
     expect(credentials.set).toHaveBeenCalledWith('OPENAI_API_KEY', 'fixture-openai');
-    // By the write's own id (review 14, keychain HIGH-1).
+    // By the write's own id.
     expect(credentials.revert).toHaveBeenCalledWith('w-set');
     expect(credentials.commit).not.toHaveBeenCalled();
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
@@ -1304,7 +1304,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     expect(credentials.revert).toHaveBeenCalledWith('w-clear');
   });
 
-  // GM, PR #203 r28 item 2: each line says what Nebula is using now.
+  // Design, PR #203: each line says what Nebula is using now.
   it('a first save the Keychain kept: Nebula has no key, the Keychain has it (beside the row)', async () => {
     const { credentials } = setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'NOTHING_TO_REVERT' }) });
     await renderSettings();
@@ -1362,7 +1362,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     expect(credentials.revert).not.toHaveBeenCalled();
   });
 
-  // Review 14, keychain LOW-1: only a 4xx says the backend didn't take it.
+  // Only a 4xx says the backend didn't take it.
   function failTheSecondCall(error: unknown) {
     updateCredentialMock.mockReset().mockImplementation((_key: string, _value: string, options?: { check?: boolean }) =>
       options?.check ? Promise.resolve({ status: 'ok' }) : Promise.reject(error));
@@ -1412,7 +1412,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     expect(credentials.revert).not.toHaveBeenCalled();
   });
 
-  it('a lost answer Nebula can’t settle: GM’s line, and the Keychain left as written (GM r29 item 7)', async () => {
+  it('a lost answer Nebula can’t settle: design’s line, and the Keychain left as written', async () => {
     const { credentials } = setupDesktopBridge();
     await renderSettings();
     failTheSecondCall(LOST());
@@ -1435,7 +1435,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     expect(credentials.revert).not.toHaveBeenCalled();
   });
 
-  it('a notice’s Undo Nebula can’t settle names the key, since its row is closed (GM r31 item 5)', async () => {
+  it('a notice’s Undo Nebula can’t settle names the key, since its row is closed', async () => {
     providerApiFetchMock.mockResolvedValue(healthResponse({}));
     setupDesktopBridge();
     await renderSettings();
@@ -1449,7 +1449,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
       + 'Remove it again to be sure.')).toBeInTheDocument();
   });
 
-  it('the kept line stays until the two agree, ending in a newer refusal’s fix (GM r29 item 6)', async () => {
+  it('the kept line stays until the two agree, ending in a newer refusal’s fix', async () => {
     setupDesktopBridge({ revert: vi.fn().mockResolvedValue({ ok: false, error: 'STORE_CHANGED' }) });
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     refuseTheSecondCall();
@@ -1659,7 +1659,7 @@ describe('Settings — preferences', () => {
     expect(useUIStore.getState().canvasMinimapEnabled).toBe(true);
     expect(localStorage.getItem('nebula:canvas:minimapEnabled')).toBe('1');
     expect(useUIStore.getState().canvasPerfMode).toBe(false);
-    // The Agent log is on by default (Q38); the switch turns it off.
+    // The Agent log is on by default; the switch turns it off.
     const agentLog = screen.getByRole('switch', { name: /Agent log/ });
     expect(agentLog).toBeChecked();
     expect(screen.getByText('Every agent’s actions, bottom right')).toBeInTheDocument();
@@ -1690,7 +1690,7 @@ describe('Settings — preferences', () => {
     fireEvent.change(select, { target: { value: 'off' } });
     expect(useUIStore.getState().runCostConfirmUsd).toBeNull();
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ runCostConfirmUsd: null }));
-    // GM - Design (PR #212 r2, item 5): "list price", and no "There is no per-run limit" (the bar cites per-run limits).
+    // Design (PR #212): "list price", and no "There is no per-run limit" (the bar cites per-run limits).
     expect(screen.queryByText(/There is no per-run limit/)).toBeNull();
     expect(document.body.textContent).toContain('before running any node without a list price. Your own runs aren\u2019t limited.');
     useUIStore.getState().setRunCostConfirmUsd(1);
@@ -1772,7 +1772,7 @@ describe('Settings — preferences', () => {
     // Unset, it follows the per-session budget.
     expect(outside).toHaveValue('session');
     expect(within(outside).getByRole('option', { name: 'Same as chats · $10' })).toBeInTheDocument();
-    // GM - Design, 2026-10-31: the select sits under its help at its own width, never cut off.
+    // Design, 2026-10-31: the select sits under its help at its own width, never cut off.
     expect(outside.closest('.settings-pref')).toHaveClass('settings-pref--stacked');
     expect(outside).toHaveClass('settings__select--fits');
     fireEvent.change(outside, { target: { value: '5' } });
@@ -1861,7 +1861,7 @@ describe('Settings — preferences', () => {
   });
 
   it('says why the connected apps could not load', async () => {
-    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // A refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
     getOutsideSpendMock.mockRejectedValue(new RequestFailedError('Couldn’t load the connected apps.', 403, { reason: 'Only the person can do this from the Nebula canvas.' }));
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
@@ -1869,7 +1869,7 @@ describe('Settings — preferences', () => {
     expect(await screen.findByText('Nebula couldn’t load the connected apps. Only the person can do this from the Nebula canvas.')).toBeInTheDocument();
   });
 
-  it('PR #204 r6 (GM r6 2): refused as not connected, the because line, and the read runs again on the promote', async () => {
+  it('PR #204: refused as not connected, the because line, and the read runs again on the promote', async () => {
     const session = await import('../src/lib/personSession');
     session.resetPersonSessionForTests();
     getOutsideSpendMock.mockRejectedValueOnce(new RequestFailedError('Couldn’t load the connected apps.', 403,
@@ -1957,7 +1957,7 @@ describe('Settings — storage', () => {
     expect(useUIStore.getState().onboardingActive).toBe(true);
   });
 
-  // GM, PR #205 r1 answer 6: a switch saving its own change follows the held
+  // Design, PR #205: a switch saving its own change follows the held
   // rule: its new position at once, the enabled look for 150 ms, then the
   // locked look with the thumb where the person put it; a quick save never
   // greys; a failed save puts back the saved position.
@@ -2002,7 +2002,7 @@ describe('Settings — storage', () => {
   });
 });
 
-// Round 15 of PR #114 (GM): "Settings stays enabled so the panel opens, but
+// PR #114 (design): "Settings stays enabled so the panel opens, but
 // its fields come up disabled." It shows the last values it loaded; with none
 // loaded, its first-load error and Try again (a read, so it still works).
 describe('Settings while Nebula is offline', () => {
@@ -2012,7 +2012,7 @@ describe('Settings while Nebula is offline', () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     act(() => noteBackendConnection('offline'));
     const panel = screen.getByRole('tabpanel');
-    // Round 16 (review 15 nit): on Providers the search sits outside the
+    // On Providers the search sits outside the
     // disabled fieldset and stays usable; everything after it is disabled.
     const fieldset = panel.querySelector('fieldset.settings__fieldset--providers')!;
     expect(fieldset).toBeDisabled();

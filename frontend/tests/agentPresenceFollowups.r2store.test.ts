@@ -1,14 +1,14 @@
 /**
- * Fix round 2 of PR #200 (review 2 and GM's 2026-10-28 answers), the store
- * side, from review 2's probes (r2/fe/fu2.probe.test.ts):
- * - M-2 (GM answer 1): the kept note and a closed draft remember their
+ * PR #200 (the PR review and design's 2026-10-28 answers), the store
+ * side, from the reviewer's probes (r2/fe/fu2.probe.test.ts):
+ * - Design: the kept note and a closed draft remember their
  *   project. The dialog starts with them only there; on another project it
  *   starts empty and an interrupted note's notice (with Copy note) stays
  *   until dismissed. A draft the person closed on purpose gets no line at
  *   all. A send that had already failed keeps its own failure line. A
  *   whitespace-only draft is dropped.
- * - L-3: two recovered copies that race each stay named.
- * - N-5: a save released as unanswered after the hold limit that then
+ * - Two recovered copies that race each stay named.
+ * - A save released as unanswered after the hold limit that then
  *   answers 200 clears its "Couldn't save … copy" line.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -184,7 +184,7 @@ const backOnAlpha = async () => {
 };
 const KEPT_LINE = 'Your note wasn’t sent because Codex started opening “beta”.';
 
-describe('M-2 (GM answer 1): a note written for one project never shows in another project\'s dialog', () => {
+describe('a note written for one project never shows in another project\'s dialog', () => {
   beforeEach(() => resetPins());
   afterEach(() => resetPins());
 
@@ -255,7 +255,7 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
     expect(pins.getState().draft).toBe('failed note');
   });
 
-  it('N-4: a whitespace-only draft is dropped, on close and across a canvas change', () => {
+  it('a whitespace-only draft is dropped, on close and across a canvas change', () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('  \n ');
     pins.getState().cancelCompose();
@@ -278,7 +278,7 @@ describe('M-2 (GM answer 1): a note written for one project never shows in anoth
   });
 });
 
-describe('L-3 and N-5: recovered copies', () => {
+describe('recovered copies', () => {
   const reconnect = (canvas: string, value: string) => emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION,
     canvasRevision: canvas, empty: false, edges: [],
     nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input', label: 'Other', params: { value }, state: 'idle', outputs: {} } }] });

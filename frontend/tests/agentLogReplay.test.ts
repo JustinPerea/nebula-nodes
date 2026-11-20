@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 
-// GM - Design, PR #211 r21 (LOW-1 + Q2): a cursor's say always reaches the
+// Design, PR #211: a cursor's say always reaches the
 // Agent log exactly once, whether this tab saw it live, saw it live and then
 // its replay (a reconnect), or only its replay (a reload, or a say from a
 // cursor folded into a count cursor, which the canvas never draws). The log
@@ -48,7 +48,7 @@ const lines = () => log.useAgentLogStore.getState().entries.map((e) => `${e.agen
 
 beforeEach(async () => { await loadPage(); });
 
-describe('a cursor\'s say reaches the Agent log exactly once (r21)', () => {
+describe('a cursor\'s say reaches the Agent log exactly once', () => {
   it('seen live, then replayed on a reconnect (twice): one line', () => {
     emit(said('d', 'Checking the prompt'));
     emit(replay({ ...said('d', 'Checking the prompt'), secondsAgo: 1 }));
@@ -83,7 +83,7 @@ describe('a cursor\'s say reaches the Agent log exactly once (r21)', () => {
     expect(lines()).toEqual(['Pair: Just now']);
   });
 
-  // Review 9, LOW-5: the id, not the words and time, says which action it
+  // The id, not the words and time, says which action it
   // is. One session's two parallel adds of "Image" in one millisecond are
   // two lines.
   it('two real actions with the same words in the same millisecond are two lines, and each replay of them none', () => {

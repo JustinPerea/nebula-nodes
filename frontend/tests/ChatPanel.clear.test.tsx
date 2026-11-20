@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-// Round 11 of PR #114 (GM): /clear clears this tab's session always; the
+// PR #114 (design): /clear clears this tab's session always; the
 // canvas clear is the backend's and is refused while a run is going. Before
-// round 11 the chat said "Session cleared. Next message starts a fresh
+// this change the chat said "Session cleared. Next message starts a fresh
 // conversation with an empty canvas." whatever the backend answered.
 
 const apiMocks = vi.hoisted(() => ({
@@ -15,7 +15,7 @@ vi.mock('../src/lib/api', async (original) => ({
   fetchClaudeStatus: apiMocks.fetchClaudeStatus, fetchCodexStatus: apiMocks.fetchCodexStatus,
   fetchChatModels: apiMocks.fetchChatModels, fetchPersonalAgents: apiMocks.fetchPersonalAgents,
 }));
-// Round 12: the clear's answer is bounded; short here so the test waits 60 ms, not 15 s.
+// The clear's answer is bounded; short here so the test waits 60 ms, not 15 s.
 vi.mock('../src/lib/chatClear', async (original) => ({
   ...await original<typeof import('../src/lib/chatClear')>(), CHAT_CLEAR_ANSWER_MS: 60,
 }));
@@ -82,7 +82,7 @@ const UNCONFIRMED = "Session cleared. Next message starts a fresh conversation. 
 const chatText = () => document.body.textContent || '';
 
 describe('/clear in the chat panel', () => {
-  it('a canvas clear refused during a run: GM\'s session line, and the refusal under Clear\'s heading', async () => {
+  it('a canvas clear refused during a run: design\'s session line, and the refusal under Clear\'s heading', async () => {
     clearAnswer = async () => new Response(
       JSON.stringify({ detail: 'A run is still going. Wait for it to finish or stop it first.' }),
       { status: 409, headers: { 'content-type': 'application/json' } });
@@ -102,13 +102,13 @@ describe('/clear in the chat panel', () => {
   });
 });
 
-// Round 12 of PR #114 (review 11, item 2; GM's lines): the chat clears at
+// PR #114 (design's lines): the chat clears at
 // once, as before; the line comes when the backend answers and is appended,
 // never replacing what was said meanwhile; the answer is bounded. Before
-// round 12 the DELETE had no bound (no answer: no line ever), and a slow
+// this change the DELETE had no bound (no answer: no line ever), and a slow
 // answer replaced the list, wiping a message sent while it was out.
-describe('/clear while the canvas clear is out (round 12)', () => {
-  it('no answer at all: GM\'s "didn\'t confirm" line once the bound passes', async () => {
+describe('/clear while the canvas clear is out', () => {
+  it('no answer at all: design\'s "didn\'t confirm" line once the bound passes', async () => {
     clearAnswer = () => new Promise<Response>(() => {});
     await typeClear();
     expect(await screen.findByText(UNCONFIRMED, undefined, { timeout: 2000 })).toBeTruthy();
@@ -145,11 +145,11 @@ describe('/clear while the canvas clear is out (round 12)', () => {
   });
 });
 
-// Round 13 of PR #114 (review 12, item 4): with no answer or a 5xx the clear
+// PR #114: with no answer or a 5xx the clear
 // may have happened, so its undo step stays. Undo is harmless either way:
 // it puts back a canvas the clear emptied, and when the clear didn't happen
 // it changes nothing and duplicates nothing.
-describe('/clear with no answer or a 5xx keeps its undo step (round 13)', () => {
+describe('/clear with no answer or a 5xx keeps its undo step', () => {
   const n1 = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
     data: { label: 'Text Input', definitionId: 'text-input', params: { value: 'kept' }, state: 'idle', outputs: {} } };
   const restores = () => apiMocks.apiFetch.mock.calls.filter(([path]) => String(path).includes('/api/graph/restore'));
@@ -195,7 +195,7 @@ describe('/clear with no answer or a 5xx keeps its undo step (round 13)', () => 
   });
 });
 
-// Round 15 of PR #114 (review 14, M2): a chat message asks an agent to edit
+// PR #114: a chat message asks an agent to edit
 // the canvas, so while Nebula is offline Send is disabled (with the offline
 // mark) and Enter sends nothing; the typed message stays.
 describe('the chat while Nebula is offline', () => {

@@ -113,7 +113,7 @@ describe('agent notes store (Updates)', () => {
     expect(useAgentNotesStore.getState().lists['board:b1'].notes.map((n) => n.id)).toEqual(['an_b']);
   });
 
-  // GM, #204 r3 item 1: an Update is read once the server says so, never ahead of it, so a
+  // Design, #204: an Update is read once the server says so, never ahead of it, so a
   // refused read never shows as done.
   it('marks read up to an update once the server has, and takes its count', async () => {
     sync('p1', [note('an_3'), note('an_2'), note('an_1', { readAt: '2026-10-20T11:00:00.000Z' })], 2);
@@ -152,12 +152,12 @@ describe('agent notes store (Updates)', () => {
 
   it('dismisses optimistically and puts the update back if the server refuses', async () => {
     sync('p1', [note('an_1')], 1);
-    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // A refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
     api.dismissAgentNote.mockRejectedValue(new RequestFailedError("Couldn't dismiss the update.", 404, { reason: 'That update is no longer in the list.' }));
     const done = useAgentNotesStore.getState().dismiss({ kind: 'canvas' }, 'an_1');
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeTruthy();
-    // #204 round 7 (review 5 LOW-8): the count is the server's, so it waits for the answer.
+    // #204: the count is the server's, so it waits for the answer.
     expect(selectCanvasList(useAgentNotesStore.getState()).unread).toBe(1);
     await done;
     expect(selectCanvasList(useAgentNotesStore.getState()).notes[0].dismissedAt).toBeNull();

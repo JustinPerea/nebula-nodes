@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import type { AgentNote } from '../src/lib/agentNotes';
 
 /**
- * The Update's Answer (Q125 item 1): it opens the answer form as a popover
+ * The Update's Answer: it opens the answer form as a popover
  * from the Updates corner, at the list's width (not on the canvas); Escape
  * closes only the popover and gives focus back to Answer; the closed
  * Update says how it ended and, answered, shows each answer.
@@ -19,7 +19,7 @@ const ws = vi.hoisted(() => ({ handlers: [] as Array<(event: unknown) => void> }
 const notesApi = vi.hoisted(() => ({ fetchAgentNotes: vi.fn(), markAgentNotesRead: vi.fn(), dismissAgentNote: vi.fn() }));
 const questionsApi = vi.hoisted(() => ({ answerQuestions: vi.fn(), dismissQuestions: vi.fn() }));
 
-// The Agents panel's roster read (Q125 item 2): nobody around in these tests.
+// The Agents panel's roster read: nobody around in these tests.
 vi.mock('../src/lib/agentRoster', () => ({ fetchAgentRoster: async () => ({ projectId: null, agents: [], rev: 0 }) }));
 vi.mock('@xyflow/react', () => ({
   useStore: (selector: (state: typeof flow.state) => unknown) => selector(flow.state),

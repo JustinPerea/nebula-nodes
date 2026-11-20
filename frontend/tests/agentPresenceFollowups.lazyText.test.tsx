@@ -1,4 +1,4 @@
-// Review 13 L-2 (PR #200 fix round 14): the Unicode data is its own chunk,
+// PR #200: the Unicode data is its own chunk,
 // fetched as lib/canvasPins loads. Pins that arrive before it are neither
 // dropped nor shown unsanitized: they wait for it, in arrival order; the
 // note dialog waits for it before it counts.
@@ -25,7 +25,7 @@ const { PinComposer } = await import('../src/components/canvas/PinComposer');
 const pin = (id: string, text: string) => ({ id, text, anchor: { nodeId: 'n1' }, status: 'open', createdAt: '2026-10-29T10:00:00+00:00' });
 afterEach(cleanup);
 
-describe('review 13 L-2: the Unicode data loads lazily', () => {
+describe('the Unicode data loads lazily', () => {
   it('is not in the entry: no static import of the JSON', () => {
     const source = readFileSync(join(__dirname, '../src/lib/canvasPins.ts'), 'utf8');
     expect(source).not.toMatch(/^import [^;]*pinTextUnicode\.json/m);

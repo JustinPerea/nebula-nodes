@@ -5,7 +5,7 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe:
 import { agentActionEntry } from '../src/store/agentLogStore';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 
-// GM - Design, round 16: the cursor bubble names the card's labels and leaves
+// Design: the cursor bubble names the card's labels and leaves
 // out a field the card shows no label for (no words at all when none has
 // one); "The Agent log keeps recording the change; where there's no card
 // label it uses the param key." The backend sends the log's words as `log`

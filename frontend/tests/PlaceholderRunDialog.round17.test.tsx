@@ -3,8 +3,8 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import { changedNodesLine, movedRowIds, type PlaceholderRunConfirm, type PlaceholderRunRow } from '../src/lib/placeholderRunConfirm';
 
-// GM - Design, round 17 (1), verbatim: "In-place dialog update names the
-// nodes, same form as the re-ask: replace round 6's "This run changed since
+// Design, verbatim: "In-place dialog update names the
+// nodes, same form as the re-ask: replace the earlier "This run changed since
 // you last reviewed it." with "“Alt still” changed while this was open." (up
 // to 3 names in row order: "“A” and “B” …", "“A”, “B” and “C” …"; from 4 up
 // the count: "4 nodes changed while this was open."). Name only nodes whose
@@ -13,7 +13,7 @@ import { changedNodesLine, movedRowIds, type PlaceholderRunConfirm, type Placeho
 // this run."); don't add the changed line on top of those. The 500 ms click
 // guard applies whenever the run button's price changes in place, not only
 // on a re-ask (the pointer may be resting on the button)."
-// Review 16, L-1 (coordinator's decision, GM confirmed): the line names each
+// The coordinator decided, and design confirmed: the line names each
 // node the way its row reads now.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
@@ -44,7 +44,7 @@ const dialog = (m: PlaceholderRunConfirm, extra: { changed?: boolean; moved?: st
 beforeEach(() => { vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); document.body.innerHTML = ''; });
 
-describe('L-1: the changed line names a node as its row reads now', () => {
+describe('the changed line names a node as its row reads now', () => {
   it('a node renamed with its route reads by its new name', () => {
     const before = model([row('g', 'Grok Imagine 2.0 (Krea)', 'Grok Imagine 2.0 (Krea)', 'price not listed')]);
     const now = model([row('g', 'Grok Imagine 2.0 via xAI', 'Grok Imagine 2.0 via xAI', '$0.06')]);
@@ -57,7 +57,7 @@ describe('L-1: the changed line names a node as its row reads now', () => {
   });
 });
 
-describe('GM round 17 (1): an in-place update names the nodes that moved', () => {
+describe('an in-place update names the nodes that moved', () => {
   it('one node: “Alt still” changed while this was open.', () => {
     const view = render(dialog(start));
     expect(changedLine()).toBeNull();
@@ -137,7 +137,7 @@ describe('the re-ask keeps its line, and an in-place change adds to it', () => {
     expect(changedLine()).toBe('“Hero still” and “Alt still” changed while this was open.');
   });
 
-  it('a re-ask with no moved node keeps the round-5 line', () => {
+  it('a re-ask with no moved node keeps the original line', () => {
     render(dialog(start, { changed: true }));
     expect(changedLine()).toBe('This run changed since you last reviewed it.');
   });

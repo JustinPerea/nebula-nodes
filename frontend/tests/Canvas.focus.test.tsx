@@ -139,7 +139,7 @@ describe('Canvas requested node focus', () => {
     expect(flow.fitView).not.toHaveBeenCalled();
   });
 
-  // Review 6 of PR #205 (inspector-pin LOW-2): the keep-pin sites.
+  // PR #205: the keep-pin sites.
   it('a focus request for a node that isn\'t on the canvas: the pinned Inspector stays pinned and on screen, empty', () => {
     useUIStore.getState().setInspectorPinned(true);
     useUIStore.getState().requestCanvasNodeFocus('no-such-node');
@@ -148,7 +148,7 @@ describe('Canvas requested node focus', () => {
     expect([ui.canvasFocusRequest, ui.selectedNodeId, ui.inspectorPinned, ui.panels.inspector.visible]).toEqual([null, null, true, true]);
   });
 
-  // Review 7 of PR #205 (inspector NIT-2): the UI store names what the canvas still has selected.
+  // PR #205: the UI store names what the canvas still has selected.
   it('a focus request for a missing node while one node is ringed: the UI store names that node, as the pinned Inspector shows it', () => {
     useGraphStore.setState({ nodes: [node('motion'), { ...node('sibling'), selected: true }] });
     useUIStore.getState().setInspectorPinned(true);
@@ -166,7 +166,7 @@ describe('Canvas requested node focus', () => {
     expect(useUIStore.getState().selectedNodeId).toBeNull();
   });
 
-  // Review 8 of PR #205, lines-inspector MEDIUM-1: as when the shown node
+  // PR #205, lines-inspector: as when the shown node
   // leaves, an unpinned Inspector over several ringed stays on one of them.
   it('unpinned, two ringed, a focus request for a missing node names one of them ("N nodes selected"), open', () => {
     useGraphStore.setState({ nodes: [{ ...node('motion'), selected: true }, { ...node('sibling'), selected: true }] });
@@ -259,7 +259,7 @@ describe('Canvas requested node focus', () => {
     expect(flow.fitView).not.toHaveBeenCalled();
   });
 
-  // Review 8 of PR #205, lines-inspector NIT-1 and NIT-2: React Flow gets
+  // PR #205, lines-inspector: React Flow gets
   // the drag-select handlers, and a drag the canvas started ends with it.
   it('React Flow gets onSelectionStart and onSelectionEnd: a drag-select is on from its start to its end', () => {
     render(<Canvas />);

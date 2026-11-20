@@ -21,7 +21,7 @@ const api = vi.hoisted(() => ({
   dismissAgentNote: vi.fn(),
 }));
 
-// The Agents panel's roster read (Q125 item 2): nobody around in these tests.
+// The Agents panel's roster read: nobody around in these tests.
 vi.mock('../src/lib/agentRoster', () => ({ fetchAgentRoster: async () => ({ projectId: null, agents: [], rev: 0 }) }));
 vi.mock('@xyflow/react', () => ({
   useStore: (selector: (state: typeof flow.state) => unknown) => selector(flow.state),
@@ -132,15 +132,15 @@ describe('the Updates chip', () => {
   });
 });
 
-describe('the list (GM\'s still)', () => {
-  it('opens from the chip, marks every update read and shows the header GM drew', async () => {
+describe('the list (the design still)', () => {
+  it('opens from the chip, marks every update read and shows the header the design drew', async () => {
     render(<AppAgentNotes />);
     const newest = note('an_3');
     sync([newest, note('an_2'), note('an_1', { readAt: '2026-10-20T12:00:00.000Z' })]);
     fireEvent.click(chip());
     const list = screen.getByRole('dialog', { name: 'Updates' });
     expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_3');
-    // GM, #204 r3 item 1: "all read" once the server has read them, not before.
+    // Design, #204: "all read" once the server has read them, not before.
     expect(await within(list).findByText('3 · all read')).toBeTruthy();
     expect(within(list).getByText('kept with this project')).toBeTruthy();
     // The chip's count is a muted 0 while the list is open.
@@ -397,7 +397,7 @@ describe('the corner on the canvas', () => {
   });
 });
 
-describe('an asset proposal\'s Update (Q92 a)', () => {
+describe('an asset proposal\'s Update', () => {
 
   function ask(target: 'project' | 'moodboard' | 'commons', targetId: string, overrides: Partial<AgentNote> = {}) {
     const text = { project: 'Claude asks to change the cover of Dusk', moodboard: 'Claude asks to turn on “Moodboard notes to generators” for Dusk board',
@@ -465,7 +465,7 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
     expect(useAssetProposalsStore.getState().review).toBeNull();
   });
 
-  it('while the Commons is off, a Commons ask\'s Review stays, locked, with the reason under it (round 18i)', async () => {
+  it('while the Commons is off, a Commons ask\'s Review stays, locked, with the reason under it', async () => {
     const { noteCommonsOff, noteCommonsAnswered, COMMONS_OFF_REVIEW_LINE } = await import('../src/lib/commonsOff');
     const enterCommons = vi.fn();
     useUIStore.setState({ enterCommons, commonsEnabled: false });

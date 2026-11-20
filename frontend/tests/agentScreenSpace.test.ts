@@ -187,7 +187,7 @@ describe('domEvents', () => {
   });
 });
 
-describe('outline rings (design section 5, GM 3)', () => {
+describe('outline rings (design section 5)', () => {
   const entry = (key: string, arrivedAt: number, extra: Partial<OutlineEntry> = {}): OutlineEntry => ({
     key, item: 'i1', kind: 'solid', color: '#E8825A', arrivedAt, box: { left: 100, top: 100, width: 120, height: 80 }, ...extra,
   });

@@ -8,11 +8,11 @@ import { type JsxTree, appControls, appCss, appMenuItemFindings, cascadeFindings
 /**
  * Follow-ups to PR #195, two static ratchets.
  *
- * 1. Review 23 L-4: round 23's ratchet (round23Surfaces.test.tsx gatedUses)
+ * 1. The earlier ratchet (round23Surfaces.test.tsx gatedUses)
  *    saw `(s) => s.X`, `getState().X`, `store.X` and `lifecycle.X` only, and
  *    missed `const graph = useGraphStore.getState(); graph.X()`, destructures,
  *    useShallow, a bare `s => s.X` and `const { X } = useGraphStore()`
- *    (review 23 ratchet.facts B-F); EditorView's keys and the chat's Apply
+ *    (ratchet.facts B-F); EditorView's keys and the chat's Apply
  *    and /clear slipped through. Now any name of a gated action (EDIT_GATES,
  *    gatedGraphActions) anywhere in a file that imports useGraphStore counts,
  *    in every form, comments and string literals aside. Each such file reads
@@ -20,7 +20,7 @@ import { type JsxTree, appControls, appCss, appMenuItemFindings, cascadeFindings
  *    surfaces it hands its controls to, or is on ALLOWLIST with the reason it
  *    has no control of its own that edits.
  *
- * 2. GM r24 item 2: one disabled rule app-wide. A disabled button is neutral
+ * 2. Design: one disabled rule app-wide. A disabled button is neutral
  *    grey whatever the reason, and its tooltip gives the reason; never orange
  *    but disabled. Every button-like rule that fills with the accent (orange)
  *    is covered by the one shared disabled rule (styles/disabled-buttons.css,
@@ -53,7 +53,7 @@ const walk = (dir: string, match: RegExp): string[] => readdirSync(dir).flatMap(
   return statSync(path).isDirectory() ? walk(path, match) : match.test(name) && !/\.test\./.test(name) ? [path] : [];
 });
 
-/** Fix round 1 of PR #200 (review L-5): the source read by the TypeScript
+/** PR #200 (review): the source read by the TypeScript
  * parser, not by regexes. Comments and string literals are no code (a
  * `/*` inside `accept="image/*"` hid 315 lines of Inspector.tsx from the
  * old regex, and `title="Don't"` hid the rest of its line); identifiers in
@@ -136,7 +136,7 @@ const ALLOWLIST: Record<string, string> = {
   'store/uiStore.ts': "opening the trim editor makes or finds its edit node: VideoEditAction's button takes the lock (EditNode's Open editor opens its own node read-only, openEditNode, which writes nothing); and selection changes; no control",
 };
 
-/** Fix round 2 of PR #200 (review 2, L-5): G's holes closed.
+/** PR #200: G's holes closed.
  * - Every `on[A-Z]*` attribute is a handler (onDragEnd, onKeyPress,
  *   onClickCapture, onContextMenu, onPaste, a component's own `onRun` or
  *   `onPick`), and so is a spread that isn't the lock (`{...handlers}`).
@@ -166,7 +166,7 @@ interface Scope {
   file: string;
   locals: Map<string, ts.Node[]>;
   imports: Map<string, { specifier: string; imported: string }>;
-  /** `export default …`: the function or expression (fix round 3, review 3 LOW-6). */
+  /** `export default …`: the function or expression. */
   defaultExport: ts.Node | null;
   /** `export { a as b } from './x'` and `export * from './x'`: b → (./x, a); '*' → every star module. */
   reexports: Map<string, { specifier: string; imported: string }[]>;
@@ -244,11 +244,11 @@ function isReference(id: ts.Identifier): boolean {
   return true;
 }
 
-/** Fix round 4 of PR #200 (review 4 LOW-4, "trust by name"): a name a
+/** PR #200 ("trust by name"): a name a
  * parent hands down is trusted only when it really is a parameter of a
  * function around it (`({ disabled }) => …`, `(props) => … props.locked`),
  * never a global or an undeclared name that happens to be called that. */
-/* Fix round 5 (review 5 LOW-3): only a parameter of the component function
+/* Only a parameter of the component function
  * itself, the outermost function around the name (`memo(…)` and
  * `forwardRef(…)` wrap it without a function of their own), never of a
  * callback inside it: `[false].map((disabled) => …)` and `render={(locked)
@@ -263,8 +263,8 @@ function boundByParam(id: ts.Identifier): boolean {
 
 /** The exported function `name` of a module, as a node to follow, with the
  * module it is in: a function, or an object of methods (`runner.go()`); a
- * store (`create(…)`) is reached by its members already. Fix round 3 of PR
- * #200 (review 3 LOW-6): a default export, and a re-export (`export { a }
+ * store (`create(…)`) is reached by its members already. It also follows
+ * a default export, and a re-export (`export { a }
  * from './a'`, `export * from`), which is no level of its own. */
 function exportedTarget(scope: Scope, name: string, resolve: Resolve, hops = 0): { node: ts.Node; scope: Scope } | null {
   if (hops > 4) return null;
@@ -292,12 +292,12 @@ function exportedTarget(scope: Scope, name: string, resolve: Resolve, hops = 0):
 }
 
 /** The names the graph store is reached by (storeNames over every source
- * file), set by the L-4 block before G runs. */
+ * file), set by the "every file that reaches a gated action reads the canvas lock" block before G runs. */
 let STORE_NAMES = new Set(['useGraphStore']);
 const reachesGraphStore = (source: string, file: string) => identifiers(parse(source, file)).some((name) => STORE_NAMES.has(name));
 
 /** How many imports deep a handler is followed: a helper that calls a
- * helper (review 3 LOW-6 "two levels"). */
+ * helper ("two levels"). */
 const IMPORT_DEPTH = 2;
 
 /** The names a node reaches: identifiers it names (members included),
@@ -305,7 +305,7 @@ const IMPORT_DEPTH = 2;
 /** `ownNames`: whether names the file itself spells count. A file that never
  * names the graph store has no gated action of its own (a moodboard's own
  * undo is no canvas undo); only what it reaches through an import into a
- * module that does name the store counts (review 3 LOW-6). */
+ * module that does name the store counts. */
 function reachOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, seen: Set<string>, depth = 0, ownNames = true): Set<string> {
   const names = new Set<string>();
   // The file's own definitions it names are followed from a worklist, not by
@@ -322,11 +322,11 @@ function reachOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, seen
       // The graph store is reached by its members (`useGraphStore.getState()
       // .executeGraph()` names executeGraph), never its `create(…)` body,
       // which names every action: as an import (exportedTarget) and, since
-      // review 8 of PR #205 (lines-inspector LOW-2), inside graphStore.ts too,
+      // PR #205, inside graphStore.ts too,
       // where a helper that reads the store reached the whole store.
       const local = STORE_NAMES.has(name) ? undefined : localsAt(current, scope);
       if (local && isReference(current)) {
-        // Each definition once (fix round 25: by the definition, since two
+        // Each definition once (by the definition, since two
         // functions' same-named locals are two things now).
         for (const definition of local) {
           const key = `${scope.file}#${name}@${definition.pos}`;
@@ -378,7 +378,7 @@ function declaredIn(definition: ts.Node): ts.Node | null {
   return null;
 }
 
-/** Fix round 25 of PR #198 (review 23 NIT-4): the file's definitions of the
+/** PR #198: the file's definitions of the
  * name `id` reads that are in scope where it is read, the nearest only. The
  * merge's two CONTROL_AT entries came from names shared across functions:
  * StopLine's `track` param took SceneStopLines' `track` local, and
@@ -412,7 +412,7 @@ function visibleLocals(id: ts.Identifier, scope: Scope): ts.Node[] | undefined {
     if (at < nearest) { nearest = at; nearestIn = container; kept.length = 0; }
     kept.push(definition);
   }
-  // Review 8 of PR #205 (lines-inspector LOW-2): an assignment `a.b = f`
+  // PR #205: an assignment `a.b = f`
   // counts for a name bound where it is read (a parameter, a local) only
   // where that binding is, so a callback's `(node) => node.selected` no
   // longer reaches some other function's `node.x = …` (in graphStore.ts that
@@ -481,13 +481,11 @@ function isLockExpression(expression: ts.Node, scope: Scope, seen: Set<string> =
   return found;
 }
 
-/** Names a parent may hand a control's disabled state down by (review 3
- * LOW-6, "too strict": `disabled={readOnly}` from a parent prop). Only as a
+/** Names a parent may hand a control's disabled state down by ("too strict": `disabled={readOnly}` from a parent prop). Only as a
  * prop (no local of that name), and only for `disabled`. */
 const DISABLED_PROPS = /^(locked|readOnly|disabled|isLocked)$/;
 
-/** Which locked states an expression is truthy in (fix round 3 of PR #200,
- * review 3 LOW-6): FOLLOWING, OFFLINE, or both (LOCKED). `lock.locked`, `x ||
+/** Which locked states an expression is truthy in (PR #200): FOLLOWING, OFFLINE, or both (LOCKED). `lock.locked`, `x ||
  * lock.locked`, a local or memo made of one and a prop handed down are
  * LOCKED; `lock.offline` covers offline only, so a Run that is `disabled`
  * offline and `aria-disabled` while following is locked by the two together.
@@ -563,16 +561,16 @@ function isActSpread(expression: ts.Node, scope: Scope, seen: Set<string> = new 
   // (`const runLocked = (…) => lock.act(own, { run })`).
   if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
     const callee = expression.expression.text;
-    // Fix round 25 (review 23 NIT-4): the canvasLock export by its own name
+    // The canvasLock export by its own name
     // (no alias), whose body the "lockedAction keeps act's lock" test reads.
     const imported = scope.imports.get(callee);
     if (callee === 'lockedAction' && imported?.imported === 'lockedAction' && isLibModule(imported.specifier, scope.file, 'canvasLock')
       && expression.arguments.length > 0 && isLockValue(expression.arguments[0], scope)) return true;
-    // PR #203 round 6 (the merge of #198): runKeyLock's `withKeyLock(props,
+    // PR #203 (the merge of #198): runKeyLock's `withKeyLock(props,
     // …)` adds the key lock to props that already carry the canvas lock. It
     // counts when its first argument is a lock spread; the "withKeyLock keeps
     // act's lock" test reads its body. Both helpers count only from lib/
-    // (round 7, review r6 NIT-3: never from any path ending in their name).
+    // (never from any path ending in their name).
     if (callee === 'withKeyLock' && imported?.imported === 'withKeyLock' && isLibModule(imported.specifier, scope.file, 'runKeyLock')) {
       return expression.arguments.length > 0 && isActSpread(expression.arguments[0], scope, seen);
     }
@@ -582,8 +580,8 @@ function isActSpread(expression: ts.Node, scope: Scope, seen: Set<string> = new 
     return helpers.length > 0 && helpers.every((helper) => (ts.isArrowFunction(helper) || ts.isFunctionExpression(helper))
       && ts.isExpression(helper.body) && isActSpread(helper.body, scope, seen));
   }
-  // An `act` prop a parent hands down, spread on the control. Fix round 25
-  // (review 23 NIT-4): trusted only when the component is a file-local,
+  // An `act` prop a parent hands down, spread on the control.
+  // Trusted only when the component is a file-local,
   // unexported function, every place in the file names it is a JSX use, and
   // each of those passes `act` as a lock spread (`act={lock.act()}`).
   if (ts.isIdentifier(expression) && expression.text === 'act' && boundByParam(expression)) return actHandedDown(expression, scope, seen);
@@ -624,7 +622,7 @@ function actHandedDown(id: ts.Identifier, scope: Scope, seen: Set<string>): bool
 /** Whether `specifier`, as `file` (a path under src/) imports it, is
  * src/lib/<name> itself: resolved against the importing file and compared
  * exactly, so '../evil/lib/runKeyLock' or a bare 'lib/runKeyLock' is
- * another module (review 7 of PR #203, copy LOW-1). */
+ * another module (PR #203, copy). */
 function isLibModule(specifier: string, file: string, name: string): boolean {
   if (!specifier.startsWith('.')) return false;
   return posix.normalize(posix.join(posix.dirname(file.split('\\').join('/')), specifier)) === `lib/${name}`;
@@ -651,7 +649,7 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
   if (isActSpread(expression, scope)) return LOCKED;
   if (component && isLockValue(expression, scope)) return LOCKED;
   // withKeyLock(props, …) (lib/runKeyLock) covers what its props cover: an
-  // object whose `disabled` reads the lock (the toolbar's Run, PR #203 round 7).
+  // object whose `disabled` reads the lock (the toolbar's Run, PR #203).
   const keyed = keyLockProps(expression, scope);
   if (keyed) return spreadCoverage(keyed, scope, component, seen, readOnlyApplies);
   if (ts.isObjectLiteralExpression(expression)) {
@@ -659,8 +657,8 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
       if (ts.isSpreadAssignment(property)) return mask | spreadCoverage(property.expression, scope, component, seen, readOnlyApplies);
       if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return mask;
       const name = property.name.getText(scope.root).replace(/^['"]|['"]$/g, '');
-      // aria-disabled blocks no click: ariaCoverage reads it (review 4 LOW-4).
-      // readOnly only on a text-like field (review 5 LOW-3: READONLY_TYPES
+      // aria-disabled blocks no click: ariaCoverage reads it.
+      // readOnly only on a text-like field (READONLY_TYPES
       // applied to a spread too: `{...{ readOnly }}` on a checkbox).
       if (name !== 'disabled' && !(name === 'readOnly' && readOnlyApplies)) return mask;
       return mask | lockCoverage(ts.isPropertyAssignment(property) ? property.initializer : property.name, scope);
@@ -679,11 +677,10 @@ function spreadCoverage(expression: ts.Node, scope: Scope, component: boolean, s
  * locked, or, on a component, the lock handed down (`lock={lock}`,
  * `locked={lock.locked}`, `readOnly`, `disabled`, a `disable…` prop). An
  * attribute that only mentions the lock (`className`, `title`, `aria-label`,
- * `data-*`, `key`, `disabled={!lock.locked}`) puts it in none (review 3
- * LOW-6). */
+ * `data-*`, `key`, `disabled={!lock.locked}`) puts it in none. */
 /** Input types readOnly applies to (HTML: text-like and date/number
  * fields); a checkbox, radio, range, colour or file input ignores it (review
- * 4 LOW-4). No `type` is text. */
+ * 4). No `type` is text. */
 const READONLY_TYPES = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'month', 'week', 'time', 'datetime-local']);
 function inputType(attributes: ts.NodeArray<ts.JsxAttributeLike> | undefined, scope: Scope): string | null {
   const type = attributes?.find((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(scope.root) === 'type') as ts.JsxAttribute | undefined;
@@ -694,13 +691,12 @@ function inputType(attributes: ts.NodeArray<ts.JsxAttributeLike> | undefined, sc
   return null; // dynamic: not known to be text-like
 }
 
-/** Which locked states an attribute puts the control in (fix round 4 of PR
- * #200, review 4 LOW-4, tightened): `disabled` only where it disables (a
+/** Which locked states an attribute puts the control in (PR #200, tightened): `disabled` only where it disables (a
  * native control, a fieldset, or a component that takes it), `readOnly` only
  * on a textarea or a text-like input, a component's `lock`, `locked` or
  * `disabled` (never another `disable…` name: `disableRipple`).
  * `aria-disabled` is no lock on its own: ariaCoverage. */
-/* Fix round 5 (review 5 LOW-3): a component's `disabled`, `readOnly`,
+/* A component's `disabled`, `readOnly`,
  * `locked` or `lock` counts only when the component is found (in the file,
  * or a relative import) and reads that prop (or forwards its props onto an
  * element): `<Fancy disabled={lock.locked}>` where Fancy ignores `disabled`
@@ -749,7 +745,7 @@ function componentDefinition(tag: string, scope: Scope, resolve: Resolve | undef
   return module ? exportedTarget(scopeOf(module.source, module.file), imported.imported, resolve) : null;
 }
 
-/** Which props a component reads (fix rounds 5 and 6 of PR #200): a name
+/** Which props a component reads (PR #200): a name
  * its definition reads (`disabled={disabled}`, `props.disabled`; a
  * destructured name it never uses reads nothing), or every prop it forwards
  * onto an element that takes it (`<button {...props}>`; `{...rest}` forwards
@@ -832,7 +828,7 @@ function ariaCoverage(attributes: ts.NodeArray<ts.JsxAttributeLike>, scope: Scop
   }, 0);
 }
 
-/** Fix round 6 of PR #200 (CI timeout on 1841a21a, review 6 MEDIUM-1): the
+/** PR #200 (CI timeout on 1841a21a): the
  * reach of a node from a fresh start is computed once per node and kept, so
  * the guard check below asks it as often as it likes. `reachOf` with a shared
  * `seen` (inside one traversal) is never cached: what it returns depends on
@@ -855,7 +851,7 @@ const ownOf = (scope: Scope) => {
 };
 const reachesGated = (reach: Set<string>) => { for (const name of reach) if (GATED.has(name)) return true; return false; };
 
-/** Review 8 of PR #205 (lines-inspector LOW-2): whether a definition reaches
+/** PR #205: whether a definition reaches
  * a gated action, as reachesGated(reachCached(…)) says, but worked out once
  * per definition: what a definition names itself (`direct`, no local
  * followed) is kept, and a walk over the file's definitions stops at the
@@ -928,8 +924,8 @@ function gatedOf(node: ts.Node, scope: Scope, resolve: Resolve | undefined, dept
   return false;
 }
 
-/** The states a handler's own refusal covers (fix rounds 5 and 6 of PR
- * #200, reviews 5 and 6 LOW-3). Each gated call the handler makes (a gated
+/** The states a handler's own refusal covers (PR
+ * #200). Each gated call the handler makes (a gated
  * name, or a call of a local or imported function that reaches one) must be
  * guarded where it sits:
  * - an earlier statement of a block around it is `if (G) return` (or an if
@@ -964,7 +960,7 @@ function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = n
     const masks = helpers.map((helper) => {
       if (!(ts.isArrowFunction(helper) || ts.isFunctionExpression(helper) || ts.isFunctionDeclaration(helper)) || !helper.body) return 0;
       if (!ts.isBlock(helper.body)) return again(helper.body);
-      // Review 7 N-1: a helper of several statements returns the refusal when
+      // A helper of several statements returns the refusal when
       // every return that can be truthy does so only when G holds
       // (`{ if (refuse()) return true; return false; }`).
       return truthyReturnsOnlyWhen(helper.body, scope, seen);
@@ -998,7 +994,7 @@ function guardMask(condition: ts.Expression, scope: Scope, seen: Set<string> = n
     const op = condition.operatorToken.kind;
     const [left, right] = [again(condition.left), again(condition.right)];
     if (op === ts.SyntaxKind.BarBarToken) return left | right;
-    // `G1 && G2` refuses only when both do; `G && x` returns only when x (review 6).
+    // `G1 && G2` refuses only when both do; `G && x` returns only when x.
     if (op === ts.SyntaxKind.AmpersandAmpersandToken) return left & right;
   }
   return 0;
@@ -1039,7 +1035,7 @@ function truthyReturnsOnlyWhen(body: ts.Block, scope: Scope, seen: Set<string>):
     return all & (itself | when);
   }, LOCKED);
 }
-/** A `switch (G)` whose `case true:` exits (review 7 N-1). */
+/** A `switch (G)` whose `case true:` exits. */
 const switchExitsOnTrue = (statement: ts.SwitchStatement): boolean => statement.caseBlock.clauses.some((clause) =>
   ts.isCaseClause(clause) && clause.expression.kind === ts.SyntaxKind.TrueKeyword
   && clause.statements.length > 0 && exits(clause.statements[clause.statements.length - 1]));
@@ -1082,7 +1078,7 @@ function guardsAround(site: ts.Node, root: ts.Node, scope: Scope): number {
   return mask;
 }
 
-/* Review 8 of PR #205, lines-inspector LOW-2: the walk is iterative. Each
+/* PR #205, lines-inspector: the walk is iterative. Each
  * function whose coverage is being worked out is a frame on an explicit
  * stack, and the frame's own syntax is walked from a stack of its own, so
  * neither a long chain of helpers calling helpers nor a deep tree grows the
@@ -1185,19 +1181,19 @@ function refuseCoverage(node: ts.Node, scope: Scope, resolve: Resolve | undefine
   return known(node)!;
 }
 
-/** Pointer handlers a disabled control still gets (review 5 LOW-3, live:
+/** Pointer handlers a disabled control still gets (live:
  * Chrome dispatches pointerdown and pointerup to a disabled <button>; only
  * mousedown and click are held back). On a native control each needs its
  * own refusal. */
 const POINTER_HANDLER = /^onPointer[A-Z]/;
 
 /** Opening-element text of each finding, for CONTROL_AT (an allowlist entry
- * for one control, never every control of its tag; review 4 LOW-4). */
+ * for one control, never every control of its tag). */
 const findingElement = new Map<string, string>();
 
 /** An attribute that hands a component (or a control) a callback without
  * `on`: `action={() => run()}`, `items={[{ select: () => run() }]}`, or a
- * function by name (review 3 LOW-6). */
+ * function by name. */
 function handsCallback(attribute: ts.JsxAttribute, scope: Scope): boolean {
   const name = attribute.name.getText(scope.root);
   if (isHandlerName(name) || /^(ref|key|className|style)$/.test(name)) return false;
@@ -1218,7 +1214,7 @@ function handsCallback(attribute: ts.JsxAttribute, scope: Scope): boolean {
   return found;
 }
 
-/** Review 23 G, review 1 of PR #200 L-5 G, review 2 L-5: in a file that
+/** The G scan (PR #200): in a file that
  * reads the lock, a control whose handler reaches a gated action (directly,
  * through the file's own functions, or one level into an imported one) must
  * carry the lock itself or sit in an element that does (a locked fieldset).
@@ -1238,7 +1234,7 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
         || (ts.isJsxSpreadAttribute(attribute) && !isActSpread(attribute.expression, scope)));
       const reached = new Set<string>();
       // Each handler that reaches a gated action, with its own refusal
-      // (review 5 LOW-3: per handler; a refusal in onKeyDown covers no
+      // (per handler; a refusal in onKeyDown covers no
       // onClick) and whether it is a pointer handler.
       const gatedHandlers: Array<{ refuse: number; pointer: boolean }> = [];
       for (const handler of handlers) {
@@ -1253,13 +1249,12 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
         const control = CONTROL_TAGS.has(tag);
         const reads = /^[A-Z]/.test(tag) ? componentReads(tag, scope, resolve) : undefined;
         // Its own attributes and a disabled <fieldset> around it, together
-        // (only a fieldset disables what it holds; review 3 LOW-6: a <div
+        // (only a fieldset disables what it holds: a <div
         // title={lock.title()}> around a button disables nothing).
         let covered = attributes.reduce((mask, attribute) => mask | lockAttribute(attribute, scope, tag, attributes, reads), 0);
         // A disabled fieldset disables the form controls it holds, except
         // those in its first <legend> (HTML), never a <div onClick> or an <a>.
-        // The legend is found through fragments and expressions (review 5
-        // LOW-3: `{open && <legend>…}`, `<><legend>…</>`): any legend with no
+        // The legend is found through fragments and expressions (`{open && <legend>…}`, `<><legend>…</>`): any legend with no
         // other element between it and the fieldset counts as the first.
         let inLegend = false;
         for (let up: ts.Node | undefined = node.parent; up && covered !== LOCKED && control; up = up.parent) {
@@ -1276,7 +1271,7 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
         }
         const aria = ariaCoverage(attributes, scope);
         // Each gated handler, on its own: the control's lock, aria-disabled
-        // with this handler's refusal (review 4 LOW-4), or, on a component or
+        // with this handler's refusal, or, on a component or
         // a non-control, the handler's refusal alone. A pointer handler on a
         // native control fires while disabled: only its own refusal.
         const own = gatedHandlers.every(({ refuse, pointer }) => (control && pointer ? refuse
@@ -1284,7 +1279,7 @@ function unlockedControls(source: string, file: string, resolve?: Resolve): stri
         if (!own) {
           const { line } = root.getLineAndCharacterOfPosition(node.getStart(root));
           // A component: the file it comes from, so a locked component is
-          // known by its file, never its name (review 3 LOW-6).
+          // known by its file, never its name.
           const head = tag.split('.')[0];
           const from = !/^[A-Z]/.test(tag) ? null : scope.locals.has(head) ? file
             : scope.imports.get(head) && resolve ? resolve(scope.imports.get(head)!.specifier, file)?.file ?? null : null;
@@ -1322,42 +1317,42 @@ const resolveSource: Resolve = (specifier, fromFile) => {
 const CONTROL_ALLOWLIST: Record<string, string> = {
   'components/panels/ChatPanel.tsx: clearBackendNodes': "the chat's /clear (lib/chatCanvasClear, one level in): the chat itself stays usable while following or offline, and /clear is refused whole with refuseCanvasEdit before it clears (agentPresenceFollowups.surfaces)",
   'components/panels/AssetsPanel.tsx: undo': "`deleting.undo()` is the asset library's own undo of a deleted style (useAssetDelete), not the canvas's",
-  // Fix round 3 of PR #200 (review 3 LOW-6): the forms G reads now (a
+  // PR #200: the forms G reads now (a
   // spread's handlers, `disabled` that must be truthy when locked) find these.
   'components/Canvas.tsx <ReactFlow>': "React Flow's change, connect and paste handlers: the store's edit gate (EDIT_GATES) refuses each while following or offline, and the canvas is read-only (data-read-only, nodesDraggable/nodesConnectable off); round20/round23 tests",
   'components/cinema-studio/CinemaShotPanel.tsx: addLocalCinemaMotionNode': "Send to motion: disabled while locked (`… || readOnly` under the not-ready branch; ready, it only views the node it made); agentPresenceFollowups.r1 renders it locked offline",
   'components/create-studio/CreateView.tsx <ResultsGallery>': "its Delete is ResultCard's button, which spreads lock.act() (ResultCard.tsx)",
 };
 
-/** One control each, found by a snippet of its own opening tag (fix round 4
- * of PR #200, review 4 LOW-4: the palette's entries were tag-wide, so any new
+/** One control each, found by a snippet of its own opening tag
+ * (PR #200: the palette's entries were tag-wide, so any new
  * palette button reaching a gated action passed unseen). */
 const CONTROL_AT: Array<{ file: string; tag: string; at: string; reason: string }> = [
   { file: 'components/CommandPalette.tsx', tag: 'input', at: 'className="command-palette__input"',
     reason: "the palette's search field: Enter runs the chosen command through run(), which refuses an acting command with refuseCanvasEdit (round23Surfaces' CommandPalette)" },
   { file: 'components/CommandPalette.tsx', tag: 'button', at: 'onClick={() => run(cmd)} {...act} aria-disabled={disabled || undefined}',
-    reason: "a palette row (an option of the listbox, PR #205 review 2 lines LOW-1): a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` as aria-disabled (`actDisabled`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
+    reason: "a palette row (an option of the listbox): a command that edits (`cmd.acts`) spreads lock.act() and takes its `disabled` as aria-disabled (`actDisabled`, which G can't follow), and run() refuses it with refuseCanvasEdit; round23Surfaces' CommandPalette renders them locked" },
   { file: 'components/CommandPalette.tsx', tag: 'div', at: 'className="command-palette__list" id={listId}',
-    reason: "the palette's listbox (PR #205 review 2 lines LOW-1): a role and a name only, no handler; its rows are the options above, each run through run()" },
+    reason: "the palette's listbox: a role and a name only, no handler; its rows are the options above, each run through run()" },
 ];
 
 /** Components that take the lock themselves for the gated handler they are
  * given (a menu's rows, a modal's Save): the call site needs no lock. Each
  * one's file reads the lock, and a render test shows it locked
- * (agentPresenceFollowups.r2 L-5). */
+ * (agentPresenceFollowups.r2). */
 const LOCKED_COMPONENTS: Record<string, { file: string; via?: string[]; reason: string }> = {
-  AssetItem: { file: 'components/panels/AssetsPanel.tsx', reason: 'Add to canvas and the drag take the lock (round 23)' },
-  ProviderSwitcher: { file: 'components/nodes/ProviderSwitcher.tsx', reason: 'every provider row, fix and switch row takes the lock (fix round 2 of PR #200)' },
+  AssetItem: { file: 'components/panels/AssetsPanel.tsx', reason: 'Add to canvas and the drag take the lock' },
+  ProviderSwitcher: { file: 'components/nodes/ProviderSwitcher.tsx', reason: 'every provider row, fix and switch row takes the lock' },
   // DeferredMaskPainter's MaskPainterModal renders the real one from its lazy chunk.
   MaskPainterModal: { file: 'components/panels/MaskPainterModal.tsx', via: ['components/panels/DeferredMaskPainter.tsx'],
-    reason: 'Save mask, the tools and the strokes take the lock (fix rounds 2 and 3 of PR #200)' },
-  // Fix round 3 (review 3 LOW-6): G now checks CinemaStudioView and CreateView
+    reason: 'Save mask, the tools and the strokes take the lock' },
+  // G now checks CinemaStudioView and CreateView
   // (files that never read the lock); these are the delegates DELEGATES names.
-  CinemaSharedControls: { file: 'components/cinema-studio/CinemaSharedControls.tsx', reason: 'every scene control takes the lock (round 23, fix round 1 of PR #200)' },
-  CinemaShotsRail: { file: 'components/cinema-studio/CinemaShotsRail.tsx', reason: '+ Add shot, the arrows, × and the drag take the lock (fix round 2 of PR #200)' },
+  CinemaSharedControls: { file: 'components/cinema-studio/CinemaSharedControls.tsx', reason: 'every scene control takes the lock' },
+  CinemaShotsRail: { file: 'components/cinema-studio/CinemaShotsRail.tsx', reason: '+ Add shot, the arrows, × and the drag take the lock' },
   CinemaShotPanel: { file: 'components/cinema-studio/CinemaShotPanel.tsx', reason: 'Generate, the stepper, the variations and the prompt take the lock' },
-  CreateComposer: { file: 'components/create-studio/CreateComposer.tsx', reason: 'Generate and the fields take the lock (round 23)' },
-  ForgetRecoveryConfirm: { file: 'components/panels/ForgetRecoveryConfirm.tsx', reason: 'Forget takes the lock (fix round 2 of PR #200)' },
+  CreateComposer: { file: 'components/create-studio/CreateComposer.tsx', reason: 'Generate and the fields take the lock' },
+  ForgetRecoveryConfirm: { file: 'components/panels/ForgetRecoveryConfirm.tsx', reason: 'Forget takes the lock' },
 };
 
 const allowed = (line: string) => {
@@ -1378,14 +1373,14 @@ const allowed = (line: string) => {
 // and scoped once per run (readSource, bySource, resolveSource, localsAt's
 // memo; CI-flake fix of 2026-11-02 halved G), so make the scan cheaper
 // before raising this.
-describe('L-4: every file that reaches a gated action reads the canvas lock', { timeout: 120_000 }, () => {
+describe('every file that reaches a gated action reads the canvas lock', { timeout: 120_000 }, () => {
   const files = walk(SRC, /\.tsx?$/).filter((path) => !path.endsWith('store/graphStore.ts'))
     .map((path) => ({ path, file: relative(SRC, path), source: readSource(path) }));
   const stores = storeNames(files);
   STORE_NAMES = stores;
   const reachesStore = (source: string, file: string) => identifiers(parse(source, file)).some((name) => stores.has(name));
 
-  it('the scan sees every form review 23 and review 1 of PR #200 listed', () => {
+  it('the scan sees every form the earlier reviews listed', () => {
     const forms: Record<string, string> = {
       A_selector: 'const run = useGraphStore((s) => s.executeGraph);',
       B_getState_alias: 'const graph = useGraphStore.getState(); graph.executeGraph();',
@@ -1426,7 +1421,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     const probe = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n'
       + 'export const A = () => <><button {...lock.act()} onClick={run}>Run</button><button onClick={() => run()}>New</button></>;';
     expect(unlockedControls(probe, 'probe.tsx')).toEqual(['probe.tsx:3 <button> executeGraph']);
-    // Fix round 3 (review 3 LOW-6): every .tsx, not only those that read the
+    // Every .tsx, not only those that read the
     // lock (a file that never reads it can still call a gated helper).
     const found = files.filter(({ path }) => path.endsWith('.tsx'))
       .flatMap(({ file, source }) => unlockedControls(source, file, resolveSource))
@@ -1434,10 +1429,10 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(found).toEqual([]);
   });
 
-  // Fix round 3 of PR #200: review 3's G corpus (r3/fe/ratchet3.probe.test.ts,
+  // PR #200: the reviewer's G corpus (r3/fe/ratchet3.probe.test.ts,
   // ratchet3.facts.json "bypass"): the 16 forms that slipped, and the ones
   // that were too strict.
-  it('G corpus (review 3, LOW-6): each of the 17 forms is caught; parent props and lock locals stay quiet', () => {
+  it('G corpus: each of the 17 forms is caught; parent props and lock locals stay quiet', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
     const modules: Record<string, string> = {
       'lib/runAll.ts': 'export function runAll() { useGraphStore.getState().executeGraph(); }',
@@ -1480,7 +1475,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       local_readonly: 'const readOnly = lock.locked;\nexport const A = () => <button disabled={readOnly} onClick={() => run()}>Run</button>;',
       memo_locked: 'const off = useMemo(() => lock.locked, [lock]);\nexport const A = () => <button disabled={off} onClick={() => run()}>Run</button>;',
       act_via_local: 'const acts = lock.act();\nexport const A = () => <button {...acts} onClick={() => run()}>Run</button>;',
-      // Review 4 LOW-4: aria-disabled counts with the handler's own refusal.
+      // aria-disabled counts with the handler's own refusal.
       aria_disabled_refused: 'export const A = () => <div role="button" aria-disabled={lock.locked || undefined} onClick={() => { if (refuseCanvasEdit()) return; run(); }} />;',
       destructured_locked: 'const { locked } = lock;\nexport const A = () => <button disabled={locked} onClick={() => run()}>Run</button>;',
       locked_fieldset: 'export const A = () => <fieldset disabled={busy || lock.locked}><button onClick={() => run()}>Run</button></fieldset>;',
@@ -1491,9 +1486,9 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(loud, 'locked or harmless controls G flags').toEqual([]);
   });
 
-  // Fix round 4 of PR #200: review 4's G corpus (r4/fe/ratchet4.probe.test.ts,
+  // PR #200: the reviewer's G corpus (r4/fe/ratchet4.probe.test.ts,
   // ratchet4.facts.json "forms"): the forms that don't really disable.
-  it('G corpus (review 4, LOW-4): aria-disabled alone, readOnly where it does nothing, a fieldset that disables nothing, trust by name', () => {
+  it('G corpus: aria-disabled alone, readOnly where it does nothing, a fieldset that disables nothing, trust by name', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
     const forms: Record<string, string> = {
       aria_disabled_native_button: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => run()}>Run</button>;',
@@ -1511,7 +1506,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       any_name_locked: 'export const A = () => <button disabled={props.locked} onClick={() => run()}>Run</button>;',
       global_named_lock: 'export const A = () => <button {...locked.act()} onClick={() => run()}>Run</button>;',
       component_disable_prop_ignored: 'export const A = () => <Fancy disableRipple={lock.locked} onClick={() => run()} />;',
-      // Fix round 5 (review 5 LOW-3): a component nobody can find takes no `disabled` on trust.
+      // A component nobody can find takes no `disabled` on trust.
       component_disabled: 'export const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
     };
     const missed = Object.entries(forms).filter(([form, body]) => unlockedControls(head + body, `components/${form}.tsx`).length !== 1)
@@ -1532,12 +1527,12 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(loud, 'locked controls G flags').toEqual([]);
   });
 
-  // Fix round 5 of PR #200: review 5's G corpus (r5/fe/ratchet5.probe.test.ts,
+  // PR #200: the reviewer's G corpus (r5/fe/ratchet5.probe.test.ts,
   // ratchet5.facts.json): a refusal counts only when it gates its own
   // handler, readOnly only where it applies, a parameter only of the
   // component, the first legend through fragments, a component's prop only
   // when it reads it, and a pointer handler fires on a disabled button.
-  it('G corpus (review 5, LOW-3): the 14 missed forms and the 7 caught ones are caught; 7 locked forms stay quiet', () => {
+  it('G corpus: the 14 missed forms and the 7 caught ones are caught; 7 locked forms stay quiet', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
     const forms: Record<string, string> = {
       aria_refuse_other_handler: 'export const A = () => <button aria-disabled={lock.locked} onClick={() => run()} onKeyDown={() => { if (refuseCanvasEdit()) return; }}>Run</button>;',
@@ -1589,13 +1584,13 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(loud, 'locked controls G flags').toEqual([]);
   });
 
-  // Fix round 6 of PR #200: review 6's G probe (r6/fe/ratchet6.probe.test.ts,
+  // PR #200: the reviewer's G probe (r6/fe/ratchet6.probe.test.ts,
   // ratchet6.facts.json): a guard counts where the gated call sits, and a
   // component's prop where it really lands.
-  it('G corpus (review 6, LOW-3): a guard counts where the call sits; 5 missed forms caught, 6 correct guards quiet', () => {
+  it('G corpus: a guard counts where the call sits; 5 missed forms caught, 6 correct guards quiet', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
     const forms: Record<string, string> = {
-      // Review 6's five misses.
+      // The five misses.
       not_refuse_empty_block: 'export const A = () => <div role="button" onClick={() => { if (!refuseCanvasEdit()) {} run(); }}>Run</div>;',
       refuse_and_other: 'export const A = () => <div role="button" onClick={() => { if (refuseCanvasEdit() && Math.random() > 2) return; run(); }}>Run</div>;',
       fancy_destructures_unused: 'const Fancy = ({ disabled, ...p }: { disabled?: boolean; onClick?: () => void }) => <span {...p} />;\nexport const A = () => <Fancy disabled={lock.locked} onClick={() => run()} />;',
@@ -1618,7 +1613,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       .map(([form]) => form);
     expect(missed, 'forms G lets through').toEqual([]);
     const quiet: Record<string, string> = {
-      // Review 6's six false positives.
+      // The six false positives.
       or_short_circuit: 'export const A = () => <div role="button" onClick={() => { refuseCanvasEdit() || run(); }}>Run</div>;',
       local_flag: 'export const A = () => <div role="button" onClick={() => { const r = refuseCanvasEdit(); if (r) return; run(); }}>Run</div>;',
       ternary: 'export const A = () => <div role="button" onClick={() => (refuseCanvasEdit() ? null : run())}>Run</div>;',
@@ -1641,9 +1636,9 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(loud, 'correct guards G flags').toEqual([]);
   });
 
-  // Fix round 7 of PR #200: review 7 N-1, the two correct guards G flagged,
+  // PR #200: the two correct guards G flagged,
   // and their wrong twins, which it must still catch.
-  it('G corpus (review 7, N-1): a helper of several statements returning the refusal, and switch (G) { case true: return }', () => {
+  it('G corpus: a helper of several statements returning the refusal, and switch (G) { case true: return }', () => {
     const head = 'const run = useGraphStore((s) => s.executeGraph);\n';
     const quiet: Record<string, string> = {
       helper_returns_refusal: 'const stop = () => { if (refuseCanvasEdit()) return true; return false; };\nexport const A = () => <div role="button" onClick={() => { if (stop()) return; run(); }}>Run</div>;',
@@ -1666,11 +1661,11 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(missed, 'forms G lets through').toEqual([]);
   });
 
-  // Review 8 of PR #205, lines-inspector LOW-2 (its mutant R1): a canvas
+  // PR #205, lines-inspector (its mutation test): a canvas
   // handler that calls a graph store export whose body reads the store
   // overflowed the stack after 404 s. The walk is iterative, and the store is
   // reached by its members, never its body.
-  it('G corpus (review 8, LOW-2): a handler calling a graph store export that reads the store, and a long chain of helpers, finish in seconds', () => {
+  it('G corpus: a handler calling a graph store export that reads the store, and a long chain of helpers, finish in seconds', () => {
     const real = readFileSync(join(SRC, 'store/graphStore.ts'), 'utf8');
     const withExport = (body: string) => {
       const store = `${real}\nexport function noteCanvasSelectionDragInStore(active: boolean): void {\n${body}\n}\n`;
@@ -1728,7 +1723,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(performance.now() - started, 'ms').toBeLessThan(60_000);
   });
 
-  it('the palette is allowlisted control by control, never tag-wide (review 4 LOW-4)', () => {
+  it('the palette is allowlisted control by control, never tag-wide', () => {
     expect(Object.keys(CONTROL_ALLOWLIST).filter((key) => key.startsWith('components/CommandPalette.tsx'))).toEqual([]);
     const source = readFileSync(join(SRC, 'components/CommandPalette.tsx'), 'utf8');
     const extra = source.replace('</ModalPortal>', '<button type="button" onClick={() => run(flat[0])}>Run first</button></ModalPortal>');
@@ -1737,7 +1732,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     for (const entry of CONTROL_AT) expect(entry.reason.trim()).not.toBe('');
   });
 
-  it('a locked component is known by the file it comes from, never its name (review 3 LOW-6)', () => {
+  it('a locked component is known by the file it comes from, never its name', () => {
     const real = "import { MaskPainterModal } from './MaskPainterModal';\n"
       + 'const run = useGraphStore((s) => s.updateNodeData);\nexport const A = () => <MaskPainterModal onSave={() => run()} />;';
     const local = 'const MaskPainterModal = (p: { onSave: () => void }) => <div />;\n'
@@ -1751,15 +1746,15 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(allowed('components/NewThing.tsx:3 <ProviderSwitcher> clearGraph')).toBe(false);
   });
 
-  it('a file that never reads the lock is checked too (review 3: a button calling an allowlisted helper)', () => {
+  it('a file that never reads the lock is checked too (a button calling an allowlisted helper)', () => {
     const noLock = "import { clearBackendNodes } from '../lib/chatCanvasClear';\n"
       + 'export const A = () => <button onClick={() => void clearBackendNodes()}>Clear</button>;';
     expect(unlockedControls(noLock, 'components/NoLock.tsx', resolveSource)).toEqual(['components/NoLock.tsx:2 <button> clearBackendNodes']);
   });
 
-  // Fix round 2 of PR #200: review 2's G corpus (ratchet.facts G-CASES),
+  // PR #200: the reviewer's G corpus (ratchet.facts G-CASES),
   // every form the old check let through, and the controls that stay quiet.
-  it('G corpus (review 2, L-5): each of the 17 bypass forms is caught; a real lock, a fenced control and a shadowing local are not', () => {
+  it('G corpus: each of the 17 bypass forms is caught; a real lock, a fenced control and a shadowing local are not', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
     const modules: Record<string, string> = {
       'lib/runAll.ts': 'export function runAll() { useGraphStore.getState().executeGraph(); }',
@@ -1797,7 +1792,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
       locked: 'export const A = () => <button disabled={busy || lock.locked} {...lock.mark} onClick={() => run()}>Run</button>;',
       local_from_lock: 'const locked = lock.locked;\nexport const A = () => <button disabled={locked} onClick={() => run()}>Run</button>;',
       prop: 'export const A = ({ locked }: { locked: boolean }) => <button disabled={locked} onClick={() => run()}>Run</button>;',
-      // Fix round 5 (review 5 LOW-3): a component's `lock` counts when it reads it.
+      // A component's `lock` counts when it reads it.
       passed_down: 'const Toolbar = ({ lock, onRun }: P) => <button {...lock.act()} onClick={onRun}>Run</button>;\n'
         + 'export const A = () => <Toolbar lock={lock} onRun={() => run()} />;',
       fieldset: 'export const A = () => <fieldset disabled={lock.locked}><button onClick={() => run()}>Run</button></fieldset>;',
@@ -1809,7 +1804,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(loud, 'locked or harmless controls G flags').toEqual([]);
   });
 
-  it('a component that takes the lock itself reads it (fix round 2 of PR #200)', () => {
+  it('a component that takes the lock itself reads it (PR #200)', () => {
     for (const [tag, { file, reason }] of Object.entries(LOCKED_COMPONENTS)) {
       expect(reason.trim(), tag).not.toBe('');
       expect(readFileSync(join(SRC, file), 'utf8'), `${tag} (${file})`).toMatch(READS_LOCK);
@@ -1824,13 +1819,13 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     }
   });
 
-  // EditNode's Open editor (review 1 L-5) left the list in fix round 2
-  // (review 2 L-6): it opens its own editor, read-only, and writes nothing.
-  // Fix round 25 of PR #198 (review 23 NIT-4): the merge trusted any `act`
+  // EditNode's Open editor left the list: it opens its own editor,
+  // read-only, and writes nothing.
+  // PR #198: the merge trusted any `act`
   // param and `lockedAction` by name. Now an `act` counts only where every
   // use of its file-local component hands it a lock spread, and
   // `lockedAction` only as canvasLock's own export, whose body keeps act's lock.
-  it('review 23 NIT-4: an `act` prop counts only where every use hands it the lock; lockedAction only as canvasLock\'s', () => {
+  it('an `act` prop counts only where every use hands it the lock; lockedAction only as canvasLock\'s', () => {
     const head = 'const lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\n';
     const child = 'function Child({ act }) { return <button {...act} onClick={run}>R</button>; }\n';
     const quiet: Record<string, string> = {
@@ -1854,9 +1849,9 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     for (const [form, source] of Object.entries(caught)) expect(unlockedControls(source, 'probe.tsx'), form).toHaveLength(1);
   });
 
-  // Fix round 25 (review 23 NIT-4): the two CONTROL_AT entries the merge
+  // The two CONTROL_AT entries the merge
   // added are gone; G reads a name where it is in scope (visibleLocals).
-  it('review 23 NIT-4: a name is the definition in scope where it is read; a parameter hides the file\'s same-named locals', () => {
+  it('a name is the definition in scope where it is read; a parameter hides the file\'s same-named locals', () => {
     const head = 'const lock = useCanvasLock();\n';
     const gated = 'useGraphStore.getState().executeGraph';
     const quiet: Record<string, string> = {
@@ -1877,7 +1872,7 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     for (const [form, source] of Object.entries(caught)) expect(unlockedControls(source, 'probe.tsx'), form).toHaveLength(1);
   });
 
-  it('lockedAction keeps act\'s lock: it starts from lock.act and never writes disabled or aria-disabled (review 23 NIT-4)', () => {
+  it('lockedAction keeps act\'s lock: it starts from lock.act and never writes disabled or aria-disabled', () => {
     const source = readFileSync(join(SRC, 'lib/canvasLock.ts'), 'utf8');
     const body = /export function lockedAction\([\s\S]*?\n\}\n/.exec(source)?.[0] ?? '';
     expect(body).toMatch(/const props[^=]*= lock\.act\(own, options\);/);
@@ -1885,14 +1880,14 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(body).not.toMatch(/\bdisabled\b|aria-disabled|delete |Object\.assign|\.\.\./);
   });
 
-  it('withKeyLock keeps act\'s lock without a key line, and with one is key-locked first: focusable, refused in the handler, no canvas-lock marks (PR #203 rounds 6 and 7)', () => {
+  it('withKeyLock keeps act\'s lock without a key line, and with one is key-locked first: focusable, refused in the handler, no canvas-lock marks', () => {
     const source = readFileSync(join(SRC, 'lib/runKeyLock.ts'), 'utf8');
     const body = /export function withKeyLock[\s\S]*?\n\}\n/.exec(source)?.[0] ?? '';
-    // No key line, or a kept canvas (PR #199, GM r19 item 4: kept comes first
+    // No key line, or a kept canvas (PR #199, design: kept comes first
     // of all, as in canvasLock `act`): the props come back exactly as the
     // canvas lock gave them.
     expect(body).toMatch(/\n {2}if \(!reason \|\| KEPT_MARK in props\) return props;\n/);
-    // A key line comes first (GM r11 item 3): never natively disabled, the
+    // A key line comes first (design): never natively disabled, the
     // lock's marks dropped so a press pulses nothing the title doesn't name.
     expect(body).toMatch(/for \(const mark of CANVAS_LOCK_MARKS\) delete rest\[mark\];/);
     expect(body).toMatch(/\n {2}return \{ \.\.\.\(rest as T\), disabled: false, title: reason, \.\.\.keyLockedProps\(reason, reasonId\) \};\n\}\n$/);
@@ -1906,11 +1901,11 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(unlockedControls(`${head}export const A = () => { const p = withKeyLock(lock.act({}), 'k', 'id'); return <button {...p} onClick={run}>R</button>; };`, 'components/probe.tsx')).toEqual([]);
     expect(unlockedControls(`${head}export const A = () => <button {...withKeyLock({ disabled: false }, 'k', 'id')} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
     expect(unlockedControls(`import { withKeyLock } from '../lib/fakeLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...withKeyLock(lock.act({}), 'k', 'id')} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
-    // Review r6 NIT-3: a module that only ends in the helper's name doesn't count.
+    // A module that only ends in the helper's name doesn't count.
     expect(unlockedControls(`import { withKeyLock } from '../evil/runKeyLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...withKeyLock(lock.act({}), 'k', 'id')} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
     expect(unlockedControls(`import { lockedAction } from '../evil/canvasLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...lockedAction(lock, {})} onClick={run}>R</button>;`, 'components/probe.tsx')).toHaveLength(1);
     expect(unlockedControls(`import { lockedAction } from '../lib/canvasLock';\nconst lock = useCanvasLock();\nconst run = useGraphStore((s) => s.executeGraph);\nexport const A = () => <button {...lockedAction(lock, {})} onClick={run}>R</button>;`, 'components/probe.tsx')).toEqual([]);
-    // Review 7 of PR #203, copy LOW-1: the import is resolved against the
+    // PR #203, copy: the import is resolved against the
     // importing file and compared exactly; a path that only contains
     // lib/runKeyLock or lib/canvasLock is another module.
     const evil = (specifier: string, call: string, file = 'components/probe.tsx') => unlockedControls(
@@ -1974,21 +1969,21 @@ describe('L-4: every file that reaches a gated action reads the canvas lock', { 
     expect(keyLineTests("import { withKeyLock } from '../lib/runKeyLock';\nconst p = withKeyLock(a, keyLock, id);\nconst A = () => <p {...p} />;")).toHaveLength(1);
   });
 
-  it('review 23\'s two misses read the lock now', () => {
+  it('the two earlier misses read the lock now', () => {
     for (const file of ['components/editor/EditorView.tsx', 'components/panels/ChatPanel.tsx', 'components/video-editor/useRemotionKeyboard.ts']) {
       expect(readFileSync(join(SRC, file), 'utf8'), file).toMatch(READS_LOCK);
     }
   });
 });
 
-// ── 2. GM r24 item 2 and PR #200 answer 6: one disabled colour treatment ──
+// ── 2. Design and PR #200: one disabled colour treatment ──
 
 const SHARED = 'styles/disabled-buttons.css';
 /** A resting fill that reads as a filled button: the accent, danger, error,
  * the white of a white primary, or another solid colour (light, or clearly
  * coloured). Dark greys (#2a2a2a) and translucent surfaces are no fill. */
 const FILL_TOKEN = /background(?:-color)?\s*:\s*var\(--(?:sr-accent|sr-error|sr-danger|sr-ink|sr-ink-bold|an-ink)\s*[,)]/i;
-/** CSS's named colours (review 3 LOW-6: whitesmoke, orange …). */
+/** CSS's named colours (whitesmoke, orange …). */
 const NAMED_COLORS = new Map(('aliceblue:f0f8ff antiquewhite:faebd7 aqua:00ffff aquamarine:7fffd4 azure:f0ffff beige:f5f5dc bisque:ffe4c4 black:000000 blanchedalmond:ffebcd blue:0000ff blueviolet:8a2be2 brown:a52a2a burlywood:deb887 cadetblue:5f9ea0 chartreuse:7fff00 chocolate:d2691e coral:ff7f50 cornflowerblue:6495ed cornsilk:fff8dc crimson:dc143c cyan:00ffff darkblue:00008b darkcyan:008b8b darkgoldenrod:b8860b darkgray:a9a9a9 darkgreen:006400 darkgrey:a9a9a9 darkkhaki:bdb76b darkmagenta:8b008b darkolivegreen:556b2f darkorange:ff8c00 darkorchid:9932cc darkred:8b0000 darksalmon:e9967a darkseagreen:8fbc8f darkslateblue:483d8b darkslategray:2f4f4f darkslategrey:2f4f4f darkturquoise:00ced1 darkviolet:9400d3 deeppink:ff1493 deepskyblue:00bfff dimgray:696969 dimgrey:696969 dodgerblue:1e90ff firebrick:b22222 floralwhite:fffaf0 forestgreen:228b22 fuchsia:ff00ff gainsboro:dcdcdc ghostwhite:f8f8ff gold:ffd700 goldenrod:daa520 gray:808080 green:008000 greenyellow:adff2f grey:808080 honeydew:f0fff0 hotpink:ff69b4 indianred:cd5c5c indigo:4b0082 ivory:fffff0 khaki:f0e68c lavender:e6e6fa lavenderblush:fff0f5 lawngreen:7cfc00 lemonchiffon:fffacd lightblue:add8e6 lightcoral:f08080 lightcyan:e0ffff lightgoldenrodyellow:fafad2 lightgray:d3d3d3 lightgreen:90ee90 lightgrey:d3d3d3 lightpink:ffb6c1 lightsalmon:ffa07a lightseagreen:20b2aa lightskyblue:87cefa lightslategray:778899 lightslategrey:778899 lightsteelblue:b0c4de lightyellow:ffffe0 lime:00ff00 limegreen:32cd32 linen:faf0e6 magenta:ff00ff maroon:800000 mediumaquamarine:66cdaa mediumblue:0000cd mediumorchid:ba55d3 mediumpurple:9370db mediumseagreen:3cb371 mediumslateblue:7b68ee mediumspringgreen:00fa9a mediumturquoise:48d1cc mediumvioletred:c71585 midnightblue:191970 mintcream:f5fffa mistyrose:ffe4e1 moccasin:ffe4b5 navajowhite:ffdead navy:000080 oldlace:fdf5e6 olive:808000 olivedrab:6b8e23 orange:ffa500 orangered:ff4500 orchid:da70d6 palegoldenrod:eee8aa palegreen:98fb98 paleturquoise:afeeee palevioletred:db7093 papayawhip:ffefd5 peachpuff:ffdab9 peru:cd853f pink:ffc0cb plum:dda0dd powderblue:b0e0e6 purple:800080 rebeccapurple:663399 red:ff0000 rosybrown:bc8f8f royalblue:4169e1 saddlebrown:8b4513 salmon:fa8072 sandybrown:f4a460 seagreen:2e8b57 seashell:fff5ee sienna:a0522d silver:c0c0c0 skyblue:87ceeb slateblue:6a5acd slategray:708090 slategrey:708090 snow:fffafa springgreen:00ff7f steelblue:4682b4 tan:d2b48c teal:008080 thistle:d8bfd8 tomato:ff6347 turquoise:40e0d0 violet:ee82ee wheat:f5deb3 white:ffffff whitesmoke:f5f5f5 yellow:ffff00 yellowgreen:9acd32').split(' ').map((pair) => pair.split(':') as [string, string]));
 
 /** `name(args)` at the start of `value`, parens balanced. */
@@ -2027,10 +2022,10 @@ function oklabToRgb(L: number, a: number, b: number): { r: number; g: number; b:
     b: encode(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s) };
 }
 
-/** Fix round 2 of PR #200 (review 2, M-3 and L-5): the colour forms a
+/** PR #200: the colour forms a
  * fill is written in: hex, rgb()/rgba() (comma or space syntax, alpha as a
- * number or %), hsl()/hsla(), and a gradient's first stop. Fix round 3
- * (review 3 LOW-6): every named colour, currentColor, color-mix() (by its
+ * number or %), hsl()/hsla(), and a gradient's first stop.
+ * Also: every named colour, currentColor, color-mix() (by its
  * percentages, mixed in sRGB), oklch() and oklab(); a custom property that
  * no sheet gives a value (Nebula sets it at run time) is an unknown colour,
  * counted as a fill. lab()/lch()/color() are not read (no sheet uses them). */
@@ -2150,15 +2145,14 @@ const BUTTONISH = /(?:button|btn|action|generate|send|download|start|export|rend
 const NOT_COVERED: Record<string, string> = {
   'commons-button': "the Commons' own light theme: a grey of white over its pale fill would vanish; it gets its own neutral in the app-wide sweep",
   'commons-button--primary': "the Commons' own light theme (as commons-button)",
-  // Fix round 2 of PR #200: the fill parser now reads gradients; this one
+  // PR #200: the fill parser now reads gradients; this one
   // matches BUTTONISH by its "back" ("fallback").
   'mesh-modal__fallback': "a <div> (MeshPreview's preview-unavailable panel), not a control",
 };
 
 /** A selector list split on its top-level commas, each `:is()`/`:where()`
- * list expanded into its alternatives (fix round 3 of PR #200, review 3
- * LOW-6: `.toast:is(.a, .b) .toast__undo` is two selectors that style
- * `.toast__undo`, never `.a`). */
+ * list expanded into its alternatives (PR #200: `.toast:is(.a, .b) .toast__undo` is two selectors
+ * that style `.toast__undo`, never `.a`). */
 function selectorsOf(selector: string): string[] {
   const top: string[] = [];
   let depth = 0; let start = 0;
@@ -2189,7 +2183,7 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
 }
 
 /**
- * Review 23 MEDIUM-1 and review 24 NIT-2: the selectors in `css` that paint a
+ * The selectors in `css` that paint a
  * locked button with !important, which would override the shared disabled
  * look for one reason. Any paint (background and its longhands, colour, the
  * border and outline and their longhands, box-shadow, opacity); any locked
@@ -2199,7 +2193,7 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
  */
 function importantPaintOnLocked(css: string, file: string, covered: (className: string) => boolean): string[] {
   const LOCKED = /:disabled|\[disabled\]|\[aria-disabled|\[data-offline-disabled\]|\[data-following-disabled\]|data-held-look/;
-  // Review 1 of PR #205 (NIT-2): svg paint, filter and the text fill too;
+  // PR #205: svg paint, filter and the text fill too;
   // "! important" with a space; a property in any case.
   const PAINT = /(?:^|;)\s*(?:background(?:-[\w-]+)?|color|border(?:-[\w-]+)*|outline(?:-[\w-]+)?|box-shadow|opacity|fill|stroke|filter|-webkit-text-fill-color)\s*:[^;]*!\s*important/i;
   const found: string[] = [];
@@ -2212,7 +2206,7 @@ function importantPaintOnLocked(css: string, file: string, covered: (className: 
       const buttonish = (compound: string) => /^button\b/.test(compound)
         || [...compound.matchAll(/\.([\w-]+)/g)].some((m) => covered(m[1]));
       // The locked compound is the button (or an ancestor of the painted
-      // part), or (review 1 of PR #205, NIT-2) any ancestor is locked and the
+      // part), or (PR #205) any ancestor is locked and the
       // subject is a button or a covered class (`fieldset:disabled .x-button`).
       const subject = compounds[compounds.length - 1] ?? '';
       const hit = compounds.some((compound) => LOCKED.test(compound) && buttonish(compound))
@@ -2253,7 +2247,7 @@ function filledButtons(): Array<{ file: string; className: string }> {
 
 /**
  * Disabled looks of their own, outside the shared file, that the app-wide
- * sweep still has to fold in (GM answer 6: "otherwise it goes on the sweep
+ * sweep still has to fold in (design: "otherwise it goes on the sweep
  * list"). This list only shrinks: a new button style with a disabled look of
  * its own fails below until it is in the shared rule (or, with a reason, here).
  */
@@ -2300,21 +2294,21 @@ const SWEEP_LATER = new Set([
   'styles/slava-restraint.css: editor-transport__range',
   'styles/world-preview.css: world-modal__button',
   // PR #198's own, kept through the merge with #200 and listed for the same
-  // sweep: the canvas notice's held and locked buttons (GM r33's token set,
-  // canvasProposals.css; its filled look differs from this file's, a GM
+  // sweep: the canvas notice's held and locked buttons (design's token set,
+  // canvasProposals.css; its filled look differs from this file's, a design
   // call), the Cinema fieldset's dimming for checkboxes, swatches and
-  // sliders (round 5), and the editor's clip presets (GM r18, beside
+  // sliders, and the editor's clip presets (design, beside
   // editor-transport__btn above).
   'styles/canvasProposals.css: canvas-undo-notice button',
   'styles/cinema-studio.css: cinema-offline-lock button',
   'styles/slava-restraint.css: editor-transport__preset',
 ]);
 
-describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey whatever the reason', { timeout: 120_000 }, () => {
+describe('design and PR #200: a disabled button is neutral grey whatever the reason', { timeout: 120_000 }, () => {
   const shared = readFileSync(join(SRC, SHARED), 'utf8');
   const rules = cssRules(shared);
-  // The two list rules (fix round 3 added smaller ones for no-label buttons beside them).
-  // Round 25 of PR #198 (GM r37, option c): the list rules read GM r33's
+  // The two list rules (a later change added smaller ones for no-label buttons beside them).
+  // PR #198 (design): the list rules read design's
   // token set, the filled one the grey fill (--disabled-fill).
   const filledRule = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--disabled-fill[,)]/.test(body)
     && /\.create-composer__generate\b/.test(selector));
@@ -2335,7 +2329,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
       // A notice button's first ~150 ms held (useHeldLook) keeps its own look.
       expect(rule.selector).toMatch(/\[aria-disabled=['"]?true['"]?\]:not\(\[data-held-pending\]\)/);
     }
-    // GM r37 option c: GM r33's tokens, by kind of button.
+    // Design: design's tokens, by kind of button.
     expect(filledRule!.body).toMatch(/color:\s*var\(--disabled-fill-label[,)]/);
     expect(unfilledRule!.body).toMatch(/color:\s*var\(--disabled-label[,)]/);
     // The unfilled rule comes first: a filled style wins for a button that has both classes.
@@ -2348,7 +2342,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(app.indexOf('disabled-buttons.css')).toBeGreaterThan(app.indexOf('slava-restraint.css'));
   });
 
-  it('the fill parser reads every colour form (review 2 SOLIDFILL): rgb(), rgba(), hsl(), gradients; translucent surfaces are no fill', () => {
+  it('the fill parser reads every colour form (SOLIDFILL): rgb(), rgba(), hsl(), gradients; translucent surfaces are no fill', () => {
     const fills: Record<string, boolean> = {
       'background: #ff5a1f;': true, 'background: rgb(255, 90, 31);': true, 'background: rgba(255,90,31,1);': true,
       'background: rgb(255 255 255 / 0.9);': true, 'background: hsl(16 100% 56%);': true, 'background: hsla(16, 100%, 56%, 0.9);': true,
@@ -2362,9 +2356,9 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(wrong).toEqual([]);
   });
 
-  // Fix round 3 (review 3 LOW-6, ratchet3.facts.json "colour"): its false
+  // The ratchet3.facts.json "colour" corpus: its false
   // positives and misses, and :is() lists split at their top-level commas.
-  it('the fill parser (review 3): suffixed tokens and half-alpha white are no fill; color-mix, oklch, named colours, layers are', () => {
+  it('the fill parser: suffixed tokens and half-alpha white are no fill; color-mix, oklch, named colours, layers are', () => {
     const fills: Record<string, boolean> = {
       'background: var(--sr-accent-soft);': false, 'background: var(--sr-ink-faint);': false, 'background: var(--sr-accent-hover-soft);': false,
       'background: rgba(255, 255, 255, 0.5);': false,
@@ -2381,7 +2375,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(wrong).toEqual([]);
   });
 
-  it(':is() lists are split at top-level commas (review 3: `.toast:is(.a, .b) .toast__undo` styles the undo)', () => {
+  it(':is() lists are split at top-level commas (`.toast:is(.a, .b) .toast__undo` styles the undo)', () => {
     expect(selectorsOf('.toast:is(.a, .b) .toast__undo').map(subjectClass)).toEqual(['toast__undo', 'toast__undo']);
     expect(selectorsOf('.x:is(.primary, .y), .z')).toEqual(['.x.primary', '.x.y', '.z']);
     expect(selectorsOf(':is(.a, .b):is(:disabled, [aria-disabled])').length).toBe(4);
@@ -2391,7 +2385,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     const found = filledButtons();
     expect(found.map((item) => item.className)).toEqual(expect.arrayContaining(['cinema-shot-panel__action--primary', 'create-composer__generate',
       'project-home__new', 'project-switch-toast__back', 'project-home__danger', 'prompt-dialog__danger', 'mask-painter__save',
-      // Review 2 M-3: the toast's white Undo, Redo and Open copy (rgb()), and the board toast's.
+      // The toast's white Undo, Redo and Open copy (rgb()), and the board toast's.
       'canvas-undo-notice__action', 'moodboard-board-toast__action']));
     const uncovered = found.filter(({ className }) => !covered(className));
     expect(uncovered.map(({ file, className }) => `${file}: .${className}`)).toEqual([]);
@@ -2424,7 +2418,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(gone, 'swept: drop these from SWEEP_LATER').toEqual([]);
   });
 
-  // PR #198 round 25 (review 23 MEDIUM-1, GM r37 option c): one look for
+  // PR #198 (design): one look for
   // every reason. Cinema's offline rule painted its buttons with !important
   // (transparent, the 0.06 edge) over this file's look, so Generate shot read
   // one way offline and another following, and the checks above missed it:
@@ -2442,12 +2436,12 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(found).toEqual([]);
   });
 
-  // PR #198 review 24 NIT-2: the check above missed the border shorthand,
+  // PR #198: the check above missed the border shorthand,
   // background-image, opacity, box-shadow, outline-color, [disabled]
   // selectors and a label inside a locked button. The reviewer's crafted
   // sheet, each case named: the first eleven are caught, the last two
   // (an enabled hover, an uncovered class) are not.
-  it('review 24 NIT-2: the !important check catches every paint and every locked form, with no false positives', () => {
+  it('the !important check catches every paint and every locked form, with no false positives', () => {
     const cases: [string, boolean][] = [
       ['.proposal-bar__button:disabled { background: #333 !important; }', true],
       ['button[data-offline-disabled] { color: red !important; }', true],
@@ -2462,7 +2456,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
       ['.proposal-bar__button:is(:disabled, [aria-disabled=\'true\']) > svg { color: red !important; }', true],
       ['.proposal-bar__button:not(:disabled):hover { background: #555 !important; }', false],
       ['.some-uncovered-thing:disabled { color: red !important; }', false],
-      // Review 1 of PR #205 (NIT-2): the forms that slipped through.
+      // PR #205: the forms that slipped through.
       ['.proposal-bar__button:disabled svg { fill: red !important; }', true],
       ['.proposal-bar__button:disabled svg { stroke: red !important; }', true],
       ['.proposal-bar__button:disabled { filter: brightness(2) !important; }', true],
@@ -2477,16 +2471,16 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     for (const [css, caught] of cases) expect(importantPaintOnLocked(css, 'zz_cases.css', covered).length > 0, css).toBe(caught);
   });
 
-  // Fix round 2 of PR #200 (review 2 M-1, GM 2026-10-28 answers 2 and 3):
+  // PR #200 (design 2026-10-28):
   // one shared grey, so every listed control's enabled look is brighter than
   // it: its label contrast above the grey's, and its disabled outline never
   // brighter than its own enabled edge. Measured on the canvas's black from
   // the stylesheets (tokens resolved), as the live check measures it.
-  it('M-1: every listed control is dimmer disabled than enabled (label contrast lower, outline never brighter)', () => {
+  it('every listed control is dimmer disabled than enabled (label contrast lower, outline never brighter)', () => {
     const report = disabledLooks();
     const brighter = report.filter((row) => row.problem).map((row) => `${row.className}: ${row.problem}`);
     expect(brighter).toEqual([]);
-    // The ones review 2 measured: raised to the normal ink.
+    // The ones the earlier review measured: raised to the normal ink.
     for (const name of ['cinema-shots-rail__add', 'cinema-shots-rail__remove', 'cinema-shared-controls__swatch-add', 'chat__codeblock-apply']) {
       const row = report.find((item) => item.className === name);
       expect(row, name).toBeDefined();
@@ -2494,16 +2488,16 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     }
   });
 
-  // Fix round 3 of PR #200 (review 3 N-5 and LOW-2): "clearly dimmer" is a
+  // PR #200: "clearly dimmer" is a
   // floor, and modifiers count; the toolbar's red Delete was 6.9:1 → 6.3:1.
-  // Fix round 4 (GM round 5 answer 2): the floor is 1.25×, the red about 8:1.
-  it('N-5: an unfilled control\'s enabled label is at least 1.25× the grey; the red Delete is measured and clears it', () => {
+  // Design: the floor is 1.25×, the red about 8:1.
+  it('an unfilled control\'s enabled label is at least 1.25× the grey; the red Delete is measured and clears it', () => {
     const report = disabledLooks();
     const danger = report.find((row) => row.className === 'selection-toolbar__button--danger');
     expect(danger, 'the modifier is measured').toBeDefined();
     expect(danger!.disabled.label).toBeLessThanOrEqual(CLEARLY_DIMMER * danger!.enabled.label);
     expect(report.find((row) => row.className === 'prompt-dialog__destructive')!.enabled.label).toBeGreaterThanOrEqual(danger!.disabled.label / CLEARLY_DIMMER);
-    // On the toolbar's own surface, not black (fix round 3: the live check
+    // On the toolbar's own surface, not black (the live check
     // drew #ff968a at 8.8:1 against the grey's 6.2:1 there).
     const toolbar = cssRules(readFileSync(join(SRC, 'styles/canvas.css'), 'utf8')).find((rule) => rule.selector.trim() === '.selection-toolbar');
     const surface = over(parseColor(/background:\s*([^;]+)/.exec(toolbar!.body)![1])!, CANVAS);
@@ -2511,7 +2505,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     const grey = parseColor(resolveFill('var(--sr-disabled-ink)', fillTokens()))!;
     expect(contrast(over(grey, surface), surface)).toBeLessThanOrEqual(CLEARLY_DIMMER * contrast(over(red, surface), surface));
     for (const [name, reason] of Object.entries(ACCENT_GHOSTS)) expect(reason.trim(), name).not.toBe('');
-    // GM round 5 answer 2: a true red (hue about 5°, never the salmon
+    // Design: a true red (hue about 5°, never the salmon
     // #ffa395 at 8°), about 8:1 on the toolbar, the hover brighter.
     const hue = ({ r, g, b }: Rgba) => { const max = Math.max(r, g, b); const min = Math.min(r, g, b); return max === r ? 60 * (((g - b) / (max - min)) % 6) : NaN; };
     expect(hue(red)).toBeLessThanOrEqual(6);
@@ -2522,7 +2516,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(hue(hover)).toBeLessThanOrEqual(6);
   });
 
-  it('M-3: no-label buttons have a disabled look of their own; the selected one keeps a grey mark', () => {
+  it('no-label buttons have a disabled look of their own; the selected one keeps a grey mark', () => {
     const shared = cssRules(readFileSync(join(SRC, SHARED), 'utf8'));
     for (const [name, { image, selected }] of Object.entries(NO_LABEL)) {
       const own = shared.filter(({ selector }) => /^:is\([^)]*\):is\(:disabled/.test(selector) && new RegExp(`\\.${name}(?:\\s[^,)]*)?[,)]`).test(selector.slice(0, selector.indexOf('):is(:disabled') + 1)));
@@ -2543,10 +2537,10 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     }
   });
 
-  // Fix round 4 of PR #200 (review 4 LOW-3, GM round 5 answer 1): a locked
+  // PR #200 (design): a locked
   // colour swatch keeps its hue, dims to 0.45 with the disabled edge, and
   // never changes on hover; a variation (the image is the button) greys.
-  it('LOW-3: locked colour swatches dim to 0.45 (the Inspector chip stays full, GM r20 on #208) with the grey edge and keep their hue; variations stay greyscale', () => {
+  it('locked colour swatches dim to 0.45 (the Inspector chip stays full, design on #208) with the grey edge and keep their hue; variations stay greyscale', () => {
     const shared = cssRules(readFileSync(join(SRC, SHARED), 'utf8'));
     for (const name of Object.keys(NO_LABEL).filter((key) => NO_LABEL[key].swatch)) {
       const rule = shared.find(({ selector }) => new RegExp(`\\.${name}(?![\\w-])`).test(selector) && /:disabled/.test(selector) && /:hover/.test(selector));
@@ -2560,7 +2554,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
     expect(variation!.body).toMatch(/grayscale\(1\)/);
   });
 
-  it('M-1: the disabled outline is the plain edge (0.06), never the brighter 0.12; M-3: a disabled toast action never changes on hover', () => {
+  it('the disabled outline is the plain edge (0.06), never the brighter 0.12; a disabled toast action never changes on hover', () => {
     const tokens = cssTokens();
     expect(parseColor(resolveVar('var(--sr-disabled-edge)', tokens))?.a).toBeCloseTo(0.06, 3);
     for (const name of ['canvas-undo-notice__action', 'moodboard-board-toast__action']) {
@@ -2580,7 +2574,7 @@ describe('GM r24 item 2 and PR #200 answer 6: a disabled button is neutral grey 
   });
 });
 
-// ── Fix round 2 of PR #200: the looks the M-1 test measures ────────────────
+// ── PR #200: the looks the "every listed control is dimmer disabled" test measures ────────────────
 
 /** Custom properties as the dark theme defines them (:root and
  * body.app-slava-restraint; the first definition wins, as the sheets load). */
@@ -2651,49 +2645,48 @@ function restingLook(className: string, tokens: Map<string, string>): { color?: 
   return look;
 }
 
-/** Buttons with no text label (fix round 3 of PR #200, review 3 M-3: the
+/** Buttons with no text label (PR #200: the
  * old NO_LABEL list let them skip the check, and the variation looked the
  * same disabled). Each is checked for a disabled look of its own below
  * (noLabelLooks): an image dims (opacity at most the shared grey's 0.55,
  * greyscale), a cell stays unfilled; the selected one keeps a grey mark. */
 const NO_LABEL: Record<string, { image: boolean; selected: RegExp | null; swatch?: boolean; fullColour?: boolean; edgeKept?: boolean }> = {
   'cinema-shot-panel__variation': { image: true, selected: /\.cinema-shot-panel__variation--active/ },
-  // GM, PR #198 r39 item 1: the chosen cell is a chosen state, not a disabled
+  // Design, PR #198: the chosen cell is a chosen state, not a disabled
   // one: no selected rule of its own here; locked, the cell's disabled look covers it.
   'remotion-properties-panel__anchor-button': { image: false, selected: null },
-  // Fix round 4 (review 4 N-7): the Projects cover picker, disabled while busy.
+  // The Projects cover picker, disabled while busy.
   // Its edge is transparent at rest and stays so disabled.
   'project-home__cover-choice': { image: true, selected: /\.project-home__cover-choice\[aria-pressed='true'\]/, edgeKept: true },
-  // Fix round 4 (review 4 LOW-3; GM round 5 answer 1): colour swatches keep
+  // Design: colour swatches keep
   // their hue (the colour is the content), dimmed, no selected state.
   'cinema-shared-controls__swatch': { image: false, selected: null, swatch: true },
-  // GM r20 on #208: the Inspector palette's chip is the content, always at
+  // Design on #208: the Inspector palette's chip is the content, always at
   // its full colour; only its edge greys.
   'inspector__palette-color': { image: false, selected: null, swatch: true, fullColour: true },
 };
-/** "Clearly dimmer" (GM r1 answer 2), fix round 3 of PR #200 (review 3
- * N-5), set by GM in round 5 (answer 2): the red Delete "clearly above the
+/** "Clearly dimmer" (design), PR #200, set by design: the red Delete "clearly above the
  * disabled 6.2:1, aiming for about 8:1", so an enabled label at least 1.25
  * times the disabled grey's contrast (8.0 against 6.2 is 1.29). The neutral
  * controls sit near 2× (17.6:1 or 12.5:1 against 6.3:1); a coloured label
  * that greys must clear it by brightness, not by its hue change alone. */
 const CLEARLY_DIMMER = 0.8;
-/** Ghost buttons whose label is the brand accent (GM, PR #200 round 5
- * answer 1: "an orange label and outline, not a fill, so it follows the
+/** Ghost buttons whose label is the brand accent (design, PR #200:
+ * "an orange label and outline, not a fill, so it follows the
  * ghost rule"): the accent isn't lightened, and the label greys at about
  * its luminance, so the outline carries the change: enabled it must be
  * clearly brighter than the disabled edge (a hue-only change is invisible
  * to colour-blind users). */
 const ACCENT_GHOSTS: Record<string, string> = {
-  'prompt-dialog__confirm': 'Send note and the other dialog confirms: the accent label (6.7:1) and outline; disabled, both go to the shared grey (GM round 5 answer 1)',
+  'prompt-dialog__confirm': 'Send note and the other dialog confirms: the accent label (6.7:1) and outline; disabled, both go to the shared grey (design)',
 };
 /** How much brighter an accent ghost's enabled outline is than the disabled edge. */
 const OUTLINE_DROP = 1.25;
 /** Filled buttons whose enabled label is under the grey's contrast: the fill
- * shows the state (GM r2 answer 6, "Generate shot's contrast: no change; its
+ * shows the state (design, "Generate shot's contrast: no change; its
  * fill shows the state"). Each still turns from its fill to the grey fill,
  * which the test checks is dimmer. */
-// Round 25 of PR #198 (GM r37 option c): the grey fill's dark label is
+// PR #198 (design): the grey fill's dark label is
 // dimmer than every enabled filled label, white on the accent (2.9:1) and on
 // the agent's colour included, so none needs this any more (Generate and
 // Accept left it; the test below keeps the list true).
@@ -2703,8 +2696,8 @@ function disabledLooks() {
   const tokens = cssTokens();
   const shared = readFileSync(join(SRC, SHARED), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const lists = [...shared.matchAll(/:is\(([^)]*)\):is\(:disabled[^{]*\{([^}]*)\}/g)].map((m) => ({ classes: [...m[1].matchAll(/\.([\w-]+)/g)].map((c) => c[1]), body: m[2] }));
-  // GM r37 option c: a filled button's label is the dark one on the grey
-  // fill, a ghost button's the grey label (GM r33's token set).
+  // Design: a filled button's label is the dark one on the grey
+  // fill, a ghost button's the grey label (design's token set).
   const ghostInk = parseColor(resolveVar('var(--disabled-label)', tokens))!;
   const fillInk = parseColor(resolveVar('var(--disabled-fill-label)', tokens))!;
   const greyFill = parseColor(resolveVar('var(--disabled-fill)', tokens))!;
@@ -2712,7 +2705,7 @@ function disabledLooks() {
   const rows: Array<{ className: string; enabled: { label: number; edge: number }; disabled: { label: number; edge: number }; problem: string | null }> = [];
   const seen = new Set<string>();
   const listed = new Set(lists.flatMap(({ classes }) => classes));
-  // Review 3 N-5: a listed class's modifiers (`__button--danger`) are
+  // A listed class's modifiers (`__button--danger`) are
   // measured too: the shared rule greys them as well.
   const modifiers = (className: string) => {
     const found = new Set<string>();
@@ -2746,7 +2739,7 @@ function disabledLooks() {
       const disabledLabel = contrast(over(ink, disabledBg), disabledBg);
       let problem: string | null = null;
       // A filled modifier the unfilled rule greys (the toolbar's orange Run):
-      // its fill goes, which shows the state (GM r4 answer 3).
+      // its fill goes, which shows the state (design).
       const fillGoes = !filled && fill.a >= 0.5;
       if (!NO_LABEL[className] && !fillGoes) {
         if (!label) problem = `no resting label colour found (${JSON.stringify(look)})`;
@@ -2759,7 +2752,7 @@ function disabledLooks() {
         } else if (!filled && ACCENT_GHOSTS[className]) {
           if (enabledEdge < OUTLINE_DROP * disabledEdge) problem = `an accent ghost: its outline ${enabledEdge.toFixed(2)}:1 is not clearly brighter than the disabled edge ${disabledEdge.toFixed(2)}:1, so only the hue changes`;
         } else if (!filled && disabledLabel > CLEARLY_DIMMER * enabledLabel) {
-          // A filled button shows its state in the fill (GM r4 answer 3);
+          // A filled button shows its state in the fill (design);
           // an unfilled one only by its label.
           problem = `disabled label ${disabledLabel.toFixed(2)}:1 is not clearly dimmer than enabled ${enabledLabel.toFixed(2)}:1 (at most ${(CLEARLY_DIMMER * enabledLabel).toFixed(2)}:1)`;
         }
@@ -2771,22 +2764,22 @@ function disabledLooks() {
   return rows;
 }
 
-// Fix rounds 7 to 9 of PR #200 (GM r11 answer 3, verbatim: "Grep for any
+// PR #200 (design, verbatim: "Grep for any
 // other hard-coded reds or orange on destructive actions, so the rule is
 // enforced in code (a ratchet), not by eye."). THE RULE, by what the action
-// does, not how the control looks (GM r13, and r14's calls):
+// does, not how the control looks (design's calls):
 // - Red: it deletes a standalone thing (project, node, asset, result, agent, API key, app token), or wipes a whole surface (Clear, Purge, Discard). Undo doesn't change this (node Delete stays red).
 // - Neutral: it takes an item out of a list inside the thing you're editing (chips, swatches, tags, a shot in a scene, an item on a board, a character view).
-// GM r16 answer 1: Krea Disconnect is red; an agent's Sign out is neutral
+// Design: Krea Disconnect is red; an agent's Sign out is neutral
 // (it deletes only the stored Google login, which signing in brings back).
-// Controls are found by their words (review 8 LOW-2, review 9 LOW-4); the
+// Controls are found by their words; the
 // words say the kind first and the class must agree; the colours are checked
 // per rule (focus rules too, all but the ring) and per control through the
 // cascade, colour inherited from its ancestors included. The machinery is
 // tests/helpers/destructiveRule.ts.
 // It parses every stylesheet and walks every TSX file: a few seconds alone,
 // past vitest's 5 s default under the full suite (it timed out there).
-describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thing or wipes a surface, an edit stays neutral, and orange marks neither', { timeout: 120_000 }, () => {
+describe('red marks what deletes a standalone thing or wipes a surface, an edit stays neutral, and orange marks neither', { timeout: 120_000 }, () => {
   const sheets = appCss();
   const vars = customProperties(sheets);
   const controls = appControls();
@@ -2794,7 +2787,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
   it('every control that names an action (Delete, Clear, Discard, Purge, Trash, Remove, Erase, Empty, Revoke, Forget) says its kind in its class', () => {
     expect(controls.length).toBeGreaterThanOrEqual(61);
     expect(controls.filter((control) => !control.kind).map((c) => `${c.file}:${c.line} ${c.name}`)).toEqual([]);
-    // Review 8's controls, each seen with GM r14's kind.
+    // The earlier review's controls, each seen with design's kind.
     const kindAt = (file: string, name: RegExp) => controls.filter((c) => c.file === file && name.test(c.name)).map((c) => c.kind);
     expect(kindAt('components/moodboard-studio/MoodboardStudioView.tsx', /^(Delete|Move to Recently deleted)$/)).toEqual(['red']);
     expect(kindAt('components/character-studio/CharacterStudioToolbar.tsx', /^(Delete|Move to Recently deleted)$/)).toEqual(['red']);
@@ -2807,16 +2800,16 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(kindAt('components/panels/MaskPainterModal.tsx', /^Clear$/)).toEqual(['red']);
     expect(kindAt('components/panels/ChatPanel.tsx', /^Remove image$/)).toEqual(['neutral']);
     expect(kindAt('components/commons/CommonsEvaluation.tsx', /^Remove accent/)).toEqual(['neutral']);
-    // The row's trigger and confirm, and Empty's confirm with one project (GM r102).
+    // The row's trigger and confirm, and Empty's confirm with one project (design).
     expect(kindAt('components/projects/ProjectHome.tsx', /^Delete forever$/)).toEqual(['red', 'red', 'red']);
     expect(kindAt('components/asset-trash/AssetTrash.tsx', /^Delete forever$/)).toEqual(['red', 'red']);
   });
 
-  it('review 9 LOW-4: the words say the kind first; the class must agree (a red word on a neutral class only where reviewed)', () => {
+  it('the words say the kind first; the class must agree (a red word on a neutral class only where reviewed)', () => {
     expect(controls.length).toBeGreaterThanOrEqual(72);
     expect(controls.flatMap((control) => wordFindings(control))).toEqual([]);
     const kindAt = (file: string, name: RegExp) => controls.filter((c) => c.file === file && name.test(c.name)).map((c) => c.kind);
-    // The ten review 9 found (GM r16 answer 1 for the last two).
+    // The ten the later review found (design for the last two).
     expect(kindAt('components/cinema-studio/CinemaShotPanel.tsx', /^Reset shot (palette|look) to scene$/)).toEqual(['neutral', 'neutral']);
     expect(kindAt('components/editor/EditorTransport.tsx', /^Reset zoom/)).toEqual(['neutral']);
     expect(kindAt('components/nodes/WorldPreview.tsx', /^Reset camera$/)).toContain('neutral');
@@ -2825,18 +2818,18 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(kindAt('components/panels/Inspector.tsx', /favorites/)).toEqual(['neutral']);
     expect(kindAt('components/panels/settings/KreaSignInRow.tsx', /^Disconnect$/)).toEqual(['red']);
     expect(kindAt('components/panels/settings/PersonalAgentsSection.tsx', /^Sign out$/)).toEqual(['neutral']);
-    // The two reviewed red words on neutral controls (GM r14), pinned.
+    // The two reviewed red words on neutral controls (design), pinned.
     expect(kindAt('components/commons/CommonsFilters.tsx', /^clear$/)).toEqual(['neutral']);
     expect(kindAt('components/create-studio/ResultsGallery.tsx', /^Clear$/)).toEqual(['neutral']);
     expect(wordKind('Clear', 'components/other/Elsewhere.tsx')).toBe('red');
     expect(wordKind('Remove')).toBeNull();
   });
 
-  it('review 9 NIT-2: pressed, every red control\'s text goes to the lighter red', () => {
+  it('pressed, every red control\'s text goes to the lighter red', () => {
     expect(controls.flatMap((control) => pressedFindings(control))).toEqual([]);
   });
 
-  it('corpus (review 9 LOW-4): every form that hid a control is found, and its words decide', () => {
+  it('corpus: every form that hid a control is found, and its words decide', () => {
     const one = (tsx: string) => controlsIn(tsx, 'probe.tsx').map((c) => [c.name, c.kind]);
     expect(one('const A = () => <button className="x__go" aria-label={t("actions.delete")}>x</button>;')).toEqual([['actions.delete', null]]);
     expect(one('const A = () => <button className="x__go" aria-label={strings.deleteProject}>x</button>;')).toEqual([['delete Project', null]]);
@@ -2876,7 +2869,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(words('const A = () => <button className="x__reset">Clear search</button>;')).toEqual([]);
   });
 
-  it('corpus (review 9 LOW-4): every colour form that hid an orange is caught, focus rules and inherited colour included', () => {
+  it('corpus: every colour form that hid an orange is caught, focus rules and inherited colour included', () => {
     const caught = (css: string) => ruleFindings(css, 'probe.css', customProperties([{ css }]));
     for (const css of [
       '.x__delete:focus-visible { color: #ff5a1f; background: #ff5a1f; }',
@@ -2908,9 +2901,9 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.x__erase:hover { color: var(--sr-danger-ink); }',
     ]) expect(caught(css), css).not.toEqual([]);
     for (const css of [
-      // A focus ring may be any colour the keyboard-ring rule gives it (r17).
+      // A focus ring may be any colour the keyboard-ring rule gives it.
       '.x__delete:focus-visible { outline: 2px solid var(--sr-accent); box-shadow: 0 0 0 2px var(--sr-accent); }',
-      // Review 8's false flags still quiet: a classed descendant is its own control.
+      // The earlier review's false flags still quiet: a classed descendant is its own control.
       '.panel--danger .panel__run { color: var(--sr-accent); }',
       '.x__delete .x__count { color: var(--sr-accent); }',
       '.x__delete:hover { color: var(--sr-danger-ink,#FF887D); }',
@@ -2933,7 +2926,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(controls.flatMap((control) => cascadeFindings(control, vars))).toEqual([]);
   });
 
-  it('GM r18: no frame around a red control is amber, warning or accent (Forget ID sat in an amber box)', () => {
+  it('no frame around a red control is amber, warning or accent (Forget ID sat in an amber box)', () => {
     expect(controls.flatMap((control) => frameFindings(control, vars))).toEqual([]);
     // The real Delete note sees the rest of the card beside it (its `near`), and passes. The card has
     // no left status edge (design: no accent edge on a card), so nothing on it takes a presence colour.
@@ -2943,23 +2936,23 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(nearClasses).not.toContain('canvas-pin__edge');
   });
 
-  it('GM r18 corpus: an amber, warning, accent or warm frame is caught at rest and on hover; neutral and red frames stay quiet', () => {
+  it('corpus: an amber, warning, accent or warm frame is caught at rest and on hover; neutral and red frames stay quiet', () => {
     const vars0 = customProperties(appCss());
     const forget = { file: 'probe.tsx', line: 1, name: 'Forget ID', kind: 'red' as const, classes: ['x__forget'],
       ancestors: [['section', ['probe-box']], ['div', ['probe-row']]] as Array<[string, string[]]> };
     for (const css of [
-      // Round 11's own safeguards box, before this round.
+      // An earlier version's own safeguards box.
       '.probe-box { border: 1px solid color-mix(in srgb, var(--sr-warning, #f5c518) 40%, transparent); }',
       '.probe-box { background: color-mix(in srgb, var(--sr-warning, #f5c518) 10%, transparent); }',
       '.probe-box { border: 1px solid #66471f; }',
       '.probe-row:hover { outline: 1px solid #f5c518; }',
       '.probe-row { box-shadow: 0 0 0 1px var(--sr-accent); }',
       '.probe-box { border-left: 3px solid #e8a33d; }',
-      // Amber by hue, not the presence variable: still caught (GM r20 Q3).
+      // Amber by hue, not the presence variable: still caught (design).
       '.probe-box { border-left: 3px solid var(--sr-warning); }',
       '.probe-box { border: 3px solid var(--sr-warning); }',
       '.probe-box:hover { border-color: #ff5a1f; }',
-      // Review 12 NIT-2: every state, pseudo-element, gradient, shadow and alias.
+      // Every state, pseudo-element, gradient, shadow and alias.
       'body.app-slava-restraint .probe-row:focus-within { outline: 1px solid #f5c518; }',
       'body.app-slava-restraint .probe-row:active { box-shadow: 0 0 0 1px #ff5a1f; }',
       'body.app-slava-restraint .probe-box::before { content: ""; position: absolute; inset: 0; border: 1px solid #f5c518; }',
@@ -3022,10 +3015,10 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.probe-row { border-color: var(--sr-danger-edge); background: var(--sr-danger-tint); }',
       // A focus ring is the keyboard-ring rule's to judge, not a frame.
       '.probe-row:focus-visible { outline: 2px solid var(--sr-accent); }',
-      // focus_visible_box (reviews 13-17): left open on purpose (GM r17,
-      // kept in GM r31). An ancestor's own keyboard ring, even a warm one
+      // focus_visible_box: left open on purpose (design ruling, kept by a later
+      // design ruling). An ancestor's own keyboard ring, even a warm one
       // round a red control, belongs to the ring rule, so this check passes it.
-      // Closing it would reverse r17; that takes a new GM ruling.
+      // Closing it would reverse an earlier ruling; that takes a new design ruling.
       'body.app-slava-restraint .probe-box:focus-visible { outline: 2px solid #ff5a1f; }',
     ]) expect(frameFindings(forget, vars0, css), css).toEqual([]);
     // A neutral control may sit in a warning box; only red ones are framed.
@@ -3042,7 +3035,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(menuItemFindings("const items = [{ label: 'Delete', action: del, danger: true }];", 'probe.tsx')).toEqual([]);
   });
 
-  it('corpus (review 8 LOW-2): every form that hid a control is found', () => {
+  it('corpus: every form that hid a control is found', () => {
     const found = (tsx: string) => controlsIn(tsx, 'probe.tsx').map((c) => c.name);
     expect(found('<button>Delete</button>')).toEqual(['Delete']);
     expect(found('<button title="Delete this">x</button>')).toEqual(['Delete this']);
@@ -3057,7 +3050,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(found('<button><Trash2 size={14} /> Clear</button>')).toEqual(['Clear']);
     expect(found("function Confirm({ label }: { label: string }) { return <button className=\"x__go\">{label}</button>; }\nconst A = () => <Confirm label=\"Delete forever\" />;"))
       .toEqual(['Delete forever']);
-    // A toggle is seen too (review 9 LOW-4: the favourite star, the Erase tool); its words still need a kind.
+    // A toggle is seen too (the favourite star, the Erase tool); its words still need a kind.
     expect(found('<button aria-pressed={on} aria-label={on ? "Remove from favorites" : "Add"}>★</button>')).toEqual(['Remove from favorites']);
     expect(controlsIn('<button className="x__action">Delete</button>', 'probe.tsx')[0].kind).toBeNull();
     expect(controlsIn('<button className="x__action x__action--delete">Delete</button>', 'probe.tsx')[0].kind).toBe('red');
@@ -3065,7 +3058,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(controlsIn('<button className="chip__remove" aria-label="Remove neon">×</button>', 'probe.tsx')[0].kind).toBe('neutral');
   });
 
-  it('corpus (review 8 LOW-2): every colour form that hid an orange is caught', () => {
+  it('corpus: every colour form that hid an orange is caught', () => {
     const caught = (css: string) => ruleFindings(css, 'probe.css', customProperties([{ css }]));
     const bad = [
       '.x__delete:hover { color: hsl(15 90% 60%); }',
@@ -3087,7 +3080,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.x__reset:hover { color: var(--sr-accent); }',
     ];
     for (const css of bad) expect(caught(css), css).not.toEqual([]);
-    // Review 8's false flags stay quiet, and so do the tokens.
+    // The earlier review's false flags stay quiet, and so do the tokens.
     const good = [
       '.save-status--cleared { color: #f59e0b; }',
       '.tool--remove-bg:hover { color: var(--sr-accent); }',
@@ -3109,7 +3102,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
 
   it('corpus: the cascade check catches a shared class\'s hover winning over a control\'s own', () => {
     const vars0 = customProperties(appCss());
-    // Moodboard Studio's Delete as review 8 found it: only the shared toolbar class (amber on hover).
+    // Moodboard Studio's Delete as the earlier review found it: only the shared toolbar class (amber on hover).
     const before = { file: 'probe.tsx', line: 1, name: 'Delete', kind: 'red' as const, classes: ['moodboard-studio-toolbar__button'], ancestors: [] as Array<[string, string[]]> };
     expect(cascadeFindings(before, vars0).join('\n')).toMatch(/#f59e0b/);
     expect(cascadeFindings({ ...before, classes: ['moodboard-studio-toolbar__button', 'moodboard-studio-toolbar__button--delete'] }, vars0)).toEqual([]);
@@ -3121,7 +3114,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(notRedFindings({ ...before, classes: ['x__action--delete'] })).not.toEqual([]);
   });
 
-  it('review 10 NIT-4: the label forms it missed are read', () => {
+  it('the label forms the first corpus missed are read', () => {
     const found = (tsx: string, file = 'probe.tsx') => controlsIn(tsx, file).map((c) => c.name);
     expect(found('const L = { del: "Delete" }; const A = () => <button className="x__go" aria-label={L.del}>x</button>;')).toEqual(['Delete']);
     expect(found('const label = () => "Delete"; const A = () => <button className="x__go" aria-label={label()}>x</button>;')).toEqual(['Delete']);
@@ -3145,7 +3138,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(found('const A = () => <button className="x__go" aria-label={nameOf(removedNode())}>x</button>;')).toEqual([]);
   });
 
-  it('review 11 NIT-4: the label forms and toggle states it still missed', () => {
+  it('the label forms and toggle states the second corpus still missed', () => {
     const found = (tsx: string) => controlsIn(tsx, 'probe.tsx').map((c) => c.name);
     expect(found('const L = { a: { del: "Delete" } }; const A = () => <button className="x__go" aria-label={L.a.del}>x</button>;')).toContain('Delete');
     expect(found('const L = { del: "Delete" }; const A = () => <button className="x__go" aria-label={L["del"]}>x</button>;')).toContain('Delete');
@@ -3173,11 +3166,11 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     expect(cascadeFindings(del, vars0, '.x__delete:hover svg { stroke: var(--sr-accent); }').join('\n')).toMatch(/:hover svg stroke/);
   });
 
-  it('review 10 LOW-1 (GM r17 item 1): a toggle may be the accent only when on; off, hovering it can\'t look on', () => {
+  it('a toggle may be the accent only when on; off, hovering it can\'t look on', () => {
     const vars0 = customProperties(appCss());
     const star = { file: 'p.tsx', line: 1, name: 'Remove from favorites', kind: 'neutral' as const, toggle: true,
       classes: ['x__star', 'x__star--active', 'x__favorite-remove'], ancestors: [] };
-    // Round 10's rule: hover and on shared the accent.
+    // The earlier rule: hover and on shared the accent.
     const shared = 'body.app-slava-restraint .x__star:hover, body.app-slava-restraint .x__star--active { color: var(--sr-accent); }';
     expect(cascadeFindings(star, vars0, shared).some((f) => / \(off\) :hover color: /.test(f))).toBe(true);
     expect(cascadeFindings(star, vars0, shared).some((f) => / \(on\) /.test(f))).toBe(false);

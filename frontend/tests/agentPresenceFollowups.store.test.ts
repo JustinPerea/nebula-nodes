@@ -1,14 +1,14 @@
 /**
- * Follow-ups to PR #195 (agent presence): review 23's store findings, turned
+ * Follow-ups to PR #195 (agent presence): the review's store findings, turned
  * from its probes (r23store.probe.test.ts) into tests.
- * - L-2: a save on its way belongs to the canvas it was sent on. Undo of an
+ * - A save on its way belongs to the canvas it was sent on. Undo of an
  *   agent's clear takes only the landings of the canvas that clear replaced,
  *   never one sent on an earlier canvas whose node ids came back (TWOCLEARS).
- * - L-3: the kept note (GM r24 item 1 and the 2026-10-27 answers): the next
+ * - The kept note (design and the 2026-10-27 answers): the next
  *   note dialog starts with it and the notice closes; × or Esc keep the text
  *   as the draft; only sending, or clearing the field and closing, drops it;
  *   the notice's own × drops it. The notice gives the reason.
- * - L-5: a save already sent when a replacement with no agent lands, and then
+ * - A save already sent when a replacement with no agent lands, and then
  *   refused, gets the recovered copy too (COPY-INFLIGHT); one that lands
  *   makes none.
  */
@@ -178,7 +178,7 @@ const agentAdds = (canvas: string, value: string, id: string) => emit({ type: 'g
   nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input', label: 'Agent prompt', params: { value }, state: 'idle', outputs: {} } }] });
 const STALE = 'This canvas is out of date. Open the current project before editing or running it.';
 
-describe('L-2: a landing belongs to the canvas it was sent on', () => {
+describe('a landing belongs to the canvas it was sent on', () => {
   it('TWOCLEARS: Undo of the second clear restores the agent\'s "AG", not typing sent on the first canvas', async () => {
     let land200: (r: Response) => void = () => {};
     graphWrites.answer = (path, init) => (path === '/api/graph/node/n1' && init?.method === 'PUT'
@@ -201,7 +201,7 @@ describe('L-2: a landing belongs to the canvas it was sent on', () => {
     expect(valueOf('n1')).toBe('AG');
   });
 
-  it('the first clear still takes its own landing (review 22 L-1 holds)', async () => {
+  it('the first clear still takes its own landing (as before)', async () => {
     let land200: (r: Response) => void = () => {};
     graphWrites.answer = (path, init) => (path === '/api/graph/node/n1' && init?.method === 'PUT'
       ? new Promise<Response>((resolve) => { land200 = resolve; }) : Promise.resolve(answer()));
@@ -218,7 +218,7 @@ describe('L-2: a landing belongs to the canvas it was sent on', () => {
   });
 });
 
-describe('L-3: the kept note', () => {
+describe('the kept note', () => {
   beforeEach(() => resetPins());
   afterEach(() => resetPins());
 
@@ -264,7 +264,7 @@ describe('L-3: the kept note', () => {
     expect(pins.getState().draft).toBe('');
   });
 
-  it('the notice gives the reason, in GM\'s words: a replacement, a follow, a refusal', async () => {
+  it('the notice gives the reason, in design\'s words: a replacement, a follow, a refusal', async () => {
     pins.getState().compose({ nodeId: 'n1' });
     pins.getState().setDraft('after a clear');
     agentClear();
@@ -296,7 +296,7 @@ describe('L-3: the kept note', () => {
   });
 });
 
-describe('L-5: a save already sent when a no-agent replacement lands', () => {
+describe('a save already sent when a no-agent replacement lands', () => {
   const reconnect = (canvas: string, value: string) => emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION,
     canvasRevision: canvas, empty: false, edges: [],
     nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input', label: 'Other', params: { value }, state: 'idle', outputs: {} } }] });
@@ -336,13 +336,13 @@ describe('L-5: a save already sent when a no-agent replacement lands', () => {
   });
 });
 
-// ── Fix round 1 of PR #200 ──────────────────────────────────────────────────
+// ── PR #200 ──────────────────────────────────────────────────
 
-describe('fix round 1, GM 2026-10-27 answer 1 (review N-1): the draft belongs to its canvas', () => {
+describe('design 2026-10-27: the draft belongs to its canvas', () => {
   beforeEach(() => resetPins());
   afterEach(() => resetPins());
 
-  // Fix round 2 (GM 2026-10-28 answer 1): a draft closed on purpose gets no
+  // Design 2026-10-28: a draft closed on purpose gets no
   // line; it waits for its own project (agentPresenceFollowups.r2store).
   it('a draft closed with × on one project never prefills the next project\'s dialog, and gets no line', async () => {
     pins.getState().compose({ nodeId: 'n1' });
@@ -364,7 +364,7 @@ describe('fix round 1, GM 2026-10-27 answer 1 (review N-1): the draft belongs to
   });
 });
 
-describe('fix round 1, GM answer 4: what replaced the canvas, for the chat\'s Apply', () => {
+describe('what replaced the canvas, for the chat\'s Apply', () => {
   it('an agent\'s open names the agent and the project; an agent\'s clear says cleared', async () => {
     const { lastCanvasReplacement } = await import('../src/lib/canvasReplaced');
     agentOpens({ kind: 'agent', name: 'Codex' });
@@ -376,7 +376,7 @@ describe('fix round 1, GM answer 4: what replaced the canvas, for the chat\'s Ap
   });
 });
 
-describe('fix round 1, review L-4 and N-2: a recovered copy is always named by a line with Open copy', () => {
+describe('a recovered copy is always named by a line with Open copy', () => {
   const reconnect = (canvas: string, value: string) => emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION,
     canvasRevision: canvas, empty: false, edges: [],
     nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input', label: 'Other', params: { value }, state: 'idle', outputs: {} } }] });

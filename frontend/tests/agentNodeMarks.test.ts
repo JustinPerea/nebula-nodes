@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * The agent's mark on a node (Q125 item 3). GM - Design, 2026-10-25,
+ * The agent's mark on a node. Design, 2026-10-25,
  * verbatim: "Content: the agent's dot or ring, then its name, then the
  * status. For runs: “Running FLUX.2 [pro] · 0:41” (provider's model name;
  * m:ss elapsed) ... Two or more agents on one node: one full pill for the
@@ -49,7 +49,7 @@ describe('elapsed time and zoom', () => {
     expect(LOW_ZOOM).toBe(0.6);
     expect(isLowZoom(0.59)).toBe(true);
     expect(isLowZoom(0.6)).toBe(false);
-    // GM, 2026-10-25: only BELOW 60%; at exactly 60% (as the toolbar shows
+    // Design, 2026-10-25: only BELOW 60%; at exactly 60% (as the toolbar shows
     // it, rounded) the full pill shows, whatever float React Flow holds.
     expect(isLowZoom(0.6 - 1e-9)).toBe(false);
     expect(isLowZoom(0.5999)).toBe(false);
@@ -119,7 +119,7 @@ describe('marksByNode', () => {
   });
 });
 
-describe('accessible names (GM - Design, 2026-10-25, verbatim)', () => {
+describe('accessible names (2026-10-25, verbatim)', () => {
   const VERIFIED_CODEX = { ...CODEX, verified: true };
   const VERIFIED_CLAUDE = { ...CLAUDE, verified: true };
 
@@ -141,7 +141,7 @@ describe('accessible names (GM - Design, 2026-10-25, verbatim)', () => {
   });
 });
 
-describe('the run pill (GM - Design, 2026-10-25)', () => {
+describe('the run pill (2026-10-25)', () => {
   const now = 500_000;
   const runAt = (at: number, model = 'FLUX.2 [pro]') => marksByNode({
     projectId: 'p1', now, statuses: [],

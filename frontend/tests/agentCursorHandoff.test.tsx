@@ -76,7 +76,7 @@ const run = (max = 200) => { for (let i = 0; i < max; i += 1) step(1); };
 
 /** The clocks the view reads: performance.now (the name's first-sight moment) follows the test's
  *  frames, and Date.now (how old an event is) is held still, so a slow machine can't make an event
- *  stale. On a loaded one the flight tests read the event as old and snapped (PR #233 r136). */
+ *  stale. On a loaded one the flight tests read the event as old and snapped (PR #233). */
 const deterministicClocks = () => {
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
   vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000);
@@ -205,7 +205,7 @@ describe('canvas to the panel: one cursor travels (PR #233 slice 6)', () => {
     expect(rest).toEqual(N1);
     const registry = toClient(N1);
     send(event(onTile()));
-    // The canvas layer holds its last spot until the screen layer has drawn it (review 1, M5).
+    // The canvas layer holds its last spot until the screen layer has drawn it.
     expect(tipOf(canvasCursor()!)).toEqual(N1);
     step(1);
     expect(canvasCursor()).toBeNull(); // the screen layer has it: the canvas layer lets go
@@ -289,7 +289,7 @@ describe('the panel to the canvas', () => {
     expect(tipOf(screenCursor()!)).toEqual(aim(TILE));
     send(event());
     step(1);
-    // Still the screen layer's: it flies the way back (GM r137), from where it rested.
+    // Still the screen layer's: it flies the way back (design), from where it rested.
     expect(drawn()).toEqual([screenCursor()]);
     const first = tipOf(screenCursor()!)!;
     expect(dist(first, aim(TILE))).toBeLessThan(25);
@@ -302,7 +302,7 @@ describe('the panel to the canvas', () => {
   });
 });
 
-describe('the way back flies as one cursor from where it rests (GM r136, ruling 1; r137)', () => {
+describe('the way back flies as one cursor from where it rests', () => {
   /** The live ordering: the canvas layer's first frame takes the registry
    *  before the screen layer's own hold write lands, so what it finds is the
    *  screen cursor's last resting frame, long since written. */
@@ -360,7 +360,7 @@ describe('the way back flies as one cursor from where it rests (GM r136, ruling 
   });
 });
 
-describe('the way back stays in the top layer over a dock (GM r137, ruling 1)', () => {
+describe('the way back stays in the top layer over a dock', () => {
   /** A dock panel across the flight's path, in client px: the canvas layer
    *  draws under it, so a cursor drawn there while over it is hidden. */
   const DOCK = { left: 900, top: 150, right: 1115, bottom: 700 };
@@ -486,7 +486,7 @@ describe('the way back stays in the top layer over a dock (GM r137, ruling 1)', 
   });
 });
 
-describe('the way back after a screen change (PR #233 pre-merge review, F1)', () => {
+describe('the way back after a screen change (PR #233 pre-merge review)', () => {
   const DOCK = { left: 900, top: 150, right: 1115, bottom: 700 };
   const overDock = (p: { x: number; y: number }) => p.x >= DOCK.left && p.x <= DOCK.right && p.y >= DOCK.top && p.y <= DOCK.bottom;
   const clientTip = (el: HTMLElement) => (el === screenCursor() ? tipOf(el)! : toClient(tipOf(el)!));
@@ -542,7 +542,7 @@ describe('the way back after a screen change (PR #233 pre-merge review, F1)', ()
   });
 });
 
-describe('the way back to a node that waits (PR #233 pre-merge review, F2 and F3)', () => {
+describe('the way back to a node that waits (PR #233 pre-merge review)', () => {
   /** n1's header while it shows "Waiting for your OK": where the canvas layer draws a cursor on it. */
   const WAIT = { x: 400 + HEADER_ICON_X, y: 300 + 44 };
   const holdWait = (id: string) => act(() => {
@@ -600,7 +600,7 @@ describe('the way back to a node that waits (PR #233 pre-merge review, F2 and F3
   });
 });
 
-describe('the name shows where a flight rests, in both motion modes (GM r136, ruling 2)', () => {
+describe('the name shows where a flight rests, in both motion modes', () => {
   const labelOf = (el: HTMLElement | null) => el?.dataset.label;
 
   it('canvas to the panel: the name shows at the panel rest, as it did on the canvas', () => {
@@ -649,7 +649,7 @@ describe('the name shows where a flight rests, in both motion modes (GM r136, ru
   });
 });
 
-describe('screenEpoch: a switched screen is not flown across (GM-approved plan, adversarial review)', () => {
+describe('screenEpoch: a switched screen is not flown across (design-approved plan, adversarial review)', () => {
   it('a hand-off written before the person switched screens makes the entrance instead', () => {
     putTile(TILE);
     const view = renderBoth(true);

@@ -1,9 +1,9 @@
 /**
- * Fix round 9 of PR #200, review 8's leave NITs:
- * - NIT-1: a cancelled leave, or one whose events never come, still ends.
- * - NIT-2: × on a toast never leaves focus on <body> (since round 10, GM r16
- *   answer 2: the next notice's ×; tests/agentPresenceFollowups.r10.test.tsx).
- * - NIT-4 (GM r14): under reduced motion a leaving row fades out over 140 ms
+ * PR #200, a review's leave nits:
+ * - A cancelled leave, or one whose events never come, still ends.
+ * - × on a toast never leaves focus on <body> (since design's later
+ *   ruling: the next notice's ×; tests/agentPresenceFollowups.r10.test.tsx).
+ * - Design: under reduced motion a leaving row fades out over 140 ms
  *   and keeps its space throughout; only after the fade does it go, in one
  *   step with no height transition. A row entering takes its space at once
  *   and its content fades in.
@@ -66,7 +66,7 @@ function Rows({ items }: { items: string[] }) {
   return <div>{rows.map(({ key, item, leaving }) => <div key={key} data-testid={`row-${item}`} {...rowProps(key, leaving)}>{item}</div>)}</div>;
 }
 
-describe('review 8 NIT-1: a leave always ends', () => {
+describe('a leave always ends', () => {
   it('a cancelled leave animation ends the leave (useLeave)', () => {
     const { rerender } = render(<Probe value="One" />);
     rerender(<Probe value={null} />);
@@ -106,7 +106,7 @@ describe('review 8 NIT-1: a leave always ends', () => {
     act(() => { vi.advanceTimersByTime(300); });
     rerender(<Probe value={null} />);
     // The first leave's timer (due at endTime + slack from its start) would
-    // end this second leave early if it were still armed (review 9 NIT-3).
+    // end this second leave early if it were still armed.
     act(() => { vi.advanceTimersByTime(endTime + LEAVE_SLACK_MS - 400 + 50); });
     expect(screen.getByTestId('item')).toHaveAttribute('data-leaving', 'surface');
     // Its own fallback still ends it.
@@ -127,9 +127,9 @@ describe('review 8 NIT-1: a leave always ends', () => {
   });
 });
 
-// Review 8 NIT-2's focus rule is now GM r16 answer 2: tests/agentPresenceFollowups.r10.test.tsx.
+// The focus rule is now design's: tests/agentPresenceFollowups.r10.test.tsx.
 
-describe('GM r14 (review 8 NIT-4): reduced motion keeps a leaving row\'s space until its fade ends', () => {
+describe('reduced motion keeps a leaving row\'s space until its fade ends', () => {
   const read = (file: string) => postcss.parse(readFileSync(join(__dirname, '..', 'src', 'styles', file), 'utf8'));
   const region = read('noticeRegion.css');
   const keyframes = (name: string) => {

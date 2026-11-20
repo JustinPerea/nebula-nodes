@@ -1,4 +1,4 @@
-// PR #200 fix round 19, review 16 NIT 2: when the Unicode chunk loads because
+// PR #200: when the Unicode chunk loads because
 // the note dialog opened (after an earlier failure), the pins already on
 // screen redraw in the full form at once, not at the next pins push.
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +23,7 @@ function Cards() {
 const settle = () => act(async () => { for (let i = 0; i < 5; i += 1) await new Promise((done) => setTimeout(done, 0)); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-describe('review 16 NIT 2: the chunk loaded by the dialog opening redraws the cards on screen', () => {
+describe('the chunk loaded by the dialog opening redraws the cards on screen', () => {
   it('fallback form while it failed; the full form as soon as the dialog\'s opening loads it, with no pins push', async () => {
     await pins.pinTextReady;
     expect(pins.pinTextIsLoaded()).toBe(false);

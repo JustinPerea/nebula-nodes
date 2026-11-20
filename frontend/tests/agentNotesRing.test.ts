@@ -8,7 +8,7 @@ import { HEADER_BACKDROP, unreadRingColor } from '../src/lib/unreadRing';
 /**
  * The Updates chip's unread ring is drawn in the newest unread author's
  * colour (one rule since the corner was built). Author colours come from
- * agents (any #RRGGBB), so the ring has GM's floor: at least 3:1 against the
+ * agents (any #RRGGBB), so the ring has design's floor: at least 3:1 against the
  * header, the focus ring's bar. A colour under it is drawn as a lighter tint
  * of itself, never another colour; the dots in the chip stay as they are.
  */

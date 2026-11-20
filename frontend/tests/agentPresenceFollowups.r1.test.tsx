@@ -7,20 +7,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CinemaSceneSpec, NodeData } from '../src/types';
 
 /**
- * Fix round 1 of PR #200 (GM's visual review 1 and review 1 of the PR).
- * - GM bug 1: the project bar shows "Opening “Second canvas”…" whole and
+ * PR #200 (design's visual review and the PR review).
+ * - The project bar shows "Opening “Second canvas”…" whole and
  *   grows to fit; only a name past 24 characters is cut.
- * - GM bug 2 / review L-1: the note dialog is a textarea that grows, starts
+ * - The note dialog is a textarea that grows, starts
  *   with the caret at the end and nothing selected, its OK reads "Send note",
  *   and text selection is never the accent.
- * - GM bug 3: with a failed reference, Generate shot and Generate 2 are both
+ * - With a failed reference, Generate shot and Generate 2 are both
  *   disabled, with the same reason as their tooltip and one line under them.
- * - GM answer 1: offline, Cinema's controls are locked and say when they
+ * - Offline, Cinema's controls are locked and say when they
  *   work again (errorCopy offlineDisabledReason).
- * - GM answer 6 / review L-2, L-3: one disabled colour treatment.
- * - GM note: the selected shot card uses the shared selected style.
- * - GM answers 3/4 and review L-6: repeated names grouped, in canvas order.
- * - Review L-5: EditNode's Open editor takes the lock.
+ * - One disabled colour treatment.
+ * - The selected shot card uses the shared selected style.
+ * - Repeated names grouped, in canvas order.
+ * - EditNode's Open editor takes the lock.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
@@ -73,9 +73,9 @@ afterEach(() => {
   useCanvasPinsStore.setState({ composer: null, composerCanvas: null, draft: '', drafts: {}, kept: [], error: null } as never);
 });
 
-// ── GM bug 1: the agent bar ─────────────────────────────────────────────────
+// ── The project bar ─────────────────────────────────────────────────
 
-describe('GM bug 1: the project bar names the project being opened in full', () => {
+describe('the project bar names the project being opened in full', () => {
   beforeEach(() => {
     useProjectStore.setState({ screen: 'workspace', saveStatus: 'saved', busy: false,
       activeProject: { id: 'followups', name: 'Followups', createdAt: '', updatedAt: '', lastOpenedAt: null,
@@ -118,9 +118,9 @@ describe('GM bug 1: the project bar names the project being opened in full', () 
   });
 });
 
-// ── GM bug 2: the kept-note dialog ──────────────────────────────────────────
+// ── The kept-note dialog ──────────────────────────────────────────
 
-describe('GM bug 2 and review L-1: the note dialog', () => {
+describe('the note dialog', () => {
   it('starts with the caret at the end of the kept note, nothing selected, in a textarea that grows', () => {
     useCanvasPinsStore.setState({ kept: [{ text: 'Make the sky warmer and the sea darker', line: NOTE_KEPT_LINE, project: '', projectName: '', following: null }] } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
@@ -176,14 +176,14 @@ describe('GM bug 2 and review L-1: the note dialog', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('GM answer 2: the kept-note lines use ’', () => {
+  it('the kept-note lines use ’', () => {
     expect(NOTE_KEPT_LINE).toBe('Your note wasn’t sent because the canvas changed first.');
     expect(noteKeptLine({ agent: 'Codex', projectName: 'Second canvas' }))
       .toBe('Your note wasn’t sent because Codex started opening “Second canvas”.');
   });
 });
 
-// ── Cinema: GM bug 3, GM answer 1 ───────────────────────────────────────────
+// ── Cinema: failed references and offline ───────────────────────────────────────────
 
 const sceneSpec = (): CinemaSceneSpec => ({ version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9',
   shots: [{ id: 'a', prompt: 'a lighthouse at dusk', output: { status: 'done', imageUrl: '/a.png' } }, { id: 'b', prompt: 'Two' }] } as never);
@@ -200,8 +200,8 @@ const at = (element: ReactElement) => render(element).container;
 const button = (root: HTMLElement, text: string) => [...root.querySelectorAll('button')]
   .find((item) => item.textContent?.trim() === text) as HTMLButtonElement;
 
-describe('GM bug 3: a failed reference disables Generate shot and Generate 2 alike', () => {
-  // GM PR #205 r1: the reason is already on screen under the row, so the
+describe('a failed reference disables Generate shot and Generate 2 alike', () => {
+  // Design, PR #205: the reason is already on screen under the row, so the
   // buttons carry no tooltip of it; each is described by that line instead.
   it('both disabled, described by the one reason line under the row (no tooltip repeating it)', () => {
     const spec = cinemaScene();
@@ -223,8 +223,8 @@ describe('GM bug 3: a failed reference disables Generate shot and Generate 2 ali
 });
 const Node_FOLLOWING = 4;
 
-describe('GM answer 1: offline, Cinema is locked and every control says when it works again', () => {
-  it('offlineDisabledReason: GM\'s words', () => {
+describe('offline, Cinema is locked and every control says when it works again', () => {
+  it('offlineDisabledReason: design\'s words', () => {
     expect(offlineDisabledReason('generate')).toBe('You can generate when Nebula reconnects.');
     expect(offlineDisabledReason()).toBe('This works again when Nebula reconnects.');
   });
@@ -241,7 +241,7 @@ describe('GM answer 1: offline, Cinema is locked and every control says when it 
     expect(generateShot).toHaveAttribute('title', 'You can generate when Nebula reconnects.');
     const locked: Array<[HTMLElement, string]> = [
       [button(panel, 'Generate 2'), 'You can generate when Nebula reconnects.'],
-      // GM, PR #200 r2 item 4 (the merge with #198): "send it to motion".
+      // Design, PR #200 (the merge with #198): "send it to motion".
       [button(panel, 'Send to motion'), 'You can send it to motion when Nebula reconnects.'],
       [button(rail, '+ Add shot'), 'You can add shots when Nebula reconnects.'],
       [rail.querySelector('[aria-label="Move shot 2 earlier"]') as HTMLElement, 'You can reorder shots when Nebula reconnects.'],
@@ -255,7 +255,7 @@ describe('GM answer 1: offline, Cinema is locked and every control says when it 
     const prompt = panel.querySelector('.cinema-shot-panel__prompt') as HTMLTextAreaElement;
     expect(prompt.readOnly).toBe(true);
     expect(prompt).toHaveAttribute('data-offline-disabled');
-    // GM, PR #200 r2 item 4 (the merge with #198): a text field has no
+    // Design, PR #200 (the merge with #198): a text field has no
     // tooltip offline; it goes read-only and the banner says why.
     expect(prompt).not.toHaveAttribute('title');
     // Dragging a shot to reorder it is off too.
@@ -271,7 +271,7 @@ describe('GM answer 1: offline, Cinema is locked and every control says when it 
   });
 });
 
-// ── GM answer 6: one disabled colour treatment ──────────────────────────────
+// ── Design: one disabled colour treatment ──────────────────────────────
 
 const walk = (dir: string, match: RegExp): string[] => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);
@@ -282,16 +282,16 @@ function cssRules(css: string): Array<{ selector: string; body: string }> {
   return [...clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1].trim(), body: m[2] }));
 }
 
-describe('GM answer 6: one disabled colour treatment', () => {
+describe('one disabled colour treatment', () => {
   const rules = cssRules(read('styles/disabled-buttons.css'));
-  // PR #198 round 25 (GM r37 option c): the filled rule takes GM r33's grey fill.
+  // PR #198 (design): the filled rule takes design's grey fill.
   const filled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*var\(--disabled-fill[,)]/.test(body));
   const unfilled = rules.find(({ selector, body }) => /:disabled/.test(selector) && /background:\s*transparent/.test(body));
 
   it('a filled button keeps a fill, turned neutral grey; ghost and outline stay unfilled; no extra opacity', () => {
     expect(filled, 'the filled rule').toBeDefined();
     expect(unfilled, 'the unfilled rule').toBeDefined();
-    // GM r37 option c: a dark label on the grey fill; the grey label on a ghost.
+    // Design: a dark label on the grey fill; the grey label on a ghost.
     expect(filled!.body).toMatch(/color:\s*var\(--disabled-fill-label[^;]*!important/);
     expect(unfilled!.body).toMatch(/color:\s*var\(--disabled-label[^;]*!important/);
     for (const rule of [filled!, unfilled!]) {
@@ -320,9 +320,9 @@ describe('GM answer 6: one disabled colour treatment', () => {
   });
 });
 
-// ── GM note: the selected shot card ─────────────────────────────────────────
+// ── Design note: the selected shot card ─────────────────────────────────────────
 
-describe('GM note: the selected shot card uses the shared selected style, never the accent', () => {
+describe('design note: the selected shot card uses the shared selected style, never the accent', () => {
   it('no accent on the selected shot; the node category colour instead', () => {
     const selected = cssRules(read('styles/cinema-studio.css')).filter(({ selector }) => /cinema-shots-rail__shot--selected/.test(selector));
     expect(selected.length).toBeGreaterThan(0);
@@ -341,7 +341,7 @@ describe('GM note: the selected shot card uses the shared selected style, never 
 
 // ── Same titles: grouped, in canvas order ───────────────────────────────────
 
-describe('GM answers 3 and 4, review L-6: repeated names grouped, in canvas order', () => {
+describe('repeated names are grouped, in canvas order', () => {
   it('the failed-save line follows canvas order, not the order the saves came in', () => {
     const line = changesNotSavedLine([
       { nodeId: 'n3', node: 'Brief', setting: 'Text', order: 2 },
@@ -367,12 +367,12 @@ describe('GM answers 3 and 4, review L-6: repeated names grouped, in canvas orde
   });
 });
 
-// ── Review L-5: EditNode's Open editor ──────────────────────────────────────
+// ── EditNode's Open editor ──────────────────────────────────────
 
-// Fix round 2 (review 2 L-6, GM 2026-10-28 answer 4): opening this node's
+// Design 2026-10-28: opening this node's
 // own editor writes nothing, so it stays available while following and
 // offline; the editor opens read-only (agentPresenceFollowups.r2).
-describe('review L-5 and review 2 L-6: EditNode\'s Open editor', () => {
+describe('EditNode\'s Open editor', () => {
   it('following: still enabled, unmarked (it opens the editor read-only)', () => {
     const props = { id: 'e1', data: { params: { clips: [] } }, selected: true } as never;
     const root = at(<ReactFlowProvider><EditNode {...(props as object)} /></ReactFlowProvider>);

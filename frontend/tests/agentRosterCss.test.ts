@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * GM - Design's review of the Agents panel (PR #193): the chevron points up
+ * Design's review of the Agents panel (PR #193): the chevron points up
  * while the panel is open and down while it is closed, every moment of the
  * change and on hover too; the Needs-you badge is a filled light pill with a
  * dark number in the corner's ink tokens, never an agent's colour, and the

@@ -331,7 +331,7 @@ describe('ConnectionPopup next-step preparation', () => {
     expect(ui.canvasFocusRequest).toMatchObject({ nodeId: 'n9' });
     expect(ui.leftDock).toBeNull();
     expect(ui.panels.inspector.visible).toBe(true);
-    // The one case the Inspector takes focus on its own (review 6 of PR #205).
+    // The one case the Inspector takes focus on its own (PR #205).
     expect(takeInspectorFocusResume()).toBe(true);
   });
 
@@ -363,7 +363,7 @@ describe('ConnectionPopup next-step preparation', () => {
     expect(addNode).not.toHaveBeenCalled();
   });
 
-  // The Inspector's bug (GM - Design, 2026-10-23) on the drop picker: dropped
+  // The Inspector's bug (design, 2026-10-23) on the drop picker: dropped
   // just above the canvas's bottom bar, it opened down over the bar.
   it('a picker dropped just above the bottom bar opens above it', () => {
     vi.stubGlobal('innerWidth', 1280);
@@ -407,10 +407,10 @@ describe('ConnectionPopup next-step preparation', () => {
   });
 });
 
-// Round 16 (review 15, L3): adding a step is an edit. Offline the picker's
+// Adding a step is an edit. Offline the picker's
 // items are disabled with the offline mark, a press only pulses the banner,
 // and a popup open when the tab goes offline never shows an error line.
-describe('ConnectionPopup while offline (round 16)', () => {
+describe('ConnectionPopup while offline', () => {
   it('its items are disabled with the mark and a press adds nothing and says nothing', async () => {
     const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
     resetBackendConnectionForTests();
@@ -444,7 +444,7 @@ describe('ConnectionPopup while offline (round 16)', () => {
   });
 });
 
-describe('PR #199 round 16 (GM r21, 3): the popup while the canvas is kept', () => {
+describe('PR #199: the popup while the canvas is kept', () => {
   afterEach(() => { setCanvasKept(false); });
 
   it('a tab-local origin takes the store’s add-and-connect (one kept step), and a refusal closes the popup', async () => {
@@ -465,9 +465,9 @@ describe('PR #199 round 16 (GM r21, 3): the popup while the canvas is kept', () 
   });
 });
 
-// GM PR #205 r4 item 3 (review 2 lines NIT-1): the connected add works during
+// Design, PR #205: the connected add works during
 // a run, as its add and its connect each do; an import still holds it.
-describe('ConnectionPopup during a run (PR #205 round 3)', () => {
+describe('ConnectionPopup during a run (PR #205)', () => {
   it('a press while this tab runs adds the connected node, with no lock line', async () => {
     useGraphStore.setState({ isExecuting: true, undoNotice: null });
     openPopup();
@@ -476,7 +476,7 @@ describe('ConnectionPopup during a run (PR #205 round 3)', () => {
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
-  it('a press during an import adds nothing, and the picker says the store\'s line (GM PR #205 r5 item 2); the line goes with the import', async () => {
+  it('a press during an import adds nothing, and the picker says the store\'s line (design, PR #205); the line goes with the import', async () => {
     useGraphStore.setState({ isImportingGraph: true });
     openPopup();
     const item = searchFor('veo-3');

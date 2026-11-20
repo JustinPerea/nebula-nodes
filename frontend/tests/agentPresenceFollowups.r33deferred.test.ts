@@ -1,4 +1,4 @@
-// PR #200 fix round 22, GM r33 item 2: while the person gate holds, the held
+// PR #200, design: while the person gate holds, the held
 // run's Dismiss hides it in this tab only and sends nothing; once the server
 // promotes the tab, each approval dismissed meanwhile is released (DELETE
 // /api/canvas/approvals/{id}, person-only, which only frees the locked
@@ -21,7 +21,7 @@ const hold = (approvalId: string | null, more: Array<{ agentName: string; nodeId
 beforeEach(() => { api.releaseApproval.mockReset(); api.releaseApproval.mockResolvedValue(undefined); });
 afterEach(() => { session.resetPersonSessionForTests(); useCanvasProposalsStore.setState({ deferredRun: null, deferredQueue: [] } as never); });
 
-describe('GM r33 item 2: the held run\'s Dismiss while the gate holds', () => {
+describe('the held run\'s Dismiss while the gate holds', () => {
   it('held: hides it here and sends nothing; promote: the release once; a second promote: nothing more', () => {
     session.reportPersonRequired();
     hold('ra_a', [{ agentName: 'Codex', nodeIds: ['n8'], approvalId: 'ra_b' }]);

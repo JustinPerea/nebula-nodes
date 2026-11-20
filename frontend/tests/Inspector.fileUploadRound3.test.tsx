@@ -3,13 +3,13 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// GM r48 on #222 (fix/file-param-upload-edits round 3):
-// - bug 1: while an upload is in flight, never "No preview". A preview the
+// Design on #222 (fix/file-param-upload-edits):
+// - while an upload is in flight, never "No preview". A preview the
 //   param holds stays until the new one lands; with nothing, or a file with
 //   no preview, nothing shows under the row;
-// - bug 2: the dropped-upload line goes on ANY change to that param's value:
+// - the dropped-upload line goes on ANY change to that param's value:
 //   a person's pick, an agent's set (graphSync), an undo or a redo;
-// - Q1: a file param's name is the name it was uploaded with, else the
+// - A file param's name is the name it was uploaded with, else the
 //   path's base name, never a bare content hash ("Uploaded file").
 
 const api = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -114,7 +114,7 @@ function dropLine(value: unknown, name = 'sunset.png') {
     file: { project: 'project-a', nodeId: D, key: 'filePath', value } });
 }
 
-describe('bug 1: never "No preview" while an upload is in flight', () => {
+describe('never "No preview" while an upload is in flight', () => {
   it('a param holding a file with no preview (shot 1\'s case): nothing under the row until the new one lands', async () => {
     const { container } = show([styleRef('n1', { filePath: '/elsewhere/harbour.png' })]);
     expect(noPreview(container)).toBe('No preview');
@@ -158,7 +158,7 @@ describe('bug 1: never "No preview" while an upload is in flight', () => {
   });
 });
 
-describe('bug 2: the dropped line goes on any change to its param', () => {
+describe('the dropped line goes on any change to its param', () => {
   it("an agent's set (a graphSync, as MCP edit_canvas or `nebula set` reaches the tab) clears it", async () => {
     act(() => dropLine(''));
     const view = show([styleRef(D)], D);
@@ -199,7 +199,7 @@ describe('bug 2: the dropped line goes on any change to its param', () => {
     expect(paletteDropNote(NOTE_KEY)).toBeNull();
   });
 
-  it('sits directly under the row it describes: row, then line, then preview (GM r67)', () => {
+  it('sits directly under the row it describes: row, then line, then preview', () => {
     const value = '/out/chat-uploads/harbour.png';
     act(() => dropLine(value));
     const view = show([styleRef(D, { filePath: value, _previewUrl: '/api/outputs/chat-uploads/harbour.png' })], D);
@@ -242,7 +242,7 @@ describe('bug 2: the dropped line goes on any change to its param', () => {
   });
 });
 
-describe('Q1: the name a file param shows', () => {
+describe('the name a file param shows', () => {
   it('a bare content hash never renders: the row, the in-flight row and the dropped line say "Uploaded file"', async () => {
     const view = show([styleRef('n1', { filePath: `/out/chat-uploads/${HASH}.png` })]);
     await settle();

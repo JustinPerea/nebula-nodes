@@ -58,7 +58,7 @@ beforeEach(() => {
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
     api.acceptProposal, api.rejectProposal, api.releaseApproval]) fn.mockReset();
   // As the real store: once adopted, the run's nodes are on the canvas (the
-  // accept's run is sent only while they are: review 11, L-5).
+  // accept's run is sent only while they are).
   graph.state.adoptAcceptedProposal.mockImplementation((result: { runNodeIds?: string[] }) => {
     const ids = new Set(graph.state.nodes.map((node) => node.id));
     graph.state.nodes = [...graph.state.nodes, ...(result.runNodeIds ?? []).filter((id) => !ids.has(id)).map((id) => ({ id }))];
@@ -121,7 +121,7 @@ describe('canvas proposals store', () => {
     expect(useCanvasProposalsStore.getState().proposals.p_a.closing).toBe('expired');
   });
 
-  it('a re-send of a card closed here on its expiry, before the backend\'s sweep, never brings it back (review 3 NIT-2)', () => {
+  it('a re-send of a card closed here on its expiry, before the backend\'s sweep, never brings it back', () => {
     vi.useFakeTimers();
     try {
       const late = proposal('p_late', { expiresAt: 5000 });
@@ -159,7 +159,7 @@ describe('canvas proposals store', () => {
     // One undo step for the accept, taken before the request.
     expect(graph.state.beginUndoStep).toHaveBeenCalledTimes(1);
     expect(graph.state.cancelUndoStep).not.toHaveBeenCalled();
-    // And ended once its nodes are on the canvas, so an undo pressed meanwhile acts (review 10, L-2).
+    // And ended once its nodes are on the canvas, so an undo pressed meanwhile acts.
     expect(graph.state.endUndoStep).toHaveBeenCalledWith(graph.state.beginUndoStep.mock.results[0].value);
     // The run carries the approval, so the backend can check it is what was accepted.
     expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
@@ -171,7 +171,7 @@ describe('canvas proposals store', () => {
     expect(useCanvasProposalsStore.getState().proposals.p_a.closing).toBe('accepted');
   });
 
-  it("hands the wires a model change removes to the accept's undo step (PR #216 r3)", async () => {
+  it("hands the wires a model change removes to the accept's undo step (PR #216)", async () => {
     const removedEdges = [{ source: 'n2', sourceHandle: 'image', target: 'n1', targetHandle: 'images' }];
     emit({ type: 'proposalOpened', proposal: proposal('p_a', { removedEdges, run: [] }), acceptKey: 'key-a' });
     const result = { status: 'accepted', proposalId: 'p_a', idMap: { '+up': 'n7' }, runNodeIds: [],
@@ -182,7 +182,7 @@ describe('canvas proposals store', () => {
       { undoStep: expect.any(Object), synced: syncs.seen, unwired: removedEdges });
   });
 
-  it('takes the view a rename re-sends, keeping where the person dragged it (GM - Design, PR #216 r4 4)', () => {
+  it('takes the view a rename re-sends, keeping where the person dragged it (PR #216)', () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a', { plan: 'Changes “Old”' }), acceptKey: 'key-a' });
     useCanvasProposalsStore.setState((state) => ({ drag: { ...state.drag, p_a: { '+k': { x: 5, y: 6 } } } }));
     emit({ type: 'proposalOpened', proposal: proposal('p_a', { plan: 'Changes “New”' }), acceptKey: 'key-a' });
@@ -226,8 +226,8 @@ describe('canvas proposals store', () => {
     expect(graph.state.executeNode).not.toHaveBeenCalled();
   });
 
-  it('review 5, L1: Accept on a proposal that runs nothing starts no run and holds none, and frees its approval', async () => {
-    // Its whole run waits on Codex's placeholders: the button said "Accept" (GM round 5, item 3).
+  it('Accept on a proposal that runs nothing starts no run and holds none, and frees its approval', async () => {
+    // Its whole run waits on Codex's placeholders: the button said "Accept" (design).
     const waits = { paidRuns: 0, freeRuns: 0, estimate: null, upTo: false, providers: [], nodes: [], note: '',
       pendingSkipped: { count: 2, placeholders: 1, agents: ['Codex'] } };
     for (const executing of [false, true]) {
@@ -254,10 +254,10 @@ describe('canvas proposals store', () => {
   });
 });
 
-describe("a person-only refusal on accept or reject (GM, Q116 a)", () => {
+describe("a person-only refusal on accept or reject", () => {
   // The because form: the cause leads and the fix follows, ending "then try again" as the shared line does.
   const GM_CLAUSE = "this tab isn’t connected as you. Open the link Nebula printed when it started.";
-  it("says GM's line, not the accept-key line", async () => {
+  it("says design's line, not the accept-key line", async () => {
     const { ProposalRequestError } = await import('../src/lib/canvasProposals');
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     api.acceptProposal.mockRejectedValue(new ProposalRequestError(403, 'Only the person can do this.',
@@ -279,8 +279,8 @@ describe("a person-only refusal on accept or reject (GM, Q116 a)", () => {
   });
 });
 
-describe('GM round 22 (4b): Accept after the canvas was cleared or replaced', () => {
-  it("says GM's line, read from the answer's code", async () => {
+describe('Accept after the canvas was cleared or replaced', () => {
+  it("says design's line, read from the answer's code", async () => {
     const { ProposalRequestError } = await import('../src/lib/canvasProposals');
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     api.acceptProposal.mockRejectedValue(new ProposalRequestError(409,
@@ -292,8 +292,8 @@ describe('GM round 22 (4b): Accept after the canvas was cleared or replaced', ()
   });
 });
 
-// GM PR #205 r16 item 2 (review 7 limits MEDIUM-1): an Accept that would leave
-// the canvas past Save's limits is refused on the click. GM's line names the
+// Design, PR #205: an Accept that would leave
+// the canvas past Save's limits is refused on the click. Design's line names the
 // agent as the bar does; the proposal stays open and Accept stays live.
 describe('Accept that would make the canvas too complex to save', () => {
   const refuse = async () => {
@@ -302,7 +302,7 @@ describe('Accept that would make the canvas too complex to save', () => {
       "The person's Accept of Claude's proposal p_a was refused: This edit would leave the canvas nested more than 64 levels deep from its file's root, and the person's canvas can't save it. Nothing changed. Nest the value less deeply. The proposal is still open.",
       { heading: "Couldn't accept the proposal.", code: 'proposal_too_complex' } as never));
   };
-  it("says GM's line, naming the agent; the proposal stays open, and a second click sends again", async () => {
+  it("says design's line, naming the agent; the proposal stays open, and a second click sends again", async () => {
     const { isNeutralProposalLine } = await import('../src/store/canvasProposalsStore');
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     await refuse();
@@ -325,7 +325,7 @@ describe('Accept that would make the canvas too complex to save', () => {
   it.each([
     ['nodes', 'Nebula couldn’t accept this because the canvas would have more than 10,000 nodes, the most Nebula saves.'],
     ['connections', 'Nebula couldn’t accept this because the canvas would have more than 50,000 connections, the most Nebula saves.'],
-  ])("a count past a limit says which, never \"too complex\" (GM PR #205 r12 item 3): %s", async (kind, lead) => {
+  ])("a count past a limit says which, never \"too complex\" (design, PR #205): %s", async (kind, lead) => {
     const { isNeutralProposalLine, proposalCountLine } = await import('../src/store/canvasProposalsStore');
     const { ProposalRequestError } = await import('../src/lib/canvasProposals');
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
@@ -343,7 +343,7 @@ describe('Accept that would make the canvas too complex to save', () => {
   });
 });
 
-// Review 8 of PR #205, limits MEDIUM-1: an Accept that would leave the project
+// PR #205, limits: an Accept that would leave the project
 // past its size limit is refused the same way, with the size limit's line
 // (picked by the answer's limit.kind, never its words).
 describe('Accept that would make the canvas too large to save', () => {

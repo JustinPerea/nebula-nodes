@@ -373,7 +373,7 @@ describe('the whole drawn cursor stays 12 px inside the clip (slice 10b)', () =>
   });
 });
 
-describe('a parked cursor\'s pills stay inside the panel and clear of the chevron (GM r136, ruling 4)', () => {
+describe('a parked cursor\'s pills stay inside the panel and clear of the chevron', () => {
   const NAME_W = 52;
   const SAY_W = 191; // "Added 3 images to “Desert light”"
   /** The pills' box after the nudge, the arrow's box and the chevron's, all client px. */

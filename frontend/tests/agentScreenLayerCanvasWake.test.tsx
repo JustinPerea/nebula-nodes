@@ -19,7 +19,7 @@ import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { useBoardCanvasStore } from '../src/store/boardCanvasStore';
 
 /**
- * PR #233 final review, finding 1: a cursor parked beside a Moodboard node on
+ * PR #233: a cursor parked beside a Moodboard node on
  * the canvas (data-agent-launcher="moodboard:<board>") follows a React Flow pan,
  * zoom and node drag, which fire no DOM event.
  */
@@ -106,7 +106,7 @@ function parked() {
   return { tip: tipOf(cursor())!, dotLeft: parseFloat(dot().style.left) };
 }
 
-describe('a cursor parked at a Moodboard node follows the canvas (final review 1)', () => {
+describe('a cursor parked at a Moodboard node follows the canvas', () => {
   it('follows a pan', () => {
     const before = parked();
     moveNode({ ...NODE, left: NODE.left - 400 }, () => { flow.state.transform = [-400, 0, 1]; });

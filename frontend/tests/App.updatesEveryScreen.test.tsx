@@ -3,7 +3,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import type { ViewMode } from '../src/store/uiStore';
 
 /**
- * Q107 a (2026-10-21): the Updates corner mounts on every screen, not only
+ * Justin's answer (2026-10-21): the Updates corner mounts on every screen, not only
  * the canvas, and each screen's header keeps a slot for it so it never sits
  * over that screen's own top-right controls. The canvas keeps its own
  * corner (its header is the centred pill).

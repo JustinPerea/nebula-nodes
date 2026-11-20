@@ -1,4 +1,4 @@
-// PR #218 review 1 MEDIUM-1: a hydrate's listing never overwrites a newer
+// PR #218: a hydrate's listing never overwrites a newer
 // push. Hydrates and pushes share one order (a push's place is its arrival, a
 // hydrate's is its fetch starting); a listing overtaken by a later one is
 // dropped. Every case runs twice, with the Unicode chunk still pending
@@ -108,7 +108,7 @@ describe.each<Mode>(['pending', 'loaded'])('hydrate and pushes in one order (chu
     expect(s.ids()).toEqual(['b']);
   });
 
-  // #220 review 1 NIT-4: a failed fetch uses up its number but never counts
+  // #220: a failed fetch uses up its number but never counts
   // as applied, so it holds back no push: one queued while it was out, nor one after.
   it('a hydrate whose fetch fails holds back no push, queued during it or arriving after', async () => {
     const s = await fresh(mode);

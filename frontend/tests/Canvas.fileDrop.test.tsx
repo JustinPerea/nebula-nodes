@@ -250,7 +250,7 @@ describe('Canvas file drop', () => {
       'Nebula couldn’t upload “tone.wav” because the server isn’t answering. Check that Nebula is running, then try again.');
   });
 
-  it('gives a drop one notice: a count over the shared reason (GM)', async () => {
+  it('gives a drop one notice: a count over the shared reason', async () => {
     api.fetch.mockImplementation(async () => new Response('{}', { status: 200 }));
     await drop([file('a.zip'), file('b.exe'), file('c.png', 'image/png')]);
     expect(notice()).toBe(`Nebula couldn’t add 2 of 3 files.\n${TYPES}`);
@@ -276,8 +276,8 @@ describe('Canvas file drop', () => {
     expect(notice()).toBeUndefined();
   });
 
-  // Round 14 of PR #114: each file that made a node is one step that owns
-  // only that node; a failed upload takes none. Round 21 (the merge): the
+  // PR #114: each file that made a node is one step that owns
+  // only that node; a failed upload takes none. In the merge, the
   // step is #195's in-flight one, owning the node the answer names.
   it('takes one undo step per dropped file that made a node, owning only that node', async () => {
     const owned = vi.spyOn(useGraphStore.getState(), 'noteOwnAdd');
@@ -293,7 +293,7 @@ describe('Canvas file drop', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
-  it("ends each upload's step with the node its echo brings (review 11, L-2)", async () => {
+  it("ends each upload's step with the node its echo brings", async () => {
     const end = vi.spyOn(useGraphStore.getState(), 'endUndoStep');
     api.fetch.mockImplementation(async () => new Response(JSON.stringify({ nodeId: 'n4' }), { status: 200 }));
     await drop([file('a.png', 'image/png')]);

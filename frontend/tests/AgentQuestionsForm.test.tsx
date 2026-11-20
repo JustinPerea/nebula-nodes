@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 /**
- * The answer form (Q125 item 1) and the closed view, in GM - Design's
+ * The answer form and the closed view, in design's
  * copy, verbatim: "A question from {agent}" / "Questions from {agent}",
  * "You can skip any question." under 2+, "Pick any that apply." under a
  * multi-choice question, "Type your answer." / "Other" + "Type your own
@@ -51,7 +51,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the answer form', () => {
-  it('heads several questions with GM\'s words and says any can be skipped', () => {
+  it('heads several questions with design\'s words and says any can be skipped', () => {
     open();
     render(<AgentQuestionsForm setId="qs_1" onClose={() => {}} />);
     const form = screen.getByRole('dialog', { name: 'Questions from Claude Code' });

@@ -4,21 +4,22 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Fix round 6 of PR #200 (review 6 and GM's r8/r9 answers), the component
+ * PR #200 (the PR review and design's answers), the component
  * and style side:
- * - LOW-1 (GM r9 answer 3): a locked Inspector "+ Add", "Extract from
+ * - Design: a locked Inspector "+ Add", "Extract from
  *   reference" and every "Choose file" get the one disabled treatment (the
  *   shared grey, no pointer, no hover) and the lock's reason, follow first,
  *   then offline ("You can choose a file when Nebula reconnects.").
- * - GM r8: a filled destructive confirm is the red fill (#ff887d) with
+ * - Design: a filled destructive confirm is the red fill (#ff887d) with
  *   near-black ink, hover #ff9a91; never white on the orange.
- * - GM r9 answer 2: motion by kind. A surface in the notice region scales
+ * - Design: motion by kind. A surface in the notice region scales
  *   in on the toasts' spring; a row inside a surface already there expands
  *   into place (its height springs, never its scale); reduced motion is
  *   opacity only.
- * - N-5: a timeline redraw keeps where the person had scrolled.
- * LOW-3 and the CI time are the ratchet's (agentPresenceFollowups.ratchet);
- * N-2, N-3 and N-4 are the backend's (test_agent_presence_followups.py).
+ * - A timeline redraw keeps where the person had scrolled.
+ * - The CI time and one more finding are the ratchet's
+ *   (agentPresenceFollowups.ratchet); three are the backend's
+ *   (test_agent_presence_followups.py).
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
@@ -122,7 +123,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey', () => {
+describe('a locked Inspector picker or Add says why, in the shared grey', () => {
   const select = (definitionId: string, params: Record<string, unknown>) => {
     useGraphStore.setState({ nodes: [{ id: 'n1', type: 'model', position: { x: 0, y: 0 },
       data: { label: 'Node', definitionId, params, state: 'idle', outputs: {} } }], edges: [], undoNotice: null } as never);
@@ -157,7 +158,7 @@ describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey',
     expect(extract()).toHaveAttribute('data-offline-disabled');
   });
 
-  it('"Choose file": "You can choose a file when Nebula reconnects." offline, the follow reason following (GM r9 answer 3)', () => {
+  it('"Choose file": "You can choose a file when Nebula reconnects." offline, the follow reason following', () => {
     select('image-input', { filePath: '' });
     const choose = () => labelOf('Choose file');
     expect(choose()).not.toHaveAttribute('title');
@@ -167,14 +168,14 @@ describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey',
     expect(choose()).toHaveAttribute('aria-disabled', 'true');
     expect(choose()).toHaveAttribute('data-offline-disabled');
     expect(choose().querySelector('input')).toBeDisabled();
-    // Follow comes before offline (GM r9 answer 3: run, then follow, then offline).
+    // Follow comes before offline (design: run, then follow, then offline).
     act(() => setFollowingSwitch(reason));
     expect(choose()).toHaveAttribute('title', waitToOpenTooltip('Second canvas'));
   });
 
   it('the CSS: the picker is in the shared ghost grey, its hover off while locked; the lock mark takes the pointer away', () => {
     const disabled = css('styles/disabled-buttons.css');
-    // PR #198 round 25 (GM r37 option c): the state passes over a held notice button's first 150 ms.
+    // PR #198 (design): the state passes over a held notice button's first 150 ms.
     const lists = [...disabled.matchAll(/:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\](?::not\(\[data-held-pending\]\))?\)/g)].map((m) => m[1].split(',').map((s) => s.trim()));
     expect(lists.filter((list) => list.includes('.inspector__file-button')).length).toBeGreaterThanOrEqual(2);
     expect(css('styles/slava-restraint.css')).toMatch(/\.inspector__file-button:hover:not\(\[aria-disabled='true'\]\)/);
@@ -183,9 +184,9 @@ describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey',
   });
 });
 
-describe('GM r8: a filled destructive confirm is the red fill with near-black ink', () => {
+describe('a filled destructive confirm is the red fill with near-black ink', () => {
   const confirms: Array<[string, string, string]> = [
-    ['styles/project-home.css', 'body.app-slava-restraint .project-home__confirm .project-home__danger', // PR #199 review 6, L-4: every hover on the home skips [aria-disabled="true"].
+    ['styles/project-home.css', 'body.app-slava-restraint .project-home__confirm .project-home__danger', // PR #199: every hover on the home skips [aria-disabled="true"].
     'body.app-slava-restraint .project-home__confirm .project-home__danger:hover:not(:disabled):not([aria-disabled="true"])'],
     ['styles/prompt-dialog.css', '.prompt-dialog__actions .prompt-dialog__danger', '.prompt-dialog__actions .prompt-dialog__danger:hover:not(:disabled)'],
     ['styles/asset-trash.css', 'body.app-slava-restraint .asset-trash__button--danger', 'body.app-slava-restraint .asset-trash__button--danger:hover:not(:disabled)'],
@@ -214,7 +215,7 @@ describe('GM r8: a filled destructive confirm is the red fill with near-black in
   });
 });
 
-describe('GM r9 answer 2: motion by kind', () => {
+describe('motion by kind', () => {
   const SURFACE = 'notice-surface-in 420ms var(--notice-spring) both';
   const ROW = 'notice-row-in 420ms var(--notice-spring) both';
   const FADE = 'notice-fade-in 180ms ease-out both';
@@ -229,7 +230,7 @@ describe('GM r9 answer 2: motion by kind', () => {
     ['the proposal bar\'s inline error line', 'styles/canvasProposals.css', 'row', '.proposal-bar__error'],
     ['the proposal bar\'s Accept key row, back with the canvas', 'styles/canvasProposals.css', 'row', '.proposal-bar__not-ready[data-entering]'],
   ];
-  // The five toasts, scaling on their own keyframes since round 5.
+  // The five toasts scale on their own keyframes (not a slide).
   const toasts: Array<[string, string, string]> = [
     ['components/projects/ProjectSwitchToast.css', '.project-switch-toast', 'project-switch-toast-in'],
     ['styles/asset-trash.css', 'body.app-slava-restraint .asset-trash__toast', 'asset-trash-toast-in'],
@@ -306,7 +307,7 @@ describe('GM r9 answer 2: motion by kind', () => {
   });
 });
 
-describe('N-5: a timeline redraw keeps where the person had scrolled', () => {
+describe('a timeline redraw keeps where the person had scrolled', () => {
   const manifest = { timeline: [{ id: 't1', componentType: 'TextNode', time: { startFrame: 30, durationInFrames: 60 } }] } as never;
   it('the lock starting, a refused drop and the lock ending each draw it again at the same scroll', () => {
     timeline.scrolledTo = [];

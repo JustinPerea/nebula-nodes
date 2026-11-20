@@ -25,7 +25,7 @@ describe('agentCursorAnywhere.css', () => {
     }
   });
 
-  it('sits above the docks (55) and below modals (60) and the notice region (GM 5)', () => {
+  it('sits above the docks (55) and below modals (60) and the notice region', () => {
     expect(rule('.agent-screen-layer')).toMatch(/z-index:\s*calc\(var\(--sr-layer-modal, 60\) - 1\)/);
     const slava = readFileSync(resolve(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
     const layer = (name: string) => Number(new RegExp(`--sr-layer-${name}:\\s*(\\d+)`).exec(slava)![1]);
@@ -93,7 +93,7 @@ describe('the store keeps what a surface target is called', () => {
     expect(reduced).toMatch(/\.agent-launcher-dot,\s*\.agent-launcher-dot__more\s*\{[^}]*animation:\s*none/);
   });
 
-  it('a "+N" belongs to no agent: the host\'s surface fill, a 1px border and secondary ink, on the rail and on the ring (GM r136, ruling 3)', () => {
+  it('a "+N" belongs to no agent: the host\'s surface fill, a 1px border and secondary ink, on the rail and on the ring', () => {
     for (const name of ['.agent-launcher-dot__more', '.agent-item-outline__more']) {
       const body = rule(name);
       expect(body).toMatch(/background:\s*var\(--agent-badge-ring\)/);

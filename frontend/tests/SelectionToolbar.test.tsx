@@ -168,8 +168,8 @@ describe('SelectionToolbar', () => {
     expect(executeNode).not.toHaveBeenCalled();
   });
 
-  // Undo puts back everything a delete removed (GM - Design, 2026-10-23,
-  // item 1), so the delete no longer asks; it still waits for the backend.
+  // Undo puts back everything a delete removed (design, 2026-10-23),
+  // so the delete no longer asks; it still waits for the backend.
   it('deletes the whole selection without a confirm, and tells the backend', async () => {
     useGraphStore.setState({ nodes: [selectedNode('n1'), selectedNode('n2')] });
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
@@ -178,7 +178,7 @@ describe('SelectionToolbar', () => {
     render(<SelectionToolbar />);
 
     fireEvent.click(screen.getByLabelText('Delete selected nodes'));
-    // Round 18 (GM option (c)): the nodes leave the canvas the moment Delete is pressed.
+    // Design: the nodes leave the canvas the moment Delete is pressed.
     expect(useGraphStore.getState().nodes).toHaveLength(0);
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(useGraphStore.getState().nodes).toHaveLength(0);
@@ -193,7 +193,7 @@ describe('SelectionToolbar', () => {
     expect(useCanvasPinsStore.getState().composer).toEqual({ nodeId: 'n4' });
   });
 
-  it('hides the note button for several nodes; a node the backend has not saved yet shows it locked (GM r26, 4)', () => {
+  it('hides the note button for several nodes; a node the backend has not saved yet shows it locked', () => {
     useGraphStore.setState({ nodes: [selectedNode('n1'), selectedNode('n2')] });
     const { unmount } = render(<SelectionToolbar />);
     expect(screen.queryByRole('button', { name: 'Note for agents' })).not.toBeInTheDocument();

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useCinemaMotionStore } from '../src/store/cinemaMotionStore';
 import { createCinemaUploadStore } from '../src/store/cinemaUploadStore';
 
-// GM PR #205 r10 item 4: what a canvas import says to a connection and an
+// Design, PR #205: what a canvas import says to a connection and an
 // upload it stops ("pending" and "Retry" are the app's words, not the person's).
 
 afterEach(() => useCinemaMotionStore.getState().clear());

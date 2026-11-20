@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { PlaceholderLine } from '../src/components/nodes/PlaceholderLine';
 
-// GM - Design, 2026-10-25: "Dim only the preview area; header and text stay
+// Design, 2026-10-25: "Dim only the preview area; header and text stay
 // at full contrast. A line in the preview area: “Codex is setting this up.”"
 
 afterEach(cleanup);

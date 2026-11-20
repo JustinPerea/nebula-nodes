@@ -1,4 +1,4 @@
-// PR #200 fix round 13 (review 12 M-1, L-1, L-2; GM r21): the canvas's strip
+// PR #200 (design): the canvas's strip
 // and count read the same generated Unicode data as the backend
 // (backend/data/pin_text_unicode.json; the backend's half is
 // tests/test_pin_text_r13.py), and a cut never leaves half an escape code.
@@ -29,7 +29,7 @@ describe('the generated Unicode data', () => {
   });
 });
 
-describe('review 12 M-1: only the three subdivision flags keep their tags', () => {
+describe('only the three subdivision flags keep their tags', () => {
   it.each(['gbeng', 'gbsct', 'gbwls'])('%s stays whole and counts one', (spec) => {
     const flag = FLAG + tags(spec) + CANCEL;
     expect(pinDisplayText(flag)).toBe(flag);
@@ -47,13 +47,13 @@ describe('review 12 M-1: only the three subdivision flags keep their tags', () =
     expect(noteLength(typed)).toBe(1);
   });
 
-  it('the reviewer\'s 280 flags of 7 ASCII tags are 2,240 hidden characters, far past the 1,120 (GM r22: characters, not bytes)', () => {
+  it('the reviewer\'s 280 flags of 7 ASCII tags are 2,240 hidden characters, far past the 1,120 (characters, not bytes)', () => {
     const typed = (FLAG + tags('ignorea') + CANCEL).repeat(280);
     expect(Array.from(typed).length - Array.from(pinDisplayText(typed)).length).toBe(280 * 8);
   });
 });
 
-describe('review 12 L-2: a ZWJ chain is one character only as an RGI sequence', () => {
+describe('a ZWJ chain is one character only as an RGI sequence', () => {
   it('11 thumbs joined are 11, and 140 such chains are far past 280', () => {
     const eleven = Array(11).fill(THUMB).join(ZWJ);
     expect(noteLength(eleven)).toBe(11);
@@ -74,7 +74,7 @@ describe('review 12 L-2: a ZWJ chain is one character only as an RGI sequence', 
   });
 });
 
-describe('GM r21: one variation selector, kept only when Unicode lists it for its base', () => {
+describe('one variation selector, kept only when Unicode lists it for its base', () => {
   it.each([
     ['葛 + E0100 is kept, one visible', '葛\u{E0100}', '葛\u{E0100}', 1, 0],
     ['葛 + 20 E0100: one visible, 19 hidden', `葛${'\u{E0100}'.repeat(20)}`, '葛\u{E0100}', 1, 19 * 4],
@@ -96,7 +96,7 @@ describe('GM r21: one variation selector, kept only when Unicode lists it for it
   });
 });
 
-describe('review 12 L-1: a cut never leaves half an escape code', () => {
+describe('a cut never leaves half an escape code', () => {
   it('a cut inside a colour code drops the partial code whole, so the next character can\'t complete it', () => {
     const cut = fitNote(`${'c'.repeat(278)}\x1b[31mRED\x1b[0m`);
     // 278 c, the whole red code, "RE", then "\x1b[0" would be cut: it goes.

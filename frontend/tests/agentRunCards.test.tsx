@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 
 /**
- * Done cards (Q125 item 3): the Update Nebula posts when an agent's run
- * ends. GM - Design, 2026-10-25, verbatim: "One button on all of them: Show
+ * Done cards: the Update Nebula posts when an agent's run
+ * ends. Design, 2026-10-25, verbatim: "One button on all of them: Show
  * on canvas. Layout: the agent's colour on the left edge, like the question
  * form. Failure gets the existing error icon by the message, never a red
  * edge. Thumbnail: the last node's first output, below the message, 96 px
@@ -86,7 +86,7 @@ describe('the card', () => {
     const { container } = card(sanitizeNote(raw({ outcome: 'failure' }, "Codex’s run of “Hero shots” failed.")));
     expect(container.querySelector('.agent-note-card')?.getAttribute('data-outcome')).toBe('failure');
     const icon = container.querySelector('.agent-run-icon')!;
-    // GM - Design, 2026-10-25: aria-hidden, the message already says "failed";
+    // Design, 2026-10-25: aria-hidden, the message already says "failed";
     // the glyph the node's own error state uses (a failed shot's ⚠).
     expect(icon.getAttribute('aria-hidden')).toBe('true');
     expect(icon.hasAttribute('aria-label')).toBe(false);

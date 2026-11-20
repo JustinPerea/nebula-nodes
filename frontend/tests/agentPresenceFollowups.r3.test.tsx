@@ -7,20 +7,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NodeData } from '../src/types';
 
 /**
- * Fix round 3 of PR #200 (review 3 and GM's round 3 answers), the component
- * side, from review 3's live findings:
- * - M-2: the kept notes stack, one per project, newest at the bottom, each
+ * PR #200 (the PR review and design's answers), the component
+ * side, from the reviewer's live findings:
+ * - The kept notes stack, one per project, newest at the bottom, each
  *   with its own Copy note and ×; on another project each names its own.
- * - M-3 and LOW-5: Cinema's variation images (image-only buttons) dim their
+ * - Cinema's variation images (image-only buttons) dim their
  *   thumbnail when disabled, and the selected one, like the selected film-look
- *   chip, keeps its outline in the shared grey (GM: "That's the disabled look
+ *   chip, keeps its outline in the shared grey (design: "That's the disabled look
  *   for image-only buttons everywhere").
- * - LOW-1: Run history's Rerun, Retry and Recover say their own verb offline.
- * - LOW-3: a follow that starts while the mask painter is open: the project
- *   bar sits above the painter's scrim (GM: "the bar goes on top, same as the
+ * - Run history's Rerun, Retry and Recover say their own verb offline.
+ * - A follow that starts while the mask painter is open: the project
+ *   bar sits above the painter's scrim (design: "the bar goes on top, same as the
  *   other editors"), and the painter's tools and strokes lock.
- * - LOW-4: the read-only trim editor locks Render preview and Export….
- * - LOW-5: the pin card is bounded and scrolls.
+ * - The read-only trim editor locks Render preview and Export….
+ * - The pin card is bounded and scrolls.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
@@ -83,9 +83,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ── M-2: the kept notes stack ───────────────────────────────────────────────
+// ── The kept notes stack ───────────────────────────────────────────────
 
-describe('M-2: kept notes stack, one per project, each with its own Copy note and ×', () => {
+describe('kept notes stack, one per project, each with its own Copy note and ×', () => {
   const reason = { agent: 'Codex', projectName: 'Second canvas' };
   const note = (project: string, projectName: string, text: string, why = reason): KeptNote =>
     ({ text, project, projectName, following: why, line: noteKeptLine(why) });
@@ -122,7 +122,7 @@ describe('M-2: kept notes stack, one per project, each with its own Copy note an
     expect(screen.getByRole('status').textContent).toContain('Your note wasn’t sent because Codex started opening “Second canvas”.');
   });
 
-  it('N-3: a failed send\'s error shows on its own project only', () => {
+  it('a failed send\'s error shows on its own project only', () => {
     setProjectContext({ id: 'beta', revision: 'rev-b' });
     publishOpenProject({ id: 'beta', name: 'Second canvas' });
     useCanvasPinsStore.setState({ error: "Couldn't save the note. Nebula didn't respond.", errorProject: 'alpha' } as never);
@@ -136,9 +136,9 @@ describe('M-2: kept notes stack, one per project, each with its own Copy note an
   });
 });
 
-// ── M-3 and LOW-5: image-only buttons and the selected chip, disabled ──────
+// ── Image-only buttons and the selected chip, disabled ──────
 
-describe('M-3: an image-only button dims its thumbnail disabled; the selected one keeps a grey outline', () => {
+describe('an image-only button dims its thumbnail disabled; the selected one keeps a grey outline', () => {
   const shared = cssRules(read('styles/disabled-buttons.css'));
   const imageRule = shared.find(({ selector }) => /\.cinema-shot-panel__variation/.test(selector) && /:disabled/.test(selector) && /\bimg\b/.test(selector));
   const selectedRules = shared.filter(({ selector }) => /:disabled/.test(selector) && /--active|aria-pressed/.test(selector));
@@ -167,19 +167,19 @@ describe('M-3: an image-only button dims its thumbnail disabled; the selected on
   });
 });
 
-// ── LOW-1: Run history's verbs ─────────────────────────────────────────────
+// ── Run history's verbs ─────────────────────────────────────────────
 
-describe('LOW-1: Run history\'s Rerun, Retry and Recover say their verb offline', () => {
+describe('Run history\'s Rerun, Retry and Recover say their verb offline', () => {
   const record = (id: string, status: RunRecord['status']): RunRecord => ({ id, status, trigger: 'graph', startedAt: Date.now(),
     snapshot: { nodes: [{ id: 'n1', definitionId: 'text-input', params: {}, outputs: {} }], edges: [] } });
 
-  it('the constants are GM\'s lines', () => {
+  it('the constants are design\'s lines', () => {
     expect(offlineDisabledReason(OFFLINE_RERUN)).toBe('You can rerun it when Nebula reconnects.');
     expect(offlineDisabledReason(OFFLINE_RETRY)).toBe('You can run its failed nodes again when Nebula reconnects.');
     expect(offlineDisabledReason(OFFLINE_RECOVER)).toBe('You can recover it when Nebula reconnects.');
   });
 
-  it('offline: Rerun and Retry give their own line; following, GM\'s wait line', () => {
+  it('offline: Rerun and Retry give their own line; following, design\'s wait line', () => {
     useGraphStore.setState({ runHistory: [record('failed-run', 'failed'), record('complete-run', 'complete')], isExecuting: false });
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
     render(<RunHistoryPanel />);
@@ -198,9 +198,9 @@ describe('LOW-1: Run history\'s Rerun, Retry and Recover say their verb offline'
   });
 });
 
-// ── LOW-3: the mask painter during a follow ────────────────────────────────
+// ── The mask painter during a follow ────────────────────────────────
 
-describe('LOW-3: the mask painter while following', () => {
+describe('the mask painter while following', () => {
   it('the project bar sits above the painter\'s scrim while following (the wrap is marked, and raised over 1000)', () => {
     useProjectStore.setState({ screen: 'workspace', saveStatus: 'saved', busy: false,
       activeProject: { id: 'a', name: 'Followups', createdAt: '', updatedAt: '', lastOpenedAt: null, nodeCount: 0, edgeCount: 0, thumbnail: null } } as never);
@@ -218,7 +218,7 @@ describe('LOW-3: the mask painter while following', () => {
     expect(wrap).not.toHaveAttribute('data-following');
   });
 
-  // Live (fix round 3): the skin's `body.app-slava-restraint .canvas-tabs-wrap`
+  // Live: the skin's `body.app-slava-restraint .canvas-tabs-wrap`
   // (z-index: var(--sr-layer-panel)) outranked the plain [data-following]
   // rule, and the painter's scrim still covered the bar. Every rule that sets
   // the wrap's z-index has a [data-following] twin, as specific, above it.
@@ -235,7 +235,7 @@ describe('LOW-3: the mask painter while following', () => {
     }
   });
 
-  it('its tools lock (Brush, Erase, Size, Clear, Save) with GM\'s tooltip; Cancel and Close stay', () => {
+  it('its tools lock (Brush, Erase, Size, Clear, Save) with design\'s tooltip; Cancel and Close stay', () => {
     render(<MaskPainterModal imageUrl={null} initialMask={null} onSave={vi.fn()} onClose={vi.fn()} />);
     follow();
     for (const name of [/Brush/, /Erase/, /Clear/, /Save mask/]) {
@@ -256,9 +256,9 @@ describe('LOW-3: the mask painter while following', () => {
   });
 });
 
-// ── LOW-4: the read-only trim editor ───────────────────────────────────────
+// ── The read-only trim editor ───────────────────────────────────────
 
-describe('LOW-4: the read-only trim editor locks Render preview and Export…', () => {
+describe('the read-only trim editor locks Render preview and Export…', () => {
   const mount = () => {
     const clip = { id: 'c1', start: 0, duration: 2, sourceIn: 0, sourceOut: 2, volume: 1, mute: false };
     const node: Node<NodeData> = { id: 'e1', type: 'model-node', position: { x: 0, y: 0 },
@@ -282,9 +282,9 @@ describe('LOW-4: the read-only trim editor locks Render preview and Export…', 
   }
 });
 
-// ── LOW-5: the pin card ────────────────────────────────────────────────────
+// ── The pin card ────────────────────────────────────────────────────
 
-describe('LOW-5: a tall note scrolls inside a bounded card', () => {
+describe('a tall note scrolls inside a bounded card', () => {
   it('the note text has a max height and scrolls; the card takes no canvas wheel', () => {
     const rule = cssRules(read('styles/canvasPins.css')).find(({ selector }) => selector === '.canvas-pin__text');
     expect(rule?.body).toMatch(/max-height:/);

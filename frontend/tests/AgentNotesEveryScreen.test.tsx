@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import type { AgentNote } from '../src/lib/agentNotes';
 
 /**
- * The Updates corner on every screen (Justin's Q107 a, 2026-10-21): "Show it
+ * The Updates corner on every screen (Justin, 2026-10-21): "Show it
  * on every screen, with the open project's Updates." The same list, count,
  * Review and outcomes as on the canvas; socket updates land live wherever
  * the person is. Review and Show work from any screen. Hidden with no
@@ -32,7 +32,7 @@ const api = vi.hoisted(() => ({
   dismissAgentNote: vi.fn(),
 }));
 
-// The Agents panel's roster read (Q125 item 2): nobody around in these tests.
+// The Agents panel's roster read: nobody around in these tests.
 vi.mock('../src/lib/agentRoster', () => ({ fetchAgentRoster: async () => ({ projectId: null, agents: [], rev: 0 }) }));
 vi.mock('@xyflow/react', () => ({
   useStore: (selector: (state: typeof flow.state) => unknown) => selector(flow.state),
@@ -205,7 +205,7 @@ describe('the corner shows the open project\'s Updates on every screen', () => {
     expect(within(screen.getByRole('dialog', { name: 'Updates' })).getByText('kept with Harbor')).toBeTruthy();
   });
 
-  it('shows a restarted ask\'s outcome in place of Review (Q108 a)', () => {
+  it('shows a restarted ask\'s outcome in place of Review', () => {
     on('home');
     render(<AppAgentNotes />);
     sync([ask('project', 'dusk', { readAt: '2026-10-21T12:30:00.000Z', resolvedAt: '2026-10-21T12:30:00.000Z',
@@ -273,7 +273,7 @@ describe('Review from any screen lands where the person decides', () => {
   });
 });
 
-describe("a canvas proposal's Update (Justin's Q112 a)", () => {
+describe("a canvas proposal's Update (Justin's ruling)", () => {
   function canvasAsk(overrides: Partial<AgentNote> = {}) {
     const text = 'Claude Code proposes 3 changes on the canvas';
     return note('an_canvas', {
@@ -500,7 +500,7 @@ describe('"See all actions →" from any screen', () => {
     expect(useUIStore.getState().viewMode).toBe('canvas');
   });
 
-  it.each(['home', 'create', 'commons'] as const)('on %s: no link while the Agent log is switched off (Q38)', (where) => {
+  it.each(['home', 'create', 'commons'] as const)('on %s: no link while the Agent log is switched off', (where) => {
     on(where);
     useUIStore.setState({ agentLogEnabled: false });
     render(<AppAgentNotes />);
@@ -571,8 +571,8 @@ describe('a step away that can\'t go through says why', () => {
 
   // While Blind labeling or Agent review holds unsaved work, the corner's
   // ways out of the Commons (See all, Show, Review) ask first through the
-  // Commons' popover, anchored to the clicked button (commons-leave, GM -
-  // Design; #163 refused with a reason). The step runs only once the person
+  // Commons' popover, anchored to the clicked button (commons-leave, design;
+  // #163 refused with a reason). The step runs only once the person
   // chose to leave and the Commons is clean. CommonsView registers the ask;
   // here a stand-in records it.
   describe('from the Commons with unsaved labels', () => {
@@ -695,7 +695,7 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     expect(list.style.getPropertyValue('--an-drop-top')).toBe('56px');
   });
 
-  // GM on #199's shots (fix round 3 of PR #200): pinned to the top right, the
+  // Design on #199's shots (PR #200): pinned to the top right, the
   // chip sat on Projects' "New project" once the page scrolled. It leaves with
   // its header now, as the header's Settings does; its card still starts on screen.
   it('scrolls away with its header when the page scrolls (Projects), never over the page below', () => {
@@ -734,7 +734,7 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     }
   });
 
-  // Review of Q107 a: a chat left open on the canvas stays mounted in the
+  // A chat left open on the canvas stays mounted in the
   // studios (.workspace-overlays--studio), docked from the top gutter at
   // 1280x800 (x 924-1264, y 16-726). The chip keeps its header slot; a card
   // or the list that would meet the chat sits just left of it, and the
@@ -792,7 +792,7 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     }
   });
 
-  // GM, PR #203 r10 and r13 item 2 (round 6 review, NIT-2): the list is
+  // Design, PR #203: the list is
   // opened by the person, so it draws over the proposal bar and keeps its
   // room; the arrival card, which nobody opened, still stops above the
   // notice stack (the bar in it).
@@ -844,7 +844,7 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     expect(root.style.getPropertyValue('--agent-notes-drop-top')).toBe('');
   });
 
-  // GM review of Q107 a: below about 1360 px the chip drops the word
+  // Design review: below about 1360 px the chip drops the word
   // "Updates" (agentNotes.css) and the header reserves its compact width. The
   // corner writes the chip's measured width into the one token the slot and
   // the header padding read; a window resize across the breakpoint changes
@@ -886,7 +886,7 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     expect(label?.children).toHaveLength(0);
   });
 
-  // GM review of p157: the count was a circle in the newest author's colour,
+  // Design review of PR #157: the count was a circle in the newest author's colour,
   // the size of a dot, so "C Ar 1" read as three people. It is its own
   // element after the dots (styled apart in agentNotes.css, pinned in
   // agentNotesLayoutCss.test.ts) at every count.
@@ -907,7 +907,7 @@ describe('the corner keeps clear of each screen\'s controls', () => {
     expect(count.getAttribute('data-muted')).toBe(unread === 0 ? 'true' : 'false');
   });
 
-  // GM review of PR #157, round 2: the 1 row of count-forms.png had no ring,
+  // Design review of PR #157: the 1 row of count-forms.png had no ring,
   // because the ring only showed while a card was up. "One new item is
   // exactly when you most need it to pull. The ring should come on at any
   // count of 1 or more." No card is up here: the list is synced, not dropped.

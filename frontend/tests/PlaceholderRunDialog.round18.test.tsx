@@ -3,10 +3,10 @@ import { act, cleanup, render } from '@testing-library/react';
 import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import type { PlaceholderRunConfirm, PlaceholderRunRow } from '../src/lib/placeholderRunConfirm';
 
-// Review 17: (1) the screen-reader line dropped the "no longer in this run"
+// The screen-reader line dropped the "no longer in this run"
 // line when a node left and another moved in the same update
-// (PlaceholderRunDialog.tsx:137). Decision: announce both lines. (2) Nit:
-// on an in-place price change, focus moves to Cancel, matching GM's re-ask
+// (PlaceholderRunDialog.tsx:137). Decision: announce both lines. A nit:
+// on an in-place price change, focus moves to Cancel, matching design's re-ask
 // rule (focus stays on Cancel on any re-ask).
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };

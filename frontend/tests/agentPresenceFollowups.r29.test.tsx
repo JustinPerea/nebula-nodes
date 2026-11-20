@@ -1,18 +1,18 @@
-// PR #200 fix round 19, GM r28: only Escape and × act on a notice. `?` (the
+// PR #200, design: only Escape and × act on a notice. `?` (the
 // shortcuts' toggle), Cmd+K (the palette's) and every other key pressed on a
 // notice close nothing and reach no dialog or app shortcut: one shared rule
 // (lib/modalFocus noticeKeys, installed by NoticeRegion), in all six modals.
-// (The setup below is round 18's, from agentPresenceFollowups.r27.test.tsx.)
+// (The setup below is the earlier test's, from agentPresenceFollowups.r27.test.tsx.)
 //
-// Round 18's notes on that setup:
-// - GM r27 item 1: Escape on a focused notice closes that notice only (as its
+// Notes on that setup:
+// - Design: Escape on a focused notice closes that notice only (as its
 //   ×), focus follows the × rule, and the dialog stays; Escape from inside a
 //   dialog still closes it. One shared rule (lib/modalFocus noticeKeys,
 //   installed by NoticeRegion), checked in all six modals.
-// - Review 15 LOW-A: in onboarding and the result comparison, a notice's keys
+// - In onboarding and the result comparison, a notice's keys
 //   are its own: Enter and Space aren't taken (no preventDefault, focus stays
 //   for the button's own activation), and a real Shift-then-Tab leaves it.
-// - Review 15 LOW-B / GM r27 item 3: a notice replaced under focus (Undo's
+// - Design: a notice replaced under focus (Undo's
 //   remount) sends focus to the open dialog's field; Redo stays reachable by Tab.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -43,7 +43,7 @@ const initialUI = useUIStore.getState();
  * leaving as a real one does (focus moved first, then gone). */
 function notices(count: number) {
   // The canvas notice's slot: the first slot is the proposal bar's, which is
-  // behind an open dialog, not one of its notices (PR #203 review r5 MEDIUM-1).
+  // behind an open dialog, not one of its notices (PR #203).
   const slot = document.querySelector('[data-notice-slot="notice"]')!;
   return Array.from({ length: count }, (_, index) => {
     const notice = document.createElement('div');
@@ -99,7 +99,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('GM r28: `?` and Cmd+K on a notice close nothing, in every modal', () => {
+describe('`?` and Cmd+K on a notice close nothing, in every modal', () => {
   it.each(MODALS)('$label', ({ label, open, dialog }) => {
     open();
     expect(dialog()).not.toBeNull();
@@ -123,7 +123,7 @@ describe('GM r28: `?` and Cmd+K on a notice close nothing, in every modal', () =
       // Enter on the notice's button is still the button's (activation is its default).
       a.act.focus();
       expect(press('Enter').defaultPrevented).toBe(false);
-      // Escape still closes the notice only (GM r27 item 1).
+      // Escape still closes the notice only (design).
       a.close.focus();
       press('Escape');
       expect(a.notice.isConnected).toBe(false);

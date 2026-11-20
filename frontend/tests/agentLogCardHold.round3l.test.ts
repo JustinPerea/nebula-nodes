@@ -2,8 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useUIStore } from '../src/store/uiStore';
 
 /**
- * PR #216 round 3l, review 4 logic NIT-1 (review 3's F8, uiStore
- * setAgentLogOpen): a collapse made while the card holds the log folded is
+ * PR #216 (uiStore setAgentLogOpen): a collapse made while the card holds the log folded is
  * the person's (or an agent's) own, so the card's hold lets go of it and the
  * card's leave never reopens it; an opening over the fold is refused for the
  * card.

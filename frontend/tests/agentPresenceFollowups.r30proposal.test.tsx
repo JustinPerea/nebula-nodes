@@ -1,8 +1,8 @@
-// PR #200 fix round 20, GM r30 item 7: while the person gate is held (the
+// PR #200, design: while the person gate is held (the
 // server's demote set it; its promote clears it, lib/personSession), the
 // proposal bar's Accept and Reject are disabled with their reasons. Both call
 // person-only routes (main._decidable_proposal: require_person). They come
-// back on promote and go again on demote. Review 17 LOW-1: an Accept or
+// back on promote and go again on demote. An Accept or
 // Reject refused for the gate stops saying so once the tab is promoted.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { blocked, lockLine } from './helpers/personLock';
@@ -78,10 +78,10 @@ afterEach(() => {
 
 const acceptButton = () => screen.getByRole('button', { name: 'Accept and run 1 paid' }) as HTMLButtonElement;
 const rejectButton = () => screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement;
-const ACCEPT_HELD = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
-const REJECT_HELD = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
+const ACCEPT_HELD = 'You can review this when this tab is connected as you.'; // one line for both (design)
+const REJECT_HELD = 'You can review this when this tab is connected as you.'; // one line for both (design)
 
-describe('GM r30 item 7: Accept and Reject hold with the person gate', () => {
+describe('Accept and Reject hold with the person gate', () => {
   it('held: both disabled with their reasons, nothing sent; Show still works', async () => {
     open(proposal('p_a'));
     act(() => session.reportPersonRequired());
@@ -120,7 +120,7 @@ describe('GM r30 item 7: Accept and Reject hold with the person gate', () => {
     expect(blocked(acceptButton())).toBe(true);
   });
 
-  it('review 17 LOW-1: an Accept refused by the gate stops saying so once promoted; another error stays', async () => {
+  it('an Accept refused by the gate stops saying so once promoted; another error stays', async () => {
     open(proposal('p_a'));
     open(proposal('p_b', { createdAt: Date.now() + 1 }), 'key-b');
     net.apiFetch.mockResolvedValueOnce(respond(403, { detail: 'Only the person can do this.', code: 'person_required' }));

@@ -284,7 +284,7 @@ describe('the rail button, the launcher for every surface', () => {
   });
 });
 
-describe('GM round 1: a type or a click at a Character is drawn as a look', () => {
+describe('a type or a click at a Character is drawn as a look', () => {
   const targets: [string, AgentPresenceEvent['target'], AgentPresenceEvent['anchorNames'], string][] = [
     ['the Character', { surface: 'character', itemId: 'c1' }, { character: 'Mara' }, 'Looking at “Mara”'],
     ['a view', { surface: 'character', itemId: 'c1/2' }, { character: 'Mara', view: 2 }, 'Looking at view 2 of “Mara”'],

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * The Agents panel's store (Q125 item 2): status lines live from the socket,
+ * The Agents panel's store: status lines live from the socket,
  * the roster read on mount and after a reconnect, and an event that lands
  * during a read is neither lost nor undone by it.
  */
@@ -83,7 +83,7 @@ describe('the roster store', () => {
   });
 });
 
-describe("the last action's own time (GM's review)", () => {
+describe("the last action's own time (design's review)", () => {
   it('a read places the action at its own secondsAgo, not the cursor\'s', () => {
     const at = 1_800_000_000_000;
     useAgentRosterStore.getState().applyRoster({ projectId: 'p1', rev: 1, agents: [{

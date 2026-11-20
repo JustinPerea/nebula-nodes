@@ -1,4 +1,4 @@
-// PR #200 fix round 22, GM r32 (verbatim): "any name with spaces between
+// PR #200, design (verbatim): "any name with spaces between
 // words steps back to the last space within 8 graphemes; scripts without
 // spaces (Chinese, Japanese, Thai) cut by grapheme. Key it on whether there's
 // a space before the cut (within 8 graphemes), NOT on the script, so mixed
@@ -16,7 +16,7 @@ const fits = (title: string, available: number) => fitNoteHeading(title, availab
 const cutAfter = (title: string, start: string) => fits(title, textWidth(noteHeading(title, graphemesOf(start).length)));
 const heading = (kept: string) => `Note for agents on “${kept}…”`;
 
-describe('GM r32: the cut steps back to a space within 8 graphemes, whatever the script', () => {
+describe('the cut steps back to a space within 8 graphemes, whatever the script', () => {
   it('Korean steps back like Latin', () => {
     const title = '등대 프롬프트 저녁 바위 위의 따뜻한 빛';
     expect(cutAfter(title, '등대 프롬프트 저녁 바')).toBe(heading('등대 프롬프트 저녁'));

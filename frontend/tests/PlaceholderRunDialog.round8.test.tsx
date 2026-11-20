@@ -4,7 +4,7 @@ import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import { isCanvasShortcutTarget } from '../src/lib/canvasShortcutScope';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
-// Review 7, M-1: focus must never fall out of the open dialog. When the rows
+// Focus must never fall out of the open dialog. When the rows
 // stop scrolling while the list has focus (an agent deletes placeholders, the
 // window grows), focus moves to Cancel; any other slip to the page comes back
 // to Cancel too. And while the dialog is open, canvas shortcuts never act,
@@ -37,7 +37,7 @@ function rowsOverflow(overflows: boolean) {
 
 afterEach(() => { cleanup(); document.body.innerHTML = ''; vi.useRealTimers(); });
 
-describe('review 7, M-1: focus stays in the dialog', () => {
+describe('focus stays in the dialog', () => {
   it('the rows stop scrolling while the list has focus: focus moves to Cancel', () => {
     render(<PlaceholderRunDialog model={model(34)} onDone={() => {}} />);
     const list = rowsOverflow(true);
@@ -69,7 +69,7 @@ describe('review 7, M-1: focus stays in the dialog', () => {
   });
 });
 
-describe('review 7, M-1 (structural): no canvas shortcut acts behind an open dialog', () => {
+describe('structurally, no canvas shortcut acts behind an open dialog', () => {
   it('the page (body) is no canvas shortcut target while the dialog is open, and is again once it closes', () => {
     const view = render(<PlaceholderRunDialog model={model(2)} onDone={() => {}} />);
     expect(isCanvasShortcutTarget(document.body)).toBe(false);

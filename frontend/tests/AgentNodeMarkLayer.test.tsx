@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 
 /**
- * The agent's mark on a node and the placeholder outline (Q125 item 3),
- * drawn over the canvas. GM - Design, 2026-10-25: the pill sits just
+ * The agent's mark on a node and the placeholder outline,
+ * drawn over the canvas. Design, 2026-10-25: the pill sits just
  * outside the node's top edge, left-aligned, 6 px gap, like a tab; never
  * over the header or the preview. Dot (ring when it named itself), name,
  * status; truncated at the node's width with the full text in a tooltip.
@@ -82,7 +82,7 @@ describe('AgentNodeMarkLayer', () => {
     expect(pill.textContent).toContain('Codex');
     expect(pill.textContent).toContain('Running FLUX.2 [pro] · 0:41');
     expect(pill.title).toBe('Codex · Running FLUX.2 [pro] · 0:41');
-    // GM, 2026-10-25: "{agent}, {status}", and "unverified" for an agent that named itself.
+    // Design, 2026-10-25: "{agent}, {status}", and "unverified" for an agent that named itself.
     expect(pill.getAttribute('aria-label')).toBe('Codex, unverified, Running FLUX.2 [pro] · 0:41');
     expect(pill.style.getPropertyValue('--anm-color')).toBe('#F2C14E');
     expect(mark.querySelector('.agent-node-mark__more')).toBeNull();
@@ -158,7 +158,7 @@ describe('AgentNodeMarkLayer', () => {
   });
 
   it('keeps the pill a fixed screen size at every zoom, truncated at the node\'s on-screen width', () => {
-    // GM, 2026-10-25: "a FIXED screen size at every zoom, like the cursor
+    // Design, 2026-10-25: "a FIXED screen size at every zoom, like the cursor
     // labels: always 22 px tall, never scaled with the canvas."
     setStatus(CLAUDE, 'n4', 'Checking the crops');
     for (const [zoom, scale, max] of [[1.5, String(1 / 1.5), '360px'], [1, '1', '240px'], [0.6, String(1 / 0.6), '144px']] as const) {
@@ -172,10 +172,10 @@ describe('AgentNodeMarkLayer', () => {
     }
   });
 
-  // Review 3, finding 8: at 60% and up the pill takes no focus (no tab stop
+  // At 60% and up the pill takes no focus (no tab stop
   // on every node), so the node's own keyboard focus shows its whole text.
   describe("the node's keyboard focus", () => {
-    // Review 4, L5: the keyboard is what brings focus there (a key pressed
+    // The keyboard is what brings focus there (a key pressed
     // since the last pointer press), not :focus-visible, which a text field
     // clicked with the mouse matches too.
     function focusNode(id: string, keyboard: boolean, field = false) {
@@ -219,7 +219,7 @@ describe('AgentNodeMarkLayer', () => {
       expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBeUndefined();
     });
 
-    it('a text field in the node clicked with the mouse changes nothing (review 4, L5)', () => {
+    it('a text field in the node clicked with the mouse changes nothing', () => {
       setStatus(CLAUDE, 'n4', 'Checking the crops on every still in the hero set');
       const { container } = render(<AgentNodeMarkLayer />);
       focusNode('n4', false, true);
@@ -240,10 +240,10 @@ describe('AgentNodeMarkLayer', () => {
       expect(container.querySelector<HTMLElement>('.agent-node-mark')!.dataset.focused).toBeUndefined();
     });
 
-    // Round 8 (review 7, L5 live check): a status now keeps a long URL whole up
+    // Live check: a status now keeps a long URL whole up
     // to the cut, which has no space to wrap at. Below 60% zoom the dot is its
     // own Tab stop: tabbing to it shows the whole status (wrapping past 480
-    // px, GM round 5), the same as the node's keyboard focus, not 320 px with "…".
+    // px, design), the same as the node's keyboard focus, not 320 px with "…".
     it('tabbing to the dot below 60% zoom shows the whole status, as the node\'s focus does', () => {
       flow.state.transform = [0, 0, 0.4];
       setStatus(CLAUDE, 'n4', `Reading https://example.com/${'p'.repeat(111)}…`);

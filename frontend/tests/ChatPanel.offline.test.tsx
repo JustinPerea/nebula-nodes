@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-// error-copy review: apiFetch now throws ConnectionLostError (message: GM's
+// error-copy review: apiFetch now throws ConnectionLostError (message: design's
 // connection line) when no answer comes back. The chat panel must still read
 // that as "the backend is down", not as "log in to Claude/Codex again".
 

@@ -4,7 +4,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 // The Inspector's mask hint on a Mask Painter whose mask goes to an edit
-// node with no base image connected: GM - Design's words (2026-10-25),
+// node with no base image connected: design's words (2026-10-25),
 // "Nebula says connected, never wired".
 
 vi.mock('../src/lib/backend', async (original) => ({
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe("the Inspector's mask hint", () => {
-  it('says connect, in GM - Design’s words', () => {
+  it('says connect, in design’s words', () => {
     const edges: Edge[] = [{ id: 'e1', source: 'm1', sourceHandle: 'mask', target: 'f1', targetHandle: 'mask' }];
     useGraphStore.setState({ nodes: [node('m1', 'mask-painter'), node('f1', 'flux-fill-inpaint')], edges });
     useUIStore.getState().selectNode('m1');

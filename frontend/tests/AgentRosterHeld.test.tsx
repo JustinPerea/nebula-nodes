@@ -3,7 +3,7 @@ import { reasonOf } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /**
- * GM, 2026-10-29: the held "agents need you" count. A tab not connected as
+ * Design, 2026-10-29: the held "agents need you" count. A tab not connected as
  * the person holds no question sets or proposals (they go to the person's
  * sockets only), only their Updates. The open project's unresolved ask
  * Updates come into the shared rule (agentNeedsYou), so the Updates chip's
@@ -159,7 +159,7 @@ const looks = (list: HTMLElement) => rows(list).map((row) => ({
   dot: row.querySelector<HTMLElement>('.agent-notes-dot')?.getAttribute('style'),
 }));
 
-describe('GM 2026-10-29: the held needs-you count', () => {
+describe('the held needs-you count (design, 2026-10-29)', () => {
   it('held: the badge and the Needs-you rows count the asks the Updates name; each row is locked, not hidden', async () => {
     render(<AppAgentNotes />);
     act(() => { reportPersonRequired(); useAssetProposalsStore.setState({ awaitingSync: true }); });
@@ -184,7 +184,7 @@ describe('GM 2026-10-29: the held needs-you count', () => {
       expect(document.activeElement).toBe(row);
     }
     expect([cover, questions, canvas].map((row) => reasonOf(row))).toEqual([REVIEW_LOCK, ANSWER_LOCK, REVIEW_LOCK]);
-    // PR #204 round 10 (GM r15): the reason is a line in the row (its description), never a
+    // PR #204 (design): the reason is a line in the row (its description), never a
     // tooltip, and not said twice in its name.
     expect(questions.getAttribute('aria-label')).toBe('Claude Code, unverified, 2 questions.');
     for (const row of [cover, questions, canvas]) expect(row.hasAttribute('title')).toBe(false);
@@ -230,7 +230,7 @@ describe('GM 2026-10-29: the held needs-you count', () => {
     const view = { ...coverProposal({ id: 'pa_cover', agent: CODEX, createdAt: T }), update: { id: 'u_cover', projectId: 'p1' } };
     const input = { projectId: 'p1', questions: [], canvasProposals: [], assetProposals: [view as never], held: asks };
     expect(needsYouCount(input)).toBe(3);
-    // GM, #204 r5 item 2: while the tab isn't confirmed every row locks, the synced view's too.
+    // Design, #204: while the tab isn't confirmed every row locks, the synced view's too.
     const built = buildRosterRows({ ...input, now: Date.now(), statuses: [], cursors: [], nodeLabel: () => null, tabHeld: true });
     expect(built.filter((row) => row.group === 'needsYou').map((row) => [row.agent.name, row.countLine, row.locked]))
       .toEqual([['Codex', '1 proposal', REVIEW_LOCK], ['Claude Code', '2 questions', ANSWER_LOCK], ['Cursor', '1 proposal', REVIEW_LOCK]]);
@@ -239,7 +239,7 @@ describe('GM 2026-10-29: the held needs-you count', () => {
   });
 });
 
-describe('GM, PR #204 round 1: a held row reads disabled', () => {
+describe('PR #204: a held row reads disabled', () => {
   const sheets = ['src/components/agent-notes/agentNotes.css', 'src/components/agent-notes/agentRoster.css',
     'src/styles/disabled-buttons.css'];
   let style: HTMLStyleElement;
@@ -273,7 +273,7 @@ describe('GM, PR #204 round 1: a held row reads disabled', () => {
   });
 });
 
-describe('PR #204 review 1 MEDIUM-1: two asks that share one Update', () => {
+describe('PR #204: two asks that share one Update', () => {
   // The reviewer's repro: Codex asks for cover A, Claude Code asks one question,
   // then Codex asks for cover B. Codex's two asks share one Update, which names
   // only the newest (B); the ref's `asks` and `firstSince` say what it stands for.
@@ -348,7 +348,7 @@ describe('PR #204 review 1 MEDIUM-1: two asks that share one Update', () => {
   });
 });
 
-describe('PR #204 review 1 NIT-1: the guards a mutant survived', () => {
+describe('PR #204: the guards a mutant survived', () => {
   it('heldAsks skips a proposal this tab holds even when no view of it is in the count (a closed view, its Update not yet resolved)', () => {
     const notes = sanitizeNotes([UPDATES[0]]);
     expect(heldAsks(notes, (id) => id === 'pa_cover')).toEqual([]);

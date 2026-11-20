@@ -74,7 +74,7 @@ describe("the Inspector's file control", () => {
     await choose(container, new File([new Uint8Array(8)], 'quarterly-report-final-version-2026.pdf', { type: 'application/pdf' }));
     await waitFor(() => expect(useGraphStore.getState().nodes[0].data.params._fileName)
       .toEqual({ file: 'abc.pdf', name: 'quarterly-report-final-version-2026.pdf' }));
-    // Cut in the middle so the extension stays (GM r46 on #222); whole in its title.
+    // Cut in the middle so the extension stays (design on #222); whole in its title.
     const name = container.querySelector('.inspector__file-button span');
     expect(name?.textContent).toBe('quarterly-report-final-….pdf');
     expect(name?.getAttribute('title')).toBe('quarterly-report-final-version-2026.pdf');
@@ -100,7 +100,7 @@ describe("the Inspector's file control", () => {
     expect(image.container.querySelector('.inspector__file-preview')).not.toBeNull();
   });
 
-  // #226 round 3 (GM r82): the stored image's size gives the preview its
+  // #226 (design): the stored image's size gives the preview its
   // aspect ratio before it decodes, so the floating Inspector measures its
   // whole body on the first frame it opens.
   it('keeps the size /api/uploads reports with the preview, and a file without one drops the last', async () => {

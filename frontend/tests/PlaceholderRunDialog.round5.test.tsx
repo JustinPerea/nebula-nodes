@@ -4,12 +4,12 @@ import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import { askPlaceholderRun } from '../src/components/askPlaceholderRun';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
-// GM - Design, round 5 (2026-10-25), verbatim: "When the dialog comes back
+// Design (2026-10-25), verbatim: "When the dialog comes back
 // because the run changed, add this line above the rows: 'This run changed
 // since you last reviewed it.'" and "When a row or the total changes while
 // the dialog is open, ignore clicks on the Run button for ~500 ms and keep
 // focus where it was." The guard also applies when it reopens with changed
-// numbers (confirmed by GM). Review 4, M3.
+// numbers (confirmed by design).
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const CHANGED = 'This run changed since you last reviewed it.';
@@ -61,15 +61,15 @@ describe('the re-asked dialog', () => {
 });
 
 describe('a price that changes while the dialog is open', () => {
-  it('holds Run for 500 ms; a price change moves focus to Cancel (review 17)', () => {
+  it('holds Run for 500 ms; a price change moves focus to Cancel', () => {
     const answers: boolean[] = [];
     const { rerender } = render(<PlaceholderRunDialog model={model('price not listed', '$0')} onDone={(ok) => answers.push(ok)} />);
     const run = document.querySelector<HTMLButtonElement>('.prompt-dialog__confirm')!;
     act(() => { run.focus(); });
     rerender(<PlaceholderRunDialog model={model('$35', '$35')} onDone={(ok) => answers.push(ok)} />);
-    // Round 18 (review 17 nit, coordinator's decision, flagged to GM): an
+    // The coordinator decided, and flagged it to design: an
     // in-place price change moves focus to Cancel, as on a re-ask; this
-    // replaces round 5's "keep focus where it was" for price changes.
+    // replaces the earlier "keep focus where it was" for price changes.
     expect(document.activeElement?.textContent).toBe('Cancel');
     expect(run.textContent).toBe('Run for $35');
     fireEvent.click(run);
@@ -82,7 +82,7 @@ describe('a price that changes while the dialog is open', () => {
     expect(answers).toEqual([true]);
   });
 
-  // GM - Design, round 19 (verbatim): "focus moves to Cancel ONLY when the
+  // Design (verbatim): "focus moves to Cancel ONLY when the
   // run button's price changes in place. Every other in-place update keeps
   // focus where it was. The "changed while this was open" line is announced
   // via aria-live."
@@ -123,7 +123,7 @@ describe('a price that changes while the dialog is open', () => {
     fireEvent.click(screen.getByText('Run for $35'));
     act(() => { vi.advanceTimersByTime(500); });
     await act(async () => { fireEvent.click(screen.getByText('Run for $35')); });
-    // Review 5, L6: it hands back the words it showed.
+    // It hands back the words it showed.
     await expect(answer).resolves.toMatchObject({ runLabel: 'Run for $35' });
     expect(stop).toHaveBeenCalledOnce();
   });

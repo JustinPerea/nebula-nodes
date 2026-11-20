@@ -5,7 +5,7 @@ import { LOG_HELD_ATTR } from '../src/lib/noticeStackPlace';
 import { useUIStore } from '../src/store/uiStore';
 
 /**
- * PR #216 round 3l (GM r69 b; review 4 layout LOW-1, logic LOW-4): a drag of
+ * PR #216 (design): a drag of
  * the Agent log ends, and its hold (`data-agent-log-held`, which stops the
  * card and the notices placing) goes, on the drop and on every way a drop
  * can be lost: the window losing focus, the pointer cancelled, its capture
@@ -32,7 +32,7 @@ afterEach(() => {
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
 });
 
-/** Mounts the log and starts a drag past the threshold (review 4's repro:
+/** Mounts the log and starts a drag past the threshold (a reviewer's repro:
  * 50 px with the button held). */
 function startDrag() {
   const { container } = render(<AgentLog />);
@@ -58,7 +58,7 @@ async function dragIsOver(header: HTMLButtonElement) {
   expect(useUIStore.getState().agentLogOpen).toBe(!open);
 }
 
-describe('round 3l (GM r69 b): the drag hold ends on every lost drop', () => {
+describe('the drag hold ends on every lost drop', () => {
   it('the window losing focus (Cmd-Tab, a system dialog mid-drag)', async () => {
     const { header } = startDrag();
     act(() => { window.dispatchEvent(new Event('blur')); });

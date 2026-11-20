@@ -1,10 +1,10 @@
-// PR #200 fix round 14 (GM r22).
-// Q1: the person gate's 403 keeps its own line, "Notes can only be added from
+// PR #200 (design).
+// The person gate's 403 keeps its own line, "Notes can only be added from
 // the Nebula canvas.", with no "try again", for a request that isn't the
 // canvas's own (agent_refused); a tab not connected as the person
-// (person_required) reads the banner's person-only line (review 13 L-1, GM r23). Q2: the pin card's status edge is
+// (person_required) reads the banner's person-only line (design). The pin card's status edge is
 // its own element, the only thing near Delete note in the presence colour
-// (the ratchet's half is agentPresenceFollowups.ratchet.test.ts). Q3: the
+// (the ratchet's half is agentPresenceFollowups.ratchet.test.ts). The
 // dialog lets both 280-character emoji notes through; the backend saves them
 // (backend/tests/test_pin_text_r14.py).
 import { readFileSync } from 'node:fs';
@@ -26,7 +26,7 @@ const { MAX_PIN_TEXT, PIN_REFUSAL_COPY, noteLength, pinRefusalLine, pinTextReady
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 // The app draws its notices in the notice region, which stays usable beside
-// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+// an open dialog (ModalPortal isolates everything else, design, PR #203).
 const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('GM r22 Q1: the person gate keeps its own line', () => {
+describe('the person gate keeps its own line', () => {
   it('reads "Notes can only be added from the Nebula canvas." with no "try again"', () => {
     expect(PIN_REFUSAL_COPY.canvasOnly).toBe('Notes can only be added from the Nebula canvas.');
     expect(PIN_REFUSAL_COPY.canvasOnly).not.toMatch(/try again/i);
@@ -84,7 +84,7 @@ describe('the pin card has no left status edge (design)', () => {
   });
 });
 
-describe('GM r22 Q3: both 280-character emoji notes fit the dialog', () => {
+describe('both 280-character emoji notes fit the dialog', () => {
   const CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
   it.each([

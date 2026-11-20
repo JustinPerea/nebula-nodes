@@ -1,10 +1,10 @@
-// PR #200 fix round 13 (GM r20).
-// Q1: every pin refusal is one neutral line with no "Couldn't …" heading,
+// PR #200 (design).
+// Every pin refusal is one neutral line with no "Couldn't …" heading,
 // read by the answer's code and status; the typed note stays in the field on
-// any failure; a failed delete keeps the pin. Note 1 and its addendum: a
+// any failure; a failed delete keeps the pin. The "N left" counter and its addendum: a
 // neutral "N left" under the note field from 30 left, and at once, whatever
 // is left, once an edit has been refused; a paste that won't fit is refused
-// whole. (Q3, the presence-colour author edge, is in the ratchet.)
+// whole. The presence-colour author edge is in the ratchet.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,7 +25,7 @@ beforeAll(() => pinTextReady);
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 // The app draws its notices in the notice region, which stays usable beside
-// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+// an open dialog (ModalPortal isolates everything else, design, PR #203).
 const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
@@ -40,8 +40,8 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('GM r20 Q1: every pin refusal is one neutral line', () => {
-  it('the lines are GM\'s, word for word, with ’ and no "Couldn\'t" heading', () => {
+describe('every pin refusal is one neutral line', () => {
+  it('the lines are design\'s, word for word, with ’ and no "Couldn\'t" heading', () => {
     expect(PIN_REFUSAL_COPY).toEqual({
       tooLong: 'Notes can be up to 280 characters. Shorten this one, then try again.',
       hidden: 'This note has too much hidden text to save. Paste it as plain text, then try again.',
@@ -118,7 +118,7 @@ describe('GM r20 Q1: every pin refusal is one neutral line', () => {
   });
 });
 
-describe('GM r20 note 1 and addendum: the "N left" counter', () => {
+describe('the "N left" counter', () => {
   const CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
   const open = (initial = '') => {
@@ -133,7 +133,7 @@ describe('GM r20 note 1 and addendum: the "N left" counter', () => {
       await Promise.resolve();
     });
   };
-  // Always laid out (it fades, GM r23 item 3): shown is data-shown.
+  // Always laid out (it fades, design): shown is data-shown.
   const counter = () => {
     const el = document.querySelector('.prompt-dialog__counter');
     return el?.hasAttribute('data-shown') ? el.textContent : null;
@@ -167,13 +167,13 @@ describe('GM r20 note 1 and addendum: the "N left" counter', () => {
     expect(counter()).toBe('0 left');
   });
 
-  it('addendum: a refused paste with plenty of room shows "N left" at once, until an edit leaves more than 30 (GM r23)', async () => {
+  it('addendum: a refused paste with plenty of room shows "N left" at once, until an edit leaves more than 30', async () => {
     const field = open('b'.repeat(180));
     expect(counter()).toBeNull();
     await edit(field, `${'b'.repeat(10)}${'P'.repeat(150)}${'b'.repeat(170)}`, 160);
     expect(field.value).toBe('b'.repeat(180));
     expect(counter()).toBe('100 left');
-    // GM r23 item 3: the next edit that leaves more than 30 hides it again.
+    // Design: the next edit that leaves more than 30 hides it again.
     await edit(field, 'b'.repeat(100), 100);
     expect(counter()).toBeNull();
     await edit(field, 'b'.repeat(270), 270);
@@ -195,7 +195,7 @@ describe('GM r20 note 1 and addendum: the "N left" counter', () => {
   });
 });
 
-describe('review 12 NIT-1: the three pressed states ease back on release', () => {
+describe('the three pressed states ease back on release', () => {
   it('each control\'s own rule (not only :active) carries the transform, so letting go eases back', async () => {
     const { cascaded } = await import('./helpers/cssCascade');
     document.body.className = 'app-slava-restraint';

@@ -4,10 +4,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { callersOf, gatedRoutes, socketRefusalGaps } from './personGatedCallers';
 
 /**
- * GM, PR #204 round 3 (2026-10-30): "on promote, every line whose only reason
+ * Design, PR #204 (2026-10-30): "on promote, every line whose only reason
  * was 'this tab isn't connected as you' clears at once, wherever it sits", and
  * "a ratchet test or a single 'clears on promote' flag on those lines would
- * keep the next one from sticking". Round 4 (review 2 MEDIUM) widens it to
+ * keep the next one from sticking". A later pass widens it to
  * every form of the person gate and checks each call site, not each file:
  *
  * 1. Every backend function behind the person gate is in GATED: whatever
@@ -24,7 +24,7 @@ import { callersOf, gatedRoutes, socketRefusalGaps } from './personGatedCallers'
  *    through the mechanism too, or is a classifier listed in CLASSIFIERS.
  * 4. Nothing clears on the promote by its own listener.
  *
- * Round 5 (review 3 MEDIUM-1: Create's two lines had slipped through every list) adds the half
+ * A later pass (Create's two lines had slipped through every list) adds the half
  * that needs no hand-kept map to start from (tests/personGatedCallers.ts):
  *
  * 5. Every backend route behind the gate is found, and every frontend function that sends one
@@ -116,7 +116,7 @@ const SITES: Record<string, string> = {
   'settings.write': 'lib/settingsWrites.ts',
   // PR #203: the restored-settings notice's dismissal (GET/POST /api/settings/notice are the person's only).
   'settings.notice': 'components/panels/settings/SettingsTopNotice.tsx',
-  // Round 10 (GM r17 item 5): the Inspector's star, whose refused save used to drop silently.
+  // Design: the Inspector's star, whose refused save used to drop silently.
   'inspector.favorite': 'components/panels/Inspector.tsx',
   'krea.connection': 'components/panels/settings/useKreaConnection.ts',
   'krea.plans': 'components/panels/settings/KreaSignInRow.tsx',
@@ -147,7 +147,7 @@ const SITES: Record<string, string> = {
   'graph.notify': 'store/graphStore.ts',
   'graph.run-start': 'store/graphStore.ts',
   'graph.shot-start': 'store/graphStore.ts',
-  // Round 7 (review 5 MEDIUM-1): Undo's and Redo's refusal line, and a scene save's retry.
+  // Undo's and Redo's refusal line, and a scene save's retry.
   'graph.undo-refusal': 'store/graphStore.ts',
   'cinema.scene-save-retry': 'store/graphStore.ts',
 };
@@ -176,7 +176,7 @@ const GATED: Record<string, Surface> = {
   revoke_agent_app: ['settings.apps'],
   create_canvas_pin: ['pins.add', 'pins.refusal'],
   delete_canvas_pin: ['pins.remove', 'pins.refusal'],
-  // Round 14 (GM r23 item 5): a mark-read refused for this tab shows no line; it waits for the promote.
+  // Design: a mark-read refused for this tab shows no line; it waits for the promote.
   read_canvas_agent_notes: NO_LINE('a mark-read is never the person\'s own press: refused for this tab it shows nothing and waits for the promote (lib/personWork afterPersonRefusal)'),
   dismiss_canvas_agent_note: ['notes.dismiss', 'notes.corner'],
   read_board_agent_notes: NO_LINE('as read_canvas_agent_notes: no line for a refusal for this tab, it waits for the promote'),
@@ -203,7 +203,7 @@ const GATED: Record<string, Surface> = {
   _refuse_override_change: ['studio.save-board', 'studio.undo-redo', 'studio.brief', 'studio.draft'],
   purge_trashed: ['trash'],
   empty_trash: ['trash'],
-  // routes/krea_connector.py: the Krea account is the person's (round 4, review 2 MEDIUM).
+  // routes/krea_connector.py: the Krea account is the person's.
   'krea_connector.person_only': NO_LINE('the dependency itself: the four routes that use it are listed by name'),
   'krea_connector.connect': ['krea.connection'],
   'krea_connector.check': ['krea.connection'],
@@ -215,7 +215,7 @@ const GATED: Record<string, Surface> = {
   // A run the daily total holds is sent as a proposal; a tab that isn't the person gets person_required from it (PR #212).
   _propose_waiting_run: ['graph.run-start', 'graph.refusal'],
   // Create's Save style (POST /api/presets, _check_style_write) and Generate (POST
-  // /api/graph/cluster) answer with it too (review 3 MEDIUM-1, round 5).
+  // /api/graph/cluster) answer with it too.
   _refuse_agent_billing_change: ['project.save', 'project.save-retry', 'project.load-retry', 'project.error', 'graph.notify', 'graph.run-start',
     'graph.refusal', 'graph.undo-refusal', 'cinema.scene-save-retry', 'create.style-retry'],
   _refuse_graph_over_save_limit_on_its_own: ['graph.notify', 'graph.refusal', 'graph.undo-refusal'],
@@ -233,12 +233,12 @@ const OTHER_SITES: Record<string, string> = {
   banner: 'the person-gate banner itself (PersonRequiredBanner)',
   'chat.transcript': 'the chat socket\'s own person_required refusal (/ws/chat), by its code',
   'chat.session': 'a chat turn with no person token for the Commons (commonsChatAuthority)',
-  // PR #204 round 9: the Commons' own refusal (lib/commonsApi sessionLost: no person token, or a
+  // PR #204: the Commons' own refusal (lib/commonsApi sessionLost: no person token, or a
   // 401 with a forgotten one), outside the gate's routes. Every Commons screen's line goes through
   // useCommonsLine (tests/presenceRound9.commons pins that structurally).
   'commons.line': 'every Commons screen\'s failure line, through useCommonsLine',
   'commons.reload-retry': 'a Commons load refused for this tab runs again on the promote (useCommonsLine)',
-  // Round 14 (GM r22): the Commons page's loads and their one page line (useCommonsLoadLines).
+  // Design: the Commons page's loads and their one page line (useCommonsLoadLines).
   'commons.load-lines': 'the Commons page\'s load lines, through useCommonsLoadLines',
   'commons.load-lines-retry': 'the Commons page\'s loads, refused for this tab, run again on the promote (useCommonsLoadLines)',
   'chat.clear-canvas': 'Clear canvas from the chat: DELETE /api/graph has no gate form today; a person_required answer still clears',
@@ -262,7 +262,7 @@ function markers(): Map<string, { file: string; line: string }[]> {
 
 /** Files that recognise the person gate's refusal but keep no line of their own. */
 const CLASSIFIERS: Record<string, string> = {
-  'lib/errorCopy.ts': 'defines the code and GM\'s line; returns copy, keeps none',
+  'lib/errorCopy.ts': 'defines the code and design\'s line; returns copy, keeps none',
   'lib/personSession.ts': 'the gate itself: the hold and the banner line (the banner registers in PersonRequiredBanner)',
   'lib/clearsOnPromote.ts': 'the mechanism',
   'lib/backend.ts': 'reports a refusal to the banner; keeps no line',
@@ -270,7 +270,7 @@ const CLASSIFIERS: Record<string, string> = {
   'lib/canvasPins.ts': 'words a pin refusal; canvasPinsStore keeps the line and registers it',
   'lib/commonsChatAuthority.ts': 'throws the session failure; ChatPanel keeps the line and registers it',
   'lib/graphFile.ts': 'loadRefusalLine leaves the person gate\'s refusal (null) to the notice\'s own line; keeps none',
-  'lib/notConnectedLine.ts': 'reads whether the page already shows a not-connected line (GM r8 1); keeps none',
+  'lib/notConnectedLine.ts': 'reads whether the page already shows a not-connected line (design); keeps none',
 };
 
 /** `onPersonPromoted(` outside the mechanism: work on the promote that isn't a line. */
@@ -278,13 +278,13 @@ const PROMOTE_LISTENERS: Record<string, string> = {
   'lib/clearsOnPromote.ts': 'the sweep',
   'lib/personSession.ts': 'defines it',
   'store/canvasProposalsStore.ts': 'releases approvals dismissed while the gate held (a request, not a line)',
-  // PR #204 round 11: person-only work the app starts on its own waits for the promote (no line).
+  // PR #204: person-only work the app starts on its own waits for the promote (no line).
   'lib/personWork.ts': 'runs the person-only work a held tab held back (a request, not a line)',
   'store/settingsChangedSocket.ts': 'reads the settings again after the promote (a request, not a line)',
 };
 
-/** Round 5: what a route the trace can't find by its path is (none may be left unexplained).
- * Round 11 (review 9 LOW-2): none now. lib/agentNotes' `${base(surface)}/…/dismiss` and `/read`
+/** What a route the trace can't find by its path is (none may be left unexplained).
+ * None now. lib/agentNotes' `${base(surface)}/…/dismiss` and `/read`
  * are read with the helper's paths in its place, so the four agent-notes routes trace by path. */
 const COMPOSED: Record<string, string[]> = {};
 const NO_FRONTEND: Record<string, string> = {
@@ -300,11 +300,11 @@ const NO_FRONTEND: Record<string, string> = {
 };
 
 /**
- * Round 8 (review 6 gates LOW-5): a socket whose person-only refusals come back as frames
+ * Also covered: a socket whose person-only refusals come back as frames
  * (`{ code: "person_required", ref }`), not as answers to a request, so no catch or `!res.ok`
  * branch is there to trace. Its sender reads the code where the frame arrives, and these tests
  * pin what it does with it (the refused answer goes back, the line clears by its own ref).
- * Round 9: the sender is read structurally (socketRefusalGaps): it opens a WebSocket to the
+ * The sender is read structurally (socketRefusalGaps): it opens a WebSocket to the
  * route, and its message handler's branch on the code makes a marked registration call.
  */
 const SOCKETS: Record<string, { file: string; tests: string[] }> = {
@@ -313,12 +313,12 @@ const SOCKETS: Record<string, { file: string; tests: string[] }> = {
 
 type Caller = string[] | { none: string };
 
-/** Round 5: each function that sends a gated route but doesn't keep its line with the mechanism
+/** Each function that sends a gated route but doesn't keep its line with the mechanism
  * in its own file. Keys are `file#function`; a lib/ key also stops the trace there. */
 const CALLERS: Record<string, Caller> = {
   // Its line is kept by what it hands the failure to.
-  'components/GraphFileActions.tsx#importGraph': ['graph.notify'], // showNotice → graphStore notify, which reads GM's line
-  // Round 7: acceptWarning throws on (no catch); ChatPanel hands it to PersonalAgentWarning's
+  'components/GraphFileActions.tsx#importGraph': ['graph.notify'], // showNotice → graphStore notify, which reads design's line
+  // acceptWarning throws on (no catch); ChatPanel hands it to PersonalAgentWarning's
   // onAccept, whose catch registers the line.
   'components/panels/ChatPanel.tsx#ChatPanel': ['settings.agent-warning'],
   // No line.
@@ -328,28 +328,28 @@ const CALLERS: Record<string, Caller> = {
   'lib/canvasProposals.ts#releaseApproval': NO_LINE('releaseApproval swallows every failure: the approval expires on its own'),
   'components/panels/ChatPanel.tsx#load': NO_LINE('a failed read of the agents falls back to an empty list; the Settings tab shows the refusal'),
   'components/panels/Inspector.tsx#renderUniversalModelControl': NO_LINE('a favourite\'s star: a failed save is ignored (.catch(() => undefined))'),
-  // Round 6 (review 4 LOW-4, MEDIUM-1): cancelWithinTimeLimit throws on to its two callers.
+  // cancelWithinTimeLimit throws on to its two callers.
   'store/graphStore.ts#fencePaidUnknownRun': NO_LINE('the 404 rule\'s Stop for a paid World Labs start: a refusal logs; the Stop stays on the run and the person\'s own Stop sends it again'),
-  // Round 7: the trace reads these itself now (OfflineRefusal and describeSaves only name a path).
-  // Round 7: its refusal is settled first, then the save registers its retry (in its finally).
+  // The trace reads these itself now (OfflineRefusal and describeSaves only name a path).
+  // Its refusal is settled first, then the save registers its retry (in its finally).
   'store/graphStore.ts#flushCinemaScenePersistence': ['cinema.scene-save-retry'],
   'store/graphStore.ts#renameNode': NO_LINE('a refused rename puts the old name back, with no line of its own (the banner says why)'),
   'store/graphStore.ts#sendRestoredWire': NO_LINE('Keep mine\'s wire put back: a refused one stays off the card and the info line names its shot (shotBackWithoutLine), what came back, not why'),
   'store/projectFlows.ts#keepReplacedCanvasAsCopy': NO_LINE('.catch(() => null): a copy not made; the held edits\' screen offers it again'),
-  // GM r7 (2): the load screens retry on the promote (showNotConnectedLoad in each catch).
+  // Design: the load screens retry on the promote (showNotConnectedLoad in each catch).
   // The handoff save after an agent's switch: a refusal becomes a recovered copy (recoverPendingWork,
-  // which throws on), whose refusal lands in this function's outer catch (GM r7 2).
+  // which throws on), whose refusal lands in this function's outer catch (design).
   'store/projectFlows.ts#followProjectSwitch': ['project.load-retry'],
   // PR #199: the kept tab's Save as a project (POST /api/projects/recover) reaches the gate through
   // the kept-save check; its refusal's line goes on the promote.
   'store/projectFlows.ts#saveKeptEdits': ['project.kept-save'],
   'store/projectFlows.ts#dismissCatalogRestore': NO_LINE('the × on the restore notice: .catch(() => undefined), the notice stays'),
   'store/projectFlows.ts#dismissCanvasHeldUnreadable': NO_LINE('the × on the unreadable-canvases notice: .catch(() => undefined), the notice stays'),
-  // Round 14 (GM r23 item 5): the Updates mark-read is never the person's own press.
+  // Design: the Updates mark-read is never the person's own press.
   'store/agentNotesStore.ts#sendRead': NO_LINE('a mark-read refused for this tab shows nothing: the updates stay unread, the page\'s because line says why, and the read waits for the promote (lib/personWork)'),
 };
 
-/** Round 5, GM r5 (1): the requests that retry on the promote, through `retryOnPromote` only. */
+/** Design: the requests that retry on the promote, through `retryOnPromote` only. */
 const RETRIES: Record<string, string> = {
   'project.save-retry': 'store/projectFlows.ts',
   'project.load-retry': 'store/projectFlows.ts',
@@ -366,11 +366,11 @@ const usesMechanism = (source: string) => /from '[./]*(?:lib\/)?clearsOnPromote'
 
 const RECOGNISES = /PERSON_REQUIRED_CODE|['"]person_required['"]|personRequiredCopy\(|reportPersonRequired\(|saysPersonRequired\(|isPersonRefusal\(/;
 
-describe('GM, PR #204: a line whose only reason was this tab clears on the promote', () => {
-  // The two scans every round-5 test shares, once, outside any one test's
+describe('PR #204: a line whose only reason was this tab clears on the promote', () => {
+  // The two scans every test here shares, once, outside any one test's
   // limit: the backend's gate routes (tests/personGateRoutes.py, ~4 s of
   // Python CPU) and the parsed frontend (callersOf builds it). They used to
-  // run inside the first round-5 test, whose 30 s limit a busy machine passed
+  // run inside the first test, whose 30 s limit a busy machine passed
   // (CI-flake fix of 2026-11-02). The tests keep their 30 s for their own work.
   beforeAll(() => {
     const routes = gatedRoutes();
@@ -437,8 +437,8 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
     expect(own).toEqual([]);
   });
 
-  // Round 11 (review 9 LOW-1): back to 30 s; the route scan no longer re-reads every fill.
-  it('round 5: every gated route is found from the frontend, or listed as composed or agent-only', { timeout: 30_000 }, () => {
+  // Back to 30 s; the route scan no longer re-reads every fill.
+  it('every gated route is found from the frontend, or listed as composed or agent-only', { timeout: 30_000 }, () => {
     const routes = gatedRoutes();
     expect(routes.length).toBeGreaterThan(50);
     const keys = routes.map((route) => `${route.method} ${route.path}`);
@@ -448,7 +448,7 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
       const byPath = callersOf(route).size;
       if (key in SOCKETS) {
         const { file, tests } = SOCKETS[key];
-        // Round 9 (review 7 NIT-2): read from the syntax tree, not the text.
+        // Read from the syntax tree, not the text.
         for (const gap of socketRefusalGaps(file, route.path)) wrong.push(`${key}: ${file} ${gap}`);
         for (const test of tests) {
           if (!readFileSync(join(__dirname, test), 'utf8').includes('person_required')) wrong.push(`${key}: ${test} doesn't pin the refusal`);
@@ -462,7 +462,7 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
     expect(wrong).toEqual([]);
   });
 
-  it('round 5: every frontend caller of a gated route keeps its line with the mechanism, or is in CALLERS', { timeout: 30_000 }, () => {
+  it('every frontend caller of a gated route keeps its line with the mechanism, or is in CALLERS', { timeout: 30_000 }, () => {
     const stops = new Set(Object.keys(CALLERS).filter((key) => key.startsWith('lib/')));
     const undeclared = new Map<string, string[]>();
     const seen = new Set<string>();
@@ -470,7 +470,7 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
       const starts = COMPOSED[`${route.method} ${route.path}`] ?? [];
       for (const [id, unit] of callersOf(route, starts, stops)) {
         seen.add(id);
-        // Round 6 (review 4 MEDIUM-1): the catch on this call registers (outcomeAt), not just the function.
+        // The catch on this call registers (outcomeAt), not just the function.
         if (unit.outcome === 'keeps' && !(id in CALLERS)) continue;
         if (!(id in CALLERS)) undeclared.set(id, [...(undeclared.get(id) ?? []), `${route.method} ${route.path}`]);
       }
@@ -488,7 +488,7 @@ describe('GM, PR #204: a line whose only reason was this tab clears on the promo
     }
   });
 
-  it('round 5: the requests that retry on the promote go through retryOnPromote, and are listed', () => {
+  it('the requests that retry on the promote go through retryOnPromote, and are listed', () => {
     const found = markers();
     const retries = [...found].filter(([, at]) => at.some((where) => /\bretryOnPromote\(/.test(where.line))).map(([site]) => site).sort();
     expect(retries).toEqual(Object.keys(RETRIES).sort());

@@ -18,7 +18,7 @@ import { AgentCursorLayer } from '../src/components/canvas/AgentCursorLayer';
 import { AGENT_SAY_FADE_MS, AGENT_SAY_MS, useAgentPresenceStore } from '../src/store/agentPresenceStore';
 
 /**
- * GM - Design, round 19 (verbatim): "the agent cursor's speech bubble fades
+ * Design (verbatim): "the agent cursor's speech bubble fades
  * out about 3 s after the agent's last event". A spring-tuned fade, the
  * bubble mounted through it, then removed; under prefers-reduced-motion the
  * removal is instant. Each new event resets the timer and cancels a fade in
@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe('the agent cursor bubble fades about 3 s after the last event', () => {
-  it('a replayed cursor (a tab that just connected) counts from its last event, not from now (PR #211 r3)', () => {
+  it('a replayed cursor (a tab that just connected) counts from its last event, not from now (PR #211)', () => {
     render(<AgentCursorLayer />);
     act(() => {
       useAgentPresenceStore.getState().replay([{ ...event('Reading the brief'), replay: true, secondsAgo: 2.5 }] as never);

@@ -1,5 +1,5 @@
 /**
- * Fix round 9 of PR #200 (GM r13): a shot's × stays neutral because Undo puts
+ * PR #200 (design): a shot's × stays neutral because Undo puts
  * the shot back whole. Cinema Studio replaces the canvas (whose Cmd+Z isn't
  * mounted there), so the studio steps the canvas history itself. The shot's
  * run media coming back is the backend's half
@@ -28,7 +28,7 @@ const spec: CinemaSceneSpec = { version: 1, base: { model: 'seedream-4-5' }, asp
 const sceneNode: Node<NodeData> = { id: 'scene-local', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
   data: { label: 'Scene', definitionId: 'cinema-scene', params: { scene: spec }, state: 'idle', outputs: {} } };
 
-describe('GM r13: Undo in Cinema Studio', () => {
+describe('Undo in Cinema Studio', () => {
   const undo = vi.fn();
   const redo = vi.fn();
   beforeEach(() => {
@@ -59,7 +59,7 @@ describe('GM r13: Undo in Cinema Studio', () => {
     fireEvent.keyDown(document.body, { key: 'z' });
     expect(undo).not.toHaveBeenCalled();
     expect(redo).not.toHaveBeenCalled();
-    // The same studio does answer Cmd+Z on the page (review 9 NIT-3: without
+    // The same studio does answer Cmd+Z on the page (without
     // the handler this test passed too), so the field's own undo was a choice.
     fireEvent.keyDown(document.body, { key: 'z', metaKey: true });
     expect(undo).toHaveBeenCalledTimes(1);

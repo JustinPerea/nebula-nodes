@@ -3,7 +3,7 @@ import { act } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Review 11, L-5 (probe H14): Accept, then Cmd+Z while the accept is on its
+// Accept, then Cmd+Z while the accept is on its
 // way. The held undo takes the proposal's nodes off when the answer lands;
 // the run the accept carried must not be sent then (Nebula refused it, and a
 // failed Run history record was left). Its approval goes back instead.
@@ -47,7 +47,7 @@ function openProposal(): void {
   useCanvasProposalsStore.setState({ proposals: { p1: { view, acceptKey: 'k', values: {} } } as never, pending: {}, errors: {}, drag: {} });
 }
 
-describe('Accept undone while it was on its way (review 11, L-5)', () => {
+describe('Accept undone while it was on its way', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     useGraphStore.setState(initialGraph, true);
@@ -55,7 +55,7 @@ describe('Accept undone while it was on its way (review 11, L-5)', () => {
     net.released.length = 0;
   });
 
-  it('H14 sends no run and leaves no failed Run history record; the approval goes back', async () => {
+  it('sends no run and leaves no failed Run history record; the approval goes back', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     useGraphStore.setState({ nodes: [textNode('n1')], edges: [], undoStack: [], redoStack: [], isExecuting: false,

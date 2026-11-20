@@ -111,7 +111,7 @@ describe('WorkspaceRail', () => {
     expect(useUIStore.getState().leftDock).toBeNull();
   });
 
-  // Review 13, L5: an open alertdialog or any aria-modal dialog holds Escape
+  // An open alertdialog or any aria-modal dialog holds Escape
   // (the rail skipped only role="dialog"), so it never closes the dock behind it.
   it.each([
     ['alertdialog', { role: 'alertdialog' }],

@@ -20,7 +20,7 @@ import { AgentScreenLayer } from '../src/components/agent-cursor/AgentScreenLaye
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 
 /**
- * PR #243, GM - Design round 1, ruling 2: a Character cursor whose launcher is
+ * PR #243, design: a Character cursor whose launcher is
  * the Character node on the canvas rests where a look at any canvas node rests
  * (by the node's icon in its header), not 7.5 px right of the node, where the
  * tip touches the output port. The node's corner dot stays.

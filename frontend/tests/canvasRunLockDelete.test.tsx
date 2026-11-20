@@ -66,7 +66,7 @@ import { resetBackendConnectionForTests } from '../src/lib/backendConnection';
 afterEach(() => resetDeletedSceneEditsForTests());
 
 /**
- * PR #198 fix round 4, M1 (review 4): React Flow's own Delete key is off
+ * PR #198: React Flow's own Delete key is off
  * while this tab runs something (deleteKeyCode null), so the key was silent.
  * The canvas's shortcut handler now hands it to deleteSelected, which says
  * why the run lock keeps the nodes. The run is a real executeShot, as the
@@ -89,7 +89,7 @@ const brief = { id: 'n5', type: 'model-node', position: { x: 300, y: 0 }, select
 // The canvas's store-reading layers draw in every test, and a test fails if one
 // crashes on the fake store's answers.
 installFakeFlowStore();
-describe('M1: the Delete key during the tab\'s own run', () => {
+describe('the Delete key during the tab\'s own run', () => {
   beforeEach(() => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     fetchMock.mockReset();

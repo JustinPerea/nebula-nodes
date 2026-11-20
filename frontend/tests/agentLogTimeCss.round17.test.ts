@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Round 17 (GM): an Agent log time never wraps ("03:46:22 / PM" read as two
+// (design): an Agent log time never wraps ("03:46:22 / PM" read as two
 // lines at 1280 and 1440). jsdom has no layout, so these pin the rules; the
 // live check looks at both widths.
 const read = (file: string) => readFileSync(join(__dirname, '../src/styles', file), 'utf8');

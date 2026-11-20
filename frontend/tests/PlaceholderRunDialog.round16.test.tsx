@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import { changedNodesLine, type PlaceholderRunConfirm, type PlaceholderRunRow } from '../src/lib/placeholderRunConfirm';
 
-// GM - Design, round 16 (a), verbatim: "Re-ask after a route change says
+// Design, verbatim: "Re-ask after a route change says
 // why. One line at the top of the body, above the rows: “Hero still”
 // changed while this was open. 2-3 nodes, in row order: “A”, “B” and “C”
 // changed while this was open. (“A” and “B” changed while this was open.
@@ -84,5 +84,5 @@ describe('the re-asked dialog after a route change', () => {
   });
 });
 
-// Naming the moved nodes when the open dialog updates in place: GM round 17
-// (1), PlaceholderRunDialog.round17.
+// Naming the moved nodes when the open dialog updates in place: design,
+// in PlaceholderRunDialog.round17.

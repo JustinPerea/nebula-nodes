@@ -159,7 +159,7 @@ describe('Commons chat integration', () => {
     expect(seen).toHaveBeenCalled();
     window.removeEventListener('nebula:person-required', seen);
   });
-  it("a person_required refusal says GM's line, with the backend's words behind a closed Details (Q116 a)", async () => {
+  it("a person_required refusal says design's line, with the backend's words behind a closed Details", async () => {
     const socket = await connected();
     await sendText('Make a simple graph');
     await waitFor(() => expect(socket.sent).toHaveLength(1));
@@ -172,7 +172,7 @@ describe('Commons chat integration', () => {
     expect(details!.textContent).toContain(backendWords);
     expect(screen.queryByText(`Warning: ${backendWords}`)).toBeNull();
   });
-  it("in the desktop app a person_required refusal says GM's app line (round 2), Details kept", async () => {
+  it("in the desktop app a person_required refusal says design's app line, Details kept", async () => {
     const socket = await connected();
     await sendText('Make a simple graph');
     await waitFor(() => expect(socket.sent).toHaveLength(1));

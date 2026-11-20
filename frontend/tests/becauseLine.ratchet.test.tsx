@@ -1,5 +1,5 @@
 /**
- * GM r14 (4), PR #204 round 9: "A because line destroys nothing, so it never gets the warning
+ * Design, PR #204: "A because line destroys nothing, so it never gets the warning
  * colour on any surface. Check that it's the one shared style, not a per-screen fix."
  *
  * The shared style: <LineText> marks the element a because line registers on
@@ -43,7 +43,7 @@ const FAILURE = 'Nebula couldn’t load the connected apps because the server di
 
 afterEach(() => { cleanup(); resetLinesForTests(); });
 
-describe('GM r14 (4): a because line is marked, and only a because line', () => {
+describe('a because line is marked, and only a because line', () => {
   it('bare words mark the surface\'s own element; words in a span mark the span', () => {
     const view = render(<div>
       <p className="settings-row__error" data-testid="bare"><LineText text={BECAUSE} /></p>
@@ -112,7 +112,7 @@ const SHEET = 'styles/becauseLine.css';
 const sheet = () => css.find((entry) => entry.file === SHEET)!.text;
 const neutralised = () => new Set([...sheet().matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
 
-describe('GM r14 (4): one shared sheet covers every warning token', () => {
+describe('one shared sheet covers every warning token', () => {
   it('ships with LineText, so every surface that shows a line has it', () => {
     expect(readFileSync(join(SRC, 'components/LineText.tsx'), 'utf8')).toMatch(/import '\.\.\/styles\/becauseLine\.css';/);
     expect(sheet()).toMatch(/\[data-line-because\]/);
@@ -183,7 +183,7 @@ export function lineClasses(sources = files(SRC, /\.tsx$/)): Map<string, string[
 const isComponent = (tag: string) => /^[A-Z]/.test(tag);
 
 /**
- * Review 8 MEDIUM-1 (PR #204 round 10): every element around a line, up to its component's root
+ * (PR #204): every element around a line, up to its component's root
  * (the box it sits in: a rail, a border, a fill), with each className resolved: written words, a
  * prop's default (`className = 'model-node__error'`) and the words every caller passes for it.
  * `boxed`: the element carries `data-line-box`, so styles/becauseLine.css neutralises it while a
@@ -370,7 +370,7 @@ export function warningDeclarations(sheets: { file: string; text: string }[], cl
   return wrong;
 }
 
-describe('GM r14 (4): no line element takes a warning colour another way', () => {
+describe('no line element takes a warning colour another way', () => {
   it('finds the elements lines render in', () => {
     const classes = lineClasses();
     for (const word of ['settings-row__error', 'commons-notice', 'failure-lines__reason']) expect(classes.has(word), word).toBe(true);
@@ -400,7 +400,7 @@ describe('GM r14 (4): no line element takes a warning colour another way', () =>
   });
 });
 
-describe('review 8 MEDIUM-1: the box around a because line goes neutral too (GM r16 Q1)', () => {
+describe('the box around a because line goes neutral too', () => {
   it('walks every element up to the component root, with className props and their defaults', () => {
     const boxes = boxClasses();
     expect(boxes.get('model-node__error')?.boxed, 'NodeError: the default className').toBe(true);

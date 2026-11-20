@@ -4,7 +4,7 @@ import { domEvents, screenSpace, type ResizeObserverLike } from '../src/lib/agen
 import type { AgentCursorAnchor } from '../src/lib/wsClient';
 
 /**
- * PR #233 review 1, M1 to M4: what the screen space remembers of a cursor's
+ * PR #233: what the screen space remembers of a cursor's
  * last read (one per cursor, pruned), the outline's clip read afresh, and what
  * wakes a resting cursor when only its container moved.
  */
@@ -57,7 +57,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('M1: the last reads are pruned', () => {
+describe('the last reads are pruned', () => {
   it('keeps one read a cursor: a cursor that moves to another item no longer holds or watches the first', () => {
     const a = put('moodboard:b1/i1', TILE);
     const b = put('moodboard:b1/i2', TILE);
@@ -108,7 +108,7 @@ describe('M1: the last reads are pruned', () => {
   });
 });
 
-describe('M2: carried is each cursor\'s own', () => {
+describe('carried is each cursor\'s own', () => {
   it('two cursors resting on one item: when its element is replaced, both fly, neither rides', () => {
     const first = put('moodboard:b1/i1', TILE);
     const { space } = rig();
@@ -136,7 +136,7 @@ describe('M2: carried is each cursor\'s own', () => {
   });
 });
 
-describe('M3: the outline reads its clip afresh', () => {
+describe('the outline reads its clip afresh', () => {
   it('a container that shrank clips the outline now, before the cursor\'s own frame', () => {
     put('moodboard:b1/i1', TILE);
     const { space } = rig();
@@ -148,7 +148,7 @@ describe('M3: the outline reads its clip afresh', () => {
   });
 });
 
-describe('M4: what wakes a resting cursor', () => {
+describe('what wakes a resting cursor', () => {
   it('watches what can move the item (its container chain) as well as the item', () => {
     const tile = put('moodboard:b1/i1', TILE);
     const scroller = document.createElement('div');

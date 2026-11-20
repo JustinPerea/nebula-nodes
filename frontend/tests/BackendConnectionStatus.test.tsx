@@ -25,12 +25,12 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('BackendConnectionStatus', () => {
-  it('surfaces backend loss in GM\'s round 14 words and leaves on reconnect', async () => {
+  it('surfaces backend loss in design\'s words and leaves on reconnect', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     render(<BackendConnectionStatus />);
 
     await act(async () => { await Promise.resolve(); });
-    // GM, round 14 of PR #114, word for word (was "Nebula is offline. Reconnecting…").
+    // Design, PR #114, word for word (was "Nebula is offline. Reconnecting…").
     expect(OFFLINE_LINE).toBe('Nebula is offline. Editing is paused until it reconnects.');
     expect(screen.getByRole('status').textContent).toBe(OFFLINE_LINE);
     expect(isBackendOffline()).toBe(true);
@@ -67,7 +67,7 @@ describe('BackendConnectionStatus', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  // Review 13, L4 (its probe U1): a slow probe's late failure, after a newer
+  // A slow probe's late failure, after a newer
   // probe answered OK, turned a connected tab offline.
   it('the newest probe decides: an older probe answering late is ignored', async () => {
     const calls: { resolve: (r: unknown) => void; reject: (e: unknown) => void }[] = [];
