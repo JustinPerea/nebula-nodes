@@ -40,9 +40,9 @@ His word covers the merge. A change that is itself his decision needs his OK
 before it is built: raising a spend or daily limit, changing what spends money,
 building something he hasn't approved, or a destructive data migration. Once he
 has given it, the merge follows the rule above. This rule covers merges;
-deploys, releases and publishing are outside it. A merge that needs `--admin` needs his
-OK for that PR, in his own words in his own message, with the date and his
-words in the PR description.
+deploys, releases and publishing are outside it. A merge that needs `--admin`
+needs his OK for that PR, in his own words in his own message, with the date
+and his words in the PR description.
 
 These paths are high tier:
 
