@@ -35,7 +35,7 @@ function UploadChip({ upload, canRetry, onRetry, onRemove }: {
           {/* Beside a “Try again” button the line ends “Try again.” The draft keeps only the line (it is saved with the
               page), so the button's ending is swapped in here (besideButton). Beside “Attach again” it stays as written:
               its ending must not name a button that isn't there. */}
-          {uploading ? 'Uploading…' : <LineText text={canRetry ? besideButton(line) : line} />}
+          {uploading ? 'Uploading…' : <LineText text={canRetry ? besideButton(line) : line} code />}
         </span>
       </div>
       {!uploading && <button type="button" className="reference-tray__retry"

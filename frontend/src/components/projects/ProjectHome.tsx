@@ -226,7 +226,7 @@ function CoverPicker({ project, busy, load, onPin, onClose }: {
       </div>
       {choices?.lostPin && <p className="project-home__cover-note">
         {choices.lostPin.by?.kind === 'person' ? 'The image you pinned' : 'The pinned image'} is no longer in this project, so the cover is automatic.</p>}
-      {failed ? <p className="project-home__cover-note"><LineText text={failed} /></p>
+      {failed ? <p className="project-home__cover-note"><LineText text={failed} code /></p>
         : !choices ? <p className="project-home__cover-note">Loading images…</p>
           : choices.images.length === 0 ? <p className="project-home__cover-note">No images in this project yet.</p>
             : (
@@ -812,18 +812,18 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               {editsSavedLine(editsSavedAs.name)}</div></div>}
           {showError && (retry === 'openFollowed' || retry === 'partLoad') ? <div {...track('error')}>
             <div className="project-home__notice project-home__notice--copy" role="alert" tabIndex={-1} data-followed-notice="" data-line-box="">
-              {errorDetails ? <div className="project-home__notice-text project-home__error-text"><LineText text={error} className="project-home__error-line" />
+              {errorDetails ? <div className="project-home__notice-text project-home__error-text"><LineText text={error} className="project-home__error-line" code />
                 <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
-                : <span className="project-home__notice-text"><LineText text={error} /></span>}
+                : <span className="project-home__notice-text"><LineText text={error} code /></span>}
               <span className="project-home__notice-actions">
                 <button type="button" className="project-home__notice-restore" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
                   {retry === 'partLoad' ? 'Try again' : <>Open “{openFollowedName}”</>}</button></span></div></div>
           : showError && <div {...track('error')}>{/* Design: the first load trying again by itself is neutral, like the line after the tries
               (a because line, drawn neutral by styles/becauseLine.css): nothing is lost while it waits. */}
             <div className="project-home__error" role="alert" tabIndex={-1} data-line-box="" {...(retry === 'retrying' ? { 'data-line-neutral': '' } : {})}>
-            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>
+            {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={besideButton(error!)} code /> : <LineText text={error} code />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
-              : <span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>}
+              : <span>{retry === 'redo' ? <LineText text={besideButton(error!)} code /> : <LineText text={error} code />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
             {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
               {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : retry === 'retrying' ? 'Try now' : 'Try again'}</button>}

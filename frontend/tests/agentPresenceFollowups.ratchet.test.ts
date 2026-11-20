@@ -2815,7 +2815,7 @@ describe('red marks what deletes a standalone thing or wipes a surface, an edit 
     expect(kindAt('components/panels/settings/KreaSignInRow.tsx', /^Disconnect$/)).toEqual(['red']);
     expect(kindAt('components/panels/settings/PersonalAgentsSection.tsx', /^Sign out$/)).toEqual(['neutral']);
     // The two reviewed red words on neutral controls (design), pinned.
-    expect(kindAt('components/commons/CommonsFilters.tsx', /^clear$/)).toEqual(['neutral']);
+    expect(kindAt('components/commons/CommonsFilters.tsx', /^Clear$/)).toEqual(['neutral']);
     expect(kindAt('components/create-studio/ResultsGallery.tsx', /^Clear$/)).toEqual(['neutral']);
     expect(wordKind('Clear', 'components/other/Elsewhere.tsx')).toBe('red');
     expect(wordKind('Remove')).toBeNull();

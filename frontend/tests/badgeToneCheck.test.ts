@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { findAccentBadges, findAccentEyebrows, findCapsBadges } from '../scripts/check-badge-tone.mjs';
+import { findAccentBadges, findAccentEyebrows, findCapsBadges, resetsTagCase } from '../scripts/check-badge-tone.mjs';
 
 /**
  * scripts/check-badge-tone.mjs runs in `npm run lint`: no state badge or source tag is painted
@@ -100,6 +100,19 @@ describe('check-badge-tone: capitals', () => {
     '.thing__state { font-variant-caps: all-small-caps; }',
     '.pill-badge { text-transform: UPPERCASE; }',
     '.a, .thing__badge { text-transform: uppercase; }',
+    '.permission-card__kind { text-transform: uppercase; }',
+    '.permission-card__kind { text-transform: lowercase; }',
+    '.permission-card__kind { text-transform: capitalize; }',
+    'body.app-slava-restraint .permission-card__kind { font-size: 10px; text-transform: LOWERCASE; }',
+    '.permission-card__kind { font-variant: small-caps; }',
+    // text-transform is inherited: a forced case on an ancestor of the tag reaches it.
+    '.permission-card { text-transform: lowercase; }',
+    '.permission-card { text-transform: uppercase; }',
+    '.permission-card { text-transform: capitalize; }',
+    '.permission-card--pending { text-transform: lowercase; }',
+    '.permission-card__head { text-transform: lowercase; }',
+    '.permission-card__head > span { text-transform: lowercase; }',
+    '.permission-card .permission-card__head { text-transform: capitalize; }',
   ];
   it.each(capitalised)('catches %s', (css) => {
     expect(caps(css)).toHaveLength(1);
@@ -112,6 +125,12 @@ describe('check-badge-tone: capitals', () => {
     '.inspector__section-title { text-transform: uppercase; letter-spacing: 0.08em; }',
     '.thing__statement { text-transform: uppercase; }',
     '.thing__badge { text-transform: capitalize; }',
+    '.permission-card__kind { text-transform: none; font-size: 10px; }',
+    '.permission-card__title { text-transform: lowercase; }',
+    '.permission-card .permission-card__title { text-transform: uppercase; }',
+    '.permission-card { text-transform: lowercase; } .permission-card__kind { text-transform: none; }',
+    '.permission-card__head { text-transform: uppercase; } .permission-card__kind { text-transform: none !important; }',
+    '.permission-card { color: red; }',
   ];
   it.each(fine)('passes %s', (css) => {
     expect(caps(css)).toHaveLength(0);
@@ -121,6 +140,11 @@ describe('check-badge-tone: capitals', () => {
     '.x__badge { &--y { text-transform: uppercase; } }',
     '.card { .x__badge { text-transform: uppercase; } }',
     '.card { .inner { .x__badge { text-transform: uppercase; } } }',
+    '.permission-card__head { .permission-card__kind { text-transform: lowercase; } }',
+    '.permission-card__head { .permission-card__kind { text-transform: capitalize; } }',
+    '.permission-card__head { .permission-card__kind { text-transform: uppercase; } }',
+    '.permission-card { text-transform: lowercase; .permission-card__note { color: red; } }',
+    '.card { .permission-card__head { text-transform: lowercase; } }',
   ];
   it.each(nested)('fails nested CSS: %s', (css) => {
     const found = caps(css);
@@ -131,6 +155,40 @@ describe('check-badge-tone: capitals', () => {
   it('lets nested CSS that touches no badge capitals pass', () => {
     expect(caps('.card { .x__label { text-transform: uppercase; } }')).toHaveLength(0);
     expect(caps('.card { .x__badge { color: red; } }')).toHaveLength(0);
+  });
+
+  it('reads the tag reset across stylesheets, not per file', () => {
+    const forced = '.permission-card { text-transform: lowercase; }';
+    const reset = '.permission-card__kind { text-transform: none; }';
+    const sheets = [forced, reset];
+    const anywhere = sheets.some(resetsTagCase);
+    expect(anywhere).toBe(true);
+    expect(sheets.flatMap((css) => findCapsBadges(css, 'fixture.css', anywhere))).toHaveLength(0);
+    // No reset in any stylesheet: the forced case fails.
+    const none = [forced, '.permission-card { color: red; }'];
+    const found = none.flatMap((css) => findCapsBadges(css, 'fixture.css', none.some(resetsTagCase)));
+    expect(found).toHaveLength(1);
+  });
+
+  it('counts a reset only when it holds for the tag everywhere', () => {
+    const forced = '.permission-card { text-transform: lowercase; }';
+    const notResets = [
+      '.permission-card__kind:hover { text-transform: none; }',
+      '.permission-card__kind:not(.x) { text-transform: none; }',
+      '.permission-card__kind--wide { text-transform: none; }',
+      '.permission-card__kind.is-open { text-transform: none; }',
+      '.permission-card .permission-card__kind { text-transform: none; }',
+      '@media (min-width: 600px) { .permission-card__kind { text-transform: none; } }',
+      '@supports (display: grid) { .permission-card__kind { text-transform: none; } }',
+      '@container (min-width: 20em) { .permission-card__kind { text-transform: none; } }',
+    ];
+    for (const css of notResets) {
+      expect(resetsTagCase(css), css).toBe(false);
+      expect(findCapsBadges(forced, 'fixture.css', [css].some(resetsTagCase)), css).toHaveLength(1);
+    }
+    // The plain rule in another file still counts, also beside other selectors.
+    expect(resetsTagCase('.permission-card__kind { text-transform: none; }')).toBe(true);
+    expect(resetsTagCase('.a, .permission-card__kind { text-transform: none !important; }')).toBe(true);
   });
 
   it('reports the line and the selector', () => {

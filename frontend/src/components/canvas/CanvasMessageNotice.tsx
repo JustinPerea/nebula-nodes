@@ -31,7 +31,7 @@ export function CanvasMessageNotice() {
       aria-live={shown.tone === 'error' ? 'assertive' : 'polite'}
       {...holdHandlers} {...leave.props}
     >
-      <LineText className="canvas-undo-notice__text" text={shown.text} />
+      <LineText className="canvas-undo-notice__text" text={shown.text} code />
       {shown.copy && <OpenCopyButton projectId={shown.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>
         ×

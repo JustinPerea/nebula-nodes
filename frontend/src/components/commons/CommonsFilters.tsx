@@ -20,7 +20,7 @@ function AxisRange({ axis, range, onChange }: {
     <div className={`commons-axis${range ? ' commons-axis--set' : ''}`}>
       <div className="commons-axis__head">
         <span>{lowLabel}</span>
-        <span className="commons-axis__value">{range ? `${axisValue(lo)} … ${axisValue(hi)}` : 'any'}</span>
+        <span className="commons-axis__value">{range ? `${axisValue(lo)} … ${axisValue(hi)}` : 'Any'}</span>
         <span>{highLabel}</span>
       </div>
       <div className="commons-axis__inputs">
@@ -36,7 +36,7 @@ function AxisRange({ axis, range, onChange }: {
         />
       </div>
       <button type="button" className="commons-link commons-filter__reset" disabled={!range} onClick={() => onChange(undefined)}>
-        clear
+        Clear
       </button>
     </div>
   );

@@ -187,7 +187,7 @@ export function CharacterDefinitionPanel({
           />
         </div>
         {uploadError && (
-          <span className="character-def__error"><LineText text={uploadError} /></span>
+          <span className="character-def__error"><LineText text={uploadError} code /></span>
         )}
       </section>
 

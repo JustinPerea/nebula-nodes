@@ -185,7 +185,7 @@ describe('Personal agents in the chat panel', () => {
     });
     const card = screen.getByRole('group', { name: 'Fake Agent asks permission' });
     expect(within(card).getAllByRole('button').map((b) => b.textContent)).toEqual(['Allow once', 'Deny']);
-    expect(within(card).getByText(/No answer in \d+s denies it/)).toBeInTheDocument();
+    expect(within(card).getByText(/^No answer in 2:00 denies it$/)).toBeInTheDocument();
     fireEvent.click(within(card).getByRole('button', { name: 'Allow once' }));
     await waitFor(() => expect(socket.sent).toHaveLength(2));
     expect(socket.sent[1]).toEqual({ type: 'permission', requestId: 'r-1', decision: 'allow', personToken: TOKEN, ref: expect.any(String) });

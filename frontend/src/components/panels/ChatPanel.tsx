@@ -154,7 +154,8 @@ type SystemLine = {
   /** Text behind a collapsed Details toggle under the line: a person-only
    * refusal's own words, written for agents (GM, Q116 a). */
   details?: string;
-  /** The line is in the "<Agent> stopped because ..." form: LineText draws it neutral (tone="because"). */
+  /** The line is in a "stopped because" form, "<Agent> stopped because ..." or the same line as two sentences,
+   * "<Agent> stopped. <Reason>.": LineText draws it neutral (tone="because"). */
   because?: true;
   /** Its only reason was this tab not being connected as the person: it goes
    * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
@@ -2209,7 +2210,7 @@ export function ChatPanel() {
             </div>
           </details>
         )}
-        {notice && <div className="chat-panel__notice" data-chat-notice="true"><LineText text={notice} /></div>}
+        {notice && <div className="chat-panel__notice" data-chat-notice="true"><LineText text={notice} code /></div>}
         {pendingImages.length > 0 && (
           <div className="chat-panel__chips">
             {pendingImages.map((chip) => (
@@ -2234,7 +2235,7 @@ export function ChatPanel() {
                   </>
                 )}
                 {chip.status === 'error' && (
-                  <div className="chat-panel__chip-error"><LineText text={chip.error} /></div>
+                  <div className="chat-panel__chip-error"><LineText text={chip.error} code /></div>
                 )}
                 <button
                   type="button"
