@@ -16,7 +16,6 @@ NUMBER_TOO_LARGE_LINE = "A number in that message is too large for Nebula to rea
 OLD_REQUEST_LINE = "This tab sent an older kind of request. Reload the page, then send again."
 AGENT_UNKNOWN_LINE = (f"Nebula doesn’t recognize the agent for this chat. Pick one in the {CHAT_MODEL_MENU} menu, "
                       "then send again.")
-# Commons has no Settings switch: it is on only when the backend starts with this variable.
-COMMONS_ON_LINE = ("Commons is on, so only Claude and Codex can chat. Pick one of them, or start Nebula without "
-                   "`NEBULA_COMMONS_ENABLED=1` to turn Commons off, then send again.")
+# Commons has no Settings switch, so no line tells the person to turn it off.
+COMMONS_ON_LINE = "Commons is on, so only Claude and Codex can chat. Pick one of them, then send again."
 RESPONSE_RUNNING_LINE = "A response is still running. Stop it and wait for it to stop, then send again."

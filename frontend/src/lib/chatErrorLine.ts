@@ -2,24 +2,37 @@ import { endedSentence, curlApostrophes } from './errorCopy';
 import { PROVIDER_LABELS } from './directRoute';
 
 /**
- * The chat's line for a stream error (design): "Claude stopped because the connection was refused."
- * There is no "Warning:" lead and no second colon. It is a because line, so it is drawn neutral
- * (the line says so itself: `because`, passed to LineText as tone="because").
+ * The chat's line for an error event. The event says what kind of line it is:
  *
- * The words come from the backend or the agent's own CLI. A line that is already a whole sentence
- * for the person (a backend refusal such as "Opus is no longer offered.", "Fake Agent exited (code
- * 3).") and anything Nebula itself sent (`source: "system"`, the codes below) reads as it is, with
- * its trailing colon form cleaned. A fragment (the CLI's stderr, "claude exited with code 1") is
- * the reason: a known one is worded here, an unknown one keeps its text, cleaned, after "because".
- * A single line of whole sentences (capital to . ! or ?) reads as it is at any length: a long refusal
- * written for the person keeps its reason and its fix in view, drawn with the error tone. A message with
- * line breaks, or a long line that is not whole sentences (a stack trace, a long stderr), reads "<Agent> stopped
- * because its command failed." with the raw text behind the line's Details. A fragment joins "because" only when it opens with a subject (a name, a pronoun, a determiner); any other fragment is a sentence of its own: "Claude stopped. Couldn’t read the file." becauseLine() is not used: it opens with "Nebula couldn’t …", and design's line names the agent.
+ * - `stop: "error"` (the agent ran and failed): always "<Agent> stopped …", in the warning tone. The reason joins
+ *   with "because" when it opens with a subject (a name, a pronoun, a determiner): "Claude stopped because the
+ *   connection was refused." Any other fragment is a sentence of its own: "Claude stopped. Couldn’t read the file."
+ *   A closing full stop in the reason changes neither the form nor the tone. A message with line breaks, or a long
+ *   line that is not whole sentences (a stack trace, a long stderr), reads "<Agent> stopped because its command
+ *   failed." with the raw text behind the line's Details. A message that already opens "<Agent> stopped" (or "This
+ *   chat’s agent stopped") is the whole line and shows as it is.
+ * - `stop: "ended"` (Nebula or a timer ended the session): the backend's message is already the whole line
+ *   ("Hermes stopped after it sat idle. …") and shows as it is, in the neutral tone.
+ * - no `stop` on a refusal (`source: "system"`, or a code in WHOLE_LINE_CODES): the request never ran. The message
+ *   is a whole line for the person, in the warning tone, with its first letter capitalised and a full stop added.
+ * - no `stop` on anything else (an older backend): read as "error".
+ *
+ * becauseLine() is not used: it opens with "Nebula couldn’t …", and design's line names the agent.
  */
 
 /** Codes whose message the backend wrote as a whole line for the person. */
-const WHOLE_LINE_CODES = new Set(['personal_session_ended', 'personal_agent_warning_required', 'model_unsupported',
-  'effort_unsupported', 'model_required', 'auth_required', 'agent_invalid', 'provider_invalid']);
+export const WHOLE_LINE_CODES = new Set([
+  // A session's end, and the person's own settings and agent choices.
+  'personal_session_ended', 'personal_agent_warning_required', 'agent_invalid', 'provider_invalid',
+  // The model picker and the CLI's model list (services/chat_models.py): the line says what to pick or check.
+  'model_unsupported', 'effort_unsupported', 'model_required', 'model_invalid', 'effort_invalid',
+  'auth_required', 'auth_unknown', 'cli_not_installed',
+  'catalog_unavailable', 'catalog_cleanup_failed', 'catalog_timeout', 'catalog_invalid',
+  // A personal agent Nebula could not start or reach (services/personal_agents.py, services/acp_session.py).
+  'personal_agent_unknown', 'personal_agent_disabled', 'personal_agent_not_installed', 'personal_agent_needs_node',
+  'personal_agent_needs_setup', 'personal_agent_changed', 'personal_agent_limit', 'personal_agent_shutting_down',
+  'personal_agent_start_timeout', 'personal_agent_start_failed', 'acp_version_unsupported',
+]);
 
 /** Connection faults, worded once. Only a connection-shaped message (an errno or "connection refused"), never any "timed out". */
 const KNOWN_REASONS: ReadonlyArray<readonly [RegExp, string]> = [
@@ -128,47 +141,56 @@ function agentIsSubject(text: string, names: readonly string[]): boolean {
 
 export type ChatErrorLine = {
   text: string;
-  /** The line is in a "stopped because" form: drawn neutral (LineText tone="because"). Both of design's forms count:
-   * "<Agent> stopped because …" and the same line as two sentences, "<Agent> stopped. <Reason>." */
-  because: boolean;
+  /** error: the warning tone (a stop that was a failure, a refusal). neutral: a stop Nebula itself made (an ended session). */
+  tone: 'error' | 'neutral';
   /** The raw message, for the Details disclosure, when the line is a short stand-in for it. */
   details?: string;
 };
 
-export function chatErrorLine({ message, code, source, agentName: given }: {
-  message: string | undefined | null; code?: unknown; source?: unknown; agentName: string;
+/** A stop's reason without its closing full stop ("." only: "?", "!" and "..." stay). */
+const withoutClosingStop = (text: string): string => text.replace(/(?<!\.)\.$/, '');
+
+export function chatErrorLine({ message, code, source, stop, agentName: given }: {
+  message: string | undefined | null; code?: unknown; source?: unknown; stop?: unknown; agentName: string;
 }): ChatErrorLine {
   // An agent with no name is "Your agent", as the chat panel calls it.
   const agentName = given.trim() || 'Your agent';
   const raw = (message ?? '').trim();
   const text = cleaned(raw);
-  const because = (reason: string): ChatErrorLine => ({ text: `${agentName} stopped because ${curlApostrophes(endedSentence(reason))}`, because: true });
+  const whole = (line: string, tone: ChatErrorLine['tone']): ChatErrorLine => ({ text: curlApostrophes(endedSentence(upperFirst(line))), tone });
+  const refusal = stop !== 'error' && stop !== 'ended' && (source === 'system' || WHOLE_LINE_CODES.has(String(code)));
+  if (refusal && text) return whole(text, 'error');
+  if (stop === 'ended') return text ? whole(text, 'neutral') : { text: `${agentName} stopped.`, tone: 'neutral' };
+
+  // A stop with an error (also a missing `stop`, from an older backend): "<Agent> stopped …", warning tone.
+  const because = (reason: string): ChatErrorLine => ({ text: `${agentName} stopped because ${curlApostrophes(endedSentence(reason))}`, tone: 'error' });
   if (!text) return because('of an unknown error');
-  const whole = (line: string): ChatErrorLine => ({ text: curlApostrophes(endedSentence(upperFirst(line))), because: false });
-  if (source === 'system' || WHOLE_LINE_CODES.has(String(code))) return whole(text);
   const stands = () => ({ ...because('its command failed'), details: raw });
   if (/\n/.test(raw)) return stands();
+  // The backend's own line for a session that is gone already opens with the stop.
+  if (/^This chat[’']s agent stopped\b/.test(text) || (opensWithAgentName(text, [agentName]) && /^\s+stopped\b/i.test(text.slice(agentName.length)))) return whole(text, 'error');
+  const reason = withoutClosingStop(text);
   // A known reason is worded here when the text is one short sentence; a longer message is the agent's own words.
-  const oneShort = text.length <= 120 && !/[.!?]\s/.test(text);
-  const known = oneShort ? KNOWN_REASONS.find(([pattern]) => pattern.test(text)) : undefined;
+  const oneShort = reason.length <= 120 && !/[.!?]\s/.test(reason);
+  const known = oneShort ? KNOWN_REASONS.find(([pattern]) => pattern.test(reason)) : undefined;
   if (known) return because(known[1]);
-  // One line of whole sentences written for the person reads as it is, whatever its length. Only a
-  // long line that is not (a raw CLI dump) gives way to the short line with its Details.
-  if (WHOLE_SENTENCE.test(text)) return whole(text);
-  if (raw.length > 200) return stands();
+  // A long line that is not whole sentences (a raw CLI dump) gives way to the short line with its Details.
+  if (raw.length > 200 && !WHOLE_SENTENCE.test(text)) return stands();
   const names = [agentName, 'claude', 'codex'];
-  const exited = /^(?:claude|codex) exited with (code \d+|subtype=\S+)$/i.exec(text);
+  const exited = /^(?:claude|codex) exited with (code \d+|subtype=\S+)$/i.exec(reason);
   if (exited) return because(`it exited with ${exited[1]}`);
-  const rest = withoutAgentName(text, names);
+  // A whole message of several sentences that opens with the agent's own name keeps it: "Codex stopped. Codex has features on …".
+  if (/[.!?]\s/.test(reason) && opensWithAgentName(reason, names)) return { text: `${agentName} stopped. ${curlApostrophes(endedSentence(upperFirst(reason)))}`, tone: 'error' };
+  const rest = withoutAgentName(reason, names);
   const bare = EMPTY_REASON.exec(rest);
   if (!rest || bare) return because(`its ${bare?.[1]?.toLowerCase() ?? 'turn'} failed`);
   // A fragment whose subject is the agent's own command, process, turn or request takes "its".
   if (OWN_SUBJECT.test(rest)) return because(`its ${lowerFirst(rest, names)}`);
   // The agent's own name was the subject ("Claude hit a rate limit"): it is "it", as in "it exited with code 1".
-  if (agentIsSubject(text, names)) return because(`it ${lowerFirst(rest, names)}`);
+  if (agentIsSubject(reason, names)) return because(`it ${lowerFirst(rest, names)}`);
   // A reason that opens with a subject joins the agent's name with "because"; any other reads as a sentence of its own.
   if (opensWithSubject(rest, names)) return because(lowerFirst(rest, names));
-  return { text: `${agentName} stopped. ${curlApostrophes(endedSentence(upperFirst(rest)))}`, because: true };
+  return { text: `${agentName} stopped. ${curlApostrophes(endedSentence(upperFirst(rest)))}`, tone: 'error' };
 }
 
 /** The agent's status hover: the CLI's own message (prose, curled where it shows) and the session (a name, kept as it is). */

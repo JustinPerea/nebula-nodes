@@ -298,7 +298,7 @@ def render(client_id: str, *, paths: CheckoutPaths, url: str | None, app_name: s
                  f"{' and '.join(entry['env'])} from the command above as environment variables if the form offers them."]
         if token is not None:
             steps.append("openclaw mcp doctor will flag the token as a literal env value, which is expected.")
-        alternative = {"format": "text", "where": "Settings > MCP > Stdio command",
+        alternative = {"format": "text", "where": "Control UI > Settings > MCP > Stdio command",
                        "snippet": " ".join(shlex.quote(part) for part in [entry["command"], *entry["args"]])}
     elif c.id == "claude-desktop":
         main = {"format": "json", "where": c.stored_in,

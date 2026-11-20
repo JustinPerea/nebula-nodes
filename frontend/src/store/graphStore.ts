@@ -11995,7 +11995,7 @@ async function readRunInputs(nodes: Node<NodeData>[], edges: Edge[], scope: RunS
 }
 
 /** Asks before a run whose list-price estimate reaches the user's threshold
- * (Settings > Interface). Every run path goes through the execute actions,
+ * (Settings > Preferences > Runs). Every run path goes through the execute actions,
  * so the check lives here rather than on each button. Unpriced runs pass.
  * `passes`: the run done that many times (a Cinema shot's variations). */
 function confirmRunCost(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope, passes = 1): boolean {

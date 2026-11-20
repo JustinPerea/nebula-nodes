@@ -129,7 +129,7 @@ def ended_line(reason: str, name: str | None) -> str:
     if reason == "agent_changed":
         return f"{name} stopped because it was switched off or changed in Settings. If it’s still on there, send again."
     if reason == "commons_enabled":
-        return f"{name} stopped because Commons is on. Pick Claude or Codex, or turn Commons off, to keep chatting."
+        return f"{name} stopped because Commons is on. Pick Claude or Codex to keep chatting."
     if reason == "idle":
         return f"{name} stopped after it sat idle. Send again to start a new conversation."
     return f"{name} stopped because Nebula closed. Send again to start a new conversation."

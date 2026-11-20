@@ -119,6 +119,36 @@ export function personRequiredCopy(desktop: boolean = inDesktopShell(),
   return reason === 'debug-port' || reason === 'dev-renderer' ? PERSON_REQUIRED_DEV_COPY : PERSON_REQUIRED_APP_COPY;
 }
 
+/** Design: the chat's person_required line says what this tab was doing. A send starts
+ * a chat ("so it can’t start a chat"); answering or closing a personal agent (a permission, close_session,
+ * personal_option) is "answer or close the agent". The same three places as personRequiredCopy: a browser
+ * tab, the desktop app, and the two developer setups, where the notice says the fix. Words only: who is
+ * refused and when the line clears are the gate's and the panel's, not this function's. */
+export type ChatPersonAction = 'send' | 'answer';
+const CHAT_PERSON_REQUIRED: Record<ChatPersonAction, { tab: string; app: string; dev: string }> = {
+  send: {
+    tab: 'This tab isn’t connected as you, so it can’t start a chat. Open the link Nebula printed when it started, then send again.',
+    app: 'This window isn’t connected as you, so it can’t start a chat. Quit Nebula and open it again, then send again.',
+    // Written whole (not joined to DEFERS_TO_NOTICE): tests/chatErrorLine.test.ts pins that it ends with it.
+    dev: 'This window isn’t connected as you, so it can’t start a chat. The notice below says why.',
+  },
+  answer: {
+    tab: 'Nebula can’t answer or close the agent from this tab because it isn’t connected as you. Open the link Nebula printed when it started.',
+    app: 'Nebula can’t answer or close the agent from this window because it isn’t connected as you. Quit Nebula and open it again.',
+    dev: 'Nebula can’t answer or close the agent from this window because it isn’t connected as you. The notice below says why.',
+  },
+};
+export function chatPersonRequiredCopy(action: ChatPersonAction, desktop: boolean = inDesktopShell(),
+  reason: string = personUnavailableReason()): string {
+  const lines = CHAT_PERSON_REQUIRED[action];
+  if (!desktop) return lines.tab;
+  return reason === 'debug-port' || reason === 'dev-renderer' ? lines.dev : lines.app;
+}
+
+/** The chat's six person_required lines (two actions, three places): they carry the person-required reason like the
+ * general line, so the same rules read them (the general notice stands down, offline hides them, the promote clears them). */
+const CHAT_PERSON_REQUIRED_LINES: readonly string[] = Object.values(CHAT_PERSON_REQUIRED).flatMap((lines) => Object.values(lines));
+
 /** GM, PR #204 round 3 ruling item 3 (2026-10-30), verbatim for a tab: the line when
  * opening the Updates couldn't mark them read because this tab isn't the person's. No
  * "then try again": the promote retries it (lib/clearsOnPromote retryOnPromote). The
@@ -479,7 +509,8 @@ export function saysPersonRequired(line: string): boolean {
   // Either apostrophe: a line a straight backend sentence made and the same line curled match alike.
   const said = foldApostrophes(line);
   return said.includes(foldApostrophes(PERSON_REQUIRED_COPY)) || said.includes(foldApostrophes(PERSON_REQUIRED_APP_COPY))
-    || said.includes(foldApostrophes(PERSON_REQUIRED_DEV_COPY)) || NOT_CONNECTED_BECAUSE.test(line);
+    || said.includes(foldApostrophes(PERSON_REQUIRED_DEV_COPY)) || NOT_CONNECTED_BECAUSE.test(line)
+    || CHAT_PERSON_REQUIRED_LINES.some((own) => said.includes(foldApostrophes(own)));
 }
 
 /** GM - Design, round 16 of PR #114: the one line for "no answer" wherever

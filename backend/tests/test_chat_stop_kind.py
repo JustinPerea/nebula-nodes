@@ -59,7 +59,7 @@ def test_ended_lines_per_reason():
     assert line("agent_changed", "Your Gemini") == (
         "Your Gemini stopped because it was switched off or changed in Settings. If it’s still on there, send again.")
     assert line("commons_enabled", "Your Gemini") == (
-        "Your Gemini stopped because Commons is on. Pick Claude or Codex, or turn Commons off, to keep chatting.")
+        "Your Gemini stopped because Commons is on. Pick Claude or Codex to keep chatting.")
     assert line("idle", "Your Gemini") == "Your Gemini stopped after it sat idle. Send again to start a new conversation."
     assert line("shutdown", "Your Gemini") == (
         "Your Gemini stopped because Nebula closed. Send again to start a new conversation.")
@@ -151,8 +151,7 @@ async def test_commons_on_refuses_a_personal_agent(isolated_app, monkeypatch):
     socket = Socket()
     task = await _run(socket, _send(agent="personal:fake"))
     error = await socket.next("error")
-    assert error["message"] == ("Commons is on, so only Claude and Codex can chat. Pick one of them, or start "
-                                "Nebula without `NEBULA_COMMONS_ENABLED=1` to turn Commons off, then send again.")
+    assert error["message"] == ("Commons is on, so only Claude and Codex can chat. Pick one of them, then send again.")
     assert error["source"] == "system" and "stop" not in error
     await _finish(socket, task)
 
@@ -345,8 +344,7 @@ async def test_an_agent_that_ignores_cancel_is_an_error_stop_on_the_next_send(ws
     ("idle", "Fake Agent stopped after it sat idle. Send again to start a new conversation."),
     ("agent_changed", "Fake Agent stopped because it was switched off or changed in Settings. "
                       "If it’s still on there, send again."),
-    ("commons_enabled", "Fake Agent stopped because Commons is on. Pick Claude or Codex, or turn Commons off, "
-                        "to keep chatting."),
+    ("commons_enabled", "Fake Agent stopped because Commons is on. Pick Claude or Codex to keep chatting."),
     ("shutdown", "Fake Agent stopped because Nebula closed. Send again to start a new conversation."),
     ("closed_by_person", ENDED_UNKNOWN),
     ("disconnected", ENDED_UNKNOWN),

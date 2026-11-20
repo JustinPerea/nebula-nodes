@@ -1163,7 +1163,7 @@ def limit_usd(amount: float) -> str:
 
 # Why a run that passes the daily total also needs the person's OK
 # (DailyWait.also): the reason the guard gives first without the total.
-ALSO_PER_RUN = "perRun"            # over the per-run limit (Settings > Run cost)
+ALSO_PER_RUN = "perRun"            # over the per-run limit (Settings > Preferences > Runs)
 ALSO_MODEL_PER_RUN = "modelPerRun"  # over one model's own per-run limit
 ALSO_UNPRICED = "unpriced"          # a node with no list price, with a USD limit set
 ALSO_LIMIT = "limit"                # over a chat's, the outside agents', an app's or a model's budget

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { chatErrorLine } from '../src/lib/chatErrorLine';
-import { isBecauseFailure } from '../src/lib/errorCopy';
+import { DEFERS_TO_NOTICE, chatPersonRequiredCopy, isBecauseFailure, saysPersonRequired } from '../src/lib/errorCopy';
+import { notConnectedKind } from '../src/lib/notConnectedLine';
 
-const line = (message: string | null, extra: { code?: string; source?: string; agentName?: string } = {}) =>
-  chatErrorLine({ message, agentName: 'Claude', ...extra }).text;
-const full = (message: string | null, extra: { code?: string; source?: string; agentName?: string } = {}) =>
-  chatErrorLine({ message, agentName: 'Claude', ...extra });
+type Extra = { code?: string; source?: string; stop?: string; agentName?: string };
+const line = (message: string | null, extra: Extra = {}) => chatErrorLine({ message, agentName: 'Claude', ...extra }).text;
+const full = (message: string | null, extra: Extra = {}) => chatErrorLine({ message, agentName: 'Claude', ...extra });
 
 describe('the chat stream error line', () => {
   it('words a refused connection as a because line naming the agent', () => {
@@ -42,9 +42,11 @@ describe('the chat stream error line', () => {
   it('leaves a whole sentence for the person, and anything Nebula sent, as it is', () => {
     expect(line('Opus is no longer offered.', { code: 'model_unsupported' })).toBe('Opus is no longer offered.');
     expect(line('Fake Agent exited (code 3).', { code: 'personal_session_ended' })).toBe('Fake Agent exited (code 3).');
-    expect(line('Another response is active. Stop it and wait for cancellation confirmation before sending again.', { source: 'system' }))
-      .toBe('Another response is active. Stop it and wait for cancellation confirmation before sending again.');
-    expect(line('Skipped an oversized stream event (likely a huge tool result). Continuing.')).toBe('Skipped an oversized stream event (likely a huge tool result). Continuing.');
+    expect(line('A response is still running. Stop it and wait for it to stop, then send again.', { source: 'system' }))
+      .toBe('A response is still running. Stop it and wait for it to stop, then send again.');
+    // A stop is never shown alone: it opens with the agent, whatever its reason's full stop.
+    expect(line('Skipped an oversized stream event (likely a huge tool result). Continuing.'))
+      .toBe('Claude stopped. Skipped an oversized stream event (likely a huge tool result). Continuing.');
   });
 
   it('is a because line, so it is drawn neutral', () => {
@@ -52,12 +54,12 @@ describe('the chat stream error line', () => {
     expect(isBecauseFailure('Opus is no longer offered.')).toBe(false);
   });
 
-  it('says whether it is a because line itself, for any agent name', () => {
-    expect(full('connection refused').because).toBe(true);
-    expect(full('Opus is no longer offered.', { code: 'model_unsupported' }).because).toBe(false);
-    const hermes = chatErrorLine({ message: 'boom', agentName: 'Hermes v2.0' });
-    expect(hermes).toEqual({ text: 'Hermes v2.0 stopped. Boom.', because: true });
-    expect(chatErrorLine({ message: 'boom', agentName: `A${'x'.repeat(70)}` }).because).toBe(true);
+  it('gives each line its tone: a stop error and a refusal are warnings, an ended session is neutral', () => {
+    expect(full('connection refused').tone).toBe('error');
+    expect(full('Opus is no longer offered.', { code: 'model_unsupported' }).tone).toBe('error');
+    expect(chatErrorLine({ message: 'boom', agentName: 'Hermes v2.0' })).toEqual({ text: 'Hermes v2.0 stopped. Boom.', tone: 'error' });
+    expect(chatErrorLine({ message: 'boom', agentName: `A${'x'.repeat(70)}` }).tone).toBe('error');
+    expect(full('Hermes stopped after it sat idle. Send again to start a new conversation.', { stop: 'ended', agentName: 'Hermes' }).tone).toBe('neutral');
   });
 
   it('drops the agent\'s own name from the reason and keeps names and acronyms capitalised', () => {
@@ -81,25 +83,25 @@ describe('the chat stream error line', () => {
 
   it('puts a multi-line or long message behind Details', () => {
     const trace = 'Traceback (most recent call last):\n  File "x.py", line 1\nValueError: nope';
-    expect(full(trace)).toEqual({ text: 'Claude stopped because its command failed.', because: true, details: trace });
+    expect(full(trace)).toEqual({ text: 'Claude stopped because its command failed.', tone: 'error', details: trace });
     const long = `boom ${'x'.repeat(220)}`;
     expect(full(long)).toMatchObject({ text: 'Claude stopped because its command failed.', details: long });
     expect(full('connection refused').details).toBeUndefined();
   });
 
-  it('shows a long single-line refusal written for the person with its apostrophes curled, with the error tone and no Details', () => {
+  it('shows a long single-line stop written for the person after the agent\'s name, with its apostrophes curled, in the error tone and no Details', () => {
     const apiKey = 'Codex agent is restricted to ChatGPT account login in Nebula. Current Codex auth is API-key billing mode. Use “Connect ChatGPT account” in Nebula, or run `codex logout` then `codex login` without `--with-api-key`.';
     expect(apiKey.length).toBeGreaterThan(200);
-    expect(full(apiKey, { agentName: 'Codex' })).toEqual({ text: apiKey, because: false });
+    expect(full(apiKey, { agentName: 'Codex' })).toEqual({ text: `Codex stopped. ${apiKey}`, tone: 'error' });
     // The backend sends a straight apostrophe; the chat line curls it where it renders.
     const features = 'Codex has features on that Nebula hasn\'t reviewed for its agent (browser_use, js_repl), so the turn was not started. Review them and add each to CODEX_ALLOWED_FEATURES or CODEX_DISABLED_FEATURES in services/agent_profiles.py.';
     expect(features.length).toBeGreaterThan(200);
-    expect(full(features, { agentName: 'Codex' })).toEqual({ text: features.replace("hasn't", 'hasn’t'), because: false });
+    expect(full(features, { agentName: 'Codex' })).toEqual({ text: `Codex stopped. ${features.replace("hasn't", 'hasn’t')}`, tone: 'error' });
   });
 
   it('puts a 6-line stack trace and a long non-sentence dump behind Details', () => {
     const trace = ['Traceback (most recent call last):', '  File "a.py", line 3, in run', '    go()', '  File "b.py", line 9, in go', '    raise ValueError("nope")', 'ValueError: nope.'].join('\n');
-    expect(full(trace)).toEqual({ text: 'Claude stopped because its command failed.', because: true, details: trace });
+    expect(full(trace)).toEqual({ text: 'Claude stopped because its command failed.', tone: 'error', details: trace });
     const dump = `Traceback ${'frame '.repeat(50)}ended`;
     expect(full(dump)).toMatchObject({ text: 'Claude stopped because its command failed.', details: dump });
     const multiSentence = 'Something failed. '.repeat(15).trim();
@@ -107,8 +109,8 @@ describe('the chat stream error line', () => {
   });
 
   it('capitalises a whole line from the backend unless it opens with an identifier, and drops an Error lead', () => {
-    expect(line('invalid JSON', { source: 'system' })).toBe('Invalid JSON.');
-    expect(line('ERROR: invalid JSON', { source: 'system' })).toBe('Invalid JSON.');
+    expect(line('Nebula couldn’t read that message. Reload the page, then send again.', { source: 'system' })).toBe('Nebula couldn’t read that message. Reload the page, then send again.');
+    expect(line('ERROR: nebula couldn’t read that message', { source: 'system' })).toBe('Nebula couldn’t read that message.');
     expect(line('error: bad thing', { source: 'system' })).toBe('Bad thing.');
     expect(line('claude_cli went away', { source: 'system' })).toBe('claude_cli went away.');
     expect(line('JSON was invalid', { source: 'system' })).toBe('JSON was invalid.');
@@ -145,15 +147,15 @@ describe('the chat stream error line', () => {
   it('joins with "because" only when the reason opens with a subject (item 7)', () => {
     // Not a subject: two sentences, the second keeping its capital.
     expect(line("Couldn't read `~/it's/file.png` because it isn't there")).toBe('Claude stopped. Couldn’t read `~/it\'s/file.png` because it isn’t there.');
-    expect(line("Couldn't read `~/it's/file.png` because it isn't there.")).toBe('Couldn’t read `~/it\'s/file.png` because it isn’t there.');
+    expect(line("Couldn't read `~/it's/file.png` because it isn't there.")).toBe('Claude stopped. Couldn’t read `~/it\'s/file.png` because it isn’t there.');
     expect(line('No API key')).toBe('Claude stopped. No API key.');
     expect(line('Cannot open the file')).toBe('Claude stopped. Cannot open the file.');
     expect(line('Missing file')).toBe('Claude stopped. Missing file.');
     // Already ended by an ellipsis, a URL or a colon-free stop.
     expect(line('Waiting for the host…')).toBe('Claude stopped. Waiting for the host…');
     expect(line('See https://fal.ai/docs')).toBe('Claude stopped. See https://fal.ai/docs');
-    // A reason that is already a whole sentence with its stop reads as it is (the whole-line rule), with no "stopped" lead.
-    expect(line('Missing file.')).toBe('Missing file.');
+    // A closing full stop in the reason changes neither the form nor the tone.
+    expect(line('Missing file.')).toBe('Claude stopped. Missing file.');
     // Pronouns and determiners are subjects.
     for (const word of ['I', 'You', 'He', 'She', 'It', 'We', 'They']) {
       expect(line(`${word} could not finish`)).toBe(`Claude stopped because ${word === 'I' ? 'I' : word.toLowerCase()} could not finish.`);
@@ -199,5 +201,99 @@ describe('the chat stream error line', () => {
     expect(line('connection refused', { agentName: '' })).toBe('Your agent stopped because the connection was refused.');
     expect(line('boom', { agentName: '   ' })).toBe('Your agent stopped. Boom.');
     expect(line(null, { agentName: '' })).toBe('Your agent stopped because of an unknown error.');
+  });
+});
+
+describe('the chat line takes its form and tone from the event', () => {
+  const hermes = (message: string | null, extra: Extra = {}) => chatErrorLine({ message, agentName: 'Hermes', ...extra });
+
+  it('stop: error opens "<Agent> stopped", in the warning tone, whether or not the reason has a full stop', () => {
+    for (const reason of ['it lost its connection', 'It lost its connection', 'It lost its connection.']) {
+      expect(hermes(reason, { stop: 'error' })).toEqual({ text: 'Hermes stopped because it lost its connection.', tone: 'error' });
+    }
+    // A reason that opens with no subject is a sentence of its own, again the same with or without the stop.
+    for (const reason of ['Couldn’t read the file', 'Couldn’t read the file.']) {
+      expect(hermes(reason, { stop: 'error' })).toEqual({ text: 'Hermes stopped. Couldn’t read the file.', tone: 'error' });
+    }
+    // A whole-sentence reason with its stop is no longer shown alone.
+    expect(hermes('The host is down.', { stop: 'error' }).text).toBe('Hermes stopped because the host is down.');
+    // The agent's own error answer, "<Name>: message".
+    expect(hermes('Hermes: request failed', { stop: 'error' }).text).toBe('Hermes stopped because its request failed.');
+  });
+
+  it('a stop error with a code is still a stop (a crashed personal session)', () => {
+    expect(hermes('Hermes exited (code 3)', { stop: 'error', code: 'personal_session_ended' }))
+      .toEqual({ text: 'Hermes stopped because it exited (code 3).', tone: 'error' });
+  });
+
+  it('a line that already opens with the stop is shown as it is, still a warning', () => {
+    expect(hermes('This chat’s agent stopped. Send again to start a new conversation.', { stop: 'error', code: 'personal_session_ended' }))
+      .toEqual({ text: 'This chat’s agent stopped. Send again to start a new conversation.', tone: 'error' });
+    expect(hermes('Hermes stopped after it sat idle.', { stop: 'error' }).text).toBe('Hermes stopped after it sat idle.');
+  });
+
+  it('stop: ended is the backend line as it is, neutral', () => {
+    const idle = 'Hermes stopped after it sat idle. Send again to start a new conversation.';
+    expect(hermes(idle, { stop: 'ended', code: 'personal_session_ended' })).toEqual({ text: idle, tone: 'neutral' });
+    const commons = 'Hermes stopped because Commons is on. Pick Claude or Codex to keep chatting.';
+    expect(hermes(commons, { stop: 'ended', code: 'personal_session_ended' })).toEqual({ text: commons, tone: 'neutral' });
+    expect(hermes('This chat\'s agent stopped. Send again to start a new conversation.', { stop: 'ended' }).text)
+      .toBe('This chat’s agent stopped. Send again to start a new conversation.');
+    expect(hermes(null, { stop: 'ended' })).toEqual({ text: 'Hermes stopped.', tone: 'neutral' });
+  });
+
+  it('a missing stop on an event that is not a refusal reads as an error stop', () => {
+    expect(hermes('boom')).toEqual({ text: 'Hermes stopped. Boom.', tone: 'error' });
+    expect(hermes('It lost its connection')).toEqual({ text: 'Hermes stopped because it lost its connection.', tone: 'error' });
+    expect(hermes('Hermes exited (code 3).', { code: 'some_new_code' }).tone).toBe('error');
+  });
+
+  it('a refusal (source system, or a whole-line code, with no stop) is a whole line in the warning tone', () => {
+    const reload = 'Nebula couldn’t read that message. Reload the page, then send again.';
+    expect(hermes(reload, { source: 'system' })).toEqual({ text: reload, tone: 'error' });
+    expect(hermes(reload, { code: 'model_invalid' })).toEqual({ text: reload, tone: 'error' });
+    expect(hermes('Commons is on, so only Claude and Codex can chat. Pick one of them, then send again.', { source: 'system' }).text)
+      .toBe('Commons is on, so only Claude and Codex can chat. Pick one of them, then send again.');
+    expect(hermes('Codex isn’t installed. Install it, then send again.', { code: 'cli_not_installed' }).text).toBe('Codex isn’t installed. Install it, then send again.');
+    expect(hermes('Hermes needs setup. Install Node.js 20.', { code: 'personal_agent_needs_node' }).tone).toBe('error');
+    expect(hermes('Hermes needs you to sign in. Sign in, then send again.', { code: 'auth_required' }).text).toBe('Hermes needs you to sign in. Sign in, then send again.');
+  });
+
+  it('every refusal code the backend sends is a whole line', () => {
+    const codes = ['personal_session_ended', 'personal_agent_warning_required', 'agent_invalid', 'provider_invalid', 'model_unsupported',
+      'effort_unsupported', 'model_required', 'model_invalid', 'effort_invalid', 'auth_required', 'auth_unknown', 'cli_not_installed',
+      'catalog_unavailable', 'catalog_cleanup_failed', 'catalog_timeout', 'catalog_invalid', 'personal_agent_unknown',
+      'personal_agent_disabled', 'personal_agent_not_installed', 'personal_agent_needs_node', 'personal_agent_needs_setup',
+      'personal_agent_changed', 'personal_agent_limit', 'personal_agent_shutting_down', 'personal_agent_start_timeout',
+      'personal_agent_start_failed', 'acp_version_unsupported'];
+    for (const code of codes) expect(hermes('Pick another, then send again.', { code })).toEqual({ text: 'Pick another, then send again.', tone: 'error' });
+  });
+
+  it('a raw dump (line breaks, or long and not whole sentences) is a short stop line with the raw text under Details', () => {
+    const trace = 'Traceback (most recent call last):\n  File "x.py", line 1\nValueError: nope.';
+    expect(hermes(trace, { stop: 'error' })).toEqual({ text: 'Hermes stopped because its command failed.', tone: 'error', details: trace });
+    const dump = `Traceback ${'frame '.repeat(50)}ended`;
+    expect(hermes(dump, { stop: 'error' })).toMatchObject({ text: 'Hermes stopped because its command failed.', tone: 'error', details: dump });
+  });
+
+});
+
+describe('the chat’s person_required wording, by what the tab was doing', () => {
+  it('has a line for each action in a tab, the desktop app and the two developer setups', () => {
+    expect(chatPersonRequiredCopy('send', false)).toBe('This tab isn’t connected as you, so it can’t start a chat. Open the link Nebula printed when it started, then send again.');
+    expect(chatPersonRequiredCopy('send', true, '')).toBe('This window isn’t connected as you, so it can’t start a chat. Quit Nebula and open it again, then send again.');
+    expect(chatPersonRequiredCopy('send', true, 'debug-port')).toBe(`This window isn’t connected as you, so it can’t start a chat. ${DEFERS_TO_NOTICE}`);
+    expect(chatPersonRequiredCopy('answer', false)).toBe('Nebula can’t answer or close the agent from this tab because it isn’t connected as you. Open the link Nebula printed when it started.');
+    expect(chatPersonRequiredCopy('answer', true, '')).toBe('Nebula can’t answer or close the agent from this window because it isn’t connected as you. Quit Nebula and open it again.');
+    expect(chatPersonRequiredCopy('answer', true, 'dev-renderer')).toBe(`Nebula can’t answer or close the agent from this window because it isn’t connected as you. ${DEFERS_TO_NOTICE}`);
+  });
+  it('is read like the general line: it carries the person-required reason, and the dev lines defer to the notice', () => {
+    for (const action of ['send', 'answer'] as const) {
+      for (const [desktop, reason] of [[false, ''], [true, ''], [true, 'debug-port']] as const) {
+        const text = chatPersonRequiredCopy(action, desktop, reason);
+        expect(saysPersonRequired(text), text).toBe(true);
+        expect(notConnectedKind(text), text).toBe(reason === 'debug-port' ? 'defers' : 'fix');
+      }
+    }
   });
 });
