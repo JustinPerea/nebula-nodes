@@ -16,6 +16,13 @@ import { tabIndexSites } from './helpers/tabIndexSites';
 
 const SRC = join(__dirname, '../src');
 const slava = readFileSync(join(SRC, 'styles/slava-restraint.css'), 'utf8');
+const evaluationCss = readFileSync(join(SRC, 'styles/commons-evaluation.css'), 'utf8');
+/** An olive token's value, as `.commons-evaluation` defines it. */
+const evaluationToken = (name: string): string => {
+  const m = evaluationCss.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'));
+  if (!m) throw new Error(`${name} is not defined in commons-evaluation.css`);
+  return m[1].trim();
+};
 
 // ── A small CSS reader: rules with their selectors and declarations ─────────
 
@@ -182,8 +189,8 @@ const SURFACES: Array<[string, string[]]> = [
   ['a hovered control (--sr-surface-control-hover on --sr-glass-strong)', [canvas, 'var(--sr-glass-strong)', 'var(--sr-surface-control-hover)']],
   ['an input (--sr-surface-control-focus on --sr-glass-strong)', [canvas, 'var(--sr-glass-strong)', 'var(--sr-surface-control-focus)']],
   ['a node card (--sr-node-pill-bg, the lightest node chrome)', [canvas, 'var(--sr-node-pill-bg)']],
-  ['the Commons evaluation panel (commons-evaluation.css)', ['#1c211d']],
-  ['an evaluation nav button, current (commons-evaluation.css)', ['#3b4b2e']],
+  ['the Commons evaluation panel (commons-evaluation.css)', [evaluationToken('--evaluation-ground')]],
+  ['an evaluation nav button, current (commons-evaluation.css)', [evaluationToken('--evaluation-current-fill')]],
   ['the provider recovery banner (App.css)', [canvas, 'rgba(39, 23, 13, 0.97)']],
 ];
 
@@ -195,11 +202,12 @@ describe('the ring clears 3:1 on every surface it sits on (WCAG 2.2 1.4.11)', ()
   });
 
   it('on the light evaluation form, its dark twin does', () => {
-    for (const surface of ['#eff1e8', '#d9e1cf', '#f9faf5']) {
+    const card = evaluationToken('--evaluation-card-fill');
+    for (const surface of [card, evaluationToken('--evaluation-button-fill'), evaluationToken('--evaluation-field-fill')]) {
       expect(contrast(over(surface, ringColor('--sr-focus-outline-on-light')), over(surface))).toBeGreaterThanOrEqual(3);
     }
     // The light ring would not have (why the form needs the twin).
-    expect(contrast(over('#eff1e8', ringColor('--sr-focus-outline')), over('#eff1e8'))).toBeLessThan(3);
+    expect(contrast(over(card, ringColor('--sr-focus-outline')), over(card))).toBeLessThan(3);
   });
 
   it('is not orange: it differs from the accent and the agent outline in hue', () => {
