@@ -175,7 +175,7 @@ body.app-slava-restraint .run-history__paper-snapshot a:hover { color: var(--sr-
 .run-history__safeguards code {
   user-select: text;
   font: inherit;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--sr-mono);
 }
 .run-history__safeguards button {
   display: inline-flex;

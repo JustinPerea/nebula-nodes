@@ -169,7 +169,7 @@
   border-radius: var(--sr-radius-pill, 999px);
   background: var(--notice-neutral-fill);
   color: var(--notice-neutral-ink);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--sr-ui);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
