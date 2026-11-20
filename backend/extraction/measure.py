@@ -13,7 +13,7 @@ from cinema.color import rgb_to_lab, visible_pixels
 from commons.measure import MAX_DIM, measure_image, phash
 from services.moodboard_analysis import measure_image_stats
 
-UNITS = {"value_range": "L* 0-100", "lightness": "L* 0-100", "saturation": "HSL saturation 0-100"}
+UNITS = {"value_range": "L* 0-100", "lightness": "L* 0-100", "saturation": "HSV saturation 0-100"}
 
 
 def _mean_lightness(image: Image.Image) -> float | None:

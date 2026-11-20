@@ -19,6 +19,7 @@ import copy
 import hashlib
 import json
 import re
+import textwrap
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
@@ -35,8 +36,16 @@ STATUSES = ("proposal", "approved")
 SHOW_FIELDS = frozenset({"statement", "evidence"})
 MAX_CORRECTIONS_PER_CALL = 50
 MAX_CORRECTIONS_PER_RECORD = 1000
-MAX_VALUE_CHARS = 20_000
+# The limits fit together: a stored correction is at most MAX_CORRECTION_BYTES as it sits in record.json
+# (indentation included), so 1000 of them take about 4 MB and the largest valid record stays under the
+# 5 MB the store reads back (store.MAX_RECORD_BYTES). The store also refuses any write over that size.
+MAX_VALUE_CHARS = 2_000
+MAX_VALUE_DEPTH = 4
 MAX_REASON_CHARS = 500
+MAX_PATH_CHARS = 200
+MAX_CORRECTION_BYTES = 4_096
+MAX_BRAND_CHARS = 200
+MAX_READ_TEXT_CHARS = 2_000
 MAX_READ_REQUESTS = 20
 MAX_READ_REQUEST_CHARS = 300
 
@@ -217,6 +226,8 @@ def validate(record: Any) -> None:
 def _check_path(path: Any, record: dict[str, Any]) -> list[str]:
     if not isinstance(path, str) or not path:
         raise RecordInvalid("A correction needs a path.")
+    if len(path) > MAX_PATH_CHARS:
+        raise RecordInvalid(f"A correction's path is at most {MAX_PATH_CHARS} characters.")
     parts = path.split(".")
     if not all(_SEGMENT.match(p) for p in parts):
         raise RecordInvalid(f"The path {path!r} has a part that isn't letters, digits, - or _.")
@@ -238,6 +249,124 @@ def _check_path(path: Any, record: dict[str, Any]) -> list[str]:
     if path.startswith("shows."):
         return parts
     raise RecordInvalid(f"{path} can't be corrected. Correct brand, structure.read.* or shows.*.")
+
+
+# -- what a correction to the reading may change ------------------------------------------------
+
+READ_CORRECTABLE = (
+    "A region's role (structure.read.regions.<id>.role) or label (.label), a text run's content, weight or "
+    "type_style (structure.read.text.<id>.content), one reader_1 field's value (structure.read.reader_1.<field>.value: "
+    "summary, composition_notes, subject, type_style, spacing_density, layout or medium), or a keyword to add or remove "
+    "(structure.read.reader_1.keywords). Regions, text runs, boxes, sizes and the provenance fields can't be set whole."
+)
+
+
+def _read_enums() -> dict[str, tuple[str, ...]]:
+    from commons import reader as commons_reader
+    from extraction import reader
+
+    return {"role": reader.ROLES, "weight": reader.WEIGHTS, "type_style": commons_reader.TYPE_STYLES,
+            "spacing_density": commons_reader.SPACING, "layout": commons_reader.LAYOUTS, "medium": commons_reader.MEDIA}
+
+
+def _read_refusal(path: str) -> RecordInvalid:
+    return RecordInvalid(f"{path} can't be corrected. What can be: {READ_CORRECTABLE}")
+
+
+def _check_read(parts: list[str], op: str, value: Any, view: dict[str, Any]) -> Any:
+    """A correction under ``structure.read``: leaf fields only, each with its type or enum.
+
+    Setting a whole region, run, box or provenance field is refused, because the page and the effective
+    view read those with a fixed shape. ``view`` is the effective record so far. Returns the value to store."""
+    from extraction import reader
+
+    path = ".".join(parts)
+    read = (view.get("structure") or {}).get("read") or {}
+    enums = _read_enums()
+    kind, rest = parts[2], parts[3:]
+
+    def need_set() -> None:
+        if op != "set":
+            raise RecordInvalid(f"{path} is one value, so it takes set, not {op}.")
+
+    def need_text(limit: int, what: str) -> str:
+        if not (isinstance(value, str) and value.strip() and len(value) <= limit):
+            raise RecordInvalid(f"{path} is set as text of 1 to {limit} characters ({what}).")
+        return value
+
+    if kind == "regions" and len(rest) == 2 and rest[1] in ("role", "label"):
+        if not isinstance(read.get("regions", {}).get(rest[0]), dict):
+            raise RecordInvalid(f"There is no region {rest[0]} in the reading.")
+        need_set()
+        if rest[1] == "role":
+            if value not in enums["role"]:
+                raise RecordInvalid(f"{path} is one of {', '.join(enums['role'])}.")
+            return value
+        if not (isinstance(value, str) and len(value) <= reader.MAX_LABEL):
+            raise RecordInvalid(f"{path} is set as text of at most {reader.MAX_LABEL} characters.")
+        return value
+    if kind == "text" and len(rest) == 2 and rest[1] in ("content", "weight", "type_style"):
+        if not isinstance(read.get("text", {}).get(rest[0]), dict):
+            raise RecordInvalid(f"There is no text run {rest[0]} in the reading.")
+        need_set()
+        if rest[1] == "content":
+            return need_text(reader.MAX_CONTENT, "the words as written")
+        if value not in enums[rest[1]]:
+            raise RecordInvalid(f"{path} is one of {', '.join(enums[rest[1]])}.")
+        return value
+    if kind == "reader_1" and len(rest) == 2 and rest[1] == "value" and rest[0] in _READER_1_TEXT + _READER_1_ENUM:
+        if not isinstance((read.get("reader_1") or {}).get(rest[0]), dict):
+            raise RecordInvalid(f"The reading has no reader_1 field {rest[0]}.")
+        need_set()
+        if rest[0] in _READER_1_ENUM:
+            if value not in enums[rest[0]]:
+                raise RecordInvalid(f"{path} is one of {', '.join(enums[rest[0]])}.")
+            return value
+        return need_text(MAX_READ_TEXT_CHARS, "a sentence or two")
+    if kind == "reader_1" and rest == ["keywords"]:
+        if op not in ("add", "remove"):
+            raise RecordInvalid(f"{path} takes add or remove, one keyword at a time.")
+        from commons.vocab import load_vocabulary
+
+        canon = load_vocabulary().canonical(value) if isinstance(value, str) else None
+        if canon is None:
+            raise RecordInvalid(f"{path} takes a keyword from the vocabulary; {value!r} isn't one.")
+        return canon
+    raise _read_refusal(path)
+
+
+_READER_1_TEXT = ("summary", "composition_notes", "subject")
+_READER_1_ENUM = ("type_style", "spacing_density", "layout", "medium")
+
+
+def _finite_box(box: Any) -> bool:
+    return (isinstance(box, (list, tuple)) and len(box) == 4
+            and all(isinstance(n, (int, float)) and not isinstance(n, bool) and n == n and abs(n) != float("inf")
+                    for n in box))
+
+
+def read_malformed(read: Any) -> str | None:
+    """Why a reading would break the page's fixed shape, or None. Looks at each region and text run:
+    an object with a box of four finite numbers and text where text belongs."""
+    if not isinstance(read, dict):
+        return "the reading isn't an object"
+    for group, texts in (("regions", ("role", "label")), ("text", ("content", "weight", "type_style"))):
+        items = read.get(group)
+        if items is None:
+            continue
+        if not isinstance(items, dict):
+            return f"{group} isn't an object"
+        for key, item in items.items():
+            if not isinstance(item, dict):
+                return f"{group[:-1] if group == 'regions' else 'text run'} {key} isn't an object"
+            if not _finite_box(item.get("box")):
+                return f"{group} {key} has no valid box"
+            if "box_px" in item and not _finite_box(item["box_px"]):
+                return f"{group} {key} has no valid box_px"
+            for name in texts:
+                if name in item and not isinstance(item[name], str):
+                    return f"{group} {key} {name} isn't text"
+    return None
 
 
 def _good_evidence(value: Any, known: set[str]) -> bool:
@@ -284,6 +413,41 @@ def _check_shows(path: list[str], op: str, value: Any, view: dict[str, Any], act
     return value
 
 
+def _depth(value: Any) -> int:
+    if isinstance(value, dict):
+        return 1 + max((_depth(v) for v in value.values()), default=0)
+    if isinstance(value, list):
+        return 1 + max((_depth(v) for v in value), default=0)
+    return 0
+
+
+def _related(a: str, b: str) -> bool:
+    return a == b or a.startswith(b + ".") or b.startswith(a + ".")
+
+
+def _keep_persons_choices(record: dict[str, Any], view: dict[str, Any], parts: list[str], op: str, value: Any) -> None:
+    """An agent's correction never removes, replaces or overrides what a person chose.
+
+    Refused: anything under a show whose origin is "person" (stored, or added by a person's correction), and
+    a set on a path whose latest correction is a person's (an add or remove of an item a person already added
+    or removed). The agent can add its own show under another id, or ask for a read."""
+    path = ".".join(parts)
+    way_out = "Add your own show under another id, or use extraction_request_read to ask the person."
+    if parts[0] == "shows" and len(parts) >= 2:
+        show = view["shows"].get(parts[1])
+        if isinstance(show, dict) and show.get("origin") == "person":
+            raise RecordInvalid(f"{path} belongs to a show a person wrote or kept, and a person's show stays as it is. {way_out}")
+    for item in reversed(record["corrections"]):
+        if op == "set":
+            if not _related(item["path"], path):
+                continue
+        elif not (item["path"] == path and item.get("value") == value):
+            continue
+        if item["actor"] == "person":
+            raise RecordInvalid(f"{path} was last corrected by a person, and a person's correction stays. {way_out}")
+        break
+
+
 def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]], actor: str, *,
                     clock: Clock | None = None) -> dict[str, Any]:
     """A copy of ``record`` with ``corrections`` appended, each ``{path, op, value, reason?}``.
@@ -324,9 +488,18 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
         reason = raw.get("reason")
         if reason is not None and (not isinstance(reason, str) or len(reason) > MAX_REASON_CHARS):
             raise RecordInvalid(f"A correction's reason is text of at most {MAX_REASON_CHARS} characters.")
+        if _depth(value) > MAX_VALUE_DEPTH:
+            raise RecordInvalid(f"A correction's value is nested at most {MAX_VALUE_DEPTH} levels deep.")
         view = effective(updated)
+        if actor == "agent":
+            _keep_persons_choices(updated, view, parts, op, value)
+        if parts[0] == "brand":
+            if op != "set" or not (value is None or (isinstance(value, str) and len(value) <= MAX_BRAND_CHARS)):
+                raise RecordInvalid(f"brand is set to text of at most {MAX_BRAND_CHARS} characters, or to null.")
         if parts[0] == "shows":
             value = _check_shows(parts, op, value, view, actor)
+        elif parts[:2] == ["structure", "read"]:
+            value = _check_read(parts, op, value, view)
         if op in ("add", "remove"):
             current = get_path(view, raw["path"])
             if current is not None and not isinstance(current, list):
@@ -334,6 +507,9 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
         entry: dict[str, Any] = {"path": raw["path"], "op": op, "value": value, "actor": actor, "at": at}
         if reason:
             entry["reason"] = reason
+        if len(textwrap.indent(json.dumps(entry, indent=2, ensure_ascii=False), "    ").encode("utf-8")) > MAX_CORRECTION_BYTES:
+            raise RecordInvalid(f"A correction takes at most {MAX_CORRECTION_BYTES} bytes in the record; "
+                                f"{raw['path']} is larger. Shorten its value or reason.")
         # Later corrections in this call see the earlier ones (add a show, then change it).
         if effective(dict(updated, corrections=[*updated["corrections"], entry])).get("corrections_skipped"):
             raise RecordInvalid(f"{raw['path']} can't take that correction here.")
@@ -365,16 +541,23 @@ def add_read_request(record: dict[str, Any], reason: Any, *, clock: Clock | None
     return updated
 
 
-# What a replace measures again from the image. Everything else in the old
-# record is kept as it was: the reading, every show, the read requests, the
-# corrections, approval fields, brand and any field added later. The id is the
-# image's hash, so the image is the same one and its reading still describes it.
-# tests/test_extraction_replace.py fails when a new field isn't kept or listed here.
+# What a replace measures again from the image, and what it keeps. Every top-level key and every key of
+# ``structure`` that build_record makes is on one list or the other, and tests/test_extraction_replace.py
+# fails when a key is on neither, on both, or when a recomputed key doesn't refresh or a kept key doesn't
+# hold. A new field therefore needs a decision here. The id is the image's hash, so the image is the same
+# one and its reading still describes it.
 REPLACE_RECOMPUTES_TOP = frozenset({"rendering", "source"})
 REPLACE_RECOMPUTES_STRUCTURE = frozenset({"measured"})
+REPLACE_KEEPS_TOP = frozenset({"schema", "schema_status", "id", "status", "approved_by", "approved_at", "brand",
+                               "structure", "shows", "corrections", "read_requests"})
+REPLACE_KEEPS_STRUCTURE = frozenset({"given", "given_reason", "read"})
 # Under structure.measured, these come from the reading's boxes, so they are
 # kept from the old record unless the caller measures them again.
 REGION_MEASURES = ("region_measures", "region_gaps")
+
+
+def _target(path: Any, key: str) -> bool:
+    return isinstance(path, str) and (path == f"shows.{key}" or path.startswith(f"shows.{key}."))
 
 
 def carry_over(new: dict[str, Any], old: dict[str, Any], *,
@@ -385,8 +568,9 @@ def carry_over(new: dict[str, Any], old: dict[str, Any], *,
     ``remeasure(regions)`` measures the reading's regions again (the image's
     crops and the gaps between boxes); without it the old region measures stay.
     A show keeps only evidence ids that still exist (palette entries can change
-    with the measurement); a show left with none is dropped and returned, so the
-    caller can say so. Returns ``(record, dropped_shows)``.
+    with the measurement). A show left with none is dropped, whether it is stored or was added by a
+    correction, and returned with the corrections that target it (they stay in the record, skipped when the
+    record is viewed), so the caller can say so. Returns ``(record, dropped_shows)``.
     """
     if old["id"] != new["id"]:
         raise RecordInvalid("A replace keeps the same image, so the ids must match.")
@@ -416,6 +600,18 @@ def carry_over(new: dict[str, Any], old: dict[str, Any], *,
             dropped.append({"id": key, "statement": show.get("statement"),
                             "why": "none of its evidence exists after measuring again"})
             del out["shows"][key]
+    # Shows that corrections added: the same rule, read off the view the page and agents see.
+    was = effective(old)["shows"]
+    for item in effective(out).get("corrections_skipped", []):
+        path = str(item.get("path"))
+        key = path.split(".")[1] if path.startswith("shows.") and path.count(".") == 1 else None
+        if key is None or item.get("error") != "none of its evidence exists now" or any(d["id"] == key for d in dropped):
+            continue
+        dropped.append({"id": key, "statement": (was.get(key) or {}).get("statement"),
+                        "why": "none of its evidence exists after measuring again"})
+    for entry in dropped:
+        entry["corrections"] = [{"path": c["path"], "op": c["op"], "actor": c["actor"]}
+                                for c in out["corrections"] if _target(c.get("path"), entry["id"])]
     validate(out)
     return out, dropped
 
@@ -433,10 +629,22 @@ def effective(record: dict[str, Any]) -> dict[str, Any]:
         if parts[0] == "shows" and len(parts) > 2 and not isinstance((view.get("shows") or {}).get(parts[1]), dict):
             skipped.append({"path": item.get("path"), "error": f"there is no show {parts[1]}"})
             continue
+        on_read = str(item.get("path")).startswith("structure.read.")
+        before = copy.deepcopy((view.get("structure") or {}).get("read")) if on_read else None
         try:
             apply_op(view, item["path"], item["op"], copy.deepcopy(item.get("value")))
         except (AttributeError, TypeError, ValueError, KeyError) as exc:
             skipped.append({"path": item.get("path"), "error": str(exc)})
+            if on_read:
+                view["structure"]["read"] = before
+            continue
+        if on_read:
+            # Defence in depth, for corrections stored before the paths were limited: one that would leave a
+            # region or text run without its box is skipped, so the page can still draw the record.
+            why = read_malformed((view.get("structure") or {}).get("read"))
+            if why:
+                view["structure"]["read"] = before
+                skipped.append({"path": item.get("path"), "error": f"it would break the reading ({why})"})
     # An entry set to null is a removal; the shows dict has only live items.
     view["shows"] = {k: v for k, v in (view.get("shows") or {}).items() if v is not None}
     # A show cites only evidence that exists now: measuring again can change the

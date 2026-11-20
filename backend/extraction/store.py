@@ -9,10 +9,18 @@ and every path read or written is checked to stay inside the folder's real
 path. Files are written to a temporary name in the same directory and moved
 into place with ``os.replace``, with ``record.json`` last, so a record whose
 ``record.json`` exists is complete.
+
+Every change to an existing record (``save`` with ``replace``, ``correct``, ``request_read``, ``modify``)
+holds an advisory lock, ``flock`` on ``<id>/.lock``, across load, change and write, so two writers (an agent's
+MCP process and the page's server) can't lose each other's work. The lock file is created without following
+a symlink and is refused if it is one. A write over ``MAX_RECORD_BYTES`` is refused, so a record the store
+writes is one it can read back.
 """
 from __future__ import annotations
 
+import contextlib
 import copy
+import fcntl
 import json
 import os
 import re
@@ -20,7 +28,7 @@ import stat
 import tempfile
 import unicodedata
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Iterator
 
 from extraction import record as rec
 from extraction.errors import StoreRefused
@@ -121,7 +129,35 @@ def _atomic_write(directory: str, name: str, data: bytes) -> None:
 
 
 def _dump(record: dict[str, Any]) -> bytes:
-    return (json.dumps(record, indent=2, ensure_ascii=False, sort_keys=False) + "\n").encode("utf-8")
+    """The bytes of ``record.json``. Refused when a read would refuse them, so the record stays readable."""
+    data = (json.dumps(record, indent=2, ensure_ascii=False, sort_keys=False) + "\n").encode("utf-8")
+    if len(data) > MAX_RECORD_BYTES:
+        raise StoreRefused("That change would make the record too large to read back, so it wasn't saved. "
+                           "The record is as it was.")
+    return data
+
+
+LOCK_NAME = ".lock"
+
+
+@contextlib.contextmanager
+def _locked(directory: str) -> Iterator[None]:
+    """Hold the record's advisory lock (``<directory>/.lock``) until the block ends.
+
+    Opened with ``O_NOFOLLOW`` so a symlink in its place is refused, and checked to be a regular file."""
+    path = os.path.join(directory, LOCK_NAME)
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except OSError as exc:
+        raise StoreRefused("That record's lock file couldn't be opened (is it a link?), so the record "
+                           "wasn't changed.") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise StoreRefused("That record's lock file isn't a regular file, so the record wasn't changed.")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)  # closing releases the lock
 
 
 # -- reading ----------------------------------------------------------------------------------
@@ -255,12 +291,33 @@ def save(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, sour
         raise StoreRefused("The rendering isn't a PNG.")
     real = resolve_folder(folder)
     directory = _record_dir(real, record["id"])
-    existing: dict[str, Any] | None = None
+    made = False
     if os.path.lexists(directory):
         if not os.path.isdir(directory):
             raise StoreRefused("A file with that record's name is in the way.")
-        if os.path.lexists(os.path.join(directory, "record.json")):
-            existing = _read_record_file(directory)
+    else:
+        os.mkdir(directory)
+        made = True
+    try:
+        with _locked(directory):
+            return _save_locked(record, rendering_png, source_bytes, source_ext, real, directory,
+                                replace=replace, image=image)
+    except BaseException:
+        if made:
+            with contextlib.suppress(OSError):
+                if not os.path.lexists(os.path.join(directory, "record.json")):
+                    for name in os.listdir(directory):
+                        if name in (LOCK_NAME,) or name.startswith(".tmp-"):
+                            os.unlink(os.path.join(directory, name))
+                    os.rmdir(directory)  # nothing was saved: leave no empty folder
+        raise
+
+
+def _save_locked(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, source_ext: str, real: str,
+                 directory: str, *, replace: bool, image: Any) -> dict[str, Any]:
+    existing: dict[str, Any] | None = None
+    if os.path.lexists(os.path.join(directory, "record.json")):
+        existing = _read_record_file(directory)
     if existing is not None and not replace:
         return {"record": existing, "dir": directory, "existed": True, "dropped_shows": []}
     to_write = copy.deepcopy(record)
@@ -275,42 +332,52 @@ def save(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, sour
             def remeasure(regions: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                 return reader.measure_regions(image, regions), reader.region_gaps(regions)
         to_write, dropped = rec.carry_over(record, existing, remeasure=remeasure)
-    if not os.path.isdir(directory):
-        os.mkdir(directory)
+    data = _dump(to_write)  # before any file changes: a record too large to read back isn't written
     _contained(directory, real)
     if os.path.islink(directory):
         raise StoreRefused("That record's folder is a symlink, so it won't be used.")
     _atomic_write(directory, "rendering.png", rendering_png)
     _atomic_write(directory, f"source.{source_ext}", source_bytes)
-    _atomic_write(directory, "record.json", _dump(to_write))
+    _atomic_write(directory, "record.json", data)
     return {"record": to_write, "dir": directory, "existed": existing is not None, "dropped_shows": dropped}
 
 
-def write(target: str | os.PathLike[str], record: dict[str, Any]) -> None:
-    """Rewrite an existing record's record.json atomically (after its corrections change)."""
-    directory = _locate(target)
+def _write_unlocked(directory: str, record: dict[str, Any]) -> None:
     rec.validate(record)
     if os.path.basename(directory) != record["id"]:
         raise StoreRefused("That record's folder name doesn't match its id.")
+    data = _dump(record)
     _read_record_file(directory)  # the one there must be a good record
-    _atomic_write(directory, "record.json", _dump(record))
+    _atomic_write(directory, "record.json", data)
+
+
+def write(target: str | os.PathLike[str], record: dict[str, Any]) -> None:
+    """Rewrite an existing record's record.json atomically, under the record's lock.
+
+    Prefer ``modify`` when the new record comes from the one on disk: it loads inside the lock."""
+    directory = _locate(target)
+    with _locked(directory):
+        _write_unlocked(directory, record)
+
+
+def modify(target: str | os.PathLike[str], change: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any]:
+    """Load a record, pass it to ``change`` and save what that returns, all under the record's lock.
+
+    Whatever ``change`` raises leaves the record as it was. Returns the saved record."""
+    directory = _locate(target)
+    with _locked(directory):
+        updated = change(_read_record_file(directory))
+        _write_unlocked(directory, updated)
+    return updated
 
 
 def correct(target: str | os.PathLike[str], corrections: Iterable[dict[str, Any]], actor: str, *,
             clock: rec.Clock | None = None) -> dict[str, Any]:
-    """Load a record, add corrections and save it. Returns the updated record.
-
-    Not safe against two writers at once: the last rewrite wins.
-    """
-    directory = _locate(target)
-    updated = rec.add_corrections(_read_record_file(directory), corrections, actor, clock=clock)
-    write(directory, updated)
-    return updated
+    """Load a record, add corrections and save it, under the record's lock. Returns the updated record."""
+    items = list(corrections)
+    return modify(target, lambda record: rec.add_corrections(record, items, actor, clock=clock))
 
 
 def request_read(target: str | os.PathLike[str], reason: str, *, clock: rec.Clock | None = None) -> dict[str, Any]:
-    """Append an agent's read request to a record and save it. Returns the updated record."""
-    directory = _locate(target)
-    updated = rec.add_read_request(_read_record_file(directory), reason, clock=clock)
-    write(directory, updated)
-    return updated
+    """Append an agent's read request to a record and save it, under the record's lock. Returns the updated record."""
+    return modify(target, lambda record: rec.add_read_request(record, reason, clock=clock))

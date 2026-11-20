@@ -38,7 +38,7 @@ def test_save_and_reload_round_trip(folder):
     saved = _save(folder)
     assert saved["existed"] is False
     directory = folder / saved["record"]["id"]
-    assert sorted(p.name for p in directory.iterdir()) == ["record.json", "rendering.png", "source.png"]
+    assert sorted(p.name for p in directory.iterdir()) == [".lock", "record.json", "rendering.png", "source.png"]
     assert (directory / "source.png").read_bytes() == (FIXTURES / "gradient_accent.png").read_bytes()
     assert json.loads((directory / "record.json").read_text()) == saved["record"]
     assert store.load(directory) == saved["record"] == store.load(directory / "record.json")
@@ -46,10 +46,11 @@ def test_save_and_reload_round_trip(folder):
 
 
 def test_nothing_is_left_behind_by_the_atomic_writes(folder):
+    # Only the record's lock file stays beside the three files; no temporary names do.
     saved = _save(folder)
     store.correct(folder / saved["record"]["id"], [{"path": "brand", "op": "set", "value": "acme"}], "person")
     names = sorted(p.name for p in (folder / saved["record"]["id"]).iterdir())
-    assert names == ["record.json", "rendering.png", "source.png"]
+    assert names == [".lock", "record.json", "rendering.png", "source.png"]
 
 
 def test_a_failed_write_leaves_the_old_record_and_no_temp_file(folder, monkeypatch):

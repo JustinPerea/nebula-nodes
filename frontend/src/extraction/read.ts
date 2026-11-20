@@ -1,4 +1,4 @@
-import type { Actor, Box, Correction, ExtractionRecord, Region } from './types'
+import type { Actor, Box, Correction, ExtractionRecord, Region, TextRun } from './types'
 
 export const ROLES = [
   'header', 'navigation', 'hero', 'heading', 'text_block', 'image', 'button', 'control', 'card', 'list',
@@ -14,7 +14,32 @@ export const words = (value: string): string => value.replace(/_/g, ' ')
 
 /** The items of an id-keyed map in the order the read gave them. */
 export function inOrder<T extends { order: number }>(items: Record<string, T> | undefined): Array<[string, T]> {
-  return Object.entries(items ?? {}).sort((a, b) => a[1].order - b[1].order)
+  return Object.entries(items ?? {}).sort((a, b) => (a[1].order ?? 0) - (b[1].order ?? 0))
+}
+
+/** A box is four finite numbers. A region or run without one can't be drawn, so the page leaves it out. */
+export const validBox = (box: unknown): box is Box =>
+  Array.isArray(box) && box.length === 4 && box.every((n) => typeof n === 'number' && Number.isFinite(n))
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** The regions that can be drawn and listed: an object with a valid box and text for role and label. */
+export function usableRegions(regions: Record<string, Region> | undefined): Record<string, Region> {
+  const out: Record<string, Region> = {}
+  for (const [id, region] of Object.entries(regions ?? {})) {
+    if (isObject(region) && validBox(region.box) && typeof region.role === 'string' && typeof region.label === 'string') out[id] = region
+  }
+  return out
+}
+
+/** The text runs that can be listed: an object with a valid box, its words and an estimated size. */
+export function usableRuns(runs: Record<string, TextRun> | undefined): Record<string, TextRun> {
+  const out: Record<string, TextRun> = {}
+  for (const [id, run] of Object.entries(runs ?? {})) {
+    if (isObject(run) && validBox(run.box) && typeof run.content === 'string' && typeof run.weight === 'string'
+      && isObject(run.size_px) && Number.isFinite(run.size_px.value)) out[id] = run
+  }
+  return out
 }
 
 const percent = (fraction: number) => `${Math.round(fraction * 100000) / 1000}%`
@@ -26,7 +51,7 @@ export function boxPosition(box: Box): { left: string; top: string; width: strin
 
 /** Regions largest first, so a small box (a logo inside a bar) is drawn on top and can be hovered. */
 export function drawOrder(regions: Record<string, Region>): Array<[string, Region]> {
-  return Object.entries(regions).sort((a, b) => b[1].box[2] * b[1].box[3] - a[1].box[2] * a[1].box[3])
+  return Object.entries(usableRegions(regions)).sort((a, b) => b[1].box[2] * b[1].box[3] - a[1].box[2] * a[1].box[3])
 }
 
 export type OriginTag = 'code' | 'Claude' | 'fake reader' | 'you' | 'agent'

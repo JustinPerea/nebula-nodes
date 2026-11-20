@@ -100,7 +100,7 @@ def test_measured_values_on_the_accent_image():
     assert block["aspect"] == 1.5
     assert set(block["value_range"]) == {"low", "high"} and block["value_range"]["low"] < block["value_range"]["high"]
     # One scale: mean L* (0-100) of the palette's pixels; saturation is the moodboard's 0-255 mean on 0-100.
-    assert block["units"] == {"value_range": "L* 0-100", "lightness": "L* 0-100", "saturation": "HSL saturation 0-100"}
+    assert block["units"] == {"value_range": "L* 0-100", "lightness": "L* 0-100", "saturation": "HSV saturation 0-100"}
     assert 0 < block["lightness"] <= 100 and block["lightness"] == round(block["lightness"], 1)
     assert block["saturation"] == round(BASELINE["gradient_accent.png"]["saturation"] / 255 * 100, 1)
     assert len(perceptual) == 16 and int(perceptual, 16) >= 0

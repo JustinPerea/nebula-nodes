@@ -763,19 +763,28 @@ The server exposes these tools for building and running (see
   folder, replace=False)` takes a JPEG, PNG, GIF, WebP or HEIC file and writes
   `<folder>/<id>/record.json`, `rendering.png` and the original; the record holds
   the palette with shares and accents, value range, aspect, lightness, saturation
-  (lightness and the value range are CIELAB L*, 0-100; saturation is 0-100; `measured.units` says so)
+  (lightness and the value range are CIELAB L*, 0-100; saturation is HSV saturation, 0-100,
+  the moodboard's (max - min) / max; `measured.units` names the scales, and a record saved before
+  `units` existed has lightness and saturation on 0-255)
   and a perceptual hash, all set by code, with status `proposal`. The id comes from
   the file's bytes, so measuring the same image again keeps the existing record and
   its corrections (`existed: true`). `replace=True` measures again: the colors,
   value range, size and hash are new and the reading's regions are measured again;
   the reading, every show, read requests, corrections and brand are kept. A show
-  whose evidence no longer exists is dropped and listed in `dropped_shows`. The folder must already exist and can't be Nebula's state folder or its
+  whose evidence no longer exists is dropped and listed in `dropped_shows`, whether the show is stored
+  or a correction added it; each entry lists the corrections aimed at it, which stay in the record. The folder must already exist and can't be Nebula's state folder or its
   source tree; video and other file types are refused. `extraction_list(folder)`
   lists the records, and `extraction_show(record)` (a record's folder or its
   `record.json`) returns the record and `effective`, the same with its corrections
   applied. `extraction_correct(record, corrections)` adds corrections as the agent,
-  each `{path, op, value, reason?}` with `op` set, add or remove, on `brand`, on
-  `structure.read.*` or on `shows.*`. Measured values (`structure.measured`,
+  each `{path, op, value, reason?}` with `op` set, add or remove, on `brand` (text or null), on
+  leaves of `structure.read.*` (a region's `role` or `label`, a text run's `content`, `weight` or
+  `type_style`, a `reader_1.<field>.value` that is text or an enum, and `reader_1.keywords` with add or
+  remove) or on `shows.*`; a whole region, run or box can't be set, and a refusal names what can. A
+  person's choices stay: an agent can't remove or rewrite a show a person wrote or kept, or set a path
+  a person corrected last, and adds its own show or asks for a read instead. Values are at most 2,000
+  characters, and a write that would make `record.json` over 5 MB is refused. Records take an
+  advisory lock (`<id>/.lock`) across each change, so the page and agents can write at once. Measured values (`structure.measured`,
   `rendering`, `source`), the id and the schema can't be corrected, and approval
   isn't a correction: an agent can't approve a record. Every path goes through
   the same protected-path check as the other file tools. `extraction_request_read(record,

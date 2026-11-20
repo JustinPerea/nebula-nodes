@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { RowOrigin, SectionLabel } from './Origin'
-import { axisFill, inOrder, isPaletteId, modelTag, originAt, ROLES, showOrigin, WEIGHTS, words } from './read'
+import { axisFill, inOrder, isPaletteId, modelTag, originAt, ROLES, showOrigin, usableRegions, usableRuns, WEIGHTS, words } from './read'
 import type { CodeGap, ExtractionRecord, Region, Show, TextRun } from './types'
 
 export type Correct = (path: string, value: unknown) => void
@@ -73,7 +73,7 @@ function Choose({ value, options, label, onPick }: {
 }
 
 export function RegionsSection({ record, view, hovered, selected, onHover, onSelect, onCorrect }: Props) {
-  const regions = inOrder(view.structure.read?.regions)
+  const regions = inOrder(usableRegions(view.structure.read?.regions))
   const base = modelTag(record.structure.read?.model)
   const measures = view.structure.measured.region_measures
   return (
@@ -114,7 +114,7 @@ export function RegionsSection({ record, view, hovered, selected, onHover, onSel
 }
 
 export function TextSection({ record, view, onCorrect }: Props) {
-  const runs = inOrder(view.structure.read?.text)
+  const runs = inOrder(usableRuns(view.structure.read?.text))
   const base = modelTag(record.structure.read?.model)
   if (runs.length === 0) return (
     <section>

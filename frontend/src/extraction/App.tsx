@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ApiError, createApi, type Api, type RecordDetail } from './api'
-import { acceptDetail } from './detail'
+import { acceptDetail, type Opened } from './detail'
 import { DropArea } from './DropArea'
 import { recordCount } from './format'
 import { RecordList } from './RecordList'
+import { RecordBoundary } from './RecordBoundary'
 import { RecordView } from './RecordView'
 import { releaseRenderings } from './rendering'
 import { springCssVars } from '../lib/springs'
@@ -67,15 +68,15 @@ function Page({ token }: { token: string }) {
   const [dragging, setDragging] = useState(false)
   const opening = useRef(0)
   const queue = useRef<Promise<void>>(Promise.resolve())
-  const selectedRef = useRef<string | null>(null)
+  const openRef = useRef<Opened | null>(null)
   useEffect(() => {
-    selectedRef.current = selectedId
-  }, [selectedId])
+    openRef.current = folder !== null && selectedId !== null ? { folder, id: selectedId } : null
+  }, [folder, selectedId])
 
-  // A read or a correction can finish after the person has opened another
-  // record. Its answer is for a record that isn't shown, so it changes nothing.
-  const changeDetail = useCallback((next: RecordDetail) => {
-    setDetail((current) => acceptDetail(current, next, selectedRef.current))
+  // A read or a correction can finish after the person has opened another record, or the same image in
+  // another folder (one id). `from` is the record it was started for; an answer for any other changes nothing.
+  const changeDetail = useCallback((next: RecordDetail, from: Opened) => {
+    setDetail((current) => acceptDetail(current, next, from, openRef.current))
   }, [])
 
   const open = useCallback(async (id: string, inFolder: string) => {
@@ -244,7 +245,9 @@ function Page({ token }: { token: string }) {
           {!folder ? (
             <p className="ex-quiet ex-pad">Choose a records folder first.</p>
           ) : shown ? (
-            <RecordView key={shown.record.id} api={api} folder={folder} detail={shown} onClose={close} onChange={changeDetail} onNotice={setNotice} />
+            <RecordBoundary key={`${folder}\n${shown.record.id}`} onClose={close}>
+              <RecordView api={api} folder={folder} detail={shown} onClose={close} onChange={changeDetail} onNotice={setNotice} />
+            </RecordBoundary>
           ) : selectedId ? null : (
             <DropArea active={dragging} onFiles={(files) => addFiles(files, 'file')} />
           )}

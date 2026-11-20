@@ -160,17 +160,40 @@ a fully transparent image is refused before sending (as Commons does); the sourc
 "Added" so it can't be taken for the Claude read. Not done: no Approve button (approval is the Viewer's), no
 editing of spacing, reading fields or evidence on the page, no smaller thumbnail file.
 
-## Replace keeps everything it doesn't measure (review fix)
+## Replace keeps what it doesn't measure (review fix)
 
 `save(replace=True)` used to write a fresh record and carry over only the corrections, so it dropped the reading,
 region measures, every show and pending read requests. Now `record.carry_over` keeps the old record and replaces only
 what measuring gives again: `rendering`, `source` and `structure.measured` (`REPLACE_RECOMPUTES_TOP` and
 `REPLACE_RECOMPUTES_STRUCTURE`). With the image passed in, the reading's regions are measured again; without it the
 old region measures stay. A show keeps only evidence ids that still exist; a show left with none is dropped and
-returned as `dropped_shows` (the CLI prints them). `effective()` applies the same evidence rule to shows that
-corrections added, listing a dropped one under `corrections_skipped`. `test_extraction_replace.py` is structural:
-every top-level and structure key of a fully populated record must survive a replace unless it is on the recompute
-lists, so a new field fails it until someone decides.
+returned as `dropped_shows` (the CLI prints them). `dropped_shows` also lists shows that corrections added and
+the corrections aimed at any dropped show (they stay in the record and show under `corrections_skipped`).
+
+The keep and recompute lists are declared next to each other (`REPLACE_KEEPS_TOP`, `REPLACE_KEEPS_STRUCTURE`). Because
+`carry_over` starts from a copy of the old record, a field added to `build_record` would be kept by default, and a
+field that depends on the image would then go stale. `test_extraction_replace.py` therefore fails unless every key
+`build_record` makes (top level and under `structure`) is on exactly one list, and it changes the old record before
+replacing (stale values in recomputed keys, sentinels in kept keys) to check that recomputed keys refresh and kept keys
+hold. An earlier version of this note claimed the old test caught a new field. It didn't: it built both sides from the
+same image, so a new image-derived field outside the recompute sets passed.
+
+## Corrections keep the reading's shape; the store writes only what it reads back (round 5)
+
+- `structure.read.*` corrections are leaves only (`record._check_read`): a region's `role` and `label`, a text run's
+  `content`, `weight` and `type_style`, a `reader_1.<field>.value` that is text or an enum, and `reader_1.keywords`
+  (add or remove one vocabulary word). A whole region, run, box or provenance field is refused with a sentence that
+  names what can be corrected. `effective()` skips a stored correction that would leave a region or run without a valid
+  box (`read_malformed`) and lists it, for records written before this. `brand` is text or null.
+- Caps fit the 5 MB read limit: a value is at most 2,000 characters and 4 levels deep, a stored correction at most
+  4,096 bytes as indented in `record.json`, 1,000 per record (about 4 MB). The store also refuses any dump over
+  `MAX_RECORD_BYTES` before touching a file, so a record it writes is one it reads.
+- Every change to an existing record holds `flock` on `<id>/.lock` (`store._locked`, `O_NOFOLLOW`) across load, change
+  and write: `modify`, `correct`, `request_read`, `write`, and `save`. The server's and CLI's read release the lock for
+  the model call and apply the reading through `store.modify`, which loads again inside the lock.
+- An agent's correction is refused when it touches a show whose origin is "person", or sets a path whose latest
+  related correction is a person's, or reverses a keyword a person added or removed. A person can still change an
+  agent's work.
 
 ## A late answer doesn't replace the record on screen (review fix)
 
@@ -183,8 +206,8 @@ answer only when its record is still the selected one (`detail.ts`); `lateAnswer
   correction changed it, and a show keeps its own origin when a person or agent added it. The "estimate" pill is
   gone; the "≈ 52 px" value carries `role="img"` and an `aria-label` of "estimated 52 pixels".
 - `measured.lightness` is the mean CIELAB L* (0-100, one decimal) of the pixels the palette reads;
-  `measured.saturation` is the moodboard's mean (its formula is (max-min)/max, HSV-style, not HSL) divided by 255
-  times 100. `measured.units` names the scales. A record without `units` shows lightness and saturation "of 255",
+  `measured.saturation` is the moodboard's mean (its formula is (max-min)/max, which is HSV saturation, not HSL) divided
+  by 255 times 100, and `measured.units.saturation` says "HSV saturation 0-100". `measured.units` names the scales. A record without `units` shows lightness and saturation "of 255",
   and its spread "of 100" so the three lines can't be misread together.
 - Region boxes are bare two-tone outlines (1px white inside the edge, 1px black just outside). A role label shows
   on a hovered, focused or selected box. Selecting: click a box, its id button or its row (not a field);

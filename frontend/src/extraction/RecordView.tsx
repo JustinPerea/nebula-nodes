@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, type Api, type RecordDetail } from './api'
+import type { Opened } from './detail'
 import { cameIn, readTime, statusLabel } from './format'
 import { SectionLabel } from './Origin'
 import { segmentWidths, sharePercent } from './palette'
-import { FAKE_MODEL } from './read'
+import { FAKE_MODEL, usableRegions } from './read'
 import { ReadSection } from './ReadSection'
 import { RegionOverlay } from './RegionOverlay'
 import { useRendering } from './rendering'
@@ -80,7 +81,7 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
   folder: string
   detail: RecordDetail
   onClose: () => void
-  onChange: (next: RecordDetail) => void
+  onChange: (next: RecordDetail, from: Opened) => void
   onNotice: (message: string | null) => void
 }) {
   const { record, effective: view } = detail
@@ -92,13 +93,15 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
 
   const correct = useCallback((path: string, value: unknown) => {
     onNotice(null)
-    api.correct(record.id, folder, [{ path, op: 'set', value }]).then(onChange, (error: unknown) => onNotice(sentence(error)))
+    const from = { folder, id: record.id } // the record this was asked for, not whichever is open when it answers
+    api.correct(record.id, folder, [{ path, op: 'set', value }]).then((next) => onChange(next, from), (error: unknown) => onNotice(sentence(error)))
   }, [api, folder, onChange, onNotice, record.id])
 
   const startRead = useCallback(async (again: boolean) => {
     onNotice(null)
+    const from = { folder, id: record.id }
     try {
-      onChange(await api.read(record.id, folder, again))
+      onChange(await api.read(record.id, folder, again), from)
     } catch (error) {
       onNotice(sentence(error))
     }
@@ -125,7 +128,7 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
         {url ? (
           <div className="ex-frame" style={{ '--ex-ratio': String(record.rendering.width / record.rendering.height) } as React.CSSProperties}>
             <img className="ex-rendering" src={url} alt={record.source.name ?? 'The measured image'} />
-            {read ? <RegionOverlay key={read.read_at} regions={read.regions} hovered={hovered} selected={selected} onHover={setHovered} onSelect={select} /> : null}
+            {read ? <RegionOverlay key={read.read_at} regions={usableRegions(read.regions)} hovered={hovered} selected={selected} onHover={setHovered} onSelect={select} /> : null}
           </div>
         ) : null}
       </div>

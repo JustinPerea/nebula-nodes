@@ -272,7 +272,7 @@ describe('measured lines', () => {
   const measured = readRecord().structure.measured
 
   it('reads a record with units on one 0-100 scale', () => {
-    const units = { value_range: 'L* 0-100', lightness: 'L* 0-100', saturation: 'HSL saturation 0-100' }
+    const units = { value_range: 'L* 0-100', lightness: 'L* 0-100', saturation: 'HSV saturation 0-100' }
     render(<dl><MeasuredLines measured={{ ...measured, value_range: { low: 11, high: 99 }, lightness: 72.6, saturation: 15.2, units }} /></dl>)
     expect(screen.getByText('Lightness spread').nextSibling!.textContent).toBe('11 to 99')
     expect(screen.getByText('Mean lightness').nextSibling!.textContent).toBe('73')

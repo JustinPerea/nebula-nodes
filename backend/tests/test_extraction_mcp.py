@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -208,3 +209,15 @@ def test_no_agent_tool_can_start_a_read():
     # and nothing in the module imports the reader at all
     assert "extraction.reader" not in Path(mcp_server.__file__).read_text()
     assert "from extraction import reader" not in Path(mcp_server.__file__).read_text()
+
+
+def test_the_descriptions_tell_an_agent_which_scale_lightness_and_saturation_use():
+    # measured.lightness and saturation are on 0-100 only when measured.units says so; older records are 0-255.
+    root = Path(__file__).resolve().parents[2]
+    texts = [" ".join(getattr(mcp_server, name).__doc__.split()) for name in ("extraction_measure", "extraction_show")]
+    texts += [" ".join((root / "docs" / "MCP-SETUP.md").read_text().split()),
+              " ".join((root / "skills" / "nebula" / "SKILL.md").read_text().split())]
+    for text in texts:
+        assert re.search(r"L\*,? 0-100", text)
+        for needle in ("HSV saturation", "units", "0-255"):
+            assert needle in text, needle

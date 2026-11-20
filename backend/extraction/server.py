@@ -283,17 +283,17 @@ def create_app(token: str, *, port: int = DEFAULT_PORT, dev: bool = False,
                 image = await asyncio.to_thread(media.load_image, png, "image/png", keep_alpha=True)
                 model = reader.FAKE_MODEL if fake_reader is not None else reader.MODEL_ID
                 structured = fake_reader if fake_reader is not None else await reader.ask(record, image, spawn=spawn)
-                # The read can take minutes: apply it to the record as it is now, so a correction made
-                # meanwhile is kept.
-                fresh = await asyncio.to_thread(store.load, directory)
-                updated = await asyncio.to_thread(reader.apply_read, fresh, image, structured, model=model)
+                # The read can take minutes, with the record's lock released: apply it to the record as it
+                # is now, loaded again inside the lock, so a correction made meanwhile is kept.
+                updated = await asyncio.to_thread(
+                    store.modify, directory,
+                    lambda fresh: reader.apply_read(fresh, image, structured, model=model))
             except reader.ReadFailed as exc:
                 return _refuse(502, str(exc))
             except AnalysisInvalid as exc:
                 return _refuse(502, f"The answer didn't fit what the page expects ({exc}). Nothing was changed.")
             except media.MediaError:
                 return _refuse(400, "That record's image couldn't be read.")
-            await asyncio.to_thread(store.write, directory, updated)
             return JSONResponse({"record": updated, "effective": rec.effective(updated)}, headers=SECURITY_HEADERS)
 
     @app.get("/{path:path}")

@@ -116,7 +116,9 @@ def _read(args: argparse.Namespace) -> int:
 
     async def run() -> dict[str, Any]:
         structured = await reader.ask(record, image, spawn=_SPAWN)
-        return reader.apply_read(store.load(directory), image, structured)
+        # Loaded again inside the record's lock, so a correction made during the read is kept.
+        return await asyncio.to_thread(store.modify, directory,
+                                       lambda fresh: reader.apply_read(fresh, image, structured))
 
     try:
         updated = asyncio.run(run())
@@ -124,7 +126,6 @@ def _read(args: argparse.Namespace) -> int:
         raise ExtractionRefused(str(exc)) from None
     except reader.AnalysisInvalid as exc:
         raise ExtractionRefused(f"The answer didn't fit what the page expects ({exc}). Nothing was changed.") from None
-    store.write(directory, updated)
     print(f"{_line(updated)}\nread: {len(updated['structure']['read']['regions'])} regions")
     return 0
 
