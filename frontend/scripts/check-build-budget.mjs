@@ -69,6 +69,11 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // wording needs (errorCopy.ts), the provider-named node lines (nodeErrorCopy.ts) and the lines that moved to the
 // shared builder. Failure copy loads with the app on purpose: a failure line that waits for a chunk cannot be
 // shown when the server or the network is what failed, so it is not split out.
+// Startup-headroom trim: lib/api.ts imported the two 409 error classes from lib/moodboardEdits.ts and
+// lib/characterEdits.ts, which carried the Studios' rebase and op code (and what it imports) into the
+// set. The classes now live in lib/versionConflicts.ts (both files re-export them). The set went from
+// 1,869,797 / 491,059 to 1,864,463 / 489,179 (-5,334 raw / -1,880 gzip), still 45 chunks, with no change
+// to the limits below.
 const MAX_STARTUP_BYTES = 1_870_000;
 const MAX_STARTUP_GZIP_BYTES = 491_400;
 const startup = await startupSet(distDir);
