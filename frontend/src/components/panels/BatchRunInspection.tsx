@@ -1,5 +1,6 @@
 import { backendAssetUrlSync } from '../../lib/backend';
 import { sanitizeVariantScopes, type RunRecord } from '../../lib/runHistory';
+import { openOutputLabel } from '../../lib/openOutputLabel';
 
 function mediaUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -39,7 +40,7 @@ export function BatchRunInspection({ record }: { record: RunRecord }) {
                 const url = ['Image', 'Video', 'Audio', 'SVG', 'Mesh'].includes(output.type)
                   ? mediaUrl(output.value) : null;
                 return url ? <a key={portId} href={url} target="_blank" rel="noopener noreferrer">
-                  Open {output.type.toLowerCase()} · {portId}
+                  {openOutputLabel(output.type, portId)}
                 </a> : null;
               })}
             </div>
