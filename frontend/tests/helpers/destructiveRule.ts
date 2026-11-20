@@ -94,9 +94,9 @@ const DANGER_TOKENS: Record<string, string[]> = {
   '--sr-danger-tint': ['rgba(255,70,60,0.14)'], '--sr-danger-edge': ['rgba(255,70,60,0.34)'],
   '--sr-on-danger': ['#1f1f1f'],
 };
-/** Not the destructive red: the accent in every variant, and the error tokens (the warning tone; design: error is not danger).
+/** Not the destructive red: the accent in every variant, the error tokens (the warning tone; design: error is not danger) and the warning tokens they alias.
  * The --sr-danger family is the red itself, so it is in DANGER_TOKENS above. */
-const ORANGE_VAR = /^--sr-(?:accent|error)(?:-[\w-]+)?$/;
+const ORANGE_VAR = /^--sr-(?:accent|error|warning)(?:-[\w-]+)?$/;
 const WARM_NAMES = /\b(red|darkred|firebrick|crimson|indianred|tomato|orangered|orange|darkorange|coral|lightcoral|salmon|darksalmon|lightsalmon|maroon|brown)\b/i;
 
 function warmRgb(r: number, g: number, b: number): boolean {

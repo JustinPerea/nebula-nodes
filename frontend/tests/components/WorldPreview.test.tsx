@@ -13,7 +13,6 @@ vi.mock('../../src/components/nodes/WorldEnvironmentViewer', () => ({
   ),
 }));
 
-import { LineText } from '../../src/components/LineText';
 import { WorldPreview } from '../../src/components/nodes/WorldPreview';
 
 const world = {
@@ -232,11 +231,18 @@ describe('WorldPreview', () => {
     expect(screen.getByRole('alert')).toHaveClass('world-modal__download-error');
   });
 
-  it('marks only a because line, the same way the download error renders it', () => {
-    const { rerender } = render(<span role="alert"><LineText text="Couldn’t download the world." /></span>);
-    expect(screen.getByRole('alert')).not.toHaveAttribute('data-line-because');
-    rerender(<span role="alert"><LineText text="Nebula couldn’t download the world because that file is gone." /></span>);
-    expect(screen.getByRole('alert')).toHaveAttribute('data-line-because');
+  it('marks the download error as a because line when the server says the file is gone', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "That reference isn't there anymore. Reload to get the latest references." }), { status: 404 })));
+    render(<WorldPreview value={world} />);
+    fireEvent.click(screen.getByRole('button', { name: /Explore 3D world/i }));
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', { name: /Panorama/i }));
+
+    // The real download-error branch renders the line through LineText, so the span carries the
+    // marker only when the message has a because clause.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/because it isn’t there anymore/);
+    expect(alert).toHaveAttribute('data-line-because');
   });
 
   it('downloads a JPEG panorama with a truthful JPEG filename', async () => {

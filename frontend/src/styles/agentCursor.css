@@ -215,7 +215,7 @@
 }
 
 .agent-cursor__error {
-  fill: var(--sr-error);
+  fill: var(--sr-error, #f5c518);
   opacity: 0;
   animation: agent-cursor-flash var(--agent-cursor-flash) both;
 }

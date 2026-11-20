@@ -28,18 +28,21 @@ import {
 //      danger red literals (#ff887d, #ff9a91, rgba(255, 70, 60, ...)), the accent or the
 //      accent literal in any declaration.
 //   3. a destructive control (the last compound holds `danger`, `delete`, `destructive`,
-//      `--clear`, `discard`, `forget` or `trash__trigger`) that uses var(--sr-error...), the
-//      accent, the accent literal or the warning literal (#F5C518).
+//      `--clear`, `discard`, `forget` or `trash__trigger`) that uses var(--sr-error...),
+//      var(--sr-warning...), the accent, the accent literal or the warning literal (#F5C518).
 //   4. design's one rule, yellow means something needs attention or went wrong and nothing else:
 //      a rule whose last compound names a state that needs neither (`running`, `pass`,
-//      `passed`, `done`, `ready`, `ok`, `success`) may not read --sr-warning*, --sr-error* or
+//      `passed`, `done`, `ready`, `ok`, `success`, `complete`, `completed`, `found`) may not read --sr-warning*, --sr-error* or
 //      the warning literal.
 // The state words are read from the element and modifier, not the BEM block, so
 // `.personal-warning__accept` (a button in a warning dialog) is not an error state, and
 // `not-ready` is not a ready state, and `.pass-through` is not a pass state. A :not(...) group is
 // dropped before a selector is read, so `.row:not(.row--ready)` styles the not-ready case.
-// Selectors are classified by the last compound of each part, so the children of an error
-// container (a Retry button inside `.chat__tool--error`) are not error states. A selector that
+// Selectors are classified by the last compound of each part. A control inside an error container
+// (a Retry or Delete button in `.chat__tool--error`) is not an error state; any other descendant
+// of one (`.chat__tool--error .chat__tool-output`) is, so its text takes the error tone. A control
+// is a last compound naming button, btn, retry, action, link, close, dismiss, delete, remove,
+// toggle or menu, or the element button, a or input. A selector that
 // is both error and destructive (`.kept-delete-chooser__error`) is an error state.
 // Nested CSS is flattened first: a nested selector with & is resolved against each part of its
 // parent (`.run { &--error {} }` reads as `.run--error`, `&.is-error` as `.run.is-error`), one
@@ -57,13 +60,16 @@ const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]
 const ERROR_STATE = /error|fail|invalid|refused|warn|blocked|denied|rejected/i;
 // A calm word is a whole class or modifier word: `.row--ready` and `.is-done` match, `.pass-through`
 // does not, and `not-ready` (the state that needs attention) is the one not- form that is exempt.
-const CALM_STATE = /(?<![a-z0-9])(?:running|pass|passed|done|ok|success|(?<!not-)ready)(?![a-z0-9-])/i;
+const CALM_STATE = /(?<![a-z0-9])(?:running|pass|passed|done|ok|success|complete|completed|(?<!not-)(?:ready|found))(?![a-z0-9-])/i;
+// A control inside an error container (a Retry or Delete button) is not an error state; any other
+// descendant of one (its output, its text) is.
+const CONTROL = /^(?:button|a|input)(?![\w-])|button|btn|retry|action|link|close|dismiss|delete|remove|toggle|menu/i;
 const NOT_GROUP = /:not\((?:[^()]|\([^()]*\))*\)/g;
 const ATTENTION_USE = /var\(\s*--sr-(?:warning|error)(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const WARNING_LITERAL = /#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const DESTRUCTIVE = /danger|delete|destructive|--clear|discard|forget|trash__trigger/i;
 const DANGER_USE = /var\(\s*--sr-danger(?![\w])|#ff887d(?:[0-9a-f]{2})?(?![0-9a-f])|#ff9a91(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*70\s*[, ]\s*60\b/i;
-const ERROR_USE = /var\(\s*--sr-error(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
+const ERROR_USE = /var\(\s*--sr-(?:error|warning)(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const ACCENT_USE = /var\(\s*--sr-accent(?![\w])|#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
 
 function main() {
@@ -126,7 +132,7 @@ export function findErrorTokenHits(sheets) {
     for (const rule of sheet.rules) {
       const selector = compact(rule.selector);
       const parts = selector.split(',').map((part) => part.replace(NOT_GROUP, '').trim());
-      const errorState = parts.some((part) => ERROR_STATE.test(stateOf(part)));
+      const errorState = parts.some((part) => ERROR_STATE.test(stateOf(part)) || inErrorContainer(part));
       const calm = parts.some((part) => CALM_STATE.test(stateOf(part)));
       const destructive = !errorState && parts.some((part) => DESTRUCTIVE.test(lastCompound(part)));
       const lineAt = (offset) => lineForOffset(sheet.lineStarts, offset);
@@ -192,6 +198,14 @@ function resolveNested(inner, parent) {
     .map((part) => part.trim())
     .flatMap((part) => parentParts.map((p) => (part.includes('&') ? part.replaceAll('&', p) : `${p} ${part}`)))
     .join(', ');
+}
+
+/** A part whose ancestor compound is an error state and whose own element is not a control: the text inside an error container. */
+function inErrorContainer(part) {
+  const compounds = part.split(/[\s>+~]+/).filter(Boolean);
+  if (compounds.length < 2) return false;
+  if (CONTROL.test(compounds[compounds.length - 1])) return false;
+  return compounds.slice(0, -1).some((compound) => ERROR_STATE.test(compound.replace(/\.[\w-]*?__/g, '.')));
 }
 
 /** The state words of a part: its last compound without the BEM block (`.personal-warning__accept` -> `.accept`). */
