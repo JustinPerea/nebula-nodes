@@ -7,12 +7,13 @@
 import type { NodeData } from '../types';
 import type { Node } from '@xyflow/react';
 import { nodeById } from './graphIndex';
+import { curlApostrophes } from './errorCopy';
 
 export const SKIPPED_FALLBACK_REASON = 'a gate upstream withheld its input';
 
 /** "Skipped: Jev Decide failed (answered no, 0.12)". */
 export function skippedLabel(reason: string | undefined): string {
-  return `Skipped: ${reason?.trim() || SKIPPED_FALLBACK_REASON}`;
+  return `Skipped: ${curlApostrophes(reason?.trim() || SKIPPED_FALLBACK_REASON)}`;
 }
 
 /** A wire draws as inactive when its source port was withheld in the latest

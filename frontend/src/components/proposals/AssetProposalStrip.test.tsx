@@ -63,7 +63,7 @@ describe('AssetProposalStrip', () => {
     ]);
     fireEvent.click(screen.getByRole('button', { name: 'Apply all' }));
     expect(accept).toHaveBeenCalledWith('pa_0000c001');
-    expect(screen.getByRole('button', { name: 'Don\'t' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Don’t' })).toBeTruthy();
   });
 
   it('reads a commons proposal without its before (another tab\'s list) and with one edit', () => {

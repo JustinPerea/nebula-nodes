@@ -90,7 +90,7 @@ describe('Inspector maker size note', () => {
     withKeys(apiKeys);
     renderModel('krea-video-bytedance-seedance-2-5',
       { _kreaAuth: 'api-token', start_image: 'https://example.com/start.png', aspect_ratio: '9:16' });
-    const note = "BytePlus makes this video in your start image's shape: Seedance 2.5 doesn't use the 9:16 aspect ratio when it starts from an image.";
+    const note = "BytePlus makes this video in your start image’s shape: Seedance 2.5 doesn’t use the 9:16 aspect ratio when it starts from an image.";
     if (shown) expect(screen.getByText(note)).toBeVisible();
     else expect(screen.queryByText(note)).toBeNull();
   });

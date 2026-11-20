@@ -1,6 +1,6 @@
 import { groupedCount } from './groupedCount';
 import type { ModelNodeDefinition } from '../types';
-import { countsInstead, nodeNameList } from './errorCopy';
+import { countsInstead, nodeNameList, curlApostrophes } from './errorCopy';
 import { formatChipEstimate } from './pricing';
 import { costTitle, mayCostSentence, type UnpricedReason } from './runScope';
 import type { NotReadyReason, ProposalCost, ProposalCostReason, ProposalNotReady, ProposalPersonValues, ProposalView } from './wsClient';
@@ -136,15 +136,15 @@ export function notReadyShown(
  * 3f, find_nodes' words:
  * "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers". */
 export function notReadyLine(row: ProposalNotReady): string {
-  if (row.person?.trim()) return row.person.trim();
+  if (row.person?.trim()) return curlApostrophes(row.person.trim());
   // Route messages already start with the node's name.
-  return row.missing.startsWith(row.name) ? `${row.ref}: ${row.missing}` : `${row.name} (${row.ref}) ${row.missing}`;
+  return curlApostrophes(row.missing.startsWith(row.name) ? `${row.ref}: ${row.missing}` : `${row.name} (${row.ref}) ${row.missing}`);
 }
 
 /** A ghost card's warning for its not-ready row: the person's line (round 3f), else find_nodes' words. */
 export function notReadyWarning(row: ProposalNotReady | undefined): string | null {
   if (!row) return null;
-  return row.person?.trim() || row.missing;
+  return curlApostrophes(row.person?.trim() || row.missing);
 }
 
 /**
@@ -212,7 +212,7 @@ export function liveKeyBilling(
  * canvas_proposals.plan_line), so agents read the same words in `nebula
  * proposal` and MCP. */
 export function proposalPlan(view: ProposalView): string {
-  return view.plan ?? '';
+  return curlApostrophes(view.plan ?? '');
 }
 
 /** The proposal card's chip, as the Run chip writes it (lib/pricing

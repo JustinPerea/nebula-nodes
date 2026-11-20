@@ -48,7 +48,7 @@ describe('GM r35: the over-limit line', () => {
     fetch.mockResolvedValueOnce(json(413, { detail: 'Project limit reached', limit: 'projects', projectLimit: 500, projectCount: 501, deletes: 2 }));
     const refused = await createProject('Fresh', 'rev-a').catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(RequestFailedError);
-    expect(refused).toMatchObject({ heading: "Couldn't create the project.", status: 413, storageLimit: 'projects',
+    expect(refused).toMatchObject({ heading: "Couldn’t create the project.", status: 413, storageLimit: 'projects',
       reason: 'You have 501 projects and the limit is 500. You can make a new one after you delete 2 projects.',
       detail: 'Project limit reached' });
   });

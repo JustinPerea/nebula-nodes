@@ -87,7 +87,7 @@ describe("GM - Design on review 8 L-b: a replay's placeholder its agent changed 
     const model = placeholderRunConfirm(nodes, [wire('q', 'o'), wire('h', 'o')], 'o', priced,
       { shown: new Map([['q', codex], ['h', codex], ['g', codex]]), changed: new Set(['h']) } as never)!;
     expect(model.heading).toBe('Run 1 node Codex is still setting up?');
-    expect(model.intro).toBe("Codex hasn't finished this, so its settings may not be final.");
+    expect(model.intro).toBe("Codex hasn’t finished this, so its settings may not be final.");
     expect(model.savedLine).toBe('Codex changed “Hero still” after the run was saved. The replay uses the saved settings.');
     expect(model.leftLine).toBe('1 node Codex was setting up is no longer in this run.');
     expect(model.rows.find((row) => row.nodeId === 'h')?.agent).toBeNull();
@@ -101,11 +101,11 @@ describe("GM - Design on review 8 L-b: a replay's placeholder its agent changed 
     expect(model.savedLine).toBe('Codex changed “Hero still” after the run was saved. The replay uses the saved settings.');
   });
 
-  it('finished with the saved settings: "Run with Codex\'s changes?" as before, no sentence', () => {
+  it('finished with the saved settings: "Run with Codex’s changes?" as before, no sentence', () => {
     const nodes = [node('h', 'Hero still'), node('o', 'Final')];
     const model = placeholderRunConfirm(nodes, [wire('h', 'o')], 'o', priced,
       { shown: new Map([['h', codex]]), changed: new Set() } as never)!;
-    expect(model.heading).toBe("Run with Codex's changes?");
+    expect(model.heading).toBe("Run with Codex’s changes?");
     expect(model.intro).toBe('Codex finished setting up this node.');
     expect(model.savedLine).toBeNull();
   });

@@ -4,6 +4,7 @@ import { deriveVisibleParams } from '../../lib/createParams';
 import { allParamDefinitions, providerLabel, routeById, routeSwitch, shownRouteId } from '../../lib/directRoute';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { snapHidden } from '../../lib/providerSwitch';
+import { curlApostrophes } from '../../lib/errorCopy';
 import { useUIStore } from '../../store/uiStore';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 
@@ -78,7 +79,7 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
       )}
       {note && (
         <span className="param-pills__note" role="status">
-          {note}
+          {curlApostrophes(note)}
           <button type="button" className="param-pills__note-dismiss" aria-label="Dismiss provider note"
             onClick={() => setSwitchNote(null)}>&times;</button>
         </span>
@@ -185,7 +186,7 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
         );
       })}
       {notes.map((snapNote) => (
-        <p key={snapNote.text} className="param-pills__note" role="note" data-param-default-note={snapNote.param}>{snapNote.text}</p>
+        <p key={snapNote.text} className="param-pills__note" role="note" data-param-default-note={snapNote.param}>{curlApostrophes(snapNote.text)}</p>
       ))}
     </div>
   );

@@ -162,7 +162,7 @@ describe('the placeholder confirm: a free-text model row, a replay and the Undo 
         savedLine: 'Codex changed “a” after the run was saved. The replay uses the saved settings.' });
     });
 
-    it('Codex finishes it with the saved settings: "Run with Codex\'s changes?" as before', async () => {
+    it('Codex finishes it with the saved settings: "Run with Codex’s changes?" as before', async () => {
       useGraphStore.setState({ runHistory: [record()], nodes: [node('a', 'nano-banana', { pending: codex }, { model: 'cheap' }), node('b')] as never,
         edges: edges as never });
       const pushed: PlaceholderRunConfirm[] = [];
@@ -174,7 +174,7 @@ describe('the placeholder confirm: a free-text model row, a replay and the Undo 
         return null;
       });
       await useGraphStore.getState().rerunHistoryRecord('saved');
-      expect(pushed.at(-1)).toMatchObject({ heading: "Run with Codex's changes?", savedLine: null });
+      expect(pushed.at(-1)).toMatchObject({ heading: "Run with Codex’s changes?", savedLine: null });
     });
   });
 

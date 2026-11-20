@@ -718,7 +718,7 @@ describe('ProposalBar', () => {
   it('keeps a reason the canvas cannot re-check, a line for each of up to 3 nodes', () => {
     const list = notReadyOf(3);
     expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['+a', '+b', '+c'].map((ref) =>
-      `⚠${ref}: FLUX 3 can't run on BFL: no BFL_API_KEY (${ref})`));
+      `⚠${ref}: FLUX 3 can’t run on BFL: no BFL_API_KEY (${ref})`));
     expect(list.textContent).not.toContain('more');
   });
 

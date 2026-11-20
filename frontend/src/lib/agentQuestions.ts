@@ -172,11 +172,11 @@ function keyed(answerKey: string, body?: unknown): RequestInit {
 }
 
 export async function answerQuestions(setId: string, answerKey: string, answers: QuestionAnswerInput[]): Promise<void> {
-  await apiRequest("Couldn't send the answers.", `/api/canvas/questions/${encodeURIComponent(setId)}/answer`,
+  await apiRequest("Couldn’t send the answers.", `/api/canvas/questions/${encodeURIComponent(setId)}/answer`,
     keyed(answerKey, { answers }));
 }
 
 export async function dismissQuestions(setId: string, answerKey: string): Promise<void> {
-  await apiRequest("Couldn't dismiss the questions.", `/api/canvas/questions/${encodeURIComponent(setId)}/dismiss`,
+  await apiRequest("Couldn’t dismiss the questions.", `/api/canvas/questions/${encodeURIComponent(setId)}/dismiss`,
     keyed(answerKey));
 }

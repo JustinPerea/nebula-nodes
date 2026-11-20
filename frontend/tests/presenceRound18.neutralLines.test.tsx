@@ -268,7 +268,8 @@ describe('the reasons mapped here are the backend\'s own words (round 18c)', () 
     for (const detail of LOAD_BECAUSE.keys()) {
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).
       if (detail === 'not found') continue;
-      if (detail.startsWith('That reference isn\'t there anymore')) { expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}."); continue; }
+      // The keys may be written with either apostrophe (the backend's template uses the straight one).
+      if (detail.replace(/’/g, "'").startsWith('That reference isn\'t there anymore')) { expect(backend).toContain("That {thing} isn't there anymore. Reload to get the latest {things}."); continue; }
       expect(backend, detail).toContain(detail.replace(/’/g, "'"));
     }
   });

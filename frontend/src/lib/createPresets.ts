@@ -41,7 +41,7 @@ export type PresetCreateInput = {
 export async function fetchPresets(scope: 'global' | 'project', projectId?: string): Promise<Preset[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
-  const res = await apiRequest("Couldn't load the styles.", `/api/presets?${params.toString()}`);
+  const res = await apiRequest("Couldn’t load the styles.", `/api/presets?${params.toString()}`);
   return res.json();
 }
 
@@ -51,7 +51,7 @@ export async function createPreset(body: PresetCreateInput): Promise<Preset> {
     : body;
   // A refusal says why (an image that isn't one of Nebula's files, a
   // project in Recently deleted), so Create can show it after the heading.
-  const res = await apiRequest("Couldn't save the style.", '/api/presets', {
+  const res = await apiRequest("Couldn’t save the style.", '/api/presets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(resolvedBody),
@@ -62,5 +62,5 @@ export async function createPreset(body: PresetCreateInput): Promise<Preset> {
 /** Move a Style to Recently deleted (backend services/preset_store.py);
  * `restoreTrashed('style', id)` brings it back with the same id. */
 export async function deletePreset(id: string): Promise<void> {
-  await apiRequest("Couldn't delete the style.", `/api/presets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await apiRequest("Couldn’t delete the style.", `/api/presets/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

@@ -5421,7 +5421,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
   it('a restore that fails says so in red; the Restore line stays', async () => {
     seed(left('t1', 'Rivers'));
     inTrash({ t1: { name: 'Rivers' } });
-    trash.restore.mockRejectedValue(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
+    trash.restore.mockRejectedValue(new RequestFailedError("Couldn’t restore the moodboard.", 500, { detail: 'boom' }));
     await openStudio();
     await screen.findByText(TRASHED);
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
@@ -6016,7 +6016,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       lookups({ t1: trashedAs('t1', 'Rivers') });
       trash.restore.mockImplementation(async () => {
         lookups({});
-        throw new RequestFailedError("Couldn't restore the moodboard.", 404, { detail: 'not in the trash' });
+        throw new RequestFailedError("Couldn’t restore the moodboard.", 404, { detail: 'not in the trash' });
       });
       await openStudio();
       fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
@@ -6047,7 +6047,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     it('an earlier failure to restore goes with a Restore that works (V17)', async () => {
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
-      trash.restore.mockRejectedValueOnce(new RequestFailedError("Couldn't restore the moodboard.", 500, { detail: 'boom' }));
+      trash.restore.mockRejectedValueOnce(new RequestFailedError("Couldn’t restore the moodboard.", 500, { detail: 'boom' }));
       await openStudio();
       fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
       await screen.findByText(/restore the moodboard/i);
@@ -6288,7 +6288,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
         projects.restore.mockReset().mockImplementation(async () => {
           // By the time this tab asks, the other tab's restore is done.
           projects.list.mockResolvedValue({ projects: [{ id: 'p1', name: 'Project' }, { id: 'p9', name: 'Shore' }], trash: [] });
-          throw new RequestFailedError("Couldn't restore the project.", Number(answer), { detail: 'no' });
+          throw new RequestFailedError("Couldn’t restore the project.", Number(answer), { detail: 'no' });
         });
         await openStudio();
         await pressRestoreProject();
@@ -6328,7 +6328,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     it('anything else: neutral, "didn\'t accept the request", with Try again', async () => {
       seed(left('pb1', 'Rivers'));
       shoreBoard();
-      projects.restore.mockRejectedValue(new RequestFailedError("Couldn't restore the project.", 500, { detail: 'boom' }));
+      projects.restore.mockRejectedValue(new RequestFailedError("Couldn’t restore the project.", 500, { detail: 'boom' }));
       await openStudio();
       await pressRestoreProject();
       const line = (await screen.findByText(SHORE_REFUSED)).closest('[data-gone]') as HTMLElement;
@@ -6336,7 +6336,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(within(line).getByRole('button', { name: 'Try again' })).toBeTruthy();
       expect(screen.queryByText(/boom|Couldn.t restore the project/)).toBeNull();
       // A 404 with the project still in Recently deleted is "anything else" too.
-      projects.restore.mockRejectedValue(new RequestFailedError("Couldn't restore the project.", 404, { detail: 'gone?' }));
+      projects.restore.mockRejectedValue(new RequestFailedError("Couldn’t restore the project.", 404, { detail: 'gone?' }));
       fireEvent.click(within(line).getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(projects.restore).toHaveBeenCalledTimes(2));
       await new Promise((done) => setTimeout(done, 50));
@@ -6355,7 +6355,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       shoreBoard();
       projects.restore.mockImplementation(async () => {
         projects.list.mockResolvedValue({ projects: [{ id: 'p1', name: 'Project' }], trash: [] });
-        throw new RequestFailedError("Couldn't restore the project.", 404, { detail: 'gone' });
+        throw new RequestFailedError("Couldn’t restore the project.", 404, { detail: 'gone' });
       });
       await openStudio();
       watch.observe(document.body, { childList: true, subtree: true });
@@ -6437,7 +6437,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       const sent = shoreBoards();
       projects.restore.mockImplementation(async () => {
         projects.list.mockResolvedValue({ projects: [{ id: 'p1', name: 'Project' }], trash: [] });
-        throw new RequestFailedError("Couldn't restore the project.", 404, { detail: 'gone' });
+        throw new RequestFailedError("Couldn’t restore the project.", 404, { detail: 'gone' });
       });
       await openStudio();
       await pressRestoreProject(false, BOTH_LINE);
@@ -6995,10 +6995,10 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     it('review 11 LOW-4, W7: a 404, then the project list doesn\'t answer: neutral with Try again, never the red line, the edit kept', async () => {
       seed(left('pb1', 'Rivers'));
       shoreBoard();
-      projects.restore.mockRejectedValue(new RequestFailedError("Couldn't restore the project.", 404, { detail: 'gone?' }));
+      projects.restore.mockRejectedValue(new RequestFailedError("Couldn’t restore the project.", 404, { detail: 'gone?' }));
       await openStudio();
       await screen.findByText(LINE);
-      projects.list.mockRejectedValue(new RequestFailedError("Couldn't load your projects.", 500, { detail: 'boom' }));
+      projects.list.mockRejectedValue(new RequestFailedError("Couldn’t load your projects.", 500, { detail: 'boom' }));
       await pressRestoreProject();
       const line = (await screen.findByText(SHORE_REFUSED)).closest('[data-gone]') as HTMLElement;
       expect(line.className).toContain('moodboard-studio__notice--neutral');

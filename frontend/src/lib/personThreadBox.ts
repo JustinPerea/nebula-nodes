@@ -13,7 +13,7 @@
  * Code…"); anything about one session uses its cursor label ("Waiting for
  * Claude · 2"). With one session the label is "Claude".
  */
-import { quotedNames } from './errorCopy';
+import { curlApostrophes, quotedNames } from './errorCopy';
 import { cursorLabel } from './agentCursorLabel';
 import { MESSAGE_MAX, PRODUCT_LABEL, countsAsReply, type SessionActivity, type ThreadAgent, type ThreadRow } from './personThread';
 
@@ -57,7 +57,9 @@ export function waitingLine(label: string = DEFAULT_SESSION_LABEL): string {
 }
 
 /** "Claude · 2 is working", with its latest action line after " · ". */
-export function workingLine(label: string = DEFAULT_SESSION_LABEL, line?: string | null): string {
+export function workingLine(label: string = DEFAULT_SESSION_LABEL, line?: string | null, nebula?: boolean): string {
+  // Design: Nebula's own line (the backend's log) is curled where it renders; the agent's say stays as it wrote it.
+  if (line && nebula) line = curlApostrophes(line);
   return line ? `${label} is working · ${line}` : `${label} is working`;
 }
 
@@ -161,7 +163,7 @@ export function messageStatus(row: ThreadRow, now: number, options: {
   if (row.state === 'sent' && row.lapsed) return { kind: 'lapsed', text: listenerLapsedLine(options.label) };
   const event = options.activity && options.activity.at >= row.at ? options.activity : null;
   if (event && now - event.at < WORKING_SETTLE_MS) {
-    return { kind: 'working', text: workingLine(options.label, event.line) };
+    return { kind: 'working', text: workingLine(options.label, event.line, event.nebula) };
   }
   const since = Math.max(row.at, event?.at ?? 0);
   if (now - since >= QUIET_SENT_MS) return { kind: 'sent', text: SENT_LINE };
@@ -595,7 +597,7 @@ export function originStatus(origin: RunOrigin, now: number, activity: Readonly<
   const events = origin.sessionKey ? [activity[origin.sessionKey]] : Object.values(activity);
   const event = events.filter((one): one is SessionActivity => Boolean(one) && one.at >= origin.at)
     .sort((a, b) => b.at - a.at)[0];
-  return event && now - event.at < WORKING_SETTLE_MS ? { kind: 'working', text: workingLine(label, event.line) } : null;
+  return event && now - event.at < WORKING_SETTLE_MS ? { kind: 'working', text: workingLine(label, event.line, event.nebula) } : null;
 }
 
 /** When originStatus may next change by itself. */

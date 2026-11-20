@@ -9,6 +9,7 @@ import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { useKeptCanvas } from '../../lib/keptCanvas';
 import { LineText } from '../LineText';
+import { curlApostrophes } from '../../lib/errorCopy';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
@@ -116,5 +117,6 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
 function noticeText(text: string, mono: string | undefined) {
   const at = mono ? text.lastIndexOf(mono) : -1;
   if (!mono || at < 0) return text;
-  return <>{text.slice(0, at)}<code className="canvas-undo-notice__mono">{mono}</code>{text.slice(at + mono.length)}</>;
+  // Design: the prose around the model id is curled like the rest of the line (LineText curls a string child); the id stays as it is.
+  return <>{curlApostrophes(text.slice(0, at))}<code className="canvas-undo-notice__mono">{mono}</code>{curlApostrophes(text.slice(at + mono.length))}</>;
 }

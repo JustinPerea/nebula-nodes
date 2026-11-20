@@ -214,15 +214,17 @@ const TERSE = /\b(?:added|connected|changed|renamed|moved|removed|disconnected) 
 
 /** An event's words for the working line (GM r79.2): its say, else its log,
  * else its did line as the Agent log words it ("Changed “Hero shot”"); never
- * a terse summary. */
-export function activityLine(event: AgentPresenceEvent): string | null {
-  for (const raw of [event.say, event.log]) {
+ * a terse summary. `nebula` is true when the words are Nebula's own (the
+ * backend's `log`, not the agent's `say`): the working line curls those and
+ * leaves the agent's words as it wrote them. */
+export function activityLine(event: AgentPresenceEvent): { line: string; nebula: boolean } | null {
+  for (const [raw, nebula] of [[event.say, false], [event.log, true]] as const) {
     const line = typeof raw === 'string' ? raw.trim() : '';
-    if (line && !TERSE.test(line)) return line;
+    if (line && !TERSE.test(line)) return { line, nebula };
   }
   const did = event.did;
   if (!did?.verb) return null;
-  return did.label ? `${did.verb} “${did.label}”` : did.verb;
+  return { line: did.label ? `${did.verb} “${did.label}”` : did.verb, nebula: false };
 }
 
 function oneSpace(text: string): string {
@@ -245,7 +247,7 @@ export function noteActivity(event: AgentPresenceEvent): void {
   const previous = state.activity[key];
   if (previous && previous.at > at) return;
   usePersonThreadStore.setState((state) => ({
-    activity: { ...state.activity, [key]: { at, line: said || previous?.line || null } },
+    activity: { ...state.activity, [key]: said ? { at, ...said } : { at, line: previous?.line || null, nebula: previous?.line ? previous.nebula : undefined } },
   }));
 }
 

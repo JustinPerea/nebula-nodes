@@ -90,6 +90,31 @@ describe('which strings are read', () => {
     expect(out.map((r) => r[0])).toEqual(["Can't a", "Can't b", "Can't {}", "Can't d", "Can't e"]);
   });
 
+  it('reads a string or template inside a template substitution, for the straight apostrophe only', () => {
+    const out = read(`
+      export const A = () => <div title={\`Open \${open ? "it's" : ''}\`}>
+        {\`\${n} items \${ok ? \`don't\` : 'fine'}\`}
+      </div>;
+      export const O = { label: \`Say \${a ? "can't" : 'can'}\` };`);
+    expect(out.map((r) => r[0])).toEqual(['Open {}', "it's", '{} items {}', "don't", 'fine', 'Say {}', "can't", 'can']);
+    const dir = path.join(tmp, 'nested');
+    mkdirSync(path.join(dir, 'src'), { recursive: true });
+    writeFileSync(path.join(dir, 'src', 'n.tsx'), "export const A = (open: boolean) => <p title={`Open ${open ? \"it's\" : 'Closed Tab'}.`}>x y</p>;\n");
+    const found = scan({ frontend: dir, rules, ctx }).violations.filter((v) => v.file.endsWith('n.tsx'));
+    // The nested "it's" breaks the straight-apostrophe rule; its sibling "Closed Tab" is judged only as part of the whole line.
+    expect(found.map((v) => [v.rule, v.text])).toEqual([['straight-quote', "it's"]]);
+  });
+
+  it('reads the quasis of a template literal in a copy position for the straight apostrophe', () => {
+    const modules = { ...rules, frontend: { ...rules.frontend, copyModules: ['src/lib/fakeCopy.ts'] } };
+    const lib = extractStrings("export const f = (a: string) => `Nebula couldn't ${a} here.`;", 'src/lib/fakeCopy.ts', modules);
+    expect(lib.map((s) => check(s.raw, s.kind, ctx))).toEqual([['straight-quote']]);
+    const attr = read("export const A = () => <p aria-label={`It's ${x} now`}>y</p>;");
+    expect(attr.map((r) => r[0])).toEqual(["It's {} now", 'y']);
+    expect(check("It's {} now", 'label', ctx)).toContain('straight-quote');
+    expect(check('It’s {} now', 'text', ctx)).not.toContain('straight-quote');
+  });
+
   it('resolves an identifier to a const string in the same file and reads the string argument of a call', () => {
     const out = read(`
       const MSG = "Can't one";

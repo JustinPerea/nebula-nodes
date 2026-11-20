@@ -16,6 +16,9 @@ export interface AgentLogEntry {
    *  the dot) and that shade's readable tone (`ink`, the name text). Absent on the chat's thinking lines. */
   agent?: { id: string; name: string; color: string; ink?: string };
   message: string;
+  /** Nebula wrote the message (the event's `log` field): the row curls its apostrophes where it shows. An agent's own
+   *  `say` stays as the agent wrote it. */
+  nebula?: true;
   /** The canvas nodes the action touched (an event's `nodeIds`): what a reader
    *  that needs the nodes uses, since the words name them by canvas name. */
   nodeIds?: string[];
@@ -55,7 +58,8 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
   // The log's own words when the bubble's leave something out (round 16 of
   // PR #195; PR #198 r1).
   const said = typeof event.say === 'string' ? event.say.trim() : '';
-  const message = (typeof event.log === 'string' ? event.log.trim() : '') || said;
+  const logged = typeof event.log === 'string' ? event.log.trim() : '';
+  const message = logged || said;
   if (!message) return null;
   const session = cleanSession(event.session);
   const tones = agentLogTones(SAFE_COLOR.test(agent.color) ? agent.color : AGENT_FALLBACK_COLOR, session);
@@ -72,6 +76,7 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
     // the log (GM - Design, PR #211 r20).
     agent: { id: agent.id, name: cursorLabel(agent.name, session), color: tones.dot, ink: tones.name },
     message,
+    ...(logged ? { nebula: true as const } : {}),
     ...(nodeIds.length > 0 ? { nodeIds } : {}),
     ...(event.tone === 'muted' ? { tone: 'muted' as const } : {}),
   };

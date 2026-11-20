@@ -1023,16 +1023,16 @@ export function orList(items: string[]): string {
 }
 
 function why(route: RouteSpec, block: DirectBlock): string {
-  if (block.reason === 'hidden') return `it doesn't offer ${block.detail}${block.when ? ` with ${block.when}` : ''}`;
-  if (block.reason === 'unsupported') return `it doesn't take ${block.detail}`;
-  if (block.reason === 'blocked') return `it doesn't take ${block.param}`;
+  if (block.reason === 'hidden') return `it doesn’t offer ${block.detail}${block.when ? ` with ${block.when}` : ''}`;
+  if (block.reason === 'unsupported') return `it doesn’t take ${block.detail}`;
+  if (block.reason === 'blocked') return `it doesn’t take ${block.param}`;
   if (block.reason === 'requires') return `it needs ${block.param} set`;
-  if (block.reason === 'size') return `it can't render that ${block.param} exactly`;
+  if (block.reason === 'size') return `it can’t render that ${block.param} exactly`;
   if (block.reason === 'retired') return `the maker retired this model on ${block.on}`;
   if (block.reason === 'ports') {
     const limit = route.rules?.ports?.[block.param ?? ''];
     const name = portLimitName(block.param ?? '', limit);
-    return limit?.max ? `it takes at most ${limit.max} connected ${name}` : `it doesn't take connected ${name}`;
+    return limit?.max ? `it takes at most ${limit.max} connected ${name}` : `it doesn’t take connected ${name}`;
   }
   return String(block.detail ?? block.reason);
 }

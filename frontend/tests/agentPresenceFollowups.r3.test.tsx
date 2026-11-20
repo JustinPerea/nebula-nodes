@@ -125,14 +125,14 @@ describe('kept notes stack, one per project, each with its own Copy note and ×'
   it('a failed send\'s error shows on its own project only', () => {
     setProjectContext({ id: 'beta', revision: 'rev-b' });
     publishOpenProject({ id: 'beta', name: 'Second canvas' });
-    useCanvasPinsStore.setState({ error: "Couldn't save the note. Nebula didn't respond.", errorProject: 'alpha' } as never);
+    useCanvasPinsStore.setState({ error: "Couldn’t save the note. Nebula didn’t respond.", errorProject: 'alpha' } as never);
     render(<PinComposer />);
     expect(screen.queryByRole('status')).toBeNull();
     cleanup();
     setProjectContext({ id: 'alpha', revision: 'rev-a' });
     publishOpenProject({ id: 'alpha', name: 'Alpha' });
     render(<PinComposer />);
-    expect(screen.getByRole('status').textContent).toContain("Couldn't save the note. Nebula didn't respond.");
+    expect(screen.getByRole('status').textContent).toContain("Couldn’t save the note. Nebula didn’t respond.");
   });
 });
 

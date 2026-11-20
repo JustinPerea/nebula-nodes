@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * they were shown), with design's rulings:
  * - Once the dialog has shown for a run it stays the authority. An agent
  *   finishing its placeholders while it is open (and making the run pricier)
- *   asks again with "Run with Codex's changes?", never the costly-run setting
+ *   asks again with "Run with Codex’s changes?", never the costly-run setting
  *   or the browser's confirm; the run sends the total the person saw, which
  *   Nebula holds it to with no placeholder left, and its refusal re-asks.
  * - Design: a refused or declined run leaves the canvas as it was:
@@ -112,7 +112,7 @@ describe("the person's direct run once the placeholder dialog has shown", () => 
       expect(askMock).toHaveBeenCalledTimes(2);
       expect(askMock.mock.calls[1][1]).toMatchObject({ changed: true });
       expect(askMock.mock.calls[1][0]).toMatchObject({
-        heading: "Run with Codex's changes?", intro: 'Codex finished setting up this node.',
+        heading: "Run with Codex’s changes?", intro: 'Codex finished setting up this node.',
         runLabel: 'Run for $9.60', confirmIds: [] });
       expect(confirm).not.toHaveBeenCalled();
       expect(execute).toHaveBeenCalledOnce();
@@ -138,7 +138,7 @@ describe("the person's direct run once the placeholder dialog has shown", () => 
         return pushed[pushed.length - 1];
       });
       await useGraphStore.getState().executeNode('b');
-      expect(pushed.at(-1)).toMatchObject({ heading: "Run with Codex's changes?", runLabel: 'Run for $9.60' });
+      expect(pushed.at(-1)).toMatchObject({ heading: "Run with Codex’s changes?", runLabel: 'Run for $9.60' });
       expect(askMock).toHaveBeenCalledOnce();
       expect(execute.mock.calls[0][6]).toEqual([]);
       expect(execute.mock.calls[0][7]).toBe(9.6);
@@ -164,7 +164,7 @@ describe("the person's direct run once the placeholder dialog has shown", () => 
         .mockImplementationOnce(yes);
       await useGraphStore.getState().executeShot('cine', 's1');
       expect(askMock).toHaveBeenCalledTimes(2);
-      expect(askMock.mock.calls[1][0]).toMatchObject({ heading: "Run with Codex's changes?", runLabel: 'Generate for $9.60' });
+      expect(askMock.mock.calls[1][0]).toMatchObject({ heading: "Run with Codex’s changes?", runLabel: 'Generate for $9.60' });
       expect(shot.mock.calls[0][7]).toEqual([]);
       expect(shot.mock.calls[0][8]).toBe(9.6);
     });
@@ -179,7 +179,7 @@ describe("the person's direct run once the placeholder dialog has shown", () => 
       expect(execute.mock.calls[0][7]).toBe(1.2);
       expect(askMock).toHaveBeenCalledTimes(2);
       expect(askMock.mock.calls[1][1]).toMatchObject({ changed: true });
-      expect(askMock.mock.calls[1][0]).toMatchObject({ heading: "Run with Codex's changes?", runLabel: 'Run for $9.60', confirmIds: [] });
+      expect(askMock.mock.calls[1][0]).toMatchObject({ heading: "Run with Codex’s changes?", runLabel: 'Run for $9.60', confirmIds: [] });
       expect(execute.mock.calls[1][6]).toEqual([]);
       expect(execute.mock.calls[1][7]).toBe(9.6);
       expect(errors()).toEqual([]);

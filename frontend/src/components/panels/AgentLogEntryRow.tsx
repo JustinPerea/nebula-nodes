@@ -1,9 +1,11 @@
+import { curlApostrophes } from '../../lib/errorCopy';
 import { writtenTime } from '../../lib/writtenDate';
 import type { AgentLogEntry } from '../../store/agentLogStore';
 
 /** One Agent log event row: the log's list, and a thread's opened "3 actions". */
 export function AgentLogEntryRow({ entry: e }: { entry: AgentLogEntry }) {
-  const line = e.message;
+  // Design: Nebula's own log line is curled where it shows; an agent's say stays as the agent wrote it.
+  const line = e.nebula ? curlApostrophes(e.message) : e.message;
   return (
     <li
       className={`agent-log__entry agent-log__entry--${e.source}${e.tone === 'muted' ? ' agent-log__entry--muted' : ''}`}

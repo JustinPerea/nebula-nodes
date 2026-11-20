@@ -107,7 +107,7 @@ export function useKreaConnection() {
         }
       } catch {
         signInWindow?.close();
-        setLaunchError("Krea sign-in didn't open. Use Open Krea sign-in below to continue.");
+        setLaunchError("Krea sign-in didn’t open. Use Open Krea sign-in below to continue.");
       }
       return state;
     });

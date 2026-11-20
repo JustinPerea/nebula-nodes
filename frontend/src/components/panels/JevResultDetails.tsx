@@ -5,6 +5,7 @@ import {
   unit, verdictLabel,
 } from '../../lib/jevView';
 import '../../styles/jev-result.css';
+import { curlApostrophes } from '../../lib/errorCopy';
 
 interface JevResultDetailsProps {
   result: JevResult;
@@ -48,6 +49,15 @@ function rowsFor(result: JevResult, params: Record<string, unknown>): Array<{ la
 
 /** The whole Jev result for the Inspector: every probability, then the facts
  * of the run (which model answered, tokens, cost, request id). */
+/** What the judge model wrote beside its verdict: prose a person reads, curled where it shows (design). */
+export function JevNotes({ notes }: { notes: readonly string[] }) {
+  return (
+    <ul className="jev-details__notes">
+      {notes.map((note) => <li key={note}>{curlApostrophes(note)}</li>)}
+    </ul>
+  );
+}
+
 export function JevResultDetails({ result, params }: JevResultDetailsProps) {
   const head = summary(result, params);
   const rows = rowsFor(result, params);
@@ -114,9 +124,7 @@ export function JevResultDetails({ result, params }: JevResultDetailsProps) {
         ))}
       </dl>
       {report && report.notes.length > 0 && (
-        <ul className="jev-details__notes">
-          {report.notes.map((note) => <li key={note}>{note}</li>)}
-        </ul>
+        <JevNotes notes={report.notes} />
       )}
     </div>
   );

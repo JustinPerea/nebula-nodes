@@ -17,7 +17,7 @@ const topaz: PlaceholderRunRow = { nodeId: 't', name: '“Clean plate”', model
 const bloom: PlaceholderRunRow = { nodeId: 'b', name: '“Bloom pass”', model: 'Topaz Bloom 2 (Krea)', modelKey: 'Topaz Bloom 2 (Krea)',
   setting: 'Variant: Large · Grain model: gaussian', price: 'on your Krea plan', agent: null };
 const model: PlaceholderRunConfirm = {
-  heading: 'Run 1 node Codex is still setting up?', intro: "Codex hasn't finished this, so its settings may not be final.",
+  heading: 'Run 1 node Codex is still setting up?', intro: "Codex hasn’t finished this, so its settings may not be final.",
   savedLine: null, leftLine: null, rows: [topaz, bloom], freeLine: null, totalLine: null, notes: [], costNotes: [],
   runLabel: 'Run', confirmIds: ['t'], confirmCost: null,
 };

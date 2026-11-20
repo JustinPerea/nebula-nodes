@@ -1,3 +1,4 @@
+import { curlApostrophes } from './errorCopy';
 import type { Moodboard, MoodboardImage, MoodboardPlacement } from '../types';
 import { cardWeight } from '../components/moodboard-studio/steering';
 import { sizeFor } from './moodboardLayout';
@@ -237,4 +238,14 @@ export function rebaseDraft<D extends QueuedDraft>(draft: D,
   const merged = draft.base ? mergeFields(draft as Partial<Record<BoardFieldKey, unknown>>, draft.base, fields) as D : draft;
   return { ...merged, images, coverImageId, base: fields, version: board.version, pendingOps,
     ...(pendingOps.some(opSteers) ? { analysis: null } : {}) };
+}
+
+/** What an undo left as it was, in the server's words (contract 07, 1.12),
+ *  each once: a field step that saved twice undoes in two restores. */
+export function skippedLines(edited: MoodboardEditResult): string[] {
+  return [...new Set(edited.applied.flatMap((entry) => {
+    const skipped = Array.isArray(entry.skipped) ? entry.skipped as Array<{ message?: unknown; number?: unknown }> : [];
+    return skipped.map((slice) => (typeof slice.message === 'string' && slice.message ? curlApostrophes(slice.message)
+      : typeof slice.number === 'number' ? `Image ${slice.number} changed after that step, so Nebula left it as it is.` : 'Part of it changed after that step, so Nebula left it as it is.'));
+  }))];
 }

@@ -32,7 +32,7 @@ const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 const css = (file: string) => readFileSync(join(__dirname, '../src', file), 'utf8');
-const hidden = () => new RequestFailedError("Couldn't save the note.", 422, {
+const hidden = () => new RequestFailedError("Couldn’t save the note.", 422, {
   detail: 'This note has too much hidden text to save.', code: HIDDEN_TEXT_CODE });
 const NOTE = `look here\x1b]0;${'h'.repeat(1200)}\x07`;
 

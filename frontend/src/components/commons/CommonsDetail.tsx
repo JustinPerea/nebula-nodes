@@ -19,6 +19,7 @@ import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
+import { curlApostrophes } from '../../lib/errorCopy';
 
 interface Props {
   assetId: string;
@@ -166,6 +167,12 @@ function Membership({ assetId, membership, run }: {
       </div>
     </section>
   );
+}
+
+/** How a borrowing held up, with the checker's reason on hover (backend text: curled where it shows, design). */
+export function FidelityBadge({ fidelity }: { fidelity: { status: string; reason?: string } | null }) {
+  const status = fidelity?.status ?? 'pending';
+  return <span className={`commons-badge commons-badge--fidelity-${status}`} title={fidelity?.reason ? curlApostrophes(fidelity.reason) : undefined}>{fidelityStatusLabel(status)}</span>;
 }
 
 export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props) {
@@ -365,7 +372,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
       {asset.media === 'image' ? (
         <div className="commons-stage">
-          <CommonsMedia className="commons-stage__image" path={detail.blob_url} alt={fields.summary?.value ?? ''} draggable={false} />
+          <CommonsMedia className="commons-stage__image" path={detail.blob_url} alt={curlApostrophes(fields.summary?.value ?? '')} draggable={false} />
           <div
             className="commons-stage__overlay"
             onPointerDown={onPointerDown}
@@ -556,10 +563,9 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         ) : (
           <ul className="commons-list">
             {detail.borrowings.map((b) => {
-              const status = b.fidelity?.status ?? 'pending';
               return (
                 <li key={b.id} className="commons-list__item">
-                  <span className={`commons-badge commons-badge--fidelity-${status}`} title={b.fidelity?.reason}>{fidelityStatusLabel(status)}</span>
+                  <FidelityBadge fidelity={b.fidelity} />
                   <span className="commons-list__text">{b.attribute} → {b.used_in.kind}:{b.used_in.ref}</span>
                   <span className="commons-meta">{actorLabel(b.actor)}</span>
                 </li>

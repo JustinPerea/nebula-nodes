@@ -59,7 +59,7 @@ function FolderField({ field, label, saved, placeholder, hint, lock }: {
       if (!result.ok) throw new Error(result.error);
       if (result.path && result.path !== saved) void saveField(field, result.path);
     } catch {
-      setChooseError("The folder picker couldn't open. Type the path instead.");
+      setChooseError("The folder picker couldn’t open. Type the path instead.");
     }
   }
 

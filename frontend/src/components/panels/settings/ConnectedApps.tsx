@@ -10,7 +10,7 @@ import {
   type ConnectedApp,
   type OutsideSpend,
 } from '../../../lib/api';
-import { becauseLine, failureMessage } from '../../../lib/errorCopy';
+import { becauseLine, failureMessage, curlApostrophes } from '../../../lib/errorCopy';
 import { PersonLockLine, type LockProps } from '../../PersonLock';
 import { usePersonLock } from '../../../hooks/usePersonLock';
 import { formatSpentUsd } from '../../../lib/pricing';
@@ -100,7 +100,7 @@ function CopyBlock({ label, where, text, onError }: {
   return (
     <div className="settings-apps__block">
       <div className="settings-apps__block-head">
-        <span className="settings-pref__description">{where}</span>
+        <span className="settings-pref__description">{curlApostrophes(where)}</span>
         <button type="button" className="settings__button" aria-label={`Copy ${label}`} onClick={() => void copy()}>
           {copied ? 'Copied' : 'Copy'}
         </button>
@@ -111,7 +111,7 @@ function CopyBlock({ label, where, text, onError }: {
 }
 
 /** What to paste or run in the agent's app. It names the token's file, never the token. */
-function SetupPanel({ name, setup, onDone, onError }: {
+export function SetupPanel({ name, setup, onDone, onError }: {
   name: string;
   setup: AgentSetup;
   onDone: () => void;
@@ -127,7 +127,7 @@ function SetupPanel({ name, setup, onDone, onError }: {
         </p>
       )}
       <ol className="settings-apps__steps">
-        {setup.steps.map((step) => <li key={step}>{step}</li>)}
+        {setup.steps.map((step) => <li key={step}>{curlApostrophes(step)}</li>)}
       </ol>
       <CopyBlock label={`${setup.label} config`} where={setup.where} text={setup.snippet} onError={onError} />
       {setup.alternative && (
@@ -140,7 +140,7 @@ function SetupPanel({ name, setup, onDone, onError }: {
           text={setup.cli} onError={onError} />
       )}
       <ul className="settings-apps__warnings" aria-label="Before you paste it">
-        {setup.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+        {setup.warnings.map((warning) => <li key={warning}>{curlApostrophes(warning)}</li>)}
       </ul>
       <div>
         <button type="button" className="settings__button settings__button--primary" onClick={onDone}>Done</button>
@@ -242,7 +242,7 @@ export function ConnectedApps({ view, counted = false, unknown = false, loadErro
       </div>
       <LineBox text={loadError} />
       {!available && view?.connect?.reason && (
-        <p className="settings-hint" role="note">{view.connect.reason} You can still make a plain token below.</p>
+        <p className="settings-hint" role="note">{curlApostrophes(view.connect.reason)} You can still make a plain token below.</p>
       )}
       <div className="settings-list">
         {apps.map((app) => (

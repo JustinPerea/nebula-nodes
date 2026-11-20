@@ -16,7 +16,7 @@ export function NousRow({ summary }: { summary: string }) {
   const setOpen = (on: boolean) => useSettingsDraftStore.setState({ openRow: on ? { id: NOUS_ROW, mode: 'manage' } : null });
   const tone = health.loading ? 'busy' : !current ? 'idle' : entry.status === 'valid' ? 'ok' : entry.configured ? 'warn' : 'idle';
   const status = health.loading ? 'Checking…' : !current ? undefined
-    : entry.status === 'valid' ? 'Signed in' : entry.configured ? "Sign-in couldn't be verified" : undefined;
+    : entry.status === 'valid' ? 'Signed in' : entry.configured ? "Sign-in couldn’t be verified" : undefined;
 
   return (
     <div onKeyDownCapture={(event) => {
@@ -37,7 +37,7 @@ export function NousRow({ summary }: { summary: string }) {
           <div id="settings-row-nous" className="settings-row__manage">
             <p className="settings-hint">
               On the computer running Nebula, run <code className="settings-mono">hermes model</code> and choose Nous Portal.
-              It signs in through Hermes in your browser; there's no key to paste.
+              It signs in through Hermes in your browser; there’s no key to paste.
             </p>
             <p className="settings-hint">Then use Check connections. Checking never starts a generation.</p>
           </div>

@@ -90,12 +90,12 @@ export class PaperSourceError extends RequestFailedError {
 }
 
 const PAPER_HEADINGS = {
-  selection: "Couldn't read the Paper selection.",
-  object: "Couldn't find that Paper object.",
-  open: "Couldn't open the source.",
-  link: "Couldn't link the artwork.",
-  refresh: "Couldn't refresh the source.",
-  reconnect: "Couldn't reconnect the object.",
+  selection: "Couldn’t read the Paper selection.",
+  object: "Couldn’t find that Paper object.",
+  open: "Couldn’t open the source.",
+  link: "Couldn’t link the artwork.",
+  refresh: "Couldn’t refresh the source.",
+  reconnect: "Couldn’t reconnect the object.",
 } as const;
 
 async function paperRequest<T>(heading: string, path: string, body?: unknown): Promise<T> {

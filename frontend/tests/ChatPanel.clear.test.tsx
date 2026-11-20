@@ -77,8 +77,8 @@ async function typeClear() {
 }
 
 const CONFIRMED = 'Session cleared. Next message starts a fresh conversation with an empty canvas.';
-const REFUSED = "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.";
-const UNCONFIRMED = "Session cleared. Next message starts a fresh conversation. Nebula didn't confirm the canvas was cleared.";
+const REFUSED = "Session cleared. Next message starts a fresh conversation. The canvas wasn’t cleared.";
+const UNCONFIRMED = "Session cleared. Next message starts a fresh conversation. Nebula didn’t confirm the canvas was cleared.";
 const chatText = () => document.body.textContent || '';
 
 describe('/clear in the chat panel', () => {
@@ -88,7 +88,7 @@ describe('/clear in the chat panel', () => {
       { status: 409, headers: { 'content-type': 'application/json' } });
     await typeClear();
     expect(await screen.findByText(
-      "Session cleared. Next message starts a fresh conversation. The canvas wasn't cleared.")).toBeTruthy();
+      "Session cleared. Next message starts a fresh conversation. The canvas wasn’t cleared.")).toBeTruthy();
     await waitFor(() => expect(document.querySelector('[data-chat-notice]')?.textContent).toBe(
       'Nebula couldn’t clear the canvas because a run is still going. Wait for it to finish or stop it first.'));
     expect(screen.queryByText(/with an empty canvas/)).toBeNull();

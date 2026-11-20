@@ -198,7 +198,7 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
   });
 
   it('the lines, exactly', () => {
-    expect(LABELS_CHANGED_ELSEWHERE).toBe("You changed this reference's labels in another tab while Nebula was offline, so your changes here weren't saved.");
+    expect(LABELS_CHANGED_ELSEWHERE).toBe("You changed this reference’s labels in another tab while Nebula was offline, so your changes here weren’t saved.");
     // GM r18: "changed", like the labels line.
     expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You changed this reference’s accents in another tab while Nebula was offline, so your changes here weren’t saved.");
   });

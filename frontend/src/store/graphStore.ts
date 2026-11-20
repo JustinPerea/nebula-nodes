@@ -99,7 +99,7 @@ import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, held
 import {
   CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
-  PERSON_REQUIRED_CODE, becauseLine, failureMessage, isNamedLine, readRefusal, refusalError, requestError,
+  PERSON_REQUIRED_CODE, becauseLine, curlApostrophes, failureMessage, isNamedLine, readRefusal, refusalError, requestError,
   saysPersonRequired, warnFailure, writtenLine, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
 } from '../lib/errorCopy';
 import { clearRefusedOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
@@ -4932,7 +4932,7 @@ type SceneAnswer =
 export interface OtherReason { text: string | null; nebula: boolean }
 
 /** Reads a refused scene write: which part, or what clears it (GM r7 item 1). */
-async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAnswer> {
+export async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAnswer> {
   let body: { detail?: unknown; code?: unknown; rendering?: { shotIds?: unknown; shots?: unknown };
     project?: { name?: unknown } | null; switchedBy?: { kind?: unknown; name?: unknown } | null;
     scene?: unknown; sceneKey?: unknown; sceneRev?: unknown; changedBy?: { kind?: unknown; name?: unknown } | null;
@@ -4965,7 +4965,7 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
       : Array.isArray(body.rendering.shots)
         ? body.rendering.shots.flatMap((n) => (Number.isInteger(n) && order[(n as number) - 1] ? [order[(n as number) - 1]] : []))
         : [];
-    if (named.length > 0) return { kind: 'rendering', shotIds: named, line: isNamedLine(detail) ? detail : becauseLine({ heading, reason: detail }) };
+    if (named.length > 0) return { kind: 'rendering', shotIds: named, line: isNamedLine(detail) ? curlApostrophes(detail) : becauseLine({ heading, reason: detail }) };
   }
   // The Agent log's line for a refusal the person can't read the cause of:
   // the status and the code (GM #198 r12 answer 1), never in the person's text.
@@ -5000,7 +5000,7 @@ async function sceneRefusal(nodeId: string, response: Response): Promise<SceneAn
   // Review 5 MEDIUM-1 (round 7): refused only because this tab isn't connected as the person,
   // the line says so in the because form (GM r6 2): the save goes again on the promote.
   if (error) return { kind: 'kept', refused: 'other', line: notConnectedBecause(`save your changes to “${label}”`), reason: { text: null, nebula: false }, error };
-  if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: detail, reason: { text: null, nebula: false }, error };
+  if (isNamedLine(detail)) return { kind: 'kept', refused: 'other', line: curlApostrophes(detail), reason: { text: null, nebula: false }, error };
   const reason = copyForAnswer(status, body.detail, code);
   const headed = becauseLine({ heading, reason });
   // becauseLine puts the heading first unless one side is empty or the reason
@@ -10775,7 +10775,7 @@ const restoreSeqs = new Map<number, number>();
 
 /** GM - Design, round 19, verbatim for an undo; a redo's says "redone". */
 function restoreTimeoutLine(action: 'undo' | 'redo'): string {
-  return `Nothing was ${action === 'undo' ? 'undone' : 'redone'}. Nebula isn't answering. Make sure it's running, then try again.`;
+  return `Nothing was ${action === 'undo' ? 'undone' : 'redone'}. Nebula isn’t answering. Make sure it’s running, then try again.`;
 }
 
 /** The nodes and wires a refused restore changed, put back as Nebula still
@@ -11271,9 +11271,9 @@ function graphNotForThisTab(event: { workspaceRevision?: unknown; paramsVersion?
     return 'This canvas is out of date. Open the current project before editing or running it.';
   }
   if (backendParamsVersion(event.paramsVersion) !== GRAPH_PARAMS_VERSION) {
-    return "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
-      + "Reload the tab; your saved work is kept. If this keeps happening after a reload, this tab's "
-      + "frontend build doesn't match the backend: rebuild the frontend, or restart the backend.";
+    return "Nebula was updated while this tab was open, so this tab can’t save or run until it reloads. "
+      + "Reload the tab; your saved work is kept. If this keeps happening after a reload, this tab’s "
+      + "frontend build doesn’t match the backend: rebuild the frontend, or restart the backend.";
   }
   return null;
 }
@@ -15456,7 +15456,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const snapshot = snapshotWithLatestPaperSources(source, captureRunSnapshot(state.nodes, state.edges));
     if (!snapshot) {
       // GM - Design, round 4 (one line at 560 px).
-      get().notify("Refresh this recipe's Paper sources, then run it again. Their last snapshots are kept.");
+      get().notify("Refresh this recipe’s Paper sources, then run it again. Their last snapshots are kept.");
       return;
     }
     await executeHistoricalRun({ ...source, snapshot }, 'latest-paper-source', set, get);
@@ -15947,7 +15947,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     );
     if (!expected || expected.durable === false) {
       throw new FailureNotice(FORGET_RECOVERY_HEADING,
-        "That recovery safeguard isn't there anymore. Reload to get the latest run history.");
+        "That recovery safeguard isn’t there anymore. Reload to get the latest run history.");
     }
     await apiDeleteProviderRecovery(runId, nodeId, expected);
     set((state) => {

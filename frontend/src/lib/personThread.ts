@@ -212,7 +212,7 @@ export function syncRows(current: readonly ThreadRow[], snapshot: readonly Threa
 }
 
 /** The last event of an agent session (by cursor key): when, and its action line. */
-export interface SessionActivity { at: number; line: string | null }
+export interface SessionActivity { at: number; line: string | null; /** The line is Nebula's own words (the backend's log), not the agent's say. */ nebula?: boolean }
 
 // -- availability (the Message box's and the shortcut sheet's, GM r89.4, r94.2) ------
 

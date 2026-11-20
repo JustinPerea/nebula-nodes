@@ -10,6 +10,7 @@ import { authorInitials, clipDuration, noteControls, noteText, type NoteButton }
 import { useHoldLine } from '../../hooks/useBefore';
 import { withHoldLine } from '../../lib/ledgerHold';
 import { useCanvasProposalsStore } from '../../store/canvasProposalsStore';
+import { curlApostrophes } from '../../lib/errorCopy';
 
 /**
  * What a surface (the main canvas, later a board in the Studio) gives the
@@ -213,5 +214,7 @@ export function NoteText({ note, numberFor }: { note: AgentNote; numberFor?: (re
   const hold = useCanvasProposalsStore((state) =>
     typeof proposalId === 'string' ? state.proposals[proposalId]?.view.wait?.ledgerHold : undefined);
   const line = useHoldLine(hold);
-  return <>{withHoldLine(noteText(note, numberFor), line)}</>;
+  // Design: an Update Nebula wrote is curled where it shows; an agent's own words stay as it wrote them.
+  const said = noteText(note, numberFor);
+  return <>{withHoldLine(note.source === 'nebula' ? curlApostrophes(said) : said, line)}</>;
 }

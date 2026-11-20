@@ -1,3 +1,5 @@
+import { curlApostrophes } from './errorCopy';
+
 /**
  * The hold after the spend record was found unreadable (review of PR #242): for 24 hours every
  * agent spending limit counts as used up. The backend sends when it ends (`until`, epoch
@@ -67,7 +69,7 @@ export function ledgerHoldLine(hold: Pick<LedgerHold, 'until'> | null | undefine
 /** A proposal's sentence while its hold is on: what the backend wrote, or null. */
 export function proposalHoldLine(hold: Partial<ProposalLedgerHold> | null | undefined, now: number): string | null {
   if (!hold || typeof hold.line !== 'string' || hold.line === '') return null;
-  return holdOn(hold as LedgerHold, now) ? hold.line : null;
+  return holdOn(hold as LedgerHold, now) ? curlApostrophes(hold.line) : null;
 }
 
 /** `text`, then the hold's line after one space while it is on. */

@@ -41,7 +41,7 @@ describe('placeholderRunConfirm', () => {
     ];
     const model = confirmFor(nodes, [wire('p', 'i'), wire('i', 'o', 'images')], 'o')!;
     expect(model.heading).toBe('Run 2 nodes Codex is still setting up?');
-    expect(model.intro).toBe("Codex hasn't finished these, so their settings may not be final.");
+    expect(model.intro).toBe("Codex hasn’t finished these, so their settings may not be final.");
     // GM - Design, round 6, item 3: every dollar in the total has a row; the
     // run's own paid node is muted, with no agent.
     expect(model.rows).toEqual([{ nodeId: 'i', name: '“Hero still”', model: 'Nano Banana Pro · 3 Pro', modelKey: 'Nano Banana Pro · 3 Pro',
@@ -62,7 +62,7 @@ describe('placeholderRunConfirm', () => {
     ];
     const model = confirmFor(nodes, [wire('p', 'i'), wire('q', 'i', 'text')], 'i')!;
     expect(model.heading).toBe('Run 3 nodes the agents are still setting up?');
-    expect(model.intro).toBe("Agents haven't finished these, so their settings may not be final.");
+    expect(model.intro).toBe("Agents haven’t finished these, so their settings may not be final.");
     expect(model.rows.map((row) => [row.name, row.agent?.verified])).toEqual([['“Hero still”', false]]);
     expect(model.freeLine).toBe('Plus 2 free nodes.');
     expect(model.totalLine).toBe('This run could cost up to $0.12 at list prices.');
@@ -95,7 +95,7 @@ describe('placeholderRunConfirm', () => {
 
     it('one placeholder: "Codex hasn\'t finished this, so its settings may not be final."', () => {
       const model = confirmFor([node('i', 'nano-banana', 'Hero still', codex)], [], 'i')!;
-      expect(model.intro).toBe("Codex hasn't finished this, so its settings may not be final.");
+      expect(model.intro).toBe("Codex hasn’t finished this, so its settings may not be final.");
     });
 
     it('a fixed total: "Run for $0.12"; a range: "Run for up to $0.86"', () => {

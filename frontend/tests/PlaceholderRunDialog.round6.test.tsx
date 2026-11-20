@@ -60,7 +60,7 @@ describe('the in-place update line as later revised by design', () => {
   it('a new heading alone holds Run, with no changed line (no node moved; no placeholder left)', () => {
     const answers: boolean[] = [];
     const { rerender } = render(<PlaceholderRunDialog model={model('$0.03', '$0.10')} onDone={(ok) => answers.push(ok)} />);
-    rerender(<PlaceholderRunDialog model={model('$0.03', '$0.10', "Run with Codex's changes?")} onDone={(ok) => answers.push(ok)} />);
+    rerender(<PlaceholderRunDialog model={model('$0.03', '$0.10', "Run with Codex’s changes?")} onDone={(ok) => answers.push(ok)} />);
     expect(changedLine()).toBeNull();
     fireEvent.click(screen.getByText('Run for $0.10'));
     expect(answers).toEqual([]); // held for 500 ms

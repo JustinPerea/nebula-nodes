@@ -39,7 +39,7 @@ export async function downloadWorldAsset(
   filename: string,
   options: WorldDownloadOptions = {},
 ): Promise<void> {
-  const heading = options.heading ?? "Couldn't download the world.";
+  const heading = options.heading ?? "Couldn’t download the world.";
   const failed = (reason: string) => new FailureNotice(heading, reason);
   if (!isSafeWorldUrl(url)) throw failed('The asset URL is not safe to download.');
 

@@ -92,7 +92,7 @@ const refuse = (match: (path: string, init?: RequestInit) => boolean, status: nu
 let clock = Date.now();
 
 
-const TIMEOUT_LINE = "Nothing was undone. Nebula isn't answering. Make sure it's running, then try again.";
+const TIMEOUT_LINE = "Nothing was undone. Nebula isn’t answering. Make sure it’s running, then try again.";
 const project = (name = 'Glass campaign') => { store().setCanvasProjectName?.(() => name); };
 
 describe('held Undo: a Clear, switches and imports, and param writes', () => {

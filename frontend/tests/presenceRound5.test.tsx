@@ -89,7 +89,7 @@ const CANVAS = update('u_canvas', CURSOR, 'proposal', { proposal: { id: 'p_canva
   actions: [{ label: 'Review', op: { kind: 'proposal.review', proposalId: 'p_canvas', target: 'canvas', targetId: 'p1' } }] });
 const UPDATES = [COVER, QUESTION, CANVAS];
 
-const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn't mark the updates as read.", 403,
+const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn’t mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.', ...options });
 
 /** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
@@ -238,7 +238,7 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
     answer(respond());
     const response = await sent;
     expect(session.sentBeforePromote(response)).toBe(true);
-    const error = await requestError("Couldn't mark the updates as read.", response);
+    const error = await requestError("Couldn’t mark the updates as read.", response);
     expect([error.code, error.sentBeforePromote]).toEqual([PERSON_REQUIRED_CODE, true]);
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(session.personGateHeld()).toBe(false); // the old state's answer doesn't demote

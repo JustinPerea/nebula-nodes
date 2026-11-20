@@ -301,7 +301,7 @@ describe('motion by kind', () => {
   });
 
   it('the pin error is its own box, marked as one', () => {
-    useCanvasPinsStore.setState({ error: "Couldn't save the note.", errorProject: null } as never);
+    useCanvasPinsStore.setState({ error: "Couldn’t save the note.", errorProject: null } as never);
     render(<PinComposer />);
     expect(screen.getByRole('status')).toHaveClass('canvas-pin-toast', 'canvas-pin-toast--notice');
   });

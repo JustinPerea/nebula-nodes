@@ -1,7 +1,7 @@
 import { isOfflineRefusal, refuseEditWhileOffline } from './backendConnection';
 import { clearLineOnPromote } from './clearsOnPromote';
 import { deleteSettingsApiKey, getSettings, updateCredential, updateSettings } from './api';
-import { RequestFailedError, becauseLine } from './errorCopy';
+import { RequestFailedError, becauseLine, curlApostrophes } from './errorCopy';
 import { keyPhrase, keyText } from './directRoute';
 import { changedKeys, SETTINGS_SAVED_EVENT, type SettingsSavedDetail } from './settingsSignal';
 import { credentialNoun, PROVIDER_KEY_SPECS } from './providerCatalog';
@@ -105,7 +105,7 @@ export const SETTINGS_REFUSAL_CODES: readonly string[] = [
 export function unreadableSettingsLine(error: unknown): string | null {
   if (!(error instanceof RequestFailedError) || error.status !== 409) return null;
   return error.code && SETTINGS_REFUSAL_CODES.includes(error.code) && typeof error.detail === 'string' && error.detail
-    ? error.detail : null;
+    ? curlApostrophes(error.detail) : null;
 }
 
 function notify(message: string, undoKey?: string) {
@@ -143,11 +143,11 @@ export function keychainKeptLine(kind: KeychainKeptCase, key: string, placement:
   const phrase = placement === 'notice' ? keyPhrase([key]) : null;
   const it = phrase ? `your ${phrase}` : 'this key';
   // GM r29 item 6: a newer refusal's own fix sentence replaces the general one.
-  if (kind === 'removal') return `Nebula removed ${it} from your Keychain but is still using it. ${fix || 'Try again.'}`;
+  if (kind === 'removal') return `Nebula removed ${it} from your Keychain but is still using it. ${fix ? curlApostrophes(fix) : 'Try again.'}`;
   if (kind === 'save-over') {
-    return `Nebula couldn’t save ${it} and is still using the one it had. Your Keychain has the new one. ${fix || 'Try again, or remove it.'}`;
+    return `Nebula couldn’t save ${it} and is still using the one it had. Your Keychain has the new one. ${fix ? curlApostrophes(fix) : 'Try again, or remove it.'}`;
   }
-  return `Nebula couldn’t save ${it}, but your Keychain has it. ${fix || 'Try again, or remove it.'}`;
+  return `Nebula couldn’t save ${it}, but your Keychain has it. ${fix ? curlApostrophes(fix) : 'Try again, or remove it.'}`;
 }
 
 /** GM, PR #203 r29 item 7: Nebula didn't answer (a lost answer, a 5xx), so
@@ -364,7 +364,7 @@ export function saveKey(key: string, raw: string): Promise<boolean> {
       }
     } catch (error) {
       setPending(key, false);
-      const fallback = "The key couldn't be saved. Your text is still here; try again.";
+      const fallback = "The key couldn’t be saved. Your text is still here; try again.";
       fail(key, bridgeInUse() ? desktopFailureLine(key, error, 'row', 'save', fallback)
         : unreadableSettingsLine(error) ?? fallback, error);
       return false;
@@ -402,7 +402,7 @@ export function removeKey(key: string, from: 'row' | 'notice' = 'row'): Promise<
       }
     } catch (error) {
       setPending(key, false);
-      const fallback = "The key couldn't be removed. Try again.";
+      const fallback = "The key couldn’t be removed. Try again.";
       const line = bridgeInUse() ? desktopFailureLine(key, error, from, 'removal', fallback)
         : unreadableSettingsLine(error) ?? fallback;
       if (from === 'notice') {

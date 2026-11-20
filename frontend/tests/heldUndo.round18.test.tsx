@@ -390,8 +390,8 @@ describe('held Undo: write admission, dead steps, node holds and restore limits'
       expect(store().canSwitchProject()).toBe(true);
       expect(writes()).not.toContain('PUT /api/graph/node/n2');
       await tick(15_000); await settle();
-      // Design: "Nothing was undone. Nebula isn't answering. …"
-      expect(lines()).toContain("Nothing was undone. Nebula isn't answering. Make sure it's running, then try again.");
+      // Design: "Nothing was undone. Nebula isn’t answering. …"
+      expect(lines()).toContain("Nothing was undone. Nebula isn’t answering. Make sure it’s running, then try again.");
       expect(writes()).toContain('PUT /api/graph/node/n2');
       expect(nebula().valueOf('n2')).toBe('B');
       // Nebula took the undo after all (its echo showed it): the canvas shows Nebula's.

@@ -20,7 +20,7 @@ export interface PinListing {
 }
 
 export async function fetchPins(): Promise<PinListing> {
-  const response = await apiRequest("Couldn't load the notes.", '/api/canvas/pins');
+  const response = await apiRequest("Couldn’t load the notes.", '/api/canvas/pins');
   return (await response.json()) as PinListing;
 }
 
@@ -29,7 +29,7 @@ export async function fetchPins(): Promise<PinListing> {
  * only, so it is sent for that canvas (its revision headers) and Nebula
  * refuses it once that canvas has gone. */
 export async function createPin(text: string, target: PinTarget, project?: ProjectContext | null): Promise<Pin> {
-  const response = await apiRequest("Couldn't save the note.", '/api/canvas/pins', {
+  const response = await apiRequest("Couldn’t save the note.", '/api/canvas/pins', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, ...target }),
@@ -533,7 +533,7 @@ export const keptMoreLabel = (hidden: number) => `Show ${hidden} more`;
 export const KEPT_FEWER = 'Show fewer';
 
 export async function deletePin(id: string): Promise<void> {
-  await apiRequest("Couldn't delete the note.", `/api/canvas/pins/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await apiRequest("Couldn’t delete the note.", `/api/canvas/pins/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 /** Backend graph ids look like n12; only those can carry pins (and be seen by agents). */

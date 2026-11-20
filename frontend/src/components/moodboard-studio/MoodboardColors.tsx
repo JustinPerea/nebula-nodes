@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { curlApostrophes } from '../../lib/errorCopy';
 import type { MoodboardAnalysis, MoodboardClash, MoodboardColor } from '../../types';
 import { formatShare, hasSources, sourcesLabel } from './colorSources';
 
@@ -46,7 +47,7 @@ export function BoardSwatches({ label, role, analysis, leftOut }: {
 }
 
 function leftOutTitle(reason: string): string {
-  return reason ? `Left out of the brief: ${reason}` : 'Left out of the brief';
+  return reason ? `Left out of the brief: ${curlApostrophes(reason)}` : 'Left out of the brief';
 }
 
 function BoardColor({ color, leftOut }: { color: MoodboardColor; leftOut?: string }) {

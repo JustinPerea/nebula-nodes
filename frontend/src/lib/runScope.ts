@@ -717,7 +717,7 @@ export function runChipTitle(summary: RunScopeSummary): string | undefined {
 
 const AWAITING = 'Priced when its input is known:';
 const AWAITING_AUDIO_LENGTH = 'Priced when its audio\u2019s length is known:';
-const UNREADABLE = "Nebula can't read the size of its input (a file on another host is never downloaded to price it):";
+const UNREADABLE = "Nebula can’t read the size of its input (a file on another host is never downloaded to price it):";
 const UNREADABLE_AUDIO = "Nebula can\u2019t read the length of its audio (a file on another host is never downloaded to price it):";
 
 /** The awaiting-input notes: still to be made, or there but unreadable. */

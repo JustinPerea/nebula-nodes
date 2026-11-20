@@ -185,7 +185,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
         <div className="mask-painter__header">
           <span className="mask-painter__title">Paint mask</span>
           <span className="mask-painter__hint">
-            Paint the region to change. Polarity is applied by the node&apos;s
+            Paint the region to change. Polarity is applied by the node&rsquo;s
             &ldquo;Painted Area Means&rdquo; setting at run time.
           </span>
           <button type="button" className="mask-painter__icon-btn" onClick={onClose} aria-label="Close">
@@ -200,7 +200,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
           </div>
         )}
         {imageUrl && imageFailed && (
-          <div className="mask-painter__empty">Couldn't load the upstream image for painting.</div>
+          <div className="mask-painter__empty">Couldn’t load the upstream image for painting.</div>
         )}
 
         {imageUrl && !imageFailed && natural && viewSize && (

@@ -428,9 +428,9 @@ describe('a refusal that can\'t be pinned keeps the edits, marked unsaved', () =
     h.release();
     await sleep(120);
     expect(said).toEqual([]);
-    expect(stopLineOf('n1')).toBe("Couldn’t save “Opening”. It's locked.");
+    expect(stopLineOf('n1')).toBe("Couldn’t save “Opening”. It’s locked.");
     expect(brief()[0]).toBe('s1:locked');
-    expect(unsaved()).toBe("Couldn’t save “Opening”. It's locked.");
+    expect(unsaved()).toBe("Couldn’t save “Opening”. It’s locked.");
   });
 
   it('the copy is in constants for design', () => {

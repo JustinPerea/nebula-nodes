@@ -84,7 +84,7 @@ const asAssetProposalError = (error: RequestFailedError) =>
     sentAt: error.sentAt });
 
 async function decide(id: string, acceptKey: string, verb: 'accept' | 'reject', body?: unknown): Promise<void> {
-  await apiRequest(`Couldn't ${verb} the proposal.`, `/api/asset-proposals/${encodeURIComponent(id)}/${verb}`, {
+  await apiRequest(`Couldn’t ${verb} the proposal.`, `/api/asset-proposals/${encodeURIComponent(id)}/${verb}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Nebula-Proposal-Key': acceptKey },
     body: JSON.stringify(body ?? {}),
@@ -98,7 +98,7 @@ export const rejectAssetProposal = (id: string, acceptKey: string, reason?: stri
 
 /** The open ones (no keys); reading them also lets the backend close those that no longer fit. */
 export async function listAssetProposals(): Promise<AssetProposalView[]> {
-  const response = await apiRequest("Couldn't load the proposals.", '/api/asset-proposals', undefined, { as: asAssetProposalError });
+  const response = await apiRequest("Couldn’t load the proposals.", '/api/asset-proposals', undefined, { as: asAssetProposalError });
   const body = (await response.json()) as { proposals?: AssetProposalView[] };
   return Array.isArray(body.proposals) ? body.proposals : [];
 }

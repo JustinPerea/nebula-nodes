@@ -37,7 +37,7 @@ function scanLine(link: FolderLink): string {
   return when ? `${when} · ${counts}` : `Last scan · ${counts}`;
 }
 
-function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<unknown>) => Promise<boolean> }) {
+export function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<unknown>) => Promise<boolean> }) {
   const pending = link.device_states.filter((d) => d.state !== 'ok' && d.state !== 'local');
   return (
     <li className="commons-folder">

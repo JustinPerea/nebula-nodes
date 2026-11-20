@@ -139,7 +139,7 @@ export function nodeErrorCopy({ raw, category, friendly, person, providerText, p
   // A stop that waits for the person is a notice, not a failure: its heading stays over its line.
   const waiting = category === WAITING_CATEGORY;
   const failure = (reason: string, details: string | null): NodeErrorCopy => (waiting
-    ? { heading, reason, details }
+    ? { heading, reason: curlApostrophes(reason), details }
     : { heading: '', reason: becauseLine({ heading, reason }), details });
   if (line) return failure(line, providerText && text && text !== line ? text : null);
   if (!category) return { heading: '', reason: becauseLine({ heading: '', reason: text || cardGeneralLine(provider, false, surface) }), details: null };

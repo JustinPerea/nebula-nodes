@@ -10,7 +10,7 @@ import {
 } from '../../../lib/api';
 import { PERSONAL_AGENTS_CHANGED_EVENT } from '../../../lib/personalAgentsEvents';
 import '../../../styles/personal-agents.css';
-import { failureMessage, notConnectedBecause } from '../../../lib/errorCopy';
+import { failureMessage, notConnectedBecause, curlApostrophes } from '../../../lib/errorCopy';
 import { agentNameInSentence } from '../../../lib/personalAgentName';
 import { clearSetterOnPromote, isPersonRefusal, retryOnPromote } from '../../../lib/clearsOnPromote';
 import { SettingsSwitch } from './Switch';
@@ -73,8 +73,8 @@ function KeyOption({ agent, busy, switching, run, lock }: { agent: PersonalAgent
           onChange={(to) => void run(() => updatePersonalAgent(agent.id, { useNebulaKey: to }), { id: agent.id, field: 'useNebulaKey', to })} />
         Use my Gemini API key from Nebula
       </label>
-      <span className="personal-agents__fine">{option.billing}</span>
-      {blocked && <span className="personal-agents__fine">{blocked}</span>}
+      <span className="personal-agents__fine">{curlApostrophes(option.billing)}</span>
+      {blocked && <span className="personal-agents__fine">{curlApostrophes(blocked)}</span>}
     </span>
   );
 }
@@ -92,9 +92,9 @@ function DownloadAndSignIn({ agent, busy, run, lock }: { agent: PersonalAgent; b
         <span className="personal-agents__progress" role="status">
           <progress max={job.totalBytes || 1} value={job.receivedBytes ?? 0}
             aria-label={`Downloading ${agentNameInSentence(agent.displayName)}`} />
-          {job.message} {megabytes(job.receivedBytes)} of {megabytes(job.totalBytes)}
+          {curlApostrophes(job.message)} {megabytes(job.receivedBytes)} of {megabytes(job.totalBytes)}
         </span>
-      ) : job?.state === 'failed' ? <span className="settings-row__error" role="alert">{job.message}</span> : null}
+      ) : job?.state === 'failed' ? <span className="settings-row__error" role="alert">{curlApostrophes(job.message)}</span> : null}
       <span className="personal-agents__actions">
         {(install.state === 'missing' || install.state === 'changed') && (
           <button type="button" className="settings__button settings__button--primary" disabled={busy} {...lock}
@@ -125,12 +125,12 @@ function DownloadAndSignIn({ agent, busy, run, lock }: { agent: PersonalAgent; b
       </span>
       {signIn?.state === 'waiting' && signJob && (
         <span className="personal-agents__fine" role="status">
-          {signJob.message}
+          {curlApostrophes(signJob.message)}
           {signJob.signInUrl && <> <a href={signJob.signInUrl} target="_blank" rel="noreferrer noopener">
             Open Google&rsquo;s sign-in page</a></>}
         </span>
       )}
-      {signJob?.state === 'failed' && <span className="settings-row__error" role="alert">{signJob.message}</span>}
+      {signJob?.state === 'failed' && <span className="settings-row__error" role="alert">{curlApostrophes(signJob.message)}</span>}
       {install.source && install.state !== 'unsupported' && (
         <span className="personal-agents__fine">
           From {new URL(install.source).host}, pinned to {install.version} and checked by SHA-256 before it runs.
@@ -248,10 +248,10 @@ export function PersonalAgentsSection() {
               </span>
               <span className="settings-pref__description">
                 <span className="personal-agents__status" data-status={agent.status}>{STATUS_TEXT[agent.status]}</span>
-                {agent.note ? ` · ${agent.note}` : ''}
+                {agent.note ? ` · ${curlApostrophes(agent.note)}` : ''}
                 <br />
                 <code>{[agent.command, ...agent.args].join(' ')}</code>
-                {agent.termsNote && <span className="personal-agents__terms" role="note">{agent.termsNote}</span>}
+                {agent.termsNote && <span className="personal-agents__terms" role="note">{curlApostrophes(agent.termsNote)}</span>}
               </span>
               <KeyOption agent={agent} busy={busy} switching={switching} run={run} lock={rowLock.control()} />
               <DownloadAndSignIn agent={agent} busy={busy} run={run} lock={rowLock.control()} />

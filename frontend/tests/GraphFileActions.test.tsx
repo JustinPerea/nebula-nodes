@@ -360,7 +360,7 @@ describe('workspace-independent graph file actions', () => {
     });
 
     it("waiting behind #178's screen, or turned away with its own line: no second line, nothing loaded", async () => {
-      for (const outcome of [{ unsavedEdits: { reason: 'Held' } }, { error: "Couldn't create the project." }]) {
+      for (const outcome of [{ unsavedEdits: { reason: 'Held' } }, { error: "Couldn’t create the project." }]) {
         mocks.apiFetch.mockClear();
         withProject(vi.fn(async () => { useProjectStore.setState(outcome as never); }));
         mocks.apiFetch.mockResolvedValueOnce(overLimit());

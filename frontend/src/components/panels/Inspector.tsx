@@ -38,7 +38,7 @@ import { skippedLabel } from '../../lib/gating';
 import { nodeStateWord } from '../../lib/valueLabel';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
-import { failureMessage, notConnectedBecause } from '../../lib/errorCopy';
+import { failureMessage, notConnectedBecause, curlApostrophes } from '../../lib/errorCopy';
 import { clearSetterOnPromote, isPersonRefusal } from '../../lib/clearsOnPromote';
 import { PALETTE_CANT_RUN, PALETTE_OFFLINE_DROPPED, PALETTE_PROJECT_CHANGED, paletteNotice, paletteStatus } from '../../lib/paletteNotice';
 import { TRY_AGAIN } from '../../lib/sceneSaveCopy';
@@ -93,6 +93,11 @@ function normalizeHex(input: string): string | null {
     v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
   }
   return /^#[0-9a-f]{6}$/.test(v) ? v : null;
+}
+
+/** The executed event's notes, one line each (backend text: curled where it shows, design). */
+export function LastRunNotes({ notes }: { notes: readonly string[] }) {
+  return <>{notes.map((note) => <div key={note} className="inspector__notice" role="note">{curlApostrophes(note)}</div>)}</>;
 }
 
 export function Inspector({ embedded = false }: InspectorProps) {
@@ -1331,11 +1336,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
           <div className="inspector__notice" role="note">{param.disabledReason}</div>
         )}
         {source === 'definition' && makerSizeNote && param.key === makerSizeNote.param && (
-          <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote.text}</div>
+          <div className="inspector__notice" role="note" data-inspector-size-note="true">{curlApostrophes(makerSizeNote.text)}</div>
         )}
         {source === 'definition' && defaultNotes.nodeId === activeNode.id
           && defaultNotes.notes.filter((note) => note.param === param.key).map((note) => (
-            <div key={note.text} className="inspector__notice" role="note" data-inspector-default-note="true">{note.text}</div>
+            <div key={note.text} className="inspector__notice" role="note" data-inspector-default-note="true">{curlApostrophes(note.text)}</div>
           ))}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button
@@ -1521,9 +1526,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         {nodeData.runNotes && nodeData.runNotes.length > 0 && (
           <div className="inspector__section" data-inspector-run-notes="true">
             <div className="inspector__label">Last run</div>
-            {nodeData.runNotes.map((note) => (
-              <div key={note} className="inspector__notice" role="note">{note}</div>
-            ))}
+            <LastRunNotes notes={nodeData.runNotes} />
           </div>
         )}
 

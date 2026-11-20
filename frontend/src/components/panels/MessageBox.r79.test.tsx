@@ -129,10 +129,10 @@ describe('r79.1: a reply’s own cursor say is never an action', () => {
 
 describe('r79.2: the working line is the say, else the did line, never a terse form', () => {
   it('activityLine', () => {
-    expect(activityLine(presence({ say: 'Cooler sky' }))).toBe('Cooler sky');
-    expect(activityLine(presence({ say: 'changed 1', log: 'Changed “Prompt” on “Hero shot”' }))).toBe('Changed “Prompt” on “Hero shot”');
-    expect(activityLine(presence({ say: 'moved 2', did: { verb: 'Moved', nodeId: 'n1', label: 'Hero shot' } }))).toBe('Moved “Hero shot”');
-    expect(activityLine(presence({ say: 'added 1, connected 2', did: { verb: 'Added', nodeId: null, label: null } }))).toBe('Added');
+    expect(activityLine(presence({ say: 'Cooler sky' }))).toEqual({ line: 'Cooler sky', nebula: false });
+    expect(activityLine(presence({ say: 'changed 1', log: 'Changed “Prompt” on “Hero shot”' }))).toEqual({ line: 'Changed “Prompt” on “Hero shot”', nebula: true });
+    expect(activityLine(presence({ say: 'moved 2', did: { verb: 'Moved', nodeId: 'n1', label: 'Hero shot' } }))).toEqual({ line: 'Moved “Hero shot”', nebula: false });
+    expect(activityLine(presence({ say: 'added 1, connected 2', did: { verb: 'Added', nodeId: null, label: null } }))).toEqual({ line: 'Added', nebula: false });
     expect(activityLine(presence({ say: '' }))).toBeNull();
   });
 

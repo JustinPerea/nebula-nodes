@@ -109,7 +109,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // dashboard.bfl.ai under API -> Keys, scoped to a project; credits are
   // shared by the organization. docs/api-guides/bfl.md.
   { key: 'BFL_API_KEY', label: 'Black Forest Labs', keyLink: 'Open Black Forest Labs keys', placeholder: 'bfl_...', url: 'https://dashboard.bfl.ai',
-    brand: ['FLUX'], note: 'FLUX on Black Forest Labs\' own API', lead: 'flux-3-image' },
+    brand: ['FLUX'], note: 'FLUX on Black Forest Labs’ own API', lead: 'flux-3-image' },
   // Optional for the Idol node on Speridlabs' Hugging Face Space: it runs
   // without a token (the first live call, PR #203 round 7), and a token gives
   // its runs the person's own ZeroGPU allowance. Copy: GM, PR #203 r12 item 3
@@ -136,9 +136,9 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // first (404 ModelNotOpen otherwise). docs/api-guides/byteplus.md.
   { key: 'BYTEPLUS_API_KEY', label: 'BytePlus · ModelArk', keyLink: 'Open BytePlus ModelArk keys', placeholder: 'ModelArk API key',
     url: 'https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey', brand: ['Seedream', 'Seedance'],
-    note: 'Seedream and Seedance on ByteDance\'s own API', lead: 'seedream-4-5',
-    caveat: 'BytePlus doesn\'t offer its model services in the United States (BytePlus Service Specific Terms). '
-      + 'Use an Asia Pacific (ap-southeast-1) ModelArk key, and activate each model on the ModelArk console\'s '
+    note: 'Seedream and Seedance on ByteDance’s own API', lead: 'seedream-4-5',
+    caveat: 'BytePlus doesn’t offer its model services in the United States (BytePlus Service Specific Terms). '
+      + 'Use an Asia Pacific (ap-southeast-1) ModelArk key, and activate each model on the ModelArk console’s '
       + 'Model activation page first; Seedance 2.x also needs USD 30 of BytePlus credits before activation.' },
 ];
 
@@ -210,6 +210,8 @@ export function providerMatches(spec: ProviderKeySpec, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   if (spec.label.toLowerCase().includes(q) || spec.key.toLowerCase().includes(q)) return true;
-  if (spec.note?.toLowerCase().includes(q)) return true;
+  // A note's apostrophes are curly where Nebula writes them and a keyboard types a straight one: compare them folded.
+  const fold = (text: string) => text.toLowerCase().replace(/’/g, "'");
+  if (spec.note && fold(spec.note).includes(fold(q))) return true;
   return nodesForKey(spec.key).some((node) => matchesModelSearch(node, q));
 }

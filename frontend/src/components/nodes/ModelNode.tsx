@@ -51,7 +51,7 @@ import type { JevResultInputs } from './JevResult';
 import { JevCardField } from './JevCardField';
 import { isJevNode, jevBrandStyle, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
-import { failureMessage } from '../../lib/errorCopy';
+import { failureMessage, curlApostrophes } from '../../lib/errorCopy';
 import { showNotice } from '../../lib/canvasNotice';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { NodeWaitSwap } from './NodeWaitSwap';
@@ -201,7 +201,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     const nodeRef = isCliNode ? `@${id}` : `(text-input node, id ${id.slice(0, 8)})`;
     const targetsLine = targets.length
       ? `It feeds into: ${targets.join(', ')}.`
-      : `It isn't connected to a downstream node yet — suggest a prompt that would work well for a generative image/video model.`;
+      : `It isn’t connected to a downstream node yet — suggest a prompt that would work well for a generative image/video model.`;
     const applyLine = isCliNode
       ? `When you have a better prompt, apply it with: nebula set ${id} value="<your new prompt>"`
       : `When you have a better prompt, return it in a code block so I can paste it in.`;
@@ -550,7 +550,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
       {switchable && providerNote && (
         <div className="model-node__provider-note nodrag nopan" role="status">
-          <span className="model-node__provider-note-text">{providerNote}</span>
+          <span className="model-node__provider-note-text">{curlApostrophes(providerNote)}</span>
           <button type="button" className="model-node__provider-note-dismiss" aria-label="Dismiss provider note"
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => { event.stopPropagation(); useProviderNoteStore.getState().dismiss(id); }}>

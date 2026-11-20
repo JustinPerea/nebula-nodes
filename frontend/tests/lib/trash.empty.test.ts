@@ -17,7 +17,7 @@ describe('emptyTrash', () => {
       [{ kind: 'moodboard', id: 'b1', name: 'Rivers', deletedAt: '2026-11-03T10:00:00Z' } as never, { kind: 'moodboard', id: 'b2' }]);
     expect(request).toHaveBeenCalledTimes(1);
     const [heading, path, init] = request.mock.calls[0] as [string, string, RequestInit];
-    expect(heading).toBe("Couldn't empty Recently deleted.");
+    expect(heading).toBe("Couldn’t empty Recently deleted.");
     expect(path).toBe('/api/trash/empty?kind=moodboard&scope=project&projectId=p1');
     expect(init.method).toBe('POST');
     expect(JSON.parse(String(init.body))).toEqual({ items: [{ kind: 'moodboard', id: 'b1' }, { kind: 'moodboard', id: 'b2' }] });

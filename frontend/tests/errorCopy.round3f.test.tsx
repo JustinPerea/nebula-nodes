@@ -218,7 +218,7 @@ describe('the shared lines design rewrote', () => {
   });
 
   it('World Labs: you can\'t run it again until Nebula hears back', () => {
-    expect(WORLD_LABS_RECONNECTING_NOTE).toBe('Reconnecting to this World Labs run. You can\'t run it again until Nebula hears back about it.');
+    expect(WORLD_LABS_RECONNECTING_NOTE).toBe('Reconnecting to this World Labs run. You can’t run it again until Nebula hears back about it.');
   });
 
   it('a proposal\'s node that can\'t run here reads the person\'s line, not find_nodes\' words', () => {

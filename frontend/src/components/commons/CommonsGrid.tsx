@@ -3,6 +3,7 @@ import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { CommonsMedia } from './CommonsMedia';
 import { analysisBadge } from '../../lib/commonsFormat';
 import { MEDIA_LABELS, ROLE_LABELS, type SearchRow } from '../../lib/commonsTypes';
+import { curlApostrophes } from '../../lib/errorCopy';
 
 interface Props {
   rows: SearchRow[];
@@ -113,7 +114,8 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
       ) : (
         <div ref={gridRef} className="commons-grid" role="listbox" aria-label="Commons results" onKeyDown={onKeyDown}>
           {rows.map((row, index) => {
-            const caption = row.summary ?? row.collection;
+            // Design: the model-read summary is prose and is curled; a collection name is a name the person chose, and stays as it is.
+            const caption = row.summary != null ? curlApostrophes(row.summary) : row.collection;
             const badges = tileBadges(row, proposed);
             return (
               <button
@@ -132,7 +134,7 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
                 {row.media === 'video' ? (
                   <CommonsMedia inControl video className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} muted preload="metadata" />
                 ) : (
-                  <CommonsMedia inControl className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} alt={row.summary ?? ''} loading="lazy" />
+                  <CommonsMedia inControl className="commons-tile__media" path={`/api/commons/blobs/${row.blob_key}`} alt={curlApostrophes(row.summary ?? '')} loading="lazy" />
                 )}
                 <span className="commons-tile__badges">
                   {badges.map((badge) => (

@@ -196,7 +196,7 @@ export const OFFLINE_CANCEL_ALLOWLIST: readonly GateRule[] = [
 export const OFFLINE_QUIET_WRITES: readonly GateRule[] = [
   { method: 'POST', pattern: /^\/api\/canvas\/selection$/, what: 'the selection agents read' },
   { method: 'POST', pattern: /^\/api\/canvas\/view$/, what: 'the view agents read' },
-  { method: 'POST', pattern: /^\/api\/pricing\/input-sizes$/, what: "a price's input sizes" },
+  { method: 'POST', pattern: /^\/api\/pricing\/input-sizes$/, what: "a price’s input sizes" },
   { method: 'POST', pattern: /^\/api\/zoom-manifest\/(?:init|entry)$/, what: 'the zoom manifest' },
 ];
 

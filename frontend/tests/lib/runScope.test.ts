@@ -528,7 +528,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     const text = describeRunScope(summary);
     expect(text).not.toContain('which isn’t ready yet');
     expect(text).toContain('“Upscale” calls a paid provider and is priced by its input size, which Nebula couldn’t read.');
-    expect(runCostConfirmMessage(summary)).toContain("Nebula can't read the size of its input");
+    expect(runCostConfirmMessage(summary)).toContain("Nebula can’t read the size of its input");
     expect(runCostConfirmMessage(summary)).not.toContain('Priced when its input is known');
   });
 

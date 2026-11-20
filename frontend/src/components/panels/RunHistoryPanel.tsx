@@ -13,7 +13,7 @@ import { ScrollFade } from '../ScrollFade';
 import { ForgetRecoveryConfirm } from './ForgetRecoveryConfirm';
 import { FORGET_LABEL, FORGET_TITLE, forgetAriaLabel, heldRecordName, providerRecoveryPlaceKey, recordNodeType, recoveryIdLabel, verdictRecordIndex } from '../../lib/worldLabsWaiting';
 import { FORGET_RECOVERY_HEADING } from '../../lib/api';
-import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY } from '../../lib/errorCopy';
+import { failureMessage, OFFLINE_RECOVER, OFFLINE_RERUN, OFFLINE_RETRY, curlApostrophes } from '../../lib/errorCopy';
 import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
 import { showNotice } from '../../lib/canvasNotice';
 import { useAnnounced } from '../../lib/useAnnounced';
@@ -309,7 +309,7 @@ export function RunHistoryPanel() {
                     {r.skippedNodes && Object.keys(r.skippedNodes).length > 0 && (
                       <span
                         className="run-history__skipped"
-                        title={Object.entries(r.skippedNodes).map(([id, reason]) => `${id} skipped: ${reason}`).join('\n')}
+                        title={Object.entries(r.skippedNodes).map(([id, reason]) => `${id} skipped: ${curlApostrophes(reason)}`).join('\n')}
                       >
                         {' '}· {groupedCount(Object.keys(r.skippedNodes).length)} skipped
                       </span>
@@ -321,7 +321,7 @@ export function RunHistoryPanel() {
                     )}
                   </span>
                   {r.statusNote && (
-                    <span className="run-history__status-note">{r.statusNote}</span>
+                    <span className="run-history__status-note">{curlApostrophes(r.statusNote)}</span>
                   )}
                   {Boolean(r.outOfDateReasons?.length) && (
                     <span className="run-history__paper-stale" role="status">

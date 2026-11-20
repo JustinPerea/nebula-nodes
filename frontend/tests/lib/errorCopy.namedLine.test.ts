@@ -68,7 +68,7 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's because form (PR #204 r6) in the desktop window: the tail is one of its two fixed sentences" },
   { file: 'lib/errorCopy.ts', text: '`${GENERATE_HEADING} ${CLUSTER_NOT_ADDED} ${personRequiredCopy(desktop, reason)}`',
     why: "GM's Generate refusal, nodes not added (PR #204 r8, GM r10 3; heading GM r12 2): two fixed sentences, then personRequiredCopy's fixed sentences" },
-  { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix || 'Try again, or remove it.'}`",
+  { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix ? curlApostrophes(fix) : 'Try again, or remove it.'}`",
     why: "GM's Keychain line (PR #203 r28 item 2, r29 item 6): the tail is GM's fixed sentence or the backend's fix sentence, never a named line" },
   // GM r39 item 2's "Couldn’t …. You can …" run-lock lines are gone: PR #205 r1 answer 2 made
   // the key-press refusals the lock line alone (lib/cinemaScene runLockedLine), no heading.

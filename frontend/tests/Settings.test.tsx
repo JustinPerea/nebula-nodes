@@ -411,7 +411,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     updateSettingsMock.mockRejectedValueOnce(new Error('offline'));
     await renderSettings();
     await addKey('Anthropic', 'fixture-anthropic');
-    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn’t be saved. Your text is still here; try again.");
     expect(screen.getByLabelText('Anthropic API key')).toHaveValue('fixture-anthropic');
     expect(rowNames(list(/^Connect a provider/))).toContain('Anthropic');
     expect(providerApiFetchMock).not.toHaveBeenCalled();
@@ -622,7 +622,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     deleteSettingsApiKeyMock.mockRejectedValueOnce(new Error('offline'));
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     removeKey('OpenAI');
-    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be removed. Try again.");
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn’t be removed. Try again.");
     expect(rowNames(list(/^Connected/))).toContain('OpenAI');
   });
 
@@ -664,14 +664,14 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
     updateSettingsMock.mockRejectedValueOnce(new RequestFailedError('Couldn’t save your settings.', 409, { detail: UNREADABLE }));
     await renderSettings();
     await addKey('Anthropic', 'fixture-anthropic');
-    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn’t be saved. Your text is still here; try again.");
   });
 
   it('keeps its own line for any other 409', async () => {
     updateSettingsMock.mockRejectedValueOnce(new RequestFailedError('Couldn’t save your settings.', 409, { detail: 'Something else.' }));
     await renderSettings();
     await addKey('Anthropic', 'fixture-anthropic');
-    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved. Your text is still here; try again.");
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn’t be saved. Your text is still here; try again.");
   });
 
   it('invalidates a running check when a key changes', async () => {
@@ -1239,7 +1239,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     const { credentials } = setupDesktopBridge({ set: vi.fn().mockResolvedValue({ ok: false, error: 'denied' }) });
     await renderSettings();
     await addKey('OpenAI', 'fixture-openai');
-    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved");
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn’t be saved");
     // Only the backend's check ran: nothing was written to it.
     expect(updateCredentialMock.mock.calls).toEqual([['OPENAI_API_KEY', 'fixture-openai', { check: true }]]);
     expect(screen.getByLabelText('OpenAI API key')).toHaveValue('fixture-openai');
@@ -1394,7 +1394,7 @@ describe('Settings — desktop app (macOS Keychain)', () => {
     fireEvent.change(input, { target: { value: 'fixture-new' } });
     fireEvent.submit(input.closest('form')!);
     await waitFor(() => expect(credentials.revert).toHaveBeenCalledWith('w-set'));
-    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn't be saved");
+    expect(await screen.findByRole('alert')).toHaveTextContent("The key couldn’t be saved");
   });
 
   it('a 503, and the backend holds the new key after all: committed, never put back (a 5xx isn’t a refusal)', async () => {

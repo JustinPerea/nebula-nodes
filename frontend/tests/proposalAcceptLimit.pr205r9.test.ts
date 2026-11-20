@@ -29,7 +29,7 @@ describe('a refused Accept carries its limit', () => {
     const refused = await acceptProposal('p_a', 'key', {}).catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(ProposalRequestError);
     const error = refused as ProposalRequestError;
-    expect([error.status, error.code, error.limitKind, error.heading]).toEqual([409, 'proposal_too_complex', kind, "Couldn't accept the proposal."]);
+    expect([error.status, error.code, error.limitKind, error.heading]).toEqual([409, 'proposal_too_complex', kind, "Couldn’t accept the proposal."]);
     expect(error.detail).toBe(SIZE_DETAIL);
   });
 
