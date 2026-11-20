@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fix round 5 of PR #199. (GM r7's restore refused by the race is gone: a
-// restore may pass the project limit, Justin 2026-10-29.) The held model (GM,
-// 2026-10-28): an agent's clear or graph load that made Nebula hold the
-// waiting canvas aside, or that Nebula refused at the limit, is one Agent
+// PR #199. (The restore refused by the race, as design had it, is gone: a
+// restore may pass the project limit, Justin 2026-10-29.) The held model
+// (design, 2026-10-28): an agent's clear or graph load that made Nebula hold
+// the waiting canvas aside, or that Nebula refused at the limit, is one Agent
 // log line, no toast.
 
 vi.mock('../lib/wsClient', () => ({
@@ -59,7 +59,7 @@ const send = (event: Record<string, unknown>) => {
   handler(event as never);
 };
 
-describe('GM held model: the Agent log', () => {
+describe('the held model (design): the Agent log', () => {
   it('logs a hold an agent caused, with its name', () => {
     send({ type: 'projectsChanged', change: 'canvasHeld', projectId: null, canvasHeld: { action: 'cleared', agent: 'Codex' } });
     expect(logged).toEqual(['Codex cleared the canvas. The one you had open is kept until Nebula can save it as a project.']);

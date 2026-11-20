@@ -47,7 +47,7 @@ export const useAgentLogStore = create<AgentLogState>((set) => ({
  * One agent action as a log entry, from the event that also moves its cursor
  * (agentPresenceStore): the same name, colour and words ("Added “Moodboard”",
  * "Running “Krea 2”", "Accepted"), or the event's own `log` line when the
- * bubble says nothing (PR #198 r1: "Changed a setting on “Hero still”"), so
+ * bubble says nothing ("Changed a setting on “Hero still”"), so
  * no action is left out. A moodboard write comes without a target, so it
  * moves no cursor and is listed here only. Null for an event with nothing to
  * say or log, such as a bare cursor move.
@@ -55,8 +55,7 @@ export const useAgentLogStore = create<AgentLogState>((set) => ({
 export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): Omit<AgentLogEntry, 'id'> | null {
   const agent = event.agent;
   if (!agent || typeof agent.id !== 'string' || typeof agent.name !== 'string') return null;
-  // The log's own words when the bubble's leave something out (round 16 of
-  // PR #195; PR #198 r1).
+  // The log's own words when the bubble's leave something out (PR #195, PR #198).
   const said = typeof event.say === 'string' ? event.say.trim() : '';
   const logged = typeof event.log === 'string' ? event.log.trim() : '';
   const message = logged || said;
@@ -70,10 +69,9 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
     ts: Number.isFinite(event.at) && event.at > 0 ? event.at : now,
     source: 'agent',
     // Named as its cursor's pill names it ("Pair · 3"), from the same
-    // helper, so two sessions of one agent read apart (GM - Design, PR #211
-    // r19). Person UI only.
+    // helper, so two sessions of one agent read apart (design, PR #211). Person UI only.
     // In its cursor's own shade, the dot exactly and the name readable on
-    // the log (GM - Design, PR #211 r20).
+    // the log (design, PR #211).
     agent: { id: agent.id, name: cursorLabel(agent.name, session), color: tones.dot, ink: tones.name },
     message,
     ...(logged ? { nebula: true as const } : {}),
@@ -88,11 +86,11 @@ export function agentActionEntry(event: AgentPresenceEvent, now = Date.now()): O
 //
 // A replay (a tab that just connected, or reconnected) adds a cursor's say
 // that is still current, so a say this tab can't show on the canvas (a
-// folded member's, or one held for room) still reaches the log (GM - Design,
-// PR #211 r21). Each action is listed once, by the backend's id for the
+// folded member's, or one held for room) still reaches the log (design, PR #211). Each action is
+// listed once, by the backend's id for the
 // event (`eventId`, person tabs only): a live event and its replay carry the
 // same one, and two real actions never do, even with the same words in the
-// same millisecond (#211 review 9, LOW-5). An event without one (an older
+// same millisecond (PR #211). An event without one (an older
 // backend, a line with no cursor) is always listed.
 const listed = new Set<string>();
 const LISTED_MAX = 4 * AGENT_LOG_MAX_ENTRIES;
@@ -137,13 +135,13 @@ if (typeof window !== 'undefined') {
 }
 
 /** A window line that names its agent (the waiting canvas's held or
- * refused line, review 6 of PR #199, N-3): the row is that agent's, with
+ * refused line, PR #199): the row is that agent's, with
  * its cursor's name and colour, as its other actions are. */
 function lineAgent(raw: unknown): { agent?: AgentLogEntry['agent'] } {
   if (!raw || typeof raw !== 'object') return {};
   const { id, name, color } = raw as { id?: unknown; name?: unknown; color?: unknown };
   if (typeof id !== 'string' || !id || typeof name !== 'string' || !name) return {};
-  // The same cursor naming and shade as its other actions (GM - Design, PR #211 r19, r20).
+  // The same cursor naming and shade as its other actions (design, PR #211).
   const tones = agentLogTones(typeof color === 'string' && SAFE_COLOR.test(color) ? color : AGENT_FALLBACK_COLOR, null);
   return { agent: { id, name: cursorLabel(name, null), color: tones.dot, ink: tones.name } };
 }

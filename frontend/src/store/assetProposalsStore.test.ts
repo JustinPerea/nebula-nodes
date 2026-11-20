@@ -79,7 +79,7 @@ describe('assetProposalsStore', () => {
     expect(state.pending.pa_00000002).toBeUndefined();
   });
 
-  it('shows the moodboard accept fallback once, as the backend says it, under no heading of its own (design r161)', async () => {
+  it('shows the moodboard accept fallback once, as the backend says it, under no heading of its own (design)', async () => {
     const sentence = 'Nebula couldn’t accept this because “Dusk” didn’t take the change, and the proposal is closed. “Dusk” may have changed somewhere else. Ask Claude Code to propose it again.';
     useAssetProposalsStore.getState().open(coverProposal({ id: 'pa_00000009' }), 'k9');
     // The request's own heading is what apiRequest gives every accept ("Couldn't accept the proposal.").

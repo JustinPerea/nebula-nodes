@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fix round 10 of PR #199. Review 10, HIGH-2 and GM r13, 1: protection ends
+// PR #199 (design): protection ends
 // only on the person's own open of the project or their first own edit
 // there; a tab that followed an agent's switch never says `viewing` for it.
-// GM r12, 1: the edits a restore stopped are kept in the tab with [Save as a
+// Design: the edits a restore stopped are kept in the tab with [Save as a
 // project], which saves them under the "(recovered)" name, and the saved
 // toast names the project.
 
@@ -98,7 +98,7 @@ async function follow(): Promise<void> {
   expect(useProjectStore.getState()).toMatchObject({ screen: 'workspace', activeProject: { id: 'po' } });
 }
 
-describe("review 10, HIGH-2: a tab that follows an agent's switch never ends the protection", () => {
+describe("a tab that follows an agent's switch never ends the protection", () => {
   it('following Codex onto the original says no `viewing` for it, during the follow or after', async () => {
     // The person had opened the original themselves earlier in this tab.
     useProjectStore.setState({ activeProject: original });
@@ -146,7 +146,7 @@ describe("review 10, HIGH-2: a tab that follows an agent's switch never ends the
   });
 });
 
-describe("a followed tab when the agent's next write closes the person's project (HIGH-2 follow-up)", () => {
+describe("a followed tab when the agent's next write closes the person's project", () => {
   /** Codex clears: Nebula saves the canvas into the original, closes it and
    * clears a new canvas with no project. The sync says which project closed. */
   function codexClears(savedId = 's1'): void {
@@ -165,7 +165,7 @@ describe("a followed tab when the agent's next write closes the person's project
     expect(useProjectStore.getState().switchNotice).toBeNull();
   });
 
-  it("with edits not saved yet: kept in the tab with GM r14, 3's line and [Save as a project] (fix round 11)", async () => {
+  it("with edits not saved yet: kept in the tab with the design line and [Save as a project]", async () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r1', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     await follow();
     vi.mocked(api.saveProject).mockImplementation(() => new Promise(() => {}));
@@ -188,7 +188,7 @@ describe("a followed tab when the agent's next write closes the person's project
   });
 });
 
-describe('GM r12, 1: the edits a restore stopped, kept in the tab, with [Save as a project]', () => {
+describe('the edits a restore stopped, kept in the tab, with [Save as a project] (design)', () => {
   async function stoppedByARestore(): Promise<void> {
     useProjectStore.setState({ screen: 'workspace', activeProject: copy });
     socket()({ type: 'graphSync', workspaceRevision: 'r1', paramsVersion: GRAPH_PARAMS_VERSION, catalogRestore: 'old' } as never);
@@ -196,7 +196,7 @@ describe('GM r12, 1: the edits a restore stopped, kept in the tab, with [Save as
     socket()({ type: 'graphSync', workspaceRevision: 'r9', paramsVersion: GRAPH_PARAMS_VERSION, catalogRestore: 'new' } as never);
   }
 
-  it("GM's line, verbatim, kept where the person is (GM r15); closing the tab gets the unload warning", async () => {
+  it("the design line, verbatim, kept where the person is; closing the tab gets the unload warning", async () => {
     await stoppedByARestore();
     const state = useProjectStore.getState();
     expect(RESTORED_LIST_UNSAVED).toBe("Nebula restored its project list before your latest edits were saved. They’re kept in this tab.");

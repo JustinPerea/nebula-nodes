@@ -5,7 +5,7 @@ import type { Viewport } from '@xyflow/react';
  * Moodboard Studio's Board view (moodboard canvas PR5): which view the
  * Studio shows, and, per board draft, the selected cards and the camera.
  *
- * The board is a second React Flow canvas with its own provider (plan C1);
+ * The board is a second React Flow canvas with its own provider;
  * none of this touches the main canvas's stores (graphStore, uiStore's
  * canvasViewport or canvasZoomedOut). Selection lives here, not in the
  * board's React Flow store, so the side panel and the Studio's keys
@@ -42,8 +42,8 @@ const sameIds = (a: readonly string[] | undefined, b: readonly string[]) =>
   a !== undefined && a.length === b.length && a.every((id, index) => id === b[index]);
 
 /** The saved board Moodboard Studio has open: its id, its draft key, and its
- *  image ids in board order (an image's number is its place + 1, plan C7).
- *  The Updates corner reads it to show that board's own Updates (Q113 c). */
+ *  image ids in board order (an image's number is its place + 1).
+ *  The Updates corner reads it to show that board's own Updates. */
 export interface StudioBoard {
   boardId: string;
   boardKey: string;
@@ -51,11 +51,11 @@ export interface StudioBoard {
 }
 
 /**
- * "The view is fitted" (#210 round 6r, GM r101): the camera is where the app
+ * "The view is fitted" (design, PR #210): the camera is where the app
  * last framed it, and which cards that framing was for: the whole board (a
  * fit), the cards an Update's Show named, or the area of the tiles the
- * outside chip brought into view (round 6s, GM r105 1). Null once the person
- * has moved the camera. It travels with the kept camera (GM r105 2): going
+ * outside chip brought into view (design). Null once the person
+ * has moved the camera. It travels with the kept camera (design): going
  * to List and back isn't a pan, so the Board view reopens with it.
  */
 export type BoardPlaced =
@@ -80,7 +80,7 @@ interface BoardCanvasState {
   setPlaced: (boardKey: string, placed: BoardPlaced | null) => void;
   /**
    * The board's draft moved to `to` (a new board's first save: its draft
-   * leaves the shared "new" key for the saved board's own, #210 round 6t):
+   * leaves the shared "new" key for the saved board's own, PR #210):
    * its camera, its flag and its selection go with it, so the Board view
    * opens on the saved key where the person left it, and the next New board
    * starts fresh. A draft already at `to` (the board open from the rail)
@@ -92,7 +92,7 @@ interface BoardCanvasState {
   /** Published by the Studio while it has a saved board open; null otherwise. */
   studioBoard: StudioBoard | null;
   setStudioBoard: (board: StudioBoard | null) => void;
-  /** An Update's Show (Q113 c): the Studio on `boardId` selects these images'
+  /** An Update's Show: the Studio on `boardId` selects these images'
    *  cards in the Board view and frames them. Taken (set to null) once handled. */
   showRequest: { boardId: string; imageIds: string[]; seq: number } | null;
   requestShow: (boardId: string, imageIds: string[]) => void;

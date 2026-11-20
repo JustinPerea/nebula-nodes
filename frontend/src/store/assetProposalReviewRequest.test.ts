@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { requestReview, takeReview } = await import('./assetProposalReviewRequest');
 const { useAssetProposalsStore } = await import('./assetProposalsStore');
 
-describe('a Review request (Q92 a)', () => {
+describe('a Review request', () => {
   beforeEach(() => {
     useAssetProposalsStore.getState().clear();
     vi.useRealTimers();
@@ -20,7 +20,7 @@ describe('a Review request (Q92 a)', () => {
     expect(takeReview('project', 'dusk')).toBe(false);
   });
 
-  it('clears itself when no strip takes it, so it can never fire later (review finding)', () => {
+  it('clears itself when no strip takes it, so it can never fire later', () => {
     vi.useFakeTimers();
     requestReview({ kind: 'commons', targetId: 'ast_1' });
     vi.advanceTimersByTime(11_000);

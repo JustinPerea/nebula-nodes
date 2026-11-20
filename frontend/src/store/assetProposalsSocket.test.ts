@@ -52,7 +52,7 @@ describe('asset proposals over the socket', () => {
     await vi.waitFor(() => expect(useAssetProposalsStore.getState().proposals.pa_00000001.closing).toBe('invalidated'));
     expect(useAssetProposalsStore.getState().proposals.pa_00000002.closing).toBeUndefined();
   });
-  it('takes the views the relist brings, so a pin whose image went shows as automatic (Q90 a)', async () => {
+  it('takes the views the relist brings, so a pin whose image went shows as automatic', async () => {
     send({ type: 'assetProposalOpened', proposal: coverProposal(), acceptKey: 'k1' });
     const lost = coverProposal({ change: { cover: { from: null, to: '/api/outputs/c.png', fromBy: null,
       lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } } } });

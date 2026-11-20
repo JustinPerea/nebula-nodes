@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fix round 8 of PR #199 (GM's rule (a), GM's answer 1 to review 8, GM r9):
+// PR #199 (design):
 // the person's Agent log row when an agent's write saved the canvas first;
 // no toast for a canvas the restore notice names (`alsoFiled` too); the
 // "Another canvas…" toast; and the held canvases' notice closed with ×,
@@ -52,7 +52,7 @@ async function listed(extra: Record<string, unknown>, revision: string) {
   return useProjectStore.getState();
 }
 
-describe("GM's rule (a): the person's Agent log row, the agent's own", () => {
+describe("the person's Agent log row, the agent's own", () => {
   it.each([
     [{ action: 'changed', copy: true }, 'Codex changed a copy of the canvas you had open. The original was saved as its own project, “Recovered canvas”.'],
     [{ action: 'cleared' }, 'Codex cleared the canvas. The one you had open was saved as its own project, “Recovered canvas”.'],
@@ -73,7 +73,7 @@ describe("GM's rule (a): the person's Agent log row, the agent's own", () => {
   });
 });
 
-describe("GM's answer 1 to review 8: the saved line shows once", () => {
+describe("the saved line shows once", () => {
   it('no toast for a canvas the notice names in alsoFiled', async () => {
     const state = await listed({ catalogRestore: restore('r-a', { alsoFiled: [{ id: 'c2', name: 'Recovered canvas 2' }] }),
       canvasSaved: { id: 'c2', name: 'Recovered canvas 2', at: '2026-10-28T10:00:00Z', another: true } }, 'r2');
@@ -87,7 +87,7 @@ describe("GM's answer 1 to review 8: the saved line shows once", () => {
   });
 });
 
-describe('GM r9: the held canvases\' notice closes with ×', () => {
+describe('the held canvases\' notice closes with ×', () => {
   const note = { count: 1, kept: ['x.damaged-20261028T100000Z-00000000'], at: '2026-10-28T10:00:00+00:00' };
 
   it('alone: × hides it, tells the backend once, and a later listing of the same note keeps it closed', async () => {
