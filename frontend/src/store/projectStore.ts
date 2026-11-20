@@ -427,6 +427,9 @@ let firstLoadFailures = 0;
 let firstLoadAuto = false;
 let firstLoadStopped = false;
 let firstLoadLine: string | null = null;
+/** Design: an open that got no answer may have changed the workspace on the server, so the next
+ * open or create reads the projects and their revision first (activate), and is not refused as stale. */
+let relistBeforeAction = false;
 export const FIRST_LOAD_TRIES = 5;
 export const firstLoadDelay = (failures: number): number => 1000 * 2 ** failures;
 export function relistIfStale(): void {
@@ -630,6 +633,7 @@ export function resetProjectStoreForTests(): void {
   firstLoadAuto = false;
   firstLoadStopped = false;
   firstLoadLine = null;
+  relistBeforeAction = false;
 }
 
 /**
@@ -992,6 +996,8 @@ export const core = {
   set firstLoadAuto(v) { firstLoadAuto = v; },
   get firstLoadFailures() { return firstLoadFailures; },
   set firstLoadFailures(v) { firstLoadFailures = v; },
+  get relistBeforeAction() { return relistBeforeAction; },
+  set relistBeforeAction(v: boolean) { relistBeforeAction = v; },
   get firstLoadLine() { return firstLoadLine; },
   set firstLoadLine(v: string | null) { firstLoadLine = v; },
   get firstLoadStopped() { return firstLoadStopped; },

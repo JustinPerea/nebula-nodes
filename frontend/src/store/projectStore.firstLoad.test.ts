@@ -226,6 +226,78 @@ describe('a project open the server never answers', () => {
     expect(state().error).toBe(openTimedOutLine('Beta'));
   });
 
+  const timedOut = async () => {
+    ready();
+    openProject.mockImplementation(() => new Promise(() => {}));
+    void state().open('p2');
+    await vi.advanceTimersByTimeAsync(OPEN_TIMEOUT_MS);
+    expect(state().error).toBe(openTimedOutLine('Beta'));
+    expect(state().initialized).toBe(true);
+    openProject.mockReset();
+  };
+  const createProject = vi.mocked(api.createProject);
+
+  it('after the timeout, New project creates once the projects are read again', async () => {
+    await timedOut();
+    listProjects.mockResolvedValue({ ...(listing('Alpha', 'Beta') as object), workspaceRevision: 'r9' } as never);
+    createProject.mockReset();
+    createProject.mockResolvedValue({ ...(opened as object), project: { ...(opened as { project: object }).project, id: 'p3', name: 'New' }, workspaceRevision: 'r10' } as never);
+    await state().createProject('New');
+    expect(listProjects.mock.invocationCallOrder[0]).toBeLessThan(createProject.mock.invocationCallOrder[0]);
+    expect(createProject).toHaveBeenCalledWith('New', 'r9');
+    expect(state().activeProject?.id).toBe('p3');
+    expect(state().error).toBeNull();
+  });
+
+  it('after the timeout, another card’s Open opens it, with a fresh revision', async () => {
+    await timedOut();
+    listProjects.mockResolvedValue({ ...(listing('Alpha', 'Beta') as object), workspaceRevision: 'r9' } as never);
+    openProject.mockResolvedValue({ ...(opened as object), project: { ...(opened as { project: object }).project, id: 'p1', name: 'Alpha' } } as never);
+    await state().open('p1');
+    expect(openProject).toHaveBeenCalledWith('p1', 'r9');
+    expect(state().activeProject?.id).toBe('p1');
+    expect(state().error).toBeNull();
+  });
+
+  it('after the timeout, a failed re-read keeps the tab usable and says so', async () => {
+    await timedOut();
+    listProjects.mockRejectedValue(noServer());
+    await state().open('p1');
+    expect(openProject).not.toHaveBeenCalled();
+    expect(state().initialized).toBe(true);
+    expect(state().error).not.toBeNull();
+    expect(state().busy).toBe(false);
+  });
+
+  it('after the timeout, Try again still re-reads and opens it', async () => {
+    await timedOut();
+    listProjects.mockResolvedValue(listing('Alpha', 'Beta'));
+    openProject.mockResolvedValue(opened);
+    await state().retry();
+    await settle();
+    expect(openProject).toHaveBeenCalledWith('p2', expect.any(String));
+    expect(state().activeProject?.id).toBe('p2');
+    expect(state().error).toBeNull();
+  });
+
+  it('a late answer to the timed-out open changes nothing after another open', async () => {
+    ready();
+    let answer: (value: never) => void = () => {};
+    openProject.mockImplementation(() => new Promise((resolve) => { answer = resolve as never; }));
+    void state().open('p2');
+    await vi.advanceTimersByTimeAsync(OPEN_TIMEOUT_MS);
+    listProjects.mockResolvedValue(listing('Alpha', 'Beta'));
+    openProject.mockReset();
+    openProject.mockResolvedValue({ ...(opened as object), project: { ...(opened as { project: object }).project, id: 'p1', name: 'Alpha' } } as never);
+    await state().open('p1');
+    expect(state().activeProject?.id).toBe('p1');
+    answer(opened);
+    await settle();
+    expect(state().activeProject?.id).toBe('p1');
+    expect(state().error).toBeNull();
+    expect(state().screen).toBe('workspace');
+  });
+
   it('an answer inside 20 s opens it as before', async () => {
     ready();
     openProject.mockResolvedValue(opened);

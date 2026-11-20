@@ -595,6 +595,9 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
   // doesn't go puts it back (review 18 MEDIUM-2: it stayed "Saving…").
   const statusBefore = state.saveStatus;
   try {
+    // Design: after an open timed out, read the projects and the revision first, so this
+    // open or create isn't refused as stale; a failed read says so with this action's Try again.
+    if (core.relistBeforeAction) await listNow();
     if (getProjectContext()) {
       draining = true;
       useProjectStore.setState({ saveStatus: 'saving' });
@@ -707,10 +710,14 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // again only reloads, and says so.
     if (error instanceof OpenTimedOut && retry.action === 'open') {
       // Design: no answer in 20 s. Nothing was applied, and an answer that comes later is
-      // dropped (see withinOpenTimeout). The server may have opened it, so Try again reads the
-      // saved projects first, then opens it unless that already landed (the lost-reply path).
+      // dropped (see withinOpenTimeout). The tab stays initialized, so the other cards' Open and
+      // New project work at once; the server may have opened it, so the next action re-reads the
+      // projects and their revision first (relistBeforeAction). Try again does the same read and
+      // then opens it unless that already landed (the lost-reply path).
       const name = useProjectStore.getState().projects.find((project) => project.id === retry.id)?.name ?? 'the project';
-      preserveWorkspaceConflict(openTimedOutLine(name), undefined, undefined, { action: 'load', reopen: retry.id });
+      core.relistBeforeAction = true;
+      const line = openTimedOutLine(name);
+      useProjectStore.setState({ screen: 'home', error: line, errorDetails: null, errorRetry: { action: 'load', reopen: retry.id } });
     } else if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
       if (retry.action === 'open') {
         preserveWorkspaceConflict(failureMessage(error, "Couldn’t open the project."), undefined, undefined,
@@ -751,6 +758,8 @@ async function listNow(): Promise<void> {
   if (generation === core.listingGeneration) {
     useProjectStore.setState((state) => ({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
       ...(!state.activeProject ? { workspaceRevision: list.workspaceRevision } : {}) }));
+    // Design: read, so an open that timed out no longer makes the next action re-read first.
+    core.relistBeforeAction = false;
   }
 }
 
