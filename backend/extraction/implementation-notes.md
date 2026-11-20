@@ -176,3 +176,20 @@ lists, so a new field fails it until someone decides.
 
 A read or correction can finish after the person opened another record. `App` passes `changeDetail`, which takes an
 answer only when its record is still the selected one (`detail.ts`); `lateAnswer.test.tsx` holds it.
+
+## Design sign-off (round 4)
+
+- Each section label carries one origin ("Regions · Claude", "Measured · code"); a row shows a tag only when a
+  correction changed it, and a show keeps its own origin when a person or agent added it. The "estimate" pill is
+  gone; the "≈ 52 px" value carries `role="img"` and an `aria-label` of "estimated 52 pixels".
+- `measured.lightness` is the mean CIELAB L* (0-100, one decimal) of the pixels the palette reads;
+  `measured.saturation` is the moodboard's mean (its formula is (max-min)/max, HSV-style, not HSL) divided by 255
+  times 100. `measured.units` names the scales. A record without `units` shows lightness and saturation "of 255",
+  and its spread "of 100" so the three lines can't be misread together.
+- Region boxes are bare two-tone outlines (1px white inside the edge, 1px black just outside). A role label shows
+  on a hovered, focused or selected box. Selecting: click a box, its id button or its row (not a field);
+  click again or press Escape to clear. Focus in a row's field counts as hovering that region.
+- Outline contrast check: for every colour on a 5-step RGB grid (140,608 colours) the better of the two lines
+  holds at least 4.58:1 (WCAG ratio); the white line fails 3:1 above relative luminance 0.30 and the black line
+  below 0.10, so the two cover each other. On the 12,312 edge pixels of the landing fixture's boxes the best of the
+  two is at least 6.01:1.

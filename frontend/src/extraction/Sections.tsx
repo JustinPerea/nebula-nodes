@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EstimateTag, Origin } from './Origin'
+import { RowOrigin, SectionLabel } from './Origin'
 import { axisFill, inOrder, isPaletteId, modelTag, originAt, ROLES, showOrigin, WEIGHTS, words } from './read'
 import type { CodeGap, ExtractionRecord, Region, Show, TextRun } from './types'
 
@@ -11,11 +11,20 @@ interface Props {
   /** The record with corrections applied: what the page shows. */
   view: ExtractionRecord
   hovered: string | null
+  /** The selected region id; its box keeps its role label and its row stays lit. */
+  selected: string | null
   onHover: (id: string | null) => void
+  onSelect: (id: string) => void
   onCorrect: Correct
 }
 
-function EditableText({ value, label, onCommit }: { value: string; label: string; onCommit: (next: string) => void }) {
+function EditableText({ value, label, onCommit, multiline = false }: {
+  value: string
+  label: string
+  onCommit: (next: string) => void
+  /** A two-line field that carries the full text in its title, for words that wrap. */
+  multiline?: boolean
+}) {
   // null: not being edited, so the field shows the saved value (which changes when a correction lands).
   const [draft, setDraft] = useState<string | null>(null)
   const commit = () => {
@@ -23,19 +32,25 @@ function EditableText({ value, label, onCommit }: { value: string; label: string
     if (next && next !== value) onCommit(next)
     setDraft(null)
   }
-  return (
-    <input
-      className="ex-input ex-input-small"
-      type="text"
-      value={draft ?? value}
-      aria-label={label}
+  const shared = {
+    value: draft ?? value,
+    'aria-label': label,
+    onBlur: commit,
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key === 'Enter') (event.currentTarget as HTMLElement).blur()
+      if (event.key === 'Escape') setDraft(null)
+    },
+  }
+  return multiline ? (
+    <textarea
+      {...shared}
+      className="ex-input ex-input-small ex-textarea"
+      rows={2}
+      title={draft ?? value}
       onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') event.currentTarget.blur()
-        if (event.key === 'Escape') setDraft(null)
-      }}
     />
+  ) : (
+    <input {...shared} className="ex-input ex-input-small" type="text" onChange={(event) => setDraft(event.target.value)} />
   )
 }
 
@@ -57,13 +72,13 @@ function Choose({ value, options, label, onPick }: {
   )
 }
 
-export function RegionsSection({ record, view, hovered, onHover, onCorrect }: Props) {
+export function RegionsSection({ record, view, hovered, selected, onHover, onSelect, onCorrect }: Props) {
   const regions = inOrder(view.structure.read?.regions)
   const base = modelTag(record.structure.read?.model)
   const measures = view.structure.measured.region_measures
   return (
     <section>
-      <h2 className="ex-label">Regions</h2>
+      <SectionLabel title="Regions" tag={base} />
       <ul className="ex-rows">
         {regions.map(([id, region]: [string, Region]) => {
           const path = `structure.read.regions.${id}`
@@ -71,15 +86,24 @@ export function RegionsSection({ record, view, hovered, onHover, onCorrect }: Pr
           return (
             <li
               key={id}
-              className={hovered === id ? 'ex-row-item2 ex-row-on ex-pop' : 'ex-row-item2 ex-pop'}
+              className={hovered === id || selected === id ? 'ex-row-item2 ex-row-on ex-pop' : 'ex-row-item2 ex-pop'}
               data-testid="region-row"
+              data-selected={selected === id ? 'true' : undefined}
               onMouseEnter={() => onHover(id)}
               onMouseLeave={() => onHover(null)}
+              onFocus={() => onHover(id)}
+              onBlur={() => onHover(null)}
+              onClick={(event) => {
+                // A click on a field edits it; a click on the row itself selects the region.
+                if (!(event.target as HTMLElement).closest('input, select, textarea')) onSelect(id)
+              }}
             >
-              <span className="ex-id">{id}</span>
+              <button type="button" className="ex-id ex-id-button" aria-pressed={selected === id} aria-label={`Select ${id}`}>
+                {id}
+              </button>
               <Choose value={region.role} options={ROLES} label={`Role of ${id}`} onPick={(role) => onCorrect(`${path}.role`, role)} />
               <EditableText value={region.label} label={`Label of ${id}`} onCommit={(label) => onCorrect(`${path}.label`, label)} />
-              <Origin tag={originAt(record.corrections, path, base)} />
+              <RowOrigin tag={originAt(record.corrections, path, base)} base={base} />
               {swatch ? <span className="ex-swatch ex-swatch-small" title="Most common color in this box, measured by code" style={{ backgroundColor: swatch }} /> : null}
             </li>
           )
@@ -94,24 +118,23 @@ export function TextSection({ record, view, onCorrect }: Props) {
   const base = modelTag(record.structure.read?.model)
   if (runs.length === 0) return (
     <section>
-      <h2 className="ex-label">Text</h2>
+      <SectionLabel title="Text" tag={base} />
       <p className="ex-quiet">No text was found.</p>
     </section>
   )
   return (
     <section>
-      <h2 className="ex-label">Text</h2>
+      <SectionLabel title="Text" tag={base} />
       <ul className="ex-rows">
         {runs.map(([id, run]: [string, TextRun]) => {
           const path = `structure.read.text.${id}`
           return (
             <li key={id} className="ex-row-item2 ex-pop" data-testid="text-row">
               <span className="ex-id">{id}</span>
-              <EditableText value={run.content} label={`Words of ${id}`} onCommit={(content) => onCorrect(`${path}.content`, content)} />
-              <span className="ex-approx" data-testid="text-size">≈ {run.size_px.value} px</span>
-              <EstimateTag />
+              <EditableText multiline value={run.content} label={`Words of ${id}`} onCommit={(content) => onCorrect(`${path}.content`, content)} />
+              <span className="ex-approx" data-testid="text-size" role="img" aria-label={`estimated ${run.size_px.value} pixels`}>≈ {run.size_px.value} px</span>
               <Choose value={run.weight} options={WEIGHTS} label={`Weight of ${id}`} onPick={(weight) => onCorrect(`${path}.weight`, weight)} />
-              <Origin tag={originAt(record.corrections, path, base)} />
+              <RowOrigin tag={originAt(record.corrections, path, base)} base={base} />
             </li>
           )
         })}
@@ -131,22 +154,20 @@ export function SpacingSection({ record, view }: Props) {
   const origin = originAt(record.corrections, 'structure.read.spacing', base)
   return (
     <section>
-      <h2 className="ex-label">Spacing</h2>
+      <SectionLabel title="Spacing" tag={base} />
       <ul className="ex-rows">
         <li className="ex-row-item2 ex-pop">
           <span className="ex-grow">Outer margin</span>
-          <span className="ex-approx">≈ {spacing.outer_margin_px.value} px</span>
-          <EstimateTag />
-          <Origin tag={origin} />
+          <span className="ex-approx" role="img" aria-label={`estimated ${spacing.outer_margin_px.value} pixels`}>≈ {spacing.outer_margin_px.value} px</span>
+          <RowOrigin tag={origin} base={base} />
         </li>
         {spacing.gaps.map((gap) => {
           const measured = codeGap(view.structure.measured.region_gaps, gap.between[0], gap.between[1])
           return (
             <li key={`${gap.between.join('-')}-${gap.axis}`} className="ex-row-item2 ex-pop" data-testid="gap-row">
               <span className="ex-grow">{gap.between[0]} to {gap.between[1]}, {gap.axis === 'x' ? 'across' : 'down'}</span>
-              <span className="ex-approx">≈ {gap.px} px</span>
-              <EstimateTag />
-              <Origin tag={origin} />
+              <span className="ex-approx" role="img" aria-label={`estimated ${gap.px} pixels`}>≈ {gap.px} px</span>
+              <RowOrigin tag={origin} base={base} />
               {measured ? <span className="ex-quiet" title="Measured by code from the model’s boxes">{measured.px} px between the boxes</span> : null}
             </li>
           )
@@ -174,13 +195,13 @@ export function ReadingSection({ record, view }: Props) {
       <dt>{name}</dt>
       <dd>
         <span className="ex-value">{words(value)}</span>
-        <Origin tag={tag} />
+        <RowOrigin tag={tag} base={base} />
       </dd>
     </div>
   )
   return (
     <section>
-      <h2 className="ex-label">Reading</h2>
+      <SectionLabel title="Reading" tag={base} />
       <p className="ex-summary">{one.summary.value}</p>
       <dl>
         {line('Type style', one.type_style.value)}
@@ -213,16 +234,17 @@ export function ReadingSection({ record, view }: Props) {
 
 export function ShowsSection({ record, view, onHover, onCorrect }: Props) {
   const shows = inOrder(view.shows)
+  const base = modelTag(record.structure.read?.model)
   return (
     <section>
-      <h2 className="ex-label">Shows</h2>
+      <SectionLabel title="Shows" tag={base} />
       {shows.length === 0 ? <p className="ex-quiet">Nothing is proposed yet.</p> : null}
       <ul className="ex-rows">
         {shows.map(([id, show]: [string, Show]) => (
           <li key={id} className="ex-show ex-pop" data-testid="show-row">
             <div className="ex-show-line">
               <EditableText value={show.statement} label={`Statement ${id}`} onCommit={(next) => onCorrect(`shows.${id}.statement`, next)} />
-              <Origin tag={showOrigin(record, id, show.origin)} />
+              <RowOrigin tag={showOrigin(record, id, show.origin)} base={base} />
             </div>
             <ul className="ex-chips">
               {show.evidence.map((evidence) => (

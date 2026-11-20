@@ -17,6 +17,19 @@ export function Origin({ tag }: { tag: OriginTag }) {
   )
 }
 
-export function EstimateTag() {
-  return <span className="ex-origin ex-estimate" title="The model’s estimate, not a measurement">estimate</span>
+/** A row's tag: shown only when it differs from the section's, so a changed row says who changed it. */
+export function RowOrigin({ tag, base }: { tag: OriginTag; base: OriginTag }) {
+  return tag === base ? null : <Origin tag={tag} />
+}
+
+/** A section's label with its one origin: "Regions · Claude". */
+export function SectionLabel({ title, tag }: { title: string; tag: OriginTag }) {
+  return (
+    <h2 className="ex-label">
+      {title}{' '}
+      <span className="ex-label-origin" data-section-origin={tag} title={TITLES[tag]}>
+        · {tag}
+      </span>
+    </h2>
+  )
 }

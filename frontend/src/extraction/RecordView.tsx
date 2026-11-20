@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, type Api, type RecordDetail } from './api'
 import { cameIn, readTime, statusLabel } from './format'
-import { Origin } from './Origin'
+import { SectionLabel } from './Origin'
 import { segmentWidths, sharePercent } from './palette'
 import { FAKE_MODEL } from './read'
 import { ReadSection } from './ReadSection'
@@ -16,7 +16,6 @@ function Line({ name, children }: { name: string; children: React.ReactNode }) {
       <dt>{name}</dt>
       <dd>
         <span className="ex-value">{children}</span>
-        <Origin tag="code" />
       </dd>
     </div>
   )
@@ -50,7 +49,6 @@ function Colors({ palette, hovered }: { palette: readonly PaletteEntry[]; hovere
             <span className="ex-hex">{entry.hex}</span>
             <span className="ex-share">{sharePercent(entry.share)}</span>
             <span className="ex-accent-tag">{entry.is_accent ? 'accent' : ''}</span>
-            <Origin tag="code" />
           </li>
         ))}
       </ul>
@@ -58,7 +56,22 @@ function Colors({ palette, hovered }: { palette: readonly PaletteEntry[]; hovere
   )
 }
 
-const mean = (value: number | null) => (value === null ? 'Not measured' : `${Math.round(value)} of 255`)
+/** A mean on its record's scale: 0-100 with `units`, "of 255" on a record saved before units existed. */
+const mean = (value: number | null, legacy: boolean) =>
+  value === null ? 'Not measured' : `${Math.round(value)}${legacy ? ' of 255' : ''}`
+
+export function MeasuredLines({ measured }: { measured: ExtractionRecord['structure']['measured'] }) {
+  const legacy = !measured.units
+  const range = measured.value_range
+  const spread = range ? `${Math.round(range.low)} to ${Math.round(range.high)}${legacy ? ' of 100' : ''}` : 'Not measured'
+  return (
+    <>
+      <Line name="Lightness spread">{spread}</Line>
+      <Line name="Mean lightness">{mean(measured.lightness, legacy)}</Line>
+      <Line name="Saturation">{mean(measured.saturation, legacy)}</Line>
+    </>
+  )
+}
 
 const sentence = (error: unknown) => (error instanceof ApiError ? error.message : 'That didn’t work. Try again.')
 
@@ -73,8 +86,8 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
   const { record, effective: view } = detail
   const url = useRendering(api, folder, record.id)
   const [hovered, setHovered] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
   const { measured } = view.structure
-  const range = measured.value_range
   const read = view.structure.read
 
   const correct = useCallback((path: string, value: unknown) => {
@@ -91,7 +104,20 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
     }
   }, [api, folder, onChange, onNotice, record.id])
 
-  const sectionProps = { record: record as ExtractionRecord, view, hovered, onHover: setHovered, onCorrect: correct }
+  // Clicking the selected box or row again clears it; Escape clears it too.
+  const select = useCallback((id: string) => setSelected((now) => (now === id ? null : id)), [])
+  useEffect(() => {
+    if (selected === null) return undefined
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelected(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selected])
+
+  const sectionProps = {
+    record: record as ExtractionRecord, view, hovered, selected, onHover: setHovered, onSelect: select, onCorrect: correct,
+  }
 
   return (
     <div className="ex-record">
@@ -99,7 +125,7 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
         {url ? (
           <div className="ex-frame" style={{ '--ex-ratio': String(record.rendering.width / record.rendering.height) } as React.CSSProperties}>
             <img className="ex-rendering" src={url} alt={record.source.name ?? 'The measured image'} />
-            {read ? <RegionOverlay key={read.read_at} regions={read.regions} hovered={hovered} onHover={setHovered} /> : null}
+            {read ? <RegionOverlay key={read.read_at} regions={read.regions} hovered={hovered} selected={selected} onHover={setHovered} onSelect={select} /> : null}
           </div>
         ) : null}
       </div>
@@ -112,22 +138,20 @@ export function RecordView({ api, folder, detail, onClose, onChange, onNotice }:
           </button>
         </div>
         <section>
-          <h2 className="ex-label">Colors</h2>
+          <SectionLabel title="Colors" tag="code" />
           <Colors palette={measured.palette} hovered={hovered} />
         </section>
         <section>
-          <h2 className="ex-label">Measured</h2>
+          <SectionLabel title="Measured" tag="code" />
           <dl>
             <Line name="Size">{record.rendering.width} × {record.rendering.height} px</Line>
             <Line name="Aspect">{measured.aspect.toFixed(2)}</Line>
-            <Line name="Lightness range">{range ? `${Math.round(range.low)} to ${Math.round(range.high)} of 100` : 'Not measured'}</Line>
-            <Line name="Mean lightness">{mean(measured.lightness)}</Line>
-            <Line name="Saturation">{mean(measured.saturation)}</Line>
+            <MeasuredLines measured={measured} />
             <Line name="Perceptual hash"><span className="ex-mono">{record.rendering.phash}</span></Line>
           </dl>
         </section>
         <section>
-          <h2 className="ex-label">Source</h2>
+          <SectionLabel title="Source" tag="code" />
           <dl>
             <Line name="Name">{record.source.name || 'Unnamed'}</Line>
             <Line name="Came in">{cameIn(record.source.kind)}</Line>

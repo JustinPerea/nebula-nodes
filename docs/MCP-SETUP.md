@@ -763,6 +763,7 @@ The server exposes these tools for building and running (see
   folder, replace=False)` takes a JPEG, PNG, GIF, WebP or HEIC file and writes
   `<folder>/<id>/record.json`, `rendering.png` and the original; the record holds
   the palette with shares and accents, value range, aspect, lightness, saturation
+  (lightness and the value range are CIELAB L*, 0-100; saturation is 0-100; `measured.units` says so)
   and a perceptual hash, all set by code, with status `proposal`. The id comes from
   the file's bytes, so measuring the same image again keeps the existing record and
   its corrections (`existed: true`). `replace=True` measures again: the colors,

@@ -31,7 +31,7 @@ body { background: #111; }
 
 .ex-app *, .ex-app *::before, .ex-app *::after { box-sizing: border-box; }
 
-.ex-app button, .ex-app input { font: inherit; color: inherit; }
+.ex-app button, .ex-app input, .ex-app textarea { font: inherit; color: inherit; }
 .ex-app :focus-visible { outline: 2px solid var(--ex-focus); outline-offset: 1px; }
 
 .ex-top {
@@ -148,6 +148,7 @@ body { background: #111; }
   color: var(--ex-muted);
 }
 .ex-list-head .ex-label { margin: 0; }
+.ex-label-origin { text-transform: none; letter-spacing: 0; font-weight: 400; }
 
 .ex-record { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; min-height: 0; }
 .ex-stage {
@@ -242,11 +243,15 @@ body { background: #111; }
 }
 .ex-frame .ex-rendering { width: 100%; height: 100%; max-width: none; max-height: none; }
 .ex-overlay { position: absolute; inset: 0; pointer-events: none; }
+/* A bare box is a two-tone line: 1px white inside its edge, 1px black just outside it, so one of the two
+   holds 3:1 against any pixel under it (white against L* up to about 60, black from about 30 up). */
 .ex-box {
   position: absolute;
-  outline: 1px solid rgba(143, 180, 255, 0.55);
+  outline: 1px solid #fff;
   outline-offset: -1px;
+  box-shadow: 0 0 0 1px #000;
   pointer-events: auto;
+  cursor: pointer;
   transform-origin: center;
   animation: ex-box-in var(--spring-pop-ms) var(--spring-pop) both;
 }
@@ -261,11 +266,11 @@ body { background: #111; }
   white-space: nowrap;
   font-size: 10px;
   line-height: 14px;
-  background: rgba(17, 17, 17, 0.85);
-  color: #cfe0ff;
+  background: #000;
+  color: #fff;
 }
-.ex-box-on { outline: 1px solid #fff; background: rgba(143, 180, 255, 0.16); z-index: 1; }
-.ex-box-on .ex-box-role { background: #fff; color: #111; }
+.ex-box-on { background: rgba(143, 180, 255, 0.16); z-index: 1; }
+.ex-box-selected { background: rgba(143, 180, 255, 0.24); }
 
 /* Read section and rows */
 .ex-read-line { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; flex-wrap: wrap; }
@@ -278,6 +283,9 @@ body { background: #111; }
 .ex-row-item2 { display: flex; align-items: center; gap: 8px; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; flex-wrap: wrap; }
 .ex-row-item2:hover, .ex-row-on { background: var(--ex-fill-hover); }
 .ex-id { flex: none; width: 26px; font-family: var(--ex-mono); font-size: 11px; color: var(--ex-muted); }
+.ex-app .ex-id-button { padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; font: 11px var(--ex-mono); color: var(--ex-muted); }
+.ex-app .ex-id-button[aria-pressed="true"] { color: var(--ex-strong); }
+.ex-input.ex-textarea { height: auto; min-height: 0; padding: 3px 6px; resize: none; line-height: 1.45; font: inherit; color: inherit; }
 .ex-grow { flex: 1; min-width: 0; }
 .ex-approx { color: var(--ex-strong); white-space: nowrap; }
 .ex-input-small { height: 24px; flex: 1; min-width: 80px; padding: 0 6px; }
@@ -294,7 +302,6 @@ body { background: #111; }
 .ex-swatch-small { width: 12px; height: 12px; }
 .ex-origin-you { background: #2b3550; color: #cfe0ff; }
 .ex-origin-agent { background: #3a2f4d; color: #e2d0ff; }
-.ex-estimate { background: transparent; box-shadow: inset 0 0 0 1px var(--ex-line); }
 .ex-color-on { background: var(--ex-fill-hover); border-radius: 6px; }
 .ex-summary { margin: 0 0 8px; color: var(--ex-strong); }
 

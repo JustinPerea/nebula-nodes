@@ -99,9 +99,22 @@ def test_measured_values_on_the_accent_image():
     assert set(palette[0]) == {"index", "hex", "share", "is_accent"}
     assert block["aspect"] == 1.5
     assert set(block["value_range"]) == {"low", "high"} and block["value_range"]["low"] < block["value_range"]["high"]
-    assert block["lightness"] == BASELINE["gradient_accent.png"]["lightness"]
-    assert block["saturation"] == BASELINE["gradient_accent.png"]["saturation"]
+    # One scale: mean L* (0-100) of the palette's pixels; saturation is the moodboard's 0-255 mean on 0-100.
+    assert block["units"] == {"value_range": "L* 0-100", "lightness": "L* 0-100", "saturation": "HSL saturation 0-100"}
+    assert 0 < block["lightness"] <= 100 and block["lightness"] == round(block["lightness"], 1)
+    assert block["saturation"] == round(BASELINE["gradient_accent.png"]["saturation"] / 255 * 100, 1)
     assert len(perceptual) == 16 and int(perceptual, 16) >= 0
+
+
+def test_lightness_is_lab_l_star_of_the_visible_pixels():
+    black, _ = measure(Image.new("RGB", (8, 8), (0, 0, 0)))
+    white, _ = measure(Image.new("RGB", (8, 8), (255, 255, 255)))
+    assert black["lightness"] == 0.0 and white["lightness"] == 100.0
+    assert white["saturation"] == 0.0
+    # Half black, half transparent: the transparent half is not a pixel, so the mean stays 0.
+    half = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    half.paste(Image.new("RGBA", (8, 4), (0, 0, 0, 255)), (0, 0))
+    assert measure(half)[0]["lightness"] == 0.0
 
 
 def test_the_one_pixel_and_transparent_images():

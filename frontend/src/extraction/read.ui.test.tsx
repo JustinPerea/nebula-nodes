@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import { createApi, TOKEN_HEADER } from './api'
 import { CONFIRM_LINE, ReadSection } from './ReadSection'
+import { MeasuredLines } from './RecordView'
 import { RegionOverlay } from './RegionOverlay'
 import { ReadingSection, RegionsSection, ShowsSection, SpacingSection, TextSection } from './Sections'
 import { axisFill } from './read'
@@ -9,31 +10,54 @@ import { applied, readRecord } from './testRecord'
 import type { Correction } from './types'
 
 describe('RegionOverlay', () => {
-  it('positions each box by its fractions and labels it with its role', () => {
+  const overlay = (hovered: string | null, selected: string | null, handlers: { onHover?: (id: string | null) => void; onSelect?: (id: string) => void } = {}) => {
     const record = readRecord()
-    render(<RegionOverlay regions={record.structure.read!.regions} hovered={null} onHover={() => {}} />)
-    const boxes = screen.getAllByTestId('region-box')
-    const byId = Object.fromEntries(boxes.map((b) => [b.getAttribute('data-region'), b]))
-    expect(byId.r1.style.left).toBe('0%')
-    expect(byId.r1.style.width).toBe('100%')
-    expect(byId.r1.style.height).toBe('8%')
-    expect(byId.r2.style.left).toBe('6.67%')
-    expect(byId.r2.style.top).toBe('45.56%')
-    expect(within(byId.r2).getByText('button')).toBeTruthy()
-    expect(within(byId.r1).getByText('header')).toBeTruthy()
+    return render(
+      <RegionOverlay
+        regions={record.structure.read!.regions}
+        hovered={hovered}
+        selected={selected}
+        onHover={handlers.onHover ?? (() => {})}
+        onSelect={handlers.onSelect ?? (() => {})}
+      />,
+    )
+  }
+  const box = (id: string) => screen.getAllByTestId('region-box').find((b) => b.getAttribute('data-region') === id)!
+
+  it('positions each box by its fractions', () => {
+    overlay(null, null)
+    expect(box('r1').style.left).toBe('0%')
+    expect(box('r1').style.width).toBe('100%')
+    expect(box('r1').style.height).toBe('8%')
+    expect(box('r2').style.left).toBe('6.67%')
+    expect(box('r2').style.top).toBe('45.56%')
   })
 
-  it('highlights the hovered box and reports hovering', () => {
-    const record = readRecord()
+  it('shows a role label only on a hovered, focused or selected box', () => {
+    const { unmount } = overlay(null, null)
+    expect(screen.queryByText('button')).toBeNull()
+    expect(screen.queryByText('header')).toBeNull()
+    unmount()
+    const hovered = overlay('r2', null)
+    expect(within(box('r2')).getByText('button')).toBeTruthy()
+    expect(screen.queryByText('header')).toBeNull()
+    hovered.unmount()
+    overlay(null, 'r1')
+    expect(within(box('r1')).getByText('header')).toBeTruthy()
+    expect(box('r1').className).toContain('ex-box-selected')
+    expect(screen.queryByText('button')).toBeNull()
+  })
+
+  it('reports hovering and a click to select', () => {
     const onHover = vi.fn()
-    render(<RegionOverlay regions={record.structure.read!.regions} hovered="r2" onHover={onHover} />)
-    const boxes = screen.getAllByTestId('region-box')
-    expect(boxes.find((b) => b.getAttribute('data-region') === 'r2')!.className).toContain('ex-box-on')
-    expect(boxes.find((b) => b.getAttribute('data-region') === 'r1')!.className).not.toContain('ex-box-on')
-    fireEvent.mouseEnter(boxes[0])
-    expect(onHover).toHaveBeenCalledWith(boxes[0].getAttribute('data-region'))
-    fireEvent.mouseLeave(boxes[0])
+    const onSelect = vi.fn()
+    overlay(null, null, { onHover, onSelect })
+    fireEvent.mouseEnter(box('r1'))
+    expect(onHover).toHaveBeenCalledWith('r1')
+    fireEvent.mouseLeave(box('r1'))
     expect(onHover).toHaveBeenLastCalledWith(null)
+    fireEvent.click(box('r2'))
+    expect(onSelect).toHaveBeenCalledWith('r2')
   })
 })
 
@@ -88,7 +112,8 @@ describe('ReadSection', () => {
 
 describe('sections', () => {
   const props = (record = readRecord(), onCorrect = vi.fn()) => ({
-    record, view: applied(record), hovered: null as string | null, onHover: vi.fn(), onCorrect,
+    record, view: applied(record), hovered: null as string | null, selected: null as string | null,
+    onHover: vi.fn(), onSelect: vi.fn(), onCorrect,
   })
 
   it('saves a role change as a correction on that region', () => {
@@ -126,7 +151,7 @@ describe('sections', () => {
     expect(onCorrect).toHaveBeenLastCalledWith('shows.s1.statement', 'Two accents.')
   })
 
-  it('shows sizes and spacing as approximate with an estimate tag', () => {
+  it('shows sizes and spacing as approximate, with estimated in the accessible name and no pill', () => {
     render(
       <>
         <TextSection {...props()} />
@@ -134,10 +159,34 @@ describe('sections', () => {
       </>,
     )
     expect(screen.getByTestId('text-size').textContent).toBe('≈ 14 px')
-    expect(screen.getAllByText('estimate').length).toBe(3)
-    expect(screen.getByText('≈ 96 px')).toBeTruthy()
-    expect(screen.getByText('≈ 40 px')).toBeTruthy()
+    expect(screen.queryByText('estimate')).toBeNull()
+    expect(screen.getByLabelText('estimated 14 pixels').textContent).toBe('≈ 14 px')
+    expect(screen.getByLabelText('estimated 96 pixels').textContent).toBe('≈ 96 px')
+    expect(screen.getByLabelText('estimated 40 pixels').textContent).toBe('≈ 40 px')
     expect(screen.getByText(/338 px between the boxes/)).toBeTruthy()
+  })
+
+  it('puts one origin on each section label and none on uncorrected rows', () => {
+    const p = props()
+    render(
+      <>
+        <RegionsSection {...p} />
+        <TextSection {...p} />
+        <SpacingSection {...p} />
+        <ReadingSection {...p} />
+        <ShowsSection {...p} />
+      </>,
+    )
+    for (const title of ['Regions', 'Text', 'Spacing', 'Reading', 'Shows']) {
+      expect(screen.getByRole('heading', { name: `${title} · Claude` })).toBeTruthy()
+    }
+    expect(document.querySelectorAll('[data-origin]').length).toBe(0)
+  })
+
+  it('names the fake reader on the section labels', () => {
+    const p = props(readRecord('fake-reader'))
+    render(<RegionsSection {...p} />)
+    expect(screen.getByRole('heading', { name: 'Regions · fake reader' })).toBeTruthy()
   })
 
   it('marks corrected values with you and an agent’s with agent', () => {
@@ -150,6 +199,47 @@ describe('sections', () => {
     expect(rows[0].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('you')
     expect(rows[1].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('agent')
     expect((screen.getByLabelText('Role of r1') as HTMLSelectElement).value).toBe('navigation')
+  })
+
+  it('keeps a show’s own origin when a person or an agent added it', () => {
+    const record = readRecord()
+    record.shows.s2 = { statement: 'Mine', evidence: ['P0'], origin: 'person', status: 'proposal', decision_ref: null, order: 1 }
+    render(<ShowsSection {...props(record)} />)
+    const rows = screen.getAllByTestId('show-row')
+    expect(rows[0].querySelector('[data-origin]')).toBeNull()
+    expect(rows[1].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('you')
+  })
+
+  it('wraps the words field to two lines and carries the full text in its title', () => {
+    const record = readRecord()
+    record.structure.read!.text.t1.content = 'A long line of words that will not fit on one line of the side panel'
+    render(<TextSection {...props(record)} />)
+    const field = screen.getByLabelText('Words of t1') as HTMLTextAreaElement
+    expect(field.tagName).toBe('TEXTAREA')
+    expect(field.rows).toBe(2)
+    expect(field.title).toBe(record.structure.read!.text.t1.content)
+  })
+
+  it('selects a region from its id button or its row, and not from a click in a field', () => {
+    const p = props()
+    render(<RegionsSection {...p} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Select r2' }))
+    expect(p.onSelect).toHaveBeenLastCalledWith('r2')
+    fireEvent.click(screen.getAllByTestId('region-row')[0])
+    expect(p.onSelect).toHaveBeenLastCalledWith('r1')
+    p.onSelect.mockClear()
+    fireEvent.click(screen.getByLabelText('Label of r1'))
+    fireEvent.click(screen.getByLabelText('Role of r1'))
+    expect(p.onSelect).not.toHaveBeenCalled()
+  })
+
+  it('shows a row’s region as focused when a field in it takes focus', () => {
+    const p = props()
+    render(<RegionsSection {...p} />)
+    fireEvent.focus(screen.getByLabelText('Label of r2'))
+    expect(p.onHover).toHaveBeenLastCalledWith('r2')
+    fireEvent.blur(screen.getByLabelText('Label of r2'))
+    expect(p.onHover).toHaveBeenLastCalledWith(null)
   })
 
   it('hovering a row or an evidence chip reports the id to highlight', () => {
@@ -175,6 +265,26 @@ describe('sections', () => {
     expect(axisFill(-3)).toEqual({ left: '0%', width: '50%' })
     render(<ReadingSection {...props()} />)
     expect(screen.getAllByTestId('axis-fill').map((el) => (el as HTMLElement).style.width)).toEqual(['25%', '50%'])
+  })
+})
+
+describe('measured lines', () => {
+  const measured = readRecord().structure.measured
+
+  it('reads a record with units on one 0-100 scale', () => {
+    const units = { value_range: 'L* 0-100', lightness: 'L* 0-100', saturation: 'HSL saturation 0-100' }
+    render(<dl><MeasuredLines measured={{ ...measured, value_range: { low: 11, high: 99 }, lightness: 72.6, saturation: 15.2, units }} /></dl>)
+    expect(screen.getByText('Lightness spread').nextSibling!.textContent).toBe('11 to 99')
+    expect(screen.getByText('Mean lightness').nextSibling!.textContent).toBe('73')
+    expect(screen.getByText('Saturation').nextSibling!.textContent).toBe('15')
+    expect(document.body.textContent).not.toContain('of 255')
+  })
+
+  it('shows an older record, saved without units, as of 255', () => {
+    render(<dl><MeasuredLines measured={{ ...measured, lightness: 200, saturation: 20 }} /></dl>)
+    expect(screen.getByText('Mean lightness').nextSibling!.textContent).toBe('200 of 255')
+    expect(screen.getByText('Saturation').nextSibling!.textContent).toBe('20 of 255')
+    expect(screen.getByText('Lightness spread').nextSibling!.textContent).toBe('10 to 95 of 100')
   })
 })
 

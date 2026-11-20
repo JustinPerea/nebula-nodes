@@ -112,6 +112,8 @@ export interface ExtractionRecord {
       aspect: number
       lightness: number | null
       saturation: number | null
+      /** Absent on records saved before the one lightness scale: lightness and saturation are then 0-255. */
+      units?: { value_range: string; lightness: string; saturation: string }
       /** A map once a read has been made; an empty list or map before. */
       region_measures?: Record<string, RegionMeasure> | unknown[]
       region_gaps?: CodeGap[]
