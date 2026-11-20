@@ -8,7 +8,7 @@ import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 import {
   DEVICE_STATE_LABELS, ENUMS, FIDELITY_STATUS_LABELS, MADE_BY_SENTENCES, MEDIA_LABELS, PALETTE_ROLE_LABELS,
   REGION_STATUS_LABELS, ROLES, ROLE_LABELS, SIGHTING_STATE_LABELS, SOURCE_KIND_LABELS,
-  ENUM_VALUE_LABELS, deviceStateLabel, sourceKindLabel,
+  ENUM_VALUE_LABELS, axisLabel, deviceStateLabel, enumFieldLabel, enumValueLabel, mediaLabel, regionStatusLabel, sourceKindLabel,
   type AnalysisState, type AssetDetail, type SearchRow,
 } from '../src/lib/commonsTypes';
 import { STATE_LABELS } from '../src/lib/commonsFormat';
@@ -144,6 +144,28 @@ it('the label maps all start upper case, and a value this app does not know read
   expect(deviceStateLabel('new_thing')).toBe('New thing');
   expect(sourceKindLabel('url')).toBe('Web');
   expect(sourceKindLabel('thing')).toBe('Thing');
+  expect(enumValueLabel('type_style', 'neo_grotesque')).toBe('Neo grotesque');
+  expect(enumValueLabel('type_style', 'serif')).toBe('Serif');
+  expect(enumFieldLabel('some_field')).toBe('Some field');
+  expect(enumFieldLabel('medium')).toBe('Medium');
+  expect(regionStatusLabel('in_review')).toBe('In review');
+  expect(regionStatusLabel('confirmed')).toBe('Confirmed');
+  expect(mediaLabel('audio_clip')).toBe('Audio clip');
+  expect(mediaLabel('video')).toBe('Video');
+  expect(axisLabel('quiet_loud')).toBe('Quiet – Loud');
+  expect(axisLabel('polished_raw')).toBe('Polished – Raw');
+  expect(axisLabel('new_axis')).toBe('New axis');
+});
+
+it('the detail shows an unknown region status and media as capitalised words', async () => {
+  const { container } = await renderDetail(detail((d) => {
+    d.asset.media = 'audio_clip' as AssetDetail['asset']['media'];
+    d.regions = [{ id: 'reg_x', box: [0.1, 0.1, 0.3, 0.2], label: 'r', note: null,
+      status: 'in_review' as AssetDetail['regions'][number]['status'], actor: 'model:x' }];
+  }));
+  expect(badgeTexts(container)).toContain('In review');
+  expect(container.querySelector('.commons-detail__bar .commons-meta')?.textContent).toContain('Audio clip');
+  expect(container.textContent).not.toMatch(/undefined|_/);
 });
 
 /** Every option in a Commons select reads as a word: upper case first, no underscore, or the "—" placeholder. */
@@ -183,6 +205,9 @@ it('Agent review selects show the detail panel\'s words and keep raw values', as
   expect([...(screen.getByLabelText('Layout') as HTMLSelectElement).options].map((o) => o.textContent)).toContain('Doesn’t apply');
   expect(optionProblems(container)).toEqual([]);
   expect(container.textContent).not.toMatch(/Not applicable|geometric sans/);
+  expect(screen.getByLabelText('Quiet – Loud')).toBeTruthy();
+  expect(container.textContent).toContain('Quiet – Loud');
+  expect(container.textContent).not.toContain('quiet loud');
 });
 
 it('Blind labeling selects show the detail panel\'s words and keep raw values', async () => {
@@ -198,4 +223,6 @@ it('Blind labeling selects show the detail panel\'s words and keep raw values', 
   await waitFor(() => expect(select.options.length).toBeGreaterThan(1));
   expect([...select.options].map((o) => [o.value, o.textContent])).toContainEqual(['motion_still', 'Motion still']);
   expect(optionProblems(container).filter((t) => t !== 'Choose one…' && t !== 'Choose a role…')).toEqual([]);
+  expect(screen.getByLabelText('Quiet – Loud')).toBeTruthy();
+  expect(container.textContent).not.toContain('quiet loud');
 });

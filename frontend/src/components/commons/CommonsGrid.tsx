@@ -26,7 +26,7 @@ function columnCount(grid: HTMLElement | null): number {
 interface TileBadge {
   key: string;
   className: string;
-  /** What the badge shows (the CSS sets it in capitals). */
+  /** What the badge shows (shown as written). */
   text: string;
   /** How the tile's name reads it, as written (badges are sentence case; the CSS adds no capitals). */
   label: string;

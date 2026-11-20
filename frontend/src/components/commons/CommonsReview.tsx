@@ -14,7 +14,7 @@ import { LineText } from '../LineText';
 import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
-import { enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
+import { axisLabel, enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
 import { isLoadLine } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
@@ -343,10 +343,10 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
         </select> : <strong>{enumValueLabel(key as EnumField, labels.tags[key])}</strong>}</label><p className="review-reason">Agent: {reason(key)}</p>
       </div>)}
       <h4 className="evaluation-subhead">Character</h4>{batch.axes.map((key) => <div className="review-grade" key={key}>
-        <label>{pretty(key)} <strong>{labels.axes[key].toFixed(2)}</strong>
-          {editing ? <input aria-label={pretty(key)} type="range" min={-1} max={1} step={0.05} value={labels.axes[key]}
+        <label>{axisLabel(key)} <strong>{labels.axes[key].toFixed(2)}</strong>
+          {editing ? <input aria-label={axisLabel(key)} type="range" min={-1} max={1} step={0.05} value={labels.axes[key]}
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} />
-            : <meter aria-label={pretty(key)} min={-1} max={1} value={labels.axes[key]} />}
+            : <meter aria-label={axisLabel(key)} min={-1} max={1} value={labels.axes[key]} />}
         </label><div className="review-axis-ends"><span>−1 {key.split('_')[0]}</span><span>+1 {key.split('_')[1]}</span></div>
         <p className="review-reason">Agent: {fields.axes[key].why}</p>
       </div>)}
@@ -367,7 +367,7 @@ function ReviewForm({ batch, item, dirty, saving, generating, onDirty, onAccept,
     <p role="status" id={statusLineId}>{dirty ? CHANGE_REFERENCE_LINE_REVIEW : item.reviewed_at ? 'Reviewed by you · saved on this computer' : 'Awaiting your review · nothing accepted yet'}</p>
     <details><summary>Original agent grade</summary><dl>
       {Object.entries(item.proposal.labels.tags).map(([key, value]) => <div key={key}><dt>{enumFieldLabel(key)}</dt><dd>{enumValueLabel(key as EnumField, value)}</dd></div>)}
-      {Object.entries(item.proposal.labels.axes).map(([key, value]) => <div key={key}><dt>{pretty(key)}</dt><dd>{value.toFixed(2)}</dd></div>)}
+      {Object.entries(item.proposal.labels.axes).map(([key, value]) => <div key={key}><dt>{axisLabel(key)}</dt><dd>{value.toFixed(2)}</dd></div>)}
       {Object.entries(item.proposal.labels.palette_roles).map(([key, value]) => <div key={key}><dt>Color P{key}</dt><dd>{paletteRoleLabel(value)}</dd></div>)}
       <dt>Keywords</dt><dd>{item.proposal.labels.keywords.map(pretty).join(', ') || 'No applicable keywords'}</dd>
     </dl></details>

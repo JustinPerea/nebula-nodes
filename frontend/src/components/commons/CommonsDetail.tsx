@@ -5,7 +5,7 @@ import { wsClient } from '../../lib/wsClient';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { CommonsMedia } from './CommonsMedia';
 import {
-  AXES, AXIS_LABELS, ENUMS, ENUM_FIELD_LABELS, MEDIA_LABELS, REGION_STATUS_LABELS, SIGHTING_STATE_LABELS, capitalised, fidelityStatusLabel, madeBySentence, sourceKindLabel, ROLES, ROLE_LABELS, enumValueLabel, TEXT_FIELDS,
+  AXES, AXIS_LABELS, ENUMS, ENUM_FIELD_LABELS, mediaLabel, regionStatusLabel, SIGHTING_STATE_LABELS, capitalised, fidelityStatusLabel, madeBySentence, sourceKindLabel, ROLES, ROLE_LABELS, enumValueLabel, TEXT_FIELDS,
   type AssetDetail, type EnumField, type MembershipDetail, type Region, type Role, type Sighting,
 } from '../../lib/commonsTypes';
 import { showConfirm } from '../../lib/commonsFiles';
@@ -327,7 +327,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       <div className="commons-detail__bar">
         <span className={`commons-badge commons-badge--${badge.modifier}`}>{badge.label}</span>
         <span className="commons-meta">
-          {MEDIA_LABELS[asset.media]}{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''} · {madeBySentence(asset.made_by)}
+          {mediaLabel(asset.media)}{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''} · {madeBySentence(asset.made_by)}
         </span>
         {detail.quarantined && <span className="commons-badge commons-badge--analysis_failed">Quarantined</span>}
         <span className="commons-spacer" />
@@ -409,7 +409,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <ul className="commons-list" aria-label="Regions">
           {liveRegions.map((r) => (
             <li key={r.id} className="commons-list__item">
-              <span className={`commons-badge commons-badge--region-${r.status}`}>{REGION_STATUS_LABELS[r.status]}</span>
+              <span className={`commons-badge commons-badge--region-${r.status}`}>{regionStatusLabel(r.status)}</span>
               <span className="commons-list__text">{r.label}</span>
               {r.status === 'proposed' && (
                 <button type="button" className="commons-link" onClick={() => run(() => commonsApi.patchRegion(r.id, { status: 'confirmed' }))}>

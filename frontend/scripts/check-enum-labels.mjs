@@ -10,11 +10,13 @@ import ts from 'typescript';
 //      (`<option value={role}>{role}</option>`): label it through a map in lib/commonsTypes;
 //   2. an <option> with no value attribute whose only child is a JSX expression: its value is
 //      its shown text by construction, so it shows the stored value;
-//   3. a badge (className holds commons-badge or commons-source) whose text is JSX text starting
-//      with a lower-case letter, or a bare identifier or property access (a stored value shown as
-//      is): badges are labels in sentence case, drawn from a label map (design). A map lookup
-//      (`ROLE_LABELS[x]`) or a call passes; the runtime test in tests/commonsBadgeCase.test.tsx
-//      checks the words themselves;
+//   3. a badge (className holds commons-badge or commons-source) whose first visible content is
+//      lower-case JSX text or a lower-case string literal (also in a conditional's branches), or
+//      that shows a property access (`s.state`) or element access by a string (`s['state']`),
+//      also one level inside a child element or fragment: badges are labels in sentence case,
+//      drawn from a label map (design). Text after a number (`{n} items`), a plain identifier
+//      (`{count}`), a map lookup (`ROLE_LABELS[x]`) and a call pass; the runtime test in
+//      tests/commonsBadgeCase.test.tsx checks the words themselves;
 //   4. "by You" written out in a string or JSX text, and "by {actorLabel(...)}" where the
 //      call is commonsFormat's leading form (no `{ midSentence: true }`): mid-sentence the
 //      local person reads "you".
@@ -28,7 +30,6 @@ const SRC = join(process.cwd(), 'src');
 export const ALLOWED = [
   { file: 'components/commons/CommonsDetail.tsx', value: 'badge.label', why: 'analysisBadge() returns a label from STATE_LABELS (sentence case); the runtime test covers every state' },
   { file: 'components/commons/CommonsDetail.tsx', value: 'membership.brand', why: 'a brand badge shows the brand\'s own name, which is not a stored enum value' },
-  { file: 'components/commons/CommonsDetail.tsx', value: 'label', why: 'sourceLabel() returns the words (Corrected, Code, Model: id); the runtime test covers them' },
   { file: 'components/commons/CommonsGrid.tsx', value: 'badge.text', why: 'the tile renders a list of badges built in tileBadges() from label maps; the runtime test covers each' },
   { file: 'components/cinema-studio/CinemaSharedControls.tsx', value: 'ratio', why: 'an aspect ratio ("16:9") is the thing a person reads; its value is not an enum word' },
   { file: 'components/cinema-studio/CinemaArtDirectionControls.tsx', value: 'value.method', why: 'the fallback for a palette method the app does not know (an older or newer scene file): shown as it is rather than hidden; outside Commons, for design to rule on' },
@@ -58,13 +59,23 @@ export function unwrap(node) {
   }
 }
 
-/** A stored value shown as is: an identifier, or a property access chain rooted at one (no call, no map lookup). */
-function isBare(node) {
+/** A stored value read off an object: a property access chain rooted at a plain object, not a call or map lookup (`s.state`), or an element access by a string literal (`s['state']`). A plain identifier, a call and a map lookup (`MAP[x]`) are not. */
+function isStoredAccess(node) {
   const n = unwrap(node);
-  if (ts.isIdentifier(n)) return true;
-  if (ts.isPropertyAccessExpression(n)) return isBare(n.expression);
+  if (ts.isPropertyAccessExpression(n)) {
+    // `MAP[x].label` reads a label map, not a stored value: only a chain rooted at a plain object counts.
+    const root = unwrap(n.expression);
+    return !(ts.isCallExpression(root) || (ts.isElementAccessExpression(root) && !isStoredAccess(root)));
+  }
+  if (ts.isElementAccessExpression(n)) {
+    const arg = unwrap(n.argumentExpression);
+    return ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg);
+  }
   return false;
 }
+
+const startsLower = (text) => /^[a-z]/.test(text.trim());
+const isStringLiteral = (n) => ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n);
 
 const exprText = (node, sf) => node.getText(sf).replace(/\s+/g, '');
 
@@ -145,17 +156,39 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
     if (!cls || !cls.initializer) return false;
     return /commons-(badge|source)\b/.test(cls.initializer.getText(sf));
   }
-  function badgeHits(el) {
-    const kids = el.children.filter((c) => !(ts.isJsxText(c) && c.containsOnlyTriviaWhiteSpaces));
-    for (const kid of kids) {
-      if (ts.isJsxText(kid) && /^[a-z]/.test(kid.text.trim())) {
-        hits.push({ line: at(kid), value: kid.text.trim(), reason: `badge text "${kid.text.trim()}" starts lower case: badges are sentence case` });
-      }
-      if (ts.isJsxExpression(kid) && kid.expression && isBare(kid.expression)) {
-        hits.push({ line: at(kid), value: exprText(unwrap(kid.expression), sf), reason: `badge shows ${exprText(unwrap(kid.expression), sf)} as is: draw its words from a label map` });
-      }
+  /** Hits for one expression child. `first` is true when it is the badge's first visible content. */
+  function badgeExpression(expr, first) {
+    const n = unwrap(expr);
+    const line = at(expr);
+    if (isStoredAccess(n)) {
+      hits.push({ line, value: exprText(n, sf), reason: `badge shows ${exprText(n, sf)} as is: draw its words from a label map` });
+    } else if (first && isStringLiteral(n) && startsLower(n.text)) {
+      hits.push({ line, value: n.text.trim(), reason: `badge text "${n.text.trim()}" starts lower case: badges are sentence case` });
+    } else if (ts.isConditionalExpression(n)) {
+      // One hit per conditional, whichever branch is first to fail.
+      const before = hits.length;
+      badgeExpression(n.whenTrue, first);
+      if (hits.length === before) badgeExpression(n.whenFalse, first);
     }
   }
+  /** Lower-case text fails only as the first visible content (design: "2 images" is fine after a number); a stored-value access fails anywhere, one level deep too. */
+  function badgeKids(el, first, nested) {
+    const kids = el.children.filter((c) => !(ts.isJsxText(c) && c.containsOnlyTriviaWhiteSpaces));
+    kids.forEach((kid, i) => {
+      const isFirst = first && i === 0;
+      if (ts.isJsxText(kid) && !nested && isFirst && startsLower(kid.text)) {
+        hits.push({ line: at(kid), value: kid.text.trim(), reason: `badge text "${kid.text.trim()}" starts lower case: badges are sentence case` });
+      } else if (ts.isJsxExpression(kid) && kid.expression) {
+        if (nested) {
+          const n = unwrap(kid.expression);
+          if (isStoredAccess(n)) hits.push({ line: at(kid), value: exprText(n, sf), reason: `badge shows ${exprText(n, sf)} as is: draw its words from a label map` });
+        } else badgeExpression(kid.expression, isFirst);
+      } else if (!nested && (ts.isJsxElement(kid) || ts.isJsxFragment(kid))) {
+        badgeKids(kid, false, true);
+      }
+    });
+  }
+  function badgeHits(el) { badgeKids(el, true, false); }
   function leadingForm(call, line) {
     const callee = call.expression;
     const name = ts.isPropertyAccessExpression(callee) ? callee.name.text : callee.getText(sf);

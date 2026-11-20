@@ -33,6 +33,10 @@ export const SIGHTING_STATE_LABELS: Record<'missing_from_folder' | 'archived' | 
 };
 export type RegionStatus = 'proposed' | 'confirmed' | 'deleted';
 export const REGION_STATUS_LABELS: Record<RegionStatus, string> = { proposed: 'Proposed', confirmed: 'Confirmed', deleted: 'Deleted' };
+/** A region's status for a person; one the app doesn't know reads as capitalised words. */
+export function regionStatusLabel(status: string): string {
+  return (REGION_STATUS_LABELS as Record<string, string>)[status] ?? capitalised(status.replaceAll('_', ' '));
+}
 /** A borrowing's fidelity status (backend commons/borrow.py); 'pending' stands in when none is recorded yet. */
 export type FidelityStatus = 'pending' | 'pass' | 'fail' | 'unverifiable';
 export const FIDELITY_STATUS_LABELS: Record<FidelityStatus, string> = {
@@ -49,6 +53,10 @@ export function deviceStateLabel(state: string): string {
 }
 export type Media = 'image' | 'video';
 export const MEDIA_LABELS: Record<Media, string> = { image: 'Image', video: 'Video' };
+/** A media kind for a person; one the app doesn't know reads as capitalised words. */
+export function mediaLabel(media: string): string {
+  return (MEDIA_LABELS as Record<string, string>)[media] ?? capitalised(media.replaceAll('_', ' '));
+}
 export type MadeBy = 'human' | 'ai' | 'unknown';
 /** The detail line's sentence for who made an asset; the filter's dropdown names the value ("Human", "AI") instead. */
 export const MADE_BY_SENTENCES: Record<MadeBy, string> = {
@@ -63,6 +71,11 @@ export const AXIS_LABELS: Record<Axis, [string, string]> = {
   quiet_loud: ['Quiet', 'Loud'], warm_cold: ['Warm', 'Cold'], geometric_humanist: ['Geometric', 'Humanist'],
   dense_airy: ['Dense', 'Airy'], polished_raw: ['Polished', 'Raw'],
 };
+/** An axis for a person, as the detail panel reads it ("Quiet – Loud"); an unknown key reads as capitalised words. */
+export function axisLabel(key: string): string {
+  const ends = (AXIS_LABELS as Record<string, [string, string] | undefined>)[key];
+  return ends ? ends.join(' – ') : capitalised(key.replaceAll('_', ' '));
+}
 export const ENUMS = {
   type_style: ['geometric_sans', 'humanist_sans', 'serif', 'mono', 'script', 'display', 'none'],
   spacing_density: ['tight', 'balanced', 'airy'],
@@ -86,17 +99,17 @@ export const ENUM_VALUE_LABELS: { [F in EnumField]: Record<(typeof ENUMS)[F][num
     object: 'Object', space: 'Space', motion_still: 'Motion still',
   },
 };
-/** The label for one enum value; a value the app doesn't know (an older or newer backend) reads as itself. */
+/** The label for one enum value; a value the app doesn't know (an older or newer backend) reads as capitalised words. */
 export function enumValueLabel(field: EnumField, value: string): string {
-  return (ENUM_VALUE_LABELS[field] as Record<string, string> | undefined)?.[value] ?? value;
+  return (ENUM_VALUE_LABELS[field] as Record<string, string> | undefined)?.[value] ?? capitalised(value.replaceAll('_', ' '));
 }
 /** The field names the detail panel shows above each enum select. */
 export const ENUM_FIELD_LABELS: Record<EnumField, string> = {
   type_style: 'Type style', spacing_density: 'Spacing', layout: 'Layout', medium: 'Medium',
 };
-/** A field key's name for a person: the detail panel's words for an enum field, else the key with spaces. */
+/** A field key's name for a person: the detail panel's words for an enum field, else the key as capitalised words. */
 export function enumFieldLabel(key: string): string {
-  return (ENUM_FIELD_LABELS as Record<string, string>)[key] ?? key.replaceAll('_', ' ');
+  return (ENUM_FIELD_LABELS as Record<string, string>)[key] ?? capitalised(key.replaceAll('_', ' '));
 }
 export const TEXT_FIELDS = ['summary', 'subject', 'composition_notes'] as const;
 export type TextField = (typeof TEXT_FIELDS)[number];

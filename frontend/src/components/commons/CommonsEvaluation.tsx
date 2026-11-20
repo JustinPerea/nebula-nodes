@@ -14,7 +14,7 @@ import { CommonsErrorLine } from './CommonsErrorLine';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useCommonsLine, useReloadEpoch, useLoadLineQuietOnReconnect } from './useCommonsLine';
 import { CommonsLoadingLine } from './CommonsLoadingLine';
-import { enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
+import { axisLabel, enumFieldLabel, enumValueLabel, paletteRoleLabel, type EnumField } from '../../lib/commonsTypes';
 
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
@@ -375,8 +375,8 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
           <option value="">Choose one…</option>{values.map((value) => <option key={value} value={value}>{enumValueLabel(key as EnumField, value)}</option>)}
         </select></label>)}
         <h4 className="evaluation-subhead">Character</h4>
-        {batch.axes.map((key) => <div className="evaluation-axis" key={key}><label>{pretty(key)} · {labels.axes[key]?.toFixed(2) ?? 'Unanswered'}
-          <input aria-label={pretty(key)} aria-valuetext={labels.axes[key] === undefined ? 'Unanswered' : String(labels.axes[key])} type="range" min={-1} max={1} step={0.05} value={labels.axes[key] ?? 0}
+        {batch.axes.map((key) => <div className="evaluation-axis" key={key}><label>{axisLabel(key)} · {labels.axes[key]?.toFixed(2) ?? 'Unanswered'}
+          <input aria-label={axisLabel(key)} aria-valuetext={labels.axes[key] === undefined ? 'Unanswered' : String(labels.axes[key])} type="range" min={-1} max={1} step={0.05} value={labels.axes[key] ?? 0}
             onChange={(e) => change({ axes: { ...labels.axes, [key]: Number(e.target.value) } })} /></label>
           <div><span>−1 {key.split('_')[0]}</span><button className="commons-button" onClick={() => change({ axes: { ...labels.axes, [key]: 0 } })}>Set neutral</button><span>+1 {key.split('_')[1]}</span></div>
         </div>)}
