@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from services.node_names import quoted
 from services.text_cut import clean_name
 
 # The words whose plural isn't the singular plus "s".
@@ -72,7 +73,31 @@ def port_words(label: Any, port_id: str) -> str:
         port_id.replace("_", " ").replace("-", " ").strip() or port_id
 
 
+def _inner_quotes_straight(name: str) -> str:
+    """A curly quote inside a name becomes a straight one, so the pair that
+    wraps the name is the only curly pair on the line: `a” · b` reads as
+    “a" · b”’s images, not as a second owner."""
+    return name.replace("\u201c", '"').replace("\u201d", '"')
+
+
 def collapsed_owner(name: str, port: str | None) -> str:
-    """“Preview” for a node with one port of results, “Preview”’s images with more."""
+    """“Preview” for a node with one port of results, “Preview”’s images with more.
+    The name is wrapped by node_names.quoted (the rule the cursor bubbles and the
+    spending refusals use: a pair the person typed around it is not doubled)."""
     shown = clean_name(name) or "?"  # a label is free text: a newline mustn’t split the one-line summary
-    return f"“{shown}”’s {port}" if port else f"“{shown}”"
+    owner = quoted(_inner_quotes_straight(shown))
+    return f"{owner}’s {port}" if port else owner
+
+
+# The most output paths a run result lists before it says how many more there
+# are (a run of 2,000 images would otherwise put 2,000 paths into an agent’s context).
+OUTPUT_PATHS_SHOWN = 20
+
+
+def capped_paths(paths: list[Any]) -> list[Any]:
+    """``paths`` whole up to OUTPUT_PATHS_SHOWN; past that, the first 20 and
+    one last line, "and 1980 more (2000 in all)"."""
+    if len(paths) <= OUTPUT_PATHS_SHOWN:
+        return paths
+    more = len(paths) - OUTPUT_PATHS_SHOWN
+    return [*paths[:OUTPUT_PATHS_SHOWN], f"and {more} more ({len(paths)} in all)"]

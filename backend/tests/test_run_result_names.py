@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import io
+import json
 
 import pytest
 
@@ -67,19 +68,80 @@ def test_printing_a_run_result_leaves_the_readers_scene_reads_alone(api, monkeyp
     noted: list = []
     real = scene_keys.note_read
     monkeypatch.setattr(scene_keys, "note_read", lambda *a, **k: (noted.append(a), real(*a, **k))[1])
-    # The run, collapsed output and all, printed the way the CLI does.
+    # The run, collapsed output and all, printed the way the CLI does, with a
+    # client that records every call it gets (none may come).
     from cli.commands import execute
 
     result = _finished(api.main, "run-names-2", {node: {"moodboard": {"type": "Moodboard", "value": {"k": "x" * 300}}}})
+    client = _RecordingClient()
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        execute._report(result, None)
+        execute._report(result, client)
+    assert client.calls == []
     assert out.getvalue().splitlines()[0].startswith("“") and "moodboard" not in out.getvalue().splitlines()[0].split("·")[0]
     assert noted == []
     assert reads() == read_before  # the read did not move forward
     refused = _put(api, node, AGENT, _scene("a quiet street", "codex's busy street"))
     assert refused.status_code == 409 and refused.json()["code"] == "scene_changed"
     assert _prompts(api, node) == ["the person typed this", "a busy street"]
+
+
+class _RecordingClient:
+    """Any attribute it is asked for is a call it records (get_graph, get_nodes,
+    snapshot, a bare request): printing a collapsed run result makes none."""
+
+    def __init__(self):
+        self.calls: list = []
+
+    def __getattr__(self, name):
+        def call(*args, **kwargs):
+            self.calls.append(name)
+            return {}
+
+        self.calls.append(f"attribute:{name}")
+        return call
+
+
+def test_the_mcp_run_result_reads_nothing_from_the_canvas(monkeypatch):
+    import mcp_server
+
+    calls: list = []
+    monkeypatch.setattr(mcp_server, "_canvas_call", lambda *a, **k: calls.append(("canvas", a)) or {})
+    monkeypatch.setattr(mcp_server, "_api", lambda *a, **k: calls.append(("api", a)) or _RecordingClient())
+    payload = {"status": "finished", "runId": "r", "names": {"n3": "Preview"}, "ports": {"n3": {"moodboard": "Moodboard"}},
+               "results": {"n3": {"moodboard": {"type": "Moodboard", "value": {"k": "x" * 5000}}}}}
+    shown = json.loads(mcp_server._run_result(payload, None)[0])
+    assert shown["outputs"]["n3"]["moodboard"]["value"].startswith("“Preview” · moodboard bundle")
+    assert calls == []
+
+
+def test_a_run_result_survives_a_node_whose_ports_raise(api, monkeypatch):  # noqa: F811
+    good = api.graph.add_node("cinema-scene", {"scene": _scene("a")}, position={"x": 0, "y": 0})
+    bad = api.graph.add_node("cinema-scene", {"scene": _scene("b")}, position={"x": 0, "y": 0})
+    api.graph.nodes[good]["label"] = "Good one"
+    real = api.main.node_ports
+
+    def ports(definition_id, params, definition, key):
+        if params is api.graph.nodes[bad].get("params"):
+            raise RuntimeError("a definition that cannot say its ports")
+        return real(definition_id, params, definition, key)
+
+    monkeypatch.setattr(api.main, "node_ports", ports)
+    results = {good: {"shot_s1": {"type": "Image", "value": "x"}}, bad: {"shot_s1": {"type": "Image", "value": "y"}}}
+    out = _finished(api.main, "run-names-3", results)
+    assert out["status"] == "finished" and out["results"] == results  # the finished run is not lost
+    assert out["names"] == {good: "Good one"} and set(out["ports"]) == {good}  # the other node is named
+
+
+def test_a_node_whose_name_raises_keeps_the_run_result(api, monkeypatch):  # noqa: F811
+    node = api.graph.add_node("cinema-scene", {"scene": _scene("a")}, position={"x": 0, "y": 0})
+
+    def boom(*args, **kwargs):
+        raise ValueError("no name")
+
+    monkeypatch.setattr(api.main.node_route, "node_name", boom)
+    out = api.main._with_result_names({"status": "finished", "results": {node: {"t": {"type": "Text", "value": "v"}}}})
+    assert out["results"][node]["t"]["value"] == "v" and out["names"] == {} and out["ports"] == {}
 
 
 # -- connected: any canvas tab -----------------------------------------------------------------

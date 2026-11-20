@@ -26,7 +26,7 @@ from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import agent_spend as _agent_spend
 from services import universal_ports as _universal_ports
-from services.wording import collapsed_owner, collapsed_summary, counted, port_words
+from services.wording import capped_paths, collapsed_owner, collapsed_summary, counted, port_words
 from services.cursor_actions import (ACTIONS as _CURSOR_ACTIONS, surface_clash as _surface_clash,
                                      surface_clash_refusal as _surface_clash_refusal,
                                      surface_exclusive_refusal as _surface_exclusive_refusal,
@@ -2059,17 +2059,18 @@ def _absolute(value: Any) -> Any:
 
 
 def _is_output_paths(value: Any) -> bool:
-    """A list of Nebula’s own output files ("/api/outputs/..."). It is never
-    collapsed: no tool returns the whole list (view_output shows a contact sheet
-    of the first four), so a summary would lose the paths."""
+    """A list of Nebula’s own output files ("/api/outputs/..."). It is not
+    collapsed to a summary (no tool returns the whole list: view_output shows a
+    contact sheet of the first four), so the paths stay; past 20 the list is cut
+    to its first 20 and a line with the count (services.wording.capped_paths)."""
     return (isinstance(value, list) and bool(value)
             and all(isinstance(item, str) and item.startswith("/api/outputs/") for item in value))
 
 
 def _brief_outputs(outputs: Any, node_id: str = "", names: Any = None) -> dict[str, Any]:
     """A node’s outputs as a run result carries them. A string over the limit is cut;
-    a dict or a list whose JSON is over it (not a list of output file paths, which
-    stays whole: no tool returns the full list) comes back as one line (design: “Preview” ·
+    a dict or a list whose JSON is over it (not a list of output file paths: the first 20 stay, then
+    “and N more (T in all)”; no tool returns the full list) comes back as one line (design: “Preview” ·
     moodboard bundle, 51 KB. view_output shows it whole.; with more than one port of
     results the port follows the name: “Preview”’s images · …). ``names``: a function
     that returns {"names": {node id: name}, "ports": {node id: {port id: label}}},
@@ -2088,6 +2089,8 @@ def _brief_outputs(outputs: Any, node_id: str = "", names: Any = None) -> dict[s
                 (found.get("names") or {}).get(node_id) or node_id,
                 port_words(((found.get("ports") or {}).get(node_id) or {}).get(port), port) if len(outputs) > 1 else None)
             value = f"{owner} · {collapsed_summary(entry.get('type'), value)}. view_output shows it whole."
+        if _is_output_paths(value):
+            value = capped_paths(value)
         brief[port] = {"type": entry.get("type"), "value": _absolute(value)}
     return brief
 

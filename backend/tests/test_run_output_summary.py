@@ -337,14 +337,47 @@ def test_a_finished_run_prints_its_results_without_a_name_lookup():
     assert out.getvalue().splitlines()[0].startswith("“n3” · moodboard bundle")
 
 
-def test_a_list_of_output_file_paths_is_never_collapsed_by_mcp():
+def test_a_list_of_output_file_paths_is_never_summarised_by_mcp():
     import mcp_server
 
     paths = ["/api/outputs/" + "a" * 100 + f"{i}.png" for i in range(60)]
     out = mcp_server._brief_outputs({"images": {"type": "Image", "value": paths}}, "n3", lambda: LOOKUP)
-    assert len(out["images"]["value"]) == 60 and out["images"]["value"][0].endswith("a" * 100 + "0.png")
+    assert len(out["images"]["value"]) == 21 and out["images"]["value"][0].endswith("a" * 100 + "0.png")  # 20 and the count
+    assert out["images"]["value"][20] == "and 40 more (60 in all)"
     assert out["images"]["value"][0].startswith("http")  # absolute, as every output path is
     # A list of anything else over the limit still collapses.
     mixed = paths[:-1] + [{"url": "x"}]
     assert "view_output shows it whole." in mcp_server._brief_outputs(
         {"images": {"type": "Array", "value": mixed}}, "n3", lambda: LOOKUP)["images"]["value"]
+
+
+def test_a_closing_curly_quote_in_a_label_does_not_end_the_owner_early():
+    from services.wording import collapsed_owner
+
+    # Inner curly quotes go straight, so the wrapping pair is the only curly pair.
+    assert collapsed_owner("a” · b", "images") == "“a\" · b”’s images"
+    assert collapsed_owner("a“ · b”", None) == "“a\" · b\"”"
+    # The shared rule: a pair a person typed around the whole name is not doubled.
+    assert collapsed_owner("“Hero”", None) == "“Hero”"
+    assert collapsed_owner("Hero", "images") == "“Hero”’s images"
+    text = format_run_results(_results(_bundle()), names={"n3": "a” · b"})
+    assert text.splitlines()[0] == "“a\" · b” · moodboard bundle, 51 KB. Add --verbose to print it."
+    import mcp_server
+
+    out = mcp_server._brief_outputs({"m": {"type": "Moodboard", "value": _bundle()}}, "n3", {"names": {"n3": "a” · b"}})
+    assert out["m"]["value"].startswith("“a\" · b” · moodboard bundle")
+
+
+def test_a_long_list_of_output_paths_is_cut_to_twenty_and_a_count():
+    import mcp_server
+
+    def listed(count: int) -> list:
+        paths = [f"/api/outputs/{i}.png" for i in range(count)]
+        return mcp_server._brief_outputs({"images": {"type": "Image", "value": paths}}, "n3", lambda: LOOKUP)["images"]["value"]
+
+    assert len(listed(20)) == 20 and not any("more" in str(p) for p in listed(20))  # 20 print whole
+    over = listed(21)
+    assert len(over) == 21 and over[19].endswith("/api/outputs/19.png") and over[20] == "and 1 more (21 in all)"
+    huge = listed(2000)
+    assert len(huge) == 21 and huge[20] == "and 1980 more (2000 in all)"
+    assert huge[0].startswith("http")  # the paths that stay are absolute

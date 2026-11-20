@@ -6100,7 +6100,7 @@ to print it.`
 `--verbose` on `nebula run`, `run-all` and `result` prints them whole; `--json` prints
 the raw result and keeps the exit codes. `run_nodes` and `get_run` in MCP send the same
 line for a dict or list over 4000 characters (“Preview” · moodboard bundle, 51 KB.
-view_output shows it whole.; “Preview”’s images · … with more than one port), and cut a longer string at 4000. A list of output file paths (“/api/outputs/…”) always comes back whole: no tool returns the full list. The names in these lines come with the run result (`names`, node id to the name the canvas shows, and `ports`, node id to {output port id: label}, for the nodes in `results`, on `POST /api/graph/run` and `GET /api/graph/runs/{id}`); printing a result reads nothing else, so it never moves your Cinema scene reads forward.
+view_output shows it whole.; “Preview”’s images · … with more than one port), and cut a longer string at 4000. A list of output file paths (“/api/outputs/…”) is not summarised (no tool returns the full list): the first 20 come back, then one line “and N more (T in all)”. The names in these lines come with the run result (`names`, node id to the name the canvas shows, and `ports`, node id to {output port id: label}, for the nodes in `results`, on `POST /api/graph/run` and `GET /api/graph/runs/{id}`); printing a result reads nothing else, so it never moves your Cinema scene reads forward.
 
 Finished outputs land on the canvas as each node completes, so a stopped
 run keeps what it made. The backend remembers the last 50 finished CLI runs

@@ -26950,16 +26950,27 @@ def _with_result_names(response: dict[str, Any]) -> dict[str, Any]:
     definitions = node_registry.get_all()
     names: dict[str, str] = {}
     ports: dict[str, dict[str, str]] = {}
+    failed = 0
+    first: Exception | None = None
     for node_id in results:
         node = cli_graph.nodes.get(str(node_id))
         if not node:
             continue
-        definition_id = str(node.get("definitionId") or "")
-        definition = definitions.get(definition_id)
-        names[str(node_id)] = node_route.node_name(definition, node.get("label"), definition_id or str(node_id))
-        ports[str(node_id)] = {str(p.get("id")): p.get("label")
-                               for p in node_ports(definition_id, node.get("params"), definition, "outputPorts")
-                               if isinstance(p, dict)}
+        try:
+            definition_id = str(node.get("definitionId") or "")
+            definition = definitions.get(definition_id)
+            name = node_route.node_name(definition, node.get("label"), definition_id or str(node_id))
+            labels = {str(p.get("id")): p.get("label")
+                      for p in node_ports(definition_id, node.get("params"), definition, "outputPorts")
+                      if isinstance(p, dict)}
+        except Exception as exc:  # noqa: BLE001 - a finished run, perhaps a paid one, must still return its results
+            failed += 1
+            first = first or exc
+            continue  # this node is named by its id and its ports by their ids in words
+        names[str(node_id)] = name
+        ports[str(node_id)] = labels
+    if failed:
+        logging.getLogger("nebula.run").debug("%d node(s) left unnamed in a run result", failed, exc_info=first)
     return {**response, "names": names, "ports": ports}
 
 
