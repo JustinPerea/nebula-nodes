@@ -173,7 +173,7 @@ def _scrub(text: str, token: str | None) -> str:
 def quota_error(message: str, *, signed_in: bool) -> IdolSpaceError:
     if signed_in:
         line = ("Your Hugging Face GPU allowance is used up for now. Try again later, "
-                "or raise it on your Hugging Face account.")
+                "or raise it on Hugging Face.")
         text = f"The Idol Space refused the run: your ZeroGPU quota is used up ({message})"
     else:
         line = ANONYMOUS_ALLOWANCE_OUT
@@ -195,7 +195,7 @@ def gpu_busy_error(*, detail: str) -> IdolSpaceError:
     return with_provider_line(
         IdolSpaceError(f"ZeroGPU had no free GPU for the Idol Space within its queue wait; "
                        f"the quota is untouched ({detail})"),
-        "Hugging Face had no free GPU for Idol. Try again in a few minutes.")
+        "Hugging Face has no free GPU for Idol right now. Try again in a few minutes.")
 
 
 def space_limit_error(*, detail: str) -> IdolSpaceError:
@@ -213,7 +213,7 @@ def token_not_applied_error(*, detail: str) -> IdolSpaceError:
     return with_provider_line(
         IdolSpaceError("HF_TOKEN was sent, but ZeroGPU ran the Idol Space without it (no X-IP-Token reached "
                        f"the Space) and hit the anonymous limit ({detail})"),
-        "Idol ran without your Hugging Face token and hit the free allowance. "
+        "It ran without your Hugging Face token and hit the free allowance. "
         "Check your token in Settings, then try again.")
 
 
@@ -228,7 +228,7 @@ def duration_token_not_applied_error(*, detail: str) -> IdolSpaceError:
         IdolSpaceError("HF_TOKEN was sent, but ZeroGPU refused the Idol Space's per-run GPU ask as over the "
                        "maximum: either the token didn't apply, or a free account's per-task cap is under the ask "
                        f"({detail})"),
-        "Idol ran without your Hugging Face token and hit the free allowance. "
+        "It ran without your Hugging Face token and hit the free allowance. "
         "Check your token in Settings, then try again.")
 
 
@@ -240,12 +240,12 @@ def duration_error(*, detail: str, signed_in: bool) -> IdolSpaceError:
         return with_provider_line(
             IdolSpaceError(f"The Idol Space asks ZeroGPU for more time per run than this Hugging Face "
                            f"account allows ({detail})"),
-            "Idol needs more GPU time per run than your Hugging Face account allows. "
+            "It needs more GPU time per run than your Hugging Face account allows. "
             "Raise your allowance on Hugging Face, then try again.")
     return with_provider_line(
         IdolSpaceError(f"The Idol Space asks ZeroGPU for more time per run than the anonymous allowance "
                        f"gives; add HF_TOKEN in Settings > Providers ({detail})"),
-        "Idol needs more GPU time per run than the free allowance gives. "
+        "It needs more GPU time per run than the free allowance gives. "
         "Add your Hugging Face token in Settings, then try again.")
 
 
@@ -322,7 +322,7 @@ def signature_error(*, detail: str) -> IdolSpaceError:
     # The detail can carry the Space's own answer (a 422 body): behind Details.
     return with_provider_line(
         IdolSpaceError(f"The Idol Space's API changed ({detail}); Nebula's node no longer matches it"),
-        "Idol changed on Hugging Face, and this version of Nebula can’t run it. Update Nebula, then try again.")
+        "Idol changed on Hugging Face and this version of Nebula can’t run it. Update Nebula, then try again.")
 
 
 def check_signature(info: Any) -> None:
@@ -409,7 +409,7 @@ def agent_call_stop(node: GraphNode) -> IdolProposalNeeded:
 
 def token_refused(*, status: int = 401) -> IdolSpaceError:
     return with_person_line(with_api_status(IdolSpaceError(f"Hugging Face refused the HF_TOKEN ({status})"), status),
-                            "Hugging Face didn’t accept your token. Check it in Settings.")
+                            "Hugging Face rejected your token. Check your Hugging Face token in Settings.")
 
 
 def token_bad_character() -> IdolSpaceError:
@@ -419,7 +419,7 @@ def token_bad_character() -> IdolSpaceError:
     return with_person_line(
         IdolSpaceError("The HF_TOKEN in Settings has a character Hugging Face tokens never have "
                        "(a space, a control character or non-ASCII), so Nebula sent nothing"),
-        "This token has a character Hugging Face tokens can’t have. "
+        "The token has a character Hugging Face tokens can’t have. "
         "Copy it again from Hugging Face, then paste it in Settings.")
 
 
@@ -445,7 +445,7 @@ def space_missing_error(*, status: int, code: str | None) -> IdolSpaceError:
     return with_person_line(
         IdolSpaceError(f"Hugging Face reports the Idol Space (speridlabs/idol) missing: deleted, private, "
                        f"gated or disabled (Hub API answered {status}, {code or 'no error code'})"),
-        "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead.")
+        "Idol isn’t on Hugging Face anymore. Use another 3D node.")
 
 
 # huggingface_hub's own rule (2.4.0 utils/_http.py hf_raise_for_status). Its
@@ -884,7 +884,8 @@ async def run_idol(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
     image_value = image.value[0] if image is not None and isinstance(image.value, list) and image.value else (
         image.value if image is not None else None)
     if not image_value:
-        raise as_person_line(ValueError("Idol needs an image. Connect one, then run it again."))
+        raise with_person_line(ValueError("Idol needs an image. Connect one, then run it again."),
+                               "It needs an image. Connect one, then run it again.")
     # Settings and the settings check trim too; this is the backstop.
     token = clean_token(api_keys.get(TOKEN_KEY))
     # A run on a PRO, Team or Enterprise token can be billed by Hugging Face

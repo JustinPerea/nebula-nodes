@@ -597,19 +597,19 @@ token-not-applied lines only follow a run with one.
 
 | Situation | The card's line |
 |---|---|
-| No image | "Idol needs an image. Connect one, then run it again." |
+| No image | "Idol needs an image. Connect one, then run it again." (agents); the card line is "It needs an image. Connect one, then run it again." |
 | No token, the free GPU time used up (the quota text, or the Space's own limit; GM r12 item 6) | "Hugging Face’s free GPU time for Idol is used up for now. Try again later, or add your Hugging Face token in Settings to use your own allowance." |
-| The person's quota used up | "Your Hugging Face GPU allowance is used up for now. Try again later, or raise it on your Hugging Face account." |
-| No GPU free in the queue | "Hugging Face had no free GPU for Idol. Try again in a few minutes." |
-| A token was sent but didn't apply (no IP token reached the Space, or the quota text is the IP-only one) | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." |
-| The run's ask (120 s, or 180 s on Blackwell) is more than the allowance per run, no token | "Idol needs more GPU time per run than the free allowance gives. Add your Hugging Face token in Settings, then try again." |
-| The same with a token (either the token didn't apply, or a free account's per-task cap is under the ask; the text is the same for both, so the first live run settles it; until then GM r6 #7 shows the token line) | "Idol ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." The signed-in duration line ("Idol needs more GPU time per run than your Hugging Face account allows. Raise your allowance on Hugging Face, then try again.") stays in code, unused, for the first live run to confirm or replace. |
+| The person's quota used up | "Your Hugging Face GPU allowance is used up for now. Try again later, or raise it on Hugging Face." |
+| No GPU free in the queue | "Hugging Face has no free GPU for Idol right now. Try again in a few minutes." |
+| A token was sent but didn't apply (no IP token reached the Space, or the quota text is the IP-only one) | "It ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." |
+| The run's ask (120 s, or 180 s on Blackwell) is more than the allowance per run, no token | "It needs more GPU time per run than the free allowance gives. Add your Hugging Face token in Settings, then try again." |
+| The same with a token (either the token didn't apply, or a free account's per-task cap is under the ask; the text is the same for both, so the first live run settles it; until then GM r6 #7 shows the token line) | "It ran without your Hugging Face token and hit the free allowance. Check your token in Settings, then try again." The signed-in duration line ("It needs more GPU time per run than your Hugging Face account allows. Raise your allowance on Hugging Face, then try again.") stays in code, unused, for the first live run to confirm or replace. |
 | Space sleeping or building past 180 s | "Idol is still starting on Hugging Face. Try again in a few minutes." |
 | Space paused, stopped or failed | "Idol isn’t running on Hugging Face right now. Try again later." |
-| Space missing (deleted, private, gated or disabled; with or without a token) | "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead." |
-| Signature changed | "Idol changed on Hugging Face, and this version of Nebula can’t run it. Update Nebula, then try again." |
-| Token refused (with a token, a 401 or 403 from the Hub, `/gradio_api/info`, the upload, `/call/run` or its stream) | "Hugging Face didn’t accept your token. Check it in Settings." |
-| Token with a character tokens can't have (leading and trailing spaces and line breaks are trimmed first) | "This token has a character Hugging Face tokens can’t have. Copy it again from Hugging Face, then paste it in Settings." (the Settings field, and the settings check, which then sends nothing: "…then paste it here.") |
+| Space missing (deleted, private, gated or disabled; with or without a token) | "Idol isn’t on Hugging Face anymore. Use another 3D node." |
+| Signature changed | "Idol changed on Hugging Face and this version of Nebula can’t run it. Update Nebula, then try again." |
+| Token refused (with a token, a 401 or 403 from the Hub, `/gradio_api/info`, the upload, `/call/run` or its stream) | "Hugging Face rejected your token. Check your Hugging Face token in Settings." |
+| Token with a character tokens can't have (leading and trailing spaces and line breaks are trimmed first) | "The token has a character Hugging Face tokens can’t have. Copy it again from Hugging Face, then paste it in Settings." (the Settings field, and the settings check, which then sends nothing: "…then paste it here.") |
 | The image was empty | "The image Idol got is empty. Check the node that makes it, then run Idol again." |
 | The model couldn't make an object | "Idol couldn’t make a 3D object from this image. Try another image, or open Details to see why." |
 | The Space stopped with no message | "Idol stopped without saying why. Try again in a minute." |
