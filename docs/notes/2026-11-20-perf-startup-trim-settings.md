@@ -1,6 +1,6 @@
 # Startup set: the Settings dock loads on idle (2026-11-20)
 
-Branch perf/startup-trim, from main 386fefd7. Main's startup set sat 4,254 bytes under the raw limit (1,867,746 of 1,870,000), so a feature PR that added a few hundred bytes could fail the budget check. This change takes 12,066 bytes raw and 3,683 gzip out of the set and leaves the limits as they are.
+Branch perf/startup-trim, from main 386fefd7. Main's startup set sat 2,254 bytes under the raw limit (1,867,746 of 1,870,000), so a feature PR that added a few hundred bytes could fail the budget check. This change takes 12,066 bytes raw and 3,683 gzip out of the set and leaves the limits as they are.
 
 ## Measurement
 

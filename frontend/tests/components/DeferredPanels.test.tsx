@@ -71,15 +71,19 @@ describe('deferred Run history', () => {
 
 describe('deferred Settings', () => {
   it('stays unmounted while closed, opens on the first dock open and keeps its close button', async () => {
-    const preload = vi.spyOn(DeferredSettings, 'preload');
+    // The loader itself, not a spy on the preload property: the idle preload list and the lazy
+    // component call the loader they captured, so only its result shows a fetch.
+    const { getSettings } = await import('../../src/lib/api');
+    vi.mocked(getSettings).mockClear();
     render(<SettingsPanel />);
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
-    expect(preload).not.toHaveBeenCalled();
+    expect(DeferredSettings.isLoaded()).toBe(false);
+    expect(getSettings).not.toHaveBeenCalled();
 
     act(() => useUIStore.getState().setLeftDock('settings'));
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(DeferredSettings.isLoaded()).toBe(true);
     expect(screen.getByRole('button', { name: 'Close settings panel' })).toBeInTheDocument();
-    preload.mockRestore();
   });
 });
 
