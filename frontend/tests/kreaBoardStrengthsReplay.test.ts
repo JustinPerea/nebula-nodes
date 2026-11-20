@@ -47,7 +47,7 @@ function recipe(board: 'nebula-moodboard' | 'krea-moodboard' | null = 'nebula-mo
 describe('runReplayNotes', () => {
   it('names the change date in the line', () => {
     expect(KREA2_BOARD_STRENGTHS_REPLAY_NOTE).toBe(
-      `Krea 2 moodboard strengths now add up to the moodboard's strength (changed ${KREA2_BOARD_STRENGTHS_CHANGED}), `
+      `Krea 2 moodboard strengths now add up to the moodboard’s strength (changed ${KREA2_BOARD_STRENGTHS_CHANGED}), `
       + 'so this replay can differ from the original.');
     expect(KREA2_BOARD_STRENGTHS_CHANGED).toBe('2026-10-20');
   });

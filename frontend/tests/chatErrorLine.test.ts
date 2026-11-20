@@ -87,13 +87,14 @@ describe('the chat stream error line', () => {
     expect(full('connection refused').details).toBeUndefined();
   });
 
-  it('shows a long single-line refusal written for the person as it is, with the error tone and no Details', () => {
+  it('shows a long single-line refusal written for the person with its apostrophes curled, with the error tone and no Details', () => {
     const apiKey = 'Codex agent is restricted to ChatGPT account login in Nebula. Current Codex auth is API-key billing mode. Use “Connect ChatGPT account” in Nebula, or run `codex logout` then `codex login` without `--with-api-key`.';
     expect(apiKey.length).toBeGreaterThan(200);
     expect(full(apiKey, { agentName: 'Codex' })).toEqual({ text: apiKey, because: false });
+    // The backend sends a straight apostrophe; the chat line curls it where it renders.
     const features = 'Codex has features on that Nebula hasn\'t reviewed for its agent (browser_use, js_repl), so the turn was not started. Review them and add each to CODEX_ALLOWED_FEATURES or CODEX_DISABLED_FEATURES in services/agent_profiles.py.';
     expect(features.length).toBeGreaterThan(200);
-    expect(full(features, { agentName: 'Codex' })).toEqual({ text: features, because: false });
+    expect(full(features, { agentName: 'Codex' })).toEqual({ text: features.replace("hasn't", 'hasn’t'), because: false });
   });
 
   it('puts a 6-line stack trace and a long non-sentence dump behind Details', () => {
