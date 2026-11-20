@@ -89,3 +89,67 @@ Decisions beyond the brief:
   "code" origin tag sits on every measured and source value.
 - `vite.extraction.config.ts` isn't in `tsconfig.node.json`'s include (that file is outside this lane), so it
   isn't type-checked; Vite loads it as is.
+
+## Reader extract-1, who may read, person corrections (round 3)
+
+`extraction/reader.py` is prompt version `extract-1`. It calls `commons.reader.read_image` with its own
+`system_prompt`, `schema` and `message` (all three optional there; left out, reader-1 is unchanged), so the
+command's flags, the scrubbed environment, the no-tools check on the init event, the timeout, the tree kill and
+the error kinds are Commons' own. Tests build both commands and compare them argument by argument: only the
+values after `--system-prompt` and `--json-schema` differ. The model id is `commons.reader.MODEL_ID`, the image
+goes through `composite_on` and `encode_png(max_edge=1568)` as in Commons, and the palette is listed as
+`P<index> hex share`, no few-shots. reader-1's field text is imported (everything before its `regions` line) and
+its validator is called on the output for the reader-1 part.
+
+What a read stores: `structure.read` = `{origin, model, prompt_version, read_at, reader_1, regions, text,
+spacing}` with fractions turned into whole pixels of the original image in code (`box_px`, `size_px`,
+`outer_margin_px`, gap `px`), every size and spacing value marked `estimate: true`. A reference to a region id
+that doesn't exist is dropped (a text run's region becomes null, a gap is dropped). The model's `shows` go to
+`record.shows` through the existing builder (origin `model`, status `proposal`, evidence must exist).
+Code then crops each region's box from the original and measures it: `structure.measured.region_measures[id]`
+(top 4 palette entries, value range, `from_model_box: true`), and `structure.measured.region_gaps`: the pixel
+gap for every pair of regions whose boxes don't overlap and whose spans overlap on exactly one axis (side by
+side gives an `x` gap, stacked gives a `y` gap). That includes pairs with a third region between them; it is not
+a nearest-neighbour list. `region_measures` is now a map (it was an empty list in measure-only records; the
+measurer writes `{}`).
+
+Replacing a read: `apply_read` keeps corrections as they are, replaces `structure.read`, the region measures and
+gaps and the model-origin shows, keeps person and agent shows, and clears `read_requests` (the read answers them).
+New model shows skip ids that a kept show or a stored correction already names, so an old correction can't land
+on a new statement.
+
+Known limit: corrections that point into the old read by id (`structure.read.regions.r1.role`,
+`...text.t2.content`) are kept and apply to whatever region or run has that id in the new read, because ids are
+r1.. and t1.. in order. A person should look at their corrections after reading again. Corrections to a model
+show (`shows.s1.statement`) can't misapply this way (see above); they are skipped when the show is gone.
+
+Who may start a read: only the person. The page's "Read with Claude" opens an inline confirm and sends nothing
+until Read is pressed; `POST /api/records/{id}/read` (token, Origin and Host guards like every POST) runs it under
+one lock per server (a second request gets 409), and a record that has a read needs `again: true`. The CLI's
+`python -m extraction read <record>` needs `sys.stdin.isatty()` and `sys.stdout.isatty()` and the word `read`
+typed; there is no `--yes`; without a terminal it refuses with a sentence pointing at the page. No MCP tool reads:
+`extraction_request_read(record, reason)` appends `{actor: "agent", at, reason}` to `read_requests` (reason at
+most 300 characters, at most 20 waiting; refused beyond that rather than dropping an older one) and the page
+shows each above the Read button. A test asserts that no extraction MCP tool mentions the reader, and that
+`mcp_server.py` doesn't import it. `read_requests` is absent on records saved earlier; they load.
+
+The read can take minutes, so the server asks the model first and applies the result to a fresh load of the
+record, so a correction made meanwhile is kept (tested). A failed read changes nothing and answers 502 with a
+plain sentence per error kind.
+
+`serve --fake-reader FILE` (development only) answers every read with that file's structured output through
+`validate_read`/`apply_read` and records `model: "fake-reader"`; no process is spawned. The page shows "fake
+reader" next to the model name. Fixtures: `tests/fixtures/extraction/landing.png` (made by a throwaway PIL script)
+and `fake_read_landing.json`. The reader tests replace `read_image`'s default spawn with one that raises, so a
+test that forgets to inject a fake fails instead of calling `claude`.
+
+Corrections: `POST /api/records/{id}/corrections` takes `{folder, corrections}`; the actor is always "person" and
+any actor in the body is ignored. The page edits a region's role and label, a text run's words and weight and a
+show's statement; each saves one correction and shows "you". The page renders the `effective` view and tags each
+value from the saved record's corrections.
+
+Other decisions: the overlay frame is sized with container query units (`cqw`/`cqh`) so boxes in percentages
+land on the drawn image; `validate_read` returns `(read, shows)` and takes `model` and `read_at` keywords;
+a fully transparent image is refused before sending (as Commons does); the source section's "Read" row is now
+"Added" so it can't be taken for the Claude read. Not done: no Approve button (approval is the Viewer's), no
+editing of spacing, reading fields or evidence on the page, no smaller thumbnail file.

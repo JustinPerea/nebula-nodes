@@ -92,7 +92,7 @@ def test_rendering_png_keeps_alpha():
 
 def test_measured_values_on_the_accent_image():
     block, perceptual = measure(intake(_bytes("gradient_accent.png")).image)
-    assert block["origin"] == "code" and block["code_version"] == "measure-2" and block["region_measures"] == []
+    assert block["origin"] == "code" and block["code_version"] == "measure-2" and block["region_measures"] == {}
     palette = block["palette"]
     assert [p["index"] for p in palette] == list(range(len(palette)))
     assert [p["hex"] for p in palette if p["is_accent"]] == ["#e61e28"]

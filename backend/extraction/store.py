@@ -296,3 +296,11 @@ def correct(target: str | os.PathLike[str], corrections: Iterable[dict[str, Any]
     updated = rec.add_corrections(_read_record_file(directory), corrections, actor, clock=clock)
     write(directory, updated)
     return updated
+
+
+def request_read(target: str | os.PathLike[str], reason: str, *, clock: rec.Clock | None = None) -> dict[str, Any]:
+    """Append an agent's read request to a record and save it. Returns the updated record."""
+    directory = _locate(target)
+    updated = rec.add_read_request(_read_record_file(directory), reason, clock=clock)
+    write(directory, updated)
+    return updated

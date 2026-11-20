@@ -1,4 +1,4 @@
-"""The four extraction MCP tools: registered, annotated, path-checked and working in process."""
+"""The five extraction MCP tools: registered, annotated, path-checked and working in process."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +12,7 @@ import mcp_server
 from services import krea_agent_mcp
 
 FIXTURES = Path(__file__).parent / "fixtures" / "extraction"
-TOOLS = ("extraction_measure", "extraction_list", "extraction_show", "extraction_correct")
+TOOLS = ("extraction_measure", "extraction_list", "extraction_show", "extraction_correct", "extraction_request_read")
 
 
 @pytest.fixture
@@ -40,10 +40,11 @@ def test_the_tools_are_registered_annotated_and_listed_for_agents():
         assert tools[name].annotations.openWorldHint is False
     assert tools["extraction_list"].annotations.readOnlyHint is True
     assert tools["extraction_show"].annotations.readOnlyHint is True
-    for name in ("extraction_measure", "extraction_correct"):
+    for name in ("extraction_measure", "extraction_correct", "extraction_request_read"):
         assert tools[name].annotations.readOnlyHint is False and tools[name].annotations.destructiveHint is False
     assert set(tools["extraction_measure"].inputSchema["properties"]) == {"image_path", "folder", "replace"}
     assert set(tools["extraction_correct"].inputSchema["properties"]) == {"record", "corrections"}
+    assert set(tools["extraction_request_read"].inputSchema["properties"]) == {"record", "reason"}
 
 
 def test_the_tools_are_documented():
@@ -53,7 +54,7 @@ def test_the_tools_are_documented():
     for name in TOOLS:
         assert f"`{name}`" in setup, name
         assert name in skill, name
-    assert "not an agent tool yet" in setup and "not an agent tool yet" in skill
+    assert "can't start a model read" in setup and "can't start a read" in skill
 
 
 def test_measure_list_show_correct_in_process(image, folder):
@@ -168,3 +169,42 @@ def test_a_symlinked_or_hard_linked_image_is_not_read(image, folder, tmp_path):
     from moodboard_client import _open_no_follow
     with pytest.raises(OSError):
         _open_no_follow(Path(str(link)))
+
+
+def test_request_read_appends_for_the_person_and_caps(image, folder):
+    record_id = mcp_server.extraction_measure(str(image), str(folder))["record"]["id"]
+    done = mcp_server.extraction_request_read(str(folder / record_id), "I want the regions to compare headers.")
+    assert done["requested"] is True and done["waiting"] == 1 and "extraction page" in done["message"]
+    shown = mcp_server.extraction_show(str(folder / record_id))
+    assert shown["record"]["read_requests"][0]["actor"] == "agent"
+    assert shown["record"]["structure"]["read"] is None
+    for n in range(19):
+        mcp_server.extraction_request_read(str(folder / record_id), f"again {n}")
+    with pytest.raises(RuntimeError, match="already waiting"):
+        mcp_server.extraction_request_read(str(folder / record_id), "too many")
+    with pytest.raises(RuntimeError):
+        mcp_server.extraction_request_read(str(folder / record_id), "x" * 301)
+    with pytest.raises(RuntimeError):
+        mcp_server.extraction_request_read(str(folder / record_id), "")
+
+
+def test_request_read_checks_the_path_like_the_other_tools(tmp_path):
+    with pytest.raises(RuntimeError):
+        mcp_server.extraction_request_read(str(Path.home() / ".nebula" / "ex_0123456789abcdef"), "please")
+
+
+def test_no_agent_tool_can_start_a_read():
+    import inspect
+
+    names = [n for n in _tools() if n.startswith("extraction_")]
+    assert set(names) == set(TOOLS)
+    forbidden = ("read_record", "reader", "apply_read", "spawn", "claude", "commons")
+    for name in names:
+        source = inspect.getsource(getattr(mcp_server, name).fn if hasattr(getattr(mcp_server, name), "fn")
+                                   else getattr(mcp_server, name))
+        code = source.split('"""')[0] + (source.split('"""', 2)[2] if source.count('"""') >= 2 else "")
+        for word in forbidden:
+            assert word not in code, f"{name} mentions {word}"
+    # and nothing in the module imports the reader at all
+    assert "extraction.reader" not in Path(mcp_server.__file__).read_text()
+    assert "from extraction import reader" not in Path(mcp_server.__file__).read_text()

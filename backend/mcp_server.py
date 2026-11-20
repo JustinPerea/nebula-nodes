@@ -2581,7 +2581,8 @@ def commons_concentration(brand: str | None = None, ctx: Context | None = None) 
 # The work is in backend/extraction, called in this process: no server, no state
 # folder. Every path an agent passes goes through require_allowed_path first,
 # then through the store's own checks (the folder must exist and can't be Nebula's
-# own). The model read is not an agent tool yet.
+# own). No tool here reads an image with a model (that spends the person's Claude
+# usage): an agent can only ask, with extraction_request_read, and the person reads.
 
 def _extraction_call(fn, *args: Any, **kwargs: Any) -> Any:
     from extraction.errors import ExtractionRefused
@@ -2695,9 +2696,9 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     palette; who added it, its status and its decision link are set for you). Everything is checked first; one refusal adds none. Values code measured
     (`structure.measured`, `rendering`, `source`), the id and the schema are facts and
     can't be corrected, and neither can a record a person approved. Approval isn't a correction: `status`, `approved_by` and
-    `approved_at` are refused, and an agent can't approve a record. There is no model
-    read yet, so `structure.read.` paths are refused until there is one. Returns the
-    corrections added and the record's effective view."""
+    `approved_at` are refused, and an agent can't approve a record. `structure.read.` paths
+    are refused until the person has read the record with Claude.
+    Returns the corrections added and the record's effective view."""
     from extraction import record as rec
     from extraction import store
 
@@ -2705,6 +2706,22 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     before = len(_extraction_call(store.load, path)["corrections"])
     updated = _extraction_call(store.correct, path, corrections, "agent")
     return {"id": updated["id"], "added": updated["corrections"][before:], "effective": rec.effective(updated)}
+
+
+@_tool(annotations=_EDIT)
+def extraction_request_read(record: str, reason: str) -> dict[str, Any]:
+    """Ask the person to read an extraction record with Claude. You can't start a read: it
+    spends the person's Claude usage, so only the person does, from the extraction page's
+    Read button or at a terminal. This adds your `reason` (max 300 characters, in a
+    sentence) to the record's `read_requests`, and the page shows it above the button
+    ("An agent asked for a reading"). At most 20 wait on a record. Once the person has read
+    it, `structure.read` has the regions, text, spacing and shows; read it with
+    `extraction_show`."""
+    from extraction import store
+
+    updated = _extraction_call(store.request_read, _extraction_path(record), reason)
+    return {"id": updated["id"], "requested": True, "waiting": len(updated["read_requests"]),
+            "message": "The person reads it from the extraction page. You can't start a read."}
 
 
 # -- moodboards (Moodboard Studio's boards) -------------------------------------

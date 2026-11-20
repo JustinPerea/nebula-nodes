@@ -78,7 +78,52 @@ def _show(args: argparse.Namespace) -> int:
 def _serve(args: argparse.Namespace) -> int:
     from extraction.server import serve
 
-    return serve(port=args.port, dev=args.dev)
+    return serve(port=args.port, dev=args.dev, fake_reader=args.fake_reader)
+
+
+# Replaced by a test with a fake process; None means the real Claude CLI.
+_SPAWN: Any = None
+READ_WORD = "read"
+
+
+def _interactive() -> bool:
+    return bool(sys.stdin.isatty() and sys.stdout.isatty())
+
+
+def _read(args: argparse.Namespace) -> int:
+    """Read a record with Claude. It uses the person's Claude usage, so only a person at a terminal may start it."""
+    if not _interactive():
+        raise ExtractionRefused("A read uses your Claude usage, so it needs you at a terminal. "
+                                "Start it from the extraction page's Read button instead.")
+    directory = store._locate(args.record)
+    record = store.load(directory)
+    if record["structure"]["read"] is not None and not args.again:
+        raise ExtractionRefused("That record has already been read. Add --again to replace the reading.")
+    print("This sends the image to Claude through the Claude CLI and uses your Claude usage.")
+    if input(f"Type {READ_WORD} to go on: ").strip() != READ_WORD:
+        print("Not read.")
+        return 1
+    import asyncio
+
+    from commons import media
+
+    from extraction import reader
+
+    image = media.load_image(store.rendering_bytes(directory), "image/png", keep_alpha=True)
+
+    async def run() -> dict[str, Any]:
+        structured = await reader.ask(record, image, spawn=_SPAWN)
+        return reader.apply_read(store.load(directory), image, structured)
+
+    try:
+        updated = asyncio.run(run())
+    except reader.ReadFailed as exc:
+        raise ExtractionRefused(str(exc)) from None
+    except reader.AnalysisInvalid as exc:
+        raise ExtractionRefused(f"The answer didn't fit what the page expects ({exc}). Nothing was changed.") from None
+    store.write(directory, updated)
+    print(f"{_line(updated)}\nread: {len(updated['structure']['read']['regions'])} regions")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -103,7 +148,13 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8870, help="the port to listen on (default 8870)")
     serve.add_argument("--dev", action="store_true",
                        help="the page comes from the Vite dev server on 5870, which proxies /api here")
+    serve.add_argument("--fake-reader", metavar="FILE", help="development only: answer every read from this JSON "
+                       "file instead of calling Claude")
     serve.set_defaults(run=_serve)
+    read = sub.add_parser("read", help="read a record with Claude (asks you to type the word read)")
+    read.add_argument("record", help="a record folder or its record.json")
+    read.add_argument("--again", action="store_true", help="replace an earlier reading")
+    read.set_defaults(run=_read)
     return parser
 
 

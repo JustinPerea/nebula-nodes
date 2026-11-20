@@ -28,6 +28,6 @@ def measure(image: Image.Image) -> tuple[dict[str, Any], str]:
         "aspect": measured["aspect"],
         "lightness": stats["lightness"],
         "saturation": stats["saturation"],
-        "region_measures": [],
+        "region_measures": {},
     }
     return block, phash(image)

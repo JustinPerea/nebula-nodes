@@ -225,3 +225,100 @@ body { background: #111; }
 @media (prefers-reduced-motion: reduce) {
   .ex-arrived, .ex-seg { animation: none; }
 }
+
+/* Region overlay: the frame is the image's drawn size (the stage is a size container), boxes are
+   positioned in percentages of it. 1px outlines only. */
+.ex-stage { container-type: size; }
+.ex-frame {
+  position: relative;
+  width: min(100cqw, calc(100cqh * var(--ex-ratio, 1.6)));
+  aspect-ratio: var(--ex-ratio, 1.6);
+  flex: none;
+}
+.ex-frame .ex-rendering { width: 100%; height: 100%; max-width: none; max-height: none; }
+.ex-overlay { position: absolute; inset: 0; pointer-events: none; }
+.ex-box {
+  position: absolute;
+  outline: 1px solid rgba(143, 180, 255, 0.55);
+  outline-offset: -1px;
+  pointer-events: auto;
+  transform-origin: center;
+  animation: ex-box-in var(--spring-pop-ms) var(--spring-pop) both;
+}
+.ex-box-role {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 14px;
+  background: rgba(17, 17, 17, 0.85);
+  color: #cfe0ff;
+}
+.ex-box-on { outline: 1px solid #fff; background: rgba(143, 180, 255, 0.16); z-index: 1; }
+.ex-box-on .ex-box-role { background: #fff; color: #111; }
+
+/* Read section and rows */
+.ex-read-line { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; flex-wrap: wrap; }
+.ex-request { margin: 0 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--ex-fill); color: var(--ex-strong); overflow-wrap: anywhere; }
+.ex-confirm { display: grid; gap: 8px; padding: 10px; border-radius: 8px; background: var(--ex-fill); }
+.ex-confirm p { margin: 0; color: var(--ex-strong); }
+.ex-confirm-actions { display: flex; gap: 6px; }
+
+.ex-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ex-row-item2 { display: flex; align-items: center; gap: 8px; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; flex-wrap: wrap; }
+.ex-row-item2:hover, .ex-row-on { background: var(--ex-fill-hover); }
+.ex-id { flex: none; width: 26px; font-family: var(--ex-mono); font-size: 11px; color: var(--ex-muted); }
+.ex-grow { flex: 1; min-width: 0; }
+.ex-approx { color: var(--ex-strong); white-space: nowrap; }
+.ex-input-small { height: 24px; flex: 1; min-width: 80px; padding: 0 6px; }
+.ex-select {
+  height: 24px;
+  max-width: 120px;
+  padding: 0 4px;
+  border: 1px solid var(--ex-line);
+  border-radius: 6px;
+  background: var(--ex-fill);
+  font: inherit;
+  color: inherit;
+}
+.ex-swatch-small { width: 12px; height: 12px; }
+.ex-origin-you { background: #2b3550; color: #cfe0ff; }
+.ex-origin-agent { background: #3a2f4d; color: #e2d0ff; }
+.ex-estimate { background: transparent; box-shadow: inset 0 0 0 1px var(--ex-line); }
+.ex-color-on { background: var(--ex-fill-hover); border-radius: 6px; }
+.ex-summary { margin: 0 0 8px; color: var(--ex-strong); }
+
+.ex-axes { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 4px; }
+.ex-axes li { display: grid; grid-template-columns: 72px 1fr 72px; align-items: center; gap: 8px; }
+.ex-axis-end { font-size: 11px; color: var(--ex-muted); }
+.ex-axis-end:last-child { text-align: right; }
+.ex-axis { position: relative; height: 6px; border-radius: 3px; background: var(--ex-fill-selected); }
+.ex-axis::after { content: ""; position: absolute; left: 50%; top: -2px; width: 1px; height: 10px; background: var(--ex-muted); }
+.ex-axis-fill { position: absolute; top: 0; height: 100%; border-radius: 3px; background: var(--ex-strong); }
+
+.ex-chips { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.ex-chip { padding: 1px 8px; border-radius: 999px; background: var(--ex-fill-selected); font-size: 11px; color: var(--ex-text); }
+.ex-chip-button { border: 0; cursor: pointer; font-family: var(--ex-mono); }
+.ex-chip-button:hover { background: #323232; color: var(--ex-strong); }
+.ex-show { padding: 6px; margin: 0 -6px; border-radius: 6px; }
+.ex-show:hover { background: var(--ex-fill-hover); }
+.ex-show-line { display: flex; align-items: center; gap: 8px; }
+
+@keyframes ex-box-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ex-pop-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ex-pop { animation: ex-pop-in var(--spring-pop-ms) var(--spring-pop) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-box, .ex-pop { animation: none; }
+}

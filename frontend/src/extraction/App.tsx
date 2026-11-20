@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ApiError, createApi, type Api } from './api'
+import { ApiError, createApi, type Api, type RecordDetail } from './api'
 import { DropArea } from './DropArea'
 import { recordCount } from './format'
 import { RecordList } from './RecordList'
@@ -59,7 +59,7 @@ function Page({ token }: { token: string }) {
   const [folder, setFolder] = useState<string | null>(null)
   const [rows, setRows] = useState<RecordRow[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<ExtractionRecord | null>(null)
+  const [detail, setDetail] = useState<RecordDetail | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [arrived, setArrived] = useState<ReadonlySet<string>>(new Set())
@@ -72,7 +72,7 @@ function Page({ token }: { token: string }) {
     setSelectedId(id)
     try {
       const got = await api.record(id, inFolder)
-      if (mine === opening.current) setDetail(got.effective)
+      if (mine === opening.current) setDetail(got)
     } catch (error) {
       if (mine === opening.current) {
         setNotice(sentence(error))
@@ -183,7 +183,7 @@ function Page({ token }: { token: string }) {
     }
   }, [addFiles])
 
-  const shown = detail && detail.id === selectedId ? detail : null
+  const shown = detail && detail.record.id === selectedId ? detail : null
 
   return (
     <div className="ex-app" style={SPRING_VARS}>
@@ -233,7 +233,7 @@ function Page({ token }: { token: string }) {
           {!folder ? (
             <p className="ex-quiet ex-pad">Choose a records folder first.</p>
           ) : shown ? (
-            <RecordView key={shown.id} api={api} folder={folder} record={shown} onClose={close} />
+            <RecordView key={shown.record.id} api={api} folder={folder} detail={shown} onClose={close} onChange={setDetail} onNotice={setNotice} />
           ) : selectedId ? null : (
             <DropArea active={dragging} onFiles={(files) => addFiles(files, 'file')} />
           )}

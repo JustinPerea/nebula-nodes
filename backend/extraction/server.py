@@ -17,6 +17,7 @@ One ASGI middleware runs before any route and refuses, in this order:
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
 import mimetypes
 import os
@@ -28,8 +29,12 @@ from typing import Any, Awaitable, Callable, MutableMapping
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
+from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from commons import media
+from commons.reader import AnalysisInvalid
+from extraction import reader
 from extraction import record as rec
 from extraction import store
 from extraction.errors import ExtractionRefused
@@ -84,6 +89,16 @@ def launch_line(token: str, port: int = DEFAULT_PORT, dev: bool = False) -> str:
 
 def _refuse(status: int, sentence: str) -> JSONResponse:
     return JSONResponse({"error": sentence}, status_code=status, headers=SECURITY_HEADERS)
+
+
+class _ReadBody(BaseModel):
+    folder: str
+    again: bool = False
+
+
+class _CorrectionsBody(BaseModel):
+    folder: str
+    corrections: list[dict[str, Any]]
 
 
 class _Guards:
@@ -185,10 +200,19 @@ def _record_id(value: str) -> str:
 
 
 def create_app(token: str, *, port: int = DEFAULT_PORT, dev: bool = False,
-               dist_dir: Path | str | None = None) -> FastAPI:
-    """The app, with its guards. ``dist_dir`` is where the built page lives."""
+               dist_dir: Path | str | None = None, spawn: Any = None,
+               fake_reader: dict[str, Any] | None = None) -> FastAPI:
+    """The app, with its guards. ``dist_dir`` is where the built page lives.
+
+    A read uses the person's Claude usage, so it runs only from the page's Read button (this app's
+    ``POST /api/records/{id}/read``). ``spawn`` replaces the process that runs the Claude CLI (tests pass a
+    fake). ``fake_reader`` is development only: a structured output the server answers every read with, so
+    no model is called and the record says ``fake-reader``.
+    """
     dist = Path(dist_dir) if dist_dir is not None else DIST_DIR
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    read_lock = asyncio.Lock()  # one read at a time per server
+    app.state.read_lock = read_lock
 
     @app.exception_handler(ExtractionRefused)
     async def _refused(_: Request, exc: ExtractionRefused) -> JSONResponse:
@@ -236,6 +260,42 @@ def create_app(token: str, *, port: int = DEFAULT_PORT, dev: bool = False,
         png = store.rendering_bytes(os.path.join(real, _record_id(record_id)))
         return Response(png, media_type="image/png", headers={"Cache-Control": "no-store", **SECURITY_HEADERS})
 
+    @app.post("/api/records/{record_id}/corrections")
+    def add_corrections(record_id: str, body: _CorrectionsBody) -> dict[str, Any]:
+        real = store.resolve_folder(body.folder)
+        updated = store.correct(os.path.join(real, _record_id(record_id)), body.corrections, "person")
+        return {"record": updated, "effective": rec.effective(updated)}
+
+    @app.post("/api/records/{record_id}/read")
+    async def read_record(record_id: str, body: _ReadBody) -> Response:
+        if read_lock.locked():
+            return _refuse(409, "A read is already running. Wait for it to finish, then try again.")
+        async with read_lock:
+            real = await asyncio.to_thread(store.resolve_folder, body.folder)
+            directory = os.path.join(real, _record_id(record_id))
+            record = await asyncio.to_thread(store.load, directory)
+            if record["status"] == "approved":
+                return _refuse(409, "That record is approved, so it can't be read again.")
+            if record["structure"]["read"] is not None and not body.again:
+                return _refuse(409, "That record has already been read. Choose Read again to replace the reading.")
+            png = await asyncio.to_thread(store.rendering_bytes, directory)
+            try:
+                image = await asyncio.to_thread(media.load_image, png, "image/png", keep_alpha=True)
+                model = reader.FAKE_MODEL if fake_reader is not None else reader.MODEL_ID
+                structured = fake_reader if fake_reader is not None else await reader.ask(record, image, spawn=spawn)
+                # The read can take minutes: apply it to the record as it is now, so a correction made
+                # meanwhile is kept.
+                fresh = await asyncio.to_thread(store.load, directory)
+                updated = await asyncio.to_thread(reader.apply_read, fresh, image, structured, model=model)
+            except reader.ReadFailed as exc:
+                return _refuse(502, str(exc))
+            except AnalysisInvalid as exc:
+                return _refuse(502, f"The answer didn't fit what the page expects ({exc}). Nothing was changed.")
+            except media.MediaError:
+                return _refuse(400, "That record's image couldn't be read.")
+            await asyncio.to_thread(store.write, directory, updated)
+            return JSONResponse({"record": updated, "effective": rec.effective(updated)}, headers=SECURITY_HEADERS)
+
     @app.get("/{path:path}")
     def page(path: str) -> Response:
         if path == "api" or path.startswith("api/"):
@@ -267,13 +327,21 @@ def _static(dist: Path, path: str) -> Response:
     return FileResponse(target, media_type=media, headers=headers)
 
 
-def serve(port: int = DEFAULT_PORT, dev: bool = False) -> int:
-    """Start the server on 127.0.0.1 and print the page's address with its token."""
+def serve(port: int = DEFAULT_PORT, dev: bool = False, fake_reader: str | None = None) -> int:
+    """Start the server on 127.0.0.1 and print the page's address with its token.
+
+    ``fake_reader`` (development only) is a JSON file whose contents answer every read; no model is called.
+    """
+    import sys
+
     import uvicorn
 
+    fake = reader.load_fake(fake_reader) if fake_reader else None
     token = secrets.token_urlsafe(32)
-    app = create_app(token, port=port, dev=dev)
+    app = create_app(token, port=port, dev=dev, fake_reader=fake)
     print(launch_line(token, port, dev), flush=True)
+    if fake is not None:
+        print("Fake reader on: Read answers from the file you named. No model is called.", file=sys.stderr, flush=True)
     uvicorn.run(app, host=HOST, port=port, access_log=False, log_level="warning")
     return 0
 

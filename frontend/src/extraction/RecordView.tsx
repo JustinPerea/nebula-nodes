@@ -1,13 +1,13 @@
-import { useMemo } from 'react'
-import type { Api } from './api'
+import { useCallback, useMemo, useState } from 'react'
+import { ApiError, type Api, type RecordDetail } from './api'
 import { cameIn, readTime, statusLabel } from './format'
+import { Origin } from './Origin'
 import { segmentWidths, sharePercent } from './palette'
+import { ReadSection } from './ReadSection'
+import { RegionOverlay } from './RegionOverlay'
 import { useRendering } from './rendering'
+import { ReadingSection, RegionsSection, ShowsSection, SpacingSection, TextSection } from './Sections'
 import type { ExtractionRecord, PaletteEntry } from './types'
-
-function Origin() {
-  return <span className="ex-origin" title="Set by code">code</span>
-}
 
 function Line({ name, children }: { name: string; children: React.ReactNode }) {
   return (
@@ -15,7 +15,7 @@ function Line({ name, children }: { name: string; children: React.ReactNode }) {
       <dt>{name}</dt>
       <dd>
         <span className="ex-value">{children}</span>
-        <Origin />
+        <Origin tag="code" />
       </dd>
     </div>
   )
@@ -37,19 +37,19 @@ export function PaletteBar({ palette }: { palette: readonly PaletteEntry[] }) {
   )
 }
 
-function Colors({ palette }: { palette: readonly PaletteEntry[] }) {
+function Colors({ palette, hovered }: { palette: readonly PaletteEntry[]; hovered: string | null }) {
   if (palette.length === 0) return <p className="ex-quiet">No colors were found.</p>
   return (
     <>
       <PaletteBar palette={palette} />
       <ul className="ex-colors">
         {palette.map((entry) => (
-          <li key={entry.index}>
+          <li key={entry.index} className={hovered === `P${entry.index}` ? 'ex-color-on' : undefined} data-palette={`P${entry.index}`}>
             <span className="ex-swatch" style={{ backgroundColor: entry.hex }} />
             <span className="ex-hex">{entry.hex}</span>
             <span className="ex-share">{sharePercent(entry.share)}</span>
             <span className="ex-accent-tag">{entry.is_accent ? 'accent' : ''}</span>
-            <Origin />
+            <Origin tag="code" />
           </li>
         ))}
       </ul>
@@ -59,19 +59,48 @@ function Colors({ palette }: { palette: readonly PaletteEntry[] }) {
 
 const mean = (value: number | null) => (value === null ? 'Not measured' : `${Math.round(value)} of 255`)
 
-export function RecordView({ api, folder, record, onClose }: {
+const sentence = (error: unknown) => (error instanceof ApiError ? error.message : 'That didn’t work. Try again.')
+
+export function RecordView({ api, folder, detail, onClose, onChange, onNotice }: {
   api: Api
   folder: string
-  record: ExtractionRecord
+  detail: RecordDetail
   onClose: () => void
+  onChange: (next: RecordDetail) => void
+  onNotice: (message: string | null) => void
 }) {
+  const { record, effective: view } = detail
   const url = useRendering(api, folder, record.id)
-  const { measured } = record.structure
+  const [hovered, setHovered] = useState<string | null>(null)
+  const { measured } = view.structure
   const range = measured.value_range
+  const read = view.structure.read
+
+  const correct = useCallback((path: string, value: unknown) => {
+    onNotice(null)
+    api.correct(record.id, folder, [{ path, op: 'set', value }]).then(onChange, (error: unknown) => onNotice(sentence(error)))
+  }, [api, folder, onChange, onNotice, record.id])
+
+  const startRead = useCallback(async (again: boolean) => {
+    onNotice(null)
+    try {
+      onChange(await api.read(record.id, folder, again))
+    } catch (error) {
+      onNotice(sentence(error))
+    }
+  }, [api, folder, onChange, onNotice, record.id])
+
+  const sectionProps = { record: record as ExtractionRecord, view, hovered, onHover: setHovered, onCorrect: correct }
+
   return (
     <div className="ex-record">
       <div className="ex-stage">
-        {url ? <img className="ex-rendering" src={url} alt={record.source.name ?? 'The measured image'} /> : null}
+        {url ? (
+          <div className="ex-frame" style={{ '--ex-ratio': String(record.rendering.width / record.rendering.height) } as React.CSSProperties}>
+            <img className="ex-rendering" src={url} alt={record.source.name ?? 'The measured image'} />
+            {read ? <RegionOverlay key={read.read_at} regions={read.regions} hovered={hovered} onHover={setHovered} /> : null}
+          </div>
+        ) : null}
       </div>
       <aside className="ex-side">
         <div className="ex-side-head">
@@ -82,7 +111,7 @@ export function RecordView({ api, folder, record, onClose }: {
         </div>
         <section>
           <h2 className="ex-label">Colors</h2>
-          <Colors palette={measured.palette} />
+          <Colors palette={measured.palette} hovered={hovered} />
         </section>
         <section>
           <h2 className="ex-label">Measured</h2>
@@ -100,14 +129,20 @@ export function RecordView({ api, folder, record, onClose }: {
           <dl>
             <Line name="Name">{record.source.name || 'Unnamed'}</Line>
             <Line name="Came in">{cameIn(record.source.kind)}</Line>
-            <Line name="Read">{readTime(record.source.read_at)}</Line>
+            <Line name="Added">{readTime(record.source.read_at)}</Line>
             <Line name="Hash"><span className="ex-mono">{record.rendering.sha256.slice(0, 12)}</span></Line>
           </dl>
         </section>
-        <section>
-          <h2 className="ex-label">Read by Claude</h2>
-          <p className="ex-quiet">Not read yet.</p>
-        </section>
+        <ReadSection key={record.structure.read?.read_at ?? 'unread'} record={record} onRead={startRead} />
+        {read ? (
+          <>
+            <RegionsSection {...sectionProps} />
+            <TextSection {...sectionProps} />
+            <SpacingSection {...sectionProps} />
+            <ReadingSection {...sectionProps} />
+            <ShowsSection {...sectionProps} />
+          </>
+        ) : null}
       </aside>
     </div>
   )

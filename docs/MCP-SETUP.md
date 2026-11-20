@@ -756,7 +756,8 @@ The server exposes these tools for building and running (see
   move a board or a Character to Global or a canvas project (`to`:
   "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
-- `extraction_measure`, `extraction_list`, `extraction_show`, `extraction_correct`:
+- `extraction_measure`, `extraction_list`, `extraction_show`, `extraction_correct`,
+  `extraction_request_read`:
   still images measured by code into records kept as plain files in a folder
   you name (a draft schema, `extracted-example/1`). `extraction_measure(image_path,
   folder, replace=False)` takes a JPEG, PNG, GIF, WebP or HEIC file and writes
@@ -774,8 +775,13 @@ The server exposes these tools for building and running (see
   `structure.read.*` or on `shows.*`. Measured values (`structure.measured`,
   `rendering`, `source`), the id and the schema can't be corrected, and approval
   isn't a correction: an agent can't approve a record. Every path goes through
-  the same protected-path check as the other file tools. The model read of an
-  image is not an agent tool yet; it comes in a later round. The tools run in the
+  the same protected-path check as the other file tools. `extraction_request_read(record,
+  reason)` is the fifth tool: an agent can't start a model read (it spends the person's
+  Claude usage, and only the person starts one, from the page's Read button or at a
+  terminal), so it asks. The reason (at most 300 characters, at most 20 waiting)
+  goes on the record's `read_requests`, and the page shows it above the Read button.
+  After the person reads, `structure.read` holds regions with roles, the text in the
+  image, estimated sizes and spacing, and `shows`, all marked as the model's. The tools run in the
   MCP process with no Nebula server, and the same work is `python -m extraction
   measure|list|show` from `backend/`. A local page (`python -m extraction serve`)
   shows the same records, so what an agent measures appears there and the reverse.

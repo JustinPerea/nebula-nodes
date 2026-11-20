@@ -37,6 +37,8 @@ MAX_CORRECTIONS_PER_CALL = 50
 MAX_CORRECTIONS_PER_RECORD = 1000
 MAX_VALUE_CHARS = 20_000
 MAX_REASON_CHARS = 500
+MAX_READ_REQUESTS = 20
+MAX_READ_REQUEST_CHARS = 300
 
 _ID = re.compile(r"^ex_[0-9a-f]{16}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -116,6 +118,7 @@ def build_record(item: Intake, *, shows: Iterable[dict[str, Any]] | None = None,
         "structure": {"given": None, "given_reason": GIVEN_REASON, "measured": measured, "read": None},
         "shows": {},
         "corrections": [],
+        "read_requests": [],
     }
     record["shows"] = _shows(shows, evidence_ids(record))
     validate(record)
@@ -197,6 +200,15 @@ def validate(record: Any) -> None:
         _need(item.get("op") in OPS, f"{where}.op", "must be set, add or remove")
         _need(item.get("actor") in ACTORS, f"{where}.actor", "must be person or agent")
         _need(isinstance(item.get("at"), str), f"{where}.at", "must be a time")
+
+    # Absent on records saved before reads existed.
+    requests = record.get("read_requests", [])
+    _need(isinstance(requests, list), "read_requests", "must be a list")
+    for index, item in enumerate(requests):
+        where = f"read_requests[{index}]"
+        _need(isinstance(item, dict) and item.get("actor") == "agent", where, "must be an object from an agent")
+        _need(isinstance(item.get("at"), str), f"{where}.at", "must be a time")
+        _need(isinstance(item.get("reason"), str), f"{where}.reason", "must be text")
 
 
 # -- corrections ------------------------------------------------------------------------------
@@ -326,6 +338,29 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
         if effective(dict(updated, corrections=[*updated["corrections"], entry])).get("corrections_skipped"):
             raise RecordInvalid(f"{raw['path']} can't take that correction here.")
         updated["corrections"].append(entry)
+    validate(updated)
+    return updated
+
+
+def add_read_request(record: dict[str, Any], reason: Any, *, clock: Clock | None = None) -> dict[str, Any]:
+    """A copy of ``record`` with an agent's request for a reading appended.
+
+    An agent can't start a read; it asks, and the person reads from the page. Refused when the reason is
+    empty or over 300 characters, when 20 requests are already waiting, or when the record is approved.
+    """
+    validate(record)
+    if record["status"] == "approved":
+        raise RecordInvalid("That record is approved, so it can't be changed.")
+    if not isinstance(reason, str) or not reason.strip():
+        raise RecordInvalid("A read request needs a reason, in a sentence.")
+    reason = reason.strip()
+    if len(reason) > MAX_READ_REQUEST_CHARS:
+        raise RecordInvalid(f"A read request's reason is at most {MAX_READ_REQUEST_CHARS} characters.")
+    updated = copy.deepcopy(record)
+    pending = updated.setdefault("read_requests", [])
+    if len(pending) >= MAX_READ_REQUESTS:
+        raise RecordInvalid(f"{MAX_READ_REQUESTS} read requests are already waiting for the person.")
+    pending.append({"actor": "agent", "at": _stamp(clock), "reason": reason})
     validate(updated)
     return updated
 

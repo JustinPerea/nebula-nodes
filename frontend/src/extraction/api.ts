@@ -1,4 +1,4 @@
-import type { ExtractionRecord, FolderListing, SourceKind } from './types'
+import type { Correction, ExtractionRecord, FolderListing, SourceKind } from './types'
 
 export const TOKEN_HEADER = 'X-Extraction-Token'
 
@@ -22,6 +22,10 @@ export interface Api {
   addRecord(folder: string, file: File, kind: SourceKind): Promise<{ record: ExtractionRecord; existed: boolean }>
   record(id: string, folder: string): Promise<RecordDetail>
   rendering(id: string, folder: string): Promise<Blob>
+  /** Reads the record with Claude. Only the page's Read button calls this, after the person has confirmed. */
+  read(id: string, folder: string, again: boolean): Promise<RecordDetail>
+  /** Corrections made by the person (the server sets the actor). */
+  correct(id: string, folder: string, corrections: Pick<Correction, 'path' | 'op' | 'value'>[]): Promise<RecordDetail>
 }
 
 const NO_ANSWER = 'The server didn’t answer. Check that it is still running.'
@@ -55,6 +59,12 @@ export function createApi(token: string, fetchFn: typeof fetch = (...args) => fe
     }
   }
 
+  const postJson = (body: unknown): RequestInit => ({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
   const query = (folder: string) => `folder=${encodeURIComponent(folder)}`
 
   return {
@@ -71,6 +81,14 @@ export function createApi(token: string, fetchFn: typeof fetch = (...args) => fe
     },
     async record(id, folder) {
       return json<RecordDetail>(await call(`/api/records/${encodeURIComponent(id)}?${query(folder)}`))
+    },
+    async read(id, folder, again) {
+      return json<RecordDetail>(await call(`/api/records/${encodeURIComponent(id)}/read`, postJson({ folder, again })))
+    },
+    async correct(id, folder, corrections) {
+      return json<RecordDetail>(
+        await call(`/api/records/${encodeURIComponent(id)}/corrections`, postJson({ folder, corrections })),
+      )
     },
     async rendering(id, folder) {
       return (await call(`/api/records/${encodeURIComponent(id)}/rendering?${query(folder)}`)).blob()
