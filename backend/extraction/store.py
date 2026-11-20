@@ -18,6 +18,7 @@ import os
 import re
 import stat
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -51,9 +52,16 @@ def _forbidden_roots() -> list[tuple[str, Path]]:
     return roots
 
 
+def _folded(path: str) -> str:
+    # macOS volumes usually ignore case and Unicode normalization, so
+    # ~/.Nebula is ~/.nebula. Compare the folded spellings, as file_access does.
+    return unicodedata.normalize("NFD", path).casefold()
+
+
 def _inside(path: str, root: Path) -> bool:
+    folded_root = _folded(str(root))
     try:
-        return os.path.commonpath([path, str(root)]) == str(root)
+        return os.path.commonpath([_folded(path), folded_root]) == folded_root
     except ValueError:
         return False
 

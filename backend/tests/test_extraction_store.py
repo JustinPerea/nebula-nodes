@@ -133,6 +133,14 @@ def test_the_state_folder_is_refused(tmp_path, monkeypatch):
         store.list_records(state)
 
 
+def test_the_state_folder_is_refused_in_another_case(tmp_path, monkeypatch):
+    # APFS ignores case, so a differently cased path names the same folder.
+    state = tmp_path / "fake-state"
+    state.mkdir()
+    monkeypatch.setenv("NEBULA_STATE_DIR", str(state))
+    assert store._inside(str(tmp_path / "FAKE-State" / "x"), state.resolve())
+
+
 def test_a_dot_nebula_folder_in_the_home_is_refused(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".nebula" / "x").mkdir(parents=True)
