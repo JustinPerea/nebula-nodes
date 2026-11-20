@@ -1,6 +1,6 @@
 """The daily total for everything that isn't the person (Justin decided,
 2026-10-31): $5 by default, changeable in Settings, and a run that would pass
-it waits for the person's OK as a proposal. design's lines are pinned
+it waits for the person's OK as a proposal. Design's lines are pinned
 here verbatim."""
 from __future__ import annotations
 
@@ -428,7 +428,7 @@ def _chat_headers():
 
 
 # A caller that didn't name itself, over the total (PR #212: only
-# callers that name themselves get the automatic proposal). design, 2026-10-31.
+# callers that name themselves get the automatic proposal). Design, 2026-10-31.
 NAMELESS = ("This would pass the $5 daily total. Name yourself with NEBULA_AGENT_NAME or --as to send it "
             "as a proposal.")
 

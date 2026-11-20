@@ -524,8 +524,8 @@ _real_commit_prepared = ProjectStore.commit_prepared
 def _waiting(client, store, graph, state, monkeypatch, owner="e" * 32) -> list[str]:
     """Three projects at a limit of 3, the live canvas unfiled and waiting,
     holding a node no project has. Added as the person's (no tab: the person
-    can't reach a waiting canvas from one), since an agent's add at the
-    limit is refused since the waiting-canvas guard was added."""
+    can't reach a waiting canvas from one), because an agent's add at the
+    limit is refused (409 canvas_waiting)."""
     ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, owner)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasNotFiled"]["reason"] == "projects"

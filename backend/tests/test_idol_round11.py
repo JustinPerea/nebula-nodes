@@ -2,7 +2,7 @@
 their reader's words from one table, and settings.json's keys never
 overwritten with a guess.
 
-- And design: `nebula propose` and `nebula
+- Design: `nebula propose` and `nebula
   proposal` count Krea-plan runs on their own, and a free run that calls a
   provider says which (cli/formatter._cost_line).
 - `nebula run`'s refusal is in CLI words over HTTP.

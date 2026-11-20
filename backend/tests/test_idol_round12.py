@@ -9,7 +9,7 @@ tag in the CLI line, and each surface's words from the one table.
 - Unreadable keys read as none, for the spend
   gate too, and no handler falls back to a token in the environment.
 - An older CLI's `?via=cli` reads as the CLI.
-- And design: "Settings > Providers > Krea".
+- Design: "Settings > Providers > Krea".
 - And the surviving mutants G5, G6, S4, S7, T5.
 """
 from __future__ import annotations

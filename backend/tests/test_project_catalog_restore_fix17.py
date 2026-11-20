@@ -12,8 +12,8 @@
   checks every connection as the live route does, and reports each it drops.
 - The shared port rules file, and droppedWires' structured entries.
 - No selection or
-  view while kept; design ("1 node", the restore note's canvas line said
-  once) and ("Recovered Delta").
+  view while kept; design's two answers ("1 node", the restore note's
+  canvas line said once; "Recovered Delta").
 """
 from __future__ import annotations
 

@@ -435,8 +435,8 @@ def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, mon
 
 
 def test_stale_temp_files_beside_the_settings_are_swept_at_startup(home_file):
-    """Only Nebula's own temp names go (settings
-    tests/test_idol_round17_settings.py has the person's look-alikes).
+    """Only Nebula's own temp names go
+    (tests/test_idol_round17_settings.py has the person's look-alikes).
     The sweep holds the save's lock, so a fresh temp file is
     a save cut short too, and goes."""
     folder = home_file.parent

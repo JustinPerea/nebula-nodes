@@ -6,8 +6,8 @@ listing's settle, so a failed state.json write or a crash after the commit
 never leaves a filed project open and unprotected (found by review probes).
 Design: the protection ends for good once the person's tab is on the
 project and connected (the person-promoted socket's `viewing` frame); an
-agent can't end it. The CLI prints design's saved-canvas reply, with
-the nits; design's order and duplicate names; design: the agent's copy
+agent can't end it. The CLI prints design's saved-canvas reply.
+Smaller findings: design's order and duplicate names, and the agent's copy
 named as the agent's.
 """
 from __future__ import annotations

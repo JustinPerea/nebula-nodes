@@ -1,4 +1,4 @@
-"""PR #198 (and design's rulings).
+"""PR #198 (design's rulings).
 
 - Design: a universal node's provider setting is named by
   the Inspector's label, the key in sentence case ("Set “Guidance scale”").

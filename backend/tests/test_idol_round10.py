@@ -7,7 +7,7 @@ signal for the person's tabs that names the keys it changed.
   class, out of "N paid" and the figure, with a ``plan`` reason.
 - Each refusal names its reader's own call
   (services/agent_words), and the CLI prints it as it came.
-- And design: settingsChanged goes to the
+- Design: settingsChanged goes to the
   person's tabs only, with the names of the keys that changed.
 - A save writes back what it wasn't asked to change.
 - describe_node's per-route billing row reads the class.

@@ -41,7 +41,7 @@ def gone(thing: str, things: str) -> str:
 
 
 NODE_GONE = "That node isn’t on the canvas anymore."
-WAITING = "This node is still waiting on World Labs."  # before PR #114's World Labs rewording
+WAITING = "This node is still waiting on World Labs."  # before PR #114's last wording change
 # Design's World Labs lines for PR #114, verbatim (each under
 # the screen's own "Couldn't <action>." heading; node names are card titles).
 STARTING = "A World Labs run is still starting. Try again in a moment."

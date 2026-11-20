@@ -82,7 +82,7 @@ def _field_labels() -> frozenset[str]:
 _LABELS = "|".join(sorted((re.escape(label) for label in _field_labels()), key=len, reverse=True))
 # Rule 5: a field named after a verb that sets it ("Set Duration to 10",
 # "Clear the node's Quality field", "doesn't offer Reasoning Effort Low") is
-# written as the node shows it, in quotes. design's verbatim xAI edit-video line
+# written as the node shows it, in quotes. Design's verbatim xAI edit-video line
 # ("Pick it in the node's Model field") is design's own and isn't one of these verbs.
 _BARE_LABEL = re.compile(r"\b(?:[Ss]et|[Cc]lear|offer|fewer|[Ll]ower|[Rr]aise|[Tt]urn (?:on|off)|[Ff]ill in)\s+"
                          r"(?:the\s+(?:node's\s+)?)?(?:" + _LABELS + r")\b"

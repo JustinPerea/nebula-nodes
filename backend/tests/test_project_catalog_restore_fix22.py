@@ -88,7 +88,7 @@ SURFACES = ["open", "clear", "create", "import", "restore"]
 @pytest.mark.parametrize("record,subject", [
     # Alpha's n1 "World" (its run history has the run); Delta is open, its own n1 "Delta World".
     ({"run_id": "wl-run-alpha", "resume_operation_id": "op-1"}, "“World” from “Alpha”"),
-    # Delta's own record: as before the hold was added.
+    # Delta's own record: as before the line placed the record.
     ({"run_id": "wl-run-delta", "resume_operation_id": "op-1"}, "“Delta World”"),
     # No project's run history has it, and no stored node holds its ID: the project can't be known.
     # An Existing World ID is only a World Labs Environment node's.

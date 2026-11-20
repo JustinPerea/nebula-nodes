@@ -6,7 +6,7 @@ A stale tab saves its unsaved edits as a recovered project
 the Projects screen offers to download the edits instead of a Try again that
 sends the same copy into the same refusal. The screen tells the refusals
 apart by status and, where the backend gives one, a structured field, never
-by the words. design's "too large" line is for a copy that is itself
+by the words. Design's "too large" line is for a copy that is itself
 too big; the store's own limits (how many projects, how big the whole
 catalog is) are 413s too, so their answer says which limit it was:
 ``limit: "projects"`` or ``limit: "storage"``, beside the same ``detail``

@@ -4,7 +4,7 @@ Review of error-copy: the canvas alert read "Couldn't delete the node.
 Cannot delete n3: it has unresolved World Labs paid state. Check Marble, then
 resolve its exact recovery/ambiguity record first." and "Couldn't delete the
 node. Node n3 not found": an internal id and technical words (design: never ids
-in what the person reads). design's split for refusals (error-copy):
+in what the person reads). Design's split for refusals (error-copy):
 "People get the written line and agents keep the specific detail." The
 person's canvas is a browser page (Origin or Sec-Fetch-Site) with no agent
 marker, with or without this launch's person token (a plain tab has none).

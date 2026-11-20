@@ -433,7 +433,7 @@ def test_a_typed_answer_is_one_question_answered_and_never_a_thread_row_post_or_
     new = [e for e in thread.journal._events if e["seq"] > seq_before]
     assert [e["kind"] for e in new] == [mcp_channel.ANSWERED_KIND]
     assert TYPED_ANSWER not in _journal_text(thread)
-    # No new thread row, no message, nothing in an inbox. design: the
+    # No new thread row, no message, nothing in an inbox. Design: the
     # question row keeps the outcome, in the person's form only.
     rows_after = thread.client.get("/api/canvas/thread", headers=PERSON).json()["rows"]
     assert [r["id"] for r in rows_after] == [r["id"] for r in rows_before]

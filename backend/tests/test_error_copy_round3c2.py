@@ -3,7 +3,7 @@
 The earlier node-run-error pass made every node run error with no person line read design's general line with
 the raw text behind "Details". That hid the lines Nebula already wrote for the
 person ("No mask painted yet — open the Mask Painter node and paint one", the
-route wiring lines, Meshy's Smart Topology line ...). design's guard: "provider
+route wiring lines, Meshy's Smart Topology line ...). Design's guard: "provider
 run errors often carry the one fact the person needs ... Don't let the
 general fallback hide them." A line Nebula wrote for the person is a written
 line, so each such raise carries it as its person line (``as_person_line``

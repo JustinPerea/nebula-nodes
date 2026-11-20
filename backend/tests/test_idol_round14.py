@@ -3,7 +3,7 @@
 - A settings.json that is exactly `null` fails closed
   again, as every other file that isn't an object: GET and every write get
   the 409, and runs don't go through.
-- And design: a file Nebula may not read (no
+- Design: a file Nebula may not read (no
   permission, a folder at the path) gets the same 409, never a 500, and
   start_here answers with the read line.
 - Design: agents read their own line, "Ask the person to fix the
@@ -12,11 +12,11 @@
   the environment at each call.
 - "~" only under a real home folder other than "/".
 - `check` is a boolean or a 422.
-- And design: every quoted Krea connection is a
+- Design: every quoted Krea connection is a
   real option label ("API key", "Krea account").
 - The Agent Log's refused-run line names up to 3
   nodes and counts from 4.
-- And design: the CLI counts every free run
+- Design: the CLI counts every free run
   once, and a lone local run is "(local)" beside another class.
 - Design: Replicate's run-failure line says "token".
 """

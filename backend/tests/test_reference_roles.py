@@ -372,7 +372,7 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["runway-sts"] = {"directRoute": {"rejectsWhen
 # Flex only (visibleWhen) and dropped elsewhere by the route clients, so the
 # per-model steps/guidance rejectsWhen entries are gone.
 # PR 5, hide what the provider doesn't offer (2026-10-16). Justin, on the
-# design: "Yes to all 4" (D4: approve this exact new entry). The fal route's
+# Design: "Yes to all 4" (D4: approve this exact new entry). The fal route's
 # eight "a safety tolerance other than 2 on Klein" rejectsWhen entries are
 # replaced by "paramVisibleWhen": {"safety_tolerance": {"model": ["pro",
 # "max", "flex"]}} (fal's Flash and Klein endpoints have no

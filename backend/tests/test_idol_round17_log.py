@@ -1,5 +1,5 @@
-"""PR #203, section 2: the refused run's Agent log line (
-copy-ui findings; design items 1 and 2).
+"""PR #203, section 2: the refused run's Agent log line (copy-ui findings;
+design's rulings).
 
 - An input with no wire merges as a reason does, from one table
   (person_line.INPUT_NEED_PREDICATES): "2 “GPT Image 2” nodes need a prompt.

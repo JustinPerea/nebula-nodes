@@ -1,5 +1,4 @@
-"""PR #205 (design,
-items 2 and 3): every agent path is measured against Save's limits, "no
+"""PR #205 (design's rulings): every agent path is measured against Save's limits, "no
 worse" compares measures that never stop early, an Accept that would leave
 the canvas past them is refused on the click (the proposal stays open), and an
 import's own checks answer with codes the person's Load line reads."""

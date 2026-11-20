@@ -4,7 +4,7 @@ An earlier pass split a node's run error in two: `error` is the specific text fo
 agents, `person` is the line the canvas card shows. The pre-run check
 (execution/engine.validate_graph) still gave one text to both: "Missing API
 key: OPENAI_API_KEY", "Required input port prompt is not connected",
-"Batch has 3 items, exceeding its batch_size_cap of 2. ...". design's rules: no
+"Batch has 3 items, exceeding its batch_size_cap of 2. ...". Design's rules: no
 ids, parameter keys or env-var names in what the person reads (a field by its
 label, an input in words); "people get the written line and agents keep the
 specific detail".

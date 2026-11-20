@@ -9,7 +9,7 @@ Settings durability:
   the file aside once, by its hash.
 - A folder at a fixed file name, and a lock wait
   past the deadline, are 409s, never 500s.
-- And design: the copy-folder line names the folder that
+- Design: the copy-folder line names the folder that
   refuses and, when that is above the state folder, the state folder it
   can't make.
 - Mutants O1 (the resolved temp of a symlinked settings.json), O19
