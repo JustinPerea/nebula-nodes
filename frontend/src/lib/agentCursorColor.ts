@@ -20,6 +20,7 @@ export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05, c
 /** The colour of an agent whose own colour is missing or not a #rrggbb hex:
  *  its cursor, its Agent log line and the log's name tone all use it, so
  *  they never disagree (review 8). */
+// palette-exempt: per-agent identity colour fallback, not a status
 export const AGENT_FALLBACK_COLOR = '#E8825A';
 
 // sRGB ↔ OKLab (Björn Ottosson's published matrices).

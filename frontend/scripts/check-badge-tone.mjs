@@ -72,7 +72,7 @@ export function findAccentBadges(source, file) {
     const commons = BADGE.test(selector);
     // Design: the named badge classes (the list below) never take the accent either. The suffix
     // match (__badge, __tag, __state, __status) stays with the caps rule: other accent badges are for design to rule on.
-    if (!commons && !selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => NAMED_BADGES.has(m[1].replace(/--[\w-]+$/, ''))))) continue;
+    if (!commons && !selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => noAccentClass(m[1])))) continue;
     // Nested CSS isn't read: a nested block under any badge selector (`.commons-badge { &--inbox {...} }`) fails.
     if (rule.nested) {
       hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
@@ -110,6 +110,12 @@ const NAMED_BADGES = new Set([
   'world-preview__badge', 'character-studio-toolbar__state', 'jev-result__badge', 'character-def__ref-badge', 'reference-set-node__role-badge',
 ]);
 const CLASS = /\.(-?[_a-zA-Z][\w-]*)/g;
+// Badges design moved off the accent, matched by the exact class so a sibling keeps its tone:
+// `.cinema-shots-rail__badge` (the unread count) stays accent, its `--running` variant does not.
+const NO_ACCENT_CLASSES = new Set([
+  'moodboard-tile__cover', 'moodboard-color__flag', 'cinema-shots-rail__badge--running', 'edit-node__speed-badge',
+]);
+const noAccentClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) || NO_ACCENT_CLASSES.has(name);
 const BADGE_SUFFIX = /(?:__(?:badge|tag|state|status)(?![a-zA-Z0-9_])|-badge)/;
 const CAPS_PROP = /^(?:text-transform|font-variant|font-variant-caps)$/i;
 const CAPS_VALUE = /(?:^|\s)(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)(?![\w-])/i;

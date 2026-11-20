@@ -37,6 +37,12 @@ describe('check-badge-tone', () => {
     '.character-def__ref-badge { color: var(--sr-accent); }',
     'body.app-slava-restraint .reference-set-node__role-badge { border-color: var(--sr-accent-border); }',
     '.world-preview__badge { background: var(--sr-accent-soft); }',
+    '.moodboard-tile__cover { color: var(--sr-accent); }',
+    'body.app-slava-restraint .moodboard-tile__cover { border-color: var(--sr-accent-border); }',
+    '.moodboard-color__flag { background: rgba(255, 90, 31, 0.1); }',
+    'body.app-slava-restraint .cinema-shots-rail__badge--running { background: var(--sr-accent); }',
+    '.edit-node__speed-badge { color: var(--sr-accent); }',
+    'body.app-slava-restraint .edit-node__speed-badge { border-color: #FF5A1F; }',
   );
   for (const css of accented) {
     it(`fails: ${css}`, () => expect(hits(css)).toHaveLength(1));
@@ -60,6 +66,13 @@ describe('check-badge-tone', () => {
     '.character-def__ref-badge-list { color: var(--sr-accent); }',
     '.character-def__ref-button { color: var(--sr-accent); }',
     '/* .commons-badge--x { color: var(--sr-accent); } */',
+    '.moodboard-tile__cover { color: var(--sr-ink-light); background: rgba(0, 0, 0, 0.76); }',
+    '.moodboard-tile__cover-button { color: var(--sr-accent); }',
+    '.moodboard-color__flag { color: var(--sr-ink-light); }',
+    'body.app-slava-restraint .cinema-shots-rail__badge--running { background: var(--sr-surface-control); color: var(--sr-ink-light); }',
+    // The unread count keeps the accent (design).
+    'body.app-slava-restraint .cinema-shots-rail__badge { background: var(--sr-accent); color: var(--sr-on-accent); }',
+    '.edit-node__speed-badge { color: var(--sr-ink-meta); border-color: var(--sr-edge); }',
   ];
   for (const css of fine) {
     it(`passes: ${css}`, () => expect(hits(css)).toHaveLength(0));

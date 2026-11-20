@@ -2957,7 +2957,7 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.probe-box { border-left: 3px solid #e8a33d; }',
       // Amber by hue, not the presence variable: still caught (GM r20 Q3).
       '.probe-box { border-left: 3px solid var(--sr-warning); }',
-      '.probe-box { border: 3px solid var(--pin-color); }',
+      '.probe-box { border: 3px solid var(--sr-warning); }',
       '.probe-box:hover { border-color: #ff5a1f; }',
       // Review 12 NIT-2: every state, pseudo-element, gradient, shadow and alias.
       'body.app-slava-restraint .probe-row:focus-within { outline: 1px solid #f5c518; }',
@@ -2981,13 +2981,13 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       near: [['p', ['canvas-pin__text'], []], ['p', ['canvas-pin__meta'], []],
         ['p', ['canvas-pin__reply'], [['span', ['canvas-pin__agent'], []]]]] as JsxTree[] };
     for (const css of [
-      '.canvas-pin__card { border-left: 3px solid var(--pin-color); }',
+      '.canvas-pin__card { border-left: 3px solid var(--sr-warning); }',
       '.canvas-pin__card { border: 2px solid var(--sr-accent); box-shadow: 0 0 0 4px #ff5a1f; }',
-      '.canvas-pin__card { box-shadow: 0 0 0 2px var(--pin-color); }',
-      '.canvas-pin__card { background: var(--pin-color); }',
+      '.canvas-pin__card { box-shadow: 0 0 0 2px var(--sr-warning); }',
+      '.canvas-pin__card { background: var(--sr-warning); }',
       'body.app-slava-restraint .canvas-pin__card { border-color: #ff5a1f; }',
       '.canvas-pin { outline: 2px solid #ff5a1f; }',
-      '.canvas-pin__meta { background: color-mix(in srgb, var(--pin-color) 20%, transparent); }',
+      '.canvas-pin__meta { background: color-mix(in srgb, var(--sr-warning) 20%, transparent); }',
       '.canvas-pin__text { border-bottom: 1px solid #f5c518; }',
       '.canvas-pin__reply .canvas-pin__agent { background: #e8a33d; }',
       // The 8-digit hex, currentColor over an amber colour, a warm fallback.
@@ -3003,16 +3003,18 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
     // A leftover status-edge element beside Delete note is not exempt: its presence fill, border or glow fails.
     const lookalike = { ...pinDelete, near: [['span', ['canvas-pin__edge'], []], ['div', ['canvas-pin__card-actions'], []]] as JsxTree[] };
     for (const css of [
-      '.canvas-pin__edge { background: var(--pin-color); }',
+      '.canvas-pin__edge { background: var(--sr-warning); }',
       '.canvas-pin__edge { background: var(--agent-color, #ff5a1f); }',
-      '.canvas-pin__edge { border: 3px solid var(--pin-color); }',
-      '.canvas-pin__card > span { background: var(--pin-color); }',
-      '.canvas-pin__card-actions { background: var(--pin-color); }',
+      '.canvas-pin__edge { border: 3px solid var(--sr-warning); }',
+      '.canvas-pin__card > span { background: var(--sr-warning); }',
+      '.canvas-pin__card-actions { background: var(--sr-warning); }',
     ]) expect(frameFindings(lookalike, vars0, css), css).not.toEqual([]);
     // The Delete row itself is never tinted: a presence fill on it is caught as its own colour.
-    expect(cascadeFindings(pinDelete, vars0, '.canvas-pin__delete:hover { background: var(--pin-color); }')).not.toEqual([]);
+    expect(cascadeFindings(pinDelete, vars0, '.canvas-pin__delete:hover { background: var(--sr-warning); }')).not.toEqual([]);
     for (const css of [
       '.canvas-pin__card { color: #e8e8e8; border: 1px solid currentColor; }',
+      // Design: the pin marker is neutral bright ink (--pin-color is --sr-ink), no longer amber.
+      '.canvas-pin__card { border: 1px solid var(--pin-color); background: var(--pin-color); }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     for (const css of [
       '.probe-box { border: 1px solid var(--sr-edge-strong); background: var(--sr-surface-control); }',

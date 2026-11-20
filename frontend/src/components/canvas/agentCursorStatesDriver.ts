@@ -30,6 +30,7 @@ function target() {
 function play(action: AgentCursorAction): void {
   useAgentPresenceStore.getState().apply({
     type: 'agentPresence',
+    // palette-exempt: dev driver agent identity colour, not a status
     agent: { id: CURSOR_STATES_DRIVER_MARKER, name: 'Claude', color: '#E8825A', verified: true },
     target: target(),
     action,

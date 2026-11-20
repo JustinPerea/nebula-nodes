@@ -361,7 +361,7 @@ body.app-slava-restraint .settings-row__dot {
 
 body.app-slava-restraint .settings-row__dot--ok {
   background: var(--sr-success);
-  box-shadow: 0 0 8px rgba(110, 231, 183, 0.45);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--sr-success) 45%, transparent);
 }
 
 body.app-slava-restraint .settings-row__dot--warn { background: var(--sr-warning); }
@@ -535,7 +535,7 @@ body.app-slava-restraint .settings-sa__drop--over {
   background: var(--sr-accent-soft);
 }
 
-body.app-slava-restraint .settings-sa__drop--ready { border-style: solid; border-color: rgba(110, 231, 183, 0.3); }
+body.app-slava-restraint .settings-sa__drop--ready { border-style: solid; border-color: var(--sr-success-border); }
 body.app-slava-restraint .settings-sa__file { color: var(--sr-success); font-size: var(--sr-type-label); }
 
 body.app-slava-restraint .settings-sa__account {

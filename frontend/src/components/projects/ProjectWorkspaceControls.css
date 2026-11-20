@@ -89,7 +89,7 @@ body.app-slava-restraint .project-workspace-controls__failed {
   white-space: nowrap;
 }
 body.app-slava-restraint .project-workspace-controls__not-saved {
-  color: #e6a395;
+  color: var(--sr-warning);
   font: 11px/1.4 var(--sr-ui);
 }
 /* The failed save's Try again keeps the quiet button's look (canvas-undo-notice__action--quiet),
@@ -106,7 +106,7 @@ body.app-slava-restraint .project-workspace-controls__failed .canvas-undo-notice
 body.app-slava-restraint .project-workspace-controls__paused {
   border: 0;
   background: transparent;
-  color: #e6a395;
+  color: var(--sr-warning);
   font: 11px/1.4 var(--sr-ui);
   cursor: pointer;
 }

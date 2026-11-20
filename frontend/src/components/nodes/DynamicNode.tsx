@@ -55,6 +55,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
 
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
+  // palette-exempt: category colour fallback, not a status
   const categoryColor = CATEGORY_COLORS[definition?.category ?? 'universal'] ?? '#E65100';
   const stateClass = `model-node--${nodeData.state}`;
 

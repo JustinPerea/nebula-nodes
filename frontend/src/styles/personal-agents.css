@@ -7,7 +7,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  border: 1px solid var(--sr-accent-border, #6b5a2a);
+  border: 1px solid var(--sr-accent-border);
   border-radius: 6px;
   background: var(--sr-canvas-elevated, #1b1910);
   font-size: 12px;
@@ -29,7 +29,7 @@
   font-size: 11px;
 }
 
-.permission-card__icon { color: var(--sr-accent, #e8c46a); flex-shrink: 0; }
+.permission-card__icon { color: var(--sr-accent); flex-shrink: 0; }
 .permission-card__kind {
   margin-left: auto;
   padding: 1px 6px;
@@ -72,7 +72,7 @@
 
 .permission-card__actions button:active:not(:disabled) { transform: scale(0.96); }
 .permission-card__actions button:disabled { cursor: default; opacity: 0.6; }
-.permission-card__allow { font-weight: 600; border-color: var(--sr-accent-border, #8a7a3a) !important; }
+.permission-card__allow { font-weight: 600; border-color: var(--sr-accent-border) !important; }
 .permission-card__held-line {
   margin: 0;
   color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
@@ -83,7 +83,7 @@
 .permission-card__outcome { color: var(--sr-ink-muted, #aaa); font-size: 11px; font-style: italic; }
 
 .permission-card__actions button:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
@@ -146,7 +146,7 @@
 .personal-warning__title { margin: 0; font-size: 16px; }
 .personal-warning__lead { margin: 0; }
 .personal-warning__list { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--sr-ink-muted, #ccc); }
-.personal-warning__error { margin: 0; color: var(--line-warning, #e08a8a); }
+.personal-warning__error { margin: 0; color: var(--line-warning, var(--sr-error)); }
 .personal-warning__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 .personal-warning__actions button {
@@ -162,12 +162,12 @@
 .personal-warning__accept { font-weight: 600; border-color: var(--sr-accent-border, #777) !important; }
 
 .personal-warning__actions button:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .personal-agents__status { font-size: 11px; color: var(--sr-ink-muted, #999); }
-.personal-agents__status[data-status='ready'] { color: #8fc89d; }
+.personal-agents__status[data-status='ready'] { color: var(--sr-success); }
 .personal-agents__swatch {
   display: inline-block;
   width: 10px;
@@ -241,7 +241,9 @@
 
 /* The Google sign-in link shown while Antigravity's sign-in waits. */
 .personal-agents__fine a {
-  color: var(--sr-accent, #e8c46a);
+  color: var(--sr-ink-light);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+.personal-agents__fine a:hover { color: var(--sr-ink); }

@@ -221,8 +221,8 @@
 
 .nn-bs__chip--active {
   color: #0a0a0b;
-  background: rgb(240, 150, 90);
-  border-color: rgb(240, 150, 90);
+  background: var(--nn-crab-warm);
+  border-color: var(--nn-crab-warm);
 }
 
 /* ── Mode grid ────────────────────────────────────────────────────── */

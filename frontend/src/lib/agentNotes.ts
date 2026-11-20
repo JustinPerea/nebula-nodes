@@ -128,6 +128,7 @@ export interface AgentNotesEvent {
   at: number;
 }
 
+// palette-exempt: per-agent identity colour fallback, not a status
 export const DEFAULT_AGENT_COLOR = '#E8825A';
 /** Argon's lavender, the reader's colour in GM's mockups. */
 export const READER_COLOR = '#B4A7FF';

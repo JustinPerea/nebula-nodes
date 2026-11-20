@@ -37,6 +37,8 @@
   --sr-accent-soft: var(--sr-surface-control);
   --sr-accent-hover-soft: var(--sr-surface-control);
   --sr-error-soft: var(--sr-surface-control);
+  --sr-error-surface: var(--sr-surface-control);
+  --sr-error-surface-strong: var(--sr-surface-control);
   --sr-danger-soft: var(--sr-surface-control);
   --sr-danger-tint: var(--sr-surface-control);
   --sr-warning-soft: var(--sr-surface-control);

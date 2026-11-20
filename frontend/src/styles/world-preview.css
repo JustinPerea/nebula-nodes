@@ -24,7 +24,7 @@
 }
 
 .world-preview:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #67e8f9);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
@@ -118,15 +118,6 @@
   color: #a5f3fc;
   font-size: 10px;
   font-weight: 650;
-}
-
-.world-preview--invalid {
-  display: grid;
-  place-items: center;
-  gap: 7px;
-  min-height: 120px;
-  color: rgba(226, 232, 240, 0.56);
-  font-size: 11px;
 }
 
 body.app-slava-restraint .model-node--world-surface {
@@ -253,6 +244,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   padding: 0;
 }
 
+/* palette-exempt: the World surface is tinted in its port colour (design) */
 .world-modal__button:hover,
 .world-modal__icon-button:hover,
 .world-modal__segmented button:hover,
@@ -270,7 +262,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-modal__button:focus-visible,
 .world-modal__icon-button:focus-visible,
 .world-modal__segmented button:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #67e8f9);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
@@ -296,18 +288,18 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 
 .world-modal__status {
   margin-left: auto;
-  color: rgba(203, 213, 225, 0.62);
+  color: var(--sr-ink-light);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
   letter-spacing: 0.04em;
 }
 
 .world-modal__status--ready {
-  color: #86efac;
+  color: var(--sr-success);
 }
 
 .world-modal__status--error {
-  color: #fca5a5;
+  color: var(--sr-error);
 }
 
 .world-modal__stage {
@@ -360,7 +352,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-environment-viewer__interactive-canvas:focus-visible {
   /* A negative offset keeps the native focus paint inside the clipped stage.
    * Unlike an inset shadow, the outline is painted above canvas pixels. */
-  outline: var(--sr-focus-outline, 3px solid #67e8f9);
+  outline: var(--sr-focus-outline);
   outline-offset: -2px;
 }
 
@@ -389,7 +381,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   align-items: center;
   justify-content: center;
   gap: 9px;
-  color: rgba(226, 232, 240, 0.74);
+  color: var(--sr-ink);
   font-size: 12px;
   text-align: center;
 }
@@ -404,8 +396,8 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-environment-viewer__spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(103, 232, 249, 0.18);
-  border-top-color: #67e8f9;
+  border: 2px solid var(--sr-pending-soft);
+  border-top-color: var(--sr-ink-light);
   border-radius: 50%;
   animation: world-spin 800ms linear infinite;
 }
@@ -456,7 +448,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-modal__failure p {
   max-width: 420px;
   margin: 0;
-  color: rgba(226, 232, 240, 0.74);
+  color: var(--sr-ink);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -483,7 +475,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 
 .world-modal__download-error {
   max-width: 280px;
-  color: #fca5a5;
+  color: var(--sr-error);
   font-size: 10px;
   line-height: 1.35;
 }
@@ -658,6 +650,12 @@ body.app-slava-restraint .world-modal__metadata {
   font-size: var(--sr-type-micro);
 }
 
+/* Loading is the base state of the status line; design reads it as neutral
+   pending ink, a step above the metadata's meta ink. */
+body.app-slava-restraint .world-modal__status {
+  color: var(--sr-ink-light);
+}
+
 body.app-slava-restraint .world-modal__status--ready {
   color: var(--sr-success);
 }
@@ -678,7 +676,7 @@ body.app-slava-restraint :is(
 }
 
 body.app-slava-restraint .world-modal__failure p {
-  color: var(--sr-ink-light);
+  color: var(--sr-ink);
   font-size: var(--sr-type-body);
   line-height: var(--sr-line-body);
 }
@@ -692,8 +690,8 @@ body.app-slava-restraint .world-modal__help {
 }
 
 body.app-slava-restraint .world-environment-viewer__spinner {
-  border-color: var(--sr-accent-soft);
-  border-top-color: var(--sr-accent);
+  border-color: var(--sr-pending-soft);
+  border-top-color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint :is(
@@ -780,7 +778,7 @@ body.app-slava-restraint :is(
 
   .world-modal__header-actions .world-modal__button svg {
     flex: 0 0 auto;
-    color: var(--sr-accent, #cffafe);
+    color: var(--sr-accent);
   }
 
   .world-modal__status,

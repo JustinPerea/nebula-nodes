@@ -140,8 +140,8 @@
 }
 
 .proposal-ghost__cost--paid {
-  border-color: rgb(232 163 61 / 0.55);
-  color: #f0c27a;
+  border-color: var(--sr-warning-border);
+  color: var(--sr-warning);
 }
 
 .proposal-ghost__more {
@@ -568,7 +568,6 @@
 
 .proposal-bar__not-ready-mark {
   margin-right: 5px;
-  color: #ffc107;
 }
 
 body.app-slava-restraint .proposal-bar__not-ready-mark {
@@ -740,7 +739,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 /* 5. The inline error, above the footer. */
 .proposal-bar__error {
   margin: 8px 0 0;
-  color: var(--line-warning, #ff8a80);
+  color: var(--line-warning, var(--sr-error));
   /* An inline line inside the bar: it expands into place (GM r9 answer 2). */
   overflow: clip;
   interpolate-size: allow-keywords;

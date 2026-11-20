@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import WaveSurfer from 'wavesurfer.js';
+import { tokenAtAlpha } from '../../lib/readToken';
 
 interface Props {
   sourceUrl: string;
@@ -18,7 +19,7 @@ export function WaveformAudio({ sourceUrl }: Props) {
       barHeight: 0.8,
       barRadius: 0,
       waveColor: 'rgba(255, 255, 255, 0.40)',
-      progressColor: 'rgba(255, 90, 31, 0.60)',
+      progressColor: tokenAtAlpha('--sr-accent', 0.6),
       cursorColor: 'transparent',
       height: 18,
       interact: false,

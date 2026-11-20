@@ -6,6 +6,8 @@
  * missing API or a tainted favicon never breaks execution.
  */
 
+import { readToken } from './readToken';
+
 export interface NotificationPrefs {
   enabled: boolean;
   sound: boolean;
@@ -218,7 +220,7 @@ export function notifyJobComplete(opts: {
   if (hidden) {
     if (originalTitle === null) originalTitle = document.title;
     document.title = `${opts.ok ? '✓ Done' : '✗ Failed'} — ${baseTitle()}`;
-    setFaviconDot(opts.ok ? '#34c759' : '#ff3b30');
+    setFaviconDot(readToken(opts.ok ? '--sr-success' : '--sr-error'));
     armRestore();
   } else {
     restoreBadges();

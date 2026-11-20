@@ -19,4 +19,4 @@
 .kept-delete-chooser__trigger--danger:active:not(:disabled) { color: var(--sr-danger-ink-hover, #ff9a91); }
 .kept-delete-chooser .prompt-dialog__actions button { font-size: 13px; }
 .kept-delete-chooser__why { color: var(--sr-ink-dim, #aaa); font-size: 12px; line-height: 1.4; }
-.kept-delete-chooser__error { margin: 0; color: var(--sr-error, #f5c518); font-size: 13px; line-height: 1.5; }
+.kept-delete-chooser__error { margin: 0; color: var(--sr-error); font-size: 13px; line-height: 1.5; }

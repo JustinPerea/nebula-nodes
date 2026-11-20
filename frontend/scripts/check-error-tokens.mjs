@@ -52,19 +52,19 @@ import {
 // file (`--x: var(--sr-accent)` in one rule, `var(--x)` in an error rule of that file). A chain
 // of two local properties, or a property declared in another file, is not followed.
 
-const SRC = join(process.cwd(), 'src');
+const SRC = join(import.meta.dirname, '..', 'src');
 const TOKEN_NAME = /^--(?:sr-(?:error|danger)|jev-fail)(?![\w])/;
 const ACCENT_VAR = /var\(\s*(--sr-accent(?![\w])[\w-]*)/gi;
 const VAR_REF = /var\(\s*(--[\w-]+)/g;
 const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
-const ERROR_STATE = /error|fail|invalid|refused|warn|blocked|denied|rejected/i;
+export const ERROR_STATE = /error|fail|invalid|refused|warn|blocked|denied|rejected/i;
 // A calm word is a whole class or modifier word: `.row--ready` and `.is-done` match, `.pass-through`
 // does not, and `not-ready` (the state that needs attention) is the one not- form that is exempt.
-const CALM_STATE = /(?<![a-z0-9])(?:running|pass|passed|done|ok|success|complete|completed|(?<!not-)(?:ready|found))(?![a-z0-9-])/i;
+export const CALM_STATE = /(?<![a-z0-9])(?:running|pass|passed|done|ok|success|complete|completed|(?<!not-)(?:ready|found))(?![a-z0-9-])/i;
 // A control inside an error container (a Retry or Delete button) is not an error state; any other
 // descendant of one (its output, its text) is.
 const CONTROL = /^(?:button|a|input)(?![\w-])|button|btn|retry|action|link|close|dismiss|delete|remove|toggle|menu/i;
-const NOT_GROUP = /:not\((?:[^()]|\([^()]*\))*\)/g;
+export const NOT_GROUP = /:not\((?:[^()]|\([^()]*\))*\)/g;
 const ATTENTION_USE = /var\(\s*--sr-(?:warning|error)(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const WARNING_LITERAL = /#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const DESTRUCTIVE = /danger|delete|destructive|--clear|discard|forget|trash__trigger/i;
@@ -164,7 +164,7 @@ export function findErrorTokenHits(sheets) {
  * A rule with its nested blocks taken out: the parent with its own declarations, then one rule per
  * nested block with its selector resolved against the parent (recursively).
  */
-function flattenNested(rule) {
+export function flattenNested(rule) {
   if (!rule.nested) return [rule];
   const out = [];
   let own = rule.body;
@@ -209,7 +209,7 @@ function inErrorContainer(part) {
 }
 
 /** The state words of a part: its last compound without the BEM block (`.personal-warning__accept` -> `.accept`). */
-function stateOf(part) {
+export function stateOf(part) {
   return lastCompound(part).replace(/\.[\w-]*?__/g, '.');
 }
 
@@ -223,7 +223,7 @@ function followLocal(value, local) {
 }
 
 /** The last compound selector of a part ("a .b > .c:hover" -> ".c:hover"). */
-function lastCompound(part) {
+export function lastCompound(part) {
   return part.split(/[\s>+~]+/).filter(Boolean).pop() ?? part;
 }
 

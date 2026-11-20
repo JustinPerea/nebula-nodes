@@ -48,6 +48,7 @@ function cleanAgent(raw: unknown): RosterAgent | null {
   return {
     id: agent.id,
     name: agent.name,
+    // palette-exempt: per-agent identity colour fallback, not a status
     color: typeof agent.color === 'string' && SAFE_COLOR.test(agent.color) ? agent.color : '#E8825A',
     verified: agent.verified === true,
   };

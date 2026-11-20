@@ -52,6 +52,7 @@ body.app-slava-restraint .moodboard-analysis button {
   cursor: pointer;
 }
 
+/* palette-exempt: the moodboard category colour tints its title and hover (design) */
 body.app-slava-restraint .moodboard-studio-toolbar__button:hover,
 body.app-slava-restraint .moodboard-dropzone__file-wrap:hover .moodboard-dropzone__file-button,
 body.app-slava-restraint .moodboard-analysis button:hover {
@@ -101,6 +102,7 @@ body.app-slava-restraint .moodboard-dropzone__file-input:disabled {
   cursor: default;
 }
 
+/* palette-exempt: the moodboard category colour tints its title and hover (design) */
 body.app-slava-restraint .moodboard-studio-toolbar__title {
   color: #f59e0b;
   font-size: 13px;
@@ -125,16 +127,6 @@ body.app-slava-restraint .moodboard-studio-toolbar__state--saved {
 /* Design: a save that failed is a warning (the warning token, not an amber literal). */
 body.app-slava-restraint .moodboard-studio-toolbar__state--error {
   color: var(--sr-error);
-}
-
-body.app-slava-restraint .moodboard-palette__empty--error,
-body.app-slava-restraint .moodboard-rail__empty--error {
-  color: var(--line-warning, #e0796b);
-}
-
-/* The open board is another project's: say where, above the list. */
-body.app-slava-restraint .moodboard-rail__empty--notice {
-  color: var(--sr-ink-meta);
 }
 
 body.app-slava-restraint .moodboard-rail__new:disabled {
@@ -484,7 +476,7 @@ body.app-slava-restraint .moodboard-analysis__summary {
 }
 
 body.app-slava-restraint .moodboard-analysis__outdated {
-  color: #d9a441;
+  color: var(--sr-warning);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -533,8 +525,8 @@ body.app-slava-restraint .moodboard-palette__new {
 
 body.app-slava-restraint .moodboard-rail__scope-tab--active,
 body.app-slava-restraint .moodboard-palette__scope-tab--active {
-  border-color: #f59e0b;
-  color: #f59e0b;
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
 }
 
 body.app-slava-restraint .moodboard-rail__list,
@@ -550,6 +542,17 @@ body.app-slava-restraint .moodboard-palette__empty {
   font-size: 11px;
   line-height: 1.4;
   padding: 4px 2px;
+}
+
+/* Design: a failed board list reads in the warning token; it follows the base rule so it wins. */
+body.app-slava-restraint .moodboard-palette__empty--error,
+body.app-slava-restraint .moodboard-rail__empty--error {
+  color: var(--sr-error);
+}
+
+/* The open board is another project's: say where, above the list. */
+body.app-slava-restraint .moodboard-rail__empty--notice {
+  color: var(--sr-ink-meta);
 }
 
 body.app-slava-restraint .moodboard-rail__item,
@@ -568,10 +571,14 @@ body.app-slava-restraint .moodboard-palette__item {
   cursor: pointer;
 }
 
+/* palette-exempt: the moodboard category colour tints its title and hover (design) */
 body.app-slava-restraint .moodboard-rail__item:hover,
-body.app-slava-restraint .moodboard-palette__item:hover,
-body.app-slava-restraint .moodboard-rail__item--active {
+body.app-slava-restraint .moodboard-palette__item:hover {
   border-color: #f59e0b;
+}
+
+body.app-slava-restraint .moodboard-rail__item--active {
+  border-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .moodboard-rail__thumb,
@@ -696,7 +703,7 @@ body.app-slava-restraint .moodboard-field .moodboard-inline input[type="color"] 
 }
 
 body.app-slava-restraint .moodboard-inline__error {
-  color: #d9a441;
+  color: var(--sr-error);
   text-transform: none;
   letter-spacing: 0;
 }
@@ -735,10 +742,10 @@ body.app-slava-restraint .moodboard-brief__stale {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  border: 1px solid rgba(217, 164, 65, 0.5);
+  border: 1px solid var(--sr-warning-border);
   border-radius: 3px;
   padding: 6px 8px;
-  color: #d9a441;
+  color: var(--sr-warning);
   font-size: 12px;
 }
 
@@ -970,7 +977,7 @@ body.app-slava-restraint .moodboard-clash {
 }
 
 body.app-slava-restraint .moodboard-clash--conflict {
-  border-color: rgba(217, 164, 65, 0.5);
+  border-color: var(--sr-warning-border);
 }
 
 body.app-slava-restraint .moodboard-clash__palette {
@@ -1020,10 +1027,8 @@ body.app-slava-restraint .moodboard-color--left-out .moodboard-color__hex {
 }
 
 body.app-slava-restraint .moodboard-color__flag {
-  color: #d9a441;
+  color: var(--sr-ink-light);
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 /* Advanced: the clash setting. */
@@ -1214,22 +1219,17 @@ body.app-slava-restraint .moodboard-tile__cover {
   position: absolute;
   left: 6px;
   bottom: 6px;
-  border: 1px solid rgba(245, 158, 11, 0.7);
+  border: 1px solid var(--sr-edge-strong);
   border-radius: 3px;
   padding: 1px 6px;
-  background: rgba(0, 0, 0, 0.62);
-  color: #f5b544;
+  background: rgba(0, 0, 0, 0.76);
+  color: var(--sr-ink-light);
   font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   transform-origin: bottom left;
   animation: moodboard-cover-in 320ms var(--moodboard-spring) both;
 }
 
-body.app-slava-restraint .moodboard-tile__cover--first {
-  border-color: rgba(255, 255, 255, 0.28);
-  color: rgba(255, 255, 255, 0.78);
-}
+/* --first (the default cover, no image chosen yet) reads like a chosen one. */
 
 body.app-slava-restraint .moodboard-tile__cover-row {
   display: flex;
@@ -1248,6 +1248,7 @@ body.app-slava-restraint .moodboard-tile__cover-button {
   cursor: pointer;
 }
 
+/* palette-exempt: the moodboard category colour tints its hover (design) */
 body.app-slava-restraint .moodboard-tile__cover-button:hover,
 body.app-slava-restraint .moodboard-tile__cover-button:focus-visible {
   border-color: #f59e0b;

@@ -91,12 +91,16 @@ All new Slava styling should consume the `--sr-*` tokens below. If a value is re
 | `--sr-error` | `var(--sr-warning)` | Something went wrong: error text, failed state. Never the accent |
 | `--sr-error-soft` | `var(--sr-warning-soft)` | Error surface |
 | `--sr-error-border` | `var(--sr-warning-border)` | Error border |
+| `--sr-error-surface` | `color-mix(in srgb, var(--sr-error) 8%, var(--sr-canvas-elevated))` | Opaque error surface for a pill that floats over content (the offline line) |
+| `--sr-error-surface-strong` | `color-mix(in srgb, var(--sr-error) 22%, var(--sr-canvas-elevated))` | The brief flash when an edit is tried offline |
 | `--sr-danger` | `#ff887d` | Destructive action ink (defined in `styles/disabled-buttons.css`, `:root`); aliased as `--sr-danger-ink`, `--sr-danger-fill` |
 | `--sr-danger-hover` | `#ff9a91` | Destructive action hover (aliases `--sr-danger-ink-hover`, `--sr-danger-fill-hover`) |
 | `--sr-danger-soft` | `rgba(255,70,60,.14)` | Destructive action tint (aliases `--sr-danger-tint`) |
 | `--sr-danger-border` | `rgba(255,70,60,.34)` | Destructive action edge (aliases `--sr-danger-edge`) |
 | `--sr-success` | `rgba(110, 231, 183, 0.90)` | Future success state |
 | `--sr-success-soft` | `rgba(110, 231, 183, 0.12)` | Future success surface |
+| `--sr-success-border` | `rgba(110, 231, 183, 0.30)` | Success edge (a valid drop zone) |
+| `--sr-on-success` | `#0A0A0B` | Ink on a solid success fill (a done badge) |
 | `--sr-pending` | `var(--sr-ink-light)` | Future pending state |
 | `--sr-pending-soft` | `rgba(255, 255, 255, 0.06)` | Future pending surface |
 | `--sr-disabled-opacity` | `0.48` | Disabled fields |
