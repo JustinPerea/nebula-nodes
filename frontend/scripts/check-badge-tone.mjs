@@ -108,6 +108,7 @@ export function findAccentBadges(source, file) {
 const NAMED_BADGES = new Set([
   'world-modal__status', 'moodboard-studio-toolbar__state', 'moodboard-view-switch__badge',
   'world-preview__badge', 'character-studio-toolbar__state', 'jev-result__badge', 'character-def__ref-badge', 'reference-set-node__role-badge',
+  'commons-unsaved',
 ]);
 const CLASS = /\.(-?[_a-zA-Z][\w-]*)/g;
 // Badges design moved off the accent, matched by the exact class so a sibling keeps its tone:

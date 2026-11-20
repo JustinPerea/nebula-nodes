@@ -410,9 +410,8 @@ body.app-slava-restraint .evaluation-save .commons-button--primary,
 .evaluation-save .commons-button--primary {
   margin:0;
 }
+/* Design: a state word in sentence case, at the app's state-word size, in the warning tone. */
 .commons-unsaved {
   color:var(--evaluation-unsaved-ink);
-  font-size:10px;
-  letter-spacing:1.5px;
-  text-transform:uppercase;
+  font-size:11px;
 }
