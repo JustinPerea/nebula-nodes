@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { curlApostrophes } from './errorCopy';
 
 /**
  * Design: a `…` span in a chat or error line is inline code (the mono face, no line break inside),
@@ -47,5 +48,27 @@ export function withCodeSpans(text: string): ReactNode {
   }
   if (out.length === 0) return text;
   if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+const MASK = '\uE000';
+/**
+ * A line in `code` mode: code spans are found first, on the words as they came, and only the prose between them is curled,
+ * so a span (`cmd's`) is never changed whichever way curlApostrophes would have paired the backticks.
+ */
+export function curledWithCodeSpans(text: string): ReactNode {
+  const node = withCodeSpans(text);
+  if (typeof node === 'string') return curlApostrophes(node);
+  if (!Array.isArray(node)) return node;
+  // The prose is curled as one text with each span masked by a placeholder, so a '…' quote that crosses a span
+  // stays protected as one quote. The placeholder is a private-use character; text that holds it is curled piece by piece.
+  if (text.includes(MASK)) return node.map((part) => (typeof part === 'string' ? curlApostrophes(part) : part));
+  const spans = node.filter((part) => typeof part !== 'string');
+  const prose = curlApostrophes(node.map((part) => (typeof part === 'string' ? part : MASK)).join('')).split(MASK);
+  const out: ReactNode[] = [];
+  prose.forEach((piece, index) => {
+    if (piece) out.push(piece);
+    if (index < spans.length) out.push(spans[index]);
+  });
   return out;
 }

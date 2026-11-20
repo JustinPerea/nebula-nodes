@@ -160,7 +160,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
               <span className="cinema-reference-upload__status" role={uploadReasonRole(upload)}>
                 {/* The line ends as its buttons do: a retryable failure ends in "Try again." (lib/cinemaUploads uploadFailure). */}
                 {upload.status === 'uploading' ? 'Uploading…'
-                  : <LineText text={upload.error ?? "Couldn’t upload this image."} />}
+                  : <LineText text={upload.error ?? "Couldn’t upload this image."} code />}
               </span>
               <div className="cinema-reference-upload__actions">
                 {uploadOffersTryAgain(upload) && (

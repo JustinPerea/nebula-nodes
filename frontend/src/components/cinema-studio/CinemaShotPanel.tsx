@@ -297,7 +297,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                 : motionHandoff?.status === 'error' ? 'Try again' : 'Send to motion'}
           </button>
           {motionHandoff?.status === 'error' ? (
-            <p id={motionLineId} className="cinema-shot-panel__motion-feedback" role="alert"><LineText text={motionHandoff.error} /></p>
+            <p id={motionLineId} className="cinema-shot-panel__motion-feedback" role="alert"><LineText text={motionHandoff.error} code /></p>
           ) : (
             <p className="cinema-shot-panel__motion-feedback" role={motionHandoff ? 'status' : undefined}>
               {motionHandoff?.status === 'ready' ? 'Video node connected. Open it to set the prompt and generate.'
@@ -359,7 +359,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
                   <span className="cinema-reference-upload__status" role={uploadReasonRole(upload)}>
                     {/* The line ends as its buttons do: a retryable failure ends in "Try again." (lib/cinemaUploads uploadFailure). */}
                     {upload.status === 'uploading' ? 'Uploading…'
-                      : <LineText text={upload.error ?? "Couldn’t upload this image."} />}
+                      : <LineText text={upload.error ?? "Couldn’t upload this image."} code />}
                   </span>
                   <div className="cinema-reference-upload__actions">
                     {uploadOffersTryAgain(upload) && (

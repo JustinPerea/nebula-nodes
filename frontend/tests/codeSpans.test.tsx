@@ -15,7 +15,7 @@ import { ChatPanel } from '../src/components/panels/ChatPanel';
 import { resetCommonsSessionForTests } from '../src/lib/commonsApi';
 import { cascaded } from './helpers/cssCascade';
 import { LineText } from '../src/components/LineText';
-import { withCodeSpans } from '../src/lib/codeSpans';
+import { curledWithCodeSpans, withCodeSpans } from '../src/lib/codeSpans';
 import { useUIStore } from '../src/store/uiStore';
 const initialUI = useUIStore.getState();
 
@@ -218,5 +218,37 @@ describe('code span styles', () => {
     // The neighbouring rule still styles a plain code element in that panel.
     const plain = render(<section className="settings-apps"><code>x</code></section>).container.querySelector('code')!;
     expect(cascaded(plain).get('|font')?.selector).toMatch(/settings-apps code/);
+  });
+});
+
+describe('LineText with code spans in a flex row', () => {
+  it('holds the text and its spans as one child before the anchor, so a gap does not space the words apart', () => {
+    const { container } = render(<p style={{ display: 'flex', gap: '10px' }}><LineText text={'Couldn’t read `~/a.png` because it isn’t there.'} code /></p>);
+    const row = container.querySelector('p')!;
+    expect(row.children).toHaveLength(2);
+    const [run, anchor] = [...row.children];
+    expect(anchor.hasAttribute('data-line-anchor')).toBe(true);
+    expect(run.querySelectorAll('code')).toHaveLength(1);
+    expect(run.textContent).toBe('Couldn’t read ~/a.png because it isn’t there.');
+  });
+  it('leaves a string body unwrapped', () => {
+    const { container } = render(<p><LineText text="Couldn’t read it." code /></p>);
+    expect(container.querySelector('p')!.firstChild?.nodeType).toBe(Node.TEXT_NODE);
+  });
+});
+
+describe('curling around code spans', () => {
+  const shown = (text: string) => render(<p>{curledWithCodeSpans(text)}</p>).container.textContent;
+  it('a quote that crosses a span stays protected as one quote', () => {
+    expect(shown("Couldn't open 'Bob's `x` board'")).toBe("Couldn’t open 'Bob's x board'");
+    expect(shown("'a `b` c'")).toBe("'a b c'");
+    expect(shown("'don't `b` c'")).toBe("'don't b c'");
+  });
+  it('prose outside a quote is still curled, and the span is never changed', () => {
+    expect(shown("Don't read `it's` now, it's gone")).toBe('Don’t read it\'s now, it’s gone');
+    expect(shown('Krea\'s `a\'b` file isn\'t there')).toBe('Krea’s a\'b file isn’t there');
+  });
+  it('text that already holds the placeholder character is curled piece by piece', () => {
+    expect(shown('Don\'t \uE000 `x` it\'s')).toBe('Don’t \uE000 x it’s');
   });
 });

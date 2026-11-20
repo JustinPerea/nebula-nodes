@@ -895,6 +895,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   white-space: pre-line;
   overflow-wrap: anywhere;
   line-height: 1.4;
+  text-wrap: pretty;
 }
 
 /* GM round 22 (answer 1): every line wraps (up to three at this width) and

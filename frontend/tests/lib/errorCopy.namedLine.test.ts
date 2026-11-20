@@ -55,11 +55,11 @@ describe('the rule', () => {
  * can't double (its tail is fixed copy, or never a line of its own).
  */
 const HAND_BUILT: { file: string; text: string; why: string }[] = [
-  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(rest))}`',
+  { file: 'lib/errorCopy.ts', text: '`${couldntLine(what)} ${endedSentence(curlApostrophes(rest))}`',
     why: 'the action, then the named line the backend wrote (a line that names the thing and its fix has no reason to fold in)' },
-  { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what}. ${endedSentence(curlApostrophes(reason))}`',
+  { file: 'lib/errorCopy.ts', text: '`${couldntLine(what)} ${endedSentence(curlApostrophes(reason))}`',
     why: 'the action, then a reason that is already a sentence of its own with its fix (an instruction, not a cause)' },
-  { file: 'lib/nodeErrorCopy.ts', text: '`Nebula couldn’t ${what}. ${curlApostrophes(named)}`',
+  { file: 'lib/nodeErrorCopy.ts', text: '`${couldntLine(what)} ${curlApostrophes(named)}`',
     why: "the action, then the provider's own unclassified line, kept whole so its fix is not lost" },
   { file: 'lib/providerReadiness.ts', text: "`${becauseLine({ heading: `Couldn’t check ${provider}.`, reason: '' })} The saved connection is unchanged. Use Check connections to try again.`",
     why: 'the action from the builder, then two fixed sentences: what stays as it was, and the fix (neither is a cause)' },
@@ -152,9 +152,13 @@ function handBuilt(text: string): string[] {
       }
     }
   }
+  // couldntLine(what) opening a template is the sentence "Nebula couldn’t ‹what›." (lib/errorCopy), so a line built on it
+  // is seen like the literal form.
   const slotOf = (node: ts.TemplateExpression, index: number) => {
     const { expression } = node.templateSpans[index];
-    return index === 0 && node.head.text === '' && ts.isIdentifier(expression) ? constants.get(expression.text) ?? SLOT : SLOT;
+    if (index !== 0 || node.head.text !== '') return SLOT;
+    if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) && expression.expression.text === 'couldntLine') return `Nebula couldn’t ${SLOT}.`;
+    return ts.isIdentifier(expression) ? constants.get(expression.text) ?? SLOT : SLOT;
   };
   const hits: string[] = [];
   const visit = (node: ts.Node) => {
@@ -193,6 +197,9 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     expect(handBuilt('const OPENING = \'Nebula couldn’t save the moodboard because \';\nconst a = `${OPENING}${cause}. ${step}`;')).toHaveLength(1);
     expect(handBuilt('const OPENING = \'Nebula couldn’t add \';\nconst a = `${OPENING}${what} because it failed. ${tail}`;')).toHaveLength(1);
     expect(handBuilt('const OPENING = \'Kept \';\nconst a = `${OPENING}${what}. ${tail}`;')).toHaveLength(0);
+    // couldntLine(what) is the sentence "Nebula couldn’t ‹what›.": a slot after it is a hand-built line.
+    expect(handBuilt('const a = `${couldntLine(what)} ${reason}`;')).toHaveLength(1);
+    expect(handBuilt('const a = couldntLine(what);')).toHaveLength(0);
     // Not a heading-plus-reason: an interpolation inside the one sentence.
     expect(handBuilt('const a = `Couldn\'t upload ${name}.`;')).toHaveLength(0);
     expect(handBuilt('const a = `Couldn’t save ${what} for “${node}”.${tail}`;')).toHaveLength(0);

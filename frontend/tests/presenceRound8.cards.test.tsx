@@ -50,7 +50,7 @@ describe('the permission card on a held tab', () => {
       fireEvent.click(button);
     }
     expect(onDecision).not.toHaveBeenCalled();
-    expect(within(card).getByText(/^No answer in \d+s denies it$/)).toBeTruthy();
+    expect(within(card).getByText(/^No answer in 2:00 denies it$/)).toBeTruthy();
   });
 
   it('connected: no line, no description, and a press decides', () => {
@@ -79,19 +79,49 @@ describe('the tool kind in Nebula\'s words', () => {
   it('maps every ACP kind through one table', () => {
     expect(Object.fromEntries(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other']
       .map((kind) => [kind, toolKindWord(kind)]))).toEqual({
-      read: 'read', edit: 'edit', delete: 'delete', move: 'move', search: 'search', execute: 'run', think: 'think',
-      fetch: 'fetch', switch_mode: 'switch mode', other: null,
+      read: 'Read', edit: 'Edit', delete: 'Delete', move: 'Move', search: 'Search', execute: 'Run', think: 'Think',
+      fetch: 'Fetch', switch_mode: 'Switch mode', other: null,
     });
     expect(toolKindWord('some_new_kind')).toBeNull();
     expect(toolKindWord('toString')).toBeNull();
   });
 
-  it('the card shows "run" for execute, and no tag for other', () => {
+  it('the card shows "Run" for execute, and no tag for other', () => {
     const { unmount } = render(<PermissionCard part={part()} agentName="Codex" onDecision={() => {}} />);
-    expect(document.querySelector('.permission-card__kind')?.textContent).toBe('run');
+    expect(document.querySelector('.permission-card__kind')?.textContent).toBe('Run');
     unmount();
     render(<PermissionCard part={part({ toolKind: 'other' })} agentName="Codex" onDecision={() => {}} />);
     expect(document.querySelector('.permission-card__kind')).toBeNull();
+  });
+
+  it('the card counts down in minutes and seconds, seconds padded', () => {
+    const timer = () => document.querySelector('.permission-card__timer')?.textContent;
+    for (const [seconds, text] of [[599, '9:59'], [600, '10:00'], [120, '2:00'], [61, '1:01'], [42, '0:42'], [5, '0:05']] as const) {
+      const { unmount } = render(<PermissionCard part={part({ timeoutSeconds: seconds })} agentName="Codex" onDecision={() => {}} />);
+      expect(timer()).toBe(`No answer in ${text} denies it`);
+      unmount();
+    }
+  });
+  it('an hour or more reads h:mm:ss', () => {
+    const timer = () => document.querySelector('.permission-card__timer')?.textContent;
+    for (const [seconds, text] of [[3600, '1:00:00'], [3599, '59:59'], [3661, '1:01:01'], [7200, '2:00:00']] as const) {
+      const { unmount } = render(<PermissionCard part={part({ timeoutSeconds: seconds })} agentName="Codex" onDecision={() => {}} />);
+      expect(timer()).toBe(`No answer in ${text} denies it`);
+      unmount();
+    }
+  });
+  it('a timeout that is not a finite number shows no countdown line, and a past one never reads negative', () => {
+    const timer = () => document.querySelector('.permission-card__timer')?.textContent;
+    for (const seconds of [Infinity, -Infinity, NaN, undefined]) {
+      const { unmount } = render(<PermissionCard part={part({ timeoutSeconds: seconds })} agentName="Codex" onDecision={() => {}} />);
+      expect(timer()).toBe('');
+      unmount();
+    }
+    for (const seconds of [0, -30]) {
+      const { unmount } = render(<PermissionCard part={part({ timeoutSeconds: seconds })} agentName="Codex" onDecision={() => {}} />);
+      expect(timer()).toBe('No answer in 0:00 denies it');
+      unmount();
+    }
   });
 });
 
