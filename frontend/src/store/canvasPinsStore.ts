@@ -301,9 +301,9 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       const line = pinDeleteLine(error);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
-        // Design: the pin stays, and the line says so in its own words.
-        // Design: refused because this tab
-        // isn't connected as the person, it's the line (how to fix it),
+        // Design: the pin stays, and the line says so in its own words. Refused
+        // because this tab isn't connected as the person, it's the person-required
+        // line (how to fix it),
         // never "try again in a moment", which can't work from this tab.
         error: line,
         errorPersonGate: error instanceof RequestFailedError && error.code === PERSON_REQUIRED_CODE

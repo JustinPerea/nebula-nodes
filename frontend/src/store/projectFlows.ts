@@ -964,7 +964,7 @@ export function showError(error: unknown, retry: ProjectRetry | null = null, wri
   // Refused while offline: nothing was sent and nothing is said;
   // the banner pulsed.
   if (isOfflineRefusal(error)) return;
-  // `written`: a line the caller worded (design's "because" form for what retries on the promote).
+  // `written`: a line the caller worded (the design's "because" form for what retries on the promote).
   const heading = RETRY_HEADINGS[retry?.action ?? 'save'];
   const line = written ?? (retry ? retryActionLine(heading, error) : null) ?? failureMessage(error, heading);
   useProjectStore.setState({ error: line, errorDetails: detailsFor(line, error),
@@ -1001,7 +1001,7 @@ export function copyDeletedAfterUpdateLine(copy: string, permanently: boolean): 
  * notice. A copy in Recently deleted says so with [Restore] and ×; one
  * deleted for good says so with × only: the reload left this tab none of the
  * edits (sessionStorage keeps the copy's id and name), so there is nothing
- * to apply (design's permanent case). Both are neutral notices (design). A copy that won't open
+ * to apply (the permanent case in the design). Both are neutral notices (design). A copy that won't open
  * says the notice anyway. */
 async function openCopyAfterUpdate(): Promise<void> {
   const copy = takeCopyForUpdate();
@@ -1536,8 +1536,8 @@ export function rememberCopyForUpdate(copy: FiledCopy): boolean {
 }
 
 
-/** The design lines beside [Reload Nebula] and in the notice
- * after the reload, with its subject (design, PR #199): "Nebula couldn’t
+/** The design line beside [Reload Nebula] and in the notice
+ * after the reload, with its subject (PR #199): "Nebula couldn’t
  * save your changes because it was updated. Reload Nebula and they’ll open
  * in a recovered copy of “Shot 7”." The stop keeps a whole project's edits,
  * so the builder's form drops the scene's name. */
@@ -2303,7 +2303,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   } finally {
     if (!followed) useGraphStore.getState().finishCanvasReplacement(null);
     // Read-only stays on while this follow (and the switches queued behind
-    // it while it waited) is the one going (C8 of the #114 merge).
+    // it while it waited) is the one going (PR #114).
     if (core.followingSwitch === following) {
       core.followingSwitch = null;
       setFollowingSwitch(null);

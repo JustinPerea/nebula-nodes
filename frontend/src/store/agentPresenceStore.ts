@@ -63,7 +63,7 @@ export interface AgentCursorDid {
   verb: string;
   nodeId: string | null;
   label: string | null;
-  /** When the action happened, in this tab's clock: a pointer gesture design cut
+  /** When the action happened, in this tab's clock: a pointer gesture the design removed
    *  (a click, a drag) keeps the action before it, with its own time. */
   at: number;
 }

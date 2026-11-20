@@ -10,7 +10,7 @@ import { proposalAgentColor, useAssetProposalsStore, type AssetProposalEntry } f
  * connected as the person, a new asset proposal reaches it only as its
  * Update (the proposal and its accept key go to the person's sockets only,
  * main.py `broadcast_browser`). Its strip shows a placeholder card for it,
- * built from the Update alone: who asks (in the agent's own colour, design),
+ * built from the Update alone: who asks (in the agent's own colour, per design),
  * the real card's header, and one line. No thumbnails, no buttons, no
  * request path. The person's sync after
  * the promote brings the real card into the same place; an Update resolved
@@ -62,7 +62,7 @@ export function askedOrder(left: { at: number; id: string }, right: { at: number
 /** The real card's header for each kind, from the Update's structured ref
  * (agent_notes.proposal_detail), never its text: an agent's name in the
  * text could spoof a count. A cover says which kind (design, PR #200); a ref
- * without it keeps design's "proposes a new cover". */
+ * without it keeps the design's "proposes a new cover". */
 function headerFor(kind: AssetProposalKind, ref: AgentNoteProposal | null | undefined): string {
   if (kind === 'moodboard') return 'asks to turn on “Moodboard notes to generators”';
   if (kind === 'commons') {

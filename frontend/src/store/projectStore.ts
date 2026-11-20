@@ -293,7 +293,7 @@ export interface ProjectState {
   initialize: () => Promise<void>;
   /** `notPersons`: shown for something that isn't the person's own open of
    * the project (a `#moodboard/<id>` link that waited while an agent's switch
-   * came: PR #199): the loaded project shows, and nothing
+   * came, PR #199): the loaded project shows, and nothing
    * says the person opened it. */
   open: (id: string, options?: { notPersons?: boolean }) => Promise<void>;
   /** `then` runs once the new project is open (a Load graph file over
@@ -1221,7 +1221,7 @@ export function subscribeProjectAutosave(): () => void {
   const socket = wsClient.subscribeFirst((event) => {
     if (event.type === 'projectsChanged') {
       // An agent's clear or graph load over the canvas waiting to be saved
-      // as a project: one Agent log line, no toast (design's held model).
+      // as a project: one Agent log line, no toast (the design's held model).
       const held = event.canvasHeld;
       if (held && typeof window !== 'undefined' && (event.change === 'canvasHeld' || event.change === 'canvasHoldRefused')) {
         // The agent's own row (design): its name and colour, so filtering the

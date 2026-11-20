@@ -25,7 +25,7 @@ export interface AssetStudioDraftEntry<D = unknown> {
   /** The action that failed with `saveError`, which the toolbar's Retry
    * runs again: a save, an analyze, or an undo or redo of `retryStep`. Null
    * for a line no button redoes (an upload, the brief, no project open):
-   * then Retry is hidden and the line keeps design's full reason; with a retry
+   * then Retry is hidden and the line keeps the design's full reason; with a retry
    * it takes the short one (WRAP rule). Any other line patched in clears it. */
   retry?: StudioRetry | null;
   /** The undo step an undo or redo failed on: Retry runs only while it is

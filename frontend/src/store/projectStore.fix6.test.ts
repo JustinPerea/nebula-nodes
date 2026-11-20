@@ -65,7 +65,7 @@ describe("the Agent log row is the agent's", () => {
   });
 });
 
-describe("the listing's fields reach the store", () => {
+describe("the listing's waiting-canvas, unreadable-note and filed-name fields reach the store", () => {
   it('keeps the waiting canvases, the unreadable note and every filed name', async () => {
     listProjects.mockResolvedValueOnce({ projects: [], trash: [], activeProjectId: null, workspaceRevision: 'r2',
       paramsVersion: GRAPH_PARAMS_VERSION, projectLimit: 3,

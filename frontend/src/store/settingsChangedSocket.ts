@@ -49,8 +49,8 @@ function readAgain(): void {
 
 // A promote reads them again too: the backend sends `settingsChanged` only to
 // a promoted socket, so a change made between this socket's connect (or the
-// reconnect read above) and its promote sent nothing it heard (PR #203 round
-// 15; CI caught the gap in a test). The promote is main's one
+// reconnect read above) and its promote sent nothing it heard (PR #203;
+// CI caught the gap in a test). The promote is main's one
 // signal (lib/personSession onPersonPromoted), not an event of its own.
 onPersonPromoted(readAgain);
 

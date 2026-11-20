@@ -214,7 +214,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
         await answerQuestions(setId, entry.answerKey, inputs);
       } catch (error) {
         // The set closed first (withdrawn, or answered in another tab): it is
-        // closed here too, and nothing went out (design's race). The
+        // closed here too, and nothing went out (the race the design covers). The
         // composer then says what happened; the row shows its outcome.
         const already = error instanceof RequestFailedError && error.status === 409
           ? /already (answered|dismissed|withdrawn)/.exec(String(error.detail ?? '')) : null;

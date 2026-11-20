@@ -189,7 +189,7 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
   } catch (error) {
     // A 409 means it no longer fits; the backend closes it and says so over the socket.
     // A 409 whose reason is already Nebula's whole sentence about this accept (the moodboard that didn't
-    // take the change, design) is the line itself: no "Couldn’t accept the proposal." over it.
+    // take the change, per design) is the line itself: no "Couldn’t accept the proposal." over it.
     const message = verb === 'accept' && error instanceof AssetProposalError && error.status === 409
       && error.reason.startsWith(ACCEPT_REFUSED_LEAD)
       ? error.reason : failureMessage(error, `Couldn’t ${verb} the proposal.`);

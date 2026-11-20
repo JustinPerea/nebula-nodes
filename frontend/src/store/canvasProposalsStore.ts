@@ -40,7 +40,7 @@ export const PROPOSAL_CANVAS_REPLACED_LINE = becauseLine({
 });
 
 /** The answer's code for an Accept refused because the canvas would be past
- * Save's limits after it (backend accept_canvas_proposal, of PR
+ * Save's limits after it (backend accept_canvas_proposal, PR
  * #205). The proposal stays open, and Accept stays live. */
 export const PROPOSAL_TOO_COMPLEX_CODE = 'proposal_too_complex';
 const PROPOSAL_TOO_COMPLEX_LEAD = 'Nebula couldn’t accept this because the canvas would be too complex to save.';
@@ -61,7 +61,7 @@ export function proposalTooComplexLine(agentName: string | null | undefined): st
   return `${PROPOSAL_TOO_COMPLEX_LEAD} Reject it, or ask ${name || 'the agent'} to change it.`;
 }
 /** The same refusal for the project's size limit (the answer's `limit.kind`
- * 'size': PR #205, limits), in the same form. */
+ * 'size', PR #205), in the same form. */
 const PROPOSAL_TOO_LARGE_LEAD = 'Nebula couldn’t accept this because the canvas would be too large to save.';
 export function proposalTooLargeLine(agentName: string | null | undefined): string {
   const name = agentName?.trim();
@@ -423,7 +423,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     // Offline is read-only (PR #114): nothing is sent or marked;
     // the banner pulses.
     if (refuseEditWhileOffline()) return;
-    if (personUnconfirmed()) return; // As accept
+    if (personUnconfirmed()) return; // as accept
     set((state) => ({ pending: { ...state.pending, [id]: 'reject' }, errors: without(state.errors, id) }));
     try {
       await rejectProposal(id, entry.acceptKey, reason);

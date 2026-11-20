@@ -25,7 +25,7 @@ import { useUIStore } from './uiStore';
  * (components/panels/MessageBox.tsx, in the Agent log's chunk) arrives.
  * The thread itself lives on the backend per project (services/person_thread.py):
  * this is the tab's copy, its draft and its one send in flight. Only what
- * the socket's events need is here (design's budget): the draft's and the
+ * the socket's events need is here (the budget the design set): the draft's and the
  * send's code is lib/personThreadCompose.ts's, in the box's chunk.
  */
 
@@ -58,8 +58,8 @@ export interface AnsweringState {
   question: string;
 }
 
-/** Why the "Answering" chip went while the person typed (design;
- * 'gone' for a set this tab no longer holds, design).
+/** Why the "Answering" chip went while the person typed (per design;
+ * 'gone' for a set this tab no longer holds).
  * `held`: the next Enter (or Send) only says so; the one after posts. */
 export interface AnswerGone {
   cause: AnswerGoneCause;

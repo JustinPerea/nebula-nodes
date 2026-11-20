@@ -20,7 +20,7 @@ describe('a Review request', () => {
     expect(takeReview('project', 'dusk')).toBe(false);
   });
 
-  it('clears itself when no strip takes it, so it can never fire later (review finding)', () => {
+  it('clears itself when no strip takes it, so it can never fire later', () => {
     vi.useFakeTimers();
     requestReview({ kind: 'commons', targetId: 'ast_1' });
     vi.advanceTimersByTime(11_000);
