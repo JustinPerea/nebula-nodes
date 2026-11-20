@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BOARD_TOAST_MS, BoardUndoToast } from './BoardUndoToast';
 
@@ -91,5 +93,11 @@ describe('the board undo toast', () => {
     render(<BoardUndoToast toast={toast()} onDismiss={onDismiss} />);
     fireEvent.keyDown(screen.getByRole('button', { name: 'Undo' }), { key: 'Escape' });
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('breaks a wrapped message evenly, so no word is left alone on its last line (design)', () => {
+    const css = readFileSync(resolve(__dirname, '../../styles/moodboard-board.css'), 'utf8');
+    const rule = css.match(/\.moodboard-board-toast__line \{[^}]*\}/);
+    expect(rule?.[0]).toContain('text-wrap: pretty;');
   });
 });

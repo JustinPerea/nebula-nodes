@@ -321,6 +321,7 @@ def plan_undo(
     refused_change: Callable[[str, str, dict[str, Any], dict[str, Any]], str | None],
     ran: Mapping[str, list[dict[str, Any]]] | None = None,
     name_of: Callable[[str], str] | None = None,
+    param_label: Callable[[str, str], str] | None = None,
 ) -> UndoPlan:
     """The restore that undoes ``inverse`` on the canvas as it is now.
 
@@ -343,14 +344,44 @@ def plan_undo(
     "“Brief” changed after that step, so Nebula left it as it is."), never the
     node id. Without it the node's own label, else its definition id.
 
+    A kept line names the part that was kept when anything else on that node
+    did go back (design): "“Hero”’s model and seed changed after that step, so
+    Nebula left them as they are."; the whole-node sentence is only for a node
+    where nothing went back. ``param_label(definition_id, key)`` gives a
+    param's display label (main: the node definition's label); without it the
+    key with its underscores as spaces. The skipped entries carry the same
+    ``keys``, ``part`` and ``reason`` either way.
+
     ``cannot_remove`` says why a node can't be deleted now (paid state), and
     ``refused_change`` why a param change isn't the agent's to make (who
     bills a run, notes to generators); both None when it is fine."""
     skipped: list[dict[str, Any]] = []
 
-    def kept_line(node_id: str) -> str:
-        name = name_of(node_id) if name_of else str(nodes[node_id].get("label") or nodes[node_id].get("definitionId") or "")
-        return f"{quoted(name)} changed after that step, so Nebula left it as it is."
+    kept_parts: dict[str, list[str]] = {}  # node -> the parts someone changed since, as words
+    kept_entries: list[tuple[dict[str, Any], str]] = []  # skip entries whose message is set once the plan is known
+
+    def keep(node_id: str, entry: dict[str, Any], words: list[str]) -> None:
+        parts = kept_parts.setdefault(node_id, [])
+        parts.extend(word for word in words if word not in parts)
+        skipped.append(entry)
+        kept_entries.append((entry, node_id))
+
+    def param_words(node_id: str, keys: list[str]) -> list[str]:
+        definition_id = str(nodes[node_id].get("definitionId") or "")
+        words = []
+        for key in keys:
+            label = param_label(definition_id, key) if param_label else key.replace("_", " ")
+            words.append(_noun(label) or key.replace("_", " "))
+        return words
+
+    def kept_line(node_id: str, went_back: bool) -> str:
+        name = quoted(name_of(node_id) if name_of else str(nodes[node_id].get("label") or nodes[node_id].get("definitionId") or ""))
+        parts = kept_parts[node_id]
+        if not went_back:
+            return f"{name} changed after that step, so Nebula left it as it is."
+        if len(parts) == 1:
+            return f"{name}\u2019s {parts[0]} changed after that step, so Nebula left it as it is."
+        return f"{name}\u2019s {_listed(parts)} changed after that step, so Nebula left them as they are."
 
     current_wires = {wire_key(edge) for edge in edges}
     edit_wires = {tuple(wire) for wire in inverse["addedWires"]}
@@ -452,8 +483,8 @@ def plan_undo(
             held.extend((key, "together") for key in sorted(back))
             back = {}
         if stale:
-            skipped.append({"nodeId": node_id, "part": "params", "keys": stale, "reason": "changed since",
-                            "message": kept_line(node_id)})
+            keep(node_id, {"nodeId": node_id, "part": "params", "keys": stale, "reason": "changed since",
+                           "message": ""}, param_words(node_id, stale))
         if held:
             names = [key for key, _reason in held]
             skipped.append({"nodeId": node_id, "part": "params", "keys": names, "reason": "the person's to change",
@@ -474,8 +505,7 @@ def plan_undo(
             leave(node_id, "name")
             continue
         if label != rename["after"]:
-            skipped.append({"nodeId": node_id, "part": "name", "reason": "changed since",
-                            "message": kept_line(node_id)})
+            keep(node_id, {"nodeId": node_id, "part": "name", "reason": "changed since", "message": ""}, ["name"])
             continue
         item(node_id)["label"] = rename["before"] or ""
 
@@ -544,6 +574,10 @@ def plan_undo(
             continue
         wire.append(wire_body(edge))
 
+    for entry, node_id in kept_entries:
+        went_back = any(key in items.get(node_id, {}) for key in ("params", "label", "position", "pending"))
+        entry["message"] = kept_line(node_id, went_back)
+
     ran_skips = [{"nodeId": node_id, "part": "node", "reason": "ran since", "left": parts,
                   "ranBy": [actor_record(actor) for actor in ran[node_id]],
                   "message": f"{node_id} ran since (run by {_runners(ran[node_id])}), so it stays"}
@@ -602,6 +636,18 @@ def nothing_went_back(skipped: list[dict[str, Any]], left: str = "") -> str:
                 "Nodes someone ran since stay for good, so trying this token again won't change that.")
     return " ".join(part for part in (
         "Nothing went back: every part of this edit was changed or run since.", left, tail) if part)
+
+
+def _listed(parts: list[str]) -> str:
+    """"a", "a and b", "a, b and c"."""
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + f" and {parts[-1]}"
+
+
+def _noun(label: str) -> str:
+    """A param's label as a sentence noun: "Aspect Ratio" gives "aspect ratio",
+    an acronym ("URL") keeps its capitals. A note after " · " is left out."""
+    words = label.split(" \u00b7 ")[0].split()
+    return " ".join(word if len(word) > 1 and word.isupper() else word.lower() for word in words)
 
 
 def _runners(actors: list[dict[str, Any]]) -> str:

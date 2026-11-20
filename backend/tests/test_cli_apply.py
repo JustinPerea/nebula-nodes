@@ -406,7 +406,7 @@ def test_nebula_undo_lists_what_it_left_as_is(api):
     assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
     lines = out.getvalue().splitlines()
     assert lines[0] == "Undone: removed 1."
-    assert lines[1] == "  Left as is: “Text Input” changed after that step, so Nebula left it as it is."
+    assert lines[1] == "  “Text Input” changed after that step, so Nebula left it as it is."
     assert api.graph.nodes[keep]["params"]["value"] == "the person's"
 
 
@@ -436,7 +436,7 @@ def test_nebula_undo_says_a_node_the_person_ran_since_stays(api):
     out = io.StringIO()
     assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
     assert out.getvalue().splitlines() == [
-        "Undone: removed 1.", f"  Left as is: {combined} ran since (run by the person), so it stays"]
+        "Undone: removed 1.", f"  {combined} ran since (run by the person), so it stays"]
     assert combined in api.graph.nodes and rerouted not in api.graph.nodes
 
 
@@ -464,7 +464,7 @@ def test_nebula_undo_counts_a_wire_it_took_away_and_lists_each_part_once(api):
     out = io.StringIO()
     assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
     assert out.getvalue().splitlines() == [
-        "Undone: disconnected 1.", f"  Left as is: {added} ran since (run by the person), so it stays"]
+        "Undone: disconnected 1.", f"  {added} ran since (run by the person), so it stays"]
     assert api.graph.edges == [] and added in api.graph.nodes
 
 
@@ -495,8 +495,8 @@ def test_nebula_undo_lists_each_part_once_when_nothing_went_back(api):
     lines = text.splitlines()
     assert lines[0].startswith("Nothing went back")
     assert "Left as is" not in lines[0]
-    assert sorted(lines[1:]) == sorted([f"  Left as is: {added} ran since (run by the person), so it stays",
-                                        "  Left as is: “Text Input” changed after that step, so Nebula left it as it is."])
+    assert sorted(lines[1:]) == sorted([f"  {added} ran since (run by the person), so it stays",
+                                        "  “Text Input” changed after that step, so Nebula left it as it is."])
     assert text.count("ran since (run by the person)") == 1 and text.count("changed after that step") == 1
 
 

@@ -1361,7 +1361,7 @@ def format_undone(result: dict[str, Any]) -> str:
     for row in result.get("notReopened") or []:
         lines.append(f"  Couldn't reopen {row.get('id')}: {row.get('reason')}")
     for line in kept_lines(result.get("skipped") or []):
-        lines.append(f"  Left as is: {line}")
+        lines.append(f"  {line}")
     return "\n".join(lines)
 
 

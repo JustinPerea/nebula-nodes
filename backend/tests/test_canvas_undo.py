@@ -834,7 +834,7 @@ def test_a_wire_out_of_an_added_node_that_ran_goes(api):
     assert [(item["nodeId"], item["reason"], item["left"]) for item in result["skipped"]] == [
         (source, "ran since", ["node"])]
     # The reply counts the wire it took away, and lists the node once.
-    assert result["message"] == f"Undone: disconnected 1. Left as is: {source} ran since (run by the person), so it stays."
+    assert result["message"] == f"Undone: disconnected 1. {source} ran since (run by the person), so it stays."
 
 
 @pytest.mark.parametrize("runner", ["person", "Codex"])
@@ -928,7 +928,7 @@ def test_a_node_whose_params_and_name_both_changed_since_is_said_once_to_a_perso
     assert sorted((item["part"], item["message"]) for item in result["skipped"]) == [("name", line), ("params", line)]
     # The agent's message (HTTP and MCP) and the CLI's lines say it once.
     assert result["message"].count(line) == 1
-    assert format_undone(result).splitlines().count(f"  Left as is: {line}") == 1
+    assert format_undone(result).splitlines().count(f"  {line}") == 1
 
 
 def test_two_nodes_that_share_a_name_each_keep_their_line_and_one_node_says_it_once():
@@ -941,3 +941,85 @@ def test_two_nodes_that_share_a_name_each_keep_their_line_and_one_node_says_it_o
         {"nodeId": "n2", "part": "params", "message": brief},
     ]
     assert kept_lines(skipped) == [brief, brief]
+
+
+def _undo_after_person_change(api, applied_params, person_params):
+    _prompt, image = _seed(api)
+    token = _apply(api, {"params": [{"nodeId": image, "params": applied_params}]})["undo"]["token"]
+    assert api.client.put(f"/api/graph/node/{image}", headers=PERSON, json={"params": person_params}).status_code == 200
+    return image, _undone(api, token)
+
+
+def test_a_kept_param_is_named_when_other_params_went_back(api):
+    image, result = _undo_after_person_change(
+        api, {"aspect_ratio": "16:9", "model": "gemini-3-pro-image"}, {"model": "gemini-2.5-flash-image"})
+    assert api.graph.nodes[image]["params"]["aspect_ratio"] == "1:1"
+    [item] = result["skipped"]
+    assert (item["keys"], item["reason"], item["part"]) == (["model"], "changed since", "params")
+    assert item["message"] == "“Nano Banana”’s model changed after that step, so Nebula left it as it is."
+    # One stop, no lead-in, no repeated "left as is".
+    assert result["message"].endswith(item["message"]) and ".." not in result["message"]
+    assert "Left as is" not in result["message"]
+
+
+def test_two_kept_params_are_listed_and_the_line_says_them(api):
+    image, result = _undo_after_person_change(
+        api, {"aspect_ratio": "16:9", "model": "gemini-3-pro-image", "imageSize": "2K"},
+        {"model": "gemini-2.5-flash-image", "imageSize": "4K"})
+    assert api.graph.nodes[image]["params"]["aspect_ratio"] == "1:1"
+    [item] = result["skipped"]
+    assert item["keys"] == ["imageSize", "model"]
+    assert item["message"] == ("“Nano Banana”’s image size and model changed after that step, "
+                               "so Nebula left them as they are.")
+
+
+def test_a_kept_name_is_named_when_params_went_back(api):
+    _prompt, image = _seed(api)
+    api.graph.set_label(image, "Hero")
+    token = _apply(api, {"params": [{"nodeId": image, "params": {"aspect_ratio": "16:9"}}],
+                         "rename": {image: "Draft"}})["undo"]["token"]
+    api.graph.set_label(image, "Final")
+    result = _undone(api, token)
+    assert api.graph.nodes[image]["params"]["aspect_ratio"] == "1:1"
+    assert [(item["part"], item["message"]) for item in result["skipped"]] == [
+        ("name", "“Final”’s name changed after that step, so Nebula left it as it is.")]
+
+
+def test_a_kept_name_and_param_share_one_line(api):
+    _prompt, image = _seed(api)
+    api.graph.set_label(image, "Hero")
+    token = _apply(api, {"params": [{"nodeId": image, "params": {"aspect_ratio": "16:9", "model": "gemini-3-pro-image"}}],
+                         "rename": {image: "Draft"}})["undo"]["token"]
+    api.graph.set_label(image, "Final")
+    assert api.client.put(f"/api/graph/node/{image}", headers=PERSON, json={"params": {"model": "gemini-2.5-flash-image"}}).status_code == 200
+    result = _undone(api, token)
+    lines = {(item["part"], item["message"]) for item in result["skipped"]}
+    line = "“Final”’s model and name changed after that step, so Nebula left them as they are."
+    assert lines == {("params", line), ("name", line)}
+    assert result["message"].count(line) == 1
+
+
+def test_a_node_where_nothing_went_back_keeps_the_whole_node_sentence(api):
+    prompt, _image = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    token = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}]})["undo"]["token"]
+    assert api.client.put(f"/api/graph/node/{prompt}", headers=PERSON, json={"params": {"value": "a castle"}}).status_code == 200
+    [item] = _undone(api, token)["skipped"]
+    assert item["message"] == "“Brief” changed after that step, so Nebula left it as it is."
+
+
+def test_a_param_word_is_its_label_in_lower_case_else_its_key():
+    from services.canvas_undo import _noun
+
+    assert _noun("Aspect Ratio · shape") == "aspect ratio"
+    assert _noun("Image URL") == "image URL"
+
+
+def test_the_replys_kept_lines_join_with_a_space_and_one_stop(api):
+    import main as main_module
+
+    lines = [{"nodeId": "n1", "message": "“A” changed after that step, so Nebula left it as it is."},
+             {"nodeId": "n2", "message": "n2 ran since (run by the person), so it stays"}]
+    assert main_module._undo_left_text(lines) == (
+        "“A” changed after that step, so Nebula left it as it is. n2 ran since (run by the person), so it stays.")
+    assert main_module._undo_param_label("nano-banana", "no_such_key") == "no such key"
