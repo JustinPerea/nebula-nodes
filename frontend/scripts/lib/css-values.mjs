@@ -45,7 +45,9 @@ export function collectVars(sources) {
   return vars;
 }
 
-const MAX_EXPANSIONS = 64;
+// Every definition of every var in a value multiplies: two vars with 10 definitions each give 100
+// texts. The cap stops a runaway product, not a real theme; cycles are cut by `seen`.
+const MAX_EXPANSIONS = 4096;
 
 /**
  * Every value a text can take once its var() calls are replaced by the custom property's

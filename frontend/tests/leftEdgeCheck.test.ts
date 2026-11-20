@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { ALLOWED, findLeftEdges, isAllowed, isNeutralColor, staleAllowed } from '../scripts/check-left-edge.mjs';
+import { ALLOWED, findLeftEdges, isAllowed, isNeutralColor, parseColor, staleAllowed } from '../scripts/check-left-edge.mjs';
 import { scanSource } from '../scripts/check-inline-styles.mjs';
 import { collectVars } from '../scripts/lib/css-values.mjs';
 
@@ -27,6 +27,7 @@ const VARS = collectVars([`
     --w: 3px;
     --hair: 1px;
     --viewport-w: 2vw;
+    --thin-vw: 0.2vw;
     --alias: var(--sr-accent);
     --hairline-edge: #5b9dff;
     --rail-ink: 4px;
@@ -127,6 +128,31 @@ describe('the left-edge check fails on', () => {
     '.a { box-shadow: -2px 0 0 0 #5b9dff; }',
     '.a { box-shadow: -2px 0 0 #444; }',
     '.a { box-shadow: 0 8px 24px rgb(0 0 0 / 0.4), -4px 0 0 red; }',
+    // (i) round 2c: a stripe whose width can't be read, a vw width at 1440 px, and a split stripe
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: var(--bar); background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--bar) + 1px); background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: calc(1px + 1ch); background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: 0.2vw; background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; inline-size: 0.2vw; background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: var(--thin-vw); background: red; }',
+    '.a::before { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .a::before { background: red; }',
+    '.a { position: absolute; } .a { left: 0; top: 0; bottom: 0; width: 3px; background: red; }',
+    '.x__edge { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .x--resolved .x__edge { background: red; }',
+    '.x__edge { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .x__edge:hover { background: var(--sr-accent); }',
+    '.x::before { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .x.x--on::before { background-color: #5b9dff; }',
+    '.a, .b { position: absolute; } .b { left: 0; top: 0; bottom: 0; width: 3px; background: red; }',
+    // a small positive left inset
+    '.a { position: absolute; left: 2px; top: 0; bottom: 0; width: 3px; background: red; }',
+    '.a { position: absolute; left: 1px; top: 8px; bottom: 8px; width: 3px; background: red; }',
+    // a painted band at the left of a background gradient
+    '.a { background: linear-gradient(to right, red 0 3px, transparent 3px); }',
+    '.a { background-image: linear-gradient(90deg, #5b9dff 0, #5b9dff 3px, transparent 3px); }',
+    '.a { background: linear-gradient(to right, var(--sr-accent) 3px, transparent 3px) no-repeat; }',
+    '.a { background: linear-gradient(to right, var(--agent-color) 0 2px, transparent 2px); }',
+    // the LOWs: a border-width list with a right side as wide or wider, a style with no width
+    '.a { border-width: 0 5px 0 3px; border-style: solid; }',
+    '.a { border-left-style: solid; }',
+    '.a { border-inline-start-style: dashed; }',
   ];
   it.each(bars)('%s', (css) => {
     expect(found(css)).toHaveLength(1);
@@ -260,6 +286,35 @@ describe('the left-edge check passes', () => {
     '.a { box-shadow: -4px 0 6px red; }',
     '.a { box-shadow: -4px 4px 0 red; }',
     '.a { box-shadow: 2px 0 0 red; }',
+    // (i) a width relative to its box is a fill; a stripe that is not tall, not painted or past 2px in
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--nope) * 100%); background: red; }',
+    '.a { position: absolute; left: 2px; top: 2px; bottom: 2px; width: calc(50% - 2px); background: rgba(255, 255, 255, 0.12); }',
+    '.a { position: absolute; inset: 0 auto 0 0; width: calc(var(--v, 0) * 100%); background: var(--fill, var(--sr-edge)); }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: 2vw; background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: auto; background: red; }',
+    '.a { position: absolute; left: 3px; top: 0; bottom: 0; width: 3px; background: red; }',
+    '.a { position: absolute; left: 0; top: 0; bottom: 0; width: var(--bar); }',
+    '.a { position: absolute; left: 0; width: var(--bar); height: 3px; background: red; }',
+    '.a::before { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .b { background: red; }',
+    '.x__edge { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .other:hover { background: red; }',
+    '.x { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .x::before { background: red; }',
+    '.x::before { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .x { background: red; }',
+    '.x__edge { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .x__edge--wide { background: red; }',
+    // gradients: a 1px band, a neutral band, a fade, a band not at the left, another direction
+    '.a { background: linear-gradient(to right, red 0 1px, transparent 1px); }',
+    '.a { background: linear-gradient(to right, #444 0 3px, transparent 3px); }',
+    '.a { background: linear-gradient(to right, rgba(0, 0, 0, 0.5) 0, transparent 24px); }',
+    '.a { background: linear-gradient(to right, transparent 0 10px, red 10px 13px); }',
+    '.a { background: linear-gradient(to bottom, red 0 3px, transparent 3px); }',
+    '.a { background: linear-gradient(red, blue); }',
+    '.a { background: var(--sr-edge); }',
+    // the LOWs: lists that stay frames, a style with a width of 0 or 1px or none
+    '.a { border-width: 0 3px 0 3px; border-style: solid; }',
+    '.a { border-left-style: solid; border-left-width: 1px; border-left-color: #444; }',
+    '.a { border-left-style: solid; border-left-width: 0; }',
+    '.a { border-left-style: none; }',
+    '.a { border-left-style: solid; border-left: 0; }',
     // (g) a url with a semicolon in a string, and a braceless body
     '.a { background: url("data:image/svg+xml;base64,AAA"); border-left: 1px solid #444; }',
   ];
@@ -296,6 +351,37 @@ describe('the left-edge check passes', () => {
 
   it('names a reason for every allowed shape', () => {
     for (const entry of ALLOWED as Array<{ why: string }>) expect(entry.why.length).toBeGreaterThan(10);
+  });
+});
+
+describe('round 2c readers', () => {
+  const stripe = '.a { position: absolute; left: 0; top: 0; bottom: 0; width: 0.2vw; background: red; }';
+  it('names the reason for a stripe it can\'t read, and not for a stripe it can', () => {
+    expect(found('.a { position: absolute; left: 0; top: 0; bottom: 0; width: var(--bar); background: red; }')[0].reason).toMatch(/a stripe whose width this check can't read/);
+    expect(found(stripe)[0].reason).toMatch(/stripe down the left/);
+  });
+  it('reads vw at 1440 px wide', () => {
+    expect(found('.a { position: absolute; left: 0; top: 0; bottom: 0; width: 0.27vw; background: red; }')).toHaveLength(1);
+    expect(found('.a { position: absolute; left: 0; top: 0; bottom: 0; width: 0.3vw; background: red; }')).toEqual([]);
+  });
+  it('reports a split stripe once, at the painting declaration', () => {
+    const hits = found('.a::before { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; } .a::before { background: red; } .a::before { opacity: 1; }') as Array<Hit & { line: number }>;
+    expect(hits.map((hit) => hit.decl)).toEqual(['background: red']);
+  });
+  it('reads two vars with ten definitions each, and still fails a wide one among them', () => {
+    const many = collectVars([Array.from({ length: 10 }, (_, i) => `.t${i} { --a: 1px; --b: #4${i}4${i}4${i}; }`).join('\n')]);
+    expect(found('.a { border-left: var(--a) solid var(--b); }', 'styles/x.css', many)).toEqual([]);
+    const wide = collectVars([Array.from({ length: 10 }, (_, i) => `.t${i} { --a: ${i === 7 ? 3 : 1}px; --b: #4${i}4${i}4${i}; }`).join('\n')]);
+    expect(found('.a { border-left: var(--a) solid var(--b); }', 'styles/x.css', wide)).toHaveLength(1);
+  });
+  it('reads hsl hues: negative, and in deg, turn, rad and grad', () => {
+    const near = (got: number[] | null, want: number[]) => want.forEach((v, i) => expect(got?.[i]).toBeCloseTo(v, 3));
+    near(parseColor('hsl(-120 100% 50%)'), [0, 0, 255]);
+    near(parseColor('hsl(240deg 100% 50%)'), [0, 0, 255]);
+    near(parseColor('hsl(0.5turn 100% 50%)'), [0, 255, 255]);
+    near(parseColor('hsl(3.14159265rad 100% 50%)'), [0, 255, 255]);
+    near(parseColor('hsl(200grad 100% 50%)'), [0, 255, 255]);
+    near(parseColor('hsl(480 100% 50%)'), [0, 255, 0]);
   });
 });
 

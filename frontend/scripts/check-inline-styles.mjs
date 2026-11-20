@@ -6,6 +6,12 @@ import ts from 'typescript';
 const ROOT = process.cwd();
 const COMPONENTS_DIR = join(ROOT, 'src', 'components');
 
+// Known limits of the left-edge keys below (scripts/check-left-edge.mjs has the stylesheet side):
+// scanSource reads only an object literal written directly in style={{ ... }}. A conditional
+// (style={cond ? { ... } : undefined}), a variable (style={s}), a spread, or a computed key is
+// not read, and neither is a borderWidth / borderColor list or a background gradient. A colour
+// set from TSX through var() is not seen by the stylesheet check. No dataflow is tried.
+//
 // Remotion composition renderers must use inline styles — the Remotion renderer
 // serializes inline styles directly to the video frame; CSS class-based styling
 // cannot be applied in the same way during server-side rendering. The entire

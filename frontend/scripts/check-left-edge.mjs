@@ -24,11 +24,26 @@ import { collectVars, expandVars, readLength, splitTop, tokens } from './lib/css
 //   2. a box-shadow with an inset part whose x offset is positive and not soft or a 1px
 //      neutral line, or an outer `-Npx 0 0` shadow of 2px or more that paints a bar outside;
 //   3. any element (not only ::before / ::after) that is absolutely positioned at the left
-//      (left or inset-inline-start 0 to -4px, or an inset shorthand), tall, 4px or narrower and
-//      painted. A 1px neutral stripe (a tree's guide line) is fine.
+//      (left or inset-inline-start from -4px to 2px, or an inset shorthand), tall, 4px or
+//      narrower and painted. A 1px neutral stripe (a tree's guide line) is fine. A stripe whose
+//      width can't be read (an undefined var, a calc it can't resolve) fails too. A width relative to its box (a %, or a calc with a % term) is a fill and passes; vw and vh are read at a reference viewport of 1440 x 900 (0.2vw is about 3px, a stripe). Declarations of one
+//      selector are merged in order across the sheet's rules, and a modifier of that selector
+//      (`.x--on .x__edge`, `.x__edge:hover`) is judged with its base's geometry;
+//   4. a background (linear-gradient to right or 90deg) with a non-neutral band of 2px or more
+//      at the left, such as `red 0 3px, transparent 3px`.
 // var() is resolved through every custom property the stylesheets define (all definitions); a
 // colour var is neutral only if every definition is neutral, and one with no definition and no
 // fallback is a value the check can't read, which fails. CSS nesting is not read, so it fails.
+// Reference viewport: vw, vh, vmin and vmax in a stripe's width are read at 1440 x 900. A width
+// with a % (or a calc containing one) scales with its box and is read as a fill, so a % stripe
+// is a known limit. The left range is -4px to 2px: -4px is the old reach (the pin card's edge
+// sat at -1px, a bar can hang outside by up to its own 4px width), 2px adds a small inset.
+// Known limits: the colour of an edge set from TSX through var() is not seen (the agent colour
+// is set inline in a few components, so var(--agent-color, #888) reads its CSS fallback); the
+// inline-style rule (check-inline-styles.mjs) reads only object literals written directly in
+// style={{ ... }}. No dataflow is tried. Not read: a background-size band, outline,
+// border-image, filter drop-shadow, a stripe made with right/max-width, an unpositioned
+// element's left, and the cascade between a later declaration and an earlier one in a rule.
 // A shape that only looks like an edge (a corner glyph, a CSS triangle) goes on ALLOWED, by
 // file, selector, property and value, with a reason. Inline styles are
 // check-inline-styles.mjs's side. There is no baseline: the check starts at zero.
@@ -84,24 +99,97 @@ export function findLeftEdges(source, file, vars = collectVars([source])) {
   const css = stripComments(source);
   const lineStarts = computeLineStarts(css);
   const hits = [];
+  const addAt = (selector, offset, decl, reason) => hits.push({ file, line: lineForOffset(lineStarts, offset), selector, decl, reason });
+  const entries = [];
   for (const rule of parseRules(css)) {
     const selector = compact(rule.selector);
-    const add = (offset, decl, reason) => hits.push({ file, line: lineForOffset(lineStarts, offset), selector, decl, reason });
     if (rule.nested) {
-      add(rule.bodyStart, '{ ... }', "nested CSS isn't read by this check; write each rule on its own");
+      addAt(selector, rule.bodyStart, '{ ... }', "nested CSS isn't read by this check; write each rule on its own");
       continue;
     }
     const declarations = parseDeclarations(rule.body, rule.bodyStart);
-    const addDecl = (declaration, reason) => add(declaration.offset, `${declaration.prop}: ${compact(declaration.value)}`, reason);
-
+    const addDecl = (declaration, reason) => addAt(selector, declaration.offset, `${declaration.prop}: ${compact(declaration.value)}`, reason);
     for (const declaration of declarations) {
       const reason = edgeReason(declaration, declarations, vars);
       if (reason) addDecl(declaration, reason);
     }
+    entries.push({ selector, declarations: declarations.map((declaration) => ({ ...declaration, selector })) });
+  }
+  // A stripe is judged on the declarations of its selector merged across rules, in order.
+  const reported = new Set();
+  for (const [, declarations] of mergedBySelector(entries)) {
     const stripe = stripeReason(declarations, vars);
-    if (stripe) addDecl(stripe.declaration, stripe.reason);
+    if (!stripe || reported.has(stripe.declaration.offset)) continue;
+    reported.add(stripe.declaration.offset);
+    const { declaration } = stripe;
+    addAt(declaration.selector, declaration.offset, `${declaration.prop}: ${compact(declaration.value)}`, stripe.reason);
   }
   return hits;
+}
+
+// ---- selectors --------------------------------------------------------------------------
+
+/** One selector split into its ancestors, its last compound's simple selectors and its pseudo-element. */
+function parseSubject(selector) {
+  let depth = 0;
+  let cut = -1;
+  for (let i = 0; i < selector.length; i += 1) {
+    const char = selector[i];
+    if (char === '(' || char === '[') depth += 1;
+    else if (char === ')' || char === ']') depth = Math.max(0, depth - 1);
+    else if (depth === 0 && /[\s>+~]/.test(char)) cut = i;
+  }
+  const ancestors = selector.slice(0, cut + 1).replace(/\s*([>+~])\s*/g, ' $1 ').trim();
+  let last = selector.slice(cut + 1);
+  let pseudo = '';
+  const pe = /(::[\w-]+(?:\([^)]*\))?|:(?:before|after|first-line|first-letter))$/i.exec(last);
+  if (pe) {
+    pseudo = pe[1].toLowerCase().replace(/^:(?!:)/, '::');
+    last = last.slice(0, pe.index);
+  }
+  const simples = new Set(last.match(/\.[\w-]+|#[\w-]+|\[[^\]]*\]|:{1,2}[\w-]+(?:\([^)]*\))?|^[\w-]+|\*/g) ?? []);
+  return { ancestors, simples, pseudo };
+}
+
+/** Whether `modifier` is the base selector with more on it: more simple selectors, or an ancestor. */
+function isModifierOf(modifier, base) {
+  if (modifier.pseudo !== base.pseudo || base.simples.size === 0) return false;
+  for (const simple of base.simples) if (!modifier.simples.has(simple)) return false;
+  if (base.ancestors !== '' && base.ancestors !== modifier.ancestors) return false;
+  return modifier.simples.size > base.simples.size || (modifier.ancestors !== '' && base.ancestors === '');
+}
+
+/**
+ * selector -> its declarations from every rule of the sheet, in order (a selector list gives each
+ * of its selectors the rule's declarations), plus those of a base selector it modifies, when the
+ * base positions an element absolutely.
+ */
+function mergedBySelector(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    for (const part of splitTop(entry.selector)) {
+      const selector = part.trim();
+      if (!selector) continue;
+      if (!groups.has(selector)) groups.set(selector, []);
+      groups.get(selector).push(...entry.declarations);
+    }
+  }
+  const carriers = [...groups].filter(([, declarations]) => declarations.some((declaration) => declaration.prop === 'position' && /absolute/i.test(declaration.value)));
+  if (carriers.length === 0) return groups;
+  const carrierSubjects = carriers.map(([selector, declarations]) => ({ selector, declarations, subject: parseSubject(selector) }));
+  const merged = new Map();
+  for (const [selector, declarations] of groups) {
+    const subject = parseSubject(selector);
+    const bases = carrierSubjects.filter((carrier) => carrier.selector !== selector && isModifierOf(subject, carrier.subject));
+    if (bases.length === 0) {
+      merged.set(selector, declarations);
+      continue;
+    }
+    const all = new Map();
+    for (const declaration of [...declarations, ...bases.flatMap((base) => base.declarations)]) all.set(declaration.offset, declaration);
+    merged.set(selector, [...all.values()].sort((a, b) => a.offset - b.offset));
+  }
+  return merged;
 }
 
 // ---- values -----------------------------------------------------------------------------
@@ -167,7 +255,7 @@ function mixIsNeutral(args) {
 }
 
 /** A hex, rgb()/rgba() or hsl()/hsla() colour as [r, g, b] in 0..255 (alpha dropped), or null. */
-function parseColor(v) {
+export function parseColor(v) {
   const hex = /^#([0-9a-f]{3,8})$/.exec(v)?.[1];
   if (hex) {
     if (![3, 4, 6, 8].includes(hex.length)) return null;
@@ -182,13 +270,22 @@ function parseColor(v) {
     const channels = parts.map((c) => (c.endsWith('%') ? (Number.parseFloat(c) / 100) * 255 : Number.parseFloat(c)));
     return channels.every(Number.isFinite) ? channels : null;
   }
-  const hue = Number.parseFloat(parts[0]);
+  const hue = hueDegrees(parts[0]);
   const sat = Number.parseFloat(parts[1]) / 100;
   const light = Number.parseFloat(parts[2]) / 100;
   if (![hue, sat, light].every(Number.isFinite)) return null;
-  const k = (n) => (n + hue / 30) % 12;
+  const k = (n) => (((n + hue / 30) % 12) + 12) % 12;
   const a = sat * Math.min(light, 1 - light);
   return [0, 8, 4].map((n) => 255 * (light - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+}
+
+/** A hue as degrees in 0..360: a bare number is degrees, and deg, grad, rad and turn are read. */
+function hueDegrees(text) {
+  const m = /^([+-]?(?:\d+\.?\d*|\.\d+))(deg|grad|rad|turn)?$/.exec(text);
+  if (!m) return Number.NaN;
+  const n = Number(m[1]);
+  const degrees = { deg: n, grad: n * 0.9, rad: (n * 180) / Math.PI, turn: n * 360 }[m[2] ?? 'deg'];
+  return ((degrees % 360) + 360) % 360;
 }
 
 /** OKLCH chroma of an sRGB colour (0..255 channels). */
@@ -220,6 +317,10 @@ function edgeReason(declaration, declarations, vars) {
   }
   if (prop === 'border-width' || prop === 'border-color') return listReason(prop, value, declarations, vars);
   if (prop === 'box-shadow') return shadowReason(value, vars);
+  if (prop === 'background' || prop === 'background-image') return gradientReason(value, vars);
+  for (const side of LEFT_SIDES) {
+    if (prop === `${side}-style`) return styleOnlyReason(side, value, declarations, vars);
+  }
   return null;
 }
 
@@ -262,6 +363,15 @@ function borderShorthandReason(side, value, vars) {
     const colour = border.colours.find((part) => !isNeutralLiteral(part));
     return colour ? `a coloured left border (${colour})` : null;
   });
+}
+
+/** A left border style with no width in its rule is medium, 3px, in currentColor. */
+function styleOnlyReason(side, value, declarations, vars) {
+  const style = tokens(value)[0] ?? '';
+  if (/^(none|hidden|initial|unset|inherit|revert)$/i.test(style)) return null;
+  if (!STYLE_WORD.test(style)) return null;
+  if (declaredLeftWidth(declarations, vars) !== undefined) return null;
+  return `${side}-style ${style} with no width is a 3px left border`;
 }
 
 /** The left and right entries of a one to four value list (top right bottom left). */
@@ -315,12 +425,80 @@ function listReason(prop, value, declarations, vars) {
       const l = readLength(left);
       const r = readLength(right);
       if (l === null || r === null) return cantRead('border-width', text);
-      return l >= 2 && l > r ? `the left value of border-width ${text} (${l}px) is wider than the right: a left edge` : null;
+      return l >= 2 && l !== r ? `the left value of border-width ${text} (${l}px) differs from the right: a left edge` : null;
     }
     if (isNeutralLiteral(left)) return null;
     if (declaredLeftWidth(declarations, vars) === 0) return null;
     return `the left value of border-color ${text} is coloured and differs from the right: a coloured left edge`;
   });
+}
+
+// ---- gradients -------------------------------------------------------------------------
+
+const RIGHTWARD = /^(to\s+right|90(\.0+)?deg|0?\.25turn|100grad|1\.5707\d*rad)$/i;
+
+/** The balanced argument text of each linear-gradient( ... ) in a value. */
+function gradientArgs(text) {
+  const out = [];
+  for (const match of text.matchAll(/linear-gradient\(/gi)) {
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    for (let i = open; i < text.length; i += 1) {
+      if (text[i] === '(') depth += 1;
+      if (text[i] === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          out.push(splitTop(text.slice(open + 1, i)).map((part) => part.trim()));
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** The colour bands of a gradient's stops, in px along its line: [{ start, end, colours }]. A position in % or one it can't read stops the walk. */
+function gradientBands(stops) {
+  const bands = [];
+  let cursor = 0;
+  let pending = [];
+  for (const stop of stops) {
+    const parts = tokens(stop);
+    const isPosition = (part) => /^[+-]?[\d.]/.test(part) || /^(calc|min|max|clamp)\(/i.test(part);
+    const colour = parts.filter((part) => !isPosition(part)).join(' ');
+    if (!colour) continue;
+    const positions = parts.filter(isPosition).map((part) => (part.endsWith('%') ? null : readLength(part)));
+    if (positions.some((px) => px === null)) return bands;
+    if (positions.length === 0) {
+      pending.push(colour);
+      continue;
+    }
+    const [first, second] = positions;
+    const start = second === undefined ? cursor : first;
+    const end = second === undefined ? first : second;
+    bands.push({ start: pending.length ? cursor : start, end, colours: [...pending, colour] });
+    pending = [];
+    cursor = end;
+  }
+  return bands;
+}
+
+/** A background with a coloured band of 2px or more at the left of a rightward linear-gradient. */
+function gradientReason(value, vars) {
+  return reasonOfExpansions(value, vars, (text) => {
+    for (const args of gradientArgs(text)) {
+      const [first, ...rest] = args;
+      const direction = /^(to\s|[-+\d.]+(deg|turn|grad|rad)$)/i.test(first ?? '') ? first : null;
+      if (direction === null || !RIGHTWARD.test(direction.trim())) continue;
+      for (const band of gradientBands(rest)) {
+        if (band.start > 2) break;
+        if (band.end - band.start >= 2 && band.colours.some((colour) => !isNeutralLiteral(colour))) {
+          return `a background gradient paints a ${band.end - band.start}px coloured band at the left`;
+        }
+      }
+    }
+    return null;
+  }, true);
 }
 
 // ---- shadows ----------------------------------------------------------------------------
@@ -377,16 +555,27 @@ function insetSides(text) {
   return { top, right, bottom, left };
 }
 
+const MAX_STRIPE_INSET_PX = 2;
 const inStripeLeft = (token) => {
   const px = token === undefined ? null : readLength(token);
-  return px !== null && px <= 0 && px >= -MAX_STRIPE_PX;
+  return px !== null && px <= MAX_STRIPE_INSET_PX && px >= -MAX_STRIPE_PX;
 };
+/** vw, vh, vmin and vmax read at the reference viewport, so 0.2vw is 2.88px. */
+const VIEWPORT_W = 1440;
+const VIEWPORT_H = 900;
+function viewportToPx(text) {
+  const unit = { vw: VIEWPORT_W, vh: VIEWPORT_H, vmin: Math.min(VIEWPORT_W, VIEWPORT_H), vmax: Math.max(VIEWPORT_W, VIEWPORT_H) };
+  return text.replace(/([+-]?(?:\d+\.?\d*|\.\d+))[dsl]?(vw|vh|vmin|vmax)\b/gi, (_, n, u) => `${(Number(n) * unit[u.toLowerCase()]) / 100}px`);
+}
+const FILL_WIDTH = /^(auto|100%|inherit|initial|unset|revert|fit-content|min-content|max-content|stretch)$/i;
 const isSet = (token) => token !== undefined && !/^auto$/i.test(token.trim());
 
 /**
  * Any element drawn as a stripe down the left: absolute, at the left (left or inset-inline-start
- * 0 to -4px, or an inset shorthand), tall (top and bottom set, inset-block, a % height, or a px
- * height past its width), 4px or narrower, and painted. A 1px neutral one is a guide line.
+ * -4px to 2px, or an inset shorthand), tall (top and bottom set, inset-block, a % height, or a px
+ * height past its width), 4px or narrower, and painted. A 1px neutral one is a guide line. When
+ * all of that holds and the width can't be read (an undefined var, a calc with no % term it can't resolve), it fails. A % width, or a calc with a % term, is a fill and passes; vw and vh are px at 1440 x 900.
+ * `declarations` are the merged declarations of one selector, later ones winning.
  */
 function stripeReason(declarations, vars) {
   const last = new Map();
@@ -403,10 +592,28 @@ function stripeReason(declarations, vars) {
     || values('inset').some((text) => inStripeLeft(insetSides(text).left));
   if (!atLeft) return null;
 
-  const widths = [...values('width'), ...values('inline-size')].map((text) => readLength(text.trim())).filter((px) => px !== null && px > 0);
-  const narrow = widths.filter((px) => px <= MAX_STRIPE_PX);
-  if (narrow.length === 0) return null;
-  const width = Math.max(...narrow);
+  // Every width this rule can take: a px it reads, a fill keyword or 100%, or one it can't read.
+  // A value with a % anywhere in it is a fill, even through a var() with no definition.
+  const widthTexts = ['width', 'inline-size']
+    .filter((prop) => last.has(prop) && !last.get(prop).value.includes('%'))
+    .map((prop) => expansions(last.get(prop).value, vars));
+  const widthPx = [];
+  let unreadable = false;
+  for (const texts of widthTexts) {
+    if (texts === null) unreadable = true;
+    else {
+      for (const text of texts) {
+        // Relative to its box (a %, or a calc with a % term) is a fill, never "a few px" by design.
+        if (text.includes('%')) continue;
+        const px = readLength(viewportToPx(text.trim()));
+        if (px !== null) widthPx.push(px);
+        else if (!FILL_WIDTH.test(text.trim())) unreadable = true;
+      }
+    }
+  }
+  const narrow = widthPx.filter((px) => px > 0 && px <= MAX_STRIPE_PX);
+  if (narrow.length === 0 && !unreadable) return null;
+  const width = narrow.length > 0 ? Math.max(...narrow) : MAX_STRIPE_PX;
 
   const topAndBottom = (isSet(last.get('top')?.value) && isSet(last.get('bottom')?.value))
     || values('inset-block').some((text) => tokens(text).every(isSet))
@@ -423,6 +630,7 @@ function stripeReason(declarations, vars) {
     .map((prop) => last.get(prop))
     .filter((declaration) => declaration && (expansions(declaration.value, vars) ?? [declaration.value]).some((text) => !/^(none|transparent|initial|unset|inherit)$/i.test(text.trim())));
   if (painted.length === 0) return null;
+  if (narrow.length === 0) return { declaration: painted[0], reason: "a stripe whose width this check can't read: absolute, flush left, tall and painted; use a literal px" };
   // A 1px stripe in a neutral colour is a guide line, like a tree's.
   if (width <= MAX_NEUTRAL_WIDTH_PX && painted.every((declaration) => declaration.prop !== 'background-image' && isNeutralColor(declaration.value, vars))) return null;
   return { declaration: painted[0], reason: 'a stripe down the left: absolute, flush left, tall, 4px or narrower, with a background' };
