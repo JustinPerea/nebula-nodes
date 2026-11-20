@@ -58,7 +58,7 @@ describe('Model discovery and setup continuity', () => {
     render(<ModelPicker value={model.id} selectedParams={{ _kreaAuth: 'mcp' }} onSelect={vi.fn()} onClose={vi.fn()} />);
     fireEvent.change(screen.getByRole('combobox', { name: 'Model provider' }), { target: { value: 'krea' } });
     const selected = screen.getByRole('button', { name: 'GPT Image 2 (Krea), Image Generation, Krea' }).parentElement!;
-    expect(selected).toHaveTextContent('Krea signed in');
+    expect(selected).toHaveTextContent('signed in');
     const original = screen.getByRole('button', { name: 'Krea 2, Image Generation, Krea' }).parentElement!;
     expect(original).toHaveTextContent('setup required');
     expect(useUIStore.getState().settingsCache.kreaConnectionMode).toBe('api-token');

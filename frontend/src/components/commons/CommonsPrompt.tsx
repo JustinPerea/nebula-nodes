@@ -1,4 +1,4 @@
-import { useContext, useState, type FormEvent } from 'react';
+import { useContext, useId, useState, type FormEvent } from 'react';
 import { ModalPortal } from '../ModalPortal';
 import { PersonLockLine } from '../PersonLock';
 import { PromptLockContext } from './promptLock';
@@ -6,12 +6,15 @@ import { PromptLockContext } from './promptLock';
 export interface PromptRequest {
   label: string;
   initial: string;
+  /** A note under the field, in the normal text style (the label is the short caps one). */
+  hint?: string;
   resolve: (value: string | null) => void;
 }
 
 export function PromptDialog({ request, onDone }: { request: PromptRequest; onDone: (value: string | null) => void }) {
   const [value, setValue] = useState(request.initial);
   const lock = useContext(PromptLockContext);
+  const hintId = useId();
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onDone(value);
@@ -33,8 +36,10 @@ export function PromptDialog({ request, onDone }: { request: PromptRequest; onDo
       >
         <label className="commons-field">
           {request.label}
-          <input autoFocus value={value} onChange={(event) => setValue(event.target.value)} />
+          <input autoFocus value={value} onChange={(event) => setValue(event.target.value)}
+            aria-describedby={request.hint ? hintId : undefined} />
         </label>
+        {request.hint && <span id={hintId} className="commons-meta">{request.hint}</span>}
         <div className="commons-prompt__actions">
           <button type="button" className="commons-button" onClick={() => onDone(null)}>Cancel</button>
           <button type="submit" className="commons-button commons-button--primary" {...lock?.control()}>OK</button>

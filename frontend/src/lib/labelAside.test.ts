@@ -27,11 +27,9 @@ describe('afterDot', () => {
     expect(afterDot('Configured · not checked')).toBe('configured · not checked');
   });
 
-  it('keeps an acronym, a word with its own capitals and a proper noun', () => {
+  it('keeps an acronym, and a word with its own capitals', () => {
     expect(afterDot('API key saved')).toBe('API key saved');
     expect(afterDot('GPU busy')).toBe('GPU busy');
-    expect(afterDot('Krea signed in')).toBe('Krea signed in');
-    expect(afterDot('Paper link required')).toBe('Paper link required');
   });
 
   it('leaves an empty note alone', () => {

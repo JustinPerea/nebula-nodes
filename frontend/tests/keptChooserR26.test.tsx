@@ -74,7 +74,7 @@ describe('the chooser is the app\'s modal and deletes the app\'s way', () => {
     expect(row.textContent).toMatch(/Alpha/);
     // One written date form: the year shows only when it isn't the current one.
     expect(row.textContent).toContain(`Edited October 9${new Date().getFullYear() === 2026 ? '' : ', 2026'}`);
-    expect(row.textContent).toMatch(/3 nodes · 1 connection/);
+    expect(row.textContent).toMatch(/3\u00a0nodes ·\u00a01\u00a0connection/);
   });
 
   it('Delete moves the project to Recently deleted with the app\'s Undo toast, and Undo restores it', async () => {

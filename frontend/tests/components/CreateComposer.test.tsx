@@ -20,7 +20,7 @@ describe('Create Krea connection control', () => {
       kreaConnection: { status: 'needs_auth' } } });
     const element = composer({ _kreaAuth: 'mcp' });
     render(element);
-    expect(screen.getByText('Krea sign-in required')).toBeInTheDocument();
+    expect(screen.getByText('setup required')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Connection settings for GPT Image 2 (Krea)' }));
     expect(useUIStore.getState().panels.settings.visible).toBe(true);
     expect(useUIStore.getState().viewMode).toBe('create');
@@ -33,12 +33,12 @@ describe('Create Krea connection control', () => {
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true,
       kreaConnection: { status: 'connected' } } });
     const { rerender } = render(composer({ _kreaAuth: 'mcp' }));
-    expect(screen.queryByText('Krea sign-in required')).not.toBeInTheDocument();
-    expect(screen.getByText('Krea signed in')).toBeInTheDocument();
+    expect(screen.queryByText(/Krea sign-in ·.*setup required/)).not.toBeInTheDocument();
+    expect(screen.getByText('signed in')).toBeInTheDocument();
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true,
       kreaConnection: { status: 'disconnected' } } });
     rerender(composer({}));
-    expect(screen.queryByText('Krea sign-in required')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Krea sign-in/)).not.toBeInTheDocument();
     expect(screen.getByText('setup required')).toBeInTheDocument();
   });
 });

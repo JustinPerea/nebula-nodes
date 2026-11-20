@@ -291,7 +291,7 @@ describe('provider readiness without generation', () => {
   it('keeps a Krea copy on the signed-in plan even with a Google key', () => {
     const ready = modelReadiness(NODE_DEFINITIONS['krea-image-google-nano-banana-pro'], freeze({ _kreaAuth: 'mcp' }),
       credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN }, kreaConnection: { status: 'connected' } }), health());
-    expect(ready).toMatchObject({ label: 'Krea signed in', setupTarget: { kind: 'krea-mcp' } });
+    expect(ready).toMatchObject({ label: 'Signed in', setupTarget: { kind: 'krea-mcp' } });
   });
 
   it('prefers Vertex over the Gemini API key when both direct credentials are set', () => {
@@ -335,9 +335,9 @@ describe('provider readiness without generation', () => {
   });
 
   it.each([
-    ['disconnected', 'Krea sign-in required'],
-    ['connecting', 'Finish Krea sign-in'],
-    ['needs_auth', 'Krea sign-in required'],
+    ['disconnected', 'Setup required'],
+    ['connecting', 'Finish setup'],
+    ['needs_auth', 'Setup required'],
     ['error', 'Connection unavailable'],
   ] as const)('does not substitute a token for saved Krea MCP mode while %s', (status, label) => {
     const ready = modelReadiness(kreaVideo, freeze({ _kreaAuth: 'mcp' }), credentials({
@@ -351,7 +351,7 @@ describe('provider readiness without generation', () => {
     const ready = modelReadiness(kreaImage, freeze({ _kreaAuth: 'mcp' }), credentials({
       kreaConnection: { status: 'connected', tools: ['generate', 'get_job'] },
     }), health({ Krea: entry('invalid') }));
-    expect(ready).toMatchObject({ label: 'Krea signed in', tone: 'neutral', connectionLabel: 'Krea sign-in' });
+    expect(ready).toMatchObject({ label: 'Signed in', tone: 'neutral', connectionLabel: 'Krea sign-in' });
     expect(ready.detail).toContain('compute units');
     expect(ready.detail).toContain('when you explicitly run');
     expect(ready.detail).not.toMatch(/verified|API balance/i);
@@ -363,14 +363,14 @@ describe('provider readiness without generation', () => {
       label: 'Connection not loaded', tone: 'neutral', connectionLabel: 'Krea sign-in', setupTarget: { kind: 'krea-mcp' },
     });
     expect(modelReadiness(kreaImage, params, credentials({ loaded: false, kreaConnection: { status: 'connected' } }), health())).toMatchObject({
-      label: 'Krea signed in', tone: 'neutral', connectionLabel: 'Krea sign-in',
+      label: 'Signed in', tone: 'neutral', connectionLabel: 'Krea sign-in',
     });
   });
 
   it.each(['krea-2-generate', 'krea-style-search', 'krea-style-train', 'krea-library-manage'])('follows the saved billing choice on %s', (id) => {
     const signedIn = credentials({ kreaConnection: { status: 'connected' } });
     expect(modelReadiness(NODE_DEFINITIONS[id], freeze({ _kreaAuth: 'mcp' }), signedIn, health()))
-      .toMatchObject({ label: 'Krea signed in', setupTarget: { kind: 'krea-mcp' } });
+      .toMatchObject({ label: 'Signed in', setupTarget: { kind: 'krea-mcp' } });
     // Recipes saved before the choice existed keep the API token.
     expect(modelReadiness(NODE_DEFINITIONS[id], freeze({}), signedIn, health())).toMatchObject({
       label: 'Setup required', connectionLabel: 'Krea API key', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' },
@@ -379,7 +379,7 @@ describe('provider readiness without generation', () => {
 
   it.each(['krea-moodboard-search', 'krea-moodboard-create'])('always needs Krea sign-in for account-only %s', (id) => {
     expect(modelReadiness(NODE_DEFINITIONS[id], freeze({}), credentials({ kreaConnection: { status: 'needs_auth' } }), health()))
-      .toMatchObject({ label: 'Krea sign-in required', setupTarget: { kind: 'krea-mcp' } });
+      .toMatchObject({ label: 'Setup required', setupTarget: { kind: 'krea-mcp' } });
   });
 
   it('keeps the local Krea style-reference helper independent of token and MCP credentials', () => {
@@ -392,7 +392,7 @@ describe('provider readiness without generation', () => {
   it('offers external Nous OAuth setup instead of treating a keyless definition as ready', () => {
     const definition = NODE_DEFINITIONS['nous-portal-universal'];
     const ready = modelReadiness(definition, {}, credentials(), health());
-    expect(ready).toMatchObject({ label: 'Sign-in not checked', tone: 'neutral', connectionLabel: 'Nous sign-in',
+    expect(ready).toMatchObject({ label: 'Not checked', tone: 'neutral', connectionLabel: 'Nous sign-in',
       setupTarget: { kind: 'external', provider: 'nous' } });
     expect(ready.detail).toContain('local Hermes OAuth login');
     expect(modelReadiness(definition, {}, credentials(), health({ Nous: entry('not_configured') })).label).toBe('Setup required');
@@ -487,5 +487,14 @@ describe('provider readiness without generation', () => {
     keyReadiness('KREA_API_TOKEN', cache, checked);
     modelReadiness(NODE_DEFINITIONS['paper-source'], params, cache, checked);
     expect(JSON.stringify({ params, cache, checked })).toBe(before);
+  });
+});
+
+describe('a readiness label never repeats the route it is joined to', () => {
+  it('has no "Krea" or "sign-in" in the state of a Krea sign-in or a Nous sign-in', () => {
+    const labels = (['disconnected', 'connecting', 'connected', 'error'] as const).map((status) => modelReadiness(kreaVideo,
+      freeze({ _kreaAuth: 'mcp' }), credentials({ kreaConnection: { status }, kreaConnectionMode: 'mcp' }), health()))
+      .concat(modelReadiness(NODE_DEFINITIONS['nous-portal-universal'], {}, credentials(), health()));
+    for (const ready of labels) expect(ready.label).not.toMatch(/krea|nous|sign-in/i);
   });
 });

@@ -3,6 +3,8 @@ import { chatErrorLine } from '../src/lib/chatErrorLine';
 import { isBecauseFailure } from '../src/lib/errorCopy';
 
 const line = (message: string | null, extra: { code?: string; source?: string; agentName?: string } = {}) =>
+  chatErrorLine({ message, agentName: 'Claude', ...extra }).text;
+const full = (message: string | null, extra: { code?: string; source?: string; agentName?: string } = {}) =>
   chatErrorLine({ message, agentName: 'Claude', ...extra });
 
 describe('the chat stream error line', () => {
@@ -22,7 +24,8 @@ describe('the chat stream error line', () => {
 
   it('words an exit, a timeout and a missing CLI', () => {
     expect(line('claude exited with code 1')).toBe('Claude stopped because it exited with code 1.');
-    expect(line('request timed out')).toBe('Claude stopped because the connection timed out.');
+    expect(line('connect ETIMEDOUT 10.0.0.1:443')).toBe('Claude stopped because the connection timed out.');
+    expect(line('socket hang up')).toBe('Claude stopped because the connection was reset.');
     expect(line('`claude` binary not found in PATH')).toBe('Claude stopped because its command wasn’t found. Check that it is installed.');
   });
 
@@ -47,5 +50,45 @@ describe('the chat stream error line', () => {
   it('is a because line, so it is drawn neutral', () => {
     expect(isBecauseFailure(line('connection refused'))).toBe(true);
     expect(isBecauseFailure('Opus is no longer offered.')).toBe(false);
+  });
+
+  it('says whether it is a because line itself, for any agent name', () => {
+    expect(full('connection refused').because).toBe(true);
+    expect(full('Opus is no longer offered.', { code: 'model_unsupported' }).because).toBe(false);
+    const hermes = chatErrorLine({ message: 'boom', agentName: 'Hermes v2.0' });
+    expect(hermes).toEqual({ text: 'Hermes v2.0 stopped because boom.', because: true });
+    expect(chatErrorLine({ message: 'boom', agentName: `A${'x'.repeat(70)}` }).because).toBe(true);
+  });
+
+  it('drops the agent\'s own name from the reason and keeps names and acronyms capitalised', () => {
+    expect(line('Codex turn failed', { agentName: 'Codex' })).toBe('Codex stopped because its turn failed.');
+    expect(line('Hermes: request failed', { agentName: 'Hermes' })).toBe('Hermes stopped because its request failed.');
+    expect(line('codex: out of credits', { agentName: 'Codex' })).toBe('Codex stopped because out of credits.');
+    expect(line('Claude hit a rate limit')).toBe('Claude stopped because hit a rate limit.');
+    expect(line('Gemini quota exhausted')).toBe('Claude stopped because Gemini quota exhausted.');
+    expect(line('MCP server crashed')).toBe('Claude stopped because MCP server crashed.');
+    expect(line('JSON parse failed')).toBe('Claude stopped because JSON parse failed.');
+  });
+
+  it('keeps the words of a timeout that is not a connection fault', () => {
+    expect(line('Command timed out after 120s')).toBe('Claude stopped because command timed out after 120s.');
+    expect(line('MCP tool call timed out')).toBe('Claude stopped because MCP tool call timed out.');
+    expect(line('connection timed out')).toBe('Claude stopped because the connection timed out.');
+  });
+
+  it('puts a multi-line or long message behind Details', () => {
+    const trace = 'Traceback (most recent call last):\n  File "x.py", line 1\nValueError: nope';
+    expect(full(trace)).toEqual({ text: 'Claude stopped because its command failed.', because: true, details: trace });
+    const long = `boom ${'x'.repeat(220)}`;
+    expect(full(long)).toMatchObject({ text: 'Claude stopped because its command failed.', details: long });
+    expect(full('connection refused').details).toBeUndefined();
+  });
+
+  it('capitalises a whole line from the backend unless it opens with an identifier, and drops an Error lead', () => {
+    expect(line('invalid JSON', { source: 'system' })).toBe('Invalid JSON.');
+    expect(line('ERROR: invalid JSON', { source: 'system' })).toBe('Invalid JSON.');
+    expect(line('error: bad thing', { source: 'system' })).toBe('Bad thing.');
+    expect(line('claude_cli went away', { source: 'system' })).toBe('claude_cli went away.');
+    expect(line('JSON was invalid', { source: 'system' })).toBe('JSON was invalid.');
   });
 });

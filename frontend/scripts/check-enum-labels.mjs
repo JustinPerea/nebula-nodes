@@ -247,12 +247,15 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   // number (`elapsedTime`, `durationMs`, a Ms/Sec/Seconds suffix) and `format` is not a date.
   const nameParts = (name) => name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase().split(/_+/).filter(Boolean);
   const DURATION_PART = new Set(['elapsed', 'duration', 'ms', 'sec', 'secs', 'seconds']);
+  // What is timed, in a "...Time" name that is a length of time (`renderTime`, `waitTime`, `latency`): it
+  // excludes only the time-word match, so `lastRunAt` and `loadedAt` still read as dates.
+  const TIMED_PART = new Set(['render', 'load', 'wait', 'latency', 'response', 'run', 'cpu', 'frame', 'total']);
   const TIME_PART = new Set(['time', 'timestamp', 'ts', 'stamp']);
   const DATE_NAME_CASED = (name) => {
     const parts = nameParts(name);
     if (parts.some((p) => DURATION_PART.has(p))) return false;
-    return /^(?:date|when|moment|at)$/i.test(name) || /[a-z](?:At|Date|Moment|When)$/.test(name) || /_(?:at|date)$/i.test(name)
-      || parts.some((p) => TIME_PART.has(p));
+    if (/^(?:date|when|moment|at)$/i.test(name) || /[a-z](?:At|Date|Moment|When)$/.test(name) || /_(?:at|date)$/i.test(name)) return true;
+    return !parts.some((p) => TIMED_PART.has(p)) && parts.some((p) => TIME_PART.has(p));
   };
   function nameOf(expr) {
     const n = unwrap(expr);

@@ -38,7 +38,7 @@ Whether TypeSafe may analyze your requests to improve its models is an organizat
 TypeSafe marks image input and Box questions as not production-ready: the request format, limits and accuracy can change between releases. Nebula sends images anyway, and says so:
 
 - Decide shows a capability note, and its report has an `Images: N (experimental)` line whenever images were sent.
-- Box is labelled *(experimental)* in its name.
+- Box is named "Jev Box · experimental".
 - Text-only questions are TypeSafe's production surface.
 
 ## Jev Decide

@@ -14,8 +14,7 @@ export function aside(label: string | number, note: string): string {
 
 /**
  * A status label as it reads after a dot ("Google API · setup required", design): the first word
- * starts lower case. An acronym ("API key") and a proper noun ("Krea signed in") keep their
- * capital. The same label stands alone elsewhere ("Setup required"), so this is applied where the
- * two are joined, not in the label.
+ * starts lower case. An acronym ("API key") keeps its capital. The same label stands alone
+ * elsewhere ("Setup required"), so this is applied where the two are joined, not in the label.
  */
-export const afterDot = (note: string): string => /^(?:[A-Z]{2}|Krea|Nous|Paper)/.test(note) ? note : note.charAt(0).toLowerCase() + note.slice(1);
+export const afterDot = (note: string): string => /^[A-Z]{2}/.test(note) ? note : note.charAt(0).toLowerCase() + note.slice(1);

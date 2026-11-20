@@ -1,6 +1,7 @@
 /**
- * The Title Case default labels of six nodes, before the copy sweep renamed
- * them to sentence case. A node saved earlier carries the old label, which no
+ * The former default labels of seven nodes: six Title Case ones that the copy
+ * sweep renamed to sentence case, and Jev Box, whose "(experimental)" aside
+ * became "· experimental". A node saved earlier carries the old label, which no
  * longer equals the definition's name, so a plain comparison would read it as a
  * name the person chose. Every default-title check goes through here, so a
  * former default counts as the default. A loaded canvas also shows the new

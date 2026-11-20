@@ -266,6 +266,13 @@ describe('colour', () => {
     expect(container.querySelector('[data-testid="b"]')?.hasAttribute('data-line-because')).toBe(false);
   });
 
+  it('marks a line told tone="because" whatever its words, so an agent named "Hermes v2.0" reads neutral', () => {
+    const { container } = render(<><p data-testid="a"><LineText text="Hermes v2.0 stopped because boom." tone="because" /></p>
+      <p data-testid="b"><LineText text="Hermes v2.0 stopped because boom." /></p></>);
+    expect(container.querySelector('[data-testid="a"]')?.hasAttribute('data-line-because')).toBe(true);
+    expect(container.querySelector('[data-testid="b"]')?.hasAttribute('data-line-because')).toBe(false);
+  });
+
   it('marks a line with no reason too, and leaves a line that is not a failure alone', () => {
     const { container } = render(<><p data-testid="a"><LineText text="Nebula couldn’t load your projects." /></p>
       <p data-testid="b"><LineText text="Saved." /></p></>);
