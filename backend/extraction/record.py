@@ -480,8 +480,7 @@ def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]
     total = len(record["corrections"]) + len(incoming)
     if actor == "agent" and total > MAX_CORRECTIONS_PER_RECORD - PERSON_RESERVE:
         raise RecordInvalid(f"An agent can add corrections up to {MAX_CORRECTIONS_PER_RECORD - PERSON_RESERVE} on a "
-                            f"record; the last {PERSON_RESERVE} are kept for the person. Ask with "
-                            "extraction_request_read, or leave the rest to them.")
+                            f"record; the last {PERSON_RESERVE} are kept for the person.")
     if total > MAX_CORRECTIONS_PER_RECORD:
         raise RecordInvalid(f"A record keeps at most {MAX_CORRECTIONS_PER_RECORD} corrections.")
     at = _stamp(clock)

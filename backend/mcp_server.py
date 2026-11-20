@@ -2715,7 +2715,7 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     corrected, or its parent or child, whoever wrote last; add your own show under another id,
     or ask with `extraction_request_read`. The last 200 of a record's 1,000 corrections are
     kept for the person.
-    Values are at most 2,000 characters. Everything is checked first; one refusal adds none. Values code measured
+    Values are at most 2,000 characters. Everything is checked first; one refusal adds none. Values the code measured
     (`structure.measured`, `rendering`, `source`), the id and the schema are facts and
     can't be corrected, and neither can a record a person approved. Approval isn't a correction: `status`, `approved_by` and
     `approved_at` are refused, and an agent can't approve a record. `structure.read.` paths
