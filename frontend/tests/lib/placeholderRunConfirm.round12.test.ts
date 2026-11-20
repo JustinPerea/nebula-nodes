@@ -8,7 +8,7 @@ const ON_KREA = { apiKeys: { KREA_API_TOKEN: '(set)' }, edges: [] };
 import { pendingIncludedLine, pendingSkipLine } from '../../src/lib/pendingNodes';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// Design's rulings (2026-10-26) and addendum, verbatim.
+// The design rulings (2026-10-26) and their addendum, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 
@@ -23,7 +23,7 @@ const unpriced = summaryOf({});
 const row = (definitionId: string, params: Record<string, unknown>, label = 'Up') =>
   placeholderRunConfirm([node('k', label, codex, definitionId, params)], [], 'k', unpriced)!.rows[0];
 
-describe('addendum (b): a required model setting with nothing chosen', () => {
+describe('a required model setting with nothing chosen (the addendum)', () => {
   it('Topaz Standard reads "Model: not chosen" and keeps the rest of the row', () => {
     const topaz = row('krea-enhance-topaz-standard-enhance', {}, 'Clean plate');
     expect(topaz.setting).toBe('Model: not chosen');

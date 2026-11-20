@@ -190,7 +190,7 @@ describe('stacked dialogs close in any order and leave the page as it was', () =
   });
 });
 
-describe('the rest', () => {
+describe('StrictMode, the opener\'s own onFocus, and a late aria-modal', () => {
   it('StrictMode: the second mount keeps focus in the dialog', async () => {
     const { opener } = page();
     opener.focus();

@@ -1,6 +1,6 @@
 /**
  * PR #204: the runtime ratchet (tests/helpers/bareLines.ts)
- * closes the three bypasses the review found, each caught here, beside controls that still pass.
+ * closes the three bypasses found in review, each caught here, beside controls that still pass.
  * - P1: a bare "connected as you" text beside a <LineText> in the same parent (before or after
  *   it, or in a child element) passed because the parent was registered.
  * - P2: data-agent-text on any element exempted it; only the two Update texts are an agent's.

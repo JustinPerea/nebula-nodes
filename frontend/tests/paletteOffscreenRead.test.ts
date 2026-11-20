@@ -4,7 +4,7 @@ import { BITMAP_OPTIONS, offscreenReadsSame, readPaletteJobOffscreen } from '../
 
 // Design: the worker reads the picked file with
 // createImageBitmap and an OffscreenCanvas, for the formats where Chrome
-// gives the page's pixels byte for byte (measured: notes).
+// gives the page's pixels byte for byte (measured in Chrome).
 
 const png = (depth: number) => {
   const head = new Uint8Array(32);

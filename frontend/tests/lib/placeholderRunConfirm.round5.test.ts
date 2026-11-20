@@ -5,7 +5,7 @@ import { placeholderRefusalOf, placeholderRunConfirm, withRunEstimate } from '..
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 import { ExecutionStartRejectedError } from '../../src/lib/api';
 
-// Design's answers (2026-10-25), verbatim:
+// Design, verbatim (2026-10-25):
 // "a dollar amount shows only when it covers every paid row; Krea-plan rows
 // cost nothing extra and don't count as missing."
 

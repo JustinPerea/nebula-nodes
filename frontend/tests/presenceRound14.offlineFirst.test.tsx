@@ -3,7 +3,7 @@
  * notice shows: a not-connected line (a lock's line, a because line, the general notice) waits,
  * since connecting the tab wouldn't be enough. Back online and still not connected, it shows.
  * The Commons and the lock lines are pinned in presenceRound14.commonsLock and .pickerLine; this
- * file pins the rest of the places listed in the notes.
+ * file pins the rest of the places offline-first covers.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

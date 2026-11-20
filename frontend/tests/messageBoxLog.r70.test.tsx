@@ -174,7 +174,7 @@ describe('the handle is a focusable separator', () => {
     expect(Number(h.getAttribute('aria-valuemin'))).toBeGreaterThan(0);
     expect(h.getAttribute('aria-valuemax')).toBe(String(820 - 154));
     expect(h.getAttribute('title')).toBe(RESIZE_HANDLE_TITLE);
-    // Design's words, verbatim.
+    // Design, verbatim.
     expect(RESIZE_HANDLE_TITLE).toBe('Drag or use the arrow keys to resize. Double-click or press Enter to fit the content.');
   });
 
@@ -208,7 +208,7 @@ describe('the header’s meta keeps the cursor label’s case', () => {
   });
 });
 
-describe('CSS', () => {
+describe('the Agent log\'s own rules', () => {
   it('the fold is one bordered chip: no rule tells the working fold from the settled one', () => {
     expect(css.rules.filter((r) => r.selectors.some((s) => /message-box__fold--/.test(s)))).toEqual([]);
     expect(css.ruleValue('.message-box__fold', 'border')).toMatch(/^1px solid/);

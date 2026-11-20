@@ -2,7 +2,7 @@
  * PR #204: the capability is asked again when the backend's boot
  * id changes, a restart health never saw as offline, as well as on reconnect. Still no polling.
  * And a tab without the Commons (a canvas tab that loaded while it was off) asks the same way, so
- * its Commons entry appears without a reload. Probes PD/PE as assertions.
+ * its Commons entry appears without a reload.
  */
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); act(() => resetBackendConnectionForTests()); history.replaceState({}, '', '/'); noteCommonsAnswered(); });
 
-it('PD: under the off view, a restart seen only by its boot id asks again, and the off view goes', async () => {
+it('under the off view, a restart seen only by its boot id asks again, and the off view goes', async () => {
   history.replaceState({}, '', '/#commons');
   render(<Probe />);
   await flush();
@@ -99,7 +99,7 @@ it('no polling: nothing asks while nothing changes, and a capability still off k
   }
 });
 
-it('PE: flapping three times while each read is slow still opens the Commons', async () => {
+it('flapping three times while each read is slow still opens the Commons', async () => {
   history.replaceState({}, '', '/#commons');
   render(<Probe />);
   await flush();

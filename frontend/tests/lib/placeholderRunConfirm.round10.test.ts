@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { placeholderRunConfirm, PRICE_ON_KREA_PLAN } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// Design's rulings, verbatim.
+// The design rulings, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const claude = { id: 'ext:claude', name: 'Claude Code', color: '#8AB4F8', verified: true };

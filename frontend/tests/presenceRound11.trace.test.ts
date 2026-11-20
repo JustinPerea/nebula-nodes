@@ -9,7 +9,7 @@
  *   what can't be read is listed with its reason (a `let` of an imported path, '/api' joined to
  *   a name it can't read, a wrapper that reads the answer itself).
  * - A self-referential const no longer overflows the stack.
- * - A const in a block around the try's block is found (localConst innermost-only).
+ * - A const in a block around the try's block is found.
  * - lockReach walks from a sender to every control that reaches it, and says
  *   how each is locked; a second, unlocked control is caught wherever it is.
  * Each probe sends POST /api/presets, then `if (!res.ok) setLine(await res.text())` with no marker

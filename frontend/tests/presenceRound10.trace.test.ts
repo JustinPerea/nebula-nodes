@@ -7,10 +7,10 @@
  * - A function-local `const` path is the path at each of its uses (B1, J5, B24, C*); a `let`, an
  *   assignment, a conditional with a branch it can't read, a const never used, or a path held in
  *   an object is listed (B2, B10, U*).
- * - `paths['presets']()` is `paths.presets()`; a path helper handed to a call uncalled is
+ * - `paths['presets']()` is `paths.presets()` (B6); a path helper handed to a call uncalled is
  *   listed (B23, N*).
  * - K*: the same forms with the branch registered keep, so a resolved path isn't just forced to drop.
- * - A helper that wraps its path in joinBackendPath is still a
+ * - W1: A helper that wraps its path in joinBackendPath is still a
  *   path helper, so its call in a local it can't read is listed.
  */
 import { describe, expect, it } from 'vitest';
@@ -51,7 +51,7 @@ interface Probe { files: Record<string, string>; found: Record<string, string>; 
 const C = (source: string) => ({ 'components/C.tsx': source });
 
 const PROBES: Record<string, Probe> = {
-  // ---- as the review wrote them ----
+  // ---- the forms as first reported ----
   B1_bare_literal_local: { files: C(dropBody('', `const u = '/api/presets'; ${SEND}`)), ...DROPS },
   B2_literal_let: { files: C(dropBody('', `let u = ''; u = '/api/presets'; ${SEND}`)), ...LISTED },
   B6_element_access: { files: C(dropBody("const paths = { presets: () => '/api/presets' };", "const res = await apiFetch(paths['presets'](), { method: 'POST' });")), ...DROPS },

@@ -169,7 +169,7 @@ for (const field of ['select', 'why'] as const) {
 }
 });
 
-// ──: a labelled region inside a membership stays that membership's ──
+// ── A labelled region inside a membership stays that membership's ──
 // Each membership's comment field sits in "Comments in <collection name>", and two manual
 // collections may share a name. The pane is the membership's scope and that region, so a same-count
 // reorder of same-named collections never hands m2's "Add a comment" to m3's (a comment there is

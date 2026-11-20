@@ -17,7 +17,7 @@ const AGENT_SCENE = "Couldn't delete “Agent scene”. “Shot 2” is still ru
  * call sites' own headings over the backend's named lines. `alone` means the
  * reason shows by itself; `both` means "<heading> <reason>". */
 const TABLE: [heading: string, reason: string, shown: 'alone' | 'both', why: string][] = [
-  // The probe's pairs.
+  // The pairs first tried.
   ["Couldn't run the graph.", "Couldn't reach the provider. Check your connection and try again.", 'both',
     'the heading names the run; the reason is its cause'],
   ["Couldn't run the canvas.", "Couldn't reach TypeSafe. Check your connection and try again.", 'both',

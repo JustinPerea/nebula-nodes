@@ -1,11 +1,12 @@
 /**
- * PR #204 (two mutants survived): lib/commonsApi send holds
+ * PR #204: lib/commonsApi send holds
  * a Commons call only on a hold that has lasted the held rule's 150 ms (personHeldSettled), never at
  * once and never while the tab is still starting. Two windows where a call must still go out, with
  * the stored token, and reach apiFetch:
  * - Before the socket's first answer (a tab still starting, unconfirmed but not held).
  * - Inside the first 150 ms of a hold (a quick reconnect).
  * The desktop shell relies on both: a 401 there re-resolves the token and retries (commonsApi call).
+ * Two mutants of these windows survived without these tests.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

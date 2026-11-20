@@ -49,7 +49,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   // since PR #114).
   ["Couldn't unlock the node.", () => api.acknowledgeProviderStartAmbiguity('video' as never, 'n1', 'r1')],
   ["Couldn't forget the recovery safeguard.", () => api.deleteProviderRecovery('r1', 'n1', { resumeOperationId: 'op1' } as never)],
-  // Design's words, verbatim: "Couldn't keep your brief." -> "Couldn't save your brief."
+  // Design, verbatim: "Couldn't keep your brief." -> "Couldn't save your brief."
   ["Couldn't save your brief.", () => api.keepMoodboardBriefOverride('b1')],
   ["Couldn't start the run.", () => api.executeGraph([], [])],
   ["Couldn't run the node.", () => api.executeNode([], [], 'n1')],
@@ -88,7 +88,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't save the note.", () => pins.createPin('x', { nodeId: 'n1' })],
   ["Couldn't delete the note.", () => pins.deletePin('p1')],
   ["Couldn't load the updates.", () => notes.fetchAgentNotes({ kind: 'canvas', projectId: null } as never)],
-  // Design's words, verbatim.
+  // Design, verbatim.
   ["Couldn't mark the updates as read.", () => notes.markAgentNotesRead({ kind: 'canvas', projectId: null } as never)],
   ["Couldn't dismiss the update.", () => notes.dismissAgentNote({ kind: 'canvas', projectId: null } as never, 'u1')],
   ["Couldn't accept the proposal.", () => assetProposals.acceptAssetProposal('a1', 'k')],

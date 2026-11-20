@@ -42,7 +42,7 @@ const NO_TERMS = 'No new terms proposed yet.';
 const TOKEN = 'a'.repeat(43);
 type Load = 'status' | 'collections' | 'search' | 'folders' | 'settings' | 'candidates' | 'review' | 'evaluation';
 const fails: Partial<Record<Load, number>> = {};
-/** The backend runs without the Commons (every route "Commons is disabled"). */
+/** The backend runs without the Commons (every route answers 404 "Commons is disabled"). */
 const commonsOff = { on: false };
 /** A load the test holds until it lets it answer. */
 const held: Partial<Record<Load, Promise<void>>> = {};

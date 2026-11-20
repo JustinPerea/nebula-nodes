@@ -465,7 +465,7 @@ describe('a band only for a continuous run (design)', () => {
   it('keeps a pink tag and a violet tag that touch on a red | blue flag as two colours', () => {
     const data = pinkVioletTags();
     const out = colors(paletteFromImageData(data, 1000, 600, 6, { data: fixture('pink-violet-touching-96x58'), width: 96 }));
-    // #1528c7 #dc1428 #781e78, the tags' mean.
+    // An earlier version showed #1528c7 #dc1428 #781e78, the tags' mean.
     expect(new Set(out)).toEqual(new Set(['#dc1428', '#1428c8', '#aa1950', '#4623a0']));
     expect(new Set(colors(paletteFromImageData(withClearPixel(data), 1000, 600)))).toEqual(
       new Set(['#dc1428', '#1428c8', '#aa1950', '#4623a0']),
@@ -474,7 +474,7 @@ describe('a band only for a continuous run (design)', () => {
 
   it('keeps the 14 px frame as one keyline, in its own grey', () => {
     const out = colors(paletteFromImageData(framed(14), 1000, 1000, 6, { data: fixture('frame-grey-14px-of-1000-96x96'), width: 96 }));
-    // #6f6f6f.
+    // An earlier version showed #6f6f6f.
     expect(out).toEqual(['#000000', '#ffffff', '#808080']);
   });
 
@@ -803,7 +803,7 @@ describe('the full image names each colour (design)', () => {
       for (const [i, v] of [68, 136, 187].entries()) if (y >= 180 + i * 15 && y < 195 + i * 15) return [v, v, v, 255];
       return [255, 255, 255, 255];
     });
-    // #ffffff #000000 #bbbbbb (one of the three).
+    // An earlier version showed #ffffff #000000 #bbbbbb (one of the three).
     for (const out of both(three, 1000, 600, 'three-greys-15px-of-1000-96x58')) {
       expect(out).toHaveLength(5);
       expect(out).toEqual(expect.arrayContaining(['#000000', '#444444', '#888888', '#bbbbbb']));
@@ -815,7 +815,7 @@ describe('the full image names each colour (design)', () => {
       if (x < 3 || y < 3 || x >= 997 || y >= 997) return [128, 128, 128, 255];
       return y >= 500 ? [255, 255, 255, 255] : [0, 0, 0, 255];
     });
-    // #9d9d9d and #626262, the 256 px cells' mixes.
+    // An earlier version showed #9d9d9d and #626262, the 256 px cells' mixes.
     for (const out of both(border, 1000, 1000, 'border-frame-3px-of-1000-96x96')) expect(out).toEqual(['#000000', '#ffffff', '#808080']);
   });
 
@@ -836,7 +836,7 @@ describe('the full image names each colour (design)', () => {
       if (y < 308) return [0, 0, 0, 255];
       return [255, 255, 255, 255];
     });
-    // #909090.
+    // An earlier version showed #909090.
     for (const out of both(strip, 1000, 600, 'strip-ddd-8px-of-1000-96x58')) {
       expect(out).toContain('#dddddd');
       expect(out).toContain('#333333');

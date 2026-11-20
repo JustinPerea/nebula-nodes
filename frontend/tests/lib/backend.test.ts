@@ -203,7 +203,7 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     expect(fetchSpy.mock.calls.flat().some((value) => String(value).includes('connectorSession'))).toBe(false);
   });
 
-  // Design's question: can the app's backend answer before the
+  // A question from design: can the app's backend answer before the
   // shell's token lookup lands? No: nothing is sent until it does, so no
   // refusal can come back while the lookup is pending, and the banner never
   // reads a half-finished one.

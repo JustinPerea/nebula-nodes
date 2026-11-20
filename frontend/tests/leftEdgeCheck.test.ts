@@ -354,7 +354,7 @@ describe('the left-edge check passes', () => {
   });
 });
 
-describe('readers', () => {
+describe('what the check reads: var(), vw, a split stripe, hsl hues', () => {
   const stripe = '.a { position: absolute; left: 0; top: 0; bottom: 0; width: 0.2vw; background: red; }';
   it('names the reason for a stripe it can\'t read, and not for a stripe it can', () => {
     expect(found('.a { position: absolute; left: 0; top: 0; bottom: 0; width: var(--bar); background: red; }')[0].reason).toMatch(/a stripe whose width this check can't read/);

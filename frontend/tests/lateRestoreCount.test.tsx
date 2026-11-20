@@ -3,7 +3,7 @@
  * "Yes, show it as a plain notice with no button, using the standard
  * timeout ... Losing that count silently is the one thing to avoid."
  *
- * Design, replying to #180's "For design": "LATE LINES: drop the
+ * Design, replying to a question in #180: "LATE LINES: drop the
  * node word, which fixes the mismatch for good. "After the restore, 1
  * proposal couldn't be reopened." / "…{n} proposals couldn't be reopened."
  * "After the restore, Nebula couldn’t reattach 1 pin." / "…{n} pins couldn't

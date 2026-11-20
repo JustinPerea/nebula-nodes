@@ -2,8 +2,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 /**
- * PR #198: rendered: where focus goes when an
- * answered clash prompt leaves the region, for the branches the earlier tests
+ * PR #198, rendered: where focus goes when an
+ * answered clash prompt leaves the region, for the branches pr198Fix21Ui's 'focus when an answered clash prompt goes never drops to the page'
  * left untested:
  * - asked again: the new prompt itself, ahead of the × rule (a toast below);
  * - focus the person moved meanwhile stays where they put it;

@@ -2,7 +2,7 @@
  * Design (PR #204): a search can't succeed while the page says why this tab can't load,
  * so "Searching…" clears in the same frame (the same commit) as the page's because line. Every
  * commit of the line row and the results area is recorded; none shows both. Deterministic: fake
- * time, and the page's loads answer only when the test lets them (the harness above).
+ * time, and the page's loads answer only when the test lets them (the harness below).
  */
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -36,7 +36,7 @@ describe('"3 more" in the Undo notice\'s row', () => {
     expect(screen.queryByRole('button', { name: /more/ })).toBeNull();
     act(() => setNoticeMore({ host: screen.getByTestId('b'), count: 3, expanded: false }));
     const more = screen.getByRole('button', { name: '3 more notices' });
-    // Design's words exactly: not a substring.
+    // The words design gave, exactly: not a substring.
     expect(more).toHaveTextContent(/^3 more$/);
     expect(more).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('b').contains(more)).toBe(true);

@@ -55,7 +55,7 @@ const CASES: [string, string, string][] = [
 ];
 
 describe('the Auto row has no colon and leads with the provider (design)', () => {
-  it('the line (design), word for word', () => {
+  it('the Auto row line (design), word for word', () => {
     expect(autoLabel(NODE_DEFINITIONS['flux-3-image'], { resolution: '1.5K' }, { FAL_KEY: KEY }))
       .toBe('Auto · fal.ai doesn’t take “Resolution” set to 1.5K');
   });
@@ -109,7 +109,7 @@ describe('the bar: the summary line, the per-reason count inside the list (desig
   });
 });
 
-// Design's copy findings: Krea’s sign-in line, the switcher row’s size note and the two-actions comma.
+// The copy design asked for: Krea’s sign-in line, the switcher row’s size note and the two-actions comma.
 describe('Krea’s sign-in line never names a provider that can’t take the run', () => {
   const krea3 = () => NODE_DEFINITIONS['krea-3'];
   const plan = { _provider: 'krea', _kreaAuth: 'mcp' };
@@ -138,7 +138,7 @@ describe('the switcher row’s size note', () => {
 describe('two actions take a comma when either holds its own "or" (design)', () => {
   it.each([
     [{ text: 'Pick 1K', options: 1 }, ['fal.ai', 'Replicate'], 'Pick 1K, or switch to fal.ai or Replicate.'],
-    // Design's later rule: every second action takes the comma (idolRound19.test.ts).
+    // A later design rule: every second action takes the comma (idolRound19.test.ts).
     [{ text: 'Pick 1K', options: 1 }, ['fal.ai'], 'Pick 1K, or switch to fal.ai.'],
     [{ text: 'Pick 1K or 2K', options: 2 }, ['fal.ai'], 'Pick 1K or 2K, or switch to fal.ai.'],
     [{ text: 'Turn “Raw” off', options: 1 }, ['fal.ai', 'Replicate'], 'Turn “Raw” off, or switch to fal.ai or Replicate.'],

@@ -61,7 +61,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); act(() => notePersonPromoted()); act(() => resetBackendConnectionForTests()); resetCommonsSessionForTests(); vi.useRealTimers(); });
 
-it('PA: a link\'s late read-back leaves a newer notice alone', async () => {
+it('a link\'s late read-back leaves a newer notice alone', async () => {
   let release = () => {};
   const gate = new Promise<void>((r) => { release = r; });
   let foldersReads = 0;
@@ -89,7 +89,7 @@ it('PA: a link\'s late read-back leaves a newer notice alone', async () => {
   expect(notice()?.getAttribute('title')).toBeNull();
 });
 
-it('PB: Import\'s re-read, sent before New collection lands, answers after the merge', async () => {
+it('Import\'s re-read, sent before New collection lands, answers after the merge; the reads after it fail', async () => {
   render(<CommonsView />);
   await tick(1000);
   let release = () => {};
@@ -181,7 +181,7 @@ it('with no failure, Import\'s re-read, sent before New collection lands, answer
   expect(bodies.filter((b) => b.path.endsWith('/intake/url')).map((b) => JSON.parse(b.body).collection_id)).toEqual(['c2']);
 });
 
-it('PC: a Try again whose re-read fails for another reason keeps focus on the new line\'s Try again', async () => {
+it('a Try again whose re-read fails for another reason keeps focus on the new line\'s Try again', async () => {
   let collectionsStatus = 503;
   transport.fetch.mockImplementation(async (p: string, i?: RequestInit) => {
     const path = String(p);
@@ -201,7 +201,7 @@ it('PC: a Try again whose re-read fails for another reason keeps focus on the ne
   expect(document.activeElement).toBe(btn());
 });
 
-it('PF: Agent review answered, then its 5 s re-read fails: the line ending "Try again." has the button', async () => {
+it('Agent review answered, then its 5 s re-read fails: the line ending "Try again." has the button', async () => {
   let fail = false;
   const batch = { id: 'b1', state: 'open', attempts: 0, call_budget: 3, items: [] };
   transport.fetch.mockImplementation(async (p: string, i?: RequestInit) => {
