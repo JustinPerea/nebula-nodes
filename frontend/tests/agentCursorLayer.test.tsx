@@ -198,7 +198,7 @@ describe('each action draws its own look (Phase 2, spec §2)', () => {
     send(event({ action: 'error' }));
     flush();
     expect(document.querySelector('.agent-cursor__press')).toBeNull();
-    expect(document.querySelector('.agent-cursor__danger')).not.toBeNull();
+    expect(document.querySelector('.agent-cursor__error')).not.toBeNull();
   });
 
   it.each(['look', 'think', 'type', 'propose', 'wait'])('%s is held from arrival', (action) => {

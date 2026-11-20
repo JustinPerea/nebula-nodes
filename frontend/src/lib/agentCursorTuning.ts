@@ -114,7 +114,7 @@ export const AGENT_CURSOR_RUN = { orbitMs: 1200, arcDeg: 120, radiusPx: 15, stro
 export const AGENT_CURSOR_DASHED = { grow: 1.45, strokePx: 1.5, dashPx: 3, gapPx: 2.5, opacity: 0.95 } as const;
 
 /** §2 error: "one sideways shake, ±4 px on a low-damping spring (t), and the
- *  halo flashes --sr-danger once (400 ms)". Build: the flash's peak opacity. */
+ *  halo flashes the error tone (--sr-error) once (400 ms)". Build: the flash's peak opacity. */
 export const AGENT_CURSOR_ERROR = { shakePx: 4, flashMs: 400, flashOpacity: 0.65 } as const;
 /** Build: the shake's low-damping spring (ζ ≈ 0.22). */
 export const AGENT_CURSOR_SHAKE_SPRING: TuningSpring = { stiffness: 520, damping: 10, mass: 1 };

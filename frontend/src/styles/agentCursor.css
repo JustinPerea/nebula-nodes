@@ -207,16 +207,15 @@
   color: var(--agent-ink, #0b0b0c);
 }
 
-/* error: one sideways shake, and the halo flashes danger once. The spec
-   names --sr-danger; the flash reads --sr-danger-ink, the destructive red
-   (the destructive-colour ratchet). It marks an agent error, not a destructive
-   action, so design may move it to the error tone. */
+/* error: one sideways shake, and the halo flashes the error tone once. It marks
+   an agent error, not a destructive action, so it reads --sr-error (design:
+   the red is only for buttons that delete or remove). */
 .agent-cursor__shake {
   animation: agent-cursor-shake var(--agent-cursor-shake) both;
 }
 
-.agent-cursor__danger {
-  fill: var(--sr-danger-ink, #ff887d);
+.agent-cursor__error {
+  fill: var(--sr-error);
   opacity: 0;
   animation: agent-cursor-flash var(--agent-cursor-flash) both;
 }
@@ -235,7 +234,7 @@
 }
 
 /* Still frames (reduced motion, spec §3): no sweep, breath, shake or ring. */
-.agent-cursor[data-still='true'][data-expr='error'] .agent-cursor__danger {
+.agent-cursor[data-still='true'][data-expr='error'] .agent-cursor__error {
   opacity: var(--agent-cursor-halo-opacity);
 }
 
@@ -548,7 +547,7 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
   .agent-cursor[data-expr='think'] .agent-cursor__halo,
   .agent-cursor__orbit,
   .agent-cursor__shake,
-  .agent-cursor__danger,
+  .agent-cursor__error,
   .agent-cursor__press,
   .agent-cursor__ring,
   .agent-cursor__field-mark[data-blink='true'],
