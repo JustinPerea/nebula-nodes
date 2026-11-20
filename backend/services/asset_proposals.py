@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 
 from services.agent_presence import AgentIdentity
-from services.personal_agents import in_sentence
+from services.agent_name_in_sentence import withdrawn_line
 from services.text_cut import clean_name
 from services.canvas_proposals import (
     OPEN,
@@ -229,20 +229,21 @@ def summary(proposal: AssetProposal) -> str:
 def update_text(proposal: AssetProposal) -> str:
     """The Update an asset proposal posts (Justin's Q92 a), in the words of
     where the person decides it: the strip's and the Commons line's. Names
-    only: never the agent's note, a board's notes or Commons text."""
-    agent = proposal.agent.name
+    only: never the agent's note, a board's notes or Commons text. The line
+    never starts with the agent's name (design): every surface that shows it
+    has the agent's header beside it."""
     name = clean_name(proposal.target_name, 120)
     if proposal.kind == "project":
-        return f"{agent} asks to change the cover of {name or 'a project'}"
+        return f"Asks to change the cover of {f'“{name}”' if name else 'a project'}"
     if proposal.kind == "moodboard":
-        return f"{agent} asks to turn on “Moodboard notes to generators” for {name or 'a moodboard'}"
+        return f"Asks to turn on “Moodboard notes to generators” for {f'“{name}”' if name else 'a moodboard'}"
     edits = proposal.change.get("edits") or []
     if len(edits) > 1:
-        return f"{agent} asks to make {len(edits)} changes to a reference in the Commons"
+        return f"Asks to make {len(edits)} changes to a reference in the Commons"
     membership = edits[0].get("membership") if edits and isinstance(edits[0], dict) else None
     if isinstance(membership, dict) and membership.get("accept") and set(membership) == {"id", "accept"}:
-        return f"{agent} asks to take a reference out of the inbox"
-    return f"{agent} asks to change a reference in the Commons"
+        return "Asks to take a reference out of the inbox"
+    return "Asks to change a reference in the Commons"
 
 
 def update_detail(proposal: AssetProposal) -> dict[str, Any]:
@@ -282,7 +283,7 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
 RESTART_OUTCOME = "Closed: Nebula restarted"
 
 
-def outcome_line(proposal: AssetProposal) -> str:
+def outcome_line(proposal: AssetProposal, closed_by: Mapping[str, Any] | None = None) -> str:
     """How a closed proposal ended, for its Update (short; never the
     person's reason or the agent's note)."""
     status = proposal.status
@@ -296,7 +297,7 @@ def outcome_line(proposal: AssetProposal) -> str:
                     else "You kept this cover")
         return "You kept the notes here" if proposal.kind == "moodboard" else "You said no"
     if status == "withdrawn":
-        return f"Withdrawn by {in_sentence(proposal.agent.name)}"
+        return withdrawn_line(proposal.agent.name, closed_by)
     if status == "expired":
         return "Expired"
     return "No longer fits"

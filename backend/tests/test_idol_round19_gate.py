@@ -115,11 +115,20 @@ def test_the_runs_other_branches_finish(world):
     assert text in body["results"] and tail in body["results"]
 
 
+# The run's own Agent log row says what ran, then the waiting sentence the done card says (design r211 item 3): both
+# end with a period, and the row never says the node "failed". The agent's name sits in the log row's header.
+ROW = ("Ran “Image Input” in under 1 s. “Idol” is waiting for you to run it because it could bill your Hugging "
+       "Face account.")
+
+
 def test_the_agents_done_card_and_agent_log_say_it_stopped(world):
     _run(world, CLAUDE)
     [line] = [m for m in world.sent if m.get("type") == "agentPresence" and "is waiting for you" in (m.get("say") or "")]
-    # The bubble fits it whole, and the Agent log keeps it whole for any agent's name.
-    assert line["say"] == DONE and line["log"] == DONE
+    # The bubble fits it whole, and the Agent log (the event's log, else its say) keeps it whole.
+    assert line["say"] == ROW and (line.get("log") or line["say"]) == ROW
+    assert "failed" not in ROW
+    # The done card's own line is not echoed into the log as a second row.
+    assert [m for m in world.sent if m.get("type") == "agentPresence" and DONE in (m.get("log") or m.get("say") or "")] == []
 
 
 def test_the_done_card_line_for_a_run_of_idol_alone():

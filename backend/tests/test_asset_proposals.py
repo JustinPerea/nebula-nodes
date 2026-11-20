@@ -347,6 +347,10 @@ def test_only_the_persons_canvas_accepts_with_the_key(api):
     assert closed[-1] == {"type": "assetProposalClosed", "proposalId": view["id"], "status": "accepted",
                           "reason": None, "kind": "project", "targetId": api.dusk}
     assert any(m.get("type") == "projectsChanged" for m in api.sent)
+    # The person's accept is a row under the agent that proposed it, in their
+    # voice (design); a project's cover has no image number, so "another image".
+    rows = [(m["agent"]["name"], m["say"]) for m in api.sent if m.get("type") == "agentPresence" and m.get("say")]
+    assert rows[-1] == ("Claude Code", "You accepted its proposal to make another image the cover of “Dusk”")
     # Decided once.
     assert api.client.post(path, headers={**api.person, KEY: key}).status_code == 409
 

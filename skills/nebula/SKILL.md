@@ -34,8 +34,9 @@ yourself.
 
 Set `NEBULA_AGENT_NAME` (for example `export NEBULA_AGENT_NAME="Claude Code"`)
 so your cursor and edits show under your name (the person's Agent log lists
-each of your edits, runs and moodboard changes under it too; a setting is
-named by its label as the Inspector shows it, never its key). `nebula apply` and
+each of your edits, runs and moodboard changes under it too, one row per
+action in the canvas's words: nodes by their names, never ids, and a setting
+by its label as the Inspector shows it, never its key). `nebula apply` and
 `nebula propose` need it (or `--as NAME`).
 
 ## Start here
@@ -550,10 +551,10 @@ on a `removes` line. The person accepts or rejects it on the canvas; you
 can't accept it. Its output's `card` line is what the person reads under
 your note, word for word (what changes and runs by node name, the model and
 who pays, the price); check it says what you meant. Each proposal also posts an Update the person sees on
-every screen ("Codex proposes 3 changes on the canvas", with Review, which
+every screen ("Proposes 3 changes on the canvas" under your name, with Review, which
 takes them to the canvas and its bar), so don't also post a `nebula note`
 about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,
-`[Withdrawn by <you>]`, `[Expired]`, `[No longer fits]` or
+`[Withdrawn]`, `[Expired]`, `[No longer fits]` or
 `[Closed: Nebula restarted]` (ask again then). Proposing again after you
 withdraw one replaces the withdrawn one's Update.
 
@@ -1061,8 +1062,8 @@ agent's proposal notes. MCP: `set_status`, `list_agents`.
 While your run is on a node, the person sees your mark above it ("Running
 FLUX.2 [pro] · 0:41"); `nebula agents` lists each agent's running nodes and
 placeholders too. When a run you started ends, Nebula posts your done card
-in Updates ("Codex finished “Hero shots”.", "Codex finished 2 of 3 nodes.
-“Upscale” failed.") with a thumbnail and Show on canvas; read it with
+in Updates, under your name ("Finished “Hero shots”.", "Finished 2 of 3
+nodes. “Upscale” failed.", "Run of 3 nodes failed.") with a thumbnail and Show on canvas; read it with
 `nebula notes` (MCP `list_notes`, `about: "run"`). You don't post it
 yourself, and a newer card for the same node replaces yours.
 

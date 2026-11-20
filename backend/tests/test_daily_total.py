@@ -33,7 +33,7 @@ CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 BAR_LEFT = "This would pass the $5 daily total, which has $0.20 left."
 BAR_USED_UP = "This would pass the $5 daily total, which is used up."
 BAR_AND_PER_RUN = "This would pass the $5 daily total and cost more than $1 per run."
-UPDATE = "Claude Code wants to run “Writer” and “Editor”. " + BAR_LEFT
+UPDATE = "Wants to run “Writer” and “Editor”. " + BAR_LEFT
 AGENTS = ("Waiting for the person’s OK: this run (about $0.40) would pass their $5 daily total for "
           "everything that isn’t them ($4.80 used in the last 24 hours). Sent as proposal p_1234abcd. "
           "Check it with nebula proposals.")
@@ -387,7 +387,7 @@ def test_a_run_that_would_pass_the_total_becomes_a_proposal_and_accept_runs_it(a
     proposal = api.main.canvas_proposals.get(body["proposalId"])
     assert proposal.spec.run == (writer,) and proposal.spec.note == BAR_LEFT
     assert "cardLine" not in proposal.wait and proposal.wait["nodeIds"] == [writer]
-    assert update_text(proposal) == f"Claude Code wants to run “Writer”. {BAR_LEFT}"
+    assert update_text(proposal) == f"Wants to run “Writer”. {BAR_LEFT}"
     view = api.client.get(f"/api/canvas/proposals/{proposal.id}", headers=CLAUDE).json()
     assert view["proposal"]["wait"]["barLine"] == BAR_LEFT and "cardLine" not in view["proposal"]["wait"]
     # Asking again for the same nodes points at the same proposal.

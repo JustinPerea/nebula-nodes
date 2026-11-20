@@ -100,10 +100,10 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     setUpdates([update('pa_a'), update('pa_b', { at: new Date(T0 + 1).toISOString() })]);
     const { container } = render(<AssetProposalStrip kind="project" targetId="dusk" />);
     expect(cards(container).map((card) => card.dataset.heldProposal)).toEqual(['pa_a', 'pa_b']);
-    act(() => setUpdates([update('pa_a', { resolvedAt: new Date(T0 + 5).toISOString(), outcome: 'Withdrawn by Claude Code' }),
+    act(() => setUpdates([update('pa_a', { resolvedAt: new Date(T0 + 5).toISOString(), outcome: 'Withdrawn' }),
       update('pa_b', { at: new Date(T0 + 1).toISOString() })]));
     expect(cards(container).map((card) => card.dataset.heldProposal)).toEqual(['pa_b']);
-    act(() => setUpdates([update('pa_a', { resolvedAt: new Date(T0 + 5).toISOString(), outcome: 'Withdrawn by Claude Code' }),
+    act(() => setUpdates([update('pa_a', { resolvedAt: new Date(T0 + 5).toISOString(), outcome: 'Withdrawn' }),
       update('pa_b', { at: new Date(T0 + 1).toISOString(), resolvedAt: new Date(T0 + 9).toISOString(), outcome: 'Expired' })]));
     expect(cards(container)).toHaveLength(0);
   });

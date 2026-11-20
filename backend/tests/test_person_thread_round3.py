@@ -203,8 +203,8 @@ def test_a_new_question_posts_its_own_update_while_an_answered_one_reads_past_te
     questions = [n for n in notes if n.get("about") == "question"]
     assert [n["questions"]["id"] for n in questions] == [second, first]  # newest first, one each
     new, old = questions
-    assert new["text"] == "Claude Code has a question." and [a["label"] for a in new["actions"]] == ["Answer"]
-    assert old["text"] == "Claude Code asked a question." and old["resolvedAt"]
+    assert new["text"] == "Has a question" and [a["label"] for a in new["actions"]] == ["Answer"]
+    assert old["text"] == "Asked a question" and old["resolvedAt"]
     unread = thread.client.get("/api/canvas/agent-notes", headers=PERSON, params={"unread": 1}).json()["notes"]
     assert [n["id"] for n in unread if n.get("about") == "question"] == [new["id"]]
     added = [m["note"]["questions"]["id"] for m in thread.browser + thread.sent

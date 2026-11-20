@@ -75,8 +75,17 @@ def _waiting(labels: Mapping[str, str], waiting: list[str], failed: list[str]) -
     return f"{wait}, and {broke} failed."
 
 
+def waiting_text(labels: Mapping[str, str], waiting: list[str]) -> str:
+    """The sentence for nodes waiting for the person's OK, with no failure
+    folded in: "“Idol” is waiting for you to run it because it could bill your
+    Hugging Face account." The done card (done_text) and the Agent log's run
+    row (main._cli_run_line) both say it through here, so they can't drift."""
+    return _waiting(labels, waiting, [])
+
+
 def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
-              succeeded: Iterable[str], failed: Iterable[str], stopped: Iterable[str] = ()) -> tuple[str, str]:
+              succeeded: Iterable[str], failed: Iterable[str], stopped: Iterable[str] = (),
+              named: bool = True) -> tuple[str, str]:
     """(the card's line, its outcome: success | partial | failure). GM - Design,
     2026-10-25, verbatim:
 
@@ -90,24 +99,36 @@ def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
     your Hugging Face account."; with a failure beside it, "… “Idol” is
     waiting for you to run it, and “Writer” failed."; from 4 nodes, counts.
     With nothing done (a draft for GM): "Codex’s run didn’t finish. “Idol” is
-    waiting …" for one node, "Codex’s run of 3 nodes didn’t finish. …"."""
+    waiting …" for one node, "Codex’s run of 3 nodes didn’t finish. …"."
+
+    ``named=False`` is the line for a surface that already shows the agent's
+    name (the Updates card's header, the Agent log row's): design r211, "the
+    line doesn't repeat it": "Finished “Hero shots”.", "Finished 2 of 3
+    nodes. “Upscale” failed.", "Run of 3 nodes failed.", "Run didn’t finish.
+    …". A surface with no header says the named form."""
     done = [node_id for node_id in planned if node_id in set(succeeded)]
     broke = [node_id for node_id in planned if node_id in set(failed)]
     waiting = [node_id for node_id in broke if node_id in set(stopped)]
     others = [node_id for node_id in broke if node_id not in set(waiting)]
     total = len(planned)
+
+    def lead(words: str) -> str:
+        """``words`` with the agent in front, or capitalised alone."""
+        return f"{agent_name} {words}" if named else words[:1].upper() + words[1:]
+
     if not done:
         what = _quoted(labels, planned[0]) if total == 1 else f"{total} nodes"
+        run = (f"{possessive(agent_name)} run" if named else "Run")
         if waiting:
-            run = "run" if total == 1 else f"run of {what}"
-            return f"{possessive(agent_name)} {run} didn’t finish. {_waiting(labels, waiting, others)}", "failure"
-        return f"{possessive(agent_name)} run of {what} failed.", "failure"
+            run = run if total == 1 else f"{run} of {what}"
+            return f"{run} didn’t finish. {_waiting(labels, waiting, others)}", "failure"
+        return f"{run} of {what} failed.", "failure"
     if broke:
         failures = (_waiting(labels, waiting, others) if waiting
                     else f"{_quoted(labels, broke[0])} failed." if len(broke) == 1 else f"{len(broke)} failed.")
-        return f"{agent_name} finished {len(done)} of {total} nodes. {failures}", "partial"
+        return f"{lead('finished')} {len(done)} of {total} nodes. {failures}", "partial"
     what = _quoted(labels, done[0]) if len(done) == 1 else f"{len(done)} nodes"
-    return f"{agent_name} finished {what}.", "success"
+    return f"{lead('finished')} {what}.", "success"
 
 
 def thumbnail_for(outputs: Mapping[str, Any] | None,
@@ -246,4 +267,4 @@ class AgentRunBook:
                 "secondsAgo": round(max(0.0, self._clock() - since), 1)}
 
 
-__all__ = ["WAITING_BECAUSE", "AgentRun", "AgentRunBook", "done_text", "possessive", "thumbnail_for"]
+__all__ = ["WAITING_BECAUSE", "AgentRun", "AgentRunBook", "done_text", "possessive", "thumbnail_for", "waiting_text"]

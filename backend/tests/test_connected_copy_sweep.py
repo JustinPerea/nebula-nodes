@@ -66,7 +66,8 @@ def test_an_edit_summary_says_connected_and_disconnected(api, monkeypatch):  # n
     response = api.client.post("/api/graph/apply", headers=CODEX, json=body)
     assert response.status_code == 200, response.text
     assert response.json()["summary"] == "connected 1, disconnected 1"
-    assert lines[-1] == "Codex edited the canvas: connected 1, disconnected 1"
+    # The counts stay for agents; the Agent log's row is the agent's own (design).
+    assert lines == []
 
 
 def test_an_edit_that_removes_and_connects_one_node_is_refused_in_connected_words(api):  # noqa: F811
@@ -89,7 +90,7 @@ def test_a_restore_line_in_the_agent_log_says_connected(api, monkeypatch):  # no
     response = api.client.post("/api/graph/restore", headers=PERSON, json={
         "action": "redo", "nodes": [], "remove": [], "wire": [_edge(text, image)], "unwire": []})
     assert response.status_code == 200, response.text
-    assert lines[-1].endswith("0 changed, 1 connected, 0 disconnected")
+    assert lines == []  # the person's own undo and redo leave no Agent log row (design)
 
 
 def test_the_moodboard_note_and_the_in_app_agent_prompt_say_connected():

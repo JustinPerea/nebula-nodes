@@ -344,7 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the person accepts, and lists them (`removes` lines, removedEdges in --json); a --set that "
             "clears the model is refused, and `nebula apply` "
             "still refuses that change until you --unwire them. Each proposal also "
-            "posts an Update (\"Codex proposes 3 changes on the canvas\", with Review) that the person sees "
+            "posts an Update (\"Proposes 3 changes on the canvas\" under your name, with Review) that the person sees "
             "on every screen, so don't also send a `nebula note` about it; `nebula notes` shows how it ended."
         ),
     )

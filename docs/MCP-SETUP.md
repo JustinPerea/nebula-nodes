@@ -162,8 +162,10 @@ The server exposes these tools for building and running (see
   `look_at_canvas` and `nebula look` show the node with `stopped` and the
   text whole. The person's card says "Waiting for you to run it" in the
   notice style, and Claude Code's done line says the node is waiting
-  ("Claude Code finished 1 of 3 nodes. “Idol” is waiting for you to run it
-  because it could bill your Hugging Face account."). A run whose origin
+  ("Finished 1 of 3 nodes. “Idol” is waiting for you to run it because it
+  could bill your Hugging Face account."; its Agent log row says
+  "Ran “Image” in 4 s. “Idol” is waiting for you to run it because it could
+  bill your Hugging Face account." and never says the node failed). A run whose origin
   Nebula can't tell stops there too.
   The CLI sends `X-Nebula-Surface: cli` on every request and prints a
   refusal exactly as it came; any other caller reads MCP words. The header
@@ -1182,7 +1184,15 @@ is logged as the Message box's working line shows it: one node names up to
 three settings ("Changed “Prompt”, “Seed” and “Size” on “Hero shot”", from
 four "Changed 4 settings on “Hero shot”"); several nodes are named without
 their settings ("Changed “Hero shot” and “Sky”", from four "Changed 4
-nodes"), with the verb they share, else "Changed". Moodboard writes are listed there too
+nodes"), with the verb they share, else "Changed"; nodes with the same name
+are counted ("Added 2 “Combine Text” nodes"), and one rename says from what
+("Renamed “Combine Text” to “Prefix”"). An apply that adds, changes, renames
+and moves nothing still has its row: "Connected “A” to “B”", "Disconnected
+“A” from “B”", "Removed “A” and “B”" (from four "Removed 4 nodes"), "Made
+“A” ready"; several kinds in one apply say "Changed" over the nodes they
+touched. A `nebula move` of several nodes
+names each one that moved ("Moved “A” and “B”", from four "Moved 4 nodes").
+Moodboard writes are listed there too
 (your edit batch's `say`, else the journal's words: "Set aside image 1 on
 “Dusk”"; "Analyzed “Dusk”"), and so is a run of the
 whole canvas ("Running 4 nodes"). A run of the whole canvas has no one place
@@ -1211,6 +1221,33 @@ is still cut at 600). Your reply is unchanged: `error` and `errors` name
 every node by id.
 The log is in the browser's memory only: the last 50 entries, gone on
 reload.
+
+One row per action, the agent's own. An action is one row under the name of the
+agent that did it, in canvas words: a node by its name in curly quotes, never
+its id or its definition's id, and no counts of things the person can't see. The
+in-app chat no longer adds a second line to the log for an action (a runner
+word such as "claude", with ids), and the person's own edits in their canvas
+make no row. A row of one sentence has no period; a row of two or more ends
+every sentence with one. Besides the cursor's words above, an agent's action
+that has no cursor says: "Cleared the canvas"; "Loaded a saved canvas"
+(`nebula import`); "Grouped “A”, “B” and “C”" (a cluster; from four "Grouped 4
+nodes"); "Opened “Spring campaign”" or "Made “Spring campaign”" (a project
+switch); "Undid its edit" or "Undid its edit except “Brief”, which changed
+after that" (an undo); and a run's end: "Ran
+“Hero shot” and “Sky” in 12 s", with a failure "Ran 4 nodes in 12 s. “Hero shot”
+failed.", and a stopped run "Stopped after “Hero shot” ran" (nodes by name up to
+three, from four "4 nodes"; seconds rounded to whole seconds, "under 1 s" below
+half a second; a node a gate skipped: "“Sky” was skipped by a gate."). When the
+person accepts an agent's asset proposal, the row is under the agent that
+proposed it: "You accepted its proposal to make another image the cover of
+“Hero shots”". A caller with no agent name has no row to put these under, so it
+shows none.
+
+The presence event that makes a row also carries `nodeIds`, the canvas ids of
+the nodes the action touched, beside the words (added, connected, disconnected,
+changed, renamed, removed, run, a failed run's nodes). It is a structured field
+for readers that need the nodes (the demo zoom manifest reads it); no row's
+words hold an id. It is absent when the action names no node.
 
 ### Beyond the canvas: pointing at a moodboard, a Character or a Style
 
@@ -2823,9 +2860,10 @@ anything that costs money or reworks the person's graph.
 
 **The Update.** Every canvas proposal also posts an Update in the Updates
 corner (Justin's Q112 a, 2026-10-21), so the person hears of it on every
-screen, not only on the canvas: "Claude Code proposes 3 changes on the
-canvas" ("proposes 1 change", or "proposes a run on the canvas" when it
-only runs nodes). Each new node, each connection and each existing node whose
+screen, not only on the canvas: "Proposes 3 changes on the canvas"
+("Proposes 1 change", or "Proposes a run on the canvas" when it only runs
+nodes). The line never starts with the agent's name: the Update's header
+has it. Each new node, each connection and each existing node whose
 params change counts as one change; runs and names don't. Nebula writes it
 from that template, never from the agent's note (the note is the bar's), and
 attributes it to the agent (`source: "nebula"`, `about: "proposal"`,
@@ -2841,8 +2879,9 @@ none (`update: null`). It doesn't count against the agent's `post_note`
 limit, so don't also post an update to announce the proposal. The view's
 `update` is `{id, projectId}`. When the proposal closes the Update gets
 `resolvedAt`, `resolvedBy`, `readAt` and an `outcome` in place of Review:
-"Accepted", "Rejected" (never the person's reason), "Withdrawn by Claude
-Code", "Expired" (on time, even when nobody reads proposals), "No longer
+"Accepted", "Rejected" (never the person's reason), "Withdrawn" (the
+agent took it back; "Withdrawn by you" if the person closed it, "Withdrawn by
+Claude Code" if another agent did), "Expired" (on time, even when nobody reads proposals), "No longer
 fits" (a node it needs was deleted, the canvas was cleared or replaced by an
 import or another project, or what it changes was edited since; a reopen of
 the project already open keeps it waiting), or
@@ -3090,16 +3129,17 @@ a proposal instead, and what it noticed is an Update.
   checked like an Update's refs: unknown ones are dropped and listed in
   `dropped`. Needs an open project (the Update is kept with it). The answer
   is `{questions: {id, status, questions, answers, ...}}`.
-- **The person answers:** the set posts one Update from the agent ("Claude
-  Code has 2 questions.", with Answer, and Show on canvas when it names
+- **The person answers:** the set posts one Update from the agent ("Has 2
+  questions", under its name, with Answer, and Show on canvas when it names
   nodes). Its ref is `questions: {id, count, since}`: how many questions
   (as the line says) and when the set was asked (ms, as its `createdAt`),
   never the questions. Answer opens the form in the Updates corner. They may skip any
   question; Send needs at least one answer; Dismiss closes the set with
-  none. When it closes, its line goes past tense ("Claude Code asked 2
-  questions." / "asked a question.", on the stored Update, so `list_notes`
+  none. When it closes, its line goes past tense ("Asked 2
+  questions" / "Asked a question", on the stored Update, so `list_notes`
   shows it too) and it says "Answered.", "Dismissed.",
-  "Withdrawn by <agent>." (or "Closed when Nebula restarted." in the rare
+  "Withdrawn." (the asker took it back; the "by" names anyone else who closed
+  it) (or "Closed when Nebula restarted." in the rare
   case a kept set can't be read back). The 200-Update cap never prunes the
   Update of an open set (at most 12 are open, so the cap holds); once the
   set closes its Update is pruned like any other. The questions
@@ -3499,15 +3539,17 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
   a node (`set_status(text, node_id)`) shows the same pill.
 - **Done cards:** when a run an agent started ends (finished, partly
   failed or failed; not stopped), Nebula posts one Update for it under that
-  agent's name (`source: "nebula"`, `about: "run"`): "Codex finished
-  “Hero shots”.", "Codex finished 2 of 3 nodes. “Upscale” failed.",
-  "Codex's run of 3 nodes failed." Its `run` is `{id, nodeIds, lastNodeId,
+  agent's name (`source: "nebula"`, `about: "run"`), without repeating the
+  name the header has: "Finished “Hero shots”.", "Finished 2 of 3 nodes.
+  “Upscale” failed.", "Run of 3 nodes failed." Its `run` is `{id, nodeIds, lastNodeId,
   outcome, thumbnail?}`; `refs` is the last node, which **Show on canvas**
   flies to. The thumbnail links an output Nebula already keeps
   (`/api/outputs/...`, never a provider URL or a copy): the last node's
   first output for a success, the last output that succeeded for a
   partial run, none for a failure or a text or audio output. A failed run
-  also gets an Agent log line. A newer card for the same node and agent
+  also gets an Agent log line (a run started with `nebula run` has its own
+  row instead, which lists what ran and what failed or is waiting for the
+  person's OK). A newer card for the same node and agent
   replaces the older one. The agent reads its own with `list_notes`. Runs
   the person starts get no card.
 
@@ -3621,10 +3663,10 @@ Commons", "Asks to make 3 changes to an image in the Commons". The proposal's
 **The Update.** Each asset proposal also posts an Update in the Updates
 corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
 Nebula in the strip's words and attributed to the agent (`author` is the
-agent, `source: "nebula"`, `about: "proposal"`): "Claude Code asks to change
-the cover of Dusk", "Claude Code asks to turn on “Moodboard notes to generators” for Dusk board", "Claude Code asks to change a reference in the Commons" (or
-"asks to make 3 changes to a reference in the Commons", "asks to take a
-reference out of the inbox"). Names only: never the agent's note, a board's
+agent, `source: "nebula"`, `about: "proposal"`): "Asks to change
+the cover of “Dusk”", "Asks to turn on “Moodboard notes to generators” for “Dusk board”", "Asks to change a reference in the Commons" (or
+"Asks to make 3 changes to a reference in the Commons", "Asks to take a
+reference out of the inbox"), under the agent's name. Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
 targetId, since}`, where `since` is when that ask was made (ms, as the
 proposal's `createdAt`; after the Update falls back to your older ask on the
@@ -3671,7 +3713,7 @@ proposal.
 When the last one closes the Update gets `resolvedAt`, `resolvedBy` (`person`,
 the agent, or `system`), `readAt` and a short `outcome` ("Accepted: the cover
 changed", "You kept your cover", "You kept the notes here", "Applied",
-"Withdrawn by Claude Code", "Expired", "No longer fits", "Closed: Nebula
+"Withdrawn", "Expired", "No longer fits", "Closed: Nebula
 restarted"), and shows that in place of Review. Expiry lands on time, even
 when nobody reads proposals: Nebula checks each proposal when it is due, and
 `list_notes` never lists an expired one as waiting. Proposals are memory
@@ -3804,7 +3846,7 @@ The person decides what agents may spend, in **Settings > Preferences**:
   toward the $5 daily total. Proposing it for the person’s OK. Sent as
   proposal <id>. Check it with nebula proposals.", the bar says "“Sketch”
   has no list price, so Nebula can’t count it toward the $5 daily total.",
-  and the Update says "Claude Code wants to run “Sketch”. It has no list
+  and the Update says "Wants to run “Sketch”. It has no list
   price, so Nebula can’t count it toward the $5 daily total." When the
   priced part of the run already passes the total, the line above stays
   ("This would pass the $5 daily total, and “Sketch” has no list price.").
@@ -5224,13 +5266,15 @@ or, for a Cinema scene, "Nebula left “Scene” as it is because “Shot 2” i
 still running as run ‹run id›." (several: "…because “Shot 2” and “Shot 3” are
 still running as runs ‹a› and ‹b›."); any other refusal reads "Nebula left
 “Brief” as it is. ‹the refusal, with ids replaced by names›". The
-person's activity line is "Codex undid its edit." when nothing was kept, else
-"Codex undid its edit except “Hero” and “Brief”, which ran after that.", "…
-except “Notes”, which changed after that." (every kept part reads "changed":
+person's Agent log row, under the agent's name, is "Undid its edit" when nothing was
+kept, else "Undid its edit except “Hero” and “Brief”, which ran after that", "…
+except “Notes”, which changed after that" (every kept part reads "changed":
 a part of a node, or a connection that couldn’t go back, counts once for the
 node it names) or both ("…except “Hero”, which ran
-after that, and “Notes”, which changed after that."); from 4 parts they are
-counted ("…except 4 parts that ran or changed after that."). The person's own
+after that, and “Notes”, which changed after that"); from 4 parts they are
+counted ("…except 4 parts that ran or changed after that"). The toast on the
+person's canvas reads "Codex undid its edit." when nothing was kept and "Codex
+undid part of its edit." when something was. The person's own
 Cmd+Z on a node that became something else is refused with "Nebula couldn’t
 undo this step because “Brief” is a different node now. Reload the canvas to
 see the current version.". The rest is one restore through the
@@ -5333,9 +5377,11 @@ answered) or one they just deleted stays as they have it until the backend
 answers.
 
 How it works: a graphSync caused by an edit request carries `edit` =
-`{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
+`{actor, tab?, id?, undoes?, kept?}`. `id` names an agent's apply or undo (its
 `undo.editId`), and `undoes` says the sync is an agent undoing that edit
-(the notice then reads "Claude undid its edit."). `actor` is the request's journal actor (a named agent, the
+(the notice then reads "Claude undid its edit."; with `kept: true`, set when
+the undo left a node as it was because it ran or changed since, "Claude undid
+part of its edit."). `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
 edit. Only the person's canvas (this launch's person token) gets a `tab`:

@@ -1,6 +1,6 @@
 """PR #202 review 3 (round 5) LOW-2: the Update settle
 (``_settle_proposal_updates``, on every list, tab connect and project switch)
-never leaves an open proposal under an Update that says "Withdrawn by …". It
+never leaves an open proposal under an Update that says "Withdrawn". It
 leaves a closed proposal's Update to the close handling while the same
 agent's other ask still shares it, and it resolves only the proposal the
 Update still reviews (an undo's reopen may have taken it over meanwhile).
@@ -24,7 +24,7 @@ from tests.test_undo_restores_deletes import (  # noqa: F401 - api and canvas ar
 # -- LOW-2 --------------------------------------------------------------------
 #
 # Claude Code has two cover asks on one project sharing one Update. Never, in
-# either race, an open proposal under an Update that says "Withdrawn by …".
+# either race, an open proposal under an Update that says "Withdrawn".
 
 def _note(canvas, author: str = "Claude Code") -> dict:
     catalog = canvas.main.project_store.read()
@@ -114,7 +114,7 @@ def test_the_settle_still_closes_an_update_nothing_open_shares(canvas, monkeypat
     assert not _note(canvas).get("resolvedAt")
     monkeypatch.setattr(canvas.main, "_follow_asset_updates", follow)
     assert canvas.client.get("/api/canvas/agent-notes", headers=PERSON).status_code == 200
-    assert _note(canvas)["outcome"] == "Withdrawn by Claude Code"
+    assert _note(canvas)["outcome"] == "Withdrawn"
 
 
 # -- review 4 LOW-1: the ask the Update moves to closes while it moves ----------
@@ -175,7 +175,7 @@ def _parallel_withdraw(canvas):
         return canvas.client.delete(f"/api/canvas/proposals/{p1}", headers=CLAUDE).status_code == 200
     return close
 
-_OUTCOMES = {"withdrawn": "Withdrawn by Claude Code", "accepted": "Accepted: the cover changed",
+_OUTCOMES = {"withdrawn": "Withdrawn", "accepted": "Accepted: the cover changed",
              "rejected": "You kept your cover", "expired": "Expired"}
 
 
@@ -195,5 +195,5 @@ def test_two_parallel_withdraws_resolve_the_shared_update(canvas, monkeypatch):
     note = _note(canvas)
     assert book.get(p1).status == "withdrawn"
     assert note["proposal"]["id"] == p1 and note.get("resolvedAt")
-    assert note["outcome"] == "Withdrawn by Claude Code"
+    assert note["outcome"] == "Withdrawn"
     assert not lists

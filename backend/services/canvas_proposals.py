@@ -42,6 +42,7 @@ from typing import Any, Callable, Iterable, Mapping
 from services import agent_words
 from services.agent_params import internal_refusal
 from services.agent_presence import AgentIdentity
+from services.agent_name_in_sentence import withdrawn_line
 from services.personal_agents import in_sentence
 from services.canvas_pins import PinError, clean_text
 from services.selection_context import _SECRET_KEY_RE
@@ -1800,18 +1801,18 @@ def change_count(spec: ProposalSpec, *, removed: int = 0) -> int:
 def update_text(proposal: Proposal) -> str:
     """The Update's line, from a fixed template: never the agent's note
     (that is the bar's), as an asset proposal's never is. A run the daily
-    total holds says so (GM - Design, 2026-10-31): "Claude Code wants to run
+    total holds says so (GM - Design, 2026-10-31): "Wants to run
     “Writer” and “Editor”. This would pass the $5 daily total, which has
-    $0.20 left.", its nodes by the shared name-list helper."""
-    agent = proposal.agent.name
+    $0.20 left.", its nodes by the shared name-list helper. The line never
+    starts with the agent's name (design): the Update's header has it."""
     if proposal.wait:
         names = [str(name) for name in proposal.wait.get("names") or []]
         line = proposal.wait.get("updateLine") or proposal.wait.get("barLine", "")
-        return f"{agent} wants to run {node_name_list(names)}. {line}".rstrip()
+        return f"Wants to run {node_name_list(names)}. {line}".rstrip()
     count = change_count(proposal.spec, removed=len(proposal.removed_edges))
     if count == 0:
-        return f"{agent} proposes a run on the canvas"
-    return f"{agent} proposes {count} change{'' if count == 1 else 's'} on the canvas"
+        return "Proposes a run on the canvas"
+    return f"Proposes {count} change{'' if count == 1 else 's'} on the canvas"
 
 
 # How the Update reads once its proposal closed, in place of Review. A
@@ -1820,13 +1821,13 @@ _OUTCOMES = {"accepted": "Accepted", "rejected": "Rejected", "expired": "Expired
              "invalidated": "No longer fits"}
 
 
-def update_outcome(proposal: Proposal) -> str:
+def update_outcome(proposal: Proposal, closed_by: Mapping[str, Any] | None = None) -> str:
     """Short, never the person's reason: "Accepted", "Rejected", "Expired",
-    "Withdrawn by <agent>" or "No longer fits" (a node it needed was
+    "Withdrawn" (by someone else: "Withdrawn by you") or "No longer fits" (a node it needed was
     deleted, the canvas was cleared or replaced, or what it changes was
     edited since)."""
     if proposal.status == "withdrawn":
-        return f"Withdrawn by {in_sentence(proposal.agent.name)}"
+        return withdrawn_line(proposal.agent.name, closed_by)
     return _OUTCOMES.get(proposal.status, "No longer fits")
 
 

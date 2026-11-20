@@ -745,20 +745,17 @@ def test_a_skipped_placeholders_reason_is_gms_tooltip_line(pend):
     assert _skips(pend)[ids["+p"]] == "Codex is still setting this up."
 
 
-def test_the_agent_log_line_counts_placeholder_skips(pend, monkeypatch):
-    """The run's line in the Agent log (publish_action) counted a gate's skips
-    only; a run that skipped placeholders says so in GM's skip line."""
-    said: list[str] = []
-    monkeypatch.setattr(pend.main, "publish_action", said.append)
+def test_the_agent_log_line_counts_placeholder_skips(pend):
+    """The run's row in the Agent log (the agent's own, design) says a run that
+    skipped placeholders did, in the placeholders' skip line, as its own sentence."""
     _chain(pend)  # Claude Code's three placeholders
-    pend.graph.add_node("text-input", {"value": "free"})
+    free = pend.graph.add_node("text-input", {"value": "free"})
+    pend.graph.set_label(free, "Free text")
     result = pend.client.post("/api/graph/run", headers=CODEX, json={}).json()
     assert result["nodesExecuted"] == 1
-    ran = [line for line in said if line.startswith("Ran ")]
-    assert len(ran) == 1, said
-    assert ran[0].endswith(". Skipped 3 nodes Claude Code is still setting up."), ran[0]
-
-
+    ran = [(m["agent"]["name"], m["say"]) for m in pend.sent
+           if m.get("type") == "agentPresence" and str(m.get("say")).startswith("Ran ")]
+    assert ran == [("Codex", "Ran “Free text” in under 1 s. Skipped 3 nodes Claude Code is still setting up.")]
 def test_a_proposals_cost_leaves_out_what_its_run_will_skip(pend):
     """GM: every place the person sees a cost before a run matches what will
     actually run. An accepted proposal's run skips placeholders and what

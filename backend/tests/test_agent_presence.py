@@ -376,6 +376,9 @@ def test_an_agents_whole_canvas_run_is_said_with_no_cursor_and_a_node_run_points
     assert client.post("/api/graph/run", json={"wait": 5}, headers=agent).status_code == 200
     assert client.post("/api/graph/run", json={"wait": 5, "targetNodeId": node_id}, headers=agent).status_code == 200
 
-    whole, one = _presence_events(sent)
+    # Each run is two rows, the agent's: what it started and, when it ends, what it did (design).
+    whole, whole_done, one, one_done = _presence_events(sent)
     assert whole["say"] == "Running 2 nodes" and "target" not in whole
+    assert whole_done["say"] == "Ran 2 “Text Input” nodes in under 1 s" and "target" not in whole_done
     assert one["say"] == "Running “Text Input”" and one["target"] == {"nodeId": node_id}
+    assert one_done["say"] == "Ran “Text Input” in under 1 s" and "target" not in one_done

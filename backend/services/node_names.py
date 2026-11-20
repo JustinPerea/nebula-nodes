@@ -31,11 +31,12 @@ def node_name_list(names: list[str]) -> str:
     """Nodes by name in a line, the shared name-list helper's rule (frontend
     lib/errorCopy.ts nodeNameList, the same cases): up to 3 by name,
     "“A”", "“A” and “B”", "“A”, “B” and “C”", a repeated name counted ("2
-    “Writer” nodes"); from 4, a count ("4 nodes")."""
+    “Writer” nodes"; design r211: "Added 2 “Combine Text” nodes"); from 4, a
+    count ("4 nodes"). A name a person typed in quotes keeps one pair."""
     if len(names) >= 4:
         return f"{len(names)} nodes"
     groups: dict[str, int] = {}
     for name in names:
         groups[name] = groups.get(name, 0) + 1
-    return _joined([f"\u201c{name}\u201d" if count == 1 else f"{count} \u201c{name}\u201d nodes"
+    return _joined([quoted(name) if count == 1 else f"{count} {quoted(name)} nodes"
                     for name, count in groups.items()])

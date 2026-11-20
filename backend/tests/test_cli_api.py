@@ -1546,7 +1546,8 @@ class TestChatAgentDispatch:
         original = AGENT_RUNNERS[agent]
 
         async def attributed_runner(*_args, **_kwargs):
-            publish_action("Added text-input as n1")
+            # What still publishes: a refused run's line no agent cursor carried (design).
+            publish_action("Nebula couldn’t start the run. Add a prompt, then run the node again.")
             yield {
                 "type": "tool_use",
                 "toolUseId": "tool-1",

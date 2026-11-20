@@ -24,7 +24,7 @@ def test_a_commons_proposal_posts_an_update_without_commons_text(cx, canvas_proj
     assert made.status_code == 201, made.text
     view = made.json()["proposal"]
     (note,) = _proposal_notes(canvas_project)
-    assert note["text"] == "Claude Code asks to change a reference in the Commons"
+    assert note["text"] == "Asks to change a reference in the Commons"
     assert note["actions"][0]["op"] == {"kind": "proposal.review", "proposalId": view["id"], "target": "commons",
                                         "targetId": cx.poster}
     text = json.dumps(note)
@@ -45,8 +45,8 @@ def test_several_edits_and_an_inbox_ask_use_the_lines_words(cx, canvas_project):
     ]})
     _propose(cx, {"membership": {"id": cx.inbox_membership, "accept": True}}, target=cx.inbox)
     texts = sorted(note["text"] for note in _proposal_notes(canvas_project))
-    assert texts == ["Claude Code asks to make 2 changes to a reference in the Commons",
-                     "Claude Code asks to take a reference out of the inbox"]
+    assert texts == ["Asks to make 2 changes to a reference in the Commons",
+                     "Asks to take a reference out of the inbox"]
 
 
 def test_the_updates_ref_counts_the_edits_never_their_values(cx, canvas_project):
@@ -86,14 +86,14 @@ def test_a_fallback_to_the_older_ask_rewrites_the_words_with_the_count(cx, canva
     ]}).json()["proposal"]
     newer = _propose(cx, {"correction": {"field_path": "summary", "op": "set", "value": "A loud grid poster"}}).json()["proposal"]
     (note,) = _proposal_notes(canvas_project)
-    assert note["text"] == "Claude Code asks to change a reference in the Commons"
+    assert note["text"] == "Asks to change a reference in the Commons"
     assert note["proposal"] == {"id": newer["id"], "kind": "commons", "targetId": cx.poster, "changes": 1,
                                 "since": newer["createdAt"], "asks": 2, "firstSince": older["createdAt"]}
 
     assert cx.client.delete(f"/api/canvas/proposals/{newer['id']}", headers=CLAUDE).status_code == 200
     (after,) = _proposal_notes(canvas_project)
     assert after["id"] == note["id"] and not after.get("resolvedAt")
-    assert after["text"] == "Claude Code asks to make 3 changes to a reference in the Commons"
+    assert after["text"] == "Asks to make 3 changes to a reference in the Commons"
     # PR #202 review 2 LOW-A: ``since`` is the older ask's createdAt now, so a held tab orders by it.
     assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.poster, "changes": 3,
                                  "since": older["createdAt"], "asks": 1, "firstSince": older["createdAt"]}
@@ -111,7 +111,7 @@ def test_a_fallback_to_an_inbox_ask_says_so_in_words_and_ref(cx, canvas_project)
     ]}, target=cx.inbox).json()["proposal"]
     assert cx.client.delete(f"/api/canvas/proposals/{newer['id']}", headers=CLAUDE).status_code == 200
     (after,) = _proposal_notes(canvas_project)
-    assert after["text"] == "Claude Code asks to take a reference out of the inbox"
+    assert after["text"] == "Asks to take a reference out of the inbox"
     assert after["proposal"] == {"id": older["id"], "kind": "commons", "targetId": cx.inbox, "changes": 1, "inbox": True,
                                  "since": older["createdAt"], "asks": 1, "firstSince": older["createdAt"]}
 

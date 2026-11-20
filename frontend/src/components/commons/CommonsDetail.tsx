@@ -9,7 +9,7 @@ import {
   type AssetDetail, type EnumField, type MembershipDetail, type Region, type Role, type Sighting,
 } from '../../lib/commonsTypes';
 import { showConfirm } from '../../lib/commonsFiles';
-import { actorLabel, analysisBadge } from '../../lib/commonsFormat';
+import { actorLabel, analysisBadge, writtenDate } from '../../lib/commonsFormat';
 import { useCommonsPrompt } from '../../hooks/useCommonsPrompt';
 import { FailureLines } from '../failure/FailureLines';
 import { ErrorDetails } from '../failure/ErrorDetails';
@@ -124,7 +124,7 @@ function Membership({ assetId, membership, run }: {
             <li key={s.id} className="commons-list__item">
               <span className="commons-badge">{s.source_kind}</span>
               <span className="commons-list__text">{s.page_title || s.original_name || s.url || s.original_path || '—'}</span>
-              {s.source_date && <span className="commons-meta">{s.source_date.slice(0, 10)}</span>}
+              {s.source_date && <span className="commons-meta">{writtenDate(s.source_date)}</span>}
               {SIGHTING_STATE[s.state] && (
                 <span className={`commons-badge commons-badge--${SIGHTING_STATE[s.state]}`}>{SIGHTING_STATE[s.state]}</span>
               )}
@@ -137,7 +137,7 @@ function Membership({ assetId, membership, run }: {
         {membership.comments.map((c) => (
           <div key={c.id} className="commons-comment">
             <span className="commons-comment__actor">{actorLabel(c.actor)}</span>
-            <span className="commons-meta">{(c.source_date ?? c.created_at).slice(0, 10)}</span>
+            <span className="commons-meta">{writtenDate(c.source_date ?? c.created_at)}</span>
             <p className="commons-comment__text">{c.text}</p>
           </div>
         ))}
@@ -538,7 +538,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
         {effective.analysis && (
           <p className="commons-meta">
-            Read by {effective.analysis.model_id} · prompt {effective.analysis.prompt_version} · {effective.analysis.created_at.slice(0, 16).replace('T', ' ')}
+            Read by {effective.analysis.model_id} · prompt {effective.analysis.prompt_version} · {writtenDate(effective.analysis.created_at)}
           </p>
         )}
       </section>

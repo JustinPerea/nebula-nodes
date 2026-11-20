@@ -39,7 +39,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Collection, Iterator, Mapping
+from typing import Any, Callable, Collection, Iterator, Mapping, Sequence
 
 from services import node_route, universal_ports
 from services.cursor_actions import (
@@ -563,6 +563,21 @@ def _clean_did(raw: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+MAX_EVENT_NODE_IDS = 50
+
+
+def _clean_node_ids(raw: Any) -> list[str]:
+    """The node ids an event carries (``nodeIds``): each once, in order, only
+    those shaped like a node id, at most MAX_EVENT_NODE_IDS."""
+    if not raw or isinstance(raw, (str, bytes)):
+        return []
+    found: list[str] = []
+    for node_id in raw:
+        if isinstance(node_id, str) and _NODE_ID_RE.fullmatch(node_id) and node_id not in found:
+            found.append(node_id)
+    return found[:MAX_EVENT_NODE_IDS]
+
+
 def _clean_say(raw: Any) -> str:
     if raw is None:
         return ""
@@ -756,6 +771,7 @@ class AgentPresence:
         log: Any = None,
         names: Mapping[str, Any] | None = None,
         log_whole: bool = False,
+        node_ids: Sequence[str] | None = None,
     ) -> dict[str, Any]:
         """The broadcast event for one agent action.
 
@@ -776,7 +792,11 @@ class AgentPresence:
         line when it isn't ``say`` (PR #198 r1): an action whose bubble says
         nothing still has one; the event carries it only when given.
         ``log_whole``: ``log`` is Nebula's own whole line, never cut
-        (clean_log).
+        (clean_log). ``node_ids``: the canvas nodes the action touched, a
+        structured field beside the words (design: a line names nodes by
+        their canvas names, never ids, so a reader that needs the nodes, the
+        demo zoom manifest, reads this instead). The event carries it only
+        when given.
         """
         if not isinstance(action, str) or action not in ACTIONS:
             raise PresenceError(action_refusal(action))
@@ -792,6 +812,9 @@ class AgentPresence:
         logged = clean_log(log, whole=log_whole)
         if logged:
             event["log"] = logged
+        touched = _clean_node_ids(node_ids)
+        if touched:
+            event["nodeIds"] = touched
         if target is None:
             return event
         event["target"] = target

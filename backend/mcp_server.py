@@ -632,7 +632,7 @@ def list_notes(board: str | None = None, unread: bool = False, ctx: Context | No
     Only the person marks them read or dismisses them. Your proposals
     (propose_change and propose_asset_change) post their own Update (`about:
     "proposal"`); once the proposal closes it has `outcome`: "Accepted" (or
-    "Accepted: ..."), "Rejected" or "You kept ...", "Withdrawn by <you>",
+    "Accepted: ..."), "Rejected" or "You kept ...", "Withdrawn" (you took it back),
     "Expired" (15 minutes without a decision), "No longer fits", or
     "Closed: Nebula restarted" (Nebula restarted while it was open;
     proposals don't survive a restart, so ask again if you still want it).
@@ -959,12 +959,12 @@ def propose_change(
     connections; nothing changes until they click Accept, and that click is their
     approval for the runs listed. You cannot accept your own proposal.
 
-    Each proposal also posts an Update for you ("Claude Code proposes 3
-    changes on the canvas", with Review), which the person sees in the
+    Each proposal also posts an Update for you ("Proposes 3 changes on the
+    canvas", under your name, with Review), which the person sees in the
     Updates corner on every screen, so don't also post_note to announce it.
     Review takes them to the canvas with your proposal in the bar. Once it
     closes the Update says how (list_notes `outcome`): Accepted, Rejected,
-    Withdrawn by <you> (withdraw_proposal), Expired, No longer fits, or
+    Withdrawn (you took it back with withdraw_proposal), Expired, No longer fits, or
     Closed: Nebula restarted. Proposing again after a withdraw replaces the
     withdrawn one's Update.
 
@@ -1147,7 +1147,7 @@ def ask_person(
       can show them from the Update. Unknown ones are dropped and listed in
       `dropped`.
 
-    The person sees an Update from you ("Claude Code has 2 questions.", with
+    The person sees an Update from you ("Has 2 questions", under your name, with
     Answer) in the Updates corner on every screen, so don't also post_note
     about it. They may skip any question or dismiss them all. Three sets can
     be open per agent; at the cap the refusal lists your open sets with the
@@ -1237,7 +1237,7 @@ def withdraw_questions(question_id: str, ctx: Context | None = None) -> dict[str
     """Take back one of your open question sets (only the agent that asked can).
 
     Withdraw one you no longer need answered, so the person isn't left
-    questions that don't matter. Its Update then says "Withdrawn by <you>."
+    questions that don't matter. Its Update then says "Withdrawn."
     """
     from urllib.parse import quote
 
