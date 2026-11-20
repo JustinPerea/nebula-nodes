@@ -236,7 +236,7 @@ def test_withdrawing_settles_it_as_withdrawn_by_the_agent(canvas):
     view = _proposed(canvas)
     assert canvas.client.delete(f"/api/canvas/proposals/{view['id']}", headers=CLAUDE).status_code == 200
     note = _settled(canvas)
-    assert note["outcome"] == "Withdrawn by Claude Code"
+    assert note["outcome"] == "Withdrawn"
     assert note["resolvedBy"] == {"kind": "agent", "name": "Claude Code"}
 
 
@@ -366,7 +366,7 @@ def test_mcp_list_notes_shows_the_outcome(canvas, monkeypatch):
     view = _proposed(canvas)
     mcp_server.withdraw_proposal(view["id"])
     (note,) = [n for n in mcp_server.list_notes()["notes"] if n["about"] == "proposal"]
-    assert note["outcome"] == "Withdrawn by Claude Code"
+    assert note["outcome"] == "Withdrawn"
 
 
 def test_nebula_notes_prints_the_outcome(canvas):
@@ -393,7 +393,7 @@ def test_agents_are_told_the_person_sees_an_update_so_they_dont_post_one():
     doc = " ".join((mcp_server.propose_change.__doc__ or "").split())
     assert "Update" in doc and "Review" in doc and "every screen" in doc
     assert "don't also post_note" in doc
-    assert "Withdrawn by" in doc and "Closed: Nebula restarted" in doc
+    assert "Withdrawn (you took it back" in doc and "Closed: Nebula restarted" in doc
     listing = " ".join((mcp_server.list_notes.__doc__ or "").split())
     assert "propose_change" in listing
 

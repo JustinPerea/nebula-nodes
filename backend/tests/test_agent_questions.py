@@ -261,7 +261,7 @@ def test_update_words_follow_gm_copy():
     assert update_text(one) == "Has a question"
     assert update_text(two) == "Has 2 questions"
     for status, line in (("answered", "Answered."), ("dismissed", "Dismissed."),
-                         ("withdrawn", "Withdrawn by Claude Code.")):
+                         ("withdrawn", "Withdrawn.")):
         made = book.create(agent=OTHER if status == "withdrawn" else ME, project_id="p",
                            spec=parse_questions({"questions": [{"text": "Crop?"}]}))
         made.agent = ME
@@ -439,7 +439,7 @@ def test_only_the_asker_withdraws(asked):
     assert response.status_code == 200
     assert response.json()["questions"]["status"] == "withdrawn"
     (note,) = _question_updates(asked)
-    assert note["outcome"] == "Withdrawn by Claude Code."
+    assert note["outcome"] == "Withdrawn."
     assert _answer(asked, set_id, GOOD_ANSWERS).status_code == 409
 
 

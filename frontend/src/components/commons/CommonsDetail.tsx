@@ -124,7 +124,7 @@ function Membership({ assetId, membership, run }: {
             <li key={s.id} className="commons-list__item">
               <span className="commons-badge">{s.source_kind}</span>
               <span className="commons-list__text">{s.page_title || s.original_name || s.url || s.original_path || '—'}</span>
-              {s.source_date && <span className="commons-meta">{s.source_date.slice(0, 10)}</span>}
+              {s.source_date && <span className="commons-meta">{writtenDate(s.source_date)}</span>}
               {SIGHTING_STATE[s.state] && (
                 <span className={`commons-badge commons-badge--${SIGHTING_STATE[s.state]}`}>{SIGHTING_STATE[s.state]}</span>
               )}
@@ -538,7 +538,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
         {effective.analysis && (
           <p className="commons-meta">
-            Read by {effective.analysis.model_id} · prompt {effective.analysis.prompt_version} · {effective.analysis.created_at.slice(0, 16).replace('T', ' ')}
+            Read by {effective.analysis.model_id} · prompt {effective.analysis.prompt_version} · {writtenDate(effective.analysis.created_at)}
           </p>
         )}
       </section>

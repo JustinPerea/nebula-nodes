@@ -25,9 +25,31 @@ class _Item:
 
 @pytest.mark.parametrize("name,said", NAMES)
 def test_withdrawn_by_names_the_agent_inside_the_sentence(name, said):
-    assert canvas_proposals.update_outcome(_Item(name)) == f"Withdrawn by {said}"
-    assert agent_questions.update_outcome(_Item(name)) == f"Withdrawn by {said}."
-    assert asset_proposals.outcome_line(_Item(name)) == f"Withdrawn by {said}"
+    """The agent that asked and closed it is the Update's header: no "by". Anyone else keeps it."""
+    other = {"kind": "agent", "name": name}
+    assert canvas_proposals.update_outcome(_Item("Someone else"), other) == f"Withdrawn by {said}"
+    assert agent_questions.update_outcome(_Item("Someone else"), other) == f"Withdrawn by {said}."
+    assert asset_proposals.outcome_line(_Item("Someone else"), other) == f"Withdrawn by {said}"
+    assert canvas_proposals.update_outcome(_Item(name), other) == "Withdrawn"
+    assert agent_questions.update_outcome(_Item(name)) == "Withdrawn."
+    assert asset_proposals.outcome_line(_Item(name), {"kind": "agent", "name": name}) == "Withdrawn"
+
+
+@pytest.mark.parametrize("name,said", NAMES)
+def test_withdrawn_by_the_person_says_you(name, said):
+    person = {"kind": "person"}
+    assert canvas_proposals.update_outcome(_Item(name), person) == "Withdrawn by you"
+    assert agent_questions.update_outcome(_Item(name), person) == "Withdrawn by you."
+    assert asset_proposals.outcome_line(_Item(name), person) == "Withdrawn by you"
+
+
+def test_every_other_outcome_line_has_no_by_phrase():
+    """Rejected, accepted, expired, no longer fits and the kept/applied lines never carried one."""
+    for status, line in (("accepted", "Accepted"), ("rejected", "Rejected"), ("expired", "Expired"),
+                         ("invalidated", "No longer fits")):
+        assert canvas_proposals.update_outcome(_Item("Claude Code", status), {"kind": "person"}) == line
+    for status in ("answered", "dismissed"):
+        assert " by " not in agent_questions.update_outcome(_Item("Claude Code", status), {"kind": "person"})
 
 
 @pytest.mark.parametrize("name,said", NAMES)
@@ -44,3 +66,17 @@ def test_an_undo_summary_names_whose_edit_it_reverted(name, said):
 
     owner = main._undo_owner_text({"kind": "agent", "id": "a1", "name": name}, by={"kind": "agent", "id": "b2"})
     assert owner == f"{said}’s edit"
+
+
+def test_the_author_sits_beside_the_outcome_in_nebula_notes():
+    """`nebula notes` and `list_notes` print the Update's author beside the line, so a withdraw by the author
+    reads "Claude Code · Proposes 1 change on the canvas [Withdrawn]", and one by anyone else still says who."""
+    from cli.commands.notes import format_note
+    base = {"id": "n1", "at": "2026-11-20T12:00:00+00:00", "author": {"kind": "agent", "name": "Claude Code"},
+            "about": "proposal", "text": "Proposes 1 change on the canvas", "resolvedAt": "2026-11-20T12:05:00+00:00"}
+    mine = canvas_proposals.update_outcome(_Item("Claude Code"), {"kind": "agent", "name": "Claude Code"})
+    assert "Claude Code [Withdrawn]  Proposes 1 change" in format_note({**base, "outcome": mine})
+    yours = canvas_proposals.update_outcome(_Item("Claude Code"), {"kind": "person"})
+    assert "Claude Code [Withdrawn by you]" in format_note({**base, "outcome": yours})
+    other = canvas_proposals.update_outcome(_Item("Claude Code"), {"kind": "agent", "name": "Codex"})
+    assert "Claude Code [Withdrawn by Codex]" in format_note({**base, "outcome": other})

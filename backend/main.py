@@ -12382,10 +12382,10 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
         ref = question_set.update
         if not ref or question_set.is_open:
             continue
+        by = _question_resolved_by(question_set)
         try:
             result = await asyncio.to_thread(agent_notes.resolve_questions, ref["projectId"], ref["id"],
-                                             outcome=question_outcome_line(question_set),
-                                             by=_question_resolved_by(question_set))
+                                             outcome=question_outcome_line(question_set, closed_by=by), by=by)
         except (NoteError, ProjectStoreError):
             continue
         if result is None:
@@ -12764,7 +12764,7 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
                 by = _RESOLVED_BY.get(proposal.status) or (
                     {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
                 result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id,
+                                                 outcome=asset_outcome_line(proposal, closed_by=by), by=by, proposal_id=proposal.id,
                                                  closed=_proposal_closed)
                 op, extra = "resolved", ({"unread": result["unread"]} if result else {})
         except (NoteError, ProjectStoreError):
@@ -12936,7 +12936,7 @@ async def _settle_proposal_updates() -> None:
         # open proposal still shares (the same agent's other ask on that
         # target) is the close handling's to retarget (_follow_asset_updates);
         # resolving it here, while that follow is under way, left the open ask
-        # under "Withdrawn by …".
+        # under "Withdrawn".
         if known and kind in _ASSET_UPDATE_KINDS and _shares_update(project_id, note["id"]):
             continue
         # Not in memory: Nebula restarted while it was open (Q108 a).
@@ -13051,10 +13051,11 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
         ref = proposal.update
         if not ref or proposal.is_open:
             continue
+        by = _canvas_resolved_by(proposal, actor)
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                             outcome=canvas_outcome_line(proposal),
-                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id,
+                                             outcome=canvas_outcome_line(proposal, closed_by=by),
+                                             by=by, proposal_id=proposal.id,
                                              closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
@@ -18108,11 +18109,16 @@ def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
     "Changed". Nodes with the same name are counted ("Added 2 “Combine Text”
     nodes"), the names rule of node_names.node_name_list (design r211). One
     rename says from what: "Renamed “Combine Text” to “Prefix”" (``renamed_from``
-    is the old name)."""
+    is the old name); two or more renames are a count, "Renamed 2 nodes"
+    (design r212). A mix says "Changed" only when the verbs differ: nodes
+    that were only added say "Added …", only removed "Removed …"."""
     node = _quoted(_node_label(node_id))
     if others:
         verbs = {verb, *(other_verb for other_verb, _ in others)}
         word = verb if len(verbs) == 1 else "Changed"
+        if word == "Renamed":
+            # Two or more renames count; one names both ends (design r212 item 2).
+            return f"Renamed {len(others) + 1} nodes"
         return f"{word} {node_names.node_name_list([_node_label(node_id), *(name for _, name in others)])}"
     if verb == "Renamed" and renamed_from and renamed_from != _node_label(node_id):
         return f"Renamed {_quoted(renamed_from)} to {node}"

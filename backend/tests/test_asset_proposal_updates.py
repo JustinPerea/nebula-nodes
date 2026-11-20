@@ -108,7 +108,7 @@ def test_a_re_proposal_replaces_the_update_instead_of_stacking(api):
     assert _review(mine)["proposalId"] == first["id"]
     api.client.delete(f"/api/canvas/proposals/{first['id']}", headers=CLAUDE)
     mine = next(n for n in _proposal_notes(api) if n["author"]["name"] == "Claude Code")
-    assert mine["resolvedAt"] and mine["outcome"] == "Withdrawn by Claude Code"
+    assert mine["resolvedAt"] and mine["outcome"] == "Withdrawn"
 
 
 def test_no_open_project_means_no_update_but_the_proposal_opens(api):

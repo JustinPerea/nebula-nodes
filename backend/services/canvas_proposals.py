@@ -42,6 +42,7 @@ from typing import Any, Callable, Iterable, Mapping
 from services import agent_words
 from services.agent_params import internal_refusal
 from services.agent_presence import AgentIdentity
+from services.agent_name_in_sentence import withdrawn_line
 from services.personal_agents import in_sentence
 from services.canvas_pins import PinError, clean_text
 from services.selection_context import _SECRET_KEY_RE
@@ -1820,13 +1821,13 @@ _OUTCOMES = {"accepted": "Accepted", "rejected": "Rejected", "expired": "Expired
              "invalidated": "No longer fits"}
 
 
-def update_outcome(proposal: Proposal) -> str:
+def update_outcome(proposal: Proposal, closed_by: Mapping[str, Any] | None = None) -> str:
     """Short, never the person's reason: "Accepted", "Rejected", "Expired",
-    "Withdrawn by <agent>" or "No longer fits" (a node it needed was
+    "Withdrawn" (by someone else: "Withdrawn by you") or "No longer fits" (a node it needed was
     deleted, the canvas was cleared or replaced, or what it changes was
     edited since)."""
     if proposal.status == "withdrawn":
-        return f"Withdrawn by {in_sentence(proposal.agent.name)}"
+        return withdrawn_line(proposal.agent.name, closed_by)
     return _OUTCOMES.get(proposal.status, "No longer fits")
 
 

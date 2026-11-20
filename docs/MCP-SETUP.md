@@ -2879,8 +2879,9 @@ none (`update: null`). It doesn't count against the agent's `post_note`
 limit, so don't also post an update to announce the proposal. The view's
 `update` is `{id, projectId}`. When the proposal closes the Update gets
 `resolvedAt`, `resolvedBy`, `readAt` and an `outcome` in place of Review:
-"Accepted", "Rejected" (never the person's reason), "Withdrawn by Claude
-Code", "Expired" (on time, even when nobody reads proposals), "No longer
+"Accepted", "Rejected" (never the person's reason), "Withdrawn" (the
+agent took it back; "Withdrawn by you" if the person closed it, "Withdrawn by
+Claude Code" if another agent did), "Expired" (on time, even when nobody reads proposals), "No longer
 fits" (a node it needs was deleted, the canvas was cleared or replaced by an
 import or another project, or what it changes was edited since; a reopen of
 the project already open keeps it waiting), or
@@ -3137,7 +3138,8 @@ a proposal instead, and what it noticed is an Update.
   none. When it closes, its line goes past tense ("Asked 2
   questions" / "Asked a question", on the stored Update, so `list_notes`
   shows it too) and it says "Answered.", "Dismissed.",
-  "Withdrawn by <agent>." (or "Closed when Nebula restarted." in the rare
+  "Withdrawn." (the asker took it back; the "by" names anyone else who closed
+  it) (or "Closed when Nebula restarted." in the rare
   case a kept set can't be read back). The 200-Update cap never prunes the
   Update of an open set (at most 12 are open, so the cap holds); once the
   set closes its Update is pruned like any other. The questions
@@ -3711,7 +3713,7 @@ proposal.
 When the last one closes the Update gets `resolvedAt`, `resolvedBy` (`person`,
 the agent, or `system`), `readAt` and a short `outcome` ("Accepted: the cover
 changed", "You kept your cover", "You kept the notes here", "Applied",
-"Withdrawn by Claude Code", "Expired", "No longer fits", "Closed: Nebula
+"Withdrawn", "Expired", "No longer fits", "Closed: Nebula
 restarted"), and shows that in place of Review. Expiry lands on time, even
 when nobody reads proposals: Nebula checks each proposal when it is due, and
 `list_notes` never lists an expired one as waiting. Proposals are memory

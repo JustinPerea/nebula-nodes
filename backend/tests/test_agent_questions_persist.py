@@ -154,7 +154,7 @@ def test_withdraw_after_a_restart(kept):
     assert response.status_code == 200, response.text
     assert response.json()["questions"]["status"] == "withdrawn"
     (note,) = _question_updates(kept)
-    assert note["outcome"] == "Withdrawn by Claude Code."
+    assert note["outcome"] == "Withdrawn."
     kept.restart()
     assert _read(kept, set_id).json()["questions"]["status"] == "withdrawn"
     assert _sync(kept)[set_id].get("answerKey") is None

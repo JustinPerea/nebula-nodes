@@ -52,6 +52,32 @@ describe('CommonsDetail quoted comments', () => {
   });
 });
 
+describe('CommonsDetail dates', () => {
+  it('writes every date the panel shows out the same way: sightings and the analysis line too', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 20, 9, 30));
+    try {
+      const dated = detail('A poster');
+      dated.memberships[0].sightings = [
+        { id: 's1', source_kind: 'web', url: 'https://example.com/a.png', page_url: null, page_title: 'Page', original_name: null,
+          source_date: '2026-11-20', state: 'ok' },
+        { id: 's2', source_kind: 'folder', url: null, page_url: null, page_title: null, original_name: 'b.png',
+          source_date: '2025-03-04', state: 'ok' },
+      ];
+      dated.effective.analysis = { model_id: 'model-x', prompt_version: 'v3', created_at: '2026-11-19T10:15:00' };
+      asset.mockResolvedValue(dated);
+      const { container } = render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
+      await screen.findByText('Page');
+      const sightings = [...container.querySelectorAll('.commons-list__item .commons-meta')].map((node) => node.textContent);
+      expect(sightings).toEqual(['November 20', 'March 4, 2025']);
+      expect(container.textContent).toContain('Read by model-x · prompt v3 · November 19');
+      expect(container.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('CommonsDetail and agents\' proposals', () => {
   beforeEach(() => {
     useAssetProposalsStore.getState().clear();

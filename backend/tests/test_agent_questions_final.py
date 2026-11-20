@@ -62,7 +62,7 @@ def _close(api, set_id: str, outcome: str) -> None:
 
 
 @pytest.mark.parametrize("outcome, line", [
-    ("answered", "Answered."), ("dismissed", "Dismissed."), ("withdrawn", "Withdrawn by Claude Code."),
+    ("answered", "Answered."), ("dismissed", "Dismissed."), ("withdrawn", "Withdrawn."),
 ])
 @pytest.mark.parametrize("body, open_text, closed_text", [
     (TWO, "Has 2 questions", "Asked 2 questions"),

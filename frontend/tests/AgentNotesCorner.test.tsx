@@ -510,9 +510,9 @@ describe('an asset proposal\'s Update (Q92 a)', () => {
     const open = ask('project', 'dusk');
     sync([open]);
     emit({ type: 'agentNotes', surface: 'canvas', op: 'resolved', projectId: 'p1', ids: [open.id], unread: 0, at: 3,
-      note: { ...open, readAt: '2026-10-20T12:30:00.000Z', resolvedAt: '2026-10-20T12:30:00.000Z', outcome: 'Withdrawn by Claude' } });
+      note: { ...open, readAt: '2026-10-20T12:30:00.000Z', resolvedAt: '2026-10-20T12:30:00.000Z', outcome: 'Withdrawn' } });
     const entry = openEntry();
-    expect(entry.textContent).toContain('Withdrawn by Claude');
+    expect(entry.textContent).toContain('Withdrawn');
     expect(within(entry).queryByRole('button', { name: 'Review' })).toBeNull();
   });
 });

@@ -475,3 +475,58 @@ def test_nodes_with_the_same_name_are_counted_and_a_rename_says_from_what(api): 
     _apply(api, {"params": [{"nodeId": one, "params": {"value": "r"}}, {"nodeId": three, "params": {"value": "r"}},
                             {"nodeId": two, "params": {"value": "r"}}]})
     assert _rows(api)[-1] == ("Claude Code", "Changed 2 “A” nodes and “B”")
+
+
+def test_one_rename_names_both_ends_and_two_or_more_are_a_count(api):  # noqa: F811
+    """Design r212 item 2."""
+    ids = [_label(api, api.graph.add_node("text-input", {"value": str(i)}), name) for i, name in enumerate("ABC")]
+    _apply(api, {"rename": {ids[0]: "Prefix"}})
+    assert _rows(api)[-1] == ("Claude Code", "Renamed “A” to “Prefix”")
+    _apply(api, {"rename": {ids[0]: "Prefix 2", ids[1]: "Suffix"}})
+    assert _rows(api)[-1] == ("Claude Code", "Renamed 2 nodes")
+    _apply(api, {"rename": {ids[0]: "P3", ids[1]: "S3", ids[2]: "R3"}})
+    assert _rows(api)[-1] == ("Claude Code", "Renamed 3 nodes")
+    # A rename beside a different kind of change is "Changed", named.
+    _apply(api, {"rename": {ids[0]: "P4"}, "params": [{"nodeId": ids[1], "params": {"value": "z"}}]})
+    assert _rows(api)[-1] == ("Claude Code", "Changed “S3” and “P4”")
+
+
+def test_a_mixed_apply_names_up_to_three_nodes_and_counts_from_four_on_the_focus_row(api):  # noqa: F811
+    """Design r212 item 3, with a focus node (the apply changes, adds or renames something)."""
+    ids = [_label(api, api.graph.add_node("text-input", {"value": str(i)}), name) for i, name in enumerate("ABCDE")]
+
+    def change(count: int) -> str:
+        _apply(api, {"params": [{"nodeId": node, "params": {"value": f"v{count}"}} for node in ids[:count]]})
+        return _rows(api)[-1][1]
+
+    assert change(3) == "Changed “A”, “B” and “C”"
+    assert change(4) == "Changed 4 nodes"
+    # Different verbs: names to three, a count from four.
+    _apply(api, {"nodes": [{"ref": "+n", "definitionId": "text-input", "params": {"value": "x"}}],
+                 "params": [{"nodeId": ids[0], "params": {"value": "k"}}]})
+    assert _rows(api)[-1][1] == "Changed “Text Input” and “A”"
+    _apply(api, {"nodes": [{"ref": "+n", "definitionId": "text-input", "params": {"value": "x"}}],
+                 "params": [{"nodeId": node, "params": {"value": "m"}} for node in ids[:3]]})
+    assert _rows(api)[-1][1] == "Changed 4 nodes"
+
+
+def test_an_apply_that_only_adds_says_added_and_one_that_only_removes_says_removed(api):  # noqa: F811
+    """Design r212 item 3: never "Changed" for one kind. Adds beside their wires are still adds; removes
+    beside the wires they take with them are still removes. Both rows, the focus row and the no-focus row."""
+    keep = _label(api, api.graph.add_node("text-input", {"value": "k"}), "Keep")
+    _apply(api, {"nodes": [{"ref": "+a", "definitionId": "text-input", "params": {"value": "x"}},
+                           {"ref": "+b", "definitionId": "gpt-image-2-5-generate", "params": {}}],
+                 "edges": [{"source": keep, "sourceHandle": "text", "target": "+b", "targetHandle": "prompt"}]})
+    assert _rows(api)[-1][1].startswith("Added ") and "Changed" not in _rows(api)[-1][1]
+    _apply(api, {"nodes": [{"ref": f"+{i}", "definitionId": "text-input", "params": {"value": "x"}} for i in range(4)]})
+    assert _rows(api)[-1][1] == "Added 4 nodes"
+    # Removes only: the wires the deletes take with them don't make it a "Changed".
+    wired = [_label(api, api.graph.add_node("text-input", {"value": "w"}), "Wired"),
+             _label(api, api.graph.add_node("gpt-image-2-5-generate", {}), "Target")]
+    _apply(api, {"edges": [{"source": wired[0], "sourceHandle": "text", "target": wired[1], "targetHandle": "prompt"}]})
+    _apply(api, {"remove": wired})
+    assert _rows(api)[-1][1] == "Removed “Wired” and “Target”"
+    # A remove beside an add is both, so "Changed".
+    gone = _label(api, api.graph.add_node("text-input", {"value": "g"}), "Gone")
+    _apply(api, {"nodes": [{"ref": "+z", "definitionId": "text-input", "params": {"value": "x"}}], "remove": [gone]})
+    assert _rows(api)[-1][1] == "Changed “Text Input” and “Gone”"

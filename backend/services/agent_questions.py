@@ -65,7 +65,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Container, Iterable, Mapping
 
 from services.agent_presence import AgentIdentity
-from services.personal_agents import in_sentence
+from services.agent_name_in_sentence import withdrawn_line
 from services.project_store import ProjectStore
 
 MAX_QUESTIONS = 5
@@ -819,7 +819,7 @@ def cap_message(detail: str, rows: Iterable[Mapping[str, Any]]) -> str:
 # Design's copy: "Has a question" / "Has {n} questions" (the Update's header
 # names the agent, so the line doesn't), one Answer button, and once it closes
 # the line says "Asked a question" / "Asked {n} questions" with: "Answered."
-# "Dismissed." "Withdrawn by {agent}." "Closed when Nebula restarted."
+# "Dismissed." "Withdrawn." (by someone else: "Withdrawn by you.") "Closed when Nebula restarted."
 # (Proposals keep "Closed: Nebula restarted".) Sets are kept with the
 # project now, so a restart closes nothing by itself: the restart line is
 # left for an Update whose set can't be read back (a damaged or unknown
@@ -858,9 +858,9 @@ def closed_update_text(text: str) -> str:
     return f"{legacy['agent']} asked {legacy['count']}." if legacy else text
 
 
-def update_outcome(question_set: QuestionSet) -> str:
+def update_outcome(question_set: QuestionSet, closed_by: Mapping[str, Any] | None = None) -> str:
     if question_set.status == "withdrawn":
-        return f"Withdrawn by {in_sentence(question_set.agent.name)}."
+        return f"{withdrawn_line(question_set.agent.name, closed_by)}."
     return _OUTCOMES.get(question_set.status, RESTART_OUTCOME)
 
 

@@ -550,7 +550,7 @@ who pays, the price); check it says what you meant. Each proposal also posts an 
 every screen ("Proposes 3 changes on the canvas" under your name, with Review, which
 takes them to the canvas and its bar), so don't also post a `nebula note`
 about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,
-`[Withdrawn by <you>]`, `[Expired]`, `[No longer fits]` or
+`[Withdrawn]`, `[Expired]`, `[No longer fits]` or
 `[Closed: Nebula restarted]` (ask again then). Proposing again after you
 withdraw one replaces the withdrawn one's Update.
 
