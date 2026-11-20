@@ -401,9 +401,6 @@ body.app-slava-restraint .result-card {
   overflow: hidden;
 }
 
-/* Design: a result picked for comparing takes the accent edge; it follows the base rule so it wins. */
-body.app-slava-restraint .result-card--compared { border-color: var(--sr-accent); }
-
 body.app-slava-restraint .result-card__media {
   position: relative;
   aspect-ratio: 1;
@@ -537,6 +534,9 @@ body.app-slava-restraint .result-card__btn--danger:active:not(:disabled) {
 }
 
 body.app-slava-restraint .result-card:focus-within { border-color: var(--sr-edge-strong); }
+/* Design: a result picked for comparing keeps the accent edge while focused too. The repeated class
+   matches the focus-within rule's specificity and follows it, so it wins. The keyboard ring is a separate outline. */
+body.app-slava-restraint .result-card--compared.result-card--compared { border-color: var(--sr-accent); }
 body.app-slava-restraint .result-card__btn:focus-visible,
 body.app-slava-restraint .result-card__zoom-btn:focus-visible,
 body.app-slava-restraint .result-card__dl-item:focus-visible,
