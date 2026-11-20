@@ -856,7 +856,7 @@ function namedLine(reason: string, beside: 'alone' | 'button'): string {
   const rest = (split?.rest ?? '').trim();
   const clause = rest ? clauseFor(rest, beside) : null;
   if (clause !== null) return `Nebula couldn’t ${what} because ${clause}`;
-  if (rest) return `Nebula couldn’t ${what}${what.endsWith('.') ? '' : '.'} ${endedSentence(curlApostrophes(rest))}`;
+  if (rest) return `${couldntLine(what)} ${endedSentence(curlApostrophes(rest))}`;
   return `Nebula couldn’t ${what}${split?.ellipsis ?? (what.endsWith('.') ? '' : '.')}`;
 }
 
