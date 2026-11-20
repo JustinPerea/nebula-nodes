@@ -48,6 +48,14 @@ describe('WorldPreview', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
   });
 
+  it('reads the viewer status as words, lower case after the dot', async () => {
+    render(<WorldPreview value={world} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Explore 3D world: Moonlit courtyard' }));
+    await screen.findByTestId('world-environment-viewer');
+    const status = screen.getAllByRole('status').find((node) => node.classList.contains('world-modal__status'));
+    expect(status?.textContent).toMatch(/ · (loading|ready|couldn’t load)$/);
+  });
+
   it('stays thumbnail-only until expanded, then defaults desktop to the 500K splat', async () => {
     render(<WorldPreview value={world} />);
 

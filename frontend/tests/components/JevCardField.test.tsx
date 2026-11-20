@@ -152,6 +152,19 @@ describe('Jev result under the card field', () => {
     expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked \u201CJudge this product photo/);
   });
 
+  it('keeps the closing quote after a long question, outside the clamped text', () => {
+    const s = sample(fixture.decide, 'longer than the report line');
+    renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
+    const asked = screen.getByTestId('jev-asked');
+    // The clamp sits on the question text alone; the quotes are siblings outside it.
+    const text = asked.querySelector('.jev-result__question-text');
+    expect(text?.textContent?.length).toBeGreaterThan(100);
+    expect(text?.textContent).not.toContain('\u201D');
+    expect(asked.title).toBe(`\u201C${text?.textContent}\u201D`);
+    expect(asked.lastElementChild?.textContent).toBe('\u201D');
+  });
+
   it('treats a blank Pick Best question as its default, which is what it asked', () => {
     const s = sample(fixture.pickBest, 'a clear winner');
     renderLive(node('p1', JEV_PICK_BEST, { question: '' }, s.outputs, 'complete'));

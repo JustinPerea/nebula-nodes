@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { findAccentBadges } from '../scripts/check-badge-tone.mjs';
+import { findAccentBadges, findCapsBadges } from '../scripts/check-badge-tone.mjs';
 
 /**
  * scripts/check-badge-tone.mjs runs in `npm run lint`: no state badge or source tag is painted
@@ -52,4 +52,46 @@ describe('check-badge-tone', () => {
   for (const css of fine) {
     it(`passes: ${css}`, () => expect(hits(css)).toHaveLength(0));
   }
+});
+
+/** Design: a badge or tag reads in sentence case, a state or a kind alike; a field label keeps its caps. */
+describe('check-badge-tone: capitals', () => {
+  const caps = (css: string) => findCapsBadges(css, 'fixture.css');
+  const capitalised = [
+    '.world-modal__status { text-transform: uppercase; }',
+    'body.app-slava-restraint .moodboard-studio-toolbar__state { font-size: 11px; text-transform: uppercase; }',
+    '.moodboard-view-switch__badge { text-transform: uppercase; }',
+    '.world-preview__badge { text-transform: uppercase; }',
+    '.jev-result__badge { text-transform: uppercase; }',
+    '.character-def__ref-badge { text-transform: uppercase; }',
+    '.reference-set-node__role-badge { text-transform: uppercase; }',
+    '.commons-badge { text-transform: uppercase; }',
+    '.commons-source--corrected { text-transform: uppercase; }',
+    '.run-history__tag { text-transform: uppercase; }',
+    '.thing__status--ready { text-transform: uppercase; }',
+    '.thing__state { font-variant: small-caps; }',
+    '.thing__state { font-variant-caps: all-small-caps; }',
+    '.pill-badge { text-transform: UPPERCASE; }',
+    '.a, .thing__badge { text-transform: uppercase; }',
+  ];
+  it.each(capitalised)('catches %s', (css) => {
+    expect(caps(css)).toHaveLength(1);
+  });
+
+  const fine = [
+    '.world-modal__status { text-transform: none; }',
+    '.thing__badge { font-variant-numeric: tabular-nums; }',
+    '.moodboard-studio__field-label { text-transform: uppercase; }',
+    '.inspector__section-title { text-transform: uppercase; letter-spacing: 0.08em; }',
+    '.thing__statement { text-transform: uppercase; }',
+    '.thing__badge { text-transform: capitalize; }',
+  ];
+  it.each(fine)('passes %s', (css) => {
+    expect(caps(css)).toHaveLength(0);
+  });
+
+  it('reports the line and the selector', () => {
+    const [hit] = caps('.a { color: red; }\n\n.x__badge {\n  color: red;\n  text-transform: uppercase;\n}\n');
+    expect(hit).toMatchObject({ file: 'fixture.css', line: 5, selector: '.x__badge' });
+  });
 });

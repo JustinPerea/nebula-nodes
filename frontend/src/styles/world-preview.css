@@ -82,7 +82,6 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   backdrop-filter: blur(8px);
 }
 
@@ -301,7 +300,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .world-modal__status--ready {

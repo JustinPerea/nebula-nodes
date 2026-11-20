@@ -93,15 +93,17 @@ function Footer({ confidence, model, label = 'Confidence' }: { confidence: strin
 function Question({ asked, fieldText }: { asked: string | null; fieldText: string | null | undefined }) {
   const echo = echoedText(asked, fieldText);
   if (!echo) return null;
+  if (!echo.earlier) {
+    return <p className="jev-result__question" title={echo.text} data-testid="jev-asked">{echo.text}</p>;
+  }
+  // Design: the question it asked is a quote, so it takes curly quotes. Only the question text is
+  // clamped (its own span), so a long question keeps its closing quote visible.
   return (
-    <p className="jev-result__question" title={echo.text} data-testid="jev-asked">
-      {echo.earlier ? (
-        <>
-          <span className="jev-result__muted">Asked </span>
-          {/* Design: the question it asked is a quote, so it takes curly quotes. */}
-          {`\u201C${echo.text}\u201D`}
-        </>
-      ) : echo.text}
+    <p className="jev-result__question jev-result__question--quoted" title={`\u201C${echo.text}\u201D`} data-testid="jev-asked">
+      <span className="jev-result__muted">Asked </span>
+      <span>{'\u201C'}</span>
+      <span className="jev-result__question-text">{echo.text}</span>
+      <span className="jev-result__question-close">{'\u201D'}</span>
     </p>
   );
 }

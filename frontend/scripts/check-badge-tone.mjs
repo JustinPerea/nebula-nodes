@@ -42,7 +42,17 @@ const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]
 function main() {
   const files = collectCssFiles(SRC);
   const hits = [];
-  for (const file of files) hits.push(...findAccentBadges(readFileSync(file, 'utf8'), relative(SRC, file)));
+  const capsHits = [];
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8');
+    hits.push(...findAccentBadges(source, relative(SRC, file)));
+    capsHits.push(...findCapsBadges(source, relative(SRC, file)));
+  }
+  if (capsHits.length > 0) {
+    console.error('A badge or tag is drawn in capitals. A badge reads in sentence case; only a field label keeps its caps (design).');
+    for (const hit of capsHits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }`);
+    process.exit(1);
+  }
   if (hits.length > 0) {
     console.error('A state badge is painted in the brand accent. Use the neutral, pending, warning or success tone (design: orange is the brand accent, not a status).');
     for (const hit of hits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }  (${hit.reason})`);
@@ -76,6 +86,38 @@ export function findAccentBadges(source, file) {
           ? 'the literal accent colour'
           : null;
       if (reason) hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector, decl: `${declaration.prop}: ${compact(declaration.value)}`, reason });
+    }
+  }
+  return hits;
+}
+
+// Design: a badge or tag, whether it carries a state or a kind, reads in sentence case. A field
+// label (the small heading over a field or section) keeps its caps, so only badge-shaped class
+// names are read: the commons badge and source classes, the explicit list of non-Commons badges
+// below, and any class that ends in __badge, __tag, __state or __status or contains -badge.
+const NAMED_BADGES = new Set([
+  'world-modal__status', 'moodboard-studio-toolbar__state', 'moodboard-view-switch__badge',
+  'world-preview__badge', 'jev-result__badge', 'character-def__ref-badge', 'reference-set-node__role-badge',
+]);
+const CLASS = /\.(-?[_a-zA-Z][\w-]*)/g;
+const BADGE_SUFFIX = /(?:__(?:badge|tag|state|status)(?![a-zA-Z0-9_])|-badge)/;
+const CAPS_PROP = /^(?:text-transform|font-variant|font-variant-caps)$/i;
+const CAPS_VALUE = /(?:^|\s)(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)(?![\w-])/i;
+const isBadgeClass = (name) => NAMED_BADGES.has(name) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
+
+/** Every declaration that capitalises a badge or tag: { file, line, selector, decl }. */
+export function findCapsBadges(source, file) {
+  const css = stripComments(source);
+  const lineStarts = computeLineStarts(css);
+  const hits = [];
+  for (const rule of parseRules(css)) {
+    const selector = compact(rule.selector);
+    const badgeParts = selector.split(',').filter((part) => [...part.matchAll(CLASS)].some((m) => isBadgeClass(m[1])));
+    if (badgeParts.length === 0) continue;
+    for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
+      if (CAPS_PROP.test(declaration.prop) && CAPS_VALUE.test(declaration.value)) {
+        hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector: badgeParts.map((part) => part.trim()).join(', '), decl: `${declaration.prop}: ${compact(declaration.value)}` });
+      }
     }
   }
   return hits;

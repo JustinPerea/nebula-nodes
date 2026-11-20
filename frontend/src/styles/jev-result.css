@@ -96,7 +96,6 @@ body.app-slava-restraint .jev-result__badge {
   font-family: var(--sr-mono);
   font-size: var(--sr-type-micro);
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -111,6 +110,24 @@ body.app-slava-restraint .jev-result__question {
   -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
 }
+
+/* A quoted question clamps only its text; the quotes sit outside the clamp so the closing one stays visible. */
+body.app-slava-restraint .jev-result__question--quoted {
+  display: flex;
+  white-space: pre;
+}
+
+body.app-slava-restraint .jev-result__question-text {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .jev-result__question-close { align-self: flex-end; }
 
 body.app-slava-restraint .jev-result__muted { color: var(--sr-ink-meta); }
 

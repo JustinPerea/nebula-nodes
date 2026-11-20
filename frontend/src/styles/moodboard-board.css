@@ -597,7 +597,6 @@ html body .moodboard-board-panel .moodboard-def__row {
   font-family: var(--mb-board-mono);
   font-size: 9px;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 /* The undo toast, in the app's notice region (NoticeRegion), which places
