@@ -1,7 +1,7 @@
 // Design: until the first load lands, "New project" waits, and says why when the server is what it
 // waits on; the line that says Nebula is trying again has "Try now"; leaving the screen stops the tries.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { ProjectHome, type ProjectHomeProps } from './ProjectHome';
 import { ProjectCoordinator } from './ProjectCoordinator';
 import { FIRST_LOAD_RETRYING_COPY, NEW_PROJECT_WAITING_TITLE } from '../../lib/errorCopy';
@@ -117,5 +117,45 @@ describe('the coordinator', () => {
     expect(stop).not.toHaveBeenCalled();
     unmount();
     expect(stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('design: focus never falls to the page while "Recent projects" is hidden', () => {
+  const waiting = { workLoaded: false, serverWaiting: true, error: FIRST_LOAD_RETRYING_COPY, retry: 'retrying' as const };
+
+  it('the last notice dismissed while it holds focus: focus goes to the page title, which is drawn', async () => {
+    const view = render(<ProjectHome {...props({ ...waiting, canvasHeldUnreadable: { count: 2 } })} />);
+    const close = await screen.findByRole('button', { name: 'Dismiss' });
+    close.focus();
+    fireEvent.click(close);
+    // Nothing else is showing, and the heading under the stack is hidden until the load lands.
+    view.rerender(<ProjectHome {...props({ ...waiting, error: null, retry: undefined, canvasHeldUnreadable: null })} />);
+    const heading = document.getElementById('recent-projects-title');
+    expect(heading?.hasAttribute('hidden')).toBe(true);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).not.toBe(heading);
+    expect(document.activeElement).toBe(document.getElementById('project-home-title'));
+  });
+
+  it('the same once loaded: "Recent projects" again', async () => {
+    const view = render(<ProjectHome {...props({ canvasHeldUnreadable: { count: 2 } })} />);
+    const close = await screen.findByRole('button', { name: 'Dismiss' });
+    close.focus();
+    fireEvent.click(close);
+    view.rerender(<ProjectHome {...props({ canvasHeldUnreadable: null })} />);
+    expect(document.activeElement).toBe(document.getElementById('recent-projects-title'));
+  });
+
+  it('after Empty with nothing loaded yet, focus goes to the page title, not the body', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    const row = { id: 'a', name: 'A', createdAt: '', updatedAt: '2026-10-20T00:00:00Z', lastOpenedAt: null, nodeCount: 0, edgeCount: 0, thumbnail: null, ...base };
+    const actions = props({ ...waiting, trash: [row] as never });
+    const { rerender } = render(<ProjectHome {...actions} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Delete this project for good?' })).getByRole('button', { name: 'Delete forever' }));
+    rerender(<ProjectHome {...actions} trash={[]} />);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(document.getElementById('project-home-title'));
   });
 });

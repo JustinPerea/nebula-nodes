@@ -421,6 +421,32 @@ export async function refreshOpenHold(): Promise<void> {
   } catch { /* Offline or refused: the last verdict stands until the next read. */ }
 }
 
+/** Design: how long the read of Nebula's verdict behind a second refusal waits (a quarter of the open's wait). */
+const OPEN_HOLD_READ_TIMEOUT_MS = 5_000;
+
+/** Reads Nebula's verdict now, 5 s at most, and keeps it as the verdict whatever a newer read
+ * does meanwhile: the caller decides from this value. Null when the read failed or got no answer
+ * (the stored verdict is then left as it was, and never trusted by the caller). */
+async function readOpenHoldWithin(ms: number): Promise<{ hold: OpenHold | null } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const answer = await Promise.race([
+      api.getOpenHold(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('The hold read got no answer in time.')), ms); }),
+    ]);
+    const hold = readOpenHold(answer?.hold);
+    core.openHoldSeq += 1;
+    core.openHoldBasis = holdBasisNow();
+    if (hold) holdArrived();
+    useProjectStore.setState({ openHold: hold });
+    return { hold };
+  } catch {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export function watchOpenHold(): () => void {
   core.holdWatchers += 1;
   if (core.holdWatchers === 1) {
@@ -727,9 +753,15 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     if (refusedAgain && inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id) {
       // The open's own reservation isn't a hold: let it go before asking (as the branch does).
       if (reserved) { useGraphStore.getState().releaseGraphImport(); reserved = false; }
+      // Design: a second refusal is read fresh and decided from that read alone: a stored verdict
+      // can name a run that has just ended, and a second stale 409 is when that happens. A read that
+      // fails or gets no answer in time leaves the out-of-date line with Try again.
       const carried = noteRefusalHold((error as api.ProjectRequestError).hold);
-      if (!carried && !reopenHold(retry.id, true)) await refreshOpenHold();
-      if (carried || reopenHold(retry.id, true)) refusedAgain = false;
+      if (carried) refusedAgain = false;
+      else {
+        const fresh = await readOpenHoldWithin(OPEN_HOLD_READ_TIMEOUT_MS);
+        if (fresh) refusedAgain = !reopenHold(retry.id, true);
+      }
     }
     if (inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id && !(error instanceof OpenTimedOut) && !refusedAgain
       && !(reserved && !(error instanceof api.ProjectRequestError && error.status < 500))) {
@@ -748,7 +780,8 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
         // one open here (reopenHold is null for any other: reopenGivesIds;
         // mutant W17 of review 20).
         const carried = noteRefusalHold(error.hold);
-        if (!carried && !hold) await refreshOpenHold();
+        // Bounded like the second refusal's read: a read that never answers must not hold busy.
+        if (!carried && !hold) await readOpenHoldWithin(OPEN_HOLD_READ_TIMEOUT_MS);
         if (carried || !hold) hold = reopenHold(retry.id, true);
       }
       if (hold) {

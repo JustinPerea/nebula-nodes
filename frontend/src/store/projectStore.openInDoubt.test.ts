@@ -35,7 +35,7 @@ import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/proje
 import { useGraphStore } from './graphStore';
 import { useUIStore } from './uiStore';
 import { core, projectRetryOffer, resetProjectStoreForTests, subscribeProjectAutosave, useProjectStore } from './projectStore';
-import { workspaceSync } from './projectFlows';
+import { relistProjects, workspaceSync } from './projectFlows';
 
 const listProjects = vi.mocked(api.listProjects);
 const openProject = vi.mocked(api.openProject);
@@ -393,6 +393,44 @@ describe('a held follow that stops before its doubt settles', () => {
   });
 });
 
+describe('a replay that is held again after the typing mark is cleared', () => {
+  it('busy is set when the commit replays: the doubt is kept through a listing and a sync, then followed once busy clears', async () => {
+    await alphaLoaded();
+    await betaTimesOut();
+    await state().open('p1');
+    useUIStore.setState({ viewMode: 'moodboard' as never });
+    const field = document.createElement('textarea');
+    document.body.appendChild(field);
+    field.focus();
+    try {
+      server(beta, 'r2');
+      workspaceSync(committed(beta, 'r2'));
+      expect(core.opensInDoubt.map((doubt) => [doubt.id, doubt.typing])).toEqual([['p2', true]]);
+      // Busy (a newer action under way) when the blur releases the wait.
+      useProjectStore.setState({ busy: true });
+      field.blur();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(core.heldFollow).toBeNull();
+      expect(core.opensInDoubt.map((doubt) => [doubt.id, doubt.typing, doubt.held !== null])).toEqual([['p2', undefined, true]]);
+      // A listing and a sync in between (past the revision the open went with) leave it held.
+      await vi.advanceTimersByTimeAsync(0);
+      await relistProjects();
+      workspaceSync({ type: 'graphSync', nodes: [], edges: [], empty: true, activeProjectId: 'p1', workspaceRevision: 'r3',
+        paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      expect(core.opensInDoubt.map((doubt) => doubt.id)).toEqual(['p2']);
+      expect(state().activeProject?.id).not.toBe('p2');
+      // Busy clears: the held commit is followed.
+      useProjectStore.setState({ busy: false });
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.waitFor(() => expect(state().activeProject?.id).toBe('p2'));
+      expect(core.opensInDoubt).toEqual([]);
+    } finally {
+      field.remove();
+      useUIStore.setState({ viewMode: 'canvas' });
+    }
+  });
+});
+
 describe('a reopen in place that times out (finding 5)', () => {
   const local = [{ id: 'local-1', type: 'model', position: { x: 0, y: 0 },
     data: { definitionId: 'gemini-chat', label: 'Chat', params: { prompt: 'a' }, outputs: {} } }] as never;
@@ -471,6 +509,78 @@ describe('a reopen in place that times out (finding 5)', () => {
     expect(state().openHold).toMatchObject({ state: 'run' });
     expect(core.shownReopen?.line).toBeTruthy();
     expect(useGraphStore.getState().messageNotice?.text ?? useGraphStore.getState().undoNotice?.text).toBe(core.shownReopen?.line);
+  });
+
+  describe('a second stale refusal reads Nebula’s verdict fresh, and decides from that read alone', () => {
+    const run = { state: 'run', nodeId: 'n1', nodeName: 'Chat', projectId: 'p1', projectName: 'Alpha', count: 1, fields: [] };
+    /** Alpha reopened in place with tab-local nodes; both sends refused as stale, no hold carried. */
+    async function refusedTwice(staleVerdict?: object) {
+      await alphaLoaded();
+      useGraphStore.setState({ nodes: local });
+      await state().flush();
+      saveProject.mockClear();
+      await betaTimesOut();
+      useProjectStore.setState({ screen: 'home' });
+      server(null, 'r1');
+      listProjects.mockResolvedValueOnce({ projects: [alpha, beta, gamma], trash: [], activeProjectId: null,
+        workspaceRevision: 'r1', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      listProjects.mockResolvedValueOnce({ projects: [alpha, beta, gamma], trash: [], activeProjectId: null,
+        workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      openProject.mockRejectedValueOnce(stale());
+      // A verdict stored by an earlier read (the watcher's) lands before the second refusal.
+      openProject.mockImplementationOnce(async () => {
+        if (staleVerdict) useProjectStore.setState({ openHold: staleVerdict as never });
+        throw stale();
+      });
+      openProject.mockClear();
+    }
+
+    it('a stored verdict about a run that has ended is not trusted: the fresh read has no hold, so the out-of-date line with Try again', async () => {
+      await refusedTwice(run);
+      getOpenHold.mockResolvedValue({ hold: null } as never);
+      await state().open('p1');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(getOpenHold).toHaveBeenCalledTimes(1);
+      expect(openProject).toHaveBeenCalledTimes(2);
+      expect(state().openHold).toBeNull();
+      expect(core.shownReopen).toBeNull();
+      expect(state().errorRetry).toEqual({ action: 'load', reopen: 'p1' });
+      expect(state().error).not.toBeNull();
+    });
+
+    it('a read that never answers releases busy, and after the bound the out-of-date line with Try again shows', async () => {
+      await refusedTwice();
+      getOpenHold.mockImplementation(hang);
+      void state().open('p1');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(state().busy).toBe(true);
+      await vi.advanceTimersByTimeAsync(4500);
+      expect(state().busy).toBe(false);
+      expect(state().errorRetry).toEqual({ action: 'load', reopen: 'p1' });
+      expect(state().error).not.toBeNull();
+      expect(core.shownReopen).toBeNull();
+    });
+
+    it('a read that fails takes the same path', async () => {
+      await refusedTwice();
+      getOpenHold.mockRejectedValue(new Error('offline'));
+      await state().open('p1');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(state().busy).toBe(false);
+      expect(state().errorRetry).toEqual({ action: 'load', reopen: 'p1' });
+    });
+
+    it('a fresh read with a hold shows the hold line, with nothing stored before it', async () => {
+      await refusedTwice();
+      getOpenHold.mockResolvedValue({ hold: run } as never);
+      await state().open('p1');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(openProject).toHaveBeenCalledTimes(2);
+      expect(state().screen).toBe('workspace');
+      expect(state().errorRetry).toBeNull();
+      expect(state().openHold).toMatchObject({ state: 'run' });
+      expect(core.shownReopen?.line).toBeTruthy();
+    });
   });
 
   it('quiet (activate’s own second try): nothing is said, and the open is in doubt', async () => {

@@ -670,6 +670,16 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const waitsForLoad = !workLoaded;
   const stack = useRef<HTMLDivElement>(null);
   const recentHeading = useRef<HTMLHeadingElement>(null);
+  const pageTitle = useRef<HTMLHeadingElement>(null);
+  // Design: where focus lands when the page has to put it somewhere (the notice stack emptied, a
+  // purge finished): "Recent projects", and while that heading is hidden (the first load has not
+  // landed) the page's own title, which is always drawn. A hidden element takes no focus, and the
+  // body is never the answer. The title, not the first-load line's button: that line goes away.
+  const loadedNow = useRef(workLoaded);
+  useEffect(() => { loadedNow.current = workLoaded; }, [workLoaded]);
+  const landing = useMemo(() => ({
+    get current(): HTMLElement | null { return (loadedNow.current ? recentHeading.current : null) ?? pageTitle.current; },
+  }), []) as RefObject<HTMLElement | null>;
   // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
   const errorKept = useOfflineFirstBecause(error ?? null);
   const showError = homeLineDrawn(errorKept, unsavedEdits);
@@ -690,17 +700,17 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
     ...(unsavedEdits ? ['held' as const] : editsSavedAs ? ['saved' as const] : []),
     ...(showError ? ['error' as const] : []),
   ];
-  const { track } = useNoticeStackFocus(noticeKeys, stack, recentHeading);
-  // GM #198 r22 Q2: the notice saying where Try again saved the edits takes
+  const { track } = useNoticeStackFocus(noticeKeys, stack, landing);
+  // Design: the notice saying where Try again saved the edits takes
   // the banner's place, and focus goes to its × (never [Open]), unless the
   // person had moved on to something else. While the projects loaded, the
   // stack rule may have parked focus on "Recent projects": that counts as
-  // still the banner's.
+  // still the banner's (the page's title while that heading is hidden).
   const savedAsCopy = copyNotice?.open ? copyNotice : null;
   useEffect(() => {
     if (!savedAsCopy) return;
     const active = document.activeElement;
-    if (active && active !== document.body && active.isConnected && active !== recentHeading.current
+    if (active && active !== document.body && active.isConnected && active !== recentHeading.current && active !== pageTitle.current
       && !stack.current?.contains(active)) return;
     stack.current?.querySelector<HTMLElement>(`[data-notice="copy"] ${NOTICE_DISMISS}`)?.focus();
   }, [savedAsCopy]);
@@ -737,9 +747,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       : undefined;
     const target = row?.querySelector<HTMLElement>('button')
       ?? document.querySelector<HTMLElement>('#recently-deleted-title button')
-      ?? recentHeading.current;
+      ?? landing.current;
     target?.focus();
-  }, [trash]);
+  }, [trash, landing]);
   // A purge that failed (busy came and went, the rows are still there) drops
   // its target, so a later expiry or another tab doesn't move focus.
   useEffect(() => {
@@ -766,7 +776,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       </header>
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">
-          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title">A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
+          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title" ref={pageTitle} tabIndex={-1}>A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
           {/* Until the first load lands there is no project list to add to (design): it keeps focus and its
               tooltip (aria-disabled, as a locked control does) and says why when the server is what it waits on. */}
           <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)}

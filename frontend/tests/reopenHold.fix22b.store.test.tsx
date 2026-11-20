@@ -286,6 +286,30 @@ describe('review 20 NIT-3: a 409 with nothing holding never leaves a line', () =
     await askToReopen();
     await vi.waitFor(() => expect(noticeNow()).toBe(LINES.run));
   });
+
+  it('a verdict read that never answers lets the open go after 5 s, and the quiet retry still runs', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    try {
+      duplicateN1();
+      vi.mocked(projects.getOpenHold).mockImplementation(() => new Promise(() => {}));
+      vi.mocked(projects.openProject)
+        .mockRejectedValueOnce(refusal('This project view is out of date. Reload projects and try again.'))
+        .mockResolvedValueOnce(openedAlpha());
+      void askToReopen();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(vi.mocked(projects.openProject)).toHaveBeenCalledTimes(1);
+      expect(useProjectStore.getState().busy).toBe(true);
+      await vi.advanceTimersByTimeAsync(4500);
+      expect(useProjectStore.getState().busy).toBe(false);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(vi.mocked(projects.openProject)).toHaveBeenCalledTimes(2);
+      expect(noticeNow()).toBeNull();
+    } finally {
+      vi.mocked(projects.getOpenHold).mockReset();
+      vi.mocked(projects.getOpenHold).mockResolvedValue({ hold: null });
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('review 20 NIT-1 (GM r34 A3): bootstrap is sent; its line shows on its 409 only', () => {
