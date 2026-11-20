@@ -95,7 +95,6 @@
 .chat__plan {
   margin: 0;
   padding: 6px 8px 6px 22px;
-  border-left: 2px solid var(--sr-edge-strong, #444);
   font-size: 11px;
   color: var(--sr-ink-muted, #bbb);
 }

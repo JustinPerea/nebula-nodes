@@ -1729,7 +1729,6 @@ body:not(.app-slava-restraint) .chat__bubble--user {
 body:not(.app-slava-restraint) .chat__bubble--assistant {
   background: #1e1e1e;
   border: 1px solid #2a2a2a;
-  border-left: 3px solid var(--chat-accent);
   color: #ccc;
 }
 

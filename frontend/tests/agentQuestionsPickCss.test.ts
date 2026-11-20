@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 // agent: "the light ink ring with a faint fill, the same weight as now, just
 // not the agent's color. The pick is the person's choice, not the agent's.
 // And an orange agent would put orange on a selection." The agent's colour
-// stays on the form's left edge and the author dot. jsdom has no layout, so
+// stays on the author dot. jsdom has no layout, so
 // this pins the rules; the live check looks at them.
 const css = readFileSync(join(__dirname, '../src/components/agent-notes/agentNotes.css'), 'utf8');
 
@@ -41,7 +41,7 @@ describe('a picked option in the answer form', () => {
     for (const selector of hovers) expect(selector).toMatch(/:not\(\[aria-pressed='true'\]\)/);
   });
 
-  it('leaves the agent colour on the form\'s left edge', () => {
-    expect(rule('.agent-questions-form__head')).toMatch(/inset 4px 0 0 color-mix\(in srgb, var\(--an-author\)/);
+  it('paints no coloured edge on the form: the author dot carries the agent colour', () => {
+    expect(rule('.agent-questions-form__head')).not.toMatch(/box-shadow|border-left/);
   });
 });

@@ -3,7 +3,7 @@ import { join, posix, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { gatedGraphActions } from '../src/store/graphStore';
-import { type JsxTree, appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, frameFindings, PRESENCE_COLOUR, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
+import { type JsxTree, appControls, appCss, appMenuItemFindings, cascadeFindings, controlsIn, controlsInFiles, customProperties, frameFindings, menuItemFindings, notRedFindings, pressedFindings, ruleFindings, wordFindings, wordKind } from './helpers/destructiveRule';
 
 /**
  * Follow-ups to PR #195, two static ratchets.
@@ -2935,13 +2935,12 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
 
   it('GM r18: no frame around a red control is amber, warning or accent (Forget ID sat in an amber box)', () => {
     expect(controls.flatMap((control) => frameFindings(control, vars))).toEqual([]);
-    // GM r22 Q2: the status edge's fill passes by its presence variable, whatever the colour.
-    expect(PRESENCE_COLOUR.test('var(--pin-color)')).toBe(true);
-    expect(PRESENCE_COLOUR.test('var(--agent-color, #5b9dff)')).toBe(true);
-    expect(PRESENCE_COLOUR.test('#e8a33d')).toBe(false);
-    // The real Delete note sees the edge beside it (its `near`), and passes.
+    // The real Delete note sees the rest of the card beside it (its `near`), and passes. The card has
+    // no left status edge (design: no accent edge on a card), so nothing on it takes a presence colour.
     const pinDeleteReal = controls.find((c) => c.file.endsWith('PinLayer.tsx') && c.name === 'Delete note');
-    expect(pinDeleteReal?.near?.map((tree) => tree[1][0])).toEqual(expect.arrayContaining(['canvas-pin__edge', 'canvas-pin__text', 'canvas-pin__meta', 'canvas-pin__reply']));
+    const nearClasses = pinDeleteReal?.near?.map((tree) => tree[1][0]);
+    expect(nearClasses).toEqual(expect.arrayContaining(['canvas-pin__text', 'canvas-pin__meta', 'canvas-pin__reply']));
+    expect(nearClasses).not.toContain('canvas-pin__edge');
   });
 
   it('GM r18 corpus: an amber, warning, accent or warm frame is caught at rest and on hover; neutral and red frames stay quiet', () => {
@@ -2975,12 +2974,11 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       // The control's own pseudo-element drawing a frame round it.
       '.x__forget::after { content: ""; border: 1px solid #f5c518; }',
     ]) expect(frameFindings(forget, vars0, css), css).not.toEqual([]);
-    // GM r22 Q2 (fix round 14): near Delete note only the status edge's own
-    // fill may take the presence colour. The card's border or fill, the Delete
-    // row, the text, the reply, the edge's border or glow all fail.
+    // Near Delete note nothing takes the presence colour: the card's border or
+    // fill, the Delete row, the text and the reply all fail.
     const pinDelete = { file: 'components/canvas/PinLayer.tsx', line: 1, name: 'Delete note', kind: 'red' as const, classes: ['canvas-pin__delete'],
       ancestors: [['div', ['canvas-pin']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]>,
-      near: [['span', ['canvas-pin__edge'], []], ['p', ['canvas-pin__text'], []], ['p', ['canvas-pin__meta'], []],
+      near: [['p', ['canvas-pin__text'], []], ['p', ['canvas-pin__meta'], []],
         ['p', ['canvas-pin__reply'], [['span', ['canvas-pin__agent'], []]]]] as JsxTree[] };
     for (const css of [
       '.canvas-pin__card { border-left: 3px solid var(--pin-color); }',
@@ -2992,161 +2990,28 @@ describe('GM r11 answer 3, r13 and r14: red marks what deletes a standalone thin
       '.canvas-pin__meta { background: color-mix(in srgb, var(--pin-color) 20%, transparent); }',
       '.canvas-pin__text { border-bottom: 1px solid #f5c518; }',
       '.canvas-pin__reply .canvas-pin__agent { background: #e8a33d; }',
-      '.canvas-pin__edge { background: #f5c518; }',
-      '.canvas-pin__edge { background: var(--pin-color); box-shadow: 0 0 8px var(--pin-color); }',
-      '.canvas-pin__edge:hover { background: var(--pin-color); }',
-      // Review 13 NIT-4: the 8-digit hex, currentColor over an amber colour,
-      // a rule that reaches the edge without naming it, a warm fallback.
+      // The 8-digit hex, currentColor over an amber colour, a warm fallback.
       '.canvas-pin__card { border: 1px solid #f5c518cc; }',
       '.canvas-pin__card { box-shadow: 0 0 0 1px #fc1c; }',
       '.canvas-pin__card { color: #f5c518; border: 1px solid currentColor; }',
       '.canvas-pin__text { color: #f5c518; border-bottom: 1px solid currentColor; }',
       '.canvas-pin__card:hover { color: #e8a33d; outline: 1px solid currentColor; }',
-      '.canvas-pin__card > span { background: var(--pin-color); }',
-      '.canvas-pin__card span:first-child { background: var(--pin-color); }',
-      '.canvas-pin__edge { background: var(--pin-color, #ff5a1f); }',
-      // Review 14 NIT-2 (fix round 16): a narrow left edge only. The presence
-      // fill stretched over the card, or widened in any state, fails.
-      '.canvas-pin__edge { position: absolute; inset: 0; background: var(--pin-color); }',
-      '.canvas-pin__edge { width: 100%; background: var(--pin-color); }',
-      '.canvas-pin__edge { right: 0; background: var(--pin-color); }',
-      '.canvas-pin__edge { width: 12px; background: var(--pin-color); }',
-      '.canvas-pin__edge:hover { width: 100%; }',
-      '.canvas-pin__edge { min-width: 40px; }',
-      '.canvas-pin__edge { padding-right: 200px; }',
-      '.canvas-pin__edge { transform: scaleX(80); }',
-      '.canvas-pin__edge { inset-inline: 0; }',
-      // Review 15 NIT 2 (fix round 18): zoom, a blur, a pseudo-element
-      // repainting the fill, a wide border the fill paints under.
-      '.canvas-pin__edge { zoom: 40; }',
-      '.canvas-pin__edge { filter: blur(30px); }',
-      '.canvas-pin__edge { filter: drop-shadow(0 0 20px var(--pin-color)); }',
-      '.canvas-pin__edge::after { content: ""; position: absolute; top: 0; left: 0; width: 200px; height: 100%; background: inherit; }',
-      '.canvas-pin__edge::before { content: ""; position: absolute; inset: 0; background: inherit; }',
-      '.canvas-pin__edge:hover::after { content: ""; width: 12rem; }',
-      '.canvas-pin__edge { border-right: 200px solid transparent; background-clip: border-box; }',
-      '.canvas-pin__edge { border-right: 200px solid transparent; }',
-      '.canvas-pin__edge { border-width: 0 10em 0 0; border-style: solid; border-color: transparent; }',
-      '.canvas-pin__edge { width: 1rem; }',
-      // Review 16 NIT 5 (fix round 19): a pseudo-element's text with no width
-      // (as wide as its glyphs), and ems on the edge's own changed font size.
-      '.canvas-pin__edge::after { content: "a label as wide as its words"; position: absolute; left: 0; }',
-      '.canvas-pin__edge::before { content: attr(data-x); }',
-      '.canvas-pin__edge { font-size: 1000px; width: 0.25em; }',
-      '.canvas-pin__edge { font-size: 500%; width: 0.25em; }',
-      '.canvas-pin__edge { font-size: larger; width: 0.25em; }',
-      '.canvas-pin__edge::after { content: ""; font-size: 400px; width: 0.5em; }',
-      // Review 17 NIT 2 (fix round 20): the font shorthand, at rest and in a
-      // state; pseudo text a width doesn't hold in (no clip, an inline box,
-      // letter-spacing); a font size the edge inherits; a flex basis or grow.
-      '.canvas-pin__edge { font: 1000px/1 serif; width: 0.25em; }',
-      '.canvas-pin:hover .canvas-pin__edge { font: 1000px serif; width: 0.25em; }',
-      '.canvas-pin__edge { font: var(--big); width: 0.25em; }',
-      '.canvas-pin__edge::after { content: "\\2588\\2588\\2588\\2588"; width: 2px; font-size: 40px; color: var(--pin-color); position: absolute; left: 0; }',
-      '.canvas-pin__edge::after { content: "."; width: 2px; letter-spacing: 400px; color: var(--pin-color); position: absolute; left: 0; }',
-      '.canvas-pin__edge::after { content: "x"; width: 2px; }',
-      '.canvas-pin__edge::after { content: "x"; width: 2px; overflow: hidden; }',
-      '.canvas-pin__card { font-size: 1000px; } .canvas-pin__edge { width: 0.25em; }',
-      '.canvas-pin__card:hover { font-size: 1000px; } .canvas-pin__edge { width: 0.25em; }',
-      '.canvas-pin { font-size: 100px; } .canvas-pin__card { font-size: 10em; } .canvas-pin__edge { width: 0.25em; }',
-      '.canvas-pin__card { font: 1000px serif; } .canvas-pin__edge { font-size: 100%; width: 0.25em; }',
-      '.canvas-pin__edge { position: static; flex: 0 0 230px; }',
-      '.canvas-pin__edge { position: static; flex: 1; }',
-      '.canvas-pin__edge { position: static; flex-basis: 230px; }',
-      '.canvas-pin__edge { position: static; flex-grow: 1; }',
-      // Review 18 NIT-4/5 (fix round 22): a font shorthand an ancestor sets
-      // that reaches the edge (the card's own 12px stops one on .canvas-pin;
-      // inherit lets it through); a glyph too big, too many, an emoji or pushed.
-      '.canvas-pin__card { font: 1000px/1 serif; } .canvas-pin__edge { width: .25em; }',
-      '.canvas-pin { font: 1000px/1 serif; } .canvas-pin__card { font-size: inherit; } .canvas-pin__edge { width: .25em; }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 5px; }',
-      '.canvas-pin__edge::before { content: "||"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "\\1F525"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; letter-spacing: 300px; }',
-      '.canvas-pin__card { font-size: 1000px; } .canvas-pin__edge::before { content: "|"; width: 3px; }',
-      // Review 19 NIT-5 (PR #200 follow-up 2): paint past the glyph (a stroke,
-      // a text-shadow offset, its own, the edge's or inherited), a glyph that
-      // is wide at any size, and a face of its own.
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; -webkit-text-stroke: 40px var(--pin-color); }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; -webkit-text-stroke-width: thick; }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; text-shadow: 300px 0 0 var(--pin-color); }',
-      '.canvas-pin__edge { text-shadow: 300px 0 0 var(--pin-color); } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge:hover { -webkit-text-stroke: 40px; } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__card { text-shadow: 300px 0 0 var(--pin-color); } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
-      '.canvas-pin:hover { -webkit-text-stroke: 40px var(--pin-color); } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "\\FDFD"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "\\1242B"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "﷽"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "𒐫"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "|\\20DD"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "\\FF37"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; font-family: "Very Wide"; }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font: 4px/1 "Very Wide", serif; }',
-      // Review 19 NIT-6 (PR #200 follow-up 2): a root size change reaches rem widths.
-      ':root { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
-      'html { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
-      ':root { font: 1000px/1 serif; } .canvas-pin__edge { width: 0.25rem; }',
-      ':root { font-size: 6250%; } .canvas-pin__edge { width: 0.25rem; }',
-      'html { font-size: 2em; } .canvas-pin__edge { width: 0.25rem; }',
-      ':root:hover { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
-      ':root { font-size: var(--big); } .canvas-pin__edge { width: 0.25rem; }',
-      ':root { font-size: 1000px; } .canvas-pin__edge { min-width: 0.25rem; width: 2px; }',
-      ':root { font-size: 1000px; } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 0.25rem; }',
-      ':root { font-size: 1000px; } .canvas-pin__edge { font-size: 0.25rem; width: 1em; }',
-      // PR #202 review 1 NIT-1: the cases its surviving mutations needed. Two
-      // root states (the larger one counts), an ancestor's rem size, a space
-      // and a Latin-1 glyph, and a generic family listed before a named face.
-      ':root { font-size: 16px; } :root:hover { font-size: 1000px; } .canvas-pin__edge { width: 0.25rem; }',
-      ':root { font-size: 1000px; } .canvas-pin__card { font-size: 1rem; } .canvas-pin__edge::before { content: "|"; width: 3px; font-size: 0.25em; }',
-      '.canvas-pin__edge::before { content: " "; width: 3px; font-size: 4px; word-spacing: 400px; }',
-      '.canvas-pin__edge::before { content: "Æ"; width: 3px; font-size: 4px; }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; font-family: serif, "Very Wide"; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).not.toEqual([]);
-    // The edge in other units, and borders the fill stops short of, stay the edge.
-    for (const css of [
-      '.canvas-pin__edge { width: 0.25rem; }',
-      '.canvas-pin__edge { width: 0.1875em; }',
-      '.canvas-pin__edge { zoom: 1; filter: none; }',
-      '.canvas-pin__edge { border-right: 200px solid transparent; background-clip: padding-box; }',
-      '.canvas-pin__edge { border-left: 1px solid transparent; }',
-      '.canvas-pin__edge { font-size: 12px; width: 0.25em; }',
-      '.canvas-pin__edge::after { content: ""; }',
-      '.canvas-pin__edge::after { content: "x"; position: absolute; width: 2px; overflow: hidden; }',
-      '.canvas-pin__edge { font: 12px/1 sans-serif; width: 0.25em; }',
-      '.canvas-pin__card { font-size: 12px; } .canvas-pin__edge { width: 0.25em; }',
-      '.canvas-pin__edge { flex: none; }',
-      '.canvas-pin__edge { flex: 0 0 3px; }',
-      // Review 18 NIT-5: one 4 px glyph, unclipped, is no wider than the edge.
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; }',
-      // An ancestor's font that the card's own 12px stops.
-      '.canvas-pin { font: 1000px/1 serif; } .canvas-pin__edge { width: .25em; }',
-      // Review 19 NIT-5/6 (PR #200 follow-up 2): no paint past the glyph, a
-      // generic family, and rems at a root size that keeps them narrow.
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font-size: 4px; text-shadow: none; -webkit-text-stroke: 0; }',
-      '.canvas-pin__edge::before { content: "|"; width: 3px; font: 4px serif; }',
-      '.canvas-pin__edge::before { content: "\\7C"; width: 3px; font-size: 4px; }',
-      ':root { font-size: 16px; } .canvas-pin__edge { width: 0.25rem; }',
-      ':root { font-size: 12px; } .canvas-pin__edge { width: 0.3rem; }',
-      'html { font-size: 50%; } .canvas-pin__edge { width: 0.5rem; }',
-      ':root { font-size: 1000px; } .canvas-pin__edge { width: 3px; }',
-      ':root { font-size: 1000px; } .canvas-pin__edge { width: 0.25em; }',
-    ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
-    // Resolved: the author's colour, with only its blue fallback.
+    // A resolved card gets no warm presence fill either.
     const resolvedDelete = { ...pinDelete, ancestors: [['div', ['canvas-pin', 'canvas-pin--resolved']], ['div', ['canvas-pin__card']]] as Array<[string, string[]]> };
-    expect(frameFindings(resolvedDelete, vars0, '.canvas-pin--resolved .canvas-pin__edge { background: var(--agent-color, #ff5a1f); }')).not.toEqual([]);
-    expect(frameFindings(resolvedDelete, vars0, '.canvas-pin--resolved .canvas-pin__edge { background: var(--agent-color, #5b9dff); }')).toEqual([]);
-    // A lookalike class beside Delete note is no status edge.
-    const lookalike = { ...pinDelete, near: [['span', ['canvas-pin__edge-glow'], []], ['div', ['canvas-pin__card-actions'], []]] as JsxTree[] };
+    expect(frameFindings(resolvedDelete, vars0, '.canvas-pin--resolved .canvas-pin__card { background: var(--agent-color, #ff5a1f); }')).not.toEqual([]);
+    // A leftover status-edge element beside Delete note is not exempt: its presence fill, border or glow fails.
+    const lookalike = { ...pinDelete, near: [['span', ['canvas-pin__edge'], []], ['div', ['canvas-pin__card-actions'], []]] as JsxTree[] };
     for (const css of [
-      '.canvas-pin__edge-glow { background: var(--pin-color); }',
+      '.canvas-pin__edge { background: var(--pin-color); }',
+      '.canvas-pin__edge { background: var(--agent-color, #ff5a1f); }',
+      '.canvas-pin__edge { border: 3px solid var(--pin-color); }',
+      '.canvas-pin__card > span { background: var(--pin-color); }',
       '.canvas-pin__card-actions { background: var(--pin-color); }',
     ]) expect(frameFindings(lookalike, vars0, css), css).not.toEqual([]);
     // The Delete row itself is never tinted: a presence fill on it is caught as its own colour.
     expect(cascadeFindings(pinDelete, vars0, '.canvas-pin__delete:hover { background: var(--pin-color); }')).not.toEqual([]);
     for (const css of [
-      '.canvas-pin__edge { --pin-color: #ff5a1f; background: var(--pin-color); }',
-      '.canvas-pin--resolved .canvas-pin__edge { background: var(--agent-color, #5b9dff); }',
-      '.canvas-pin__card .canvas-pin__edge { background: var(--pin-color); }',
       '.canvas-pin__card { color: #e8e8e8; border: 1px solid currentColor; }',
     ]) expect(frameFindings(pinDelete, vars0, css), css).toEqual([]);
     for (const css of [

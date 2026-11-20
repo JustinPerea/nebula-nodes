@@ -1081,13 +1081,23 @@ body.app-slava-restraint .commons-thread {
   gap: 8px;
 }
 
+/* A quoted comment sits on a quiet fill, not a bar down its edge (design).
+   The quoted text is --sr-ink-light on this fill over the detail panel:
+   5.5:1, above the 4.5:1 floor. */
 body.app-slava-restraint .commons-comment {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
-  border-left: 2px solid var(--sr-edge-strong);
-  padding-left: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.04);
+}
+
+/* The quoted comment's date reads at the same ink as its text (design), so it
+   holds 4.5:1 on the fill; dates elsewhere keep --sr-ink-meta. */
+body.app-slava-restraint .commons-comment .commons-meta {
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .commons-comment__actor {

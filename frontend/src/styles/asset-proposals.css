@@ -1,6 +1,6 @@
 /* An agent's proposal for a project or a board (components/proposals/
  * AssetProposalStrip.tsx): the canvas decision bar's language (the agent's
- * colour on the left edge, its dot and name, a quiet "asks" line) at the
+ * dot and name in the agent's colour, a quiet "asks" line) at the
  * size of a card or a Studio field. It springs in on the agent log's spring
  * (a short, slightly underdamped one) and fades out in 220ms
  * (ASSET_PROPOSAL_EXIT_MS); no motion under reduced motion. */
@@ -15,9 +15,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 10px 10px 12px;
+  padding: 10px;
   border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.12));
-  border-left: 3px solid var(--agent-color);
   border-radius: calc(var(--sr-node-media-radius, 14px) - 5px);
   background: var(--sr-surface-control, rgb(255 255 255 / 0.04));
   color: var(--sr-ink, rgb(255 255 255 / 0.92));
@@ -32,23 +31,14 @@
   animation: asset-proposal-out 220ms var(--sr-motion-handle, cubic-bezier(0.32, 0.72, 0, 1)) forwards;
 }
 
-/* GM r34-r35 (PR #200 fix rounds 23-24): a proposal known only from its
- * Update while this tab isn't connected as the person. The dot and the name
- * keep the agent's identity colour (--agent-color, set from the Update, as on
- * the real card); the card is neutral: no left status edge, no accent fill,
- * no buttons. The real card replaces it in place without springing in
- * (--in-place).
- * GM, PR #200 follow-up 2 (review 20 NIT-6): the swap moves nothing inside
- * the box either. The real card's content starts 3px edge + 12px padding =
- * 15px in; the placeholder's 1px edge + 14px padding = 15px too. The top
- * (1px edge + 10px padding) and the right side are already the same, so the
- * dot, the name and the header sit in the same place on both cards. */
-.asset-proposal--held {
-  border-left-width: 1px;
-  border-left-color: var(--sr-edge-strong, rgb(255 255 255 / 0.12));
-  padding-left: 14px;
-}
-
+/* A proposal known only from its Update while this tab isn't connected as the
+ * person (.asset-proposal--held). The dot and the name keep the agent's
+ * identity colour (--agent-color, set from the Update, as on the real card);
+ * the card is neutral: no accent fill, no buttons. The real card replaces it
+ * in place without springing in (--in-place). Neither card has a coloured
+ * edge (design), so both share the base box (1px edge, 10px padding) and the
+ * swap moves nothing inside it. The content starts 11px in on both, and 10px
+ * above and to the right as before. */
 .asset-proposal__held-line {
   margin: 0;
   color: var(--sr-ink-light, rgb(255 255 255 / 0.55));

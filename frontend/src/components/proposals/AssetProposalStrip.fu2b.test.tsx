@@ -3,7 +3,7 @@
 // - NIT-2: a ref's `changes` is 1 to 999; 0 reads as absent ("a change").
 // - A Commons Update with no count reads "a change", never "0 changes".
 // - Focus with two real cards goes to the one whose placeholder had it.
-// - No other padding on the placeholder can undo its 14px left.
+// - No rule of the placeholder's own sets padding, so it keeps the real card's box.
 // - GM, Q1: an Update that falls back to the agent's older ask changes in
 //   place: the corner's count and its arrival cards don't move for the swap.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,8 +88,8 @@ describe('review 1 NIT-1: focus with two real cards', () => {
   });
 });
 
-describe('review 1 NIT-1: nothing else sets the placeholder\'s horizontal padding', () => {
-  it('in every stylesheet, a rule naming .asset-proposal--held sets only its padding-left, in its own rule', () => {
+describe('review 1 NIT-1: nothing sets the placeholder\'s padding', () => {
+  it('in every stylesheet, no rule naming .asset-proposal--held sets padding, so the swap moves nothing', () => {
     const dir = resolve(process.cwd(), 'src/styles');
     const found: string[] = [];
     for (const file of readdirSync(dir).filter((name) => name.endsWith('.css'))) {
@@ -103,7 +103,7 @@ describe('review 1 NIT-1: nothing else sets the placeholder\'s horizontal paddin
         }
       }
     }
-    expect(found).toEqual(['asset-proposals.css: .asset-proposal--held { padding-left }']);
+    expect(found).toEqual([]);
   });
 });
 
