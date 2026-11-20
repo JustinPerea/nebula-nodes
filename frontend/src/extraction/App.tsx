@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ApiError, createApi, type Api, type RecordDetail } from './api'
+import { acceptDetail } from './detail'
 import { DropArea } from './DropArea'
 import { recordCount } from './format'
 import { RecordList } from './RecordList'
@@ -66,6 +67,16 @@ function Page({ token }: { token: string }) {
   const [dragging, setDragging] = useState(false)
   const opening = useRef(0)
   const queue = useRef<Promise<void>>(Promise.resolve())
+  const selectedRef = useRef<string | null>(null)
+  useEffect(() => {
+    selectedRef.current = selectedId
+  }, [selectedId])
+
+  // A read or a correction can finish after the person has opened another
+  // record. Its answer is for a record that isn't shown, so it changes nothing.
+  const changeDetail = useCallback((next: RecordDetail) => {
+    setDetail((current) => acceptDetail(current, next, selectedRef.current))
+  }, [])
 
   const open = useCallback(async (id: string, inFolder: string) => {
     const mine = ++opening.current
@@ -233,7 +244,7 @@ function Page({ token }: { token: string }) {
           {!folder ? (
             <p className="ex-quiet ex-pad">Choose a records folder first.</p>
           ) : shown ? (
-            <RecordView key={shown.record.id} api={api} folder={folder} detail={shown} onClose={close} onChange={setDetail} onNotice={setNotice} />
+            <RecordView key={shown.record.id} api={api} folder={folder} detail={shown} onClose={close} onChange={changeDetail} onNotice={setNotice} />
           ) : selectedId ? null : (
             <DropArea active={dragging} onFiles={(files) => addFiles(files, 'file')} />
           )}

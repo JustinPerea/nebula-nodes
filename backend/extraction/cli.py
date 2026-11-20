@@ -37,12 +37,15 @@ def _measure(args: argparse.Namespace) -> int:
     data, real = _read_image(args.image)
     item = intake(data, name=os.path.basename(real), kind="file", path=real)
     record = rec.build_record(item)
-    saved = store.save(record, rendering_png(item.image), item.data, item.ext, args.out, replace=args.replace)
+    saved = store.save(record, rendering_png(item.image), item.data, item.ext, args.out, replace=args.replace,
+                       image=item.image)
     if args.json:
         print(json.dumps(saved, indent=2, ensure_ascii=False))
     else:
         note = "already there, kept" if saved["existed"] and not args.replace else ("replaced" if saved["existed"] else "saved")
         print(f"{_line(saved['record'])}\n{note}: {saved['dir']}")
+        for show in saved.get("dropped_shows") or []:
+            print(f"dropped show {show['id']} ({show['why']}): {show['statement']}")
     return 0
 
 

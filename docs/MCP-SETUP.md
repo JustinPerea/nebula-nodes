@@ -765,8 +765,10 @@ The server exposes these tools for building and running (see
   the palette with shares and accents, value range, aspect, lightness, saturation
   and a perceptual hash, all set by code, with status `proposal`. The id comes from
   the file's bytes, so measuring the same image again keeps the existing record and
-  its corrections (`existed: true`); `replace=True` measures again and still keeps
-  them. The folder must already exist and can't be Nebula's state folder or its
+  its corrections (`existed: true`). `replace=True` measures again: the colors,
+  value range, size and hash are new and the reading's regions are measured again;
+  the reading, every show, read requests, corrections and brand are kept. A show
+  whose evidence no longer exists is dropped and listed in `dropped_shows`. The folder must already exist and can't be Nebula's state folder or its
   source tree; video and other file types are refused. `extraction_list(folder)`
   lists the records, and `extraction_show(record)` (a record's folder or its
   `record.json`) returns the record and `effective`, the same with its corrections

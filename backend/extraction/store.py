@@ -236,14 +236,17 @@ def summary(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def save(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, source_ext: str,
-         folder: str | os.PathLike[str], *, replace: bool = False) -> dict[str, Any]:
+         folder: str | os.PathLike[str], *, replace: bool = False, image: Any = None) -> dict[str, Any]:
     """Write a record to ``<folder>/<id>/``.
 
-    Saving an id that is already there keeps the existing record and its
-    corrections and returns it with ``existed: True``. ``replace=True``
-    writes the new measurement instead, keeping the corrections.
+    Saving an id that is already there keeps the existing record and returns it
+    with ``existed: True``. ``replace=True`` measures again: the rendering, the
+    source details and ``structure.measured`` are new, and everything else is
+    kept (``record.carry_over``): the reading, every show, read requests,
+    corrections, brand. With ``image`` the reading's regions are measured again
+    too. A show whose evidence no longer exists is dropped and listed.
 
-    Returns ``{"record", "dir", "existed"}``.
+    Returns ``{"record", "dir", "existed", "dropped_shows"}``.
     """
     rec.validate(record)
     if source_ext not in SOURCE_EXTS:
@@ -259,12 +262,19 @@ def save(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, sour
         if os.path.lexists(os.path.join(directory, "record.json")):
             existing = _read_record_file(directory)
     if existing is not None and not replace:
-        return {"record": existing, "dir": directory, "existed": True}
+        return {"record": existing, "dir": directory, "existed": True, "dropped_shows": []}
     to_write = copy.deepcopy(record)
+    dropped: list[dict[str, Any]] = []
     if existing is not None:
         if existing["status"] != "proposal":
             raise StoreRefused("That record is approved, so it won't be replaced.")
-        to_write["corrections"] = existing["corrections"]
+        remeasure = None
+        if image is not None:
+            from extraction import reader
+
+            def remeasure(regions: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+                return reader.measure_regions(image, regions), reader.region_gaps(regions)
+        to_write, dropped = rec.carry_over(record, existing, remeasure=remeasure)
     if not os.path.isdir(directory):
         os.mkdir(directory)
     _contained(directory, real)
@@ -273,7 +283,7 @@ def save(record: dict[str, Any], rendering_png: bytes, source_bytes: bytes, sour
     _atomic_write(directory, "rendering.png", rendering_png)
     _atomic_write(directory, f"source.{source_ext}", source_bytes)
     _atomic_write(directory, "record.json", _dump(to_write))
-    return {"record": to_write, "dir": directory, "existed": existing is not None}
+    return {"record": to_write, "dir": directory, "existed": existing is not None, "dropped_shows": dropped}
 
 
 def write(target: str | os.PathLike[str], record: dict[str, Any]) -> None:

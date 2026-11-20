@@ -365,6 +365,61 @@ def add_read_request(record: dict[str, Any], reason: Any, *, clock: Clock | None
     return updated
 
 
+# What a replace measures again from the image. Everything else in the old
+# record is kept as it was: the reading, every show, the read requests, the
+# corrections, approval fields, brand and any field added later. The id is the
+# image's hash, so the image is the same one and its reading still describes it.
+# tests/test_extraction_replace.py fails when a new field isn't kept or listed here.
+REPLACE_RECOMPUTES_TOP = frozenset({"rendering", "source"})
+REPLACE_RECOMPUTES_STRUCTURE = frozenset({"measured"})
+# Under structure.measured, these come from the reading's boxes, so they are
+# kept from the old record unless the caller measures them again.
+REGION_MEASURES = ("region_measures", "region_gaps")
+
+
+def carry_over(new: dict[str, Any], old: dict[str, Any], *,
+               remeasure: Callable[[dict[str, Any]], tuple[dict[str, Any], list[dict[str, Any]]]] | None = None,
+               ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """``new``'s fresh measurement with everything else kept from ``old``.
+
+    ``remeasure(regions)`` measures the reading's regions again (the image's
+    crops and the gaps between boxes); without it the old region measures stay.
+    A show keeps only evidence ids that still exist (palette entries can change
+    with the measurement); a show left with none is dropped and returned, so the
+    caller can say so. Returns ``(record, dropped_shows)``.
+    """
+    if old["id"] != new["id"]:
+        raise RecordInvalid("A replace keeps the same image, so the ids must match.")
+    out = copy.deepcopy(old)
+    for key in REPLACE_RECOMPUTES_TOP:
+        out[key] = copy.deepcopy(new[key])
+    for key in REPLACE_RECOMPUTES_STRUCTURE:
+        out["structure"][key] = copy.deepcopy(new["structure"][key])
+    measured = out["structure"]["measured"]
+    old_measured = old["structure"].get("measured") or {}
+    read = out["structure"].get("read")
+    if read and remeasure is not None:
+        measured["region_measures"], measured["region_gaps"] = remeasure(read.get("regions") or {})
+    else:
+        for key in REGION_MEASURES:
+            if key in old_measured:
+                measured[key] = copy.deepcopy(old_measured[key])
+    known = evidence_ids(out)
+    dropped: list[dict[str, Any]] = []
+    for key, show in list((out.get("shows") or {}).items()):
+        if not isinstance(show, dict):
+            continue
+        kept = [e for e in show.get("evidence") or [] if e in known]
+        if kept:
+            show["evidence"] = kept
+        else:
+            dropped.append({"id": key, "statement": show.get("statement"),
+                            "why": "none of its evidence exists after measuring again"})
+            del out["shows"][key]
+    validate(out)
+    return out, dropped
+
+
 def effective(record: dict[str, Any]) -> dict[str, Any]:
     """A deep copy with ``corrections`` applied in order through ``commons.effective.apply_op``.
 
@@ -384,6 +439,18 @@ def effective(record: dict[str, Any]) -> dict[str, Any]:
             skipped.append({"path": item.get("path"), "error": str(exc)})
     # An entry set to null is a removal; the shows dict has only live items.
     view["shows"] = {k: v for k, v in (view.get("shows") or {}).items() if v is not None}
+    # A show cites only evidence that exists now: measuring again can change the
+    # palette. A show left with none is left out and listed with the reason.
+    known = evidence_ids(view)
+    for key, show in list(view["shows"].items()):
+        if not isinstance(show, dict) or not isinstance(show.get("evidence"), list):
+            continue
+        kept = [e for e in show["evidence"] if e in known]
+        if kept:
+            show["evidence"] = kept
+        else:
+            del view["shows"][key]
+            skipped.append({"path": f"shows.{key}", "error": "none of its evidence exists now"})
     if skipped:
         view["corrections_skipped"] = skipped
     return view

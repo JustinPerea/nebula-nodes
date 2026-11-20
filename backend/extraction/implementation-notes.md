@@ -159,3 +159,20 @@ land on the drawn image; `validate_read` returns `(read, shows)` and takes `mode
 a fully transparent image is refused before sending (as Commons does); the source section's "Read" row is now
 "Added" so it can't be taken for the Claude read. Not done: no Approve button (approval is the Viewer's), no
 editing of spacing, reading fields or evidence on the page, no smaller thumbnail file.
+
+## Replace keeps everything it doesn't measure (review fix)
+
+`save(replace=True)` used to write a fresh record and carry over only the corrections, so it dropped the reading,
+region measures, every show and pending read requests. Now `record.carry_over` keeps the old record and replaces only
+what measuring gives again: `rendering`, `source` and `structure.measured` (`REPLACE_RECOMPUTES_TOP` and
+`REPLACE_RECOMPUTES_STRUCTURE`). With the image passed in, the reading's regions are measured again; without it the
+old region measures stay. A show keeps only evidence ids that still exist; a show left with none is dropped and
+returned as `dropped_shows` (the CLI prints them). `effective()` applies the same evidence rule to shows that
+corrections added, listing a dropped one under `corrections_skipped`. `test_extraction_replace.py` is structural:
+every top-level and structure key of a fully populated record must survive a replace unless it is on the recompute
+lists, so a new field fails it until someone decides.
+
+## A late answer doesn't replace the record on screen (review fix)
+
+A read or correction can finish after the person opened another record. `App` passes `changeDetail`, which takes an
+answer only when its record is still the selected one (`detail.ts`); `lateAnswer.test.tsx` holds it.
