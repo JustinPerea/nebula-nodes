@@ -1,16 +1,16 @@
-"""PR #203 round 12: the settings 409s name the file, a value that holds no
+"""PR #203: the settings 409s name the file, a value that holds no
 key is replaced, unreadable keys read as none for every reader, one provider
 tag in the CLI line, and each surface's words from the one table.
 
-- GM r22 item 3: each 409 line names the settings file by its full path.
-- GM r22 item 4: person lines say "Krea API key", as the Settings row does.
-- GM r22 item 5: "1 free run (fal)" beside "1 paid run (google)".
-- GM r23 and review 11, LOW-3: a value that holds nothing is replaced.
-- Review 11, HIGH-1 (option a): unreadable keys read as none, for the spend
+- Design: each 409 line names the settings file by its full path.
+- Design: person lines say "Krea API key", as the Settings row does.
+- Design: "1 free run (fal)" beside "1 paid run (google)".
+- Design: a value that holds nothing is replaced.
+- Unreadable keys read as none, for the spend
   gate too, and no handler falls back to a token in the environment.
-- Review 11, LOW-1: an older CLI's `?via=cli` reads as the CLI.
-- Review 11, LOW-2 and GM r23: "Settings > Providers > Krea".
-- Review 11, NIT-1 to NIT-8 and the surviving mutants G5, G6, S4, S7, T5.
+- An older CLI's `?via=cli` reads as the CLI.
+- Design: "Settings > Providers > Krea".
+- And the surviving mutants G5, G6, S4, S7, T5.
 """
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def _person() -> TestClient:
     return TestClient(main.app, headers=PERSON)
 
 
-# -- the 409 lines name the file by its full path (GM r22 item 3) ----------------------------
+# -- the 409 lines name the file by its full path (design) ----------------------------
 
 
 def test_the_keys_refusal_names_the_settings_file_by_its_full_path(sockets):  # noqa: F811
@@ -91,7 +91,7 @@ def test_the_path_is_the_one_nebula_settings_path_names(tmp_path):
     assert relative == str((BACKEND / "rel" / "s.json").resolve()) and os.path.isabs(relative)
 
 
-# -- a value that holds nothing is replaced (GM r23; review 11, LOW-3) -----------------------
+# -- a value that holds nothing is replaced (design) -----------------------
 
 
 @pytest.mark.parametrize("empty", [None, [], "", False, 0], ids=["null", "list", "text", "false", "zero"])
@@ -133,7 +133,7 @@ def test_holding_nothing_is_only_a_value_with_no_key_in_it():
     assert not settings.saved_keys_hold_nothing({}) and not settings.saved_keys_hold_nothing([None])
 
 
-# -- masked values while the keys are unreadable (review 11, NIT-8; mutant T5) ---------------
+# -- masked values while the keys are unreadable (mutant T5) ---------------
 
 
 def test_a_save_that_echoes_masked_keys_writes_no_key_and_keeps_them(sockets):  # noqa: F811
@@ -147,7 +147,7 @@ def test_a_save_that_echoes_masked_keys_writes_no_key_and_keeps_them(sockets):  
     assert on_disk["apiKeys"] == "sk-kept-2222" and on_disk["favorites"] == ["x"]
 
 
-# -- desktop mode writes {} over the file's keys, on purpose (review 11, NIT-5) --------------
+# -- desktop mode writes {} over the file's keys, on purpose --------------
 
 
 def test_desktop_mode_writes_no_keys_to_the_file_readable_or_not(sockets, monkeypatch):  # noqa: F811
@@ -160,7 +160,7 @@ def test_desktop_mode_writes_no_keys_to_the_file_readable_or_not(sockets, monkey
         assert "fal-injected" not in sockets.read_text()
 
 
-# -- unreadable keys read as none, for the gate too (review 11, HIGH-1, option a) ------------
+# -- unreadable keys read as none, for the gate too ------------
 
 
 def test_unreadable_keys_read_as_none_so_an_agent_runs_idol_keyless(sockets, monkeypatch):  # noqa: F811
@@ -212,7 +212,7 @@ def test_no_backend_module_reads_a_provider_key_from_the_environment():
     assert "HF_TOKEN" in CREDENTIAL_PROVIDERS
 
 
-# -- an older CLI's ?via=cli (review 11, LOW-1) ----------------------------------------------
+# -- an older CLI's ?via=cli ----------------------------------------------
 
 
 @pytest.mark.parametrize("headers,params,cli", [
@@ -236,7 +236,7 @@ def test_start_here_reads_an_old_clis_query_as_the_cli(start):  # noqa: F811
     assert "`nebula " not in mcp.text
 
 
-# -- start_here's providers note in CLI words (review 11, NIT-7; mutant S7) ------------------
+# -- start_here's providers note in CLI words (mutant S7) ------------------
 
 
 def test_start_heres_providers_note_names_the_cli_commands():
@@ -261,7 +261,7 @@ def test_cli_words_rewords_every_named_call(name):
     assert agent_words.cli_words(f"see {mcp} first") == f"see {cli} first"
 
 
-# -- cost_class reads key billing before the Krea plan (review 11, NIT-1; mutant G5) ---------
+# -- cost_class reads key billing before the Krea plan (mutant G5) ---------
 
 
 def test_a_key_billing_route_on_the_krea_plan_is_counted_by_its_key():
@@ -277,7 +277,7 @@ def test_a_key_billing_route_on_the_krea_plan_is_counted_by_its_key():
         assert model_pricing.cost_class(definition, {}, keys) == billing != model_pricing.PLAN
 
 
-# -- the class ratchet sees a second may_bill reader (review 11, NIT-2; mutant G6) -----------
+# -- the class ratchet sees a second may_bill reader (mutant G6) -----------
 
 
 def test_nothing_outside_the_tests_reads_may_bill(tmp_path):
@@ -287,7 +287,7 @@ def test_nothing_outside_the_tests_reads_may_bill(tmp_path):
     assert class_part_reads(tmp_path) == ["gate.py:2 may_bill in gate"]
 
 
-# -- `nebula load` in the CLI's words, from the one table (review 11, NIT-3) -----------------
+# -- `nebula load` in the CLI's words, from the one table -----------------
 
 
 def test_the_load_notes_name_calls_from_the_one_table():
@@ -324,7 +324,7 @@ def test_nebula_load_sends_the_clis_surface(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == "Loaded."
 
 
-# -- an unknown kind is never counted free (review 11, NIT-4) --------------------------------
+# -- an unknown kind is never counted free --------------------------------
 
 
 def _entry(kind, provider=None, label=None):
@@ -349,7 +349,7 @@ def test_propose_change_reads_an_unknown_kind_as_paid():
     assert "Read a `kind` or a `reason` kind you don't know as paid with no listed price." in description
 
 
-# -- one provider tag in the CLI line (GM r22 item 5) ----------------------------------------
+# -- one provider tag in the CLI line (design) ----------------------------------------
 
 
 def test_a_free_run_is_tagged_as_a_paid_run_is():
@@ -378,11 +378,11 @@ def test_an_idol_run_without_a_token_is_tagged_by_its_route():
     entry = canvas_proposals.cost_for(REGISTRY["speridlabs-idol"], {}, REGISTRY, {})
     assert (entry["kind"], entry["provider"], entry["label"]) == ("free", "speridlabs", "free · Hugging Face")
     cost = canvas_proposals.summarize_cost([{"ref": "+i", "nodeId": None, **entry}], up_to=False)
-    # Where it runs (GM r24 item 1): tests/test_idol_round13.py.
+    # Where it runs (design): tests/test_idol_round13.py.
     assert _cost_line(cost) == "1 free run (huggingface)"
 
 
-# -- "Krea API key" in person lines, as the row says (GM r22 item 4) -------------------------
+# -- "Krea API key" in person lines, as the row says (design) -------------------------
 
 
 def test_person_lines_name_the_krea_key_as_its_row_does():
@@ -393,7 +393,7 @@ def test_person_lines_name_the_krea_key_as_its_row_does():
     assert fixtures["keyNames"]["KREA_API_TOKEN"] == ["Krea", "API key"]
 
 
-# -- the Krea place name (review 11, LOW-2; GM r23) ------------------------------------------
+# -- the Krea place name (design) ------------------------------------------
 
 
 def test_every_agent_line_names_the_providers_tab_for_krea():
@@ -402,7 +402,7 @@ def test_every_agent_line_names_the_providers_tab_for_krea():
     assert "(Settings > Providers > Krea)" in (mcp_server.krea_discovery_tools.__doc__ or "")
 
 
-# -- the writing tab's id rides back on the signal (review 11, copy MEDIUM-1) ----------------
+# -- the writing tab's id rides back on the signal ----------------
 
 
 def test_the_signal_names_the_tab_that_wrote(sockets, monkeypatch):  # noqa: F811

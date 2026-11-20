@@ -1,16 +1,16 @@
-"""The Message box thread, round 5b (review 4 of #223/#225; the push ledger; GM r108, r110, r112).
+"""The Message box thread, (#223/#225; the push ledger; design).
 
 - The push ledger (services/push_ledger.py; coordinator decision, the
   numbered tests): the listener reports each push (messageIds and
   questionIds), and a reply answers its session's OLDEST open push, in that
   push's project, marked once the row is saved.
-- GM r112.1: one "replied in" Update per agent and project while unread,
-  updated in place with a count; GM r108 d: “Untitled”.
-- GM r108 b, review 4 LOW-3: a reply for another project's thread ignores
+- Design: one "replied in" Update per agent and project while unread,
+  updated in place with a count; design: “Untitled”.
+- Design: a reply for another project's thread ignores
   its node, flies no cursor, and says so.
-- GM r110: the no-project refusal points at open_project, in the refusal,
+- Design: the no-project refusal points at open_project, in the refusal,
   the tool's docstring, MCP-SETUP and SKILL.md.
-- Review 4 LOW-4: the inbox, accepted and held routes answer only the
+- The inbox, accepted and held routes answer only the
   listener's own process (its nonce). And a message sent before a Nebula
   restart is still read after it (matched by agent and session).
 """
@@ -126,7 +126,7 @@ def test_a_retried_report_records_no_second_push(thread):
 
 
 def test_4_a_shell_reply_to_an_answer_only_push_names_its_question_set(thread):
-    # Review 4 live MEDIUM-4: a session with no message asks; the person
+    # A session with no message asks; the person
     # picks; `nebula reply` from its shell (the same session) answers it.
     _listen(thread, SESSION_A)
     set_id = _ask_answered(thread)
@@ -164,7 +164,7 @@ def test_5_a_coast_message_then_a_harbor_answer_the_second_reply_lands_in_harbor
 
 
 def test_6_an_answered_message_then_ten_replies_go_to_the_open_project_with_no_update(thread):
-    # Review 4 MEDIUM-1 (34 Updates in 60 s): only a reply that answers a
+    # 34 Updates in 60 s: only a reply that answers a
     # push goes elsewhere.
     coast = thread.project_id
     forest = _new_project(thread, "Forest")
@@ -233,7 +233,7 @@ def test_11_the_cap_mirrors_the_listeners_span():
     clock.now = start + 900.0  # one period (550 s apart): the t=0 push is still pickable
     assert ledger.peek("app:a", "s").reply_to() == "m0"
     clock.now = start + 1200.0  # 650 s after the last push: past the span, so the listener is told of none,
-    assert ledger.open_pushes("app:a", "s") == []  # but a late reply (round 5c, LOW-1) still answers m0
+    assert ledger.open_pushes("app:a", "s") == []  # but a late reply still answers m0
     assert ledger.peek("app:a", "s").reply_to() == "m0"
     # Past the cap between two pushes: only the latest period is pickable.
     clock.now = start + 1900.0
@@ -299,7 +299,7 @@ def test_16_a_cross_project_reply_with_a_node_is_saved_without_it_flies_nothing_
     assert answer.json()["projectId"] == coast and _replies_in(thread, coast)[0]["nodeId"] is None
     assert answer.json()["note"] == ("Nebula posted this reply in “Coast” but didn’t point at n3 because that "
                                      "project isn’t open, so your cursor stayed where it was.")
-    assert len([m for m in thread.sent if m.get("type") == "agentPresence"]) == before  # GM r108 b
+    assert len([m for m in thread.sent if m.get("type") == "agentPresence"]) == before  # Design
 
 
 def test_a_node_on_the_open_canvas_is_still_checked_and_points(thread):
@@ -442,7 +442,7 @@ def test_14_an_unreported_push_is_ended_by_the_tool_once_never_by_a_shell_reply(
 
 
 def test_the_first_good_beat_marks_the_inbox_due(thread):
-    # GM r112.5: a message sent while the successor waited is read once it registers.
+    # Design: a message sent while the successor waited is read once it registers.
     state = mcp_channel.ChannelState(now=0.0)
     beat = thread.client.post("/api/agent/channel", headers=SESSION_A,
                               json={"state": "listening", "nonce": "process-one-0001"}).json()
@@ -450,7 +450,7 @@ def test_the_first_good_beat_marks_the_inbox_due(thread):
     assert state.beat_answered(beat, 2.0) is False and not state.inbox_to_fetch()
 
 
-# -- review 4 LOW-4: the nonce binds the inbox, accepted and held routes -------------------------
+# -- The nonce binds the inbox, accepted and held routes -------------------------
 
 def test_only_the_process_holding_the_session_reads_or_marks_its_messages(thread):
     one = thread.client.post("/api/agent/channel", headers=SESSION_A,
@@ -482,10 +482,10 @@ def test_the_listener_sends_its_nonce_on_its_inbox_accepted_and_held_calls():
     assert '"questionIds": question_ids' in source
 
 
-# -- review 4: a message sent before a Nebula restart is still read after it ----------------------
+# -- A message sent before a Nebula restart is still read after it ----------------------
 
 def test_a_message_sent_before_a_restart_is_read_after_it(thread, monkeypatch):
-    # Probe (review 4, "outside the design"): the inbox matched to.listenerId,
+    # Probe ("outside the design"): the inbox matched to.listenerId,
     # an HMAC under a secret each backend process makes, so after a restart
     # the listener's new id never matched a message "Sent" before it.
     old = _listen(thread, SESSION_A)
@@ -521,7 +521,7 @@ def test_a_revoked_agents_messages_and_pushes_go_even_after_a_restart(thread, mo
     assert thread.ledger.peek("app:claude1", "sess-a") is None
 
 
-# -- GM r112.1: one "replied in" Update per agent and project while unread -------------------------
+# -- Design: one "replied in" Update per agent and project while unread -------------------------
 
 def _away_reply(thread, a, harbor, text):
     _open(thread, thread.project_id)
@@ -601,7 +601,7 @@ def test_an_unnamed_project_reads_untitled(thread):
         "Claude Code replied in “Untitled”."]
 
 
-# -- GM r110: the no-project refusal points at open_project --------------------------------------
+# -- Design: the no-project refusal points at open_project --------------------------------------
 
 NO_PROJECT = ("Nebula couldn’t post this reply because no project is open. Open one with open_project, then reply "
               "again.")
@@ -638,7 +638,7 @@ def test_the_agent_docs_never_tell_an_agent_to_ask_the_person_to_open_a_project(
 
 
 def test_mcp_setup_lists_every_token_file_clause():
-    # Review 4 parity NIT-1: the symlink clause was missing from the list.
+    # The symlink clause was missing from the list.
     source = (ROOT / "backend/services/agent_token_file.py").read_text()
     clauses = set(re.findall(r'"(points to [^"]+)"', source))
     assert "points to a file Nebula can’t open" in clauses

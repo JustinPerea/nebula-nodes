@@ -1,4 +1,4 @@
-"""Q118 (Justin, 2026-10-23, option a): "Let Load graph open bigger .nebula
+"""Justin, 2026-10-23, option a: "Let Load graph open bigger .nebula
 files (up to the 512 MiB it already allows for a bundle) as a new project. A
 project over 16 MiB still can't be saved, so the canvas says so, and you
 remove what you don't need until it saves."
@@ -250,7 +250,7 @@ def test_the_persons_own_load_graph_and_edits_are_never_refused_for_size(api):
 
 
 def test_load_graph_can_ask_to_be_refused_when_the_file_is_over_the_limit_on_its_own(api):
-    # Q120 (Justin): "Files over the limit open as a new project named after
+    # Justin: "Files over the limit open as a new project named after
     # the file. The open project is left as it was." The person's Load graph
     # first asks the import to refuse a graph that would be over the limit as
     # a project of its own, measured as the save check measures it; on that
@@ -292,7 +292,7 @@ def test_load_graph_can_ask_to_be_refused_when_the_file_is_over_the_limit_on_its
 def test_a_tab_without_the_persons_token_is_asked_to_reconnect_not_shown_the_agents_text(api):
     # A canvas tab whose person token is from before Nebula restarted carries
     # no agent marker and no current token: the person gate's refusal, so the
-    # tab shows GM's reconnect line (the detail stays behind Details), not a
+    # tab shows design's reconnect line (the detail stays behind Details), not a
     # pause or the agents' text as its reason. Reconnected, it goes through.
     node = api.graph.add_node("text-input", {"value": "short"})
     imported = api.client.post("/api/graph/import", json={
@@ -433,7 +433,7 @@ def test_each_rows_size_is_the_panels_nearest_tenth(api):
 
 
 def test_rows_under_a_tenth_of_a_mb_fold_into_the_smaller_line(api):
-    """GM - Design (#182): "Rows under 0.1 MB: don't show them. "0.0 MB"
+    """Design (#182): "Rows under 0.1 MB: don't show them. "0.0 MB"
     tells nobody anything. Fold them into the "{n} smaller items" line, and
     show that line even if all the rows would be tiny." The panel's count for
     the same rows (shared listedRows)."""

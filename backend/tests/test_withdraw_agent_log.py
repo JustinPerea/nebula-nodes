@@ -1,4 +1,4 @@
-"""GM, PR #202 r2: an agent's withdrawal of an asset proposal reaches the
+"""Design, PR #202: an agent's withdrawal of an asset proposal reaches the
 Agent log on every route (HTTP, MCP, CLI), mirroring the ask's own line:
 "Asks to X (decide …)" → "Withdrew its request to X", with the same X from
 the same helper, under the agent's name, as the ask line."""
@@ -103,7 +103,7 @@ def test_a_refused_withdrawal_logs_nothing(api):
 
 
 def test_withdrawing_twice_logs_one_withdrawal(api):
-    """PR #202 review 3 NIT-2: the line comes after the close, so a second
+    """PR #202: the line comes after the close, so a second
     withdraw (409, already closed) logs nothing; a line moved above the
     close would log twice."""
     _pin(api, A, api.person)

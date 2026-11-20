@@ -1,8 +1,8 @@
-"""Question sets, final pass (Q125 item 1, same PR, 2026-10-24).
+"""Question sets, final pass (same PR, 2026-10-24).
 
 Two rules on the set's Update, the person's only way into an open set:
 
-- GM - Design's copy: once the set closes, the line is past tense for every
+- Design's copy: once the set closes, the line is past tense for every
   closed outcome ("{agent} asked a question." / "{agent} asked {n}
   questions."); while it is open it stays "{agent} has a question." / "{agent}
   has {n} questions.". It changes on the stored Update, so the person, an
@@ -27,7 +27,7 @@ ONE = {"questions": [{"text": "Square or wide?", "options": ["Square", "Wide"]}]
 PICK_WIDE = {"answers": [{"questionId": "q1", "choices": ["Wide"]}]}
 
 
-# -- past tense once closed (GM - Design) ------------------------------------------------
+# -- past tense once closed (design) ------------------------------------------------
 
 def test_closed_update_text_is_past_tense():
     assert closed_update_text("Has a question") == "Asked a question"

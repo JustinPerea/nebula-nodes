@@ -78,7 +78,7 @@ def api(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)
     monkeypatch.setattr(main_module.manager, "broadcast_browser", ignore)
     # No canvas is open unless a test opens one: the arrange line reads
-    # manager.canvas_open() (PR #203 round 13; a socket another test left
+    # manager.canvas_open() (PR #203; a socket another test left
     # registered once made it say a canvas was open).
     monkeypatch.setattr(main_module.manager, "active_connections", [])
     monkeypatch.setattr(main_module.manager, "browser_connections", set())
@@ -411,7 +411,7 @@ def test_nebula_undo_lists_what_it_left_as_is(api):
 
 
 def test_nebula_undo_says_a_node_the_person_ran_since_stays(api):
-    """Q82: the person's run counts as changed since; `nebula undo` says so."""
+    """The person's run counts as changed since; `nebula undo` says so."""
     import time
 
     from tests.conftest import PERSON

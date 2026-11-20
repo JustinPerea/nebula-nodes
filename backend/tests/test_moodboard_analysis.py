@@ -130,7 +130,7 @@ def test_the_analysis_ranks_only_images_it_could_read() -> None:
 
     assert analysis["representativeImages"] == [heavy, light]
     assert analysis["providerHints"]["krea"]["representativeImages"] == [heavy, light]
-    # A link to another site is never fetched or read (Q98): "outside", not "unresolved".
+    # A link to another site is never fetched or read: "outside", not "unresolved".
     assert analysis["images"][1]["status"] == "outside"
 
 

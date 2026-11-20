@@ -582,7 +582,7 @@ def test_connect_refuses_to_write_when_nebula_cant_be_reached(tmp_path, monkeypa
     assert mcp_connect.run_connect(args("cursor"), home=tmp_path) == 1
     err = capsys.readouterr().err
     assert "nothing was written" in err and not list(tmp_path.rglob("*"))
-    # GM r45: two sentences, no semicolon, and the file named in Settings, not a pane title.
+    # Design: two sentences, no semicolon, and the file named in Settings, not a pane title.
     assert ("Start Nebula, or pass its address with --url. For the desktop app, set NEBULA_URL_FILE to the file "
             "named in Settings, under Connect your agent. --print shows the config without checking.") in err
     # Printing only still works, with a warning.
@@ -1005,7 +1005,7 @@ def test_cli_default_url_reads_the_url_file(tmp_path, monkeypatch):
 
 
 def test_check_token_says_where_to_point_it_in_two_sentences(monkeypatch, capsys):
-    """GM r45: "Pass Nebula’s address with --url. For the desktop app, set NEBULA_URL_FILE instead." """
+    """Design: "Pass Nebula’s address with --url. For the desktop app, set NEBULA_URL_FILE instead." """
     import httpx
 
     monkeypatch.setattr(httpx, "get", lambda *a, **k: httpx.Response(404, json={"detail": "Not Found"}))
@@ -1018,14 +1018,14 @@ def test_check_token_says_where_to_point_it_in_two_sentences(monkeypatch, capsys
 
 
 def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
-    """GM r51 Q6: no semicolon and no aside in parens, each its own sentence; the parser's words on their own line."""
+    """Design: no semicolon and no aside in parens, each its own sentence; the parser's words on their own line."""
     import httpx
 
     monkeypatch.setenv("NEBULA_AGENT_TOKEN", "turn-token")
     mcp_connect.run_connect(args("cursor"), home=tmp_path)
     mcp_connect.run_disconnect(args("cursor"), home=tmp_path)
     err = capsys.readouterr().err.splitlines()
-    # GM r59: actionable for the agent that hits it.
+    # Design: actionable for the agent that hits it.
     assert err == ["error: in-app agents can’t connect other apps to Nebula. Ask the person to run this in their own "
                    "terminal.",
                    "error: in-app agents can’t disconnect other apps from Nebula. Ask the person to run this in their "
@@ -1043,14 +1043,14 @@ def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
     with pytest.raises(mcp_connect.MergeError) as raised:
         mcp_connect._load(broken)
     first, second = str(raised.value).split("\n")
-    assert first == f"{broken} isn’t valid JSON. Fix it by hand. Nebula won’t overwrite it."  # GM r60 1
+    assert first == f"{broken} isn’t valid JSON. Fix it by hand. Nebula won’t overwrite it."  # Design
     assert second.startswith("The parser said Expecting property name") and second.endswith(".")
 
 
 def test_gm_r59_r60_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
-    """Round 18p (GM r59, r60): GM's exact strings. Nothing introduces a command or a path with a colon:
+    """Design's exact strings. Nothing introduces a command or a path with a colon:
     a sentence ends with a period and the command goes on the next line."""
-    # r60 19: OpenClaw's and the plain case, the command on its own line.
+    # The OpenClaw and plain cases, the command on its own line.
     monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: None)
     assert mcp_connect.run_disconnect(args("openclaw"), home=tmp_path) == 0
     assert capsys.readouterr().out.splitlines()[:2] == ["Stop the OpenClaw Gateway, then run this command.",
@@ -1060,14 +1060,14 @@ def test_gm_r59_r60_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
     assert mcp_connect.run_disconnect(args("codex"), home=tmp_path) == 0
     assert capsys.readouterr().out.splitlines()[:2] == ["Run this command.", "codex mcp remove nebula"]
 
-    # r60 9: the backup sentence, with and without a blanked-out token.
+    # The backup sentence, with and without a blanked-out token.
     backup = tmp_path / "mcp.json.nebula-backup-1"
     assert mcp_connect._backup_note(backup, None) == f" Nebula saved a backup at {backup}."
     assert mcp_connect._backup_note(backup, "nebula_app_old") == (
         f" Nebula saved a backup at {backup}. The old Nebula token is blanked out in it.")
     assert mcp_connect._backup_note(None, "nebula_app_old") == ""
 
-    # r60 12: the names in curly quotes, no repr.
+    # The names in curly quotes, no repr.
     monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
     assert mcp_connect.run_connect(args("cursor", name="Desk"), home=tmp_path) == 0
     assert "note: this token belongs to “My Cursor”, not “Desk”. The canvas will show “My Cursor”.\n" in \
@@ -1140,7 +1140,7 @@ def test_channel_connect_writes_the_listen_config_and_prints_the_launch_command(
     out = capsys.readouterr()
     assert TOKEN not in out.out + out.err
     # J2: the session's own shell gets the token file's path (never the token).
-    # D2 (round 5): and a session id of its own, made by the shell at each launch.
+    # D2: and a session id of its own, made by the shell at each launch.
     command = (f'NEBULA_APP_TOKEN_FILE={cli_env.file} NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude --mcp-config '
                f'{path} --dangerously-load-development-channels server:nebula-listen --disallowedTools '
                '"mcp__nebula__*"')
@@ -1150,7 +1150,7 @@ def test_channel_connect_writes_the_listen_config_and_prints_the_launch_command(
         if line == command:
             continue
         assert "'" not in line and "(" not in line and ")" not in line and ";" not in line, line
-    # GM r55: no colon to introduce the command; the dialog quoted exactly
+    # Design: no colon to introduce the command; the dialog quoted exactly
     # as Claude Code 2.1.317 shows it (title and confirm label).
     lines = out.out.splitlines()
     assert "Start Claude Code with the Nebula channel from any folder with this command." in lines
@@ -1236,9 +1236,9 @@ def test_channel_first_run_reuses_the_token_file_claude_codes_saved_server_names
 
 def test_channel_after_a_revoke_uses_the_new_file_claude_codes_saved_server_names(tmp_path, cli_env, monkeypatch,
                                                                                  capsys, tmp_path_factory):
-    """Review 2 parity LOW-2: the listen config names a file Nebula deleted
+    """The listen config names a file Nebula deleted
     at the revoke; the plain connect then saved the new token's file. The
-    bare --channel command (GM r81's "run this command again") works."""
+    bare --channel command (design's "run this command again") works."""
     assert mcp_connect.run_connect(args("claude-code", channel=True), home=tmp_path) == 0
     os.unlink(cli_env.file)  # revoked: Nebula deletes the file
     from services import app_token_file
@@ -1339,10 +1339,10 @@ def _stepping(*times):
 
 
 def test_a_second_listener_process_on_the_same_session_says_why_it_cant_listen(client, monkeypatch, capsys):
-    # Round 5, D2: one session is one process (each beat carries its nonce).
-    # GM r112.5: it first waits quietly (a restart's leftover entry times
+    # One session is one process (each beat carries its nonce).
+    # Design: it first waits quietly (a restart's leftover entry times
     # out within 45 s); still refused after 60 s, it is a real second
-    # process, and Nebula's line (GM r108, string 4) says so, once.
+    # process, and Nebula's line (design's wording) says so, once.
     import main
     import mcp_server
     from services import channel_listeners
@@ -1373,7 +1373,7 @@ def test_a_second_listener_process_on_the_same_session_says_why_it_cant_listen(c
 
 
 def test_a_successor_on_the_same_session_connects_by_itself_once_the_old_entry_lapses(client, monkeypatch, capsys):
-    # GM r112.5 (review 4 live LOW-1): Claude Code restarted its MCP server
+    # Design: Claude Code restarted its MCP server
     # (a crash, /mcp reconnect): the old process's entry lives until its
     # TTL. The successor waits, says only the wait line, and registers by
     # itself, with no error left for channel_status.
@@ -1403,7 +1403,7 @@ def test_a_successor_on_the_same_session_connects_by_itself_once_the_old_entry_l
 
 
 def test_a_refused_beat_is_tried_again_every_5_s_not_every_second(client, monkeypatch):
-    # Review 4 NIT-2: the docs say how often; the loop now does that.
+    # The docs say how often; the loop now does that.
     import main
     import mcp_server
 

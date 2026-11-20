@@ -1,4 +1,4 @@
-"""PR #233 review round 1, backend findings.
+"""PR #233 review, backend findings.
 
 B1  a unicode digit as an image number is a plain-words refusal, never a 500
 B2  open tabs are told when a board delete or an image removal drops their cursors

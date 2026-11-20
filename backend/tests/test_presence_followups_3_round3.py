@@ -1,15 +1,15 @@
-"""PR #204 round 3 (review 1 on ffd33872; GM 2026-10-30).
+"""PR #204 (on ffd33872; design 2026-10-30).
 
-MEDIUM-1: one agent's open asks on one asset target share one Update, and
+One agent's open asks on one asset target share one Update, and
 its ref named only the newest ask. A tab not connected as the person counts
 from the Update, so it read "1 proposal" dated by the newest ask, and the
 promote (which brings the real views) read "2 proposals" dated by the oldest:
-the row moved. GM: nothing moves on the promote. The shared Update's ref now
+the row moved. Design: nothing moves on the promote. The shared Update's ref now
 says how many open asks it stands for (``asks``) and the oldest one's time
 (``firstSince``), kept current as asks join and leave it: a new ask, one of
 them closing (the follow's retarget), an undo reopening one.
 
-NIT-1: the no-op retarget compares the words too. NIT-2: the ref bounds are
+The no-op retarget compares the words too. The ref bounds are
 the backend's own constants, and the frontend's copies are pinned to them.
 """
 from __future__ import annotations
@@ -139,7 +139,7 @@ def test_a_retarget_keeps_no_stale_share_fields(canvas, monkeypatch):
     assert "asks" not in after["proposal"] and "firstSince" not in after["proposal"]
 
 
-# -- NIT-1: the no-op retarget compares the words too --------------------------
+# -- The no-op retarget compares the words too --------------------------
 
 def test_a_retarget_with_new_words_on_the_same_ref_still_writes(canvas, monkeypatch):
     _book, _c, p1 = _cover_setup(canvas, monkeypatch)
@@ -151,7 +151,7 @@ def test_a_retarget_with_new_words_on_the_same_ref_still_writes(canvas, monkeypa
     assert moved is not None and moved["note"]["text"] == "Claude asks something else"
 
 
-# -- NIT-2: one constant each --------------------------------------------------
+# -- One constant each --------------------------------------------------
 
 def test_the_ref_bounds_are_the_backends_own_constants_and_the_frontends_match():
     from services import agent_notes, agent_questions, canvas_proposals

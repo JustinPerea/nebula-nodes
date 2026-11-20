@@ -1,23 +1,23 @@
-"""PR #199 fix round 22: review 20's backend items and GM r34.
+"""PR #199: backend items and design.
 
-- reopen-verdict LOW-5 / agents-docs main LOW (GM r34 A1): the person's
+- Design: the person's
   refusal line for a whole-canvas replacement (the open, Clear canvas,
   Create, a graph replace, a bundle restore) places the held record as the
   hold does: "“World” from “Alpha”" for another project's record, "A World
   Labs Environment node" when the project can't be known, never the live
   canvas's node that only shares the id.
-- reopen-verdict LOW-1: the landing stamp loads with the node at an open,
+- The landing stamp loads with the node at an open,
   and a save keeps the stored stamp while the result is the one stored.
-- reopen-verdict NIT-1 / agents-docs LOW-2: the read of the hold and the
+- The read of the hold and the
   press agree on bootstrap (the read tries the same journal write), and a
   fenced refusal says bootstrap in its detail, code and hold.
-- reopen-verdict NIT-2: a tab's run record dates each node's result by
+- A tab's run record dates each node's result by
   ``nodeLandedAt``.
-- reopen-verdict NIT-6 / agents-docs NIT-1: mutants V5 (A3), V9 (A9), V14,
+- Mutants V5, V9, V14,
   A18 and A21.
-- agents-docs LOW-1 and NIT-2: a real paid start's open 409, and
+- A real paid start's open 409, and
   new_project's 409, carry ``hold`` with the same action words.
-- agents-docs LOW-3, LOW-4, LOW-5, NIT-3: the tool descriptions, the event
+- The tool descriptions, the event
   table, the agents' note, and what a read can persist.
 - The export's, the graph read's and graphSync's ``providerRecoveries`` /
   ``providerStartAmbiguities`` are pinned (unchanged from 69277f89).
@@ -63,7 +63,7 @@ ENVIRONMENT = "worldlabs-environment"
 TAIL = "has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history."
 
 
-# -- A. the person's line places the record as the hold does (GM r34 A1) ----------------------------
+# -- A. the person's line places the record as the hold does (design) ----------------------------
 
 def _press(client, surface: str, headers=PERSON):
     """One whole-canvas replacement, as the person's tab sends it."""
@@ -88,7 +88,7 @@ SURFACES = ["open", "clear", "create", "import", "restore"]
 @pytest.mark.parametrize("record,subject", [
     # Alpha's n1 "World" (its run history has the run); Delta is open, its own n1 "Delta World".
     ({"run_id": "wl-run-alpha", "resume_operation_id": "op-1"}, "“World” from “Alpha”"),
-    # Delta's own record: as before round 22.
+    # Delta's own record: as before the line placed the record.
     ({"run_id": "wl-run-delta", "resume_operation_id": "op-1"}, "“Delta World”"),
     # No project's run history has it, and no stored node holds its ID: the project can't be known.
     # An Existing World ID is only a World Labs Environment node's.
@@ -132,7 +132,7 @@ def test_a_the_open_keeps_the_hold_and_its_line_agrees(app, recoveries):
 # -- B. the landing stamp across an open; a node's own landing time (nodeLandedAt) ----------------
 
 def test_b1_the_stamp_survives_an_open_an_autosave_and_a_restart(app, monkeypatch):
-    """Review 20's probe (stamp lost across an open then restart): the agent's
+    """Probe (stamp lost across an open then restart): the agent's
     run lands on n1; an agent reopens Delta; window B autosaves; Nebula
     restarts; tab A hands off an hour-old result. Nebula's stands."""
     client, store, _graph, state_path = app

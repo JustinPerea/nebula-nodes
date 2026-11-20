@@ -1,15 +1,15 @@
-"""PR #199 fix round 11 (review 11, GM r14 and r15).
+"""PR #199 (design).
 
-- MEDIUM-1: the person's canvas a restore left unsettled is filed in a
+- The person's canvas a restore left unsettled is filed in a
   commit of its own before an agent's clear, load or edit commits, so a
   second damage right after that write still restores it.
-- HIGH-1: a restore while Nebula runs reaches open tabs as a graphSync with
+- A restore while Nebula runs reaches open tabs as a graphSync with
   the restore notice's id (and `projectsChanged{catalogRestored}`).
-- LOW-1 and nit 4: a restore during the import (the boot read) is journaled
+- A restore during the import (the boot read) is journaled
   at startup, and the protection it sets carries the canvas's real digest.
-- GM r15: a project protected again after a restore already was a
+- Design: a project protected again after a restore already was a
   project, so the agent's replies and the person's log row say "kept".
-- GM r14, 4: one naming rule for the three families ("Recovered canvas N",
+- Design: one naming rule for the three families ("Recovered canvas N",
   "Recovered X N", "X copy N"): never stacked, the next free number, a
   lost row's own name reused when it is free.
 - nit 3: a protection for a project the restored list doesn't have goes.
@@ -53,7 +53,7 @@ def _listed_with(store, values: list[str]) -> list[str]:
     return [p["name"] for p in _catalog(store)["projects"].values() if _values(p) == sorted(values)]
 
 
-# -- MEDIUM-1: a second damage right after the agent's write ------------------------------
+# -- A second damage right after the agent's write ------------------------------
 
 WRITES = {
     "clear": ("DELETE", "/api/graph?force=true", None),
@@ -67,7 +67,7 @@ WRITES = {
 @pytest.mark.parametrize("write", list(WRITES))
 def test_medium1_a_damage_right_after_the_agents_write_still_restores_the_persons_canvas(
         app, monkeypatch, write, cut):
-    """Review 11's A5 (restored-unsettled): the first restore left the
+    """Restored-unsettled: the first restore left the
     person's canvas live and unfiled; Codex's write files it and changes the
     canvas; catalog.json is damaged before any later commit. The restore's
     .bak must hold the person's canvas, exactly, as a listed project (on
@@ -117,7 +117,7 @@ def test_medium1_the_filing_and_the_agents_write_are_two_commits(app, monkeypatc
     assert any(c["activeProjectId"] is None and filed in c["projects"] for c in seen[filing + 1:])
 
 
-# -- HIGH-1: a restore while Nebula runs reaches the tabs ---------------------------------
+# -- A restore while Nebula runs reaches the tabs ---------------------------------
 
 def test_high1_a_runtime_restore_sends_a_graphsync_with_its_id(app, monkeypatch):
     client, store, _graph, _state = app
@@ -185,7 +185,7 @@ def test_high1_tell_catalog_restore_broadcasts_on_a_running_loop(monkeypatch):
     assert {"type": "projectsChanged", "change": "catalogRestored"} in sent
 
 
-# -- LOW-1 and nit 4: a restore at boot ---------------------------------------------------
+# -- a restore at boot ---------------------------------------------------
 
 BOOT_SCRIPT = r'''
 import asyncio, json, sys
@@ -257,7 +257,7 @@ def test_low1_a_restore_at_boot_is_journaled_at_startup_with_a_real_digest(tmp_p
     assert "filed" not in booted["fresh"]
 
 
-# -- GM r15: "kept" for a project that already was one --------------------------------
+# -- Design: "kept" for a project that already was one --------------------------------
 
 def _graph_file(tmp_path) -> Path:
     path = tmp_path / "file.json"
@@ -352,7 +352,7 @@ def test_q10_the_persons_waiting_canvas_filed_by_a_listing_is_still_said_as_save
     assert saved["message"] == "Nebula saved the open canvas as its own project, “Recovered canvas”, and cleared a new canvas."
 
 
-# -- GM r14, 4: the naming families -------------------------------------------------------
+# -- Design: the naming families -------------------------------------------------------
 
 def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
     return {"projects": {f"{i:032x}": {"name": name} for i, name in enumerate(names)},
@@ -360,7 +360,7 @@ def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
 
 
 @pytest.mark.parametrize(("source", "names", "want"), [
-    # GM r29, 2: "Recovered <name>", then " copy", " copy 2"; no number read.
+    # Design: "Recovered <name>", then " copy", " copy 2"; no number read.
     ("Alpha", (), "Recovered Alpha"),
     ("Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),
     ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),
@@ -394,13 +394,13 @@ def test_r14_4_recovered_canvas_takes_the_next_free_number_and_counts_the_trash(
 
 
 @pytest.mark.parametrize(("lost", "names", "want"), [
-    # Review 11, nit 2: no "Recovered Recovered canvas".
+    # Nit 2: no "Recovered Recovered canvas".
     ("Recovered canvas", (), "Recovered canvas"),
-    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),  # GM r29, 2
+    ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),  # Design
     ("Alpha", (), "Alpha"),
     ("Alpha", ("Alpha",), "Recovered Alpha"),
     ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),
-    # GM r16, 1: a recovered copy of a copy names its source.
+    # Design: a recovered copy of a copy names its source.
     ("Alpha copy", ("Alpha copy",), "Recovered Alpha copy"),
 ])
 def test_r14_4_a_lost_rows_own_name_is_reused_when_free(lost, names, want):
@@ -422,7 +422,7 @@ def test_r14_4_the_recover_endpoint_names_a_copy_of_an_unlisted_project_by_its_n
     again = client.post("/api/projects/recover", headers=PERSON, json={
         "sourceProjectId": gone, "snapshot": snapshot, "recoveryId": "d" * 32,
         "paramsVersion": main_module.PARAMS_VERSION, "sourceName": "Delta"})
-    assert again.json()["project"]["name"] == "Recovered Delta copy"  # GM r29, 2
+    assert again.json()["project"]["name"] == "Recovered Delta copy"  # Design
     nameless = client.post("/api/projects/recover", headers=PERSON, json={
         "sourceProjectId": gone, "snapshot": snapshot, "recoveryId": "c" * 32,
         "paramsVersion": main_module.PARAMS_VERSION})

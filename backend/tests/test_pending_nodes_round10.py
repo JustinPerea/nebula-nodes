@@ -1,4 +1,4 @@
-"""Placeholders and statuses, round 10 (review 9 of feat/agent-presence).
+"""Placeholders and statuses, (feat/agent-presence).
 
 - Nit c: Krea Style Search's free-text ``model`` is a search filter, not the
   model the node runs, so the run pill never names it as one (the person's

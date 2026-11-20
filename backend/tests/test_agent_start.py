@@ -1,7 +1,7 @@
 """An agent's first turn in one call: GET /api/agent/start, MCP `start_here`
 and `nebula context` (plan v2.7, PR26, §5.10.1).
 
-GM's headless run on 2026-10-20 spent 8 of its 16 turns finding its way
+Design's headless run on 2026-10-20 spent 8 of its 16 turns finding its way
 (docs/agent-runs/2026-10-20-cli-headless.md). The start call gives a first
 turn the canvas, pins, proposals, every board, the node types that run here
 with prices and the spend limits at once, each part inside its own budget.
@@ -114,7 +114,7 @@ def _board(ctx, scope: str, board_id: str, name: str, *, updated: str = "2026-10
 
 def _get(ctx, via: str | None = None, headers=CLAUDE) -> dict:
     # The CLI says so on every request (X-Nebula-Surface), the one signal
-    # (services/agent_words; review 10 of PR #203, NIT-4).
+    # (services/agent_words; PR #203).
     if via == "cli":
         headers = {**(headers or {}), "X-Nebula-Surface": "cli"}
     response = ctx.client.get("/api/agent/start", headers=headers)
@@ -362,7 +362,7 @@ def test_spend_shows_what_the_budget_it_runs_against_has_used(start, monkeypatch
 def test_spend_names_the_daily_total_over_the_budget(start, monkeypatch):
     """The daily total holds on top of the budget: an outside agent with no
     budget limit of its own (limitUsd None) still reads the $5 total, what is
-    used and what's left (review 1 of PR #212, MEDIUM-1)."""
+    used and what's left (PR #212)."""
     from services import agent_spend
 
     ctx = start
@@ -404,10 +404,10 @@ def test_spend_for_an_app_gives_its_own_line_and_the_shared_budget():
 
 
 def test_the_surface_header_is_the_one_signal(start):
-    """The hints follow X-Nebula-Surface wherever it is sent (review 10 of
-    PR #203, NIT-4): a `via` query beside it names nothing, and a surface
+    """The hints follow X-Nebula-Surface wherever it is sent (PR
+    #203): a `via` query beside it names nothing, and a surface
     Nebula doesn't know reads MCP words. An older CLI's `?via=cli` with no
-    header at all reads as the CLI (review 11, LOW-1; test_idol_round12)."""
+    header at all reads as the CLI (test_idol_round12)."""
     assert "`nebula " not in json.dumps(_get(start)) and "`nebula " in json.dumps(_get(start, via="cli"))
     for headers, params in (({**CLAUDE, "X-Nebula-Surface": "telnet"}, None),
                             ({**CLAUDE, "X-Nebula-Surface": "mcp"}, {"via": "cli"})):

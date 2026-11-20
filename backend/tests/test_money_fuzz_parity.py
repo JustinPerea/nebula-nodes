@@ -1,4 +1,4 @@
-"""Money parity, as a fuzz the frontend runs too (PR #198 review 4, L2).
+"""Money parity, as a fuzz the frontend runs too (PR #198).
 
 contracts/fixtures/money/fuzz.json holds a few thousand amounts (log-uniform
 from a millionth of a cent to ten million dollars, float denormals, and a
@@ -8,7 +8,7 @@ file; frontend/tests/pr198Fix4Money.test.ts checks pricing.ts against the
 same file, so the two can't drift apart on any of them.
 
 The test reads each row's amount from the file and never regenerates it
-(the generator's ``pow`` differs by platform; PR #198 review 5, M2). To
+(the generator's ``pow`` differs by platform; PR #198). To
 rebuild the file after a deliberate change to the money rules:
 ``python -m tests.test_money_fuzz_parity`` from backend/.
 """
@@ -45,7 +45,7 @@ def test_python_writes_every_fuzz_amount_as_the_shared_file_says():
     ``amounts()`` draws its floats with ``10 ** rng.uniform(...)``, and
     ``pow`` differs in the last bit between libm versions (macOS and glibc:
     CI regenerated 7637674.5538175125 where the file has 7637674.553817513;
-    PR #198 review 5, M2), so only the ``__main__`` rebuild uses it. What is
+    PR #198), so only the ``__main__`` rebuild uses it. What is
     compared is platform-independent:
 
     - the amounts: JSON floats round-trip exactly (CPython parses decimal

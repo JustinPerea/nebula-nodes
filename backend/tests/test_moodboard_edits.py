@@ -236,7 +236,7 @@ def test_the_inverse_round_trips(client, root):
 
 
 def test_an_add_then_an_undo_with_nothing_else_changed_undoes_cleanly(client, root):
-    """Copy sweep r5: the Studio adds with a client-made image id and a drop point; an Undo straight after
+    """Copy sweep: the Studio adds with a client-made image id and a drop point; an Undo straight after
     takes it off, with no "changed since" (the add's own record is what the undo expects)."""
     write_board(root, fixture_board())
     new_url = _image_url("studio-add.png", (24, 24), (10, 10, 200))
@@ -541,7 +541,7 @@ def test_put_diffs_show_up_in_the_journal(client, root, journal):
     put(lambda images: images[1:])
     _ok(client.put(f"/api/moodboards/{BOARD_ID}", json={"name": "Only a rename"}))
     events = _board_events(journal)
-    # The board's own fields (its notes, a rename) are board.fields events (Q91).
+    # The board's own fields (its notes, a rename) are board.fields events.
     assert [e["kind"] for e in events] == ["board.resized", "board.setAside", "board.fields", "board.removed",
                                            "board.fields"]
     assert events[1]["data"]["kinds"] == ["board.setAside"]

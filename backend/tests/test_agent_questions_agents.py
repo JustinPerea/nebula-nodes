@@ -1,4 +1,4 @@
-"""Agent support for questions (Q125 item 1): MCP, the `nebula` CLI, docs and
+"""Agent support for questions: MCP, the `nebula` CLI, docs and
 every list propose_change is in.
 
 Justin's standing rule: every feature ships its agent tools in the same PR.

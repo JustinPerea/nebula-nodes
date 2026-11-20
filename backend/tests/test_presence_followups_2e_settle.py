@@ -1,4 +1,4 @@
-"""PR #202 review 3 (round 5) LOW-2: the Update settle
+"""PR #202: the Update settle
 (``_settle_proposal_updates``, on every list, tab connect and project switch)
 never leaves an open proposal under an Update that says "Withdrawn". It
 leaves a closed proposal's Update to the close handling while the same
@@ -21,7 +21,7 @@ from tests.test_undo_restores_deletes import (  # noqa: F401 - api and canvas ar
 )
 
 
-# -- LOW-2 --------------------------------------------------------------------
+# -- two cover asks sharing one Update ----------------------------------
 #
 # Claude Code has two cover asks on one project sharing one Update. Never, in
 # either race, an open proposal under an Update that says "Withdrawn".
@@ -96,7 +96,7 @@ def test_an_undos_reopen_inside_the_settles_resolve_keeps_its_update(canvas, mon
 def test_the_settle_still_closes_an_update_nothing_open_shares(canvas, monkeypatch):
     """The guard is narrow: a closed ask with no other open ask under its
     Update is still resolved by the settle (a missed follow, a restart),
-    whatever other asks are open elsewhere (review 4 NIT-1: another agent's
+    whatever other asks are open elsewhere (another agent's
     ask on the same cover, under its own Update)."""
     book, _c, p1 = _cover_setup(canvas, monkeypatch)
     canvas.graph.add_node("nano-banana", {}, outputs={"image": {"type": "Image", "value": "/api/outputs/b.png"}})
@@ -117,7 +117,7 @@ def test_the_settle_still_closes_an_update_nothing_open_shares(canvas, monkeypat
     assert _note(canvas)["outcome"] == "Withdrawn"
 
 
-# -- review 4 LOW-1: the ask the Update moves to closes while it moves ----------
+# -- The ask the Update moves to closes while it moves ----------
 #
 # Claude Code's P1 and P2 share one Update. P2 is withdrawn; while its follow
 # moves the Update to P1, P1 closes too, and P1's own follow runs first: its

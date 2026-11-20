@@ -631,7 +631,7 @@ def test_unit_bodies_that_can_hold_a_number_are_still_checked(parts):
     assert inner.calls == 0 and sent[0]["status"] == 422, sent
 
 
-# -- the engine's reason stays the agent's (GM PR #205 r10 item 4) -------------
+# -- the engine's reason stays the agent's (design PR #205) -------------
 
 def test_an_agents_too_deep_graph_payload_keeps_the_engine_reason(api):
     """The canvas words its own shape checks for the person (lib/graphFileShared.ts);

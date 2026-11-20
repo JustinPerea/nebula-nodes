@@ -106,7 +106,7 @@ def test_paid_claim_classification_excludes_recovery_and_free_ply() -> None:
 @pytest.mark.asyncio
 async def test_stop_arriving_before_execute_admission_blocks_paid_start() -> None:
     run_id = "cancel-before-paid-admission"
-    # Round 17 (review 16 L1): this process never saw the run start, so the
+    # This process never saw the run start, so the
     # answer also says it has no record of it (the Stop holds the same way).
     assert await main_module.cancel_execution(run_id) == {
         "runId": run_id,
@@ -121,7 +121,7 @@ async def test_stop_arriving_before_execute_admission_blocks_paid_start() -> Non
         )
 
     assert exc_info.value.status_code == 409
-    # Review 17 L4: the Stop came for an id this process never saw start, so
+    # The Stop came for an id this process never saw start, so
     # the refusal says only what is known (it may be a run from before a
     # restart), not "cancelled before it started".
     assert exc_info.value.detail == (
@@ -871,7 +871,7 @@ async def test_clear_refuses_unresolved_ambiguity_until_exact_ack() -> None:
     await main_module.acknowledge_provider_start_ambiguity(
         ENVIRONMENT, "world-node", "ambiguous"
     )
-    # The answer names the new canvas (round 19 of PR #195).
+    # The answer names the new canvas (PR #195).
     assert await main_module.clear_graph(force=True) == {"status": "cleared", "canvasRevision": main_module._canvas_revision()}
 
 

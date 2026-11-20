@@ -1,4 +1,4 @@
-"""GM, PR #202 r4: how an asset proposal's ask and its withdrawal read in the
+"""Design, PR #202: how an asset proposal's ask and its withdrawal read in the
 Agent log ("Asks to X (decide …)" / "Withdrew its request to X"), X built
 once by the shared helper (asset_proposals.summary). Agents read the log, so a
 Commons line names no reference by its id, filename, page title or collection,
@@ -154,7 +154,7 @@ def test_no_commons_log_line_carries_an_id_a_filename_a_page_title_or_commons_te
         cx.client.delete(f"/api/canvas/proposals/{made.json()['proposal']['id']}", headers=CLAUDE)
     lines = [words for _, words in _log(cx.sent[start:])]
     assert len(lines) >= 2 * (len(changes) + len(COMMONS_KINDS))
-    # PR #202 review 3 NIT-3: every field the socket sends on an Agent log
+    # PR #202: every field the socket sends on an Agent log
     # event, not only its words, so a field added later is checked too.
     events = [json.dumps(event, ensure_ascii=False) for event in cx.sent[start:] if event.get("type") == "agentPresence"]
     assert len(events) >= len(lines)

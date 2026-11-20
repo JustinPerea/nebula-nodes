@@ -1,6 +1,6 @@
 """Tabs loaded before a one-time params upgrade can't save or run old values.
 
-Justin, 2026-10-17 (round 2, item 3): "we should fix that shouldn't we?" A tab
+Justin, 2026-10-17: "we should fix that shouldn't we?" A tab
 whose canvas loaded before the upgrade (main's bundle, or any bundle built for
 another ``PARAMS_VERSION``) is stale. The backend never accepts its writes and
 never runs its params, and the tab reloads (services/saved_graph_upgrades.py,
@@ -234,7 +234,7 @@ BROWSER_MARKERS = {
 @pytest.mark.parametrize("browser", BROWSER_MARKERS.values(), ids=BROWSER_MARKERS.keys())
 def test_main_bundle_without_a_project_context_is_refused(
         workspace, tmp_path, route_calls, no_provider_calls, browser):
-    """Review round 2: main's tab can reach the canvas with getProjectContext()
+    """Main's tab can reach the canvas with getProjectContext()
     null (conflict, then Try again while no project is active, then Open of
     the same project takes main's open() shortcut without applyProject), so
     it sends neither header. A browser request with no params version is
@@ -359,7 +359,7 @@ def test_health_reports_the_params_version_and_keeps_its_identity():
 
 
 def test_health_names_the_backend_process():
-    # Round 16 of PR #114, M4: the tab notes the backend's process id from
+    # PR #114, M4: the tab notes the backend's process id from
     # every health probe, so a restart is seen even with no project open.
     body = TestClient(main_module.app).get("/api/health").json()
     assert isinstance(body["bootId"], str) and body["bootId"] == main_module.BACKEND_BOOT_ID

@@ -298,7 +298,7 @@ async def test_close_api_is_human_only_and_status_reports_state(store, source, m
 
 @pytest.mark.asyncio
 async def test_close_retry_after_a_lost_answer_succeeds(store, source, monkeypatch, fresh_person_session):
-    """PR #204 round 18l (GM r43 Q1): the window gives up on a close after 30 s and may send it
+    """PR #204 (design): the window gives up on a close after 30 s and may send it
     again, with the revision it had. If the first one landed, the retry gets the same closed
     record (200), never a 409. Who may call the route is unchanged (human_dep)."""
     from routes import commons as routes

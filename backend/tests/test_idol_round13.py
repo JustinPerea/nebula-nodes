@@ -1,12 +1,12 @@
-"""PR #203 round 13: GM r24 and the two CI failures on 485fb5e0.
+"""PR #203: design's rulings and the two CI failures on 485fb5e0.
 
-- GM r24 items 1 and 2: the CLI tags each part by where its runs go, in one
+- Design items 1 and 2: the CLI tags each part by where its runs go, in one
   id style, with a count per id once there's more than one: "1 free
   (huggingface)", "2 free (1 fal, 1 local)", "3 paid runs (2 anthropic, 1
   krea)".
-- GM r24 item 3: the Krea mode label is "API key · API balance".
-- GM r24 item 5: the Krea handlers' errors say "Krea API key".
-- GM r24 item 7: the 409's path shows the home folder as "~".
+- Design: the Krea mode label is "API key · API balance".
+- Design: the Krea handlers' errors say "Krea API key".
+- Design: the 409's path shows the home folder as "~".
 - CI: a /ws socket that ends any way but a clean disconnect is unregistered,
   so no canvas counts as open after it (test_cli_apply's arrange line).
 """
@@ -36,7 +36,7 @@ def _entry(kind, provider=None, label=None, **extra):
             "label": label or kind, **extra}
 
 
-# -- where each part's runs go, one id style (GM r24 items 1 and 2) ---------------------------
+# -- where each part's runs go, one id style (design items 1 and 2) ---------------------------
 
 
 @pytest.mark.parametrize("token", [None, TOKEN], ids=["free", "may-cost"])
@@ -95,7 +95,7 @@ def test_the_paid_part_has_the_same_shape(entries, line):
 
 
 @pytest.mark.parametrize("entries,line", [
-    # In a list, "run" goes on the first class only (GM r25 item 1) ...
+    # In a list, "run" goes on the first class only (design) ...
     ([{**_entry("paid", "google"), "price": 0.039}, _entry("plan", "krea", "on Krea plan"),
       _entry("free", "fal", "free · fal.ai")],
      "1 paid run (google), 1 on the person's Krea plan and 1 free (fal), no list price"),
@@ -121,7 +121,7 @@ def test_a_cost_without_entries_keeps_its_providers():
     assert _cost_line({"paidRuns": 0, "freeRuns": 2}) == "2 free runs (runs locally)"
 
 
-# -- Krea's words (GM r24 items 3 and 5) ------------------------------------------------------
+# -- Krea's words (design items 3 and 5) ------------------------------------------------------
 
 
 def test_the_krea_mode_label_says_api_key():
@@ -136,7 +136,7 @@ def test_no_person_line_in_the_backend_says_krea_api_token():
         assert "Krea API token" not in path.read_text(encoding="utf-8"), path
 
 
-# -- the 409's path with "~" (GM r24 item 7) ---------------------------------------------------
+# -- the 409's path with "~" (design) ---------------------------------------------------
 
 
 def test_the_409_shows_the_home_folder_as_a_tilde(sockets, tmp_path, monkeypatch):  # noqa: F811
@@ -191,7 +191,7 @@ def test_a_socket_cancelled_before_it_reads_again_is_unregistered(monkeypatch):
     assert main.manager.active_connections == [] and not main.manager.canvas_open()
 
 
-# -- GM r25 item 2: the HTTP and CLI sign-in line names the row ---------------------------------
+# -- Design: the HTTP and CLI sign-in line names the row ---------------------------------
 
 
 def test_the_krea_sign_in_line_names_the_row_as_mcp_does():
@@ -204,7 +204,7 @@ def test_the_krea_sign_in_line_names_the_row_as_mcp_does():
     assert "Settings > Providers > Krea" in mcp
 
 
-# -- review 12, LOW-2: one resolved path for reading, writing and the 409 ----------------------
+# -- One resolved path for reading, writing and the 409 ----------------------
 
 
 def test_a_tilde_in_nebula_settings_path_is_the_home_folder_for_reads_writes_and_the_409(tmp_path):
@@ -234,7 +234,7 @@ def test_a_tilde_in_nebula_settings_path_is_the_home_folder_for_reads_writes_and
     assert not (tmp_path / "cwd" / "~").exists()
 
 
-# -- review 12, LOW-3: a file that isn't valid JSON gets the 409, never a 500 -------------------
+# -- A file that isn't valid JSON gets the 409, never a 500 -------------------
 
 
 CUT_SHORT = '{"apiKeys": {"FAL_KEY": "fal-kept-1111"'
@@ -305,7 +305,7 @@ def test_desktop_check_changes_nothing_on_a_readable_file(sockets, monkeypatch):
     assert written.status_code == 200 and settings._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-new-1111"
 
 
-# -- review 12, NIT-1: live_cost counts an unknown kind as the gate does -----------------------
+# -- live_cost counts an unknown kind as the gate does -----------------------
 
 
 def test_live_cost_counts_an_unknown_kind_as_paid_never_free():

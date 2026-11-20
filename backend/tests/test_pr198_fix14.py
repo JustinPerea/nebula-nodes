@@ -1,13 +1,13 @@
-"""PR #198 fix round 14 (review 13 NITs 2-4; GM r23 answer 3).
+"""PR #198 (NITs 2-4; design).
 
-- GM r23 answer 3: a refused node definition is bare when id-shaped, in
+- Design: a refused node definition is bare when id-shaped, in
   “…” when it has a space or a character no id has. None at all (missing,
-  null, empty) is GM's own line for the person, "No node definition was
+  null, empty) is design's own line for the person, "No node definition was
   given.", while an agent's detail keeps the raw value
   (`unknown node definition ""`); the answer carries ``code:
   "unknown_definition"`` and ``definitionId`` (the raw value).
-- Review 13 NIT 2: the wrong-argument refusal's next call is in backticks.
-- Review 13 NIT 3: a name the agent wrote that matches nothing (an Avoid
+- The wrong-argument refusal's next call is in backticks.
+- A name the agent wrote that matches nothing (an Avoid
   item, a model) is in “…”.
 """
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """Cursor Phase 3 ("Anywhere"), slice 3: what a board write does to the
-agent's cursor, row by row (GM - Design's table, PR #233 r4).
+agent's cursor, row by row (design's table, PR #233).
 
 Before this, a board write announced itself with no target: the Agent log
 listed it and no cursor moved, and it skipped the session numbering. Now each
@@ -126,7 +126,7 @@ def _agent_events(sent) -> list[dict]:
 
 
 def test_a_board_made_in_another_project_sends_no_cursor_target(api):
-    """Final review 2: the panel doesn't list that board, so a cursor parked
+    """The panel doesn't list that board, so a cursor parked
     at "Open assets" for it would be pointing at nothing. The log line stays."""
     client, sent, _, _ = api
     _create(client, LANE_A, projectId=_other_project())
@@ -207,7 +207,7 @@ def test_placing_one_card_is_that_image_and_set_aside_too(api):
     ("direction", "Low sun, long shadows", "direction", "type"),
     ("avoid", ["neon"], "avoid", "type"),
     ("pinnedColors", {"include": ["#C8A27A"], "exclude": []}, "colors", "click"),
-    # The keep-out row is its own control (review 1, C6): an exclude pin goes there, not to "must appear".
+    # The keep-out row is its own control: an exclude pin goes there, not to "must appear".
     ("pinnedColors", {"include": [], "exclude": ["#2F4F4F"]}, "colors-out", "click"),
 ])
 def test_a_field_is_its_control_typed_and_a_pin_is_a_click_on_colors(api, field, value, part, action):

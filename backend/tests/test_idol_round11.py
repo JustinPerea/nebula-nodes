@@ -1,21 +1,21 @@
-"""PR #203 round 11: the CLI counts every cost class, refusals and hints in
+"""PR #203: the CLI counts every cost class, refusals and hints in
 their reader's words from one table, and settings.json's keys never
 overwritten with a guess.
 
-- Review 10, MEDIUM-1, and GM r21 item 1: `nebula propose` and `nebula
+- Design: `nebula propose` and `nebula
   proposal` count Krea-plan runs on their own, and a free run that calls a
   provider says which (cli/formatter._cost_line).
-- Review 10, LOW-1: `nebula run`'s refusal is in CLI words over HTTP.
-- Review 10, LOW-2: propose_change's description lists every cost class,
+- `nebula run`'s refusal is in CLI words over HTTP.
+- propose_change's description lists every cost class,
   written from model_pricing.CLASS_ENTRIES.
-- Review 10, LOW-3: cost_for reads a route-table node's params as the
+- cost_for reads a route-table node's params as the
   router does, with the wired inputs.
-- Review 10, NIT-3: a ghost card's cost tag is in its cost class.
-- Review 10, NIT-4: one table of surface words, one CLI signal.
-- Review 10, NIT-5: the spend gate reads the one cost class.
-- Review 10, NIT-6: an unreadable `apiKeys` is never overwritten.
-- Review 10, NIT-7: the settings signal skips unconfirmed tabs.
-- GM r20 item 3 and r21: quoted names, and "Sign in to Krea in Settings".
+- A ghost card's cost tag is in its cost class.
+- One table of surface words, one CLI signal.
+- The spend gate reads the one cost class.
+- An unreadable `apiKeys` is never overwritten.
+- The settings signal skips unconfirmed tabs.
+- Design: quoted names, and "Sign in to Krea in Settings".
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ REGISTRY = NodeRegistry().get_all()
 CLI = {"X-Nebula-Surface": "cli"}
 
 
-# -- the CLI's cost line (review 10, MEDIUM-1; GM r21 item 1) --------------------------------
+# -- the CLI's cost line (design) --------------------------------
 
 
 def _entry(kind, label, **extra):
@@ -109,7 +109,7 @@ def test_the_journal_counts_each_class(api):  # noqa: F811
     assert (event["data"]["paidRuns"], event["data"]["planRuns"], event["data"]["mayCostRuns"]) == (0, 1, 0)
 
 
-# -- `nebula run`'s words over HTTP (review 10, LOW-1: B14) ---------------------------------
+# -- `nebula run`'s words over HTTP (B14) ---------------------------------
 # Idol's stop now comes at its call, so each surface's own command is pinned
 # on the real engine: tests/test_idol_round19_gate.py,
 # test_an_agents_run_that_must_call_stops_before_any_request[mcp|cli].
@@ -134,7 +134,7 @@ def test_a_spending_limit_refusal_names_its_own_command(gated, monkeypatch, head
     assert gated.ran == []
 
 
-# -- propose_change's description, from the one table (review 10, LOW-2) ---------------------
+# -- propose_change's description, from the one table ---------------------
 
 
 def test_propose_changes_description_lists_every_cost_class():
@@ -153,7 +153,7 @@ def test_propose_changes_description_lists_every_cost_class():
     assert {entry["count"] for entry in model_pricing.CLASS_ENTRIES.values()} <= set(summary)
 
 
-# -- cost_for reads a route-table node as the router does (review 10, LOW-3: B6) -------------
+# -- cost_for reads a route-table node as the router does -------------
 
 
 @pytest.mark.parametrize("wired,kind", [((), "plan"), (("end_image",), "paid"), (("keyframes",), "paid")])
@@ -176,7 +176,7 @@ def test_a_route_table_entry_takes_the_estimates_class():
     assert entry == {"kind": "free", "provider": "krea", "label": "free · Krea"}
 
 
-# -- a ghost card's tag is in its cost class (review 10, NIT-3) ------------------------------
+# -- a ghost card's tag is in its cost class ------------------------------
 
 
 def test_a_sourced_zero_ghost_reads_free(monkeypatch):
@@ -193,7 +193,7 @@ def test_a_sourced_zero_ghost_reads_free(monkeypatch):
                                         run_entry, []) == tag
 
 
-# -- one table of surface words (review 10, NIT-4) -------------------------------------------
+# -- one table of surface words -------------------------------------------
 
 
 def test_every_surface_call_comes_from_one_table():
@@ -241,7 +241,7 @@ def test_the_cli_sends_one_signal_and_no_via():
     assert client._identity_headers()["X-Nebula-Surface"] == "cli"
 
 
-# -- the spend gate reads the one cost class (review 10, NIT-5) ------------------------------
+# -- the spend gate reads the one cost class ------------------------------
 
 
 def _combos():
@@ -274,7 +274,7 @@ def test_the_gate_holds_exactly_the_nodes_may_bill_holds():
     assert agent_spend.may_bill_nodes([{"id": "g", "definitionId": "gone", "params": {}}], REGISTRY, SIGNED_IN) == []
 
 
-# -- an unreadable apiKeys is kept as it is (review 10, NIT-6) -------------------------------
+# -- an unreadable apiKeys is kept as it is -------------------------------
 
 
 @pytest.mark.parametrize("raw", [["sk-a"], "sk-a", 42], ids=["list", "string", "number"])
@@ -306,13 +306,13 @@ def test_a_settings_file_that_is_no_object_is_never_overwritten(sockets):  # noq
 
 
 def test_the_unreadable_refusals_say_nothing_was_saved():
-    # GM r22 item 3: each names the file by its full path (test_idol_round12).
+    # Design: each names the file by its full path (test_idol_round12).
     assert main.KEYS_UNREADABLE == ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
                                     "Fix “apiKeys” in that file, then try again.")
     assert main.SETTINGS_UNREADABLE.startswith("Nothing was saved because Nebula can’t read {path}.")
 
 
-# -- the settings signal skips every socket that isn't the person's (review 10, NIT-7) -------
+# -- the settings signal skips every socket that isn't the person's -------
 
 
 def _heard_all(sockets_open) -> list[list[dict]]:
@@ -353,7 +353,7 @@ def test_an_unconfirmed_tab_and_a_silent_socket_hear_no_signal(sockets):  # noqa
         assert _heard_all([browser, wrong, silent]) == [[{"type": "settingsChanged", "keys": ["HF_TOKEN"]}], [], []]
 
 
-# -- quoted names and Krea's one verb (GM r20 item 3, r21) -----------------------------------
+# -- quoted names and Krea's one verb (design) -----------------------------------
 
 
 def test_the_not_ready_line_quotes_the_name_and_says_sign_in():
@@ -409,7 +409,7 @@ def test_krea_discovery_still_says_who_signs_in(monkeypatch):
                                    "ask them to open Settings > Providers > Krea in Nebula.")
 
 
-# -- the run dialog's free ids (review 10, NIT-3) --------------------------------------------
+# -- the run dialog's free ids --------------------------------------------
 
 
 def test_the_run_estimate_lists_the_sourced_zero_nodes(monkeypatch):

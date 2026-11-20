@@ -1,4 +1,4 @@
-"""A wait for the person's answers rides through a Nebula restart (Q125 item 1, final pass).
+"""A wait for the person's answers rides through a Nebula restart (final pass).
 
 Question sets are kept with the project, so they outlive a restart; the wait
 for them should too. Within the wait's own budget, MCP get_answers

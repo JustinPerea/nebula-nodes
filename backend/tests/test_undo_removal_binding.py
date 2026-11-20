@@ -309,7 +309,7 @@ def test_a_stale_record_cant_put_the_pin_on_another_model(bound):
                     [{"id": removal["id"], "nodeId": n1}])
     assert fake.status_code == 200, fake.text
     assert fake.json()["reattached"] == []
-    # The canvas counts it by ``code`` (GM: "1 pin couldn't be re-attached."); agents read ``reason``.
+    # The canvas counts it by ``code`` (design: "1 pin couldn't be re-attached."); agents read ``reason``.
     assert fake.json()["pinsLeft"] == [{"id": pin["id"], "reason": "its node came back as another model",
                                         "code": "another-model"}]
     stored = _stored_pins(bound)[pin["id"]]
@@ -536,7 +536,7 @@ def test_an_agents_own_undo_still_puts_back_what_its_delete_removed(bound):
 
 
 def test_a_stale_record_for_a_pin_a_later_delete_detached_says_changed(bound):
-    """Every pin left carries a ``code`` the canvas counts by (GM, 2026-10-23:
+    """Every pin left carries a ``code`` the canvas counts by (design, 2026-10-23:
     "1 pin couldn't be re-attached." only for another model; a pin the
     person deleted or changed since stays silent), never the English ``reason``."""
     n1, pin, _proposal = _setup(bound)

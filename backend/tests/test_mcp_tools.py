@@ -366,7 +366,7 @@ def test_propose_change_warns_about_run_nodes_that_cannot_run(nebula, monkeypatc
 
 
 def test_propose_change_reminds_the_agent_its_unrunnable_proposal_is_still_open(nebula, monkeypatch):
-    """Q109: FLUX.2 with only an OpenAI key is kept with its warning; the next
+    """FLUX.2 with only an OpenAI key is kept with its warning; the next
     proposal (GPT Image 2) says the first is still open and names withdraw_proposal."""
     import main
 

@@ -162,7 +162,7 @@ def test_an_agent_over_the_per_run_limit_is_refused(client, google):
     response = client.post(f"/api/moodboards/{board['id']}/read?dryRun=1", json={"model": "gemini-4-argon"})
     assert response.status_code == 403 and "per-run limit" in response.json()["detail"]
     assert google.bodies == []
-    # The Gemini chat node's own limit replaces the general one (Q11).
+    # The Gemini chat node's own limit replaces the general one.
     SETTINGS["agentSpend"] = {"sessionUsd": None, "models": {"gemini-chat": {"perRunUsd": 20.0, "sessionUsd": None}}}
     assert client.post(f"/api/moodboards/{board['id']}/read?dryRun=1",
                        json={"model": "gemini-4-argon"}).status_code == 200
@@ -339,7 +339,7 @@ def test_mcp_only_takes_numbers_as_the_docs_show(cli, client, google):
 ], ids=["no-person-token", "stale-person-token"])
 def test_a_read_from_a_tab_not_connected_as_the_person_says_person_required(client, google, headers):
     """The person's reads pass; a tab that isn't connected as them is held to
-    the agents' limits, so its refusal is one reconnecting fixes (GM, Q116 a:
+    the agents' limits, so its refusal is one reconnecting fixes (design:
     "Use it for every person-only refusal"). Same status and words; an agent's
     answer has no code."""
     board = _board(client, 6)

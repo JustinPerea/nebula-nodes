@@ -240,7 +240,7 @@ def test_message_text_is_cleaned_like_a_pins():
 
 
 def test_more_messages_than_kept_are_counted_never_dropped_and_read_again():
-    # Review 1 of #225, LOW-3 (M11) and LOW-6 (B15): past MAX_PENDING a
+    # #225 (M11, B15): past MAX_PENDING a
     # message is counted, the push says how many it didn't list, and the
     # rest (still unsent at Nebula) are read again after the push.
     state = listening()
@@ -261,7 +261,7 @@ def test_more_messages_than_kept_are_counted_never_dropped_and_read_again():
 
 
 def test_a_message_event_from_an_agent_never_wakes_it():
-    # Review 1 of #225, LOW-3 (M17): only the person's route journals
+    # #225 (M17): only the person's route journals
     # person.message, but the actor filter comes first all the same.
     state = listening()
     state.observe(resp(ev(1, mcp_channel.MESSAGE_KIND, actor=OTHER_AGENT,
@@ -270,7 +270,7 @@ def test_a_message_event_from_an_agent_never_wakes_it():
     assert drain(state, 5.0, 60.0) == []
 
 
-# -- the turn a deliberate push starts is never gated (review 1 of #225, HIGH-1) ----------
+# -- the turn a deliberate push starts is never gated (#225) ----------
 
 def _first_gated(pushes):
     return next((at for at, p in pushes if p.gate), None)
@@ -395,7 +395,7 @@ def test_the_201st_deliberate_send_in_an_hour_is_held_not_dropped():
         push = take(state, t)
         if push is not None:
             times.append(t)
-            # Answered at once, so only the hourly cap holds the 201st (64 unanswered would: round 5c).
+            # Answered at once, so only the hourly cap holds the 201st (64 unanswered would).
             assert state.tool_started("reply_to_person", {"text": "Done."}, t) is None
             state.tool_finished("reply_to_person", {"text": "Done."},
                                 {"reply": {"id": f"pt_{n}", "replyTo": f"msg_{n}"}}, t)
@@ -440,7 +440,7 @@ def test_deliberate_sends_never_count_toward_or_delay_the_passive_limits():
     assert len(state._history) == 1 and len(state._deliberate_history) == 28
     # The next passive push keeps its 30 s spacing from the last passive one,
     # not from the last message. (A short span cap here, so the last
-    # message's span, at 37, is over by 39: HIGH-1/J4 hold gated pushes until then.)
+    # message's span, at 37, is over by 39: hold gated pushes until then.)
     state.observe(resp(edit(40, node="n9")), now=37.0)
     pushes = drain(state, 37.0, 100.0)
     assert [(at, p.wake, p.gate) for at, p in pushes] == [(45.0, "change", True)]
@@ -498,7 +498,7 @@ def test_an_ungated_passive_push_still_waits_for_a_gated_window():
 
 @pytest.mark.parametrize("kind", ["message", "answer", "pin"])
 def test_a_long_quiet_inside_a_deliberate_turn_never_lets_a_gated_push_refuse_its_edit(kind):
-    # Review 2 LOW-5 (P6b): Claude reads the request, then thinks or works in
+    # (P6b): Claude reads the request, then thinks or works in
     # Read/Bash for 70 s with no Nebula call. The person edits meanwhile. A
     # gated push used to go at 160.5 and refuse the turn's edit at 175.
     state = listening()
@@ -563,7 +563,7 @@ MINE = {"kind": "agent", "id": "app:0123456789", "name": "Claude Code", "verifie
 
 def replied(seq: int, reply_id: str = "pt_9", actor=None, reply_to: str | None = "msg_1") -> dict:
     """A thread.replied in its feed (asked for with ownReplies=1); Nebula
-    names the message it answers (``replyTo``, round 5 D1)."""
+    names the message it answers (``replyTo``)."""
     return ev(seq, mcp_channel.REPLY_KIND, actor=actor or MINE,
               data={"replyId": reply_id, "text": "Done.", "nodeId": None, "replyTo": reply_to})
 
@@ -696,7 +696,7 @@ def test_the_listener_says_it_listens_and_a_message_and_an_answer_reach_the_sess
     assert nebula.goodbyes == 1
 
 
-# -- round 5, D1: the span belongs to one listener session and the pushes it got --------------
+# -- The span belongs to one listener session and the pushes it got --------------
 
 def _pin_answer(state: ChannelState, at: float, pin_id: str, *, ok: bool = True) -> None:
     assert state.tool_started("resolve_pin", {"pin_id": pin_id}, at) is None
@@ -709,7 +709,7 @@ def pin_resolved(seq: int, pin_id: str, actor=None) -> dict:
 
 
 def test_two_messages_and_one_reply_keep_the_second_messages_span():
-    # Review 3 HIGH-1 (P1): "make the sky warmer" at 100, "and add a moon" at
+    # "make the sky warmer" at 100, "and add a moon" at
     # 110; the reply to the first at 150 used to end the moon's span too, and
     # a gated push at 176 refused the moon turn's edit at 181.
     state = listening()
@@ -731,7 +731,7 @@ def test_two_messages_and_one_reply_keep_the_second_messages_span():
 
 
 def test_the_same_for_shell_replies_naming_its_messages():
-    # Nebula marks the session's oldest unanswered push (review 4, the push
+    # Nebula marks the session's oldest unanswered push (the push
     # ledger): the first shell reply names msg_1, the second msg_2. A reply
     # naming a push already answered answers nothing more.
     state = listening()
@@ -749,7 +749,7 @@ def test_the_same_for_shell_replies_naming_its_messages():
 
 
 def test_a_sibling_sessions_reply_never_ends_the_span():
-    # Review 3 HIGH-1 (P1b): session A and this session B listen under one
+    # (P1b): session A and this session B listen under one
     # token. A's reply (its own message, same actor id) reaches B's feed.
     state = listening()
     state.agent_id = MINE["id"]
@@ -767,7 +767,7 @@ def test_a_sibling_sessions_reply_never_ends_the_span():
 
 
 def test_an_unrelated_resolve_pin_never_ends_a_message_span():
-    # Review 3 HIGH-1 (P1c).
+    # (P1c).
     state = listening()
     sent(state, 1, 100.0)
     assert take(state, 100.0).wake == "message"
@@ -850,7 +850,7 @@ def test_the_cap_clears_what_waits_so_a_later_reply_never_reaches_back():
 
 
 def test_the_instructions_say_to_answer_every_deliberate_wake():
-    # Round 5 (D1, adversarial change 4): a deliberate wake is answered (its
+    # (D1, adversarial change 4): a deliberate wake is answered (its
     # span waits for that); "end the turn without a reply" is only for the
     # passive wakes.
     text = mcp_channel.INSTRUCTIONS
@@ -859,13 +859,13 @@ def test_the_instructions_say_to_answer_every_deliberate_wake():
     assert "If nothing needs saying" not in text
     # PR C: a message (and an answer) is answered with reply_to_person.
     assert "Each is their request: answer a pin with resolve_pin, the others with reply_to_person." in text
-    # Review 4 parity LOW-1: the merge dropped it from the gated-turn list.
+    # The merge dropped it from the gated-turn list.
     assert ("may only look, point (point_at say), post_note, reply_to_person, answer pins and propose "
             "(propose_change, propose_asset_change)") in text
     assert "reply_to_person" in mcp_channel.CHANGE_TURN_TOOLS
 
 
-# -- review 4: the push ledger, the listener's side ------------------------------------
+# -- The push ledger, the listener's side ------------------------------------
 # Nebula records each push the listener reports and marks the session's
 # OLDEST unanswered one for each reply (``replyTo``: its newest message,
 # else its first question set). The listener keeps the pushes as groups and
@@ -895,7 +895,7 @@ def _two_pushes(state: ChannelState) -> None:
 
 @pytest.mark.parametrize("order", ["echo first", "result first"])
 def test_1_one_reply_ends_exactly_one_push_whichever_of_its_echo_and_result_comes_first(order):
-    # Review 4 HIGH-1: the echo came before the tool's result 8 of 8 times on
+    # The echo came before the tool's result 8 of 8 times on
     # the cross-project path, and both counted.
     state = listening()
     _two_pushes(state)
@@ -939,7 +939,7 @@ def test_2_two_messages_in_one_push_one_reply_ends_it():
 
 
 def test_4_a_shell_reply_to_an_answer_only_push_ends_its_span():
-    # Review 4 live MEDIUM-4: a fresh session asks, the person picks "Warm",
+    # A fresh session asks, the person picks "Warm",
     # `nebula reply` from its shell: Nebula marks the answer's push, whose
     # replyTo is its question set.
     state = listening()
@@ -953,7 +953,7 @@ def test_4_a_shell_reply_to_an_answer_only_push_ends_its_span():
 
 
 def test_an_answer_push_and_a_message_push_need_two_replies():
-    # Review 4 LOW-2 (M08, B16): an answer push opens a group of its own.
+    # (M08, B16): an answer push opens a group of its own.
     state = listening()
     state.agent_id = MINE["id"]
     _answer_ready(state, "qs_0000000a", 1, now=100.0)
@@ -1072,7 +1072,7 @@ def test_gm_r108_a_a_pin_the_person_deletes_ends_its_span():
 
 
 def test_a_pin_left_at_the_cap_never_holds_a_later_span():
-    # Review 4 LOW-3 (B14): the cap clears the pins too.
+    # (B14): the cap clears the pins too.
     state = listening()
     state.observe(resp(pin(1, "warmer")), now=100.0)
     assert [p.wake for _, p in drain(state, 100.0, 101.0)] == ["pin"]

@@ -1,7 +1,7 @@
-"""Placeholders and statuses, round 8 (review 7 of feat/agent-presence, with
-the coordinator's decisions and GM - Design's round-8 rulings of 2026-10-26).
+"""Placeholders and statuses (feat/agent-presence, with
+the coordinator's decisions and design's rulings of 2026-10-26).
 
-Justin, Q133 b: what runs never costs more than the person was shown.
+Justin: what runs never costs more than the person was shown.
 - L4: an amount above zero never confirms as nothing. The canvas shows and
   sends at least $0.01 for it (lib/placeholderRunConfirm.ts roundUpToCent);
   Nebula's estimate, read at 6 places, never rounds a positive run to 0, so

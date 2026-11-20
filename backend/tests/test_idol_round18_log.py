@@ -1,4 +1,4 @@
-"""PR #203 round 18, GM r34 item 1: one node with several needs.
+"""PR #203, design: one node with several needs.
 
 - One node with two needs: "“FLUX Kontext” needs a prompt and an image.
   Connect both, then run the node again."; three or more: "…needs a
@@ -8,7 +8,7 @@
   stay separate sentences.
 - The needs follow the node's input order, and the same set merges whatever
   order another node's inputs are in.
-- From 4 nodes, nodes that share a set count inside its sentence (GM r35:
+- From 4 nodes, nodes that share a set count inside its sentence (design:
   "4 nodes need a prompt and an image. …"); only a line too long for the
   log says "N nodes can’t run here yet." instead.
 """
@@ -107,7 +107,7 @@ MANY_SETS = [KONTEXT, FILL, "runway-aleph", "mmaudio-v2", "minimax-s2v", "seedan
 
 @pytest.mark.parametrize("who", ["mcp", "cli", "chat"])
 def test_only_a_line_too_long_for_the_log_says_the_count_instead(monkeypatch, agent_log, chat_turn, who):  # noqa: F811
-    """GM r35 item 1: the log falls back to "N nodes can’t run here yet."
+    """Design: the log falls back to "N nodes can’t run here yet."
     only when the per-set sentences don't fit (agent_presence.MAX_LOG_CHARS)."""
     headers = {"mcp": MCP, "cli": CLI, "chat": chat_turn}[who]
     body, ids, said = _refused(monkeypatch, MANY_SETS, headers, agent_log)

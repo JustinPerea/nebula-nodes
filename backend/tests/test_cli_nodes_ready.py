@@ -1,6 +1,6 @@
 """`nebula nodes` is find_nodes' twin: what runs here, with prices.
 
-In the Q104 rerun (docs/agent-runs/2026-10-20-pr26-first-turn-measurement.md,
+In the rerun (docs/agent-runs/2026-10-20-pr26-first-turn-measurement.md,
 run B3) a CLI agent browsed `nebula nodes --category image-gen`, which listed
 all 78 image node types with no sign of which could run, and proposed
 FLUX.2 [pro] with no BFL or fal key set. MCP's find_nodes (GET

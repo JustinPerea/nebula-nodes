@@ -116,7 +116,7 @@ def test_an_edge_only_edit_on_a_canvas_past_the_connection_limit_goes_through(sm
     assert (wire.status_code, wire.json()["detail"]) == (413, _line(4, 2, 4, 1))
 
 
-# ---- round 13: apply follows the "no larger than now goes through" rule -------
+# ---- Apply follows the "no larger than now goes through" rule -------
 
 def test_apply_on_an_over_limit_canvas_lets_a_trim_through_and_refuses_growth(small):
     api = small
@@ -216,7 +216,7 @@ def test_a_stalled_socket_is_closed_and_doesnt_stop_another_getting_the_sync(mon
     assert elapsed < 2.0
 
 
-# ---- round 13 ---------------------------------------------------------------
+# ---- an accept over the connection limit ---------------------------
 
 def test_an_accept_over_the_connection_limit_on_an_over_node_canvas_says_connections(small, person):
     """The canvas is already past the node limit; the proposal only grows connections."""
@@ -249,7 +249,7 @@ def test_the_oversized_kind_is_the_one_this_edit_grows(small):
     assert api.main._oversized_graph_kind(candidate) == "nodes"
 
 
-# ---- round 13: the hello's first sync is bounded, and the bound scales ------
+# ---- The hello's first sync is bounded, and the bound scales ------
 
 def test_the_send_bound_is_a_floor_plus_time_for_the_bytes_and_capped():
     import main as main_module

@@ -1,4 +1,4 @@
-"""PR #200 fix round 13 (review 12 M-1, L-2, NIT-5; GM r21): the strip and
+"""PR #200 (design): the strip and
 the count read Unicode's own lists, the same bytes the canvas reads.
 
 - Tag characters stay only as England, Scotland or Wales; any other tag run

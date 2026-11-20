@@ -10,7 +10,7 @@ added (bf488a80); this test compares against it.
 To re-pin after a deliberate change (gap #20 itself), run this file with
 NEBULA_REPIN_MOODBOARD=1 and review the fixture diff.
 
-Analysis version 5 (moodboard canvas PR2, Q7) measures set-aside images: the
+Analysis version 5 (moodboard canvas PR2) measures set-aside images: the
 "brand" board's excluded image gains an ``images`` entry with
 ``setAside: true`` and its colours. The steering view below leaves those
 entries out, so its fixture is unchanged; ``fixtures/moodboard_set_aside_pin.json``
@@ -21,7 +21,7 @@ Re-pinned 2026-10-20 (weight 0 out of the summary's count, plan section
 its image 5 is at weight 0. Its colours, brief, negatives, keywords and
 per-image colours are as they were.
 
-Re-pinned 2026-10-31 (GM r1 on #208): the 4 summaries' "N reference
+Re-pinned 2026-10-31 (design on #208): the 4 summaries' "N reference
 image(s)" became "N reference images". Nothing else moved. (The same PR
 counts alpha; no image here has transparency, so no colour moved.)
 """

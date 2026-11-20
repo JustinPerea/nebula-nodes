@@ -1,9 +1,9 @@
-"""Agent cursors, PR #211 round 4c (review 5).
+"""Agent cursors, PR #211.
 
-- M3 / MEDIUM-1: conftest's cursor checks are installed before any fixture,
+- M3: conftest's cursor checks are installed before any fixture,
   so a fixture that patches ``main.manager.broadcast_raw`` can't blind them,
   and every cursor test file passes run alone, in its own pytest run.
-- LOW-1: the checks read the content too. No person-only frame (a cursor
+- The checks read the content too. No person-only frame (a cursor
   event with ``session``, or the replay) reaches a socket that isn't the
   person's canvas: through the real senders, an instance-level stand-in, or
   in main.py's source.
@@ -53,7 +53,7 @@ def test_each_cursor_file_passes_run_alone(name):
 
 
 def test_a_fixture_that_patches_broadcast_raw_cant_blind_the_check(tmp_path):
-    """Review 5, M3: a fixture saved the unwrapped sender and its undo left it
+    """A fixture saved the unwrapped sender and its undo left it
     on the manager instance, so later tests sent around the check. Here the
     first test's fixture patches broadcast_raw; the two after it each send
     around the helper (one stray cursor event, one person-only frame to
@@ -91,7 +91,7 @@ def test_a_fixture_that_patches_broadcast_raw_cant_blind_the_check(tmp_path):
 
 
 def test_the_check_is_in_before_any_fixture_runs(tmp_path):
-    """Review 5, M3, the fix itself: the senders are checked before the first
+    """The fix itself: the senders are checked before the first
     fixture, and a fixture that imports main itself and patches a sender
     saves (so puts back) the checked one. Each probe runs in a pytest of its
     own, so nothing imported main earlier."""
@@ -133,7 +133,7 @@ def test_the_check_is_in_before_any_fixture_runs(tmp_path):
         assert run.returncode == 0 and passed in run.stdout, run.stdout[-3000:]
 
 
-# -- LOW-1: the content, at run time --------------------------------------------
+# -- The content, at run time --------------------------------------------
 
 def _person(presence: AgentPresence, session: str = "a") -> tuple[dict, dict]:
     event = presence.point(AGENT, target={"x": 1, "y": 1})
@@ -183,7 +183,7 @@ def test_an_instance_level_stand_in_is_checked_too(sockets, monkeypatch):
 
 
 def test_an_asyncmock_stand_in_is_checked_and_still_reads_as_the_mock(sockets, monkeypatch):
-    """Review 6, MEDIUM-1: a Mock makes up any attribute, the check's marker
+    """A Mock makes up any attribute, the check's marker
     too, so it used to pass as checked and go unwrapped (16 files patch a
     sender with AsyncMock). It is wrapped now, and the test still reads the
     mock's own attributes through the wrapper."""
@@ -212,7 +212,7 @@ def test_an_asyncmock_stand_in_is_checked_and_still_reads_as_the_mock(sockets, m
 
 
 def test_a_stand_in_marked_by_hand_is_still_wrapped_and_reads_as_itself(sockets, monkeypatch):
-    """Review 7, NIT-1 and NIT-4: the marker alone no longer passes a stand-in
+    """The marker alone no longer passes a stand-in
     unwrapped; the wrapper shows the stand-in in its repr, and deleting an
     attribute through it deletes it on the stand-in."""
     from unittest.mock import AsyncMock
@@ -249,7 +249,7 @@ def test_a_magicmock_stand_in_sent_the_agent_form_is_left_alone(sockets, monkeyp
 
 
 def test_the_socket_check_reads_bytes_too():
-    """Review 6, N1: send_bytes is wrapped, and a frame sent as bytes is read."""
+    """send_bytes is wrapped, and a frame sent as bytes is read."""
     import main
     from starlette.websockets import WebSocket
 
@@ -265,7 +265,7 @@ def test_the_socket_check_reads_bytes_too():
     other = Sink()
     assert person_only_frame(b'{"type": "agentPresenceReplay", "cursors": []}')
     assert not person_only_frame(b'{"type": "agentPresence", "target": null}')
-    # Review 7, NIT-2: a bytearray, a UTF-8 BOM, UTF-16, and bad UTF-8 in a value.
+    # A bytearray, a UTF-8 BOM, UTF-16, and bad UTF-8 in a value.
     frame = '{"type": "agentPresence", "session": {"key": "k", "ordinal": 1}}'
     assert person_only_frame(bytearray(frame.encode()))
     assert person_only_frame(b"\xef\xbb\xbf" + frame.encode())
@@ -315,7 +315,7 @@ def test_the_starlette_socket_check_reads_the_frame_and_the_socket():
     assert len(other.frames) == 3  # recorded, still sent
 
 
-# -- LOW-1: the content, in main.py's source ------------------------------------
+# -- The content, in main.py's source ------------------------------------
 
 def test_main_sends_a_person_only_frame_only_to_the_persons_canvas():
     """Every person-only frame main.py builds goes out as
@@ -348,10 +348,9 @@ PERSON_SHAPES = {
     "replay literal": "await ws.send_text(json.dumps({'type': 'agentPresenceReplay', 'cursors': []}))",
     "copy": "p = _person_form(e, i, h)\n    await manager.broadcast_raw(dict(p))",
     "from another function": "await manager.broadcast_raw(build())",
-    # Review 6, N2.
     "nested in a dict": "await manager.broadcast_others({'cursor': _person_form(e, i, h)})",
     "sender alias": "send = manager.broadcast_others\n    await send(_person_form(e, i, h))",
-    # Review 6, LOW-2: built by hand, or sent another way.
+    # Built by hand, or sent another way.
     "hand-built, a target": "await manager.broadcast_raw({'type': 'agentPresence', 'target': t, 'session': tag})",
     "hand-built, no target": "await manager.broadcast_others({'type': 'agentPresence', 'target': None, 'say': 'x', 'session': tag})",
     "spread plus session": "await manager.broadcast_raw({**agent_presence.point(i, target=None, say='x'), 'session': agent_presence.session_tag(i, s)})",
@@ -362,14 +361,14 @@ PERSON_SHAPES = {
     "getattr": "p = _person_form(e, i, h)\n    await getattr(manager, 'broadcast_raw')(p)",
     "loop over a list": "p = _person_form(e, i, h)\n    for x in [p]:\n        await manager.broadcast_others(x)",
     "on self": "self.p = _person_form(e, i, h)\n    await manager.broadcast_others(self.p)",
-    # Review 7, LOW-B: each reader from its other side.
+    # Each reader from its other side.
     "other branch": "p = _person_form(e, i, h)\n    await manager.broadcast_others(e if ok else p)",
     "loop over a tuple": "p = _person_form(e, i, h)\n    for x in (p,):\n        await manager.broadcast_others(x)",
     "loop over a set": "p = _person_form(e, i, h)\n    for x in {p}:\n        await manager.broadcast_others(x)",
     "partial, keyword": "p = _person_form(e, i, h)\n    await functools.partial(manager.broadcast_others, data=p)()",
     "dict() with session": "await manager.broadcast_raw(dict(e, session=tag))",
     "dict() presence with session": "await manager.broadcast_raw(dict(type='agentPresence', target=t, session=tag))",
-    # Review 7, LOW-A: the shapes it found missed.
+    # The shapes it found missed.
     "send_bytes": "p = _person_form(e, i, h)\n    await ws.send_bytes(json.dumps(p).encode())",
     "raw socket send": "p = _person_form(e, i, h)\n    await ws.send({'type': 'websocket.send', 'text': json.dumps(p)})",
     "person function alias": "pf = _person_form\n    await manager.broadcast_raw(pf(e, i, h))",
@@ -410,7 +409,7 @@ def test_the_person_only_guard_catches_each_shape(shape):
     "await manager.broadcast_raw({'type': 'graphSync', 'session': s})",
     "await manager.broadcast_raw(dict(type='graphSync', session=s))",
     "e = _point(i, target=None, say='x')\n    await manager.broadcast_raw(e if ok else {**e})",
-    # Review 7: each reader's other side, with nothing person-only in it.
+    # Each reader's other side, with nothing person-only in it.
     "e = _point(i, target=None, say='x')\n    for x in (e,):\n        await manager.broadcast_others(x)",
     "e = _point(i, target=None, say='x')\n    await functools.partial(manager.broadcast_others, data=e)()",
     "e = _point(i, target=None, say='x')\n    await manager.broadcast_raw(dict(e, say='y'))",
@@ -429,7 +428,7 @@ def test_the_person_only_guard_lets_the_route_through(shape):
 # -- N1: live_only's TTL edge -----------------------------------------------------
 
 def test_an_accept_lands_on_a_cursor_exactly_at_its_ttl_and_not_past_it():
-    """Review 5, N1: live_only reads liveness as _slot and session_tag do, a
+    """live_only reads liveness as _slot and session_tag do, a
     cursor is live through exactly PRESENCE_TTL_SECONDS (``>``, not ``>=``)."""
     for age, lands in ((PRESENCE_TTL_SECONDS, True), (PRESENCE_TTL_SECONDS + 0.001, False)):
         clock = Clock()

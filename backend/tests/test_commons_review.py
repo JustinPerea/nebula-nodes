@@ -59,7 +59,7 @@ async def test_budget_failure_and_duplicate_inflight_cannot_spend_twice(store, s
     monkeypatch.setenv('NEBULA_COMMONS_REVIEW_CALL_BUDGET', '0')
     with pytest.raises(evaluation.EvaluationError, match='budget') as refused:
         await review.propose(store, 0)
-    # GM r39: the restart is the step (the frontend re-reads on the new boot), no parens.
+    # Design: the restart is the step (the frontend re-reads on the new boot), no parens.
     assert refused.value.person == ('Agent review is turned off because Nebula started without a call budget. Restart '
                                     'Nebula with NEBULA_COMMONS_REVIEW_CALL_BUDGET set to the number of calls to allow.')
     monkeypatch.setenv('NEBULA_COMMONS_REVIEW_CALL_BUDGET', '1')
@@ -115,14 +115,14 @@ async def test_review_api_requires_human_and_records_only_explicit_acceptance(st
     assert response.status_code == 200 and response.json()['items'][0]['reviewed_at']
 
 
-# Review of error-copy round 3: the daily-cap refusal gives the real count and
+# Error copy: the daily-cap refusal gives the real count and
 # a next step that works. With Analysis calls per day set to 0 nothing was
 # made and tomorrow won't help; with the cap lowered below today's calls the
-# count is the calls made, not the cap. (GM's pattern: what's needed, the
+# count is the calls made, not the cap. (design's pattern: what's needed, the
 # count, then what to do.) Agents keep 'Daily model call cap reached.'.
 @pytest.mark.asyncio
 @pytest.mark.parametrize('cap,calls,line', [
-    # GM's rewrite (after #168): the setting's name in quotes, not read as a label.
+    # Design's rewrite (after #168): the setting's name in quotes, not read as a label.
     (0, 0, 'Agent review needs at least 1 analysis call a day, and Settings has it at 0. '
            'Raise \u201cAnalysis calls per day\u201d, then try again.'),
     (5, 12, 'Commons has made 12 analysis calls today, and the daily cap is 5. '

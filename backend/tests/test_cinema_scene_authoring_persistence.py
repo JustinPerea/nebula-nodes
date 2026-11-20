@@ -334,8 +334,8 @@ async def test_cancelled_whole_scene_sync_only_installs_shots_that_actually_sett
     if first_success:
         assert saved[0]["output"]["imageUrl"] == "https://fixture.example/completed-a.png"
     else:
-        # `error` is the agents' text; the error* fields are for the Cinema panel (error copy 3c-2).
-        # No errorProvider: Gemini never answered this plain error (round 3f review), so the
+        # `error` is the agents' text; the error* fields are for the Cinema panel (error copy).
+        # No errorProvider: Gemini never answered this plain error (review), so the
         # panel reads "open Details", not "Details shows what Gemini said".
         assert saved[0]["output"] == {"status": "error", "error": "Synthetic first-shot error",
                                       "errorCategory": "unknown", "errorFriendly": "Synthetic first-shot error",
@@ -420,7 +420,7 @@ async def test_cached_context_cinema_result_syncs_rebound_runtime_without_copyin
     assert "_cinema_produced_outputs" not in recipe.model_dump()
 
 
-# Fix round 9 of PR #200 (GM r13): a shot's × is neutral because Undo puts the
+# PR #200 (design): a shot's × is neutral because Undo puts the
 # shot back whole. The write that takes a shot out keeps its run media on the
 # server, and the restore (or any write) that brings the same shot back gets it.
 RUN_MEDIA = {
@@ -508,7 +508,7 @@ def test_r9_kept_media_is_capped_oldest_first():
     assert ("n1", f"s{main._REMOVED_SHOT_MEDIA_CAP + 4}") in graph.removed_shot_media
 
 
-# PR #200 fix round 10 (review 9 LOW-1, GM r16 answer 4): a returning shot id
+# PR #200 (design): a returning shot id
 # gets its media back only when its prompt and settings match what was taken
 # out; otherwise it starts idle, and only the kept link goes (no file).
 
@@ -556,7 +556,7 @@ def test_r10_the_matching_shot_comes_back_whole_and_key_order_does_not_matter(au
 
 
 def test_r10_dropping_kept_media_never_deletes_a_file(authoring_client):
-    """GM r16 answer 4: "Dropped" is only the link from the shot; generated
+    """Design: "Dropped" is only the link from the shot; generated
     files stay in the outputs folder, as Projects promises."""
     client, graph, _, _ = authoring_client
     folder = main.OUTPUT_ROOT / "r10-shot-files"
@@ -583,7 +583,7 @@ def test_r10_dropping_kept_media_never_deletes_a_file(authoring_client):
     assert set(before_listing) <= set(main.OUTPUT_ROOT.rglob("*"))
 
 
-# PR #200 fix round 11 (review 10 LOW-2, GM r12 answer 4): "settings match"
+# PR #200 (design): "settings match"
 # is value equality. 1.0 is 1 (exact, no epsilon); a missing field is its
 # default (no prompt is "", no refs are [], no overrides are {}), and a null,
 # {} or [] anywhere is the same as missing; key order never counts.

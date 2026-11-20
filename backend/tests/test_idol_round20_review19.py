@@ -1,10 +1,10 @@
-"""PR #203 round 20, section 2b: review 19's findings, with GM r40's words.
+"""PR #203, section 2b: findings, with design's words.
 
 A. A routed node's missing key is a need like any other key's: its inputs
    and its key say one card line, ending once, and the bubble names both
-   (MEDIUM-1). GM r40 item 1: from 4 providers a count ("a key for one of
+   Design: from 4 providers a count ("a key for one of
    its 4 providers"), with 2 or 3 their names. A Krea sign-in is a need the
-   same way (a draft for GM).
+   same way (a draft for design).
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def test_no_card_line_has_two_run_again_endings(node_id):
 @pytest.mark.parametrize("node_id", WALKED)
 def test_the_bubble_names_every_need_when_the_card_says_one_line(node_id):
     """A node whose stops are only inputs and its key: the bubble's words
-    name each of them (a first sentence of the needs, per GM r39 item 5)."""
+    name each of them (a first sentence of the needs, per design)."""
     card, errors = _card(node_id)
     own = [error for error in errors if error.node_id == "n1"]
     if not own or not all(error._stop == "input" or error._key for error in own):
@@ -68,15 +68,15 @@ def test_the_bubble_names_every_need_when_the_card_says_one_line(node_id):
 
 
 @pytest.mark.parametrize("node_id,card", [
-    # GM, PR #203 r40 item 1, verbatim: 4 providers or more, a count.
+    # Design, PR #203, verbatim: 4 providers or more, a count.
     ("flux-3-image", "Connect the prompt and add a key for one of its 4 providers in Settings, then run it again."),
     # 2 or 3: their names, joined as the route line joins them.
     ("flux-2-pro", "Connect the prompt and add your Black Forest Labs API key or fal.ai API key in Settings, "
                    "then run it again."),
     ("krea-3", "Connect the prompt and add your Krea API key or fal.ai API key in Settings, then run it again."),
-    # A Krea sign-in (a draft for GM).
+    # A Krea sign-in (a draft for design).
     ("krea-moodboard-create", "Connect the images and sign in to Krea in Settings, then run it again."),
-    # A plain key keeps GM r38's form.
+    # A plain key keeps design's form.
     ("flux-kontext", "Connect the prompt and the image, and add your fal.ai API key in Settings, then run it again."),
 ])
 def test_the_card_says_its_needs_once(node_id, card):
@@ -86,7 +86,7 @@ def test_the_card_says_its_needs_once(node_id, card):
 def test_a_routed_bubble_names_the_node_its_prompt_and_its_key(monkeypatch, bubbles):  # noqa: F811
     body = _run(monkeypatch, [("flux-3-image", {}, "Hero shot")], MCP, {})
     assert body["status"] == "failed"
-    # GM, PR #203 r40 item 1, verbatim.
+    # Design, PR #203, verbatim.
     assert bubbles == ["“Hero shot” needs a prompt and a key for one of its 4 providers."]
 
 
@@ -233,7 +233,7 @@ def test_the_journal_marks_the_stop_with_the_agents_whole_text(world):
 def test_the_run_result_marks_the_stop_and_says_its_text(world):
     body = _graph_run(world, CLAUDE)
     assert body["stopped"] == {world.idol: STOPPED_FOR_PROPOSAL}
-    # One node's own words, never "n2 failed: …" (review 19, NIT-1).
+    # One node's own words, never "n2 failed: …".
     assert body["error"] == body["errors"][world.idol] == _agent_text(world)
     import mcp_server
 
@@ -285,7 +285,7 @@ def test_watch_prints_the_stops_whole_text():
 
 def test_a_stop_and_a_failure_in_one_run_say_both():
     labels = {"img": "Image", "n1": "Idol", "w": "Writer", "t": "Text"}
-    # GM, PR #203 r40 item 2, verbatim.
+    # Design, PR #203, verbatim.
     assert run_done_cards.done_text("Claude Code", labels, ["img", "n1", "w", "t"], succeeded=["img"],
                                     failed=["n1", "w"], stopped=["n1"]) == (
         "Claude Code finished 1 of 4 nodes. “Idol” is waiting for you to run it, and “Writer” failed.", "partial")
@@ -306,7 +306,7 @@ def test_the_done_bubble_says_whole_sentences_and_the_log_the_whole_line(world):
     assert renamed.status_code == 200, renamed.text
     _graph_run(world, CLAUDE)
     [line] = [m for m in world.sent if m.get("type") == "agentPresence" and "is waiting for you" in (m.get("log") or "")]
-    # The run's own row (design r211 item 3): what ran, then the whole waiting sentence, never cut.
+    # The run's own row (design): what ran, then the whole waiting sentence, never cut.
     assert line["log"] == ("Ran “Image Input” in under 1 s. “Chair splat for the client deck” is waiting for you to "
                            "run it because it could bill your Hugging Face account.")
     assert line["say"] == "Ran “Image Input” in under 1 s."
@@ -318,7 +318,7 @@ def test_a_tab_not_connected_as_the_person_gets_its_own_card_body(world):
     assert response.status_code == 200, response.text
     _done(world, "r-tab")
     [stop] = [m for m in world.sent if m.get("type") == "error" and m.get("proposalNeeded")]
-    # GM, PR #203 r40 item 5, verbatim; the gate is unchanged: no request.
+    # Design, PR #203, verbatim; the gate is unchanged: no request.
     assert stop["person"] == ("This node could bill your Hugging Face account, so only you can run it. You can run "
                               "it when this tab is connected as you.")
     assert stop["category"] == "waiting" and _space(world.hosts) == []

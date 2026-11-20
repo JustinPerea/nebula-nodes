@@ -44,7 +44,7 @@ def test_moodboard_import_is_idempotent_and_marks_ai_outputs(store, tmp_path, mo
     first = intake.import_moodboards(store)
     second = intake.import_moodboards(store)
     assert first["added"] == 2 and second["added"] == 0
-    # blob: is a link the browser holds, never one of Nebula's files (Q98).
+    # blob: is a link the browser holds, never one of Nebula's files.
     assert [s["url"] for s in first["skipped"]] == ["blob:xyz"]
     assert "outside Nebula" in first["skipped"][0]["reason"]
     (col,) = [c for c in store.list_collections() if c["kind"] == "moodboard"]
@@ -118,7 +118,7 @@ def test_moodboard_reimport_adds_no_sightings_and_refetches_nothing(store, tmp_p
     monkeypatch.setattr(net, "safe_fetch", fake_fetch)
     first = intake.import_moodboards(store)
     intake.import_moodboards(store)
-    # Q98: a board image that is a link to another site is never fetched
+    # A board image that is a link to another site is never fetched
     # (nothing in Nebula loads one); the import skips it and says why.
     with store.db.read() as conn:
         assert conn.execute("SELECT count(*) FROM sightings").fetchone()[0] == 0

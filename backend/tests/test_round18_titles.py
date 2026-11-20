@@ -1,6 +1,6 @@
-"""Round 18: an unnamed node's canvas title drops the gateway its name names.
+"""An unnamed node's canvas title drops the gateway its name names.
 
-GM - Design (r18, item 1), verbatim: "Unnamed node: the default title drops
+Design, verbatim: "Unnamed node: the default title drops
 the route. "Grok Imagine 2.0" ... Only for nodes whose route depends on keys."
 Follow-up: "build the canvas-title-only version. The library and search keep
 the catalog names, nothing is migrated". "Unnamed = the saved label equals the

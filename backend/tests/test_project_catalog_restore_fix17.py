@@ -1,19 +1,19 @@
-"""PR #199 fix round 17 (review 15, GM r23 and r24), the backend's part.
+"""PR #199 (design), the backend's part.
 
-- HIGH-1 (review 15 renumber-recover): Nebula's live graph never holds a
+- Nebula's live graph never holds a
   node id that isn't ``nN``. Duplicate and Paste make tab-local uuid nodes;
   autosave writes them into the project; an open used to load them into the
   live graph, where the tab's typing never reached them, and an agent's read
   then wrote the stale value back. Every open renumbers them (the stored
   project too) and answers ``renumbered``; the commit refuses any other id.
-- LOW-1: a renumbering numbers past every id the copy, its run history and
+- A renumbering numbers past every id the copy, its run history and
   its records have used, even with the source gone.
-- NIT-1 to NIT-4: ASCII digits only; node references in params move; recover
+- ASCII digits only; node references in params move; recover
   checks every connection as the live route does, and reports each it drops.
 - The shared port rules file, and droppedWires' structured entries.
-- Agents-grace LOW-1, LOW-2, NIT-1; kept-wires-ui LOW-1 (no selection or
-  view while kept); GM r23 e ("1 node", the restore note's canvas line said
-  once) and a ("Recovered Delta").
+- No selection or
+  view while kept; design's two answers ("1 node", the restore note's
+  canvas line said once; "Recovered Delta").
 """
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def _agent_read_and_listing(client, project_id: str) -> None:
     assert client.get("/api/projects", headers=CODEX).status_code == 200
 
 
-# -- HIGH-1: the reviewer's repro, duplicate and paste --------------------------------------
+# -- The reviewer's repro, duplicate and paste --------------------------------------
 
 def test_high1_a_duplicates_typing_survives_a_reopen_and_an_agents_read(app):
     client, store, *_ = app
@@ -372,7 +372,7 @@ def test_high1_undo_sync_refuses_a_non_nebula_id_clearly(app):
     assert refused.status_code == 400 and "must be a node id like n3" in refused.text
 
 
-# -- LOW-1: the counter covers every id the copy has used ------------------------------------
+# -- The counter covers every id the copy has used ------------------------------------
 
 def test_low1_with_the_source_gone_a_kept_node_never_takes_a_deleted_nodes_id(app):
     client, store, *_ = app
@@ -394,7 +394,7 @@ def test_low1_with_the_source_gone_a_kept_node_never_takes_a_deleted_nodes_id(ap
     assert _on_disk(store, "f" * 32)["_nodeCounter"] == 3
 
 
-# -- NIT-4: recover checks every connection as the live route does ---------------------------
+# -- Recover checks every connection as the live route does ---------------------------
 
 def test_nit4_a_connection_to_a_node_whose_definition_was_removed_is_checked_and_reported(app, monkeypatch):
     client, store, *_ = app
@@ -432,7 +432,7 @@ def test_nit4_a_stray_shot_connection_is_reported_not_dropped_silently(app):
     assert [(wire["id"], wire["kind"]) for wire in recovered.json()["droppedWires"]] == [("w-shot", "port")]
 
 
-# -- droppedWires: structured entries (GM r23 2, agents-grace NIT-2, kept-wires-ui NIT-1) ------
+# -- droppedWires: structured entries (design) ------
 
 ENTRY_KEYS = {"id", "source", "sourceHandle", "target", "targetHandle", "sourceWas", "targetWas", "sourceName",
               "targetName", "sourcePort", "targetPort", "sourceType", "targetType", "limit", "kind", "detail"}
@@ -492,7 +492,7 @@ def test_one_dropped_connection_is_said_in_the_singular(app):
     assert event["summary"].endswith("left out 1 connection it couldn't keep")
 
 
-# -- The shared port rules (kept-wires-ui LOW-3, GM r23 2) ------------------------------------
+# -- The shared port rules (design) ------------------------------------
 
 def test_port_rules_are_the_same_bytes_on_both_sides():
     backend = ROOT / "backend/data/port_rules.json"
@@ -547,7 +547,7 @@ def test_the_generator_writes_what_is_checked_in(tmp_path):
     assert (copy / "backend/data/port_rules.json").read_bytes() == (ROOT / "backend/data/port_rules.json").read_bytes()
 
 
-# -- Agents-grace LOW-1, LOW-2, NIT-1 --------------------------------------------------------
+# -- an expired grace isn't counted while another tab stays kept ---
 
 def test_grace_low1_an_expired_grace_isnt_counted_while_another_tab_stays_kept(app, clock, monkeypatch, tmp_path):
     client, *_ = app
@@ -638,7 +638,7 @@ def test_grace_nit1_a_marker_that_cant_be_removed_pauses_one_grace_only(monkeypa
     assert main_module.ConnectionManager(marker).start_boot_grace() == 1
 
 
-# -- Kept-wires-ui LOW-1: no selection and no view while kept ---------------------------------
+# -- No selection and no view while kept ---------------------------------
 
 def test_kept_ui_low1_agents_read_no_selection_or_view_while_a_tab_keeps_edits(app, clock, monkeypatch, tmp_path):
     client, *_ = app
@@ -694,7 +694,7 @@ def test_kept_ui_low1_a_catalog_restore_clears_the_published_selection(app):
     assert _settles(lambda: main_module.selection_context.current() == [])
 
 
-# -- GM r23 e: "1 node", and the canvas said once --------------------------------------------
+# -- Design: "1 node", and the canvas said once --------------------------------------------
 
 def test_r23e_counts_are_singular_for_one():
     assert counted(1, "node") == "1 node" and counted(2, "node") == "2 nodes" and counted(0, "project") == "0 projects"
@@ -723,7 +723,7 @@ def test_r23e_the_restore_note_leaves_the_waiting_canvas_to_its_block():
     assert "couldn't be filed as its own" not in text
 
 
-# -- GM r23 a: "Recovered Delta" ---------------------------------------------------------------
+# -- Design: "Recovered Delta" ---------------------------------------------------------------
 
 def test_r23a_recovered_copies_are_named_recovered_delta_then_numbered(app):
     client, store, *_ = app
@@ -738,14 +738,14 @@ def test_r23a_recovered_copies_are_named_recovered_delta_then_numbered(app):
             "paramsVersion": main_module.PARAMS_VERSION, "sourceName": "Delta"})
         assert recovered.status_code == 200, recovered.text
         names.append(recovered.json()["project"]["name"])
-    assert names == ["Recovered Delta", "Recovered Delta copy"]  # GM r29, 2
+    assert names == ["Recovered Delta", "Recovered Delta copy"]  # Design
     listing = client.get("/api/projects", headers=CODEX).json()
     assert {"Recovered Delta", "Recovered Delta copy"} <= {project["name"] for project in listing["projects"]}
 
 
 @pytest.mark.parametrize("source, taken, expected", [
     ("Delta", (), "Recovered Delta"),
-    # GM r29, 2: " copy", then " copy 2"; no number in a name is read.
+    # Design: " copy", then " copy 2"; no number in a name is read.
     ("Delta", ("Recovered Delta",), "Recovered Delta copy"),
     ("Recovered Delta", ("Recovered Delta",), "Recovered Delta copy"),  # never a second "Recovered"
     ("Delta", ("Recovered Delta", "Recovered Delta copy 2"), "Recovered Delta copy"),  # the lowest free

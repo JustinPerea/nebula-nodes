@@ -1,5 +1,5 @@
 """The stored alpha facts on a board image, and the guards around them
-(PR #208 round 4, review 3 L1 and L3).
+(PR #208).
 
 Each board image entry stores ``hasTransparency`` and ``hasClearPixels``
 with the stat of the file they were read from (``alphaFileStat``). A use
@@ -36,7 +36,7 @@ SIZE = (48, 32)
 
 
 def current_alpha_facts(image):
-    from services.moodboard_analysis import current_alpha_facts as facts  # new in round 4
+    from services.moodboard_analysis import current_alpha_facts as facts  # new in the stamp change
 
     return facts(image)
 
@@ -157,7 +157,7 @@ def test_facts_stored_before_the_stamp_get_it_at_startup_on_any_board(tmp_path, 
     store.update(made["id"], analysis=analyze_moodboard(store.get(made["id"])))  # version 6
     path = next((tmp_path / "boards").rglob(f"{made['id']}.json"))
     raw = json.loads(path.read_text(encoding="utf-8"))
-    raw["images"][0].pop("alphaFileStat")  # as a round 3 build stored it
+    raw["images"][0].pop("alphaFileStat")  # as an earlier build stored it
     path.write_text(json.dumps(raw), encoding="utf-8")
     report = stamp_transparency_once()
     assert [Path(p).stem for p in report["saved"]] == [made["id"]]
@@ -193,7 +193,7 @@ def test_the_cache_reads_a_file_again_when_its_size_changes() -> None:
     assert file_alpha_facts(path) == {"hasTransparency": True, "hasClearPixels": True}
 
 
-# -- Review 4 L3: same size, same mtime, another file ---------------------------------------
+# -- Same size, same mtime, another file ---------------------------------------
 
 def _cache_clear() -> None:
     """A fresh process: nothing decoded in memory, only the stored stamp."""
@@ -288,7 +288,7 @@ def test_a_stamp_of_the_older_two_element_form_is_read_again_then_restamped(monk
     entry = {"id": "a", "url": _put(_opaque_rgba())}
     path = _file_of(entry["url"])
     stat = path.stat()
-    # As round 4 and 5 builds stored it, and wrong about the file.
+    # As the earlier builds stored it, and wrong about the file.
     entry.update({"hasTransparency": True, "hasClearPixels": True,
                   "alphaFileStat": [stat.st_mtime_ns, stat.st_size]})
     assert current_alpha_facts(entry) == {"hasTransparency": False, "hasClearPixels": False}
@@ -304,7 +304,7 @@ def test_a_stamp_of_the_older_two_element_form_is_read_again_then_restamped(monk
 
 
 def test_a_current_board_with_the_older_stamp_is_restamped_at_startup(tmp_path, monkeypatch) -> None:
-    # A version-6 board stamped [mtime_ns, size] by round 4-5 builds: the
+    # A version-6 board stamped [mtime_ns, size] by earlier builds: the
     # startup pass restamps it once, then leaves it.
     from services.moodboard_store import MoodboardStore, stamp_transparency_once
 

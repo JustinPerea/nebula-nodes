@@ -1,11 +1,11 @@
-"""The Message box thread, round 3 (review 1 of #225 and GM r79).
+"""The Message box thread (#225 and design).
 
-- MEDIUM-2: the person's messages still in flight are never trimmed (agent
+- The person's messages still in flight are never trimmed (agent
   rows go first), and reply_to_person is paced per agent (5 in a row, then
   one every 2 s), refused with a line saying when it can reply again.
-- MEDIUM-1: a question row's text is the asker's; no agent reads the
-  person's answer in the thread (GM r79.5 keeps it there, person form only).
-- GM r79.6: an answer racing a withdrawal is refused; nothing goes out.
+- A question row's text is the asker's; no agent reads the
+  person's answer in the thread (design keeps it there, person form only).
+- Design: an answer racing a withdrawal is refused; nothing goes out.
 - The LOWs: a stable listener id (its messages survive a lapse; #223 tests eviction),
   replyTo, an unnamed reader's line, `nebula channel`, and the mutation
   survivors (hold never reopens an accepted row, no clientId for agents, the
@@ -46,7 +46,7 @@ def _person_rows(api):
     return api.client.get("/api/canvas/thread", headers=PERSON, params={"limit": 300}).json()["rows"]
 
 
-# -- MEDIUM-2: trimming and the reply pace ------------------------------------------------
+# -- Trimming and the reply pace ------------------------------------------------
 
 def test_trim_drops_agent_rows_first_then_settled_rows_never_one_in_flight():
     rows = [{"id": "m0", "kind": "message", "state": "sent"}, {"id": "r0", "kind": "reply"},
@@ -115,7 +115,7 @@ def test_the_pace_forgets_the_least_recent_agent_past_its_cap():
     assert pace.take("a") == 0
 
 
-# -- MEDIUM-1 and GM r79.5: questions stay the asker's --------------------------------------
+# -- Design: questions stay the asker's --------------------------------------
 
 def _ask(api, headers=SESSION_A, questions=None):
     asked = api.client.post("/api/canvas/questions", headers=headers, json={"questions": questions or [
@@ -168,7 +168,7 @@ def test_a_closed_question_keeps_its_outcome_for_the_person_only(thread):
 
 
 def test_an_answer_racing_a_withdrawal_is_refused_and_nothing_goes_out(thread):
-    """GM r79.6: the agent withdraws while the person types; their send is
+    """Design: the agent withdraws while the person types; their send is
     refused, no message, no wake, no row."""
     a = _listen(thread, SESSION_A)
     set_id, key = _ask(thread, questions=[{"text": "Which palette?", "allowText": True}])
@@ -187,7 +187,7 @@ def test_an_answer_racing_a_withdrawal_is_refused_and_nothing_goes_out(thread):
 
 
 def test_a_new_question_posts_its_own_update_while_an_answered_one_reads_past_tense(thread):
-    """GM r83 CHECK (shot 6): a question asked after another was answered
+    """Design's check of a screenshot: a question asked after another was answered
     posts its own Update, "has a question." with Answer, unread; the
     answered one keeps "asked a question." and "Answered.", read. The shot's
     card was the earlier Update still up (the corner shows one card at a
@@ -287,7 +287,7 @@ def test_a_person_pin_adds_a_row_only_while_a_session_listens_and_agents_read_it
     agents = thread.client.get("/api/canvas/thread", headers=CODEX).json()["rows"]
     pins = thread.client.get("/api/canvas/pins", headers=CODEX).json()["pins"]
     listed = next(p["text"] for p in pins if p["text"].startswith("warmer"))
-    assert agents[-1]["kind"] == "pin" and agents[-1]["text"] == listed  # GM r23: the agents' form
+    assert agents[-1]["kind"] == "pin" and agents[-1]["text"] == listed  # Design: the agents' form
     assert "️" not in agents[-1]["text"]
 
 
@@ -328,7 +328,7 @@ def test_nebula_channel_prints_your_listeners(capsys, monkeypatch):
 
 
 def test_nebula_reply_and_thread_say_what_happened_in_the_persons_words(capsys):
-    """GM r83.5: curly apostrophes; an empty or too-long reply says why and
+    """Design: curly apostrophes; an empty or too-long reply says why and
     what to do, the command on its own line; thread rows keep "(n7)"."""
     from cli.commands import thread as thread_cmd
 
@@ -359,7 +359,7 @@ def test_nebula_reply_and_thread_say_what_happened_in_the_persons_words(capsys):
     assert capsys.readouterr().out.endswith("agent  Done.  (n7)\n")
 
 
-# -- GM r79.2: an edit with no note is logged in the person's words ----------------------------
+# -- Design: an edit with no note is logged in the person's words ----------------------------
 
 def _presence(api):
     return [m for m in api.sent + api.browser if m.get("type") == "agentPresence"]
@@ -374,13 +374,13 @@ def test_an_edit_with_no_note_logs_the_persons_words_never_the_terse_summary(thr
                                 json={"params": [{"nodeId": n1, "params": {"value": "a warmer cat"}}]})
     assert edited.status_code == 200, edited.text
     event = _presence(thread)[before:][-1]
-    assert event["say"] == "Changed 1 node"  # the person's bubble counts (main's GM r47 person_say)
+    assert event["say"] == "Changed 1 node"  # the person's bubble counts (main's person_say)
     label = thread.main._card_label(thread.main.node_registry.get("text-input") or {}, thread.graph.nodes[n1], "value")
     assert event["log"] == f"Changed “{label}” on “Hero shot”"
     before = len(_presence(thread))
     thread.client.post("/api/graph/apply", headers=CLAUDE,
                        json={"params": [{"nodeId": n1, "params": {"value": "x"}}, {"nodeId": n2, "params": {"value": "y"}}]})
-    # GM r83.1: several nodes are named, never "and 1 more node".
+    # Design: several nodes are named, never "and 1 more node".
     assert _presence(thread)[before:][-1]["log"] == "Changed “Hero shot” and “Text Input”"
     noted = thread.client.post("/api/graph/apply", headers=CLAUDE,
                                json={"note": "Cooler sky", "params": [{"nodeId": n1, "params": {"value": "z"}}]})
@@ -389,7 +389,7 @@ def test_an_edit_with_no_note_logs_the_persons_words_never_the_terse_summary(thr
     assert not any("more node" in (e.get("log") or "") for e in _presence(thread))
 
 
-# -- GM r83.1: the working line's edit labels, one per count -----------------------------------
+# -- Design: the working line's edit labels, one per count -----------------------------------
 
 def _named_nodes(api, *names):
     ids = [api.graph.add_node("text-input", {"value": name}) for name in names]
@@ -469,7 +469,7 @@ def test_several_nodes_keep_a_shared_verb_else_changed(thread):
         assert not re.search(r"\b(changed|moved) \d", line) and "more node" not in line
 
 
-# -- GM r83.5: the CLI's thread lines follow the person-copy rules ---------------------------------
+# -- Design: the CLI's thread lines follow the person-copy rules ---------------------------------
 # A sibling of #204's test_flag_parens_copy (not on this branch yet): the lines `nebula reply`,
 # `nebula thread` and `nebula channel` print use curly apostrophes, never introduce a command with a
 # colon (the command goes on its own line), and put a listener's reason after " · ", not in

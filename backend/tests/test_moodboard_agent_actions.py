@@ -173,7 +173,7 @@ def test_describe_change_is_the_journal_summary_with_the_fields_it_leaves_out():
     both = _board(direction="warm dusk")
     both["images"] = aside["images"]
     assert _describe(before, both) == "Set aside image 1 on “Dusk” and changed “Direction”"
-    # The board's notes are a field, named as the board.fields event names them (Q91).
+    # The board's notes are a field, named as the board.fields event names them.
     assert _describe(before, _board(notes="calm")) == "Changed “Moodboard notes” on “Dusk”"
     # ...and named after the journal's summary when it is about something else.
     added_and_noted = _board(notes="calm")
@@ -300,8 +300,8 @@ def test_an_agents_put_takes_before_from_the_write_itself(api, monkeypatch):
     assert _said(sent) == ["Changed “Direction” on “Dusk dunes”"]
 
 
-# -- one set of words (GM - Design on PR #233): the Agent log, the cursor's say and the journal ---------
-# Every line GM listed, once, for each surface. "Dusk" is the board unless a row says otherwise.
+# -- one set of words (design on PR #233): the Agent log, the cursor's say and the journal ---------
+# Every line design listed, once, for each surface. "Dusk" is the board unless a row says otherwise.
 
 LQ, RQ = "“", "”"
 
@@ -316,7 +316,7 @@ def _named(name: str, **fields) -> dict:
 
 
 def _words_rows() -> list[tuple[str, dict, dict, str]]:
-    """(label, before, after, the say GM listed)."""
+    """(label, before, after, the say design listed)."""
     dusk, light = _named("Dusk"), _named("Desert light")
     aside = _named("Dusk")
     aside["images"][0]["excluded"] = True

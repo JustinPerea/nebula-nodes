@@ -1,8 +1,8 @@
-"""The Agents panel's backend (Q125 item 2): a status line per agent, and the
+"""The Agents panel's backend: a status line per agent, and the
 roster the panel and agents read.
 
-Justin, 2026-10-24: "Yes, all four, in that order" (merge-oks Q125); this is
-item 2. An identified agent sets one line about what it is working on,
+Justin, 2026-10-24: "Yes, all four, in that order" (merge-oks); this is the second of the four.
+An identified agent sets one line about what it is working on,
 optionally on a node (`set_status`, `nebula status`, `POST
 /api/canvas/status`). It lasts until the agent replaces or clears it, or
 until STATUS_IDLE_SECONDS pass with no sign of that agent (any identified
@@ -421,7 +421,7 @@ def test_the_roster_names_the_last_action_from_the_cursor(roster):
 
 def test_a_single_rename_or_move_names_itself_in_the_roster(roster):
     """`nebula rename` and `nebula move` (the label and layout routes) are
-    actions too: GM's line reads Moved “Hero shots” · 2 min ago."""
+    actions too: design's line reads Moved “Hero shots” · 2 min ago."""
     created = roster.client.post("/api/graph/node", headers=CODEX,
                                  json={"definitionId": "text-input", "params": {"value": "a cat"}})
     node_id = created.json()["id"]
@@ -440,9 +440,9 @@ def test_a_single_rename_or_move_names_itself_in_the_roster(roster):
     assert len([m for m in roster.sent if m.get("type") == "agentPresence"]) == before
 
 
-# -- GM's review of the verbs (PR #193, Q125 item 2) ------------------------------------------
+# -- Design's review of the verbs (PR #193) ------------------------------------------
 #
-# GM - Design: "Wired" / "Unwired" become "Connected" / "Disconnected" (Nebula
+# Design: "Wired" / "Unwired" become "Connected" / "Disconnected" (Nebula
 # says connected, never wired). Of the pointer gestures only "Pointed at “X”"
 # and "Looked at “X”" on a node and "Looked around" at a spot stay; "Clicked",
 # "Dragged to" and a bare "Moved", "Clicked" or "Dragged" at a spot are cut

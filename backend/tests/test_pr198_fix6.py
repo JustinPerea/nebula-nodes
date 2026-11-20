@@ -1,6 +1,6 @@
-"""PR #198 fix round 6 (GM's pr198 r8 rulings): the stray shot-port lines.
+"""PR #198 (design's rulings): the stray shot-port lines.
 
-GM's words, verbatim:
+Design's words, verbatim:
 - "Removed the connection to shot port <port> on “Scene”, node n4. That shot
   no longer exists."
 - Plural: "Removed 3 connections to shot ports on “Scene”, node n4. Those
@@ -9,7 +9,7 @@ GM's words, verbatim:
 - The Agent log's overflow names the rest: "“A”, “B”, “C” and 4 more" (no
   serial comma).
 
-Builder's reading, reported to GM: one line per node; <port> is the shot's id
+Builder's reading, reported to design: one line per node; <port> is the shot's id
 (the port is ``shot_<id>``); several connections from one port keep "shot
 port <port>" and "That shot"; a port dropped with no connection is listed in
 ``droppedPorts`` but has no line (nothing the person sees changed); a project
@@ -120,4 +120,4 @@ def test_a_project_open_with_a_port_and_no_connection_says_nothing(workspace, pe
         _rf_scene("n2", "Next", _scene("t1"), {})], [])
     assert opened.status_code == 200, opened.text
     assert opened.json()["warnings"] == []
-    assert BASE  # the shared fixtures are the round 5 ones
+    assert BASE  # the shared fixtures are test_pr198_fix5's ones

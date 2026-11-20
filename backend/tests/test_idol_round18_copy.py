@@ -1,14 +1,14 @@
-"""PR #203 round 18, section 2: review 17's copy findings, GM r36 B1, B2, B4, B5.
+"""PR #203, section 2: copy findings from review and design's rulings.
 
-- B1 (MEDIUM-1): after a count, a numbered input's action names what to
+- B1: after a count, a numbered input's action names what to
   connect: "Connect an output to “Text 1” on each".
-- B2 (LOW-1): "“Claude” needs messages. Connect them, …"; every other mass
+- B2: "“Claude” needs messages. Connect them, …"; every other mass
   noun keeps "it".
 - B4: a single option and two providers take the comma: "Pick 1K, or switch
   to fal.ai or Replicate."
-- B5 (LOW-6): the cursor bubble is the line alone when the line already
+- B5: the cursor bubble is the line alone when the line already
   opens with the node's quoted name.
-- NIT-2: runway-gen4-turbo's ports have labels, so its line names the image.
+- runway-gen4-turbo's ports have labels, so its line names the image.
 """
 from __future__ import annotations
 
@@ -121,7 +121,7 @@ def test_claude_needs_messages_connect_them(monkeypatch, agent_log, chat_turn, p
     assert agent_log == [f"{HEADING} “Claude” needs messages. Connect them, then run the node again."]
 
 
-# "Media" left the mass nouns in round 19 (GM r37 item 2: "a media input";
+# "Media" left the mass nouns (design: "a media input";
 # test_idol_round19_copy.py).
 @pytest.mark.parametrize("label,pronoun", [("Audio", "it"), ("Text", "it"), ("Context", "it"), ("Lighting", "it"),
                                            ("Messages", "them"), ("Guidance", "it")])
@@ -136,7 +136,7 @@ def test_every_mass_noun_takes_the_pronoun_of_its_number(label, pronoun):
 def test_one_option_and_two_providers_take_the_comma():
     assert route_action(person_line.Fix("Pick 1K", 1), ["fal.ai", "Replicate"], [], None) == (
         "Pick 1K, or switch to fal.ai or Replicate", True)
-    # GM r37 item 1 since: every second action takes the comma.
+    # Design since: every second action takes the comma.
     assert route_action(person_line.Fix("Pick 1K", 1), ["fal.ai"], [], None) == ("Pick 1K, or switch to fal.ai", True)
     reason = NotReadyReason.of("route_block", after_clause=True, provider="Black Forest Labs",
                                why=" with “Resolution” set to 1.5K", action="Pick 1K, or switch to fal.ai or Replicate")
@@ -166,7 +166,7 @@ def test_a_route_line_that_opens_with_the_name_is_the_bubble_alone(monkeypatch, 
 @WHO
 def test_an_unwired_input_is_the_bubbles_needs_line_with_the_name_once(monkeypatch, agent_log, bubbles,  # noqa: F811
                                                                         chat_turn, person, who):
-    # GM, PR #203 r38 items 1-2: the bubble says the needs in r34's form, the node named once,
+    # Design, PR #203 items 1-2: the bubble says the needs in the earlier form, the node named once,
     # with no "then run it again" (the "can’t run." prefix stays for a line with no name of its
     # own; test_idol_round19_review18 pins that one).
     body = _run(monkeypatch, [("claude-chat", {})], _headers(who, chat_turn), agent_log, bubbles)
@@ -176,7 +176,7 @@ def test_an_unwired_input_is_the_bubbles_needs_line_with_the_name_once(monkeypat
     assert "can’t run" not in bubble and "run it again" not in bubble, bubble
 
 
-# -- NIT-2: runway-gen4-turbo's image ----------------------------------------------------
+# -- runway-gen4-turbo's image ----------------------------------------------------
 
 def test_runway_gen4_turbos_unwired_image_is_named():
     [error] = [e for e in validate_graph([GraphNode(id="n1", definitionId="runway-gen4-turbo", params={})], [],

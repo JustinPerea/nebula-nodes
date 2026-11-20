@@ -1,6 +1,6 @@
 """The `nebula` CLI points an agent to the right option (plan v2.7, PR26, §5.10.1).
 
-GM's headless run (docs/agent-runs/2026-10-20-cli-headless.md) lost two turns
+Design's headless run (docs/agent-runs/2026-10-20-cli-headless.md) lost two turns
 to options the CLI didn't have: `nebula nodes preview` ("unrecognized
 arguments: preview") and `nebula propose ... --rename +g="Lake hero"`
 ("unrecognized arguments"). Both work now, and any other mistake gets a
@@ -50,7 +50,7 @@ def _fail(argv: list[str]) -> str:
 
 @pytest.fixture
 def cli(tmp_path, monkeypatch, person):
-    """`nebula` against the app in-process, as GM's agent ran it."""
+    """`nebula` against the app in-process, as design's agent ran it."""
     import main as main_module
 
     graph = CLIGraph(persist_path=tmp_path / "state.json")
@@ -116,7 +116,7 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
-# -- GM's two mistakes ---------------------------------------------------------
+# -- Design's two mistakes ---------------------------------------------------------
 
 def test_nodes_takes_a_plain_search_word(cli):
     code, out, err = _run(["nodes", "preview"])

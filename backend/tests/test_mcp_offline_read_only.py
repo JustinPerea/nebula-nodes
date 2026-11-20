@@ -1,6 +1,6 @@
-"""Round 14 of PR #114: the person's canvas is read-only while Nebula is offline.
+"""PR #114: the person's canvas is read-only while Nebula is offline.
 
-GM (2026-10-27): "Nebula is offline. Editing is paused until it reconnects."
+Design (2026-10-27): "Nebula is offline. Editing is paused until it reconnects."
 The tab blocks every edit while it can't reach the backend, not queues it,
 "because a restarted backend refuses replayed writes". An agent sees the same
 outage as Nebula never answering its connect (nebula_api's "Nebula isn't

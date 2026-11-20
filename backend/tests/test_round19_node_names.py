@@ -1,12 +1,12 @@
-"""Round 19: agents, the cursor and the Agent log name a node as the canvas does.
+"""Agents, the cursor and the Agent log name a node as the canvas does.
 
-Review 18, M-D: an unnamed key-routed node reads by its canvas title
-(GM - Design, round 18, item 1: "Unnamed node: the default title drops the
+An unnamed key-routed node reads by its canvas title
+(design: "Unnamed node: the default title drops the
 route"), not its catalog name, everywhere a node is named: MCP results, the
 cursor bubble, the Agent log and run refusals. The catalog (find_nodes,
 describe_node, search) keeps the catalog names.
 
-Review 18, L-A (GM's visual pass, check 1): a row on the gateway names its
+Design's visual pass: a row on the gateway names its
 route like any other ("“Alt still” · Grok Imagine 2.0 via Krea · price not
 listed"), for nodes whose route depends on keys; with the route unknown,
 "drop only the route": "Grok Imagine 2.0".
@@ -28,7 +28,7 @@ def _defs():
     return main_module.node_registry.get_all()
 
 
-# -- M-D: one rule for a node's name -----------------------------------------------
+# -- One rule for a node's name -----------------------------------------------
 
 def test_every_definition_names_an_unnamed_node_by_its_canvas_title(monkeypatch):
     defs = _defs()
@@ -124,7 +124,7 @@ def test_edit_canvas_names_an_added_unnamed_node_by_its_canvas_title(client):
     assert bubbles and all("(Krea)" not in str(event) for event in bubbles)
 
 
-# -- L-A: the gateway route is named too ---------------------------------------------
+# -- The gateway route is named too ---------------------------------------------
 
 def test_name_on_the_gateway_names_the_route_when_it_depends_on_keys():
     grok = _defs()[GROK]

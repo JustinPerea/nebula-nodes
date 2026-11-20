@@ -369,7 +369,7 @@ def _clear_png() -> bytes:
 
 
 def test_reanalyze_of_a_too_transparent_reference_answers_its_state_and_does_not_requeue(client):
-    # GM r6 on #208, item 3: re-analyzing can't change a property of the image,
+    # Design on #208: re-analyzing can't change a property of the image,
     # so Re-analyze answers the transparent state (kind and line), not a requeue.
     import asyncio
 
@@ -418,7 +418,7 @@ def test_reanalyze_of_a_too_transparent_reference_answers_its_state_and_does_not
 
 
 def test_reanalyze_stale_leaves_a_too_transparent_reference_as_it_is(client):
-    # Review 4 N1 on #208: a prompt bump re-analyzes stale assets through the
+    # On #208: a prompt bump re-analyzes stale assets through the
     # same check as the detail's Re-analyze. A transparent one with an older
     # ok analysis (measured before alpha counted) stays analysis_failed /
     # transparent; every other stale asset is requeued as before.

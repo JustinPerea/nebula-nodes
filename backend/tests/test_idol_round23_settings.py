@@ -1,4 +1,4 @@
-"""PR #203 round 23: a save can never rename another save's temp file over
+"""PR #203: a save can never rename another save's temp file over
 settings.json (the final review's three saves, no flock).
 
 Each save writes a temp file of its own (".settings.json.nebula-tmp-<pid>-
@@ -156,7 +156,7 @@ def test_two_saves_at_once_without_flock_end_with_one_valid_write(tmp_path, roun
     assert not errors, errors
     assert path.read_bytes() in writes  # valid JSON, whole, one of the two
     json.loads(path.read_bytes())
-    # Nothing left beside it but the private temp folder (round 23b), empty.
+    # Nothing left beside it but the private temp folder, empty.
     assert sorted(p.name for p in tmp_path.iterdir()) == [settings.TEMP_FOLDER, "settings.json"]
     assert list((tmp_path / settings.TEMP_FOLDER).iterdir()) == []
 

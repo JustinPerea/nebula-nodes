@@ -1,4 +1,4 @@
-"""PR #203 round 23b: every save's unique temp file lives inside one private
+"""PR #203: every save's unique temp file lives inside one private
 folder beside the file it saves (".settings-nebula-tmp", 0700), and every
 agent's deny covers that folder, so a temp made after an agent's profile is
 built (Codex's deny paths are exact) is inside a denied folder.
@@ -53,7 +53,7 @@ def test_a_save_writes_its_temp_inside_the_private_folder(keyed, monkeypatch):
     monkeypatch.setattr(settings, "_open_temp", lambda temp, **k: seen.append((temp, k.get("dir_fd"))) or real(temp, **k))
     settings.save_settings({"apiKeys": {"K": "new"}})
     folder = _folder(keyed)
-    # Round 23c: a bare name made through the folder's descriptor, never a path.
+    # A bare name made through the folder's descriptor, never a path.
     assert seen and all(os.sep not in name and dir_fd is not None for name, dir_fd in seen)
     assert _parses(keyed)["apiKeys"] == {"K": "new"}
     assert stat.S_IMODE(os.lstat(folder).st_mode) == 0o700

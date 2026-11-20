@@ -321,7 +321,7 @@ def test_no_agent_log_row_an_agent_action_makes_holds_a_node_id_or_a_definition_
         assert not any(re.search(rf"(?<![\w-]){re.escape(definition)}(?![\w-])", text) for definition in definitions), text
 
 
-# -- round 3: the rows that were missing, and the lines design r211 words ---------------------------------
+# -- The rows that were missing, and the lines design words ---------------------------------
 
 def _label(api, node_id: str, name: str) -> str:  # noqa: F811
     api.graph.set_label(node_id, name)
@@ -478,7 +478,7 @@ def test_nodes_with_the_same_name_are_counted_and_a_rename_says_from_what(api): 
 
 
 def test_one_rename_names_both_ends_and_two_or_more_are_a_count(api):  # noqa: F811
-    """Design r212 item 2."""
+    """Design: a rename names both ends; two or more are a count."""
     ids = [_label(api, api.graph.add_node("text-input", {"value": str(i)}), name) for i, name in enumerate("ABC")]
     _apply(api, {"rename": {ids[0]: "Prefix"}})
     assert _rows(api)[-1] == ("Claude Code", "Renamed “A” to “Prefix”")
@@ -492,7 +492,7 @@ def test_one_rename_names_both_ends_and_two_or_more_are_a_count(api):  # noqa: F
 
 
 def test_a_mixed_apply_names_up_to_three_nodes_and_counts_from_four_on_the_focus_row(api):  # noqa: F811
-    """Design r212 item 3, with a focus node (the apply changes, adds or renames something)."""
+    """Design, with a focus node (the apply changes, adds or renames something)."""
     ids = [_label(api, api.graph.add_node("text-input", {"value": str(i)}), name) for i, name in enumerate("ABCDE")]
 
     def change(count: int) -> str:
@@ -511,7 +511,7 @@ def test_a_mixed_apply_names_up_to_three_nodes_and_counts_from_four_on_the_focus
 
 
 def test_an_apply_that_only_adds_says_added_and_one_that_only_removes_says_removed(api):  # noqa: F811
-    """Design r212 item 3: never "Changed" for one kind. Adds beside their wires are still adds; removes
+    """Design: never "Changed" for one kind. Adds beside their wires are still adds; removes
     beside the wires they take with them are still removes. Both rows, the focus row and the no-focus row."""
     keep = _label(api, api.graph.add_node("text-input", {"value": "k"}), "Keep")
     _apply(api, {"nodes": [{"ref": "+a", "definitionId": "text-input", "params": {"value": "x"}},

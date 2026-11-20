@@ -1,4 +1,4 @@
-"""Question sets survive a restart (Q125 item 1, follow-up in the same PR).
+"""Question sets survive a restart (follow-up in the same PR).
 
 A side agent pointed out that open sets lived in memory only, so a restart
 closed them and lost the person's unsent answers; Justin was told it would
@@ -6,7 +6,7 @@ change before the merge OK. Unlike proposals (staged against the live
 graph, 15-minute expiry), a question set depends on nothing in the graph,
 has no time limit, and matters most while the person is away during a long
 run, and an outside agent (Claude Code in a terminal) outlives a Nebula
-restart. GM - Design agreed.
+restart. Design agreed.
 
 So sets are kept on the project record, ``catalog["projects"][id]
 ["agentQuestions"]``, next to pins and agentNotes and outside the snapshot
@@ -287,7 +287,7 @@ def test_an_answer_that_cannot_be_saved_leaves_the_set_open(kept):
     assert _read(kept, set_id).json()["questions"]["status"] == "answered"
 
 
-# -- a record that can't be read: GM's restart line ---------------------------------------------
+# -- a record that can't be read: design's restart line ---------------------------------------------
 
 def test_a_record_that_cannot_be_read_closes_its_update_with_gm_line(kept):
     set_id = _ask(kept).json()["questions"]["id"]
@@ -302,7 +302,7 @@ def test_a_record_that_cannot_be_read_closes_its_update_with_gm_line(kept):
     assert gone.status_code == 404 and "ask again" in gone.json()["detail"]
 
 
-# GM - Design (PR #193 review, item 6): a set that closed, whose Update then
+# Design (PR #193 review): a set that closed, whose Update then
 # couldn't be resolved (a note or project store error), and that was pruned
 # after its 30 minutes, says just "Closed." The real restart path above keeps
 # "Closed when Nebula restarted."

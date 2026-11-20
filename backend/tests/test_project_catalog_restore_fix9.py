@@ -1,13 +1,13 @@
-"""PR #199 fix round 9 (review 9, GM r10 and GM r11).
+"""PR #199 (design's two rulings).
 
-M-1: the person's canvas's protection is written in the same catalog commit
+The person's canvas's protection is written in the same catalog commit
 as its filing (the catalog's `canvasPending`), in the protect and in the
 listing's settle, so a failed state.json write or a crash after the commit
-never leaves a filed project open and unprotected (review 9's P3/P7 probes).
-GM r11, 2: the protection ends for good once the person's tab is on the
+never leaves a filed project open and unprotected (found by review probes).
+Design: the protection ends for good once the person's tab is on the
 project and connected (the person-promoted socket's `viewing` frame); an
-agent can't end it. M-2: the CLI prints GM's saved-canvas reply. L-3 and
-the nits; GM r10's order and duplicate names; GM r11, 4: the agent's copy
+agent can't end it. The CLI prints design's saved-canvas reply.
+Smaller findings: design's order and duplicate names, and the agent's copy
 named as the agent's.
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ def _fresh_if_kept(store):
     return _fresh(store) if hasattr(store_module, "canvas_pending_of") else True
 
 
-# -- M-1: the protection is committed with the filing (review 9's P3 and P7) ---------------
+# -- The protection is committed with the filing ---------------
 
 @pytest.mark.parametrize("action", ["add", "clear"])
 def test_m1_p3_the_protects_owner_write_fails_and_the_project_stays_protected(app, monkeypatch, action):
@@ -120,7 +120,7 @@ def test_m1_p7_the_protects_owner_write_fails_with_no_restart(app, monkeypatch):
 def test_m1_p7_the_process_dies_after_the_listings_filing_commit(app, monkeypatch):
     """The listing filed and opened the waiting canvas, its waiting record
     went, and the process died before the rest of the bookkeeping after its
-    commit (review 9's crash-before-fresh-write): the protection is in that
+    commit (crash-before-fresh-write): the protection is in that
     commit."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
@@ -148,7 +148,7 @@ def test_m1_the_pending_record_lives_in_the_catalog_only():
     assert not hasattr(ProjectStore, "set_canvas_pending") and not hasattr(main_module, "_note_fresh_filing")
 
 
-# -- GM r11, 2: protection ends once the person's tab is on the project ------------------
+# -- Design: protection ends once the person's tab is on the project ------------------
 
 def _listed_fresh(client, store, graph, state, monkeypatch) -> str:
     ids = _waiting(client, store, graph, state, monkeypatch)
@@ -181,7 +181,7 @@ def test_gm11_2_the_persons_tab_on_the_project_ends_its_protection_for_good(app,
         socket.receive_json()
         socket.send_json(PERSON_HELLO)
         _drain(socket, "proposalSync")
-        # The person's own open of it (GM r13, 1): the screen they reached themselves.
+        # The person's own open of it (design): the screen they reached themselves.
         opened = client.post(f"/api/projects/{project_id}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
         assert opened.status_code == 200, opened.text
         socket.send_json({"type": "viewing", "projectId": project_id, "openedBy": "person"})
@@ -231,14 +231,14 @@ def test_gm11_2_no_http_route_ends_it():
 
     source = inspect.getsource(main_module)
     # The one writer of fresh=None after a filing is the person's socket
-    # frames (their own open, their own edit: GM r13, 1).
+    # frames (their own open, their own edit: design).
     assert source.count('{**pending, "fresh": None}') == 1
     assert "_person_tab_viewing(frame.get(\"projectId\"), frame.get(\"openedBy\"))" in source
     assert "_person_tab_input(frame.get(\"projectId\"))" in source
     assert "_person_tab_open(frame.get(\"projectId\"))" in source
 
 
-# -- M-2: the CLI prints GM's reply ------------------------------------------------------
+# -- The CLI prints design's reply ------------------------------------------------------
 
 def _cli(client) -> NebulaClient:
     cli = NebulaClient("http://testserver")
@@ -278,7 +278,7 @@ def test_m2_every_cli_printer_prints_gms_saved_canvas_line(app, monkeypatch, cap
     start = next(index for index, line in enumerate(printed) if line.startswith(action))
     lines = printed[start:start + 2]  # the backend's own log lines are around them
     assert lines[1] == f"Nebula saved the open canvas as its own project, “Recovered canvas”, {gm}", lines
-    # GM's line takes the clear's Undo sentence's place (review 9, M-2).
+    # Design's line takes the clear's Undo sentence's place.
     assert "Cmd-Z" not in "\n".join(lines)
 
 
@@ -292,7 +292,7 @@ def test_m2_without_a_saved_canvas_the_printers_say_what_they_said(app, capsys):
     assert out[1] == "Canvas cleared (1 node removed). The person can undo it on an open canvas (Undo, or Cmd-Z)."
 
 
-# -- GM r10, 3: the copy that has to wait is said at the time ----------------------------
+# -- Design: the copy that has to wait is said at the time ----------------------------
 
 def test_gm10_3_the_edit_reply_says_the_copy_waits(app, monkeypatch):
     client, store, graph, state = app
@@ -307,12 +307,12 @@ def test_gm10_3_the_edit_reply_says_the_copy_waits(app, monkeypatch):
                                 "limit is reached.")
     assert main_module.CANVAS_COPY_WAITS["storage"] == (
         "The copy isn’t saved as a project yet because Nebula’s project list is full.")
-    # GM r11, 4: the waiting copy is the agent's in the listing, never the person's.
+    # Design: the waiting copy is the agent's in the listing, never the person's.
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasNotFiled"]["canvases"] == [{"name": None, "agentCopy": {"agent": "Codex"}, "deletes": 1}]
 
 
-# -- GM r11, 4 and GM r10: the copy named as the agent's, in saved order -------------------
+# -- Design: the copy named as the agent's, in saved order -------------------
 
 def test_gm11_4_the_copy_filed_while_the_notice_shows_is_the_agents(app, monkeypatch):
     client, store, _graph, state = app
@@ -396,7 +396,7 @@ def test_l3_a_damaged_note_never_lets_pruning_delete_a_kept_file(tmp_path, monke
     assert {f"canvas-held/{path.name}" for path in kept} <= set(note["kept"])
 
 
-# -- GM r11, 5: the graphSync says the restore ------------------------------------------
+# -- Design: the graphSync says the restore ------------------------------------------
 
 def test_gm11_5_the_graph_sync_carries_the_restore_notice(app, monkeypatch):
     client, store, _graph, state = app
@@ -411,7 +411,7 @@ def test_gm11_5_the_graph_sync_carries_the_restore_notice(app, monkeypatch):
         assert "catalogRestore" not in socket.receive_json()
 
 
-# -- GM r11, 3: the person's refusal lines are gone ---------------------------------------
+# -- Design: the person's refusal lines are gone ---------------------------------------
 
 def test_gm11_3_the_persons_refusal_lines_are_dropped():
     assert not hasattr(main_module, "canvas_waiting_person_reason")

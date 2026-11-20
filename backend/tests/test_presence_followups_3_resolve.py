@@ -1,6 +1,6 @@
-"""PR #202 review 5 (follow-up 3): LOW-1 and NIT-1.
+"""PR #202 (follow-up 3).
 
-LOW-1: an undo's reopen can land between a resolve's caller checking that
+An undo's reopen can land between a resolve's caller checking that
 its proposal closed and the resolve's write. The reopen found the Update
 not yet resolved and left it (it still reviewed that proposal), and then
 the resolve wrote the outcome: an open ask under a resolved Update, with no
@@ -9,7 +9,7 @@ Review, and nothing to heal it (the settle skips resolved Updates). Now
 ``reopen_proposal`` does, at every caller: the asset follow, the canvas
 follow and the settle.
 
-NIT-1: a move onto the proposal the Update already reviews (another follow
+A move onto the proposal the Update already reviews (another follow
 moved it there first) writes nothing and says nothing: no second "changed".
 """
 from __future__ import annotations
@@ -154,10 +154,10 @@ def test_the_store_resolves_only_a_proposal_still_closed(canvas, monkeypatch):
     assert _proposal_notes(canvas)[0]["outcome"] == "Expired"
 
 
-# -- NIT-1 -------------------------------------------------------------------
+# -- a move onto the proposal the Update already reviews ---------------
 
 def test_a_move_onto_the_proposal_the_update_already_reviews_says_nothing(canvas, monkeypatch):
-    """Review 5's THREE-ONE: p3 withdrawn; while its follow moves the Update
+    """THREE-ONE: p3 withdrawn; while its follow moves the Update
     to p1, p2 is withdrawn and p2's follow moves it to p1 first. The outer
     move to p1 then finds it there: one "changed", not two."""
     book, _c, p1 = _cover_setup(canvas, monkeypatch)
@@ -198,14 +198,14 @@ def test_a_move_onto_the_proposal_the_update_already_reviews_says_nothing(canvas
     assert canvas.client.delete(f"/api/canvas/proposals/{p3}", headers=CLAUDE).status_code == 200
     (after,) = _proposal_notes(canvas)
     assert after["proposal"]["id"] == p1 and not after.get("resolvedAt") and book.get(p1).status == "open"
-    # PR #204 round 3: the outer move counted p1 and p2 before p2 closed; the count is read inside
+    # PR #204: the outer move counted p1 and p2 before p2 closed; the count is read inside
     # the write, so the Update stands for p1 alone, from p1's time, not the stale two.
     assert (after["proposal"]["asks"], after["proposal"]["firstSince"]) == (1, int(book.get(p1).created_at * 1000))
     ops = [m.get("op") for m in canvas.sent if m.get("type") == "agentNotes" and note["id"] in (m.get("ids") or [])]
     assert ops == ["changed"], ops
 
 
-# -- GM 2026-10-29: refs a held tab counts and orders by -----------------------
+# -- Design 2026-10-29: refs a held tab counts and orders by -----------------------
 
 def test_a_reopened_canvas_proposals_update_says_when_it_was_asked_again(canvas):
     from tests.test_undo_restores_deletes import _delete, _restore, _whole

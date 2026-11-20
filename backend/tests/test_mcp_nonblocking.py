@@ -118,7 +118,7 @@ def test_long_polls_cannot_starve_other_calls(fake_nebula, monkeypatch):
 
 
 def _assert_look_never_queued_behind_the_waits(times: dict[str, float]) -> None:
-    """Order, not a wall-clock bound (review 9 of PR #114: `look < 1.5 s`
+    """Order, not a wall-clock bound (PR #114: `look < 1.5 s`
     failed at 1.65 s on a loaded machine). Starved, look takes a slot only
     once a wait gives one back, so it lands after the first wait ends; with
     its own pool it lands while both slots are still held. Load delays look

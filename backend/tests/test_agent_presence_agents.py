@@ -1,4 +1,4 @@
-"""Agent support for placeholders, the node mark and done cards (Q125 item 3).
+"""Agent support for placeholders, the node mark and done cards.
 
 Justin's standing rule: "Every feature we add needs to make sure we include
 MCP support for agents." edit_canvas gains `pending` (and `node_ids` with
@@ -51,7 +51,7 @@ def test_edit_canvas_takes_pending_and_says_what_it_does():
 
 
 def test_pending_lives_in_edit_canvas_and_the_instructions_keep_their_headroom():
-    """Review 3: the step-2 clause on `pending` pushed the first-turn text to
+    """The step-2 clause on `pending` pushed the first-turn text to
     3,039 of its 3,000 characters. edit_canvas's docstring says what
     `pending` does (the test above); the instructions keep 40 to spare."""
     assert "`pending`" not in mcp_server.INSTRUCTIONS

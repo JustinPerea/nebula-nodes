@@ -1,5 +1,5 @@
-"""PR #203 round 26, item 2: the settings temp folder's two refusals, by cause
-(GM's strings, verbatim), and a folder at a file's name keeping its own line."""
+"""PR #203: the settings temp folder's two refusals, by cause
+(design's strings, verbatim), and a folder at a file's name keeping its own line."""
 from __future__ import annotations
 
 import errno

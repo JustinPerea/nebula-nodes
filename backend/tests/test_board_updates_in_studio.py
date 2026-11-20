@@ -1,4 +1,4 @@
-"""A board's own Updates show in Moodboard Studio (Justin's Q113 c, 2026-10-21).
+"""A board's own Updates show in Moodboard Studio (Justin's ruling, 2026-10-21).
 
 "c) Two sections in one list: "This board" first, then the project. One chip
 with one count (both added), opening it reads both, and an empty board
