@@ -499,8 +499,9 @@ body.app-slava-restraint .world-modal__footer {
   border-top-color: var(--sr-edge);
 }
 
+/* Design: an eyebrow is a label, so it takes the meta ink; the accent is for the primary action, the selection and the agent. */
 body.app-slava-restraint .world-modal__eyebrow {
-  color: var(--sr-accent);
+  color: var(--sr-ink-meta);
   font-size: var(--sr-type-micro);
 }
 

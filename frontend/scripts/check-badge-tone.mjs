@@ -46,10 +46,17 @@ function main() {
   const files = collectCssFiles(SRC);
   const hits = [];
   const capsHits = [];
+  const eyebrowHits = [];
   for (const file of files) {
     const source = readFileSync(file, 'utf8');
     hits.push(...findAccentBadges(source, relative(SRC, file)));
     capsHits.push(...findCapsBadges(source, relative(SRC, file)));
+    eyebrowHits.push(...findAccentEyebrows(source, relative(SRC, file)));
+  }
+  if (eyebrowHits.length > 0) {
+    console.error('An eyebrow is painted in the brand accent. An eyebrow is a label: it takes var(--sr-ink-meta) (design: the accent is for the primary action, the selection and the agent).');
+    for (const hit of eyebrowHits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} { ${hit.decl} }  (${hit.reason})`);
+    process.exit(1);
   }
   if (capsHits.length > 0) {
     console.error('A badge or tag is drawn in capitals. A badge reads in sentence case; only a field label keeps its caps (design).');
@@ -98,6 +105,33 @@ export function findAccentBadges(source, file) {
           ? 'the literal accent colour'
           : null;
       if (reason) hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector, decl: `${declaration.prop}: ${compact(declaration.value)}`, reason });
+    }
+  }
+  return hits;
+}
+
+// Design: an eyebrow (a class named eyebrow, kicker or overline) is a label, not a primary action, a
+// selection or the agent, so it never reads the accent: no var(--sr-accent...) and no accent literal, at rest or in any state.
+// Same limit as above: an alias token or a colour set from TSX is not followed.
+const EYEBROW_CLASS = /(?:^|[_-])(?:eyebrow|kicker|overline)(?:$|[_-])/;
+
+/** Every declaration on an eyebrow selector that paints the accent: { file, line, selector, decl, reason }. */
+export function findAccentEyebrows(source, file) {
+  const css = stripComments(source);
+  const lineStarts = computeLineStarts(css);
+  const hits = [];
+  for (const rule of parseRules(css)) {
+    const selector = compact(rule.selector);
+    if (!selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => EYEBROW_CLASS.test(m[1])))) continue;
+    if (rule.nested) {
+      hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
+      continue;
+    }
+    for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
+      if (!COLOUR_PROP.test(declaration.prop)) continue;
+      if (ACCENT_VAR.test(declaration.value) || ACCENT_LITERAL.test(declaration.value)) {
+        hits.push({ file, line: lineForOffset(lineStarts, declaration.offset), selector, decl: `${declaration.prop}: ${compact(declaration.value)}`, reason: 'the brand accent: an eyebrow is a label' });
+      }
     }
   }
   return hits;

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { findAccentBadges, findCapsBadges } from '../scripts/check-badge-tone.mjs';
+import { findAccentBadges, findAccentEyebrows, findCapsBadges } from '../scripts/check-badge-tone.mjs';
 
 /**
  * scripts/check-badge-tone.mjs runs in `npm run lint`: no state badge or source tag is painted
@@ -136,4 +136,23 @@ describe('check-badge-tone: capitals', () => {
     const [hit] = caps('.a { color: red; }\n\n.x__badge {\n  color: red;\n  text-transform: uppercase;\n}\n');
     expect(hit).toMatchObject({ file: 'fixture.css', line: 5, selector: '.x__badge' });
   });
+});
+
+describe('check-badge-tone: eyebrows', () => {
+  const eyebrows = (css: string) => findAccentEyebrows(css, 'fixture.css');
+  const failing = [
+    '.world-modal__eyebrow { color: var(--sr-accent); }',
+    'body.app-slava-restraint .world-modal__eyebrow { color: var(--sr-accent); font-size: 11px; }',
+    '.panel__eyebrow:hover { color: var(--sr-accent-hover); }',
+    '.page-kicker { color: #FF5A1F; }',
+    '.x__overline { border-bottom: 1px solid rgba(255, 90, 31, 0.4); }',
+  ];
+  for (const css of failing) it(`fails: ${css}`, () => expect(eyebrows(css)).toHaveLength(1));
+  const passing = [
+    'body.app-slava-restraint .world-modal__eyebrow { color: var(--sr-ink-meta); }',
+    '.world-modal__eyebrow { font-weight: 700; text-transform: uppercase; }',
+    '.eyebrowish { color: var(--sr-accent); }',
+    '.world-modal__title { color: var(--sr-accent); }',
+  ];
+  for (const css of passing) it(`passes: ${css}`, () => expect(eyebrows(css)).toHaveLength(0));
 });
