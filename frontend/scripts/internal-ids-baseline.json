@@ -760,7 +760,7 @@
   "frontend/src/styles/placeholder-run-dialog.css": 8,
   "frontend/src/styles/project-home.css": 38,
   "frontend/src/styles/prompt-dialog.css": 23,
-  "frontend/src/styles/provider-readiness.css": 6,
+  "frontend/src/styles/provider-readiness.css": 4,
   "frontend/src/styles/provider-switcher.css": 3,
   "frontend/src/styles/remotion-editor.css": 12,
   "frontend/src/styles/remotion-node.css": 2,

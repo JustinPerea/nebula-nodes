@@ -501,7 +501,7 @@ body.app-slava-restraint .settings-key__input {
   font: var(--sr-type-label) var(--sr-mono);
 }
 
-body.app-slava-restraint .settings-key__input::placeholder { color: var(--sr-ink-faint); }
+body.app-slava-restraint .settings-key__input::placeholder { color: var(--sr-ink-light); }
 
 body.app-slava-restraint .settings-key__reveal {
   height: 22px;
@@ -869,7 +869,7 @@ body.app-slava-restraint .settings-folder__input {
   transition: border-color var(--sr-motion-fast);
 }
 
-body.app-slava-restraint .settings-folder__input::placeholder { color: var(--sr-ink-faint); }
+body.app-slava-restraint .settings-folder__input::placeholder { color: var(--sr-ink-light); }
 body.app-slava-restraint .settings-folder__input:focus { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .settings-folder__input[aria-invalid="true"] { border-color: var(--sr-error-border); }
 body.app-slava-restraint .settings-folder__hint { margin-top: 6px; }

@@ -420,6 +420,7 @@ body.app-slava-restraint .structured-preview__status {
 
 body.app-slava-restraint .structured-preview__status-item + .structured-preview__status-item::before {
   content: '·';
+  content: '·' / '';
   padding: 0 6px;
   color: var(--sr-ink-faint);
 }

@@ -1,11 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { ICON_ONLY, isDisabledScoped, isDimLiteral, scan } from '../scripts/check-text-ink.mjs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import ts from 'typescript';
+import { DECORATION, FAILURE_MESSAGE, ICON_ONLY, isDisabledScoped, isDimLiteral, normaliseCombinators, scan } from '../scripts/check-text-ink.mjs';
 
 /**
- * scripts/check-text-ink.mjs runs in `npm run lint` (design: text takes the light ink; meta ink is
- * for non-text, disabled controls and the named icon-only controls). Each bad fixture must report;
- * each fine one must not.
+ * scripts/check-text-ink.mjs runs in `npm run lint` (design: text takes the light ink; white at .40
+ * and .20 is for non-text, disabled controls, the named icon-only controls (at .40 or brighter) and
+ * the named decoration). Each bad fixture must report; each fine one must not.
  */
 const META = ':root { --sr-ink-meta: rgba(255, 255, 255, 0.40); }\n';
 const css = (rules: string, defs = META) => scan([{ file: 'fixture.css', source: defs + rules }], []);
@@ -106,8 +109,9 @@ describe('check-text-ink: the dim range', () => {
     expect(css('.a { color: var(--one); }', defs)).toHaveLength(1);
   });
 
-  it('passes a token at .20 and one at .55, and a dim literal on a non-text property', () => {
-    expect(css('.a { color: var(--faint); }', ':root { --faint: rgba(255, 255, 255, 0.2); }\n')).toEqual([]);
+  it('fails a token at .20 and one at .10, passes one at .55, and passes a dim literal on a non-text property', () => {
+    expect(css('.a { color: var(--faint); }', ':root { --faint: rgba(255, 255, 255, 0.2); }\n')).toHaveLength(1);
+    expect(css('.a { color: var(--dimmer); }', ':root { --dimmer: rgba(255, 255, 255, 0.1); }\n')).toHaveLength(1);
     expect(css('.a { color: var(--light); }', ':root { --light: rgba(255, 255, 255, 0.55); }\n')).toEqual([]);
     expect(css('.a { border-color: rgba(255, 255, 255, 0.45); }', '')).toEqual([]);
   });
@@ -203,6 +207,237 @@ describe('check-text-ink: icon-only controls', () => {
   });
 });
 
+describe('check-text-ink: faint ink (.20) and dimmer', () => {
+  const FAINT = ':root { --sr-ink-faint: rgba(255, 255, 255, 0.20); }\n';
+
+  it.each([
+    ['rgba', 'rgba(255, 255, 255, 0.2)'],
+    ['rgba without the leading zero', 'rgba(255,255,255,.20)'],
+    ['rgb with a slash', 'rgb(255 255 255 / 0.2)'],
+    ['a percent alpha', 'rgb(255 255 255 / 20%)'],
+    ['hex8', '#ffffff33'],
+    ['hex4', '#fff3'],
+    ['hsla', 'hsla(0, 0%, 100%, 0.2)'],
+    ['hsl with a slash and a percent', 'hsl(0 0% 100% / 20%)'],
+    ['the faint-ink token', 'var(--sr-ink-faint)'],
+    ['the faint-ink token with a fallback', 'var(--sr-ink-faint, rgba(0, 0, 0, 0.4))'],
+  ])('fails text at .20 as %s', (_name, value) => {
+    expect(css(`.a { color: ${value}; }`, FAINT)).toHaveLength(1);
+    expect(css(`.a { color: ${value}; }`, '')).toHaveLength(1);
+  });
+
+  it.each([
+    'rgba(255, 255, 255, 0.1)',
+    'rgba(255,255,255,.10)',
+    'rgb(255 255 255 / 10%)',
+    '#ffffff1a',
+    '#fff1',
+    'hsl(0 0% 100% / 6%)',
+    'rgba(255, 255, 255, 0.03)',
+  ])('fails text dimmer than .20: %s', (value) => {
+    expect(isDimLiteral(value)).toBe(true);
+    expect(css(`.a { color: ${value}; }`, '')).toHaveLength(1);
+  });
+
+  it('fails a placeholder at .20', () => {
+    expect(css('.a::placeholder { color: var(--sr-ink-faint); }', FAINT)).toHaveLength(1);
+  });
+
+  it.each(['transparent', 'rgba(255, 255, 255, 0)', 'rgb(255 255 255 / 0%)', '#ffffff00', '#fff0', 'hsla(0, 0%, 100%, 0)'])(
+    'passes transparent text: %s',
+    (value) => {
+      expect(isDimLiteral(value)).toBe(false);
+      expect(css(`.a { color: ${value}; }`, '')).toEqual([]);
+    },
+  );
+
+  it('passes .20 on non-text properties', () => {
+    expect(css('.a { border-color: var(--sr-ink-faint); background: rgba(255, 255, 255, 0.2); stroke: var(--sr-ink-faint); }', FAINT)).toEqual([]);
+  });
+
+  it('names .20 and both lists in the failure message', () => {
+    expect(FAILURE_MESSAGE).toContain('.20');
+    expect(FAILURE_MESSAGE).toContain('ICON_ONLY');
+    expect(FAILURE_MESSAGE).toContain('DECORATION');
+  });
+});
+
+describe('check-text-ink: decoration', () => {
+  const FAINT = ':root { --sr-ink-faint: rgba(255, 255, 255, 0.20); }\n';
+
+  it('passes a DECORATION selector at .20, with or without the body prefix', () => {
+    expect(DECORATION.has('.agent-log-hidden-notice__sep')).toBe(true);
+    expect(css('.agent-log-hidden-notice__sep { color: var(--sr-ink-faint); }', FAINT)).toEqual([]);
+    expect(css('body.app-slava-restraint .agent-log-hidden-notice__sep { color: rgba(255, 255, 255, 0.2); }', '')).toEqual([]);
+    expect(css(".project-workspace-controls__count::before { content: '·'; color: var(--sr-ink-faint); }", FAINT)).toEqual([]);
+  });
+
+  it('fails the same rule on another selector, and names only the non-decoration part of a list', () => {
+    expect(css('.agent-log-hidden-notice__other { color: var(--sr-ink-faint); }', FAINT)).toHaveLength(1);
+    const found = css('.agent-log-hidden-notice__sep, .agent-log-hidden-notice__other { color: var(--sr-ink-faint); }', FAINT);
+    expect(found).toHaveLength(1);
+    expect(found[0].selector).toBe('.agent-log-hidden-notice__other');
+  });
+
+  it('lists the separators and the thumbnail stand-ins, and nothing else', () => {
+    expect([...DECORATION].sort()).toEqual([
+      '.agent-log-hidden-notice__sep',
+      '.character-palette__thumb-empty',
+      '.character-rail__thumb-empty',
+      '.moodboard-rail__thumb',
+      '.project-workspace-controls__count::before',
+      '.structured-preview__status-item + .structured-preview__status-item::before',
+    ]);
+  });
+});
+
+describe('check-text-ink: icon-only controls need meta ink', () => {
+  const FAINT = ':root { --sr-ink-faint: rgba(255, 255, 255, 0.20); }\n';
+
+  it('fails an ICON_ONLY selector at .20, in every form, and says an icon needs 3:1', () => {
+    for (const value of ['var(--sr-ink-faint)', 'rgba(255, 255, 255, 0.2)', '#fff3', 'rgb(255 255 255 / 20%)', 'rgba(255, 255, 255, 0.1)']) {
+      const found = css(`body.app-slava-restraint .project-home__rename { color: ${value}; }`, FAINT);
+      expect(found).toHaveLength(1);
+      expect(found[0].iconTooDim).toBe(true);
+    }
+  });
+
+  it('passes an ICON_ONLY selector at .40, .45 and .55', () => {
+    expect(css('.project-home__rename { color: var(--sr-ink-meta); }')).toEqual([]);
+    expect(css('.project-home__rename { color: rgba(255, 255, 255, 0.4); }', '')).toEqual([]);
+    expect(css('.project-home__rename { color: rgba(255, 255, 255, 0.45); }', '')).toEqual([]);
+    expect(css('.project-home__rename { color: var(--sr-ink-light); }', ':root { --sr-ink-light: rgba(255, 255, 255, 0.55); }')).toEqual([]);
+  });
+
+  it('lists the icon-only controls that moved from faint to meta ink', () => {
+    for (const selector of ['.panel__group-chevron', '.inspector__favorite-button', '.agent-log__hide', '.agent-log-hidden-notice__icon', '.editor-breadcrumb__arrow']) {
+      expect(ICON_ONLY.has(selector)).toBe(true);
+    }
+  });
+});
+
+describe('check-text-ink: combinator whitespace', () => {
+  const DIM = '{ color: var(--sr-ink-faint); }';
+  const defs = ':root { --sr-ink-faint: rgba(255, 255, 255, 0.20); }\n';
+
+  it('normalises spaces around > + ~ and runs of spaces', () => {
+    expect(normaliseCombinators('.a+.b')).toBe('.a + .b');
+    expect(normaliseCombinators('.a   >   .b ~ .c')).toBe('.a > .b ~ .c');
+  });
+
+  it('reads the DECORATION selector written without spaces around +', () => {
+    const tight = `body.app-slava-restraint .structured-preview__status-item+.structured-preview__status-item::before ${DIM}`;
+    const loose = `body.app-slava-restraint .structured-preview__status-item  +  .structured-preview__status-item::before ${DIM}`;
+    expect(css(tight, defs)).toEqual([]);
+    expect(css(loose, defs)).toEqual([]);
+  });
+
+  it('still fails a selector that is not listed, however it is spaced', () => {
+    expect(css(`.a+.b::before ${DIM}`, defs)).toHaveLength(1);
+  });
+});
+
+describe('check-text-ink: decoration is hidden from assistive tech', () => {
+  const SRC = join(import.meta.dirname, '..', 'src');
+  const walk = (dir: string, ext: string[]): string[] =>
+    readdirSync(dir).flatMap((entry) => {
+      const path = join(dir, entry);
+      if (statSync(path).isDirectory()) return walk(path, ext);
+      return ext.some((e) => entry.endsWith(e)) && !/\.test\.tsx?$/.test(entry) ? [path] : [];
+    });
+  const cssSources = walk(SRC, ['.css']).map((file) => readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''));
+
+  /** Every JSX element in src that has a className, parsed once: its class text and whether it carries aria-hidden="true". */
+  let cached: { file: string; classes: string; hidden: boolean }[] | null = null;
+  function jsxElements() {
+    if (cached) return cached;
+    const found: { file: string; classes: string; hidden: boolean }[] = [];
+    for (const file of walk(SRC, ['.tsx'])) {
+      const source = readFileSync(file, 'utf8');
+      if (!source.includes('className')) continue;
+      const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const visit = (node: ts.Node) => {
+        if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+          const attrs = node.attributes.properties.filter(ts.isJsxAttribute);
+          const className = attrs.find((attr) => attr.name.getText() === 'className');
+          if (className?.initializer) {
+            const hidden = attrs.some((attr) => {
+              if (attr.name.getText() !== 'aria-hidden') return false;
+              const init = attr.initializer?.getText() ?? '';
+              return init === '"true"' || init === "'true'" || init === '{true}' || init === '{"true"}';
+            });
+            found.push({ file, classes: className.initializer.getText(), hidden });
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(tree);
+    }
+    cached = found;
+    return found;
+  }
+
+  function elementsWithClass(name: string): { file: string; hidden: boolean }[] {
+    const pattern = new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`);
+    return jsxElements().filter((element) => pattern.test(element.classes));
+  }
+
+  /** Every rule in every stylesheet whose selector list has a part whose last compound is `selector`'s (a more specific rule counts) and that sets `content`: the LAST content declaration of each. */
+  function lastContents(sources: string[], selector: string): { selector: string; content: string }[] {
+    const lastCompound = (part: string) => part.split(/\s*[>+~]\s*|\s+/).pop() ?? '';
+    const subject = lastCompound(normaliseCombinators(selector));
+    const found: { selector: string; content: string }[] = [];
+    for (const source of sources) {
+      for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const parts = match[1].split(',').map((part) => normaliseCombinators(part.trim()));
+        if (!parts.some((part) => lastCompound(part) === subject)) continue;
+        const contents = [...match[2].matchAll(/(?:^|;|\s)content\s*:\s*([^;]*)/g)].map((m) => m[1].trim());
+        if (contents.length > 0) found.push({ selector: match[1].trim(), content: contents[contents.length - 1] });
+      }
+    }
+    return found;
+  }
+  const hasEmptyAlt = (content: string) => /^(['"]).*\1\s*\/\s*(''|"")$/.test(content);
+
+  it.each([...DECORATION].filter((selector) => selector.includes('::')))(
+    '%s is a pseudo-element whose content has empty alt text in every rule that sets it',
+    (selector) => {
+      const rules = lastContents(cssSources, selector);
+      expect(rules.length).toBeGreaterThan(0);
+      expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toEqual([]);
+    },
+  );
+
+  const DECORATED = '.project-workspace-controls__count::before';
+  it('mutation: swapped declarations (alt text first, plain content last) fail', () => {
+    const rules = lastContents([`${DECORATED} { content: '·' / ''; content: '·'; }`], DECORATED);
+    expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toHaveLength(1);
+  });
+
+  it('mutation: a later rule with plain content fails, even a more specific one', () => {
+    const good = `${DECORATED} { content: '·' / ''; }`;
+    const later = `.project-workspace-controls--x ${DECORATED} { content: '·'; }`;
+    const rules = lastContents([good, later], DECORATED);
+    expect(rules).toHaveLength(2);
+    expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toHaveLength(1);
+  });
+
+  it('the shipped order (plain, then alt text) passes', () => {
+    const rules = lastContents([`${DECORATED} { content: '·'; content: '·' / ''; }`], DECORATED);
+    expect(rules.filter((rule) => !hasEmptyAlt(rule.content))).toEqual([]);
+  });
+
+  it.each([...DECORATION].filter((selector) => !selector.includes('::')))(
+    '%s is aria-hidden="true" wherever a component renders it',
+    (selector) => {
+      const elements = elementsWithClass(selector.slice(1));
+      expect(elements.length).toBeGreaterThan(0);
+      expect(elements.filter((element) => !element.hidden)).toEqual([]);
+    },
+    30000,
+  );
+});
+
 describe('check-text-ink: inline TSX', () => {
   it('fails a style color that is meta ink, as a var, an alias or a literal', () => {
     expect(tsx("<span style={{ color: 'var(--sr-ink-meta)' }} />")).toHaveLength(1);
@@ -240,9 +475,15 @@ describe('check-text-ink: inline TSX, read as a syntax tree', () => {
     expect(found.map((hit) => hit.line)).toEqual([4]);
   });
 
-  it('passes the light ink, .20, a template with a substitution and a non-text key', () => {
+  it('fails .20 and .10 inline', () => {
+    expect(tsx("const s = { color: 'rgba(255,255,255,.2)' };")).toHaveLength(1);
+    expect(tsx("const s = { color: 'var(--sr-ink-faint)' };")).toHaveLength(1);
+    expect(tsx("const s = { color: 'rgba(255,255,255,.1)' };")).toHaveLength(1);
+  });
+
+  it('passes the light ink, transparent, a template with a substitution and a non-text key', () => {
     expect(tsx("const s = { color: 'var(--sr-ink-light)' };")).toEqual([]);
-    expect(tsx("const s = { color: 'rgba(255,255,255,.2)' };")).toEqual([]);
+    expect(tsx("const s = { color: 'transparent' };")).toEqual([]);
     expect(tsx('const s = { color: `rgba(255,255,255,${a})` };')).toEqual([]);
     expect(tsx("const s = { borderColor: 'var(--sr-ink-meta)', backgroundColor: 'rgba(255,255,255,.45)' };")).toEqual([]);
   });
