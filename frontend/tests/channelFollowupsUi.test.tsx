@@ -251,7 +251,7 @@ describe('Commons label drafts (GM line; review 17 L3)', () => {
     await draftThenReconnectTo(batch(5, { image: 'image-b' }));
     // GM, PR #198 r1 item 4: its own line (tests/pr198Fix1Ui.test.tsx).
     expect(await screen.findByText(IMAGE_REPLACED_ELSEWHERE)).toHaveAttribute('role', 'status');
-    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).not.toBe('0');
+    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).not.toBe('0.00');
   });
 
   it('another batch (a new manifest): the draft is dropped, with the line', async () => {

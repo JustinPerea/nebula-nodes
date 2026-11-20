@@ -180,7 +180,7 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
     api.get.mockResolvedValueOnce(saved);
     act(() => noteBackendConnection('online'));
     expect(await screen.findByText(LABELS_CHANGED_ELSEWHERE)).toHaveAttribute('role', 'status');
-    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).not.toBe('0');
+    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('2.00');
     expect(api.labels).not.toHaveBeenCalled();
   });
 

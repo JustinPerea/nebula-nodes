@@ -14,9 +14,11 @@ import ts from 'typescript';
 //      any depth, is lower-case JSX text, a lower-case string literal or a template literal with a
 //      lower-case head (also in a conditional's branches and in each operand of ??, ||, and the
 //      shown right side of &&), or that shows a stored value anywhere: a property chain on a plain
-//      object (`s.state`), an element access outside an ALL_CAPS label map (`row[field]`,
-//      `s.tags[0].name`), a property of a call that is not a *Label or *Badge call
-//      (`get(s).state`), or a method call on a stored value (`s.state.toLowerCase()`). Badges
+//      object (`s.state`), an element access outside an ALL_CAPS *LABEL* map (`row[field]`,
+//      `s.tags[0].name`, `ROLES[0]`), a property of a call that is not a *Label or *Badge call
+//      (`get(s).state`), a method call on a stored value (`s.state.toLowerCase()`), or a case
+//      change on any value (`enumValueLabel(f, v).toLowerCase()`). A concatenation is read like a
+//      template (`'in ' + s.state`). A length and number formatting (`row.count.toFixed(1)`) pass. Badges
 //      are labels in sentence case, drawn from a label map (design). Text after a number
 //      (`{n} items`), a map lookup (`ROLE_LABELS[x]`, `SIGHTING_STATE[s.state]!.label`), a
 //      *Label or *Badge call and a plain function call pass. A bare identifier (`{count}`) passes
@@ -71,6 +73,10 @@ function calleeName(call) {
   return ts.isPropertyAccessExpression(callee) ? callee.name.text : ts.isIdentifier(callee) ? callee.text : '';
 }
 const isLabelCall = (call) => /(Label|Badge)$/.test(calleeName(call));
+/** An ALL_CAPS constant whose name says it holds labels (`ROLE_LABELS`, `LABELS`). */
+const isLabelMap = (n) => isCaps(n) && /LABEL/.test(n.text);
+const CASE_METHODS = new Set(['toLowerCase', 'toUpperCase', 'toLocaleLowerCase', 'toLocaleUpperCase']);
+const NUMBER_METHODS = new Set(['toFixed', 'toLocaleString', 'toPrecision']);
 
 /**
  * A stored value shown as it is. Fails: a property chain rooted at a plain object (`s.state`);
@@ -85,16 +91,26 @@ const isLabelCall = (call) => /(Label|Badge)$/.test(calleeName(call));
 function isStoredAccess(node) {
   const n = unwrap(node);
   if (ts.isPropertyAccessExpression(n)) {
+    // A length is a count, not a stored word.
+    if (n.name.text === 'length') return false;
     let root = unwrap(n.expression);
     while (ts.isPropertyAccessExpression(root)) root = unwrap(root.expression);
+    // A property of an ALL_CAPS map lookup (`SIGHTING_STATE[s.state]!.label`) reads the map's entry.
     if (ts.isElementAccessExpression(root)) return !isCaps(unwrap(root.expression));
     if (ts.isCallExpression(root)) return !isLabelCall(root);
     return true;
   }
-  if (ts.isElementAccessExpression(n)) return !isCaps(unwrap(n.expression));
+  // A lookup shown as it is passes only on a label map (`ROLE_LABELS[x]`); a list of stored
+  // values (`ROLES[0]`, `AXES[i]`) shows the stored word.
+  if (ts.isElementAccessExpression(n)) return !isLabelMap(unwrap(n.expression));
   if (ts.isCallExpression(n)) {
     const callee = unwrap(n.expression);
-    return ts.isPropertyAccessExpression(callee) && !isLabelCall(n) && isStoredAccess(callee.expression);
+    if (!ts.isPropertyAccessExpression(callee)) return false;
+    const method = callee.name.text;
+    // Changing a label's case undoes the label map's words; number formatting shows a number.
+    if (CASE_METHODS.has(method)) return true;
+    if (NUMBER_METHODS.has(method)) return false;
+    return !isLabelCall(n) && isStoredAccess(callee.expression);
   }
   return false;
 }
@@ -211,6 +227,12 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
         badgeExpression(n.left, first);
         if (hits.length === before) badgeExpression(n.right, first);
       } else if (op === ts.SyntaxKind.AmpersandAmpersandToken) badgeExpression(n.right, first);
+      else if (op === ts.SyntaxKind.PlusToken) {
+        // A concatenation reads left to right: its first piece leads the badge, the rest follows it.
+        const before = hits.length;
+        badgeExpression(n.left, first);
+        if (hits.length === before) badgeExpression(n.right, false);
+      }
     }
   }
   /** Lower-case text fails only as the first visible content, at any depth ("2 images" is fine after a number); a stored-value access fails anywhere. */

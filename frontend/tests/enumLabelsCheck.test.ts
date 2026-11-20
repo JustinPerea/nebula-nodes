@@ -28,6 +28,12 @@ const bad: Array<[string, string]> = [
   ['a badge with a conditional of lower-case strings', `const a = <span className="commons-badge">{x ? 'queued' : 'held'}</span>;`],
   ['a badge with one lower-case conditional branch', `const a = <span className="commons-badge">{x ? 'Queued' : 'held'}</span>;`],
   ['a badge with a property access inside a child element', `const a = <span className="commons-badge"><b>{s.state}</b></span>;`],
+  ['a badge showing an entry of a list of stored values', `const a = <span className="commons-badge">{ROLES[0]}</span>;`],
+  ['a badge showing an axis key by index', `const a = <span className="commons-badge">{AXES[i]}</span>;`],
+  ['a badge lower-casing a label', `const a = <span className="commons-badge">{enumValueLabel(f, v).toLowerCase()}</span>;`],
+  ['a badge concatenating lower-case text and a stored value', `const a = <span className="commons-badge">{'in ' + s.state}</span>;`],
+  ['a badge concatenating lower-case text and a count', `const a = <span className="commons-badge">{'inbox ' + n}</span>;`],
+  ['a badge concatenating a count and a stored value', `const a = <span className="commons-badge">{n + ' ' + s.state}</span>;`],
   ['a badge with a property access inside a fragment', `const a = <span className="commons-badge"><>{s.state}</></span>;`],
   ['a badge with an element access inside a child element', `const a = <span className="commons-badge"><b>{s['state']}</b></span>;`],
   ['a badge whose first content is lower-case text before a count', `const a = <span className="commons-badge">items {n}</span>;`],
@@ -86,6 +92,10 @@ const fine: Array<[string, string]> = [
   ['a label call with ?? and a capitalised fallback', `const a = <span className="commons-badge">{enumValueLabel(f, v) ?? 'Unknown'}</span>;`],
   ['a count after &&', `const a = <span className="commons-badge">{ok && count}</span>;`],
   ['a template with a capitalised head', 'const a = <span className="commons-badge">{`Inbox ${n}`}</span>;'],
+  ['a number formatted on a stored record', `const a = <span className="commons-badge">{row.count.toFixed(1)}</span>;`],
+  ['a length of a stored list', `const a = <span className="commons-badge">{s.tags.length}</span>;`],
+  ['a count concatenated with lower-case text after it', `const a = <span className="commons-badge">{n + ' items'}</span>;`],
+  ['a capitalised literal concatenated with a count', `const a = <span className="commons-badge">{'Inbox ' + n}</span>;`],
   ['lower-case text on an element that is no badge', `const a = <span className="commons-meta">inbox</span>;`],
 ];
 
