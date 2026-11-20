@@ -18717,6 +18717,7 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
         )
         # The kind, for the undo line (_undo_cannot_remove); not in the answer.
         refusal.kind = "paid_state"  # type: ignore[attr-defined]
+        refusal.state = state  # type: ignore[attr-defined]
         raise refusal
 
 
@@ -19894,10 +19895,25 @@ def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any
     return None
 
 
+def _undo_paid_because(state: str | None, node: Mapping[str, Any]) -> str:
+    """The because-clause of the undo's can't-remove line for each World Labs
+    state _ensure_node_deletable computes (design); each wording is here only."""
+    if state == "active":
+        return "its World Labs run is still starting. Undo again in a moment."
+    if state == "ambiguity":
+        return ("it has a World Labs run that isn\u2019t settled. Ask the person to check it in Marble and "
+                "confirm in the notice at the top of their screen.")
+    if state == "recovery":
+        return ("it has a World Labs run that isn\u2019t settled. Ask the person to check the run in Marble, then use "
+                f"{FORGET_BUTTON} in run history.")
+    return ("its settings hold a World Labs ID. Ask the person to check it in Marble, then clear "
+            f"{_quoted_fields(_recovery_field_labels([dict(node)]))}.")
+
+
 def _undo_cannot_remove(node_id: str, node: dict[str, Any]) -> str | None:
     """Why an undo leaves a node it would remove, as one line naming nodes
     (design), chosen by the kind of refusal _ensure_node_deletable raised, not
-    by its words: World Labs paid state, a Cinema scene with a shot still
+    by its words: World Labs paid state (one line per state), a Cinema scene with a shot still
     running, else the refusal's own text after a plain "left it as it is"."""
     try:
         _ensure_node_deletable(node_id, node)
@@ -19911,8 +19927,7 @@ def _undo_cannot_remove(node_id: str, node: dict[str, Any]) -> str | None:
             ids = ("run " + runs[0]) if len(runs) == 1 else "runs " + ", ".join(runs[:-1]) + " and " + runs[-1]
             return f"{lead} because {what} {'are' if several else 'is'} still running as {ids}."
         if getattr(exc, "kind", None) == "paid_state":
-            return (f"{lead} because it has unresolved World Labs paid state. "
-                    "Check Marble, then resolve its recovery or ambiguity record first.")
+            return f"{lead} because {_undo_paid_because(getattr(exc, 'state', None), node)}"
         logging.getLogger("nebula.undo").info("undo kept %s: a removal refusal of an unlisted kind (%s, status %s)",
                     node_id, type(exc).__name__, exc.status_code)
         text = re.sub(rf"(?<![\w-]){re.escape(node_id)}(?![\w-])", lambda _m: name, str(exc.detail)).strip()
@@ -20106,6 +20121,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # With the restore's own events, before any await (round 8 of PR #114).
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
+            "name": _quoted(_node_label(wire["target"]))[1:-1],
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
             # The restore's own reason names ports and ids; the line says what the person can see.
             "message": (f"Nebula couldn\u2019t put back the connection from {_quoted(_node_label(wire['source']))} to "

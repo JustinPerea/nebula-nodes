@@ -5212,15 +5212,23 @@ Nebula left it as it is.", "“Brief” was connected to “Hero” after that s
 …", "“Brief” is a different node now, …", "“Brief” was moved after that
 step, so Nebula left it where it is." and "“Brief” changed after that step,
 so Nebula left it as a normal node.". A node that can't be removed now reads, by the kind of refusal:
-"Nebula left “Brief” as it is because it has unresolved World Labs paid
-state. Check Marble, then resolve its recovery or ambiguity record first.",
+"Nebula left “Brief” as it is because " plus, by the node's World Labs state,
+"its World Labs run is still starting. Undo again in a moment.", "it has a
+World Labs run that isn’t settled. Ask the person to check it in Marble and
+confirm in the notice at the top of their screen.", "it has a World Labs run
+that isn’t settled. Ask the person to check the run in Marble, then use
+“Forget ID” in run history." or "its settings hold a World Labs ID. Ask the
+person to check it in Marble, then clear “Existing World ID”." (only the
+fields that hold an ID, joined with "and"),
 or, for a Cinema scene, "Nebula left “Scene” as it is because “Shot 2” is
 still running as run ‹run id›." (several: "…because “Shot 2” and “Shot 3” are
 still running as runs ‹a› and ‹b›."); any other refusal reads "Nebula left
 “Brief” as it is. ‹the refusal, with ids replaced by names›". The
 person's activity line is "Codex undid its edit." when nothing was kept, else
 "Codex undid its edit except “Hero” and “Brief”, which ran after that.", "…
-except “Notes”, which changed after that." or both ("…except “Hero”, which ran
+except “Notes”, which changed after that." (every kept part reads "changed":
+a part of a node, or a connection that couldn’t go back, counts once for the
+node it names) or both ("…except “Hero”, which ran
 after that, and “Notes”, which changed after that."); from 4 parts they are
 counted ("…except 4 parts that ran or changed after that."). The person's own
 Cmd+Z on a node that became something else is refused with "Nebula couldn’t

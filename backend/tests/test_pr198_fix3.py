@@ -552,15 +552,48 @@ def test_an_amount_never_raises_and_never_lies_about_nothing():
 # -- the undo's can't-remove line is one sentence per kind of refusal (design) ------
 
 
-def test_an_undo_that_would_remove_a_node_with_paid_state_says_why(api, monkeypatch):  # noqa: F811
+_PAID_LINES = {
+    "active": "its World Labs run is still starting. Undo again in a moment.",
+    "ambiguity": ("it has a World Labs run that isn\u2019t settled. Ask the person to check it in Marble and "
+                  "confirm in the notice at the top of their screen."),
+    "recovery": ("it has a World Labs run that isn\u2019t settled. Ask the person to check the run in Marble, then use "
+                 "\u201cForget ID\u201d in run history."),
+    "params": ("its settings hold a World Labs ID. Ask the person to check it in Marble, then clear "
+               "\u201cExisting World ID\u201d."),
+}
+
+
+@pytest.mark.parametrize("state", ["active", "ambiguity", "recovery", "params"])
+def test_every_paid_state_the_delete_check_computes_gives_its_own_because_line(api, monkeypatch, state):  # noqa: F811
+    """One case per state _ensure_node_deletable computes, so only a new kind of
+    refusal reaches the two-sentence fallback."""
     _client, graph, _sent = api
     node = graph.add_node("text-input", {"value": "x"})
     graph.set_label(node, "Brief")
-    monkeypatch.setattr(main_module.provider_start_guard, "list",
-                        lambda: [{"nodeId": node, "runId": "r1", "kind": "worldlabs"}])
+    record = {"nodeId": node, "runId": "r1", "kind": "worldlabs"}
+    monkeypatch.setattr(main_module.provider_start_guard, "has_active_node", lambda _id: state == "active")
+    monkeypatch.setattr(main_module.provider_start_guard, "list", lambda: [record] if state == "ambiguity" else [])
+    monkeypatch.setattr(main_module.provider_recovery_store, "list", lambda: [record] if state == "recovery" else [])
+    monkeypatch.setattr(main_module, "_recovery_record_holds_node", lambda _record, _node: True)
+    monkeypatch.setattr(main_module, "has_recovery_identity", lambda _definition, _params: state == "params")
+    monkeypatch.setattr(main_module, "_shared_id_delete_person", lambda _id, _holding: None)
+    monkeypatch.setattr(main_module, "_recovery_field_labels", lambda _nodes: ["Existing World ID"])
+    with pytest.raises(main_module.HTTPException) as caught:
+        main_module._ensure_node_deletable(node, graph.nodes[node])
+    assert caught.value.state == state and caught.value.status_code == 409
     assert main_module._undo_cannot_remove(node, graph.nodes[node]) == (
-        "Nebula left “Brief” as it is because it has unresolved World Labs paid state. "
-        "Check Marble, then resolve its recovery or ambiguity record first.")
+        f"Nebula left \u201cBrief\u201d as it is because {_PAID_LINES[state]}")
+
+
+def test_the_params_line_joins_two_id_fields_like_the_person_line(api, monkeypatch):  # noqa: F811
+    _client, graph, _sent = api
+    node = graph.add_node("text-input", {"value": "x"})
+    graph.set_label(node, "Brief")
+    monkeypatch.setattr(main_module, "has_recovery_identity", lambda _definition, _params: True)
+    monkeypatch.setattr(main_module, "_recovery_field_labels", lambda _nodes: ["Resume Operation ID", "Existing World ID"])
+    assert main_module._undo_cannot_remove(node, graph.nodes[node]) == (
+        "Nebula left \u201cBrief\u201d as it is because its settings hold a World Labs ID. Ask the person to check it in Marble, "
+        "then clear \u201cResume Operation ID\u201d and \u201cExisting World ID\u201d.")
 
 
 def test_an_undo_that_would_remove_a_scene_with_a_rendering_shot_names_the_run(api, rendering):  # noqa: F811

@@ -1321,13 +1321,11 @@ def test_the_activity_line_has_no_counts_colon_or_parens_in_all_its_forms():
     assert activity_line("Codex", [ran("Hero"), ran("Brief")]) == (
         "Codex undid its edit except “Hero” and “Brief”, which ran after that.")
     assert activity_line("Codex", [kept("Notes")]) == "Codex undid its edit except “Notes”, which changed after that."
-    assert activity_line("Codex", [kept("Notes", "moved since")]) == (
-        "Codex undid its edit except “Notes”, which moved after that.")
-    assert activity_line("Codex", [kept("Notes", "wired since")]) == (
-        "Codex undid its edit except “Notes”, which connected after that.")
-    assert activity_line("Codex", [kept("Notes", "removed since")]) == (
-        "Codex undid its edit except “Notes”, which removed after that.")
-    # Kept reasons that differ read as "changed"; a node counts once however many of its parts were kept.
+    # Removed, moved and connected kept parts read "changed" too: only a run is told apart.
+    for reason in ("moved since", "wired since", "removed since"):
+        assert activity_line("Codex", [kept("Notes", reason)]) == (
+            "Codex undid its edit except “Notes”, which changed after that.")
+    # Every kept reason but a run reads "changed"; a node counts once however many of its parts were kept.
     assert activity_line("Codex", [kept("A", "moved since"), kept("B", "wired since")]) == (
         "Codex undid its edit except “A” and “B”, which changed after that.")
     assert activity_line("Codex", [kept("Notes"), kept("Notes", "moved since"), ran("Hero")]) == (
@@ -1347,7 +1345,78 @@ def test_the_activity_line_has_no_counts_colon_or_parens_in_all_its_forms():
 def test_a_removed_node_is_named_by_its_skip_and_a_nameless_one_by_the_fallback():
     skip = {"nodeId": "n7", "part": "params", "reason": "removed since", "message": ""}
     assert activity_line("Codex", [skip], lambda _id: "Mixer") == (
-        "Codex undid its edit except “Mixer”, which removed after that.")
+        "Codex undid its edit except “Mixer”, which changed after that.")
+
+
+def test_a_deleted_end_of_a_wire_is_named_by_its_skip_not_the_wires_source():
+    """Hero feeds Brief, the person deletes Brief, the agent undoes: the wire's
+    skip carries Brief as its nodeId and name, though “Hero” comes first in its line."""
+    inverse = _inverse(removedWires=[["hero", "text", "brief", "input"]], names={"hero": "Hero", "brief": "Brief"})
+    plan = _plan(inverse, {"hero": _node(label="Hero")})
+    [skip] = plan.skipped
+    assert (skip["part"], skip["reason"], skip["nodeId"], skip["name"]) == ("wire", "gone since", "brief", "Brief")
+    assert skip["message"] == ("Nebula couldn’t put back the connection from “Hero” to "
+                               "“Brief” because “Brief” is gone.")
+    assert activity_line("Codex", plan.skipped) == "Codex undid its edit except “Brief”, which changed after that."
+
+
+def test_every_skip_plan_undo_makes_carries_the_name_its_message_uses():
+    nodes = {"n1": _node(label="Brief", params={"value": "x"}), "n2": _node("nano-banana", label="Hero"),
+             "n3": _node(label="Other"), "n4": _node("nano-banana", label="Four")}
+    inverse = _inverse(
+        added=[{"id": "n1", "definitionId": "text-input", "params": {}, "label": "Brief"},
+               {"id": "n3", "definitionId": "text-input", "params": {}, "label": "Other"}],
+        changed=[{"id": "n2", "definitionId": "nano-banana", "before": {"model": "a"}, "after": {"model": "b"}},
+                 {"id": "n9", "definitionId": "text-input", "before": {}, "after": {"value": "a"}},
+                 {"id": "n4", "definitionId": "text-input", "before": {}, "after": {"value": "a"}}],
+        moved=[{"id": "n2", "before": {"x": 0, "y": 0}, "after": {"x": 5, "y": 5}}],
+        removedWires=[["n8", "text", "n2", "input"]],
+        names={"n9": "Mixer", "n8": "Source", "n4": "Was Four"},
+        removed=[{"id": "n8", "definitionId": "text-input", "params": {}, "outputs": {}}],
+    )
+    plan = _plan(inverse, nodes, ran={"n3": [{"kind": "person"}]}, name_of=lambda node_id: nodes[node_id]["label"])
+    assert {(item["nodeId"], item["name"]) for item in plan.skipped} >= {
+        ("n1", "Brief"), ("n2", "Hero"), ("n9", "Mixer"), ("n4", "Was Four"), ("n3", "Other")}
+    for item in plan.skipped:
+        assert f"“{item['name']}”" in item["message"] or not item["message"], item
+
+
+def test_a_node_with_a_kept_param_and_a_kept_wire_counts_once():
+    def both(node_id):
+        return [{"nodeId": node_id, "name": node_id, "part": "params", "reason": "changed since", "message": ""},
+                {"nodeId": node_id, "name": node_id, "part": "wire", "reason": "gone since", "message": ""}]
+
+    ran = {"nodeId": "R", "name": "R", "part": "node", "reason": "ran since", "message": ""}
+    three = both("A") + both("B") + both("C")
+    assert activity_line("Codex", three) == "Codex undid its edit except “A”, “B” and “C”, which changed after that."
+    assert activity_line("Codex", three + [ran]) == "Codex undid its edit except 4 parts that ran or changed after that."
+    # Six entries are three nodes: the count form needs four distinct nodes.
+    assert "parts that" not in activity_line("Codex", three + [dict(ran, nodeId="A", name="A")])
+
+
+def test_a_name_with_a_closing_curly_quote_keeps_its_whole_name():
+    inverse = _inverse(changed=[{"id": "n1", "definitionId": "text-input", "before": {}, "after": {"value": "a"}}])
+    [kept] = _plan(inverse, {"n1": _node(label="Say “hi” now", params={"value": "b"})},
+                   name_of=lambda _id: "Say “hi” now").skipped
+    assert kept["name"] == "Say “hi” now"
+    assert activity_line("Codex", [kept]) == "Codex undid its edit except “Say “hi” now”, which changed after that."
+
+
+def test_the_routes_refused_wire_names_its_target_and_reads_changed(api, monkeypatch):
+    import main as main_module
+
+    lines: list[str] = []
+    monkeypatch.setattr(main_module, "publish_action", lines.append)
+    prompt, image = _seed(api)
+    api.graph.set_label(image, "Brief")
+    other = api.graph.add_node("text-input", {"value": "b"})
+    token = _apply(api, {"unwire": [{"source": prompt, "sourceHandle": "text", "target": image,
+                                     "targetHandle": "prompt"}]})["undo"]["token"]
+    api.graph.connect(other, "text", image, "prompt")  # the person fills the input the edit freed
+    result = _undone(api, token)
+    [skip] = [item for item in result["skipped"] if item["reason"] == "can't be wired now"]
+    assert skip["nodeId"] == image and skip["name"] == "Brief"
+    assert lines[-1] == "Claude Code undid its edit except “Brief”, which changed after that."
 
 
 def test_the_routes_activity_line_names_the_nodes_that_ran(api, monkeypatch):

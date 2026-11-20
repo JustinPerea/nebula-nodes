@@ -427,6 +427,11 @@ def plan_undo(
         definition_id = str(entry.get("definitionId") or (nodes.get(node_id) or {}).get("definitionId") or "")
         return quoted(type_name(definition_id) if type_name and definition_id and type_name(definition_id) else node_id)
 
+    def shown(node_id: str, *, live: bool = True) -> str:
+        """``name`` without its quotes: the skip entries' ``name``, which the
+        person's activity line quotes itself."""
+        return name(node_id, live=live)[1:-1]
+
     kept_parts: dict[str, list[str]] = {}  # node -> the parts someone changed since, as words
     kept_entries: list[tuple[dict[str, Any], str]] = []  # skip entries whose message is set once the plan is known
 
@@ -495,7 +500,8 @@ def plan_undo(
                     reason, message = "can't be removed now", refusal
         if reason:
             kept.add(node_id)
-            skipped.append({"nodeId": node_id, "part": "node", "reason": reason, "message": message})
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "node", "reason": reason,
+                            "message": message})
         else:
             remove.append(node_id)
 
@@ -519,11 +525,12 @@ def plan_undo(
         node_id = change["id"]
         now = nodes.get(node_id)
         if now is None:
-            skipped.append({"nodeId": node_id, "part": "params", "reason": "removed since",
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "params", "reason": "removed since",
                             "message": f"{name(node_id)} was removed after that step, so Nebula couldn\u2019t change it back."})
             continue
         if str(now.get("definitionId") or "") != change["definitionId"]:
-            skipped.append({"nodeId": node_id, "part": "params", "reason": "a different node now",
+            skipped.append({"nodeId": node_id, "name": shown(node_id, live=False), "part": "params",
+                            "reason": "a different node now",
                             "message": f"{name(node_id, live=False)} is a different node now, so Nebula left it as it is."})
             continue
         current = dict(now.get("params") or {})
@@ -554,12 +561,14 @@ def plan_undo(
             held.extend((key, "together") for key in sorted(back))
             back = {}
         if stale:
-            keep(node_id, {"nodeId": node_id, "part": "params", "keys": stale, "reason": "changed since",
+            keep(node_id, {"nodeId": node_id, "name": shown(node_id), "part": "params", "keys": stale,
+                           "reason": "changed since",
                            "message": ""}, param_words(node_id, stale))
         if held:
             names = [key for key, _reason in held]
             words = param_words(node_id, names)
-            skipped.append({"nodeId": node_id, "part": "params", "keys": names, "reason": "the person's to change",
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "params", "keys": names,
+                            "reason": "the person's to change",
                             "message": f"{name(node_id)}\u2019s {_listed(words)} {'is' if len(words) == 1 else 'are'} "
                                        "the person\u2019s to change back. Ask them with propose_change."})
         if back:
@@ -577,7 +586,8 @@ def plan_undo(
             leave(node_id, "name")
             continue
         if label != rename["after"]:
-            keep(node_id, {"nodeId": node_id, "part": "name", "reason": "changed since", "message": ""}, ["name"])
+            keep(node_id, {"nodeId": node_id, "name": shown(node_id), "part": "name", "reason": "changed since",
+                           "message": ""}, ["name"])
             continue
         item(node_id)["label"] = rename["before"] or ""
 
@@ -593,7 +603,7 @@ def plan_undo(
             leave(node_id, "position")
             continue
         if point != move["after"]:
-            skipped.append({"nodeId": node_id, "part": "position", "reason": "moved since",
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "position", "reason": "moved since",
                             "message": f"{name(node_id)} was moved after that step, so Nebula left it where it is."})
             continue
         item(node_id)["position"] = dict(move["before"])
@@ -612,7 +622,8 @@ def plan_undo(
             leave(node_id, "placeholder")
             continue
         if _ready_changed_since(ready, now, current_wires):
-            skipped.append({"nodeId": node_id, "part": "placeholder", "reason": "changed since",
+            skipped.append({"nodeId": node_id, "name": shown(node_id), "part": "placeholder",
+                            "reason": "changed since",
                             "message": f"{name(node_id)} changed after that step, so Nebula left it as a normal node."})
             continue
         item(node_id)["pending"] = copy.deepcopy(ready["pending"])
@@ -641,7 +652,7 @@ def plan_undo(
         missing = next((end for end in (edge[0], edge[2]) if end not in present), None)
         if missing is not None:
             skipped.append({"part": "wire", "wire": wire_body(edge), "reason": "gone since",
-                            "nodeId": missing,
+                            "nodeId": missing, "name": shown(missing),
                             "message": (f"Nebula couldn\u2019t put back the connection from {name(edge[0])} to "
                                         f"{name(edge[2])} because {name(missing)} is gone.")})
             continue
@@ -652,7 +663,7 @@ def plan_undo(
                      or any(node_id in (edge["source"], edge["target"]) for edge in wire + unwire))
         entry["message"] = kept_line(node_id, went_back)
 
-    ran_skips = [{"nodeId": node_id, "part": "node", "reason": "ran since", "left": parts,
+    ran_skips = [{"nodeId": node_id, "name": shown(node_id), "part": "node", "reason": "ran since", "left": parts,
                   "ranBy": [actor_record(actor) for actor in ran[node_id]],
                   "message": f"{_runners(ran[node_id])} ran {name(node_id)} after that step, so Nebula left it as it is."}
                  for node_id, parts in ran_left.items()]
@@ -689,45 +700,35 @@ def kept_lines(skipped: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-_KEPT_VERBS = {"changed since": "changed", "moved since": "moved", "wired since": "connected",
-               "removed since": "removed"}
-
-
-def _quoted_name(item: Mapping[str, Any], fallback: Callable[[str], str] | None) -> str:
-    """The node a skip names, as its line quotes it (a removed node has no
-    live name), else the fallback's, else the id."""
-    found = re.search(r"\u201c([^\u201d]+)\u201d", str(item.get("message") or ""))
-    node_id = str(item.get("nodeId") or "")
-    return found.group(1) if found else (fallback(node_id) if fallback else node_id)
-
-
 def activity_line(agent: str, skipped: list[dict[str, Any]], name_of: Callable[[str], str] | None = None) -> str:
     """The person's activity line for an agent's undo (design), no counts in
     the short forms, no colon, no parens. Nothing kept: "Codex undid its
     edit." Parts kept (a part is a node, counted once): "Codex undid its edit
     except “Hero” and “Brief”, which ran after that.", "…except “Notes”, which
-    changed after that." (the kept verb when they agree: moved, connected,
-    removed; else "changed"), and both: "…except “Hero”, which ran after that,
-    and “Notes”, which changed after that." From 4 parts in all they are
-    counted: "…except 4 parts that ran or changed after that." (only ran: "4
-    nodes that ran"; only changed: "4 parts that changed")."""
+    changed after that." (every kept reason but a run reads "changed"), and
+    both: "…except “Hero”, which ran after that, and “Notes”, which changed
+    after that." From 4 parts in all they are counted: "…except 4 parts that
+    ran or changed after that." (only ran: "4 nodes that ran"; only changed:
+    "4 parts that changed").
+
+    A skip names its node in ``name`` (else ``name_of`` gives it from
+    ``nodeId``). A wire skip counts as a kept part of the node in its
+    ``nodeId``: the end that is gone, or the target that no longer takes the
+    connection."""
     ran: dict[str, str] = {}
     kept: dict[str, str] = {}
-    verbs: dict[str, set[str]] = {}
     for item in skipped:
         node_id = item.get("nodeId")
         if not node_id:
-            continue  # a wire isn't a node
+            continue
+        shown = str(item.get("name") or "") or (name_of(node_id) if name_of else str(node_id))
         if item.get("reason") == "ran since":
-            ran[node_id] = _quoted_name(item, name_of)
+            ran[node_id] = shown
         else:
-            kept[node_id] = _quoted_name(item, name_of)
-            verbs.setdefault(node_id, set()).add(_KEPT_VERBS.get(str(item.get("reason")), "changed"))
+            kept[node_id] = shown
     kept = {node_id: shown for node_id, shown in kept.items() if node_id not in ran}
     if not ran and not kept:
         return f"{agent} undid its edit."
-    all_verbs = set().union(*(verbs[node_id] for node_id in kept)) if kept else set()
-    verb = next(iter(all_verbs)) if len(all_verbs) == 1 else "changed"
     total = len(ran) + len(kept)
     if total >= 4:
         what = (f"{total} parts that ran or changed" if ran and kept else f"{total} nodes that ran" if ran
@@ -737,7 +738,7 @@ def activity_line(agent: str, skipped: list[dict[str, Any]], name_of: Callable[[
     if ran:
         clauses.append(f"{node_name_list(list(ran.values()))}, which ran after that")
     if kept:
-        clauses.append(f"{node_name_list(list(kept.values()))}, which {verb} after that")
+        clauses.append(f"{node_name_list(list(kept.values()))}, which changed after that")
     return f"{agent} undid its edit except {', and '.join(clauses)}."
 
 
