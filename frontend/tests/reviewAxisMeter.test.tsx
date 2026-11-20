@@ -21,6 +21,12 @@ describe('ReviewAxisMeter (design: fill runs from the centre to the value)', () 
     [0, 'positive', '0'],
     [-3, 'negative', '1'],
     [2.5, 'positive', '1'],
+    [-0, 'positive', '0'],
+    [-0.004, 'positive', '0'],
+    [0.004, 'positive', '0'],
+    [Number.NaN, 'positive', '0'],
+    [Number.POSITIVE_INFINITY, 'positive', '1'],
+    [Number.NEGATIVE_INFINITY, 'negative', '1'],
   ])('value %s fills the %s side to %s of its half', (value, side, reach) => {
     const d = draw(value);
     expect(d.side).toBe(side);
@@ -43,10 +49,12 @@ describe('ReviewAxisMeter (design: fill runs from the centre to the value)', () 
     cleanup();
     expect(draw(0).meter.getAttribute('aria-valuetext')).toBe('0.00, centred');
     cleanup();
-    expect(draw(0.5).meter.getAttribute('aria-valuetext')).toBe('0.50, toward loud');
+    expect(draw(0.5).meter.getAttribute('aria-valuetext')).toBe('+0.50, toward loud');
+    cleanup();
+    expect(draw(-0.004).meter.getAttribute('aria-valuetext')).toBe('0.00, centred');
     cleanup();
     const out = draw(5);
     expect(out.meter.getAttribute('aria-valuenow')).toBe('1');
-    expect(out.meter.getAttribute('aria-valuetext')).toBe('1.00, toward loud');
+    expect(out.meter.getAttribute('aria-valuetext')).toBe('+1.00, toward loud');
   });
 });

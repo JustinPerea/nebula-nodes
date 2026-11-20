@@ -91,7 +91,9 @@ export function axisLabel(key: string | null | undefined): string {
 export function axisValue(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return '';
   const text = Math.abs(n).toFixed(2);
-  return n < 0 && Number(text) !== 0 ? `\u2212${text}` : text;
+  // Design: signed like the axis ends ("+1 loud"): a minus or a plus, and no sign on 0.00.
+  if (Number(text) === 0) return text;
+  return n < 0 ? `\u2212${text}` : `+${text}`;
 }
 export const ENUMS = {
   type_style: ['geometric_sans', 'humanist_sans', 'serif', 'mono', 'script', 'display', 'none'],
