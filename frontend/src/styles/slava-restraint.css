@@ -1239,6 +1239,21 @@ body.app-slava-restraint .chat__system--success {
   color: var(--sr-success);
 }
 
+/* Design: a `backtick` span in a chat or error line is inline code (lib/codeSpans). The mono face,
+   the line's own colour (so the error, neutral or because tone carries over) and size (the mono
+   face's x-height equals the sans', 0.55em against 0.546em, so no shrink), no box. It sits
+   on the line as one unit: it moves to the next line whole and wraps inside only when it is wider
+   than the line itself. */
+body.app-slava-restraint .code-span {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+  font-family: var(--sr-mono);
+  /* A command is typed as shown: no ligatures ("--" stays two hyphens). */
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
 body.app-slava-restraint .chat__tool-header {
   color: var(--sr-ink-light);
 }

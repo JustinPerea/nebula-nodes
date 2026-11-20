@@ -61,7 +61,8 @@
 }
 .run-history__status {
   font-size: 10px;
-  text-transform: uppercase;
+  /* Design: a status word is a badge, not a field label, so it reads in
+     sentence case ("Running", "Failed", "Complete"). */
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }

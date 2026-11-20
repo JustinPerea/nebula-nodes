@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { matchesModelSearch } from './modelDiscovery';
 
@@ -188,7 +189,7 @@ function listNames(names: readonly string[]): string {
  */
 export function summarizeUnlocked(names: readonly string[], lead?: string): string {
   if (names.length <= 3) return listNames(names);
-  return lead ? `${names.length} nodes, including ${lead}` : `${names.length} nodes`;
+  return lead ? `${groupedCount(names.length)} nodes, including ${lead}` : `${groupedCount(names.length)} nodes`;
 }
 
 /** The row's one-line summary of what the key opens up (connected and add rows read the same). */

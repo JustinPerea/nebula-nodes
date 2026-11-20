@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { X, RotateCcw, ShieldCheck, Square, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
@@ -310,7 +311,7 @@ export function RunHistoryPanel() {
                         className="run-history__skipped"
                         title={Object.entries(r.skippedNodes).map(([id, reason]) => `${id} skipped: ${reason}`).join('\n')}
                       >
-                        {' '}· {Object.keys(r.skippedNodes).length} skipped
+                        {' '}· {groupedCount(Object.keys(r.skippedNodes).length)} skipped
                       </span>
                     )}
                     {r.targetNodeId && (

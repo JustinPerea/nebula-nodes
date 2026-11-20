@@ -1,4 +1,5 @@
 
+import { groupedCount } from '../lib/groupedCount';
 import { adoptRenumberedSelection, nodeCardTitle, releaseKeptCanvas, useGraphStore, hasUnsavedSceneEdits, isTabLocalNode, keepCanvasLocally, runsThatNeverStarted } from './graphStore';
 import { isCanvasKept, pulseKeptCanvas, setKeptCanvasSaving } from '../lib/keptCanvas';
 import { useUIStore } from './uiStore';
@@ -2250,7 +2251,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       // Never silent: "Couldn’t delete “X”. It has a saved World Labs …", as
       // the canvas says a refused delete.
       useGraphStore.getState().notify(deleteRefusalText(deletesHeld.length === 1 ? "Couldn’t delete the node."
-        : `Couldn’t delete ${deletesHeld.length} nodes.`, deletesHeld.length, deletesHeld), 'info');
+        : `Couldn’t delete ${groupedCount(deletesHeld.length)} nodes.`, deletesHeld.length, deletesHeld), 'info');
     }
     // The toast names the project the tab landed on (round 17, review 16
     // M1), from the newest switch to it; the way back is the project this

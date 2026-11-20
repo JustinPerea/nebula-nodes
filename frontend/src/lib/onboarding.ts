@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 
 export type OnboardingTarget = 'nodes' | 'settings' | 'create' | 'history' | 'chat' | 'help';
@@ -16,7 +17,7 @@ export const ONBOARDING_HELP_SELECTOR = '[data-onboarding-target="help"]';
 export const ONBOARDING_TOUR: readonly OnboardingTourStep[] = [
   {
     target: 'nodes', selector: '[data-onboarding-target="nodes"]', title: 'Find a model',
-    body: `Browse ${catalogCount} nodes by task, model or provider. Try “animate a logo”, then add a model to the canvas. Adding never generates.`,
+    body: `Browse ${groupedCount(catalogCount)} nodes by task, model or provider. Try “animate a logo”, then add a model to the canvas. Adding never generates.`,
   },
   {
     target: 'settings', selector: '[data-onboarding-target="settings"]', title: 'Connect a provider',

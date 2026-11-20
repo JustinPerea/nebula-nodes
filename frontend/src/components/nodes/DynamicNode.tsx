@@ -259,7 +259,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           <button
             type="button"
             className={`model-node__loop-toggle nodrag ${videoLoop ? 'model-node__loop-toggle--on' : ''}`}
-            title={videoLoop ? 'Loop: on (click to stop looping)' : 'Loop: off (click to loop)'}
+            title={videoLoop ? 'Loop is on. Click to stop looping.' : 'Loop is off. Click to loop.'}
             onClick={(e) => {
               e.stopPropagation();
               setVideoLoop((v) => !v);

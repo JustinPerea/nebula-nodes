@@ -1,3 +1,4 @@
+import { groupedCount } from '../../../lib/groupedCount';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
@@ -36,7 +37,7 @@ interface Entry {
 }
 
 function plural(count: number, word: string) {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
+  return `${groupedCount(count)} ${word}${count === 1 ? '' : 's'}`;
 }
 
 /**
@@ -281,7 +282,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
           </div>
           <PersonLockLine lock={keyLock} place="heading" />
           <div className="settings-list">{connected.map((entry) => entry.render(moved(entry)))}</div>
-          {health.error && <p className="settings-row__error" role="alert"><LineText text={health.error} /></p>}
+          {health.error && <p className="settings-row__error" role="alert"><LineText text={health.error} code /></p>}
           {desktop?.credentials && <p className="settings-hint settings-list__note">Keys are stored in the macOS Keychain.</p>}
         </section>
       )}

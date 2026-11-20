@@ -1,3 +1,4 @@
+import { countNoun } from '../../lib/groupedCount';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useReactFlow, useStore } from '@xyflow/react';
@@ -207,7 +208,7 @@ export function Toolbar() {
     if (isCanvasKept()) {
       const count = useGraphStore.getState().nodes.length;
       if (count === 0) return;
-      if (!window.confirm(`Clear the canvas? ${count} node${count === 1 ? '' : 's'} will be removed. Undo brings them back.`)) return;
+      if (!window.confirm(`Clear the canvas? ${countNoun(count, 'node')} will be removed. Undo brings them back.`)) return;
       clearKeptTab();
       return;
     }
@@ -215,7 +216,7 @@ export function Toolbar() {
     const { nodes } = useGraphStore.getState();
     const msg =
       nodes.length > 0
-        ? `Clear the canvas? ${nodes.length} node${nodes.length === 1 ? '' : 's'} will be removed, and the stored canvas used by connected tools will be reset. Save your canvas first to keep a copy.`
+        ? `Clear the canvas? ${countNoun(nodes.length, 'node')} will be removed, and the stored canvas used by connected tools will be reset. Save your canvas first to keep a copy.`
         : 'Reset the stored canvas used by connected tools? The visible canvas is already empty.';
     if (refuseEditWhileFollowing()) return;
     if (!window.confirm(msg)) return;

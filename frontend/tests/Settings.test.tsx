@@ -1788,7 +1788,7 @@ describe('Settings — preferences', () => {
     // Unset, plan runs are held to the default, never to no limit.
     const planRuns = screen.getByRole('combobox', { name: 'Krea plan runs' });
     expect(planRuns).toHaveValue('default');
-    expect(within(planRuns).getByRole('option', { name: '10 (default)' })).toBeInTheDocument();
+    expect(within(planRuns).getByRole('option', { name: /^10\s·\sdefault$/ })).toBeInTheDocument();
     fireEvent.change(planRuns, { target: { value: '25' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
       agentSpend: { sessionUsd: 10, kreaPlanRuns: 25, models: {} },

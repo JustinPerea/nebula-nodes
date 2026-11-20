@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useId } from 'react';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
@@ -57,6 +58,7 @@ import { LineText } from '../LineText';
 import { PersonLockLine } from '../PersonLock';
 import { usePersonLock } from '../../hooks/usePersonLock';
 import { RUN_LOCK_VERBS, runFinishesLine } from '../../lib/runLock';
+import { aside } from '../../lib/labelAside';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
@@ -446,7 +448,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <span className="inspector__empty-grid" aria-hidden="true" />
         {canvasSelectedCount >= 2 ? (
           <>
-            <span className="inspector__empty-title">{`${canvasSelectedCount} nodes selected`}</span>
+            <span className="inspector__empty-title">{`${groupedCount(canvasSelectedCount)} nodes selected`}</span>
             <span className="inspector__empty-line">Select one node to see its settings.</span>
           </>
         ) : (
@@ -1449,7 +1451,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   <div key={p.id} className="inspector__info-row">
                     <span className="inspector__info-dot" style={{ backgroundColor: PORT_COLORS[p.dataType as keyof typeof PORT_COLORS] ?? '#9E9E9E' }} />
                     <span className="inspector__info-name">{p.label}</span>
-                    <span className="inspector__info-type">{p.dataType}{p.required ? '' : ' (optional)'}{p.multiple ? ' +' : ''}</span>
+                    <span className="inspector__info-type">{p.required ? p.dataType : aside(p.dataType, 'optional')}{p.multiple ? ' +' : ''}</span>
                   </div>
                 ))
               )}

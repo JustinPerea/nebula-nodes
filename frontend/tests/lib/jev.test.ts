@@ -114,7 +114,7 @@ describe('Jev node definitions', () => {
     expect(pick.inputPorts[0]).toMatchObject({ id: 'candidates', dataType: 'Image', multiple: true, maxConnections: 10 });
 
     const box = NODE_DEFINITIONS[JEV_BOX];
-    expect(box.displayName).toBe('Jev Box (experimental)');
+    expect(box.displayName).toBe('Jev Box · experimental');
     expect(box.outputPorts.map((port) => [port.id, port.dataType])).toEqual([
       ['found', 'Text'], ['box', 'Text'], ['crop', 'Image'], ['mask', 'Mask'], ['annotated', 'Image'], ['report', 'Text'],
     ]);

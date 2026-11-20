@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import { becauseLine, isNamedLine } from './errorCopy';
 import { lastNodeLabel } from './lastNodeLabels';
 
@@ -200,9 +201,9 @@ export function heldDeleteText(count: number, unlock: boolean, held = 1, name?: 
     return `${lead} because ${unlock ? lowerFirst(WORLD_LABS_NEEDS_CHECK) : RECOVERY_ID_FORGET_CLAUSE}`;
   }
   // Design (error-copy round 5): the line names the nodes, never a bare "them".
-  const lead = `Nebula couldn’t delete these ${count} nodes`;
+  const lead = `Nebula couldn’t delete these ${groupedCount(count)} nodes`;
   if (!unlock && held >= count) return `${lead} because they’re waiting on World Labs. Check Marble and run history.`;
-  const waiting = held <= 1 ? 'one is' : held >= count ? 'they’re' : `${held} are`;
+  const waiting = held <= 1 ? 'one is' : held >= count ? 'they’re' : `${groupedCount(held)} are`;
   const then = unlock ? `unlock ${held <= 1 ? 'it' : 'them'}.` : 'use run history.';
   return `${lead} because ${waiting} waiting on World Labs. Check Marble, then ${then}`;
 }

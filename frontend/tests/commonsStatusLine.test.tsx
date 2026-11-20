@@ -144,8 +144,10 @@ it.each(cases)('says %s in a short status, with the full explanation as its tool
 // state alone. The longest realistic ones, measured live at Inter 400 11px:
 // "Paused · computer busy (140.2/128) · 99 held" 235.8 px beside Stop (245 px
 // of room at 1280), "Stopped · call budget used (9999/9999) · 99 held" 257.5
-// px with no control (301 px). Characters stand in for pixels here (jsdom
-// has no layout); the ellipsis stays as the safety net beyond these.
+// px with no control (301 px). Counts are now grouped (design), so that one
+// reads "(9,999/9,999)": two commas add about 6 px at Inter 11px (an estimate,
+// not measured), about 263 px of the 301. Characters stand in for pixels here
+// (jsdom has no layout); the ellipsis stays as the safety net beyond these.
 it.each([
   // 44 characters since GM's "computer busy" (it matches the tooltip's "this computer"): 235.8 px, measured.
   ['beside a control', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 140.2, load_threshold: 128, queue: queue(0, 99) }, 44],
@@ -153,7 +155,7 @@ it.each([
   ['beside a control', { worker: { state: 'analyzing', running: true, budget_used: 0, budget: null }, queue: queue(999, 99) }, 43],
   ['beside a control', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null }, queue: queue(0, 99),
     meter: { calls: 999, cap: 999, remaining: 0, resets_at: '2026-09-28T23:59:00' } }, 43],
-  ['with no control', { worker: { state: 'budget_exhausted', running: false, budget_used: 9999, budget: 9999 }, queue: queue(0, 99) }, 48],
+  ['with no control', { worker: { state: 'budget_exhausted', running: false, budget_used: 9999, budget: 9999 }, queue: queue(0, 99) }, 50],
 ] as Array<[string, Partial<CommonsStatus>, number]>)('keeps a long realistic status short enough to show whole %s', (_, patch, cap) => {
   const { text } = rendered(status(patch));
   expect([...text].length, `"${text}"`).toBeLessThanOrEqual(cap);

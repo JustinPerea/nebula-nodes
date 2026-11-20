@@ -34,6 +34,13 @@ describe('Character Studio reference views', () => {
     expect([...container.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([views[0], ...views]);
     expect(screen.queryByText('Image link from outside Nebula')).toBeNull();
   });
+
+  it('badges the first view "Cover", in sentence case', () => {
+    const views = ['/api/outputs/chat-uploads/a.png', '/api/outputs/chat-uploads/b.png'];
+    const { container } = render(<CharacterDefinitionPanel thumbnail={views[0]} onChange={() => {}} draft={draft(views)} />);
+    const badges = [...container.querySelectorAll('.character-def__ref-badge')].map((node) => node.textContent);
+    expect(badges).toEqual(['Cover']);
+  });
 });
 
 // error-copy round 2 (GM): "Couldn't upload {filename}." then the reason;

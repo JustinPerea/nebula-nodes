@@ -1,3 +1,4 @@
+import { writtenTime } from '../../lib/writtenDate';
 import type { AgentLogEntry } from '../../store/agentLogStore';
 
 /** One Agent log event row: the log's list, and a thread's opened "3 actions". */
@@ -16,11 +17,7 @@ export function AgentLogEntryRow({ entry: e }: { entry: AgentLogEntry }) {
     >
       <span className="agent-log__entry-marker" aria-hidden="true" />
       <span className="agent-log__time">
-        {new Date(e.ts).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        })}
+        {writtenTime(e.ts)}
       </span>
       <span className="agent-log__source" title={e.agent?.name}>{e.agent?.name ?? e.source}</span>
       <span className="agent-log__msg">{line}</span>

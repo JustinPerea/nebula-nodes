@@ -1,3 +1,4 @@
+import { countNoun } from '../../lib/groupedCount';
 import { useEffect, useRef, useState } from 'react';
 import { Activity, ChevronUp, EyeOff } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
@@ -750,7 +751,7 @@ export function AgentLog() {
   // GM r70: an agent's name is its cursor label ("Claude", "Claude · 2"), in
   // its own case; the state words stay the telemetry's lowercase.
   const statusIsName = !isExecuting && Boolean(latestEntry?.agent?.name);
-  const countLabel = `${entries.length} event${entries.length === 1 ? '' : 's'}`;
+  const countLabel = countNoun(entries.length, 'event');
 
   if (!visible) {
     if (!hiddenNotice) return null;
@@ -887,7 +888,7 @@ export function AgentLog() {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={handleHide}
           aria-label="Hide agent log"
-          title="Hide agent log (Settings brings it back)"
+          title="Hide agent log. Settings brings it back."
         >
           <EyeOff size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </button>

@@ -1,3 +1,4 @@
+import { groupedCount } from '../../../lib/groupedCount';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { X } from 'lucide-react';
@@ -20,6 +21,7 @@ import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
 import { useNowUntil } from '../../../hooks/useBefore';
 import { AMOUNT_UNKNOWN, LEDGER_CANT_READ, holdFigure, holdOn, holdSentence, ledgerHoldLine } from '../../../lib/ledgerHold';
 import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
+import { aside } from '../../../lib/labelAside';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -204,7 +206,7 @@ export function AgentSpendSection() {
                 <span className="settings-agent-spent" data-testid="settings-agent-outside-spent">
                   {' '}{counted ? holdSentence(!blocked && outsideLimit !== null) : <>
                     {spentUsd(outside.view.outside.spentUsd)} in the last 24 hours
-                    {outside.view.outside.kreaPlanRuns > 0 && `, ${outside.view.outside.kreaPlanRuns} Krea plan runs`}.
+                    {outside.view.outside.kreaPlanRuns > 0 && `, ${groupedCount(outside.view.outside.kreaPlanRuns)} Krea plan runs`}.
                   </>}
                 </span>
               )}
@@ -294,7 +296,7 @@ function PersonalAgentSpend({ view, held }: {
             <span className="settings-pref__description">
               {held ?? <>
                 {spentUsd(agent.spentUsd)} in the last 24 hours
-                {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}
+                {agent.kreaPlanRuns > 0 && `, ${groupedCount(agent.kreaPlanRuns)} Krea plan runs`}
               </>}, inside the budget above
             </span>
           </span>
@@ -324,7 +326,7 @@ function PlanRunsSelect({ limits, disabled, onChange, lock }: {
         else next.kreaPlanRuns = value === 'none' ? null : Number(value);
         onChange(next);
       }}>
-      <option value={DEFAULT_CHOICE}>{DEFAULT_PLAN_RUNS} (default)</option>
+      <option value={DEFAULT_CHOICE}>{aside(DEFAULT_PLAN_RUNS, 'default')}</option>
       <option value="0">Ask every time</option>
       {custom && <option value={current}>{own} run{own === 1 ? '' : 's'}</option>}
       {PLAN_RUN_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{choice} runs</option>)}

@@ -3,6 +3,7 @@ import type { MoodboardBrief, MoodboardClash, MoodboardClashMode, MoodboardPinne
 import { BRIEF_LIMITS } from './briefLimits';
 import { agentAnchor } from '../../lib/agentAnchors';
 import { useStudioBoardId } from './useStudioBoardId';
+import { ASIDE_DOT } from '../../lib/labelAside';
 
 // The person's side of a board's brief (design-canvas gap 14): Direction,
 // Avoid and pinned colours, plus the brief generators get and its optional
@@ -338,7 +339,7 @@ export function BriefFields({
                       onChange={() => onChange({ clashMode: mode.value })} />
                     <span className="moodboard-advanced__label">
                       {mode.label}
-                      {mode.value === 'leave-out' && <span className="moodboard-advanced__default"> (default)</span>}
+                      {mode.value === 'leave-out' && <span className="moodboard-advanced__default">{ASIDE_DOT}default</span>}
                     </span>
                     <span className="moodboard-advanced__hint">{mode.hint}</span>
                   </label>

@@ -1,3 +1,4 @@
+import { groupedCount } from '../../../lib/groupedCount';
 import { useState } from 'react';
 import {
   createConnectedApp,
@@ -260,7 +261,7 @@ export function ConnectedApps({ view, counted = false, unknown = false, loadErro
                 {labelOf(app.client) ? `${labelOf(app.client)} · ` : ''}
                 {counted ? holdFigure(!unknown && app.dailyUsd !== null) : <>
                   {formatSpentUsd(app.spentUsd)} in the last 24 h
-                  {app.kreaPlanRuns > 0 && `, ${app.kreaPlanRuns} Krea plan runs`}
+                  {app.kreaPlanRuns > 0 && `, ${groupedCount(app.kreaPlanRuns)} Krea plan runs`}
                 </>}
               </span>
             </span>
@@ -354,7 +355,7 @@ export function ConnectedApps({ view, counted = false, unknown = false, loadErro
           )}
         </div>
       )}
-      {error && <p className="settings-row__error" role="alert"><LineText text={error} /></p>}
+      {error && <p className="settings-row__error" role="alert"><LineText text={error} code /></p>}
     </div>
   );
 }

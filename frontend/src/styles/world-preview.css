@@ -82,7 +82,6 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   backdrop-filter: blur(8px);
 }
 
@@ -302,7 +301,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .world-modal__status--ready {
@@ -818,13 +816,12 @@ body.app-slava-restraint :is(
 }
 
 /* A World v2 splat the viewer can't show says why in the status line
-   (WorldSplatPreview, GM PR #203 r1): a sentence, so not the status's
-   uppercase mono micro type. */
+   (WorldSplatPreview): a sentence, so body type rather than the status's
+   mono micro type (design). */
 .world-modal__status[data-splat-failure],
 body.app-slava-restraint .world-modal__status[data-splat-failure] {
   font-family: inherit;
   font-size: 12px;
   letter-spacing: 0;
-  text-transform: none;
   text-align: right;
 }

@@ -1012,7 +1012,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '21m00Tcm4TlvDq8ikWAM',
-        placeholder: 'Rachel (default)',
+        placeholder: 'Rachel · default',
       },
       {
         key: 'similarity_boost',
@@ -1207,7 +1207,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Prompt',
         type: 'string',
         required: false,
-        placeholder: 'Guide the model (optional)',
+        placeholder: 'Guide the model · optional',
       },
     ],
   },
@@ -1424,7 +1424,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '21m00Tcm4TlvDq8ikWAM',
-        placeholder: 'Rachel (default)',
+        placeholder: 'Rachel · default',
       },
       {
         key: 'model_id',
@@ -13565,7 +13565,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   // Finds one thing in an image. Only a confident 'found' produces crop / mask / annotated.
   'jev-box': {
     id: 'jev-box',
-    displayName: 'Jev Box (experimental)',
+    displayName: 'Jev Box · experimental',
     description: 'Find one thing in an image and get its bounding box, a crop and a rectangle mask for inpainting. A presence check runs in the same request, so a missing target gives found false, no crop, and the nodes connected to “Crop”, “Mask” or “Annotated” are skipped. TypeSafe Jev makes decisions only, no text generation. Experimental at TypeSafe.',
     category: 'analyzer',
     apiProvider: 'typesafe',

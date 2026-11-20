@@ -138,7 +138,7 @@ export function CommonsFilters({ filters, collections, onChange }: Props) {
       <label className="commons-field">
         Role
         <select value={filters.role} onChange={(event) => set({ role: event.target.value as FilterState['role'] })}>
-          <option value="">Any (avoid hidden)</option>
+          <option value="">{`All but ${ROLE_LABELS.avoid}`}</option>
           {ROLES.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}
         </select>
       </label>

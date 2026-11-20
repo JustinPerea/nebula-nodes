@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { cutToFit } from '../../lib/cutToFit';
 import { parseJevNumber, type JevBoxResult, type JevDecideResult, type JevPickBestResult, type JevResult } from '../../lib/jev';
 import { backendAssetUrlSync } from '../../lib/backend';
 import {
@@ -92,11 +94,98 @@ function Footer({ confidence, model, label = 'Confidence' }: { confidence: strin
 
 function Question({ asked, fieldText }: { asked: string | null; fieldText: string | null | undefined }) {
   const echo = echoedText(asked, fieldText);
+  const paragraph = useRef<HTMLParagraphElement>(null);
+  const text = useRef<HTMLSpanElement>(null);
+  const quotedText = echo && echo.earlier ? echo.text : null;
+  // The text shown inside the quotes: the question, or its cut with the ellipsis.
+  const [shown, setShown] = useState<string | null>(null);
+  // Set once the component has measured: only then does the quoted form drop the base two-line clamp.
+  const [fit, setFit] = useState(false);
+  const visible = shown ?? quotedText;
+
+  // Design: the quoted question is one inline run, \u201C ... \u201D, at most two lines. When the whole
+  // question doesn't fit it is cut at the last word that does, with the ellipsis and the closing
+  // quote right after it. The cut is measured on the real paragraph (candidates written into its
+  // text node, read back, then settled on the answer), on mount, on a text change and when the
+  // paragraph's width changes. Height-only changes are our own cut and are ignored. The new cut is
+  // committed before paint, so a resize never shows a frame of the wrong text. It also runs again
+  // when web fonts finish loading, which can change the wrapping at the same width. Without layout
+  // (jsdom) the whole text shows, under the base two-line clamp.
+  useLayoutEffect(() => {
+    const outer = paragraph.current;
+    const inner = text.current;
+    if (!outer || !inner || quotedText === null) return undefined;
+    const node = inner.firstChild;
+    if (!node) return undefined;
+    let width = outer.getBoundingClientRect().width;
+    const measure = () => {
+      // Written on the node so the read below sees the unclamped block layout.
+      outer.setAttribute('data-fit', '');
+      const lineHeight = parseFloat(getComputedStyle(outer).lineHeight);
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+        outer.removeAttribute('data-fit');
+        node.nodeValue = quotedText;
+        setFit(false);
+        setShown(null);
+        return;
+      }
+      // Two lines plus slack for a line box taller than the line-height (an emoji, a fallback
+      // glyph); three lines still fail.
+      const limit = lineHeight * 2.5;
+      const fits = (candidate: string) => {
+        node.nodeValue = candidate;
+        return outer.offsetHeight <= limit;
+      };
+      const cut = cutToFit(quotedText, fits);
+      node.nodeValue = cut;
+      setFit(true);
+      setShown(cut === quotedText ? null : cut);
+    };
+    measure();
+
+    let live = true;
+    const remeasure = () => { if (live) flushSync(measure); };
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+    fonts?.addEventListener?.('loadingdone', remeasure);
+    fonts?.ready?.then(remeasure);
+
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver((entries) => {
+        const next = entries[entries.length - 1]?.contentRect.width ?? outer.getBoundingClientRect().width;
+        if (next === width) return;
+        width = next;
+        flushSync(measure);
+      })
+      : null;
+    observer?.observe(outer);
+    return () => {
+      live = false;
+      fonts?.removeEventListener?.('loadingdone', remeasure);
+      observer?.disconnect();
+    };
+  }, [quotedText]);
+
   if (!echo) return null;
+  if (!echo.earlier) {
+    return <p className="jev-result__question" title={echo.text} data-testid="jev-asked">{echo.text}</p>;
+  }
+  // Design: the question it asked is a quote, so it takes curly quotes. The whole question is
+  // the accessible text, in a visually hidden span; the visible, possibly cut, text is aria-hidden.
   return (
-    <p className="jev-result__question" title={echo.text} data-testid="jev-asked">
-      {echo.earlier && <span className="jev-result__muted">Asked </span>}
-      {echo.text}
+    <p
+      ref={paragraph}
+      className="jev-result__question jev-result__question--quoted"
+      title={`\u201C${echo.text}\u201D`}
+      data-testid="jev-asked"
+      data-fit={fit ? '' : undefined}
+    >
+      <span className="jev-result__sr-only">{`Asked \u201C${echo.text}\u201D`}</span>
+      <span aria-hidden="true" data-testid="jev-asked-visible">
+        <span className="jev-result__muted">Asked </span>
+        {'\u201C'}
+        <span ref={text}>{visible}</span>
+        {'\u201D'}
+      </span>
     </p>
   );
 }

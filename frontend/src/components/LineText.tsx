@@ -1,14 +1,18 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
 import { isBecauseFailure } from '../lib/errorCopy';
+import { withCodeSpans } from '../lib/codeSpans';
 import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
 
 const ANCHOR_STYLE = { display: 'none' } as const;
 export const BECAUSE_ATTR = 'data-line-because';
 
-/** `failure` keeps the warning colour on a line that is a failure to run or a loss (a node card's run failure, "deleted somewhere else"); the default draws a because failure neutral. */
-export type LineTone = 'failure';
+/**
+ * `failure` keeps the warning colour on a line that is a failure to run or a loss (a node card's run failure, "deleted somewhere else"); the default draws a because failure neutral.
+ * `because` says outright that the line is a because line (drawn neutral), for a surface that knows it and must not depend on the words matching isBecauseFailure (the chat's error line names an agent of any name).
+ */
+export type LineTone = 'failure' | 'because';
 
 /**
  * A line's words, registered while they are mounted (lib/notConnectedLine, PR #204 round 9): a
@@ -32,7 +36,7 @@ export type LineTone = 'failure';
  * surface's element is hidden too when the line is all it holds (a `role="alert"` paragraph, a
  * toast's span), so no empty box is left; with one, the span is. Any other line is unchanged.
  */
-export function LineText({ text, className, children, tone }: { text: string | null | undefined; className?: string; children?: ReactNode; tone?: LineTone }) {
+export function LineText({ text, className, children, tone, code }: { text: string | null | undefined; className?: string; children?: ReactNode; tone?: LineTone; code?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const own = className !== undefined;
   const registration = useRef<LineRegistration | null>(null);
@@ -61,7 +65,7 @@ export function LineText({ text, className, children, tone }: { text: string | n
     const element = own ? ref.current : ref.current?.parentElement;
     if (!element || words === null) return;
     registration.current?.update(words);
-    if (isBecauseLine(words) || (tone !== 'failure' && isBecauseFailure(words))) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
+    if (tone === 'because' || isBecauseLine(words) || (tone !== 'failure' && isBecauseFailure(words))) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
     else element.removeAttribute(BECAUSE_ATTR);
   }, [own, words, tone]);
   // Offline first, bare: the surface's element goes too when the line is all it holds.
@@ -76,6 +80,6 @@ export function LineText({ text, className, children, tone }: { text: string | n
     return () => { element.hidden = false; };
   }, [own, hide]);
   if (!text) return null;
-  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? text}</span>;
-  return <>{hide ? null : children ?? text}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
+  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? (code ? withCodeSpans(text) : text)}</span>;
+  return <>{hide ? null : children ?? (code ? withCodeSpans(text) : text)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
 }
