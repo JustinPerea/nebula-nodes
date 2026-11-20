@@ -163,7 +163,39 @@ describe('sections', () => {
     expect(screen.getByLabelText('estimated 14 pixels').textContent).toBe('≈ 14 px')
     expect(screen.getByLabelText('estimated 96 pixels').textContent).toBe('≈ 96 px')
     expect(screen.getByLabelText('estimated 40 pixels').textContent).toBe('≈ 40 px')
-    expect(screen.getByText(/338 px between the boxes/)).toBeTruthy()
+    expect(screen.getByText('· measured 338 px')).toBeTruthy()
+  })
+
+  it('prints one number for a gap when the estimate and the measured gap agree', () => {
+    const record = readRecord()
+    record.structure.measured.region_gaps = [{ between: ['r1', 'r2'], axis: 'y', px: 40, origin: 'code' }]
+    render(<SpacingSection {...props(record)} />)
+    const row = screen.getByTestId('gap-row')
+    expect(within(row).getByLabelText('40 pixels, estimated and measured').textContent).toBe('40 px')
+    expect(row.textContent).not.toContain('measured 40')
+    expect(row.textContent).not.toContain('≈')
+  })
+
+  it('reads the stored words through the app labels', () => {
+    render(<ReadingSection {...props()} />)
+    for (const label of ['Geometric sans', 'Asymmetric', 'UI', 'Airy']) expect(screen.getByText(label)).toBeTruthy()
+    for (const end of ['Quiet', 'Loud']) expect(screen.getAllByText(end).length).toBeGreaterThan(0)
+    expect(screen.queryByText('ui')).toBeNull()
+  })
+
+  it('wraps a region label and a statement in a field that grows', () => {
+    render(
+      <>
+        <RegionsSection {...props()} />
+        <ShowsSection {...props()} />
+      </>,
+    )
+    for (const name of ['Label of r1', 'Statement s1']) {
+      const field = screen.getByLabelText(name)
+      expect(field.tagName).toBe('TEXTAREA')
+      expect(field.getAttribute('rows')).toBe('1')
+      expect(field.hasAttribute('title')).toBe(false)
+    }
   })
 
   it('puts one origin on each section label and none on uncorrected rows', () => {
@@ -210,14 +242,15 @@ describe('sections', () => {
     expect(rows[1].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('you')
   })
 
-  it('wraps the words field to two lines and carries the full text in its title', () => {
+  it('shows the whole of a long words field in a field that wraps and grows', () => {
     const record = readRecord()
     record.structure.read!.text.t1.content = 'A long line of words that will not fit on one line of the side panel'
     render(<TextSection {...props(record)} />)
     const field = screen.getByLabelText('Words of t1') as HTMLTextAreaElement
     expect(field.tagName).toBe('TEXTAREA')
-    expect(field.rows).toBe(2)
-    expect(field.title).toBe(record.structure.read!.text.t1.content)
+    expect(field.rows).toBe(1)
+    expect(field.value).toBe(record.structure.read!.text.t1.content)
+    expect(field.style.height).not.toBe('')
   })
 
   it('selects a region from its id button or its row, and not from a click in a field', () => {
