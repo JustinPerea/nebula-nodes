@@ -32,11 +32,11 @@ from tests.test_pending_nodes import pend  # noqa: F401 - fixture
 from tests.test_route_clients import FakeHosts, quick, registry_handler, validate  # noqa: F401
 
 TOKEN = "hf_fixturetoken0123456789abcdefghijklmnop"
-CHANGED = ("Idol changed on Hugging Face, and this version of Nebula can’t run it. Update Nebula, then try again.")
+CHANGED = ("Idol changed on Hugging Face and this version of Nebula can’t run it. Update Nebula, then try again.")
 STARTING = "Idol is still starting on Hugging Face. Try again in a few minutes."
-TOKEN_LINE = "Hugging Face didn’t accept your token. Check it in Settings."
+TOKEN_LINE = "Hugging Face rejected your token. Check your Hugging Face token in Settings."
 NEEDS_TOKEN = "You can run Idol after you add your Hugging Face token in Settings."
-MISSING_LINE = "Nebula can’t find Idol on Hugging Face, so it can’t run. Use another 3D node instead."
+MISSING_LINE = "Idol isn’t on Hugging Face anymore. Use another 3D node."
 SIGNED_IN = {"HF_TOKEN": TOKEN}
 UPLOADED_IMAGE = {"path": UPLOADED, "orig_name": "input.png", "meta": {"_type": "gradio.FileData"}}
 
@@ -510,14 +510,14 @@ DURATION = ("The requested GPU duration (120s) is larger than the maximum allowe
 ANON_QUOTA_LINE = ("Hugging Face’s free GPU time for Idol is used up for now. Try again later, "
                    "or add your Hugging Face token in Settings to use your own allowance.")
 OWN_QUOTA_LINE = ("Your Hugging Face GPU allowance is used up for now. Try again later, "
-                  "or raise it on your Hugging Face account.")
-BUSY_LINE = "Hugging Face had no free GPU for Idol. Try again in a few minutes."
+                  "or raise it on Hugging Face.")
+BUSY_LINE = "Hugging Face has no free GPU for Idol right now. Try again in a few minutes."
 SPACE_LIMIT_LINE = ANON_QUOTA_LINE
-NOT_APPLIED_LINE = ("Idol ran without your Hugging Face token and hit the free allowance. "
+NOT_APPLIED_LINE = ("It ran without your Hugging Face token and hit the free allowance. "
                     "Check your token in Settings, then try again.")
-DURATION_ANON_LINE = ("Idol needs more GPU time per run than the free allowance gives. "
+DURATION_ANON_LINE = ("It needs more GPU time per run than the free allowance gives. "
                       "Add your Hugging Face token in Settings, then try again.")
-DURATION_OWN_LINE = ("Idol needs more GPU time per run than your Hugging Face account allows. "
+DURATION_OWN_LINE = ("It needs more GPU time per run than your Hugging Face account allows. "
                      "Raise your allowance on Hugging Face, then try again.")
 
 
@@ -855,7 +855,8 @@ async def test_no_image_stops_before_any_request(monkeypatch):
     hosts = idol_hosts(monkeypatch)
     with pytest.raises(ValueError) as excinfo:
         await run_direct(inputs={})
-    assert person_line(excinfo.value) == "Idol needs an image. Connect one, then run it again."
+    assert str(excinfo.value) == "Idol needs an image. Connect one, then run it again."
+    assert person_line(excinfo.value) == "It needs an image. Connect one, then run it again."
     assert hosts.requests == []
 
 
@@ -1212,7 +1213,7 @@ async def test_a_token_with_a_character_tokens_cant_have_gets_gms_line_and_sends
         await run_direct(keys={"HF_TOKEN": bad_token})
     assert not isinstance(excinfo.value, UnicodeError)
     # GM PR #203 r2: the card's version says Settings; the field's says "here".
-    assert person_line(excinfo.value) == ("This token has a character Hugging Face tokens can’t have. "
+    assert person_line(excinfo.value) == ("The token has a character Hugging Face tokens can’t have. "
                                           "Copy it again from Hugging Face, then paste it in Settings.")
     assert bad_token not in str(excinfo.value)
     assert hosts.requests == []

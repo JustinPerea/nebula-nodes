@@ -432,3 +432,43 @@ async def test_single_shot_execution_pass_resolves_typed_inputs_with_same_handle
     assert "yaw around subject: 45 deg" in calls[0]["inputs"]["prompt"]
     assert calls[0]["inputs"]["prompt"].endswith("image 1: style.")
     assert calls[0]["params"]["seed"] == 123
+
+
+# Design: the person's lines for a shot over its base model's reference cap and for a Seedream
+# aspect ratio that can't be used. Each follows "Nebula couldn’t generate the shot because", so
+# it opens with a lead word or a name; the exception text agents read stays as it was.
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model, base_params, refs, line", [
+    ("nano-banana", {"model": "gemini-2.5-flash-image"}, ["a.png", "b.png", "c.png", "d.png"],
+     "Nano Banana takes up to 3 reference images and this shot has 4. "
+     "Remove some, or choose another base model. Nothing was sent."),
+    ("flux-kontext", {}, ["a.png", "b.png"],
+     "FLUX Kontext takes up to 1 reference image and this shot has 2. "
+     "Remove some, or choose another base model. Nothing was sent."),
+])
+async def test_a_shot_over_the_reference_cap_gets_the_designs_person_line(monkeypatch, model, base_params, refs, line):
+    calls, _ = patch_base(monkeypatch)
+    node = scene_node(model, [{"id": "a", "refImageUrls": refs}], base_params)
+    await handle_cinema_scene(node, {}, {})
+    output = node.params["scene"]["shots"][0]["output"]
+    assert output["errorPerson"] == line
+    assert "Cinema adapter" in output["error"] and "No references were submitted." in output["error"]
+    assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ratio, line, raw", [
+    ("NaN:1", "The aspect ratio isn’t written as width:height. Use positive numbers, like 16:9.",
+     "Cinema Seedream aspectRatio must be a positive width:height ratio"),
+    ("1:100", "That aspect ratio is too wide or too tall for Cinema Seedream. Choose a less extreme one.",
+     "Cinema Seedream aspectRatio cannot fit supported image dimensions; use a less extreme ratio"),
+])
+async def test_a_seedream_aspect_ratio_that_cant_be_used_gets_the_designs_person_line(monkeypatch, ratio, line, raw):
+    calls, _ = patch_base(monkeypatch)
+    node = scene_node("seedream-4-5")
+    node.params["scene"]["aspectRatio"] = ratio
+    await handle_cinema_scene(node, {}, {})
+    output = node.params["scene"]["shots"][0]["output"]
+    assert output["errorPerson"] == line
+    assert output["error"] == raw
+    assert calls == []
