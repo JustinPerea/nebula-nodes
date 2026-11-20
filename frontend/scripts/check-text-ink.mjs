@@ -1,0 +1,445 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
+import {
+  collectCssFiles,
+  compact,
+  computeLineStarts,
+  lineForOffset,
+  parseDeclarations,
+  parseRules,
+  stripComments,
+} from './lib/css-scan.mjs';
+
+// Design: text takes the light ink, var(--sr-ink-light) (white at .55). Dimmer white measures under the
+// 4.5:1 text needs on every surface the app draws (meta ink, white at .40, gives 3.6 to 3.9:1), so it
+// is for non-text (borders, strokes, ticks, rules, backgrounds, shadows, decoration colours, swatches),
+// for a disabled control, and for the icon-only controls named in ICON_ONLY below (an icon needs 3:1
+// and .40 clears it). Hierarchy between two text lines is carried by size and weight.
+//
+// What fails: a TEXT declaration that resolves to white at an alpha strictly between .20 and .55.
+// TEXT properties are `color` (a ::placeholder rule's color included), `-webkit-text-fill-color`,
+// `-webkit-text-stroke-color`, `caret-color`, and `fill` on a rule whose selector targets an SVG
+// `text` or `tspan`. "Resolves to dim white" means:
+//   - var(--sr-ink-meta, ...), or var(--x) for any custom property that any rule in src defines as
+//     dim white or as another such alias (followed to a fixed point, so a chain of any length is read);
+//   - white at an alpha in that range as a literal in every form: rgba(255,255,255,.45), rgb(255 255
+//     255 / 40%), #ffffff66, #fff8, hsla(0,0%,100%,.3), hsl(0 0% 100% / 50%).
+// A fallback counts only when the variable is defined nowhere in src: var(--undefined, <dim>) fails.
+// .55 and above pass. Exactly .20 (--sr-ink-faint) is outside the check for now: a follow-up audit
+// decides the text at .20, and that change extends the check to it.
+//
+// Exempt:
+//   - a rule whose selector scopes to :disabled, [disabled] or [aria-disabled="true"] on the element
+//     itself; every part of a comma list must be scoped, and every :is()/:where() alternative must be a
+//     disabled state; :has() and :not() never scope; a disabled ancestor or earlier sibling does not
+//     (DISABLED_SIBLING names the one sibling form that is allowed);
+//   - the icon-only controls in ICON_ONLY, by exact selector (the part after `body.app-slava-restraint `).
+// Inline TSX: the file is parsed, and an object literal property whose key is a text colour (`color`,
+// `caretColor`, `WebkitTextFillColor`, `WebkitTextStrokeColor`, or the quoted CSS name) and whose value
+// is a string or a plain template that resolves to dim white fails. Comments, regex literals, nested
+// templates and JSX text cannot hide or fake a match. A TS or TSX file that does not parse cleanly
+// fails the check, naming the file and its first parse error.
+//
+// Rules with an unprefixed form and a `body.app-slava-restraint` twin are checked as written, both
+// forms (the unprefixed one is dead CSS that check-skin-shadows reports; checking it as well is
+// simpler and costs nothing).
+//
+// Known limits (this is a text check, not a CSS engine):
+//   - nested CSS rules (`&`, or a `{` between declarations) are skipped;
+//   - the value must be the colour itself: color-mix(...) of dim white, or a calc, is not followed;
+//   - a custom property defined as dim white in ANY rule makes every use of it dim, even where
+//     another rule overrides it (--swatch is meta by default and overridden per swatch; it is only
+//     read by background, so it passes);
+//   - TSX: a colour built at run time (a template with a substitution, a function result) is not seen;
+//   - a canvas or library colour passed as a prop (WaveformAudio's waveColor) is shape, not text;
+//   - not seen: a colour held in a const (`color: META`), JSX colour props (`<Icon color=... />`),
+//     `el.style.color = ...`, `style.setProperty(...)`, SVG `<text fill=...>` attributes, an inline
+//     custom property that a CSS rule reads as a colour, `fill` on a class that sits on an SVG `<text>`
+//     (only a selector ending in text/tspan is read), and `textPath`;
+//   - computed keys (`['color']: ...`, a template-literal key) are not read;
+//   - colour forms not read: color(), oklch(), oklab(), lab(), lch(), hwb(), relative colours
+//     (`rgb(from ...)`), and calc() or var() inside a colour's channels;
+//   - text at exactly .20 is not checked yet (see above).
+
+const SRC = join(import.meta.dirname, '..', 'src');
+const PREFIX = 'body.app-slava-restraint';
+
+export const TEXT_PROPS = new Set(['color', '-webkit-text-fill-color', '-webkit-text-stroke-color', 'caret-color']);
+
+// icon-only: colour tints an svg; non-text, 3:1. Exact selectors, without the body.app-slava-restraint prefix.
+export const ICON_ONLY = new Set([
+  '.agent-note-card__close',
+  '.project-switch-toast__close',
+  '.asset-trash__toast-close',
+  '.reference-tray__remove',
+  '.project-home__search svg',
+  '.project-home__cover-close',
+  '.project-home__rename',
+  '.project-home__trash-toggle svg',
+  '.project-home__toast-close',
+  '.project-home__empty-search',
+  '.project-home__notice-close',
+  '.settings-pref--link svg',
+  '.panel__header-action',
+  '.model-node__header-action',
+  '.connection-popup__category-chevron',
+  '.connection-popup__close',
+  '.chat__tool-icon',
+  '.model-node__loop-toggle',
+]);
+
+const META_TOKEN = '--sr-ink-meta';
+
+// Text white must be at least this alpha. Alphas from DIM_FLOOR (exclusive) to LIGHT_ALPHA (exclusive) fail.
+const DIM_FLOOR = 0.2;
+const LIGHT_ALPHA = 0.55;
+const EPSILON = 1e-6;
+
+function isDimAlpha(alpha) {
+  return Number.isFinite(alpha) && alpha > DIM_FLOOR + EPSILON && alpha < LIGHT_ALPHA - EPSILON;
+}
+
+function parseAlpha(raw) {
+  const text = raw.trim();
+  return text.endsWith('%') ? Number.parseFloat(text) / 100 : Number.parseFloat(text);
+}
+
+/** Whether a whole value is white at a dim alpha (strictly between .20 and .55) in any literal form. */
+export function isDimLiteral(value) {
+  const v = value.trim().toLowerCase().replace(/\s*!important$/, '').trim();
+  const hex = /^#([0-9a-f]{3,8})$/.exec(v);
+  if (hex) {
+    const h = hex[1];
+    if (h.length === 4) return h.slice(0, 3) === 'fff' && isDimAlpha(Number.parseInt(h[3] + h[3], 16) / 255);
+    if (h.length === 8) return h.slice(0, 6) === 'ffffff' && isDimAlpha(Number.parseInt(h.slice(6), 16) / 255);
+    return false;
+  }
+  const fn = /^(rgba?|hsla?)\(([^)]*)\)$/.exec(v);
+  if (!fn) return false;
+  const parts = fn[2].split(/[\s,/]+/).filter(Boolean);
+  if (parts.length !== 4) return false;
+  const [a, b, c, alpha] = parts;
+  if (!isDimAlpha(parseAlpha(alpha))) return false;
+  if (fn[1].startsWith('rgb')) return [a, b, c].every((n) => Number.parseFloat(n) === 255 || n === '100%');
+  // hsl: lightness 100% is white whatever the hue and saturation.
+  return Number.parseFloat(c) === 100;
+}
+
+/** 1 for every character inside a quoted span (quotes included), 0 elsewhere. Backslash escapes are honoured. */
+function quotedMask(text) {
+  const mask = new Uint8Array(text.length);
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c !== '"' && c !== "'") {
+      i += 1;
+      continue;
+    }
+    let j = i + 1;
+    while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1;
+    const end = Math.min(j, text.length - 1);
+    for (let k = i; k <= end; k += 1) mask[k] = 1;
+    i = j + 1;
+  }
+  return mask;
+}
+
+/** The first match of a regex whose start is outside any quoted span, or null. */
+function matchOutsideQuotes(pattern, text) {
+  const mask = quotedMask(text);
+  const global = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+  for (const match of text.matchAll(global)) if (!mask[match.index]) return match;
+  return null;
+}
+
+function splitTopLevel(text) {
+  const mask = quotedMask(text);
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (mask[i]) continue;
+    const c = text[i];
+    if (c === '(' || c === '[') depth += 1;
+    else if (c === ')' || c === ']') depth -= 1;
+    else if (c === ',' && depth === 0) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts.map((part) => part.trim());
+}
+
+/**
+ * Whether a value resolves to dim white, given the set of custom properties that do and the set of
+ * custom properties defined anywhere in src (a fallback only matters for a variable defined nowhere).
+ */
+export function resolvesToDim(value, dimVars, definedVars) {
+  const v = value.trim().replace(/\s*!important$/i, '').trim();
+  if (isDimLiteral(v)) return true;
+  const wrapped = /^var\(([\s\S]*)\)$/i.exec(v);
+  if (!wrapped) return false;
+  const [name, ...rest] = splitTopLevel(wrapped[1]);
+  if (dimVars.has(name)) return true;
+  if (definedVars.has(name) || rest.length === 0) return false;
+  return resolvesToDim(rest.join(','), dimVars, definedVars);
+}
+
+/** Every custom property that is dim white or an alias of one, followed to a fixed point. */
+export function collectDimVars(sources) {
+  const defs = new Map();
+  for (const { source } of sources) {
+    const css = stripComments(source);
+    for (const rule of parseRules(css)) {
+      if (rule.nested) continue;
+      for (const { prop, value } of parseDeclarations(rule.body, rule.bodyStart)) {
+        if (!prop.startsWith('--')) continue;
+        if (!defs.has(prop)) defs.set(prop, []);
+        defs.get(prop).push(value);
+      }
+    }
+  }
+  const definedVars = new Set(defs.keys());
+  const dimVars = new Set([META_TOKEN]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [name, values] of defs) {
+      if (dimVars.has(name)) continue;
+      if (values.some((value) => resolvesToDim(value, dimVars, definedVars))) {
+        dimVars.add(name);
+        grew = true;
+      }
+    }
+  }
+  return { dimVars, definedVars };
+}
+
+export function splitList(selector) {
+  return splitTopLevel(selector).map((part) => compact(part)).filter(Boolean);
+}
+
+const DISABLED = [/:disabled(?![\w-])/, /\[disabled\]/, /\[aria-disabled\s*=\s*["']?true["']?\]/];
+
+// A disabled state on an earlier element (`.f[aria-disabled] ~ .key`) styles that other element, so it
+// does not scope. This one is the exception: the field is aria-disabled and the "/" key hint beside it
+// dims with it (design). Exact selector, without the body prefix.
+export const DISABLED_SIBLING = new Set([".message-box__field[aria-disabled='true'] ~ .message-box__key"]);
+
+/** The index of the `)` that closes the `(` at `open`. */
+function closingParen(text, open) {
+  const mask = quotedMask(text);
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    if (mask[i]) continue;
+    if (text[i] === '(') depth += 1;
+    else if (text[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return text.length - 1;
+}
+
+/** Drop every `:not(...)` and `:has(...)` argument: neither one scopes a rule to a disabled control. */
+function dropNonScoping(part) {
+  let out = part;
+  for (;;) {
+    const match = matchOutsideQuotes(/:(?:not|has)\(/, out);
+    if (!match) return out;
+    const open = match.index + match[0].length - 1;
+    out = out.slice(0, match.index) + out.slice(closingParen(out, open) + 1);
+  }
+}
+
+/** Expand :is(...) / :where(...) into one selector per alternative, until none is left. */
+function expandAlternatives(part) {
+  const match = matchOutsideQuotes(/:(?:is|where)\(/, part);
+  if (!match) return [part];
+  const open = match.index + match[0].length - 1;
+  const close = closingParen(part, open);
+  const head = part.slice(0, match.index);
+  const tail = part.slice(close + 1);
+  return splitTopLevel(part.slice(open + 1, close)).flatMap((alt) => expandAlternatives(`${head}${alt}${tail}`));
+}
+
+/** The last compound selector: the part after the final combinator outside brackets and parentheses. */
+function lastCompound(part) {
+  const mask = quotedMask(part);
+  let depth = 0;
+  let cut = 0;
+  for (let i = 0; i < part.length; i += 1) {
+    if (mask[i]) continue;
+    const c = part[i];
+    if (c === '(' || c === '[') depth += 1;
+    else if (c === ')' || c === ']') depth -= 1;
+    else if (depth === 0 && (c === ' ' || c === '>' || c === '+' || c === '~')) cut = i + 1;
+  }
+  return part.slice(cut);
+}
+
+/**
+ * Whether one selector part applies only to a disabled control. Every :is()/:where() alternative must
+ * be a disabled state; :not() and :has() never scope; the disabled state must sit on the subject itself
+ * (the last compound), not on an ancestor or an earlier sibling, except the DISABLED_SIBLING selector.
+ */
+export function isDisabledScoped(part) {
+  if (DISABLED_SIBLING.has(stripPrefix(part))) return true;
+  return expandAlternatives(part).every((alt) => {
+    const subject = lastCompound(dropNonScoping(alt));
+    return DISABLED.some((pattern) => matchOutsideQuotes(pattern, subject) !== null);
+  });
+}
+
+function stripPrefix(part) {
+  return part.startsWith(`${PREFIX} `) ? part.slice(PREFIX.length + 1) : part;
+}
+
+/** Expand :is(a, b) at the end of a part into its alternatives (the only form the icon list needs). */
+function expandIs(part) {
+  const match = /^(.*?)(?::is|:where)\(([^()]*)\)(.*)$/.exec(part);
+  if (!match) return [part];
+  return splitTopLevel(match[2]).map((alt) => `${match[1]}${alt}${match[3]}`.trim());
+}
+
+function isIconOnly(part) {
+  return expandIs(stripPrefix(part)).every((alt) => ICON_ONLY.has(alt));
+}
+
+function isSvgTextSelector(part) {
+  const lastCompound = part.split(/[\s>+~]+/).filter(Boolean).pop() ?? '';
+  return /^(text|tspan)(?![\w-])/.test(lastCompound);
+}
+
+/** The TEXT declarations in one stylesheet that resolve to meta ink and are not exempt. */
+export function findCssTextInk(files, dimVars, definedVars) {
+  const hits = [];
+  for (const { file, source } of files) {
+    const css = stripComments(source);
+    const lineStarts = computeLineStarts(css);
+    for (const rule of parseRules(css)) {
+      if (rule.nested) continue;
+      const parts = splitList(rule.selector);
+      for (const decl of parseDeclarations(rule.body, rule.bodyStart)) {
+        const textual = TEXT_PROPS.has(decl.prop) || (decl.prop === 'fill' && parts.some(isSvgTextSelector));
+        if (!textual || !resolvesToDim(decl.value, dimVars, definedVars)) continue;
+        // Parts of the list this declaration reaches: for fill, only the svg text parts.
+        const reached = decl.prop === 'fill' ? parts.filter(isSvgTextSelector) : parts;
+        const live = reached.filter((part) => !isDisabledScoped(part) && !isIconOnly(part));
+        if (live.length === 0) continue;
+        hits.push({
+          file,
+          line: lineForOffset(lineStarts, decl.offset),
+          selector: live.join(', '),
+          prop: decl.prop,
+          value: decl.value,
+        });
+      }
+    }
+  }
+  return hits;
+}
+
+const TSX_TEXT_KEYS = new Set([
+  'color',
+  'caretColor',
+  'WebkitTextFillColor',
+  'WebkitTextStrokeColor',
+  '-webkit-text-fill-color',
+  '-webkit-text-stroke-color',
+  'caret-color',
+]);
+
+/** The text of a string literal or a plain template, through parentheses and `as` casts; else null. */
+function literalText(node) {
+  let current = node;
+  while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isSatisfiesExpression(current)) {
+    current = current.expression;
+  }
+  return ts.isStringLiteral(current) || ts.isNoSubstitutionTemplateLiteral(current) ? current.text : null;
+}
+
+/**
+ * Inline TSX: the file is parsed, and an object literal property whose key is a text colour and whose
+ * value is a string or plain template resolving to dim white is reported. A var() read is checked
+ * against the same alias set.
+ */
+export function findTsxTextInk(files, dimVars, definedVars) {
+  const hits = [];
+  for (const { file, source } of files) {
+    const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+    // parseDiagnostics is not in TypeScript's public typings; it holds the syntax errors of this parse.
+    const [parseError] = tree.parseDiagnostics ?? [];
+    if (parseError) {
+      const { line } = tree.getLineAndCharacterOfPosition(parseError.start ?? 0);
+      hits.push({
+        file,
+        line: line + 1,
+        selector: 'syntax error',
+        prop: 'parse',
+        value: ts.flattenDiagnosticMessageText(parseError.messageText, ' '),
+        parseError: true,
+      });
+    }
+    const visit = (node) => {
+      if (ts.isPropertyAssignment(node) && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name))) {
+        const key = node.name.text;
+        const value = TSX_TEXT_KEYS.has(key) ? literalText(node.initializer) : null;
+        if (value !== null && resolvesToDim(value, dimVars, definedVars)) {
+          const { line } = tree.getLineAndCharacterOfPosition(node.getStart(tree));
+          hits.push({ file, line: line + 1, selector: 'inline style', prop: key, value });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+  }
+  return hits;
+}
+
+export const FAILURE_MESSAGE =
+  'Text takes the light ink, var(--sr-ink-light). White dimmer than the light ink (alpha above .20 and under .55, meta ink --sr-ink-meta among it) is for non-text (borders, strokes, ticks, backgrounds, shadows), disabled controls and the named icon-only controls (design). Put the text on var(--sr-ink-light); size and weight carry the hierarchy.';
+
+function collectFiles(dir, extensions) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) out.push(...collectFiles(path, extensions));
+    else if (extensions.some((ext) => entry.endsWith(ext))) out.push(path);
+  }
+  return out;
+}
+
+export function scan(cssFiles, tsxFiles) {
+  const { dimVars, definedVars } = collectDimVars(cssFiles);
+  return [...findCssTextInk(cssFiles, dimVars, definedVars), ...findTsxTextInk(tsxFiles, dimVars, definedVars)];
+}
+
+function main() {
+  const read = (path) => ({ file: relative(SRC, path), source: readFileSync(path, 'utf8') });
+  const cssFiles = collectCssFiles(SRC).map(read);
+  const tsxFiles = collectFiles(SRC, ['.tsx', '.ts']).map(read);
+  const hits = scan(cssFiles, tsxFiles);
+  if (process.argv.includes('--json')) {
+    console.log(JSON.stringify(hits, null, 1));
+    return;
+  }
+  if (hits.length > 0) {
+    console.error(FAILURE_MESSAGE);
+    for (const hit of hits) {
+      console.error(
+        hit.parseError
+          ? `  src/${hit.file}:${hit.line} does not parse, so it was not checked: ${hit.value}`
+          : `  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}`,
+      );
+    }
+    process.exit(1);
+  }
+  console.log(`Text-ink guard passed (${cssFiles.length} stylesheets, ${tsxFiles.length} TS files scanned).`);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();

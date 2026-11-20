@@ -54,7 +54,7 @@ body.app-slava-restraint .result-comparison__header p {
   margin: 6px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .result-comparison__close {
@@ -88,7 +88,7 @@ body.app-slava-restraint .result-comparison__result {
 
 body.app-slava-restraint .result-comparison__position {
   margin: 0 0 8px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font: 11px var(--sr-mono, monospace);
   line-height: 1.5;
 }

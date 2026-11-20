@@ -1433,7 +1433,7 @@ body.app-slava-restraint .chat-panel__brand {
   align-items: center;
   gap: 8px;
   margin-top: 8px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 body.app-slava-restraint .chat-panel__brand input {
@@ -1448,6 +1448,6 @@ body.app-slava-restraint .chat-panel__brand input {
 }
 body.app-slava-restraint .chat-panel__scope-hint {
   margin: 4px 0 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
 }

@@ -758,6 +758,48 @@ The server exposes these tools for building and running (see
   move a board or a Character to Global or a canvas project (`to`:
   "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
+- `extraction_measure`, `extraction_list`, `extraction_show`, `extraction_correct`,
+  `extraction_request_read`:
+  still images measured by code into records kept as plain files in a folder
+  you name (a draft schema, `extracted-example/1`). `extraction_measure(image_path,
+  folder, replace=False)` takes a JPEG, PNG, GIF, WebP or HEIC file and writes
+  `<folder>/<id>/record.json`, `rendering.png` and the original; the record holds
+  the palette with shares and accents, value range, aspect, lightness, saturation
+  (lightness and the value range are CIELAB L*, 0-100; saturation is HSV saturation, 0-100,
+  the moodboard's (max - min) / max; `measured.units` names the scales, and a record saved before
+  `units` existed has lightness and saturation on 0-255)
+  and a perceptual hash, all set by code, with status `proposal`. The id comes from
+  the file's bytes, so measuring the same image again keeps the existing record and
+  its corrections (`existed: true`). `replace=True` measures again: the colors,
+  value range, size and hash are new and the reading's regions are measured again;
+  the reading, every show, read requests, corrections and brand are kept. A show
+  whose evidence no longer exists is dropped and listed in `dropped_shows`, whether the show is stored
+  or a correction added it; each entry lists the corrections aimed at it, which stay in the record. The folder must already exist and can't be Nebula's state folder or its
+  source tree; video and other file types are refused. `extraction_list(folder)`
+  lists the records, and `extraction_show(record)` (a record's folder or its
+  `record.json`) returns the record and `effective`, the same with its corrections
+  applied. `extraction_correct(record, corrections)` adds corrections as the agent,
+  each `{path, op, value, reason?}` with `op` set, add or remove, on `brand` (text or null), on
+  leaves of `structure.read.*` (a region's `role` or `label`, a text run's `content`, `weight` or
+  `type_style`, a `reader_1.<field>.value` that is text or an enum, and `reader_1.keywords` with add or
+  remove) or on `shows.*`; a whole region, run or box can't be set, and a refusal names what can. A
+  person's choices stay: an agent can't remove or rewrite a show a person wrote or kept, or change a path
+  a person corrected, or its parent or child, whoever wrote last, and adds its own show or asks for a
+  read instead. The last 200 of a record's 1,000 corrections are kept for the person. Values are at most 2,000
+  characters, and a write that would make `record.json` over 5 MB is refused. Records take an
+  advisory lock (`<id>/.lock`) across each change, so the page and agents can write at once. Measured values (`structure.measured`,
+  `rendering`, `source`), the id and the schema can't be corrected, and approval
+  isn't a correction: an agent can't approve a record. Every path goes through
+  the same protected-path check as the other file tools. `extraction_request_read(record,
+  reason)` is the fifth tool, and it doesn't read: an agent can't start a model read
+  (it spends the person's Claude usage, and only the person starts one, from the page's
+  Read button or at a terminal), so it asks. A request never starts a read on its own. The reason (at most 300 characters, at most 20 waiting)
+  goes on the record's `read_requests`, and the page shows it above the Read button.
+  After the person reads, `structure.read` holds regions with roles, the text in the
+  image, estimated sizes and spacing, and `shows`, all marked as the model's. The tools run in the
+  MCP process with no Nebula server, and the same work is `python -m extraction
+  measure|list|show` from `backend/`. A local page (`python -m extraction serve`)
+  shows the same records, so what an agent measures appears there and the reverse.
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, Styles, projects), and bring one back with the same id. A
   project restore may pass the project limit; after one, `new_project` is

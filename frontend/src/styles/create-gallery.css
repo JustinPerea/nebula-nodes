@@ -13,7 +13,7 @@ body.app-slava-restraint .result-metadata {
   margin-top: 4px;
   font-size: 11px;
   line-height: 1.5;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   overflow-wrap: anywhere;
 }
 body.app-slava-restraint .result-metadata time { white-space: nowrap; }
@@ -24,7 +24,7 @@ body.app-slava-restraint .result-recipe > summary {
   max-width: 100%;
   padding: 4px 0;
   cursor: pointer;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   overflow-wrap: anywhere;
 }
 body.app-slava-restraint .result-recipe > summary:hover { color: var(--sr-ink); }
@@ -48,11 +48,11 @@ body.app-slava-restraint .result-recipe__body dl > div {
   padding: 4px 0;
   border-bottom: 1px solid var(--sr-edge);
 }
-body.app-slava-restraint .result-recipe__body dt { color: var(--sr-ink-meta); }
+body.app-slava-restraint .result-recipe__body dt { color: var(--sr-ink-light); }
 body.app-slava-restraint .result-recipe__body dd { margin: 0; white-space: pre-wrap; }
 body.app-slava-restraint .result-recipe__body ol { padding-left: 18px; }
 body.app-slava-restraint .result-recipe__body small,
-body.app-slava-restraint .result-recipe__note { color: var(--sr-ink-meta); }
+body.app-slava-restraint .result-recipe__note { color: var(--sr-ink-light); }
 body.app-slava-restraint .result-recipe__prompt { white-space: pre-wrap; }
 body.app-slava-restraint .result-card__recipe-actions,
 body.app-slava-restraint .results-gallery__comparison {
@@ -163,7 +163,7 @@ body.app-slava-restraint .reference-tray__name {
 body.app-slava-restraint .reference-tray__status {
   display: block;
   max-width: 320px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   overflow-wrap: anywhere;
 }
 body.app-slava-restraint .reference-tray__upload > div { min-width: 0; }
@@ -187,7 +187,7 @@ body.app-slava-restraint .create-composer__attach {
   background: var(--sr-glass-raised);
   border: 1px solid var(--sr-edge);
   border-radius: 10px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -215,7 +215,7 @@ body.app-slava-restraint .create-composer__qty button {
   height: 32px;
   background: transparent;
   border: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 16px;
   cursor: pointer;
   line-height: 1;
@@ -271,7 +271,7 @@ body.app-slava-restraint .results-gallery__display {
 
 body.app-slava-restraint .results-gallery__count {
   font-size: 13px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   white-space: nowrap;
 }
 
@@ -286,7 +286,7 @@ body.app-slava-restraint .results-gallery__layout button {
   border-radius: 8px;
   padding: 4px 10px;
   font-size: 12px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   cursor: pointer;
 }
 
@@ -344,7 +344,7 @@ body.app-slava-restraint .results-gallery__tab {
   border-radius: 6px;
   padding: 4px 10px;
   font-size: 12px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   cursor: pointer;
   transition: background 120ms, color 120ms;
 }
@@ -368,7 +368,7 @@ body.app-slava-restraint .results-gallery__selected-toggle {
   border-radius: 8px;
   padding: 4px 9px;
   font-size: 11px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -442,7 +442,7 @@ body.app-slava-restraint .result-card__prompt {
   white-space: nowrap;
 }
 body.app-slava-restraint .result-card__caption { font-size: 12px; color: var(--sr-ink); }
-body.app-slava-restraint .result-card__prompt { margin: 4px 0 0; font-size: 12px; color: var(--sr-ink-meta); }
+body.app-slava-restraint .result-card__prompt { margin: 4px 0 0; font-size: 12px; color: var(--sr-ink-light); }
 
 body.app-slava-restraint .results-gallery__items--list .result-card {
   display: grid;
@@ -645,13 +645,13 @@ body.app-slava-restraint .preset-library {
   overflow: hidden;
 }
 body.app-slava-restraint .preset-library__top { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--sr-edge); }
-body.app-slava-restraint .preset-library__search { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--sr-ink-meta); }
+body.app-slava-restraint .preset-library__search { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--sr-ink-light); }
 body.app-slava-restraint .preset-library__search input { flex: 1; background: transparent; border: none; outline: none; color: var(--sr-ink); font-family: inherit; font-size: 13px; }
 /* The bare field's focus: the token ring around its search row. */
 body.app-slava-restraint .preset-library__search:has(input:focus-visible) { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); border-radius: 6px; }
 body.app-slava-restraint .preset-library__save { display: inline-flex; align-items: center; gap: 6px; background: var(--sr-glass-raised); border: 1px solid var(--sr-edge); border-radius: 9px; padding: 6px 10px; color: var(--sr-ink); font-size: 12px; cursor: pointer; }
 body.app-slava-restraint .preset-library__cats { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--sr-edge); }
-body.app-slava-restraint .preset-library__cat { background: transparent; border: 1px solid var(--sr-edge); border-radius: 999px; padding: 4px 11px; color: var(--sr-ink-meta); font-size: 12px; cursor: pointer; }
+body.app-slava-restraint .preset-library__cat { background: transparent; border: 1px solid var(--sr-edge); border-radius: 999px; padding: 4px 11px; color: var(--sr-ink-light); font-size: 12px; cursor: pointer; }
 body.app-slava-restraint .preset-library__cat.is-active { border-color: var(--sr-accent); color: var(--sr-ink-bold); }
 /* The grid shrinks to the popover's max-height and scrolls. Its rows take each
    card's whole height (max-content) and don't stretch: with auto rows they

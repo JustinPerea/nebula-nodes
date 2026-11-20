@@ -11,7 +11,7 @@ body.app-slava-restraint .moodboard-swatches {
 }
 
 body.app-slava-restraint .moodboard-swatches__label {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;

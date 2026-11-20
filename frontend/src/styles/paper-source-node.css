@@ -49,7 +49,7 @@ body.app-slava-restraint .paper-source-node {
 body.app-slava-restraint .paper-source-node--selected { border-color: var(--sr-accent); }
 body.app-slava-restraint .paper-source-node__status,
 body.app-slava-restraint .paper-source-node__note,
-body.app-slava-restraint .paper-source-node__preview figcaption { color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4)); }
+body.app-slava-restraint .paper-source-node__preview figcaption { color: var(--sr-ink-light); }
 body.app-slava-restraint .paper-source-node__error { color: var(--sr-error); }
 body.app-slava-restraint .paper-source-node button,
 body.app-slava-restraint .paper-source-node__action-link,

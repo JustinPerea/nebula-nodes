@@ -90,7 +90,7 @@ describe('neutral Settings lines (GM r39: neutral in colour too)', () => {
     expect(line.textContent).toBe(BUSY);
     expect(line.className).toBe('settings-row__error settings-row__error--neutral');
     expect(rule(css('settings.css'), 'body.app-slava-restraint .settings-row__error--neutral'))
-      .toContain('color: var(--sr-ink-meta)');
+      .toContain('color: var(--sr-ink-light)');
   });
 
   it('any other failed write stays an alert, and a retry that fails otherwise clears neutral', async () => {

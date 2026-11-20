@@ -92,7 +92,7 @@ body.app-slava-restraint .jev-result__badge {
   padding: 2px 7px;
   border: 1px dashed var(--sr-edge-strong);
   border-radius: var(--sr-radius-pill);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-micro);
   letter-spacing: 0.06em;
@@ -137,7 +137,7 @@ body.app-slava-restraint .jev-result__sr-only {
   user-select: none;
 }
 
-body.app-slava-restraint .jev-result__muted { color: var(--sr-ink-meta); }
+body.app-slava-restraint .jev-result__muted { color: var(--sr-ink-light); }
 
 body.app-slava-restraint .jev-result__headline {
   display: flex;
@@ -222,7 +222,7 @@ body.app-slava-restraint .jev-result__scale {
   display: flex;
   justify-content: space-between;
   gap: var(--sr-space-3);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
 }
 body.app-slava-restraint .jev-result__scale > span {
@@ -240,10 +240,10 @@ body.app-slava-restraint .jev-result__bar-row {
   grid-template-columns: minmax(0, 92px) 1fr 34px;
   align-items: center;
   gap: var(--sr-space-2);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
 }
-body.app-slava-restraint .jev-result__bar-row .jev-result__figure { text-align: right; color: var(--sr-ink-meta); }
+body.app-slava-restraint .jev-result__bar-row .jev-result__figure { text-align: right; color: var(--sr-ink-light); }
 body.app-slava-restraint .jev-result__bar-row--winner { color: var(--sr-ink-bold); }
 body.app-slava-restraint .jev-result__bar-row--winner .jev-result__figure { color: var(--sr-ink-bold); }
 
@@ -348,10 +348,10 @@ body.app-slava-restraint .jev-result__candidate {
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 5px 6px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 body.app-slava-restraint .jev-result__candidate .jev-result__thumb { grid-column: 1 / -1; }
-body.app-slava-restraint .jev-result__candidate .jev-result__figure { color: var(--sr-ink-meta); }
+body.app-slava-restraint .jev-result__candidate .jev-result__figure { color: var(--sr-ink-light); }
 body.app-slava-restraint .jev-result__candidate--winner .jev-result__figure { color: var(--sr-ink-bold); }
 
 body.app-slava-restraint .jev-result__thumb {
@@ -380,7 +380,7 @@ body.app-slava-restraint .jev-result__thumb--empty {
   place-items: center;
   aspect-ratio: auto;
   height: 22px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   opacity: 1;
@@ -552,7 +552,7 @@ body.app-slava-restraint .jev-result__footer {
   gap: var(--sr-space-3);
   padding-top: 8px;
   border-top: 1px solid var(--sr-edge);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
 }
 body.app-slava-restraint .jev-result__footer .jev-result__figure { color: var(--sr-ink-light); }
@@ -593,7 +593,7 @@ body.app-slava-restraint .jev-details__table {
 }
 body.app-slava-restraint .jev-details__table th {
   padding: 0 0 4px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
   font-weight: 500;
   text-align: left;
@@ -630,7 +630,7 @@ body.app-slava-restraint .jev-details__facts {
   font-size: var(--sr-type-label);
 }
 body.app-slava-restraint .jev-details__fact { display: contents; }
-body.app-slava-restraint .jev-details__facts dt { color: var(--sr-ink-meta); }
+body.app-slava-restraint .jev-details__facts dt { color: var(--sr-ink-light); }
 body.app-slava-restraint .jev-details__facts dd {
   margin: 0;
   min-width: 0;
@@ -682,13 +682,13 @@ body.app-slava-restraint .model-node__jev-field {
 }
 
 body.app-slava-restraint .model-node__jev-field-label {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-micro);
 }
 
 body.app-slava-restraint .model-node__jev-field-note {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-meta);
   line-height: var(--sr-line-meta);

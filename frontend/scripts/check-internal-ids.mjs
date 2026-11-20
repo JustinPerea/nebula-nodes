@@ -28,7 +28,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // are reachable, an entry counts as a raise only when it is above both the merge-base value and
 // main's value (so a branch that is merely behind main passes), and the allowance on paths that
 // neither had may not exceed what the branch freed against the merge base by removing or lowering
-// paths.
+// paths. A shallow checkout has no merge base. There the base is HEAD's first parent when it has
+// been fetched, and main otherwise. CI fetches both before lint: GitHub's merge ref sits on main as
+// it stood when the ref was made, which can be older than origin/main by the time lint runs.
 //
 // What counts as a comment:
 //   TS, TSX, JS, MJS, CJS: // to end of line, and /* ... */ blocks.
@@ -493,7 +495,8 @@ export function compareWithMain(baseline, mainBaseline, baseBaseline = mainBasel
     }
     const ceiling = Math.max(mainBaseline[file] ?? 0, baseBaseline[file] ?? 0);
     if (allowed > ceiling) {
-      const note = inMain ? `main's ${mainBaseline[file]}` : `the merge base's ${baseBaseline[file]}`;
+      const fromBase = (baseBaseline[file] ?? 0) > (mainBaseline[file] ?? 0);
+      const note = fromBase ? `the merge base's ${baseBaseline[file]}` : `main's ${mainBaseline[file]}`;
       problems.push(`${file}: baseline ${allowed} is above ${note}`);
     }
   }
@@ -506,21 +509,48 @@ export function compareWithMain(baseline, mainBaseline, baseBaseline = mainBasel
 }
 
 /**
- * main's baseline and the merge base's, as {main, base}; null when origin/main, a merge base or
- * either file is missing (shallow CI, first run).
+ * main's baseline and the merge base's, as {main, base}; null when origin/main, main's file or the
+ * merge base's file is missing (first run). With no merge base (a shallow checkout), the base is
+ * HEAD's first parent when its file can be read, and main otherwise.
  */
 export function readMainBaselines(root) {
+  const opts = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 };
+  const show = (rev) => JSON.parse(execFileSync('git', ['show', `${rev}:${BASELINE_REL}`], opts));
   try {
-    const opts = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 };
     execFileSync('git', ['rev-parse', '--verify', '--quiet', 'origin/main'], opts);
-    const mergeBase = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], opts).trim();
-    if (!mergeBase) return null;
-    return {
-      main: JSON.parse(execFileSync('git', ['show', `origin/main:${BASELINE_REL}`], opts)),
-      base: JSON.parse(execFileSync('git', ['show', `${mergeBase}:${BASELINE_REL}`], opts)),
-    };
+    let mergeBase = '';
+    try {
+      mergeBase = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], opts).trim();
+    } catch {
+      mergeBase = '';
+    }
+    const main = show('origin/main');
+    if (mergeBase) return { main, base: show(mergeBase) };
+    // CI checks out the pull request merged onto main at depth 1. The merge ref was made on main as
+    // it stood then (HEAD's first parent), and origin/main may have moved since, so comparing with
+    // main alone would count every lowering merged in between as this branch's raise.
+    let base = main;
+    const parent = firstParent(opts);
+    if (parent) {
+      try {
+        base = show(parent);
+      } catch {
+        base = main;
+      }
+    }
+    return { main, base };
   } catch {
     return null;
+  }
+}
+
+/** HEAD's first parent as recorded in the commit, which a shallow checkout still knows; '' when none. */
+function firstParent(opts) {
+  try {
+    const header = execFileSync('git', ['cat-file', 'commit', 'HEAD'], opts).split('\n\n')[0];
+    return /^parent ([0-9a-f]+)$/m.exec(header)?.[1] ?? '';
+  } catch {
+    return '';
   }
 }
 

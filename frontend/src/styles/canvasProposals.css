@@ -419,7 +419,7 @@
 
 .proposal-bar__proposes {
   flex-shrink: 0;
-  color: rgb(255 255 255 / 0.5);
+  color: var(--sr-ink-light);
   font-size: 12px;
 }
 
@@ -436,7 +436,7 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  color: rgb(255 255 255 / 0.5);
+  color: var(--sr-ink-light);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -462,7 +462,7 @@
 
 /* Neutral at every value. */
 .proposal-bar__expires {
-  color: rgb(255 255 255 / 0.5);
+  color: var(--sr-ink-light);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -574,10 +574,6 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   color: var(--sr-warning);
 }
 
-.proposal-bar__not-ready--more {
-  color: rgb(255 255 255 / 0.5);
-}
-
 /* 4. The disclosure: a real row, full width, 32 px. Its label never
    changes; the chevron and aria-expanded carry the state. */
 .proposal-bar__disclosure {
@@ -629,7 +625,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 .proposal-bar__disclosure-count {
   flex-shrink: 0;
   margin-left: auto;
-  color: rgb(255 255 255 / 0.5);
+  color: var(--sr-ink-light);
   font-variant-numeric: tabular-nums;
 }
 
@@ -665,7 +661,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 
 .proposal-bar__quote {
   margin: 0;
-  color: rgb(255 255 255 / 0.5);
+  color: var(--sr-ink-light);
 }
 
 .proposal-bar__group-title {
@@ -691,7 +687,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 
 .proposal-bar__line dt {
   flex-shrink: 0;
-  color: rgb(255 255 255 / 0.5);
+  color: var(--sr-ink-light);
 }
 
 .proposal-bar__line dd {
@@ -702,7 +698,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__from {
-  color: rgb(255 255 255 / 0.45);
+  color: var(--sr-ink-light);
   text-decoration: line-through;
 }
 
@@ -728,11 +724,11 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__wire-port {
-  color: rgb(255 255 255 / 0.5);
+  color: var(--sr-ink-light);
 }
 
 .proposal-bar__wires[data-kind='unwired'] .proposal-bar__wire {
-  color: rgb(255 255 255 / 0.45);
+  color: var(--sr-ink-light);
   text-decoration: line-through;
 }
 
@@ -865,7 +861,6 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 /* The notice for someone else's edit (CanvasUndoNotice): it landed, or was
    undone or redone. Same surface as the bar; springs up from below. */
 .canvas-undo-notice {
-  --agent-color: rgb(255 255 255 / 0.3);
   --canvas-undo-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
   display: flex;
   align-items: center;
@@ -891,7 +886,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--agent-color);
+  background: var(--agent-color, rgb(255 255 255 / 0.3));
 }
 
 .canvas-undo-notice__text {
@@ -933,7 +928,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 
 .canvas-undo-notice__more-dot {
   flex-shrink: 0;
-  color: rgb(255 255 255 / 0.45);
+  color: var(--sr-ink-light);
 }
 
 /* A trailing text button: no fill, no border. */

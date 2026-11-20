@@ -1,6 +1,6 @@
 # High-tier paths, one fnmatch glob per line, matched against repo-relative
-# paths. "*" also matches "/". A diff that touches any of these needs Justin's
-# own OK before merge; see RISK-TIERS.md.
+# paths. "*" also matches "/". A diff that touches any of these needs the
+# high-tier reviews in RISK-TIERS.md before merge.
 
 # Token and credential files
 backend/services/app_tokens.py
