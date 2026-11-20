@@ -79,12 +79,14 @@ body.app-slava-restraint {
   --sr-warning: #F5C518;
   --sr-warning-soft: rgba(245, 197, 24, 0.12);
   --sr-warning-border: rgba(245, 197, 24, 0.34);
-  --sr-error: var(--sr-accent);
-  --sr-error-soft: var(--sr-accent-soft);
-  --sr-error-border: var(--sr-accent-border);
-  --sr-danger: var(--sr-error);
-  --sr-danger-soft: var(--sr-error-soft);
-  --sr-danger-border: var(--sr-error-border);
+  /* Design: --sr-error is something that went wrong, and it takes the warning
+     tone. It is never the accent (the accent is the primary action, the
+     selected state and the agent). --sr-danger* is the destructive red, a
+     different thing: it is defined once in styles/disabled-buttons.css (:root)
+     and used only by destructive controls. */
+  --sr-error: var(--sr-warning);
+  --sr-error-soft: var(--sr-warning-soft);
+  --sr-error-border: var(--sr-warning-border);
   --sr-success: rgba(110, 231, 183, 0.90);
   --sr-success-soft: rgba(110, 231, 183, 0.12);
   --sr-pending: var(--sr-ink-light);
@@ -1202,7 +1204,7 @@ body.app-slava-restraint .chat__tool-status {
 }
 
 body.app-slava-restraint .chat__system--error {
-  color: var(--sr-danger);
+  color: var(--sr-error);
 }
 
 /* GM, Q116 a: a person-only refusal in the chat: GM's line, the agents' text
@@ -1249,11 +1251,11 @@ body.app-slava-restraint .chat__tool-body {
 
 body.app-slava-restraint .chat__tool--error,
 body.app-slava-restraint .chat__tool--error .chat__tool-output {
-  border-color: var(--sr-danger-border);
+  border-color: var(--sr-error-border);
 }
 
 body.app-slava-restraint .chat__tool--error .chat__tool-output {
-  color: var(--sr-danger);
+  color: var(--sr-error);
 }
 
 body.app-slava-restraint .chat-panel__input {
@@ -1351,8 +1353,8 @@ body.app-slava-restraint .chat-panel__send:disabled {
 
 body.app-slava-restraint .chat-panel__send--stop {
   border-color: var(--sr-accent-border-medium);
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+  background: var(--sr-accent-soft);
+  color: var(--sr-accent);
 }
 
 body.app-slava-restraint .chat-panel__send--stop:hover {
@@ -1373,7 +1375,7 @@ body.app-slava-restraint .chat-panel__chip {
 }
 
 body.app-slava-restraint .chat-panel__chip--error {
-  border-color: var(--sr-accent-border-strong);
+  border-color: var(--sr-error-border);
 }
 
 body.app-slava-restraint .chat-panel__chip-label {
@@ -1384,7 +1386,7 @@ body.app-slava-restraint .chat-panel__chip-label {
 }
 
 body.app-slava-restraint .chat-panel__chip-error {
-  color: var(--sr-danger);
+  color: var(--sr-error);
 }
 
 body.app-slava-restraint .chat-panel__chip-close {
@@ -1411,7 +1413,7 @@ body.app-slava-restraint .chat-panel__notice {
 body.app-slava-restraint .chat-panel__thinking {
   border: 1px solid var(--sr-accent-border);
   border-radius: var(--sr-radius-control-lg);
-  background: var(--sr-danger-soft);
+  background: var(--sr-accent-soft);
   box-shadow: none;
 }
 
@@ -1431,7 +1433,7 @@ body.app-slava-restraint .chat-panel__thinking-header:hover {
 
 body.app-slava-restraint .chat-panel__thinking-indicator,
 body.app-slava-restraint .chat-panel__thinking-label {
-  color: var(--sr-danger);
+  color: var(--sr-accent);
 }
 
 body.app-slava-restraint .chat-panel__thinking-caret,
@@ -2072,7 +2074,7 @@ body.app-slava-restraint .inspector__actions {
 }
 
 body.app-slava-restraint .inspector__model-error {
-  color: var(--sr-accent);
+  color: var(--sr-error);
   font-family: var(--sr-mono);
 }
 

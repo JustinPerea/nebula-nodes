@@ -226,6 +226,23 @@ describe('WorldPreview', () => {
       "Nebula couldn’t download the world because the server isn’t answering. Check that Nebula is running, then try again.",
     );
     expect(screen.getByRole('alert')).not.toHaveTextContent('CORS detail');
+    // Design: a because line is drawn neutral (becauseLine.css), so the alert is marked.
+    expect(screen.getByRole('alert')).toHaveAttribute('data-line-because');
+    expect(screen.getByRole('alert')).toHaveClass('world-modal__download-error');
+  });
+
+  it('marks the download error as a because line when the server says the file is gone', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "That reference isn't there anymore. Reload to get the latest references." }), { status: 404 })));
+    render(<WorldPreview value={world} />);
+    fireEvent.click(screen.getByRole('button', { name: /Explore 3D world/i }));
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', { name: /Panorama/i }));
+
+    // The real download-error branch renders the line through LineText, so the span carries the
+    // marker only when the message has a because clause.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/because it isn’t there anymore/);
+    expect(alert).toHaveAttribute('data-line-because');
   });
 
   it('downloads a JPEG panorama with a truthful JPEG filename', async () => {

@@ -194,14 +194,14 @@ body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; 
 
 /* ---- status dot colors (semantic, skin-agnostic) ---- */
 .run-history__dot--running {
-  background: var(--sr-warning, #f5c518);
+  background: var(--sr-ink-light, rgba(150, 150, 150, 0.8));
   animation: run-history-pulse 1.2s ease-in-out infinite;
 }
 .run-history__dot--complete {
   background: var(--sr-success, #34d399);
 }
 .run-history__dot--failed {
-  background: var(--sr-danger, #ef4444);
+  background: var(--sr-error, #f5c518);
 }
 .run-history__dot--cancelled {
   background: var(--sr-ink-meta, rgba(150, 150, 150, 0.6));
@@ -223,11 +223,11 @@ body.app-slava-restraint .run-history__sub {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.55));
 }
 body.app-slava-restraint .run-history__status-note {
-  color: var(--sr-danger, #b42318);
+  color: var(--sr-error);
 }
-body.app-slava-restraint .run-history__status--running { color: var(--sr-warning, #f5c518); }
+body.app-slava-restraint .run-history__status--running { color: var(--sr-ink-light, rgba(0, 0, 0, 0.55)); }
 body.app-slava-restraint .run-history__status--complete { color: var(--sr-success, #34d399); }
-body.app-slava-restraint .run-history__status--failed { color: var(--sr-danger, #ef4444); }
+body.app-slava-restraint .run-history__status--failed { color: var(--sr-error); }
 body.app-slava-restraint .run-history__status--cancelled { color: var(--sr-ink-meta, rgba(0, 0, 0, 0.45)); }
 body.app-slava-restraint .run-history__empty {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.5));

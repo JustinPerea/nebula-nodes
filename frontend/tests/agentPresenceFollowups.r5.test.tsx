@@ -264,8 +264,11 @@ describe('N-4: every Delete hovers red, never orange', () => {
     expect(/\.selection-toolbar__button--danger:hover[^{]*\{([^}]*)\}/.exec(css('styles/canvas.css'))?.[1]).toMatch(/--sr-danger-ink-hover/);
     expect(/\.prompt-dialog__destructive:hover[^{]*\{([^}]*)\}/.exec(css('styles/prompt-dialog.css'))?.[1]).toMatch(/--sr-danger-ink-hover/);
     const tokens = css('styles/disabled-buttons.css');
-    expect(tokens).toMatch(/--sr-danger-ink:\s*#ff887d/i);
-    expect(tokens).toMatch(/--sr-danger-ink-hover:\s*#ff9a91/i);
+    // Design: --sr-danger is the one destructive red; the -ink names alias it.
+    expect(tokens).toMatch(/--sr-danger:\s*#ff887d/i);
+    expect(tokens).toMatch(/--sr-danger-hover:\s*#ff9a91/i);
+    expect(tokens).toMatch(/--sr-danger-ink:\s*var\(--sr-danger\)/);
+    expect(tokens).toMatch(/--sr-danger-ink-hover:\s*var\(--sr-danger-hover\)/);
   });
   it('GM r12: a shot\'s × and the Inspector palette × hover neutral, never red or the accent', () => {
     for (const [file, pattern] of [
