@@ -783,6 +783,7 @@ body.app-slava-restraint .commons-badge {
 }
 
 body.app-slava-restraint .commons-badge--queued,
+body.app-slava-restraint .commons-badge--analyzing,
 body.app-slava-restraint .commons-badge--held,
 body.app-slava-restraint .commons-badge--downloading,
 body.app-slava-restraint .commons-badge--fidelity-pending,
@@ -791,11 +792,12 @@ body.app-slava-restraint .commons-badge--region-proposed {
   border-color: var(--sr-edge-strong);
 }
 
-body.app-slava-restraint .commons-badge--analyzing,
-body.app-slava-restraint .commons-badge--inbox {
-  color: var(--sr-accent);
-  border-color: var(--sr-accent-border);
-}
+/* Design: orange is the brand accent, not a status. Inbox (it sits beside Accept),
+   Missing (informational, the reference is kept) and Avoid (a role, not a status)
+   use the plain badge colours; the base .commons-badge rule already sets them.
+   Attract and Avoid are both roles, a category rather than good or bad news, so
+   both are neutral and the word carries the role. Analyzing is in progress, so it takes the pending
+   tone above. */
 
 /* An agent proposes changes to this reference (asset proposals, kind commons). */
 body.app-slava-restraint .commons-badge--proposal {
@@ -804,18 +806,16 @@ body.app-slava-restraint .commons-badge--proposal {
   background: var(--sr-surface-control);
 }
 
+/* Design: a failure uses the warning tone (about 10:1 on the badge ground). */
 body.app-slava-restraint .commons-badge--analysis_failed,
-body.app-slava-restraint .commons-badge--missing,
 body.app-slava-restraint .commons-badge--download_failed,
-body.app-slava-restraint .commons-badge--fidelity-fail,
-body.app-slava-restraint .commons-badge--role-avoid {
-  color: var(--sr-error);
-  border-color: var(--sr-error-border);
+body.app-slava-restraint .commons-badge--fidelity-fail {
+  color: var(--sr-warning);
+  border-color: var(--sr-warning-border);
 }
 
 body.app-slava-restraint .commons-badge--ready,
 body.app-slava-restraint .commons-badge--fidelity-pass,
-body.app-slava-restraint .commons-badge--role-attract,
 body.app-slava-restraint .commons-badge--region-confirmed {
   color: var(--sr-success);
 }
@@ -844,9 +844,10 @@ body.app-slava-restraint .commons-source {
   border: 1px solid var(--sr-edge);
 }
 
+/* Design: a correction is not an alert, so it is neutral. Brighter than the
+   model tag (--sr-ink-meta is under 4.5:1 at 9px) so the two stay apart. */
 body.app-slava-restraint .commons-source--corrected {
-  color: var(--sr-accent);
-  border-color: var(--sr-accent-border);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .commons-source--model {
