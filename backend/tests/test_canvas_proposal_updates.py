@@ -1,11 +1,11 @@
-"""Every canvas proposal posts an Update (Justin's Q112 a, 2026-10-21).
+"""Every canvas proposal posts an Update (Justin's ruling, 2026-10-21).
 
-"a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
+"a) Yes, every one: "Proposes 3 changes on the canvas", with
 Review taking you to the canvas and its bar. It settles like the others
 (Accepted, Rejected, Expired, Closed: Nebula restarted)."
 
-Asset proposals have posted an Update since Q92 a (#149), and the Updates
-corner is on every screen since Q107 a. A canvas proposal (MCP
+Asset proposals have posted an Update (#149), and the Updates
+corner is on every screen. A canvas proposal (MCP
 propose_change, `nebula propose`, POST /api/canvas/proposals) now posts one
 too, from one place in the backend (the create route every surface calls):
 attributed to the agent, Nebula's own template words (never the agent's
@@ -86,11 +86,11 @@ def test_an_mcp_proposal_posts_one_update_with_review(canvas, monkeypatch):
                                          params=body["params"], run=body["run"])
     view = response["proposal"]
     (note,) = _updates(canvas)
-    assert note["text"] == "Claude Code proposes 3 changes on the canvas"
+    assert note["text"] == "Proposes 3 changes on the canvas"
     assert note["source"] == "nebula" and note["about"] == "proposal"
     assert note["author"]["kind"] == "agent" and note["author"]["name"] == "Claude Code"
     assert note["author"]["color"] == view["agent"]["color"]
-    # GM 2026-10-29: when it was asked, as an asset ask's ref says (the held needs-you rows order by it).
+    # Design 2026-10-29: when it was asked, as an asset ask's ref says (the held needs-you rows order by it).
     assert note["proposal"] == {"id": view["id"], "kind": "canvas", "targetId": canvas.project_id,
                                 "since": view["createdAt"]}
     assert _review(note) == {"kind": "proposal.review", "proposalId": view["id"], "target": "canvas",
@@ -122,7 +122,7 @@ def test_a_cli_proposal_posts_the_same_update(canvas):
     code = proposals_cmd.run_propose(client, _propose_args(wait=False, agent_name="Codex"), out=out)
     assert code == 0, out.getvalue()
     (note,) = _updates(canvas)
-    assert note["text"] == "Codex proposes 1 change on the canvas"
+    assert note["text"] == "Proposes 1 change on the canvas"
     assert note["author"]["name"] == "Codex"
     (proposal,) = canvas.book.open_list()
     assert _review(note)["proposalId"] == proposal.id
@@ -139,12 +139,12 @@ def test_what_counts_as_a_change(canvas):
                       "rename": {"+t": "Hero line"}})
     _propose(canvas, {"note": "Just run it", "run": [n1]}, headers=CODEX)
     texts = [note["text"] for note in _updates(canvas)]
-    assert texts == ["Claude Code proposes 2 changes on the canvas", "Claude Code proposes 1 change on the canvas",
-                     "Codex proposes a run on the canvas"]
+    assert texts == ["Proposes 2 changes on the canvas", "Proposes 1 change on the canvas",
+                     "Proposes a run on the canvas"]
 
 
 def test_every_proposal_gets_its_own_update(canvas):
-    """Q112: "every one". Unlike an asset proposal's, a second canvas proposal
+    """Justin: "every one". Unlike an asset proposal's, a second canvas proposal
     from the same agent doesn't replace the first one's Update."""
     n1 = canvas.graph.add_node("text-input", {"value": "a cat"})
     first = _propose(canvas, _upscale_body(n1)).json()["proposal"]["id"]
@@ -236,7 +236,7 @@ def test_withdrawing_settles_it_as_withdrawn_by_the_agent(canvas):
     view = _proposed(canvas)
     assert canvas.client.delete(f"/api/canvas/proposals/{view['id']}", headers=CLAUDE).status_code == 200
     note = _settled(canvas)
-    assert note["outcome"] == "Withdrawn by Claude Code"
+    assert note["outcome"] == "Withdrawn"
     assert note["resolvedBy"] == {"kind": "agent", "name": "Claude Code"}
 
 
@@ -327,7 +327,7 @@ def test_opening_another_project_settles_it_in_its_own_project(canvas):
 
 def test_a_restart_closes_an_open_ones_update(canvas, monkeypatch):
     """Proposals live in memory and Updates with the project: after a restart
-    the Update reads "Closed: Nebula restarted" (Q108 a's outcome), the next
+    the Update reads "Closed: Nebula restarted" (outcome), the next
     time its list is read."""
     from services.asset_proposals import RESTART_OUTCOME
 
@@ -366,7 +366,7 @@ def test_mcp_list_notes_shows_the_outcome(canvas, monkeypatch):
     view = _proposed(canvas)
     mcp_server.withdraw_proposal(view["id"])
     (note,) = [n for n in mcp_server.list_notes()["notes"] if n["about"] == "proposal"]
-    assert note["outcome"] == "Withdrawn by Claude Code"
+    assert note["outcome"] == "Withdrawn"
 
 
 def test_nebula_notes_prints_the_outcome(canvas):
@@ -374,7 +374,7 @@ def test_nebula_notes_prints_the_outcome(canvas):
 
     view = _proposed(canvas)
     (note,) = _updates(canvas)
-    assert "waiting for your OK" in format_note(note) and "proposes 2 changes on the canvas" in format_note(note)
+    assert "waiting for your OK" in format_note(note) and "Proposes 2 changes on the canvas" in format_note(note)
     canvas.client.post(f"/api/canvas/proposals/{view['id']}/reject", headers={**PERSON, KEY: _key(canvas, view["id"])})
     line = format_note(_settled(canvas))
     assert "[Rejected]" in line and "waiting for your OK" not in line
@@ -393,7 +393,7 @@ def test_agents_are_told_the_person_sees_an_update_so_they_dont_post_one():
     doc = " ".join((mcp_server.propose_change.__doc__ or "").split())
     assert "Update" in doc and "Review" in doc and "every screen" in doc
     assert "don't also post_note" in doc
-    assert "Withdrawn by" in doc and "Closed: Nebula restarted" in doc
+    assert "Withdrawn (you took it back" in doc and "Closed: Nebula restarted" in doc
     listing = " ".join((mcp_server.list_notes.__doc__ or "").split())
     assert "propose_change" in listing
 
@@ -405,10 +405,10 @@ def test_agents_are_told_the_person_sees_an_update_so_they_dont_post_one():
     setup = (root / "docs" / "MCP-SETUP.md").read_text(encoding="utf-8")
     section = setup.split("### Proposals\n", 1)[1].split("\n### ", 1)[0]
     flat = " ".join(section.split())
-    assert "Claude Code proposes 3 changes on the canvas" in flat and "Review" in flat
+    assert "Proposes 3 changes on the canvas" in flat and "Review" in flat
     assert "post_note" in flat and "Closed: Nebula restarted" in flat
     skill = " ".join((root / "skills" / "nebula" / "SKILL.md").read_text(encoding="utf-8").split())
-    assert "proposes 3 changes on the canvas" in skill and "don't also post a `nebula note`" in skill
+    assert "Proposes 3 changes on the canvas" in skill and "don't also post a `nebula note`" in skill
 
 
 # -- review follow-ups ------------------------------------------------------------------
@@ -442,7 +442,7 @@ def test_a_proposal_that_closes_while_its_update_is_written_settles_at_once(canv
 
 
 def test_a_new_proposal_folds_away_the_same_agents_withdrawn_update(canvas):
-    """Q109's "withdraw it first, then propose again": the withdrawn one's
+    """Justin: "withdraw it first, then propose again": the withdrawn one's
     Update leaves the list when the same agent proposes again (the socket's
     `removed`), so a propose/withdraw loop can't flood the list or push the
     person's older Updates past the cap. Only the agent's own withdrawn

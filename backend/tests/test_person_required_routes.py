@@ -1,6 +1,6 @@
 """Every person-only refusal a canvas tab can get says so: ``code: person_required``.
 
-GM - Design, 2026-10-23 (Q116 a), for the line under "Couldn't recover the
+Design, 2026-10-23, for the line under "Couldn't recover the
 project.": "Use it for every person-only refusal, not just Krea billing. The
 agents' text stays behind Details." The canvas classifies a refusal by its
 ``code``, never its words, so every route that refuses a request only because

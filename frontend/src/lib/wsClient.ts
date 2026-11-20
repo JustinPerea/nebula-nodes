@@ -101,6 +101,11 @@ export interface AgentPresenceEvent {
    * label) still has its line here. Absent: the log uses `say` (and a bare
    * cursor move has none). */
   log?: string;
+  /** The canvas nodes the action touched, as ids, beside the words: a log line
+   * names nodes by their canvas names, never ids (design), so a reader that
+   * needs the nodes (the demo zoom manifest, hooks/useZoomManifest) reads this.
+   * Absent when the action names none. */
+  nodeIds?: string[];
   /** "muted": a line the Agent log shows neutral, not as an action or an
    * error (a run that waited with no proposal slot left, round 2 of PR #212). */
   tone?: 'muted';

@@ -122,15 +122,17 @@ body.app-slava-restraint .character-studio-toolbar__state--saving {
 }
 
 body.app-slava-restraint .character-studio-toolbar__state--saved {
-  color: var(--sr-accent);
+  /* Design: a finished save is the calm case, so the neutral meta ink. */
+  color: var(--sr-ink-meta);
 }
 
 body.app-slava-restraint .character-studio-toolbar__state--draft {
   color: var(--sr-ink-faint);
 }
 
+/* Design: a save that failed is a warning (the warning token, not a salmon literal). */
 body.app-slava-restraint .character-studio-toolbar__state--error {
-  color: #e0796b;
+  color: var(--sr-error);
 }
 
 /* ── Library rail ────────────────────────────────────────────────────────── */
@@ -205,7 +207,7 @@ body.app-slava-restraint .character-palette__empty {
 
 body.app-slava-restraint .character-rail__empty--error,
 body.app-slava-restraint .character-palette__empty--error {
-  color: var(--line-warning, #e0796b);
+  color: var(--line-warning, var(--sr-error));
 }
 
 /* The open Character is another project's: say where, above the list. */
@@ -393,7 +395,7 @@ body.app-slava-restraint .character-def__field input[type='range']:disabled {
 
 body.app-slava-restraint .character-def__error {
   font-size: 11px;
-  color: var(--line-warning, #e0796b);
+  color: var(--line-warning, var(--sr-error));
 }
 
 body.app-slava-restraint .character-def__input,
@@ -451,12 +453,13 @@ body.app-slava-restraint .character-def__ref-badge {
   left: 0;
   right: 0;
   font-size: 9px;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   text-align: center;
   padding: 1px 0;
-  background: rgba(0, 0, 0, 0.55);
-  color: var(--sr-accent);
+  background: rgba(0, 0, 0, 0.76);
+  /* Design: Cover is a lasting property of the reference, a kind of badge, not the current selection.
+     The darker backing keeps the label at 4.5:1 or better over any image (design). */
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .character-def__ref-remove {
@@ -646,8 +649,8 @@ body.app-slava-restraint .assets-panel__tab {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.6));
 }
 body.app-slava-restraint .assets-panel__tab--active {
-  border: 1px solid var(--sr-accent, #ff5a1f);
-  background: var(--sr-accent-soft, rgba(255, 90, 31, 0.12));
+  border: 1px solid var(--sr-accent);
+  background: var(--sr-accent-soft);
   color: var(--sr-ink, #1a1a1a);
 }
 body.app-slava-restraint .assets-panel__search {

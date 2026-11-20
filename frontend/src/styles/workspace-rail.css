@@ -46,8 +46,6 @@
    the left edge holds its small gap, and the corners stay concentric on every
    frame because the whole thing scales together. */
 .workspace-rail__shell {
-  /* The launcher badge's ring (lib/agentLauncherDots.ts): this shell's own surface, as drawn below. */
-  --agent-launcher-surface: rgb(24, 24, 26);
   position: relative;
   display: flex;
   max-height: calc(100dvh - var(--workspace-rail-top) - var(--workspace-rail-bottom));
@@ -57,10 +55,6 @@
   padding: var(--workspace-rail-pad);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: calc(var(--workspace-rail-button-radius) + var(--workspace-rail-pad) + 1px);
-  background: rgba(24, 24, 26, 0.92);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.48);
-  backdrop-filter: blur(22px) saturate(135%);
-  -webkit-backdrop-filter: blur(22px) saturate(135%);
   transform: scale(var(--workspace-rail-rest-scale));
   transform-origin: left center;
   transition: transform var(--workspace-rail-spring);
@@ -101,7 +95,6 @@
   border: 1px solid transparent;
   border-radius: var(--workspace-rail-button-radius);
   background: transparent;
-  color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
 }
@@ -129,9 +122,6 @@
 }
 
 .workspace-rail__item--primary {
-  border-color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.96);
-  color: #111;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
@@ -239,6 +229,7 @@ body.app-slava-restraint .workspace-dock-panel.panel.panel--exiting {
 }
 
 body.app-slava-restraint .workspace-rail__shell {
+  /* The launcher badge's ring (lib/agentLauncherDots.ts): this shell's own surface, as drawn below. */
   --agent-launcher-surface: rgb(28, 28, 31);
   border-color: var(--sr-edge, rgba(255, 255, 255, 0.09));
   background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78));

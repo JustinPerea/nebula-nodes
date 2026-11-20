@@ -1,4 +1,4 @@
-"""PR #199 review 2: a restore never reverts a project because a key was
+"""PR #199: a restore never reverts a project because a key was
 damaged, the strict read stays off the hot path, and the bookkeeping around
 a restored list is right (2026-10-27).
 
@@ -133,7 +133,7 @@ def test_m1_nan_is_refused_on_every_read(tmp_path):
 
 @pytest.mark.parametrize("hex_valid", [False, True], ids=["non-hex flip", "hex flip"])
 def test_m2_a_flip_in_a_records_key_keeps_its_latest_version(tmp_path, hex_valid):
-    """Review 2's test_d (non-hex) and live2 (hex): the record parses whole
+    """test_d (non-hex) and live2 (hex): the record parses whole
     under a damaged key. It keeps its newer version under its own id, and is
     never reported as deleted and back."""
     store = _store(tmp_path)
@@ -308,7 +308,7 @@ def _events(since: int, kind: str) -> list[dict]:
 
 
 def test_l1_a_recover_retry_after_a_delete_for_good_survives_a_restore(app):
-    """Review 2's test_c: the stale tab's retry re-creates the copy with the
+    """test_c: the stale tab's retry re-creates the copy with the
     same id after the person deleted it for good. .bak (one commit behind)
     still has the tombstone; the newer record wins."""
     client, store, _graph, _state = app
@@ -366,7 +366,7 @@ def test_l1_a_tombstone_only_in_the_copy_never_drops_a_newer_record():
 
 
 def test_l1_a_tombstone_in_a_newer_file_decides_even_against_a_later_created_at():
-    # Fix round 3 (review 3, L-3) replaced this test's rule: the tombstone
+    # Replaced this test's rule: the tombstone
     # sits in a newer file and the record, only in an older one, says it was
     # made after it. That is a clock that ran ahead, not another project:
     # file order decides, and the row says so.
@@ -463,7 +463,7 @@ def test_l3_a_restore_takes_the_newest_valid_copy_by_what_it_holds(tmp_path):
 
 
 def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, monkeypatch):
-    """Review 2's test_f: the canvas's project isn't in the list, which is full."""
+    """test_f: the canvas's project isn't in the list, which is full."""
     client, store, graph, state = app
     monkeypatch.setattr(store_module, "MAX_PROJECTS", 3)
     first = _create(client, "A")
@@ -482,7 +482,7 @@ def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, 
     assert listing["activeProjectId"] is None
     assert [node["params"]["value"] for node in main_module.cli_graph.get_state()["nodes"]] == ["c1"]
     # Opening another project replaces it: held aside first, nothing lost
-    # (review 5 of PR #199, M-3: it was refused until round 5).
+    # (PR #199: it was refused until the restore held the canvas aside first).
     opened = client.post(f"/api/projects/{first}/open", json={"workspaceRevision": listing["workspaceRevision"]},
                          headers=PERSON)
     assert opened.status_code == 200, opened.text
@@ -501,7 +501,7 @@ def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, 
 
 
 def test_l5_a_later_filing_is_not_pinned_on_an_older_restore_notice(app):
-    """Review 2's test_h: a restore that brought everything back, then a
+    """test_h: a restore that brought everything back, then a
     crash-window filing while its notice is still open."""
     client, store, graph, state = app
     _create(client, "Alpha")
@@ -555,7 +555,7 @@ def test_l5_a_filing_right_after_its_restore_goes_in_that_restores_record(app):
     listing = client.get("/api/projects", headers=PERSON).json()
     restore = listing["catalogRestore"]
     assert restore["openProjectMissing"] == beta
-    # GM r14 on PR #199, 4: the lost row's own name is free again, so it is reused as it was.
+    # Design on PR #199, 4: the lost row's own name is free again, so it is reused as it was.
     assert restore["recoveredCanvas"]["name"] == "Beta"
 
 
@@ -614,7 +614,7 @@ def test_m2_the_open_project_torn_after_another_torn_record_is_filed_under_its_n
     restore = listing["catalogRestore"]
     assert restore["openProjectMissing"] == scratch
     assert restore["openProjectName"] == "Scratch"
-    # GM r14 on PR #199, 4: the lost row's own name is free again, so it is reused as it was.
+    # Design on PR #199, 4: the lost row's own name is free again, so it is reused as it was.
     assert restore["recoveredCanvas"]["name"] == "Scratch"
 
 
@@ -626,7 +626,7 @@ def test_naming_the_filed_canvas_takes_its_projects_name_and_numbers_a_second_co
     alpha = _create(client, "Alpha")
     _add_text(client, "a1")
     client.get("/api/projects", headers=PERSON)
-    for expected in ("Recovered Alpha", "Recovered Alpha copy"):  # GM r29 of PR #199, 2
+    for expected in ("Recovered Alpha", "Recovered Alpha copy"):  # Design of PR #199, 2
         with store.transaction() as catalog:
             entry = catalog["projects"].pop(alpha, None) or catalog["trash"][alpha]
             catalog["trash"][alpha] = {**entry, "deletedAt": store_module.now()}
@@ -641,7 +641,7 @@ def test_naming_the_filed_canvas_takes_its_projects_name_and_numbers_a_second_co
 
 
 def test_upgrade_day_a_damaged_catalog_whose_head_reads_opens_the_project_with_the_live_canvas(app):
-    """Review 2's test_b (L8): a pre-PR state.json beside a catalog damaged
+    """test_b: a pre-PR state.json beside a catalog damaged
     at boot whose head still reads. The head says which project was open,
     as an intact catalog would: the live canvas goes back into it, not into
     a second project."""

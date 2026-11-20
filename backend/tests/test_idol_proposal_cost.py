@@ -1,6 +1,6 @@
 """How a proposal counts a run that may bill the person's own account.
 
-GM, PR #203 r11 items 2, 4 and 6, and r12: Idol runs free on Hugging Face's
+Design, PR #203: Idol runs free on Hugging Face's
 shared GPUs without a token and on the person's own allowance with one. It is
 never counted as "paid": with a token it "may cost" (its own count, named,
 with the account it may bill), without one it is free. It adds nothing to the
@@ -91,9 +91,9 @@ def test_summarize_names_two_idol_runs_once():
 
 
 def test_summarize_never_calls_a_paid_estimate_sourced_zero():
-    """A sourced $0 is free and never priced (GM, PR #203 r18 item 1), so a
+    """A sourced $0 is free and never priced (design, PR #203), so a
     proposal's estimate covers paid nodes only and never says sourcedZero
-    (review 10 of PR #203, NIT-1: the branch that passed it on is gone)."""
+    (PR #203: the branch that passed it on is gone)."""
     base = {"currency": "usd", "low": 0, "high": 0, "unpriced": [], "plan": [], "plus": []}
     for flag in (True, False):
         estimate = summarize_cost([_entry("+a", "paid")], up_to=False, estimate={**base, "sourcedZero": flag})["estimate"]
@@ -107,7 +107,7 @@ def test_estimate_run_says_sourced_zero_only_when_every_priced_row_is_zero():
     pricing = model_pricing.load_pricing()
     idol = [{"id": "n1", "definitionId": "speridlabs-idol", "params": {}}]
     # A key-billing node (Idol) adds nothing to any estimate, with or without
-    # its token: not "$0", not unpriced (review 8 of PR #203, LOW-2).
+    # its token: not "$0", not unpriced (PR #203).
     for keys in ({}, {"HF_TOKEN": "hf_x"}):
         alone = model_pricing.estimate_run(idol, pricing, DEFINITIONS, keys)
         assert alone["priced"] == {} and alone["high"] is None and alone["unpriced"] == []
@@ -205,7 +205,7 @@ def test_a_proposal_that_runs_only_idol_has_no_estimate_line(keyed, api_keys):
     assert {node["ref"]: node["price"] for node in cost["nodes"]}["+idol"] is None
 
 
-# -- the ghost card and every listing read the keys set now (GM, PR #203 r15) -----------
+# -- the ghost card and every listing read the keys set now (design, PR #203) -----------
 
 
 def _ghost(proposal, ref="+idol"):
@@ -236,7 +236,7 @@ def test_the_ghost_card_without_a_token_is_free(keyed):
 
 
 def test_a_token_added_after_the_proposal_makes_idol_may_cost_everywhere(keyed):
-    """Review 7, NIT-5: the count isn't frozen at propose time."""
+    """The count isn't frozen at propose time."""
     keyed.keys({"GEMINI_API_KEY": "k"})
     proposal = _propose(keyed, _idol_and_paid(keyed)).json()["proposal"]
     assert proposal["cost"]["mayCostRuns"] == 0 and proposal["cost"]["freeRuns"] == 1

@@ -77,8 +77,13 @@ describe('the Projects startup line', () => {
   });
 
   it('no answer: the server on this computer', async () => {
-    fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
-    await useProjectStore.getState().initialize();
+    // The line the tries end on (design): a first load that found no server tries again by itself
+    // (1, 2, 4, 8, 16 s) before it says this.
+    vi.useFakeTimers();
+    for (let tries = 0; tries < 6; tries += 1) fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
+    void useProjectStore.getState().initialize();
+    await vi.advanceTimersByTimeAsync(31_000);
+    vi.useRealTimers();
     expect(useProjectStore.getState().error)
       .toBe("Nebula couldn’t load your projects because the server isn’t answering. Check that Nebula is running, then try again.");
   });

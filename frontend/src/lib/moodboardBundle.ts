@@ -6,6 +6,7 @@
  * (kept-out colours already removed), never the raw analysis's.
  */
 
+import { groupedCount } from './groupedCount';
 import { isSetAside } from './moodboardCount';
 
 export interface MoodboardBundleImage {
@@ -183,7 +184,7 @@ export function parseMoodboardBundle(value: unknown): MoodboardBundleView | null
 }
 
 function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`;
+  return `${groupedCount(count)} ${count === 1 ? one : many}`;
 }
 
 /** The board's settings line: "look · 70% · 3 images", counting the images

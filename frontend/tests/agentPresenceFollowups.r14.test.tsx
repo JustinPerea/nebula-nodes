@@ -64,19 +64,21 @@ describe('GM r22 Q1: the person gate keeps its own line', () => {
   });
 });
 
-describe('GM r22 Q2: the status edge is its own element', () => {
-  it('PinLayer draws it inside the card; only it takes the pin and author colours', () => {
+describe('the pin card has no left status edge (design)', () => {
+  it('PinLayer draws no edge element; only the badge, the agent name and the root carry the presence colours', () => {
     const layer = readFileSync(join(__dirname, '../src/components/canvas/PinLayer.tsx'), 'utf8');
-    expect(layer).toMatch(/<span className="canvas-pin__edge" aria-hidden="true" \/>/);
+    expect(layer).not.toMatch(/canvas-pin__edge/);
     const sheet = readFileSync(join(__dirname, '../src/styles/canvasPins.css'), 'utf8');
-    expect(/\.canvas-pin__edge \{[^}]*top: -1px;[^}]*bottom: -1px;[^}]*background: var\(--pin-color\);/s.test(sheet)).toBe(true);
-    expect(sheet).toMatch(/\.canvas-pin--resolved \.canvas-pin__edge \{\s*background: var\(--agent-color, #5b9dff\);/);
-    // The card itself has no presence colour any more: no amber border-left, nothing on Delete.
+    expect(sheet).not.toMatch(/canvas-pin__edge/);
+    // The card itself has no presence colour: no amber border-left, nothing on Delete.
     const card = /\.canvas-pin__card \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
     expect(card).not.toMatch(/--pin-color|--agent-color|border-left/);
+    // Open or resolved still reads from the badge icon and the meta line.
+    expect(layer).toMatch(/resolved \? <Check size=\{12\}/);
+    expect(layer).toMatch(/waiting for an agent/);
     for (const [selector, body] of sheet.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
       if (/--pin-color|--agent-color/.test(body) && !/^\s*:root|\.canvas-pin \{/.test(selector)) {
-        expect(selector.trim(), body).toMatch(/canvas-pin__edge|canvas-pin__badge|canvas-pin__agent|canvas-pin--resolved \.canvas-pin__badge|^\.canvas-pin$/);
+        expect(selector.trim(), body).toMatch(/canvas-pin__badge|canvas-pin__agent|canvas-pin--resolved \.canvas-pin__badge|^\.canvas-pin$/);
       }
     }
   });

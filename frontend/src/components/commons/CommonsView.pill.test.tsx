@@ -90,7 +90,7 @@ describe('GM PR #202 r2: the PROPOSAL pill while the tab is held', () => {
     await waitFor(() => expect(view.container.querySelectorAll('[role="option"]')).toHaveLength(3));
     expect(pills(view.container).map((pill) => pill !== null)).toEqual([true, false, true]);
     act(() => setUpdates([
-      update('pa_1', 'ast_1', { resolvedAt: '2026-10-29T12:05:00.000Z', outcome: 'Withdrawn by Codex' }),
+      update('pa_1', 'ast_1', { resolvedAt: '2026-10-29T12:05:00.000Z', outcome: 'Withdrawn' }),
       update('pa_2', 'ast_3', { resolvedAt: '2026-10-29T12:15:00.000Z', outcome: 'Expired' }),
     ]));
     expect(pills(view.container)).toEqual([null, null, null]);

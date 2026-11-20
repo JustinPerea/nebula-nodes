@@ -62,6 +62,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.error_classifier import classify_error
+from execution import person_line
 from execution.person_line import is_job_failure, with_person_line
 from execution.provider_status import card_line
 
@@ -251,12 +252,37 @@ def _seedream_image_size(aspect_ratio: str, extra_params: dict[str, Any]) -> Any
     except (ValueError, ZeroDivisionError):
         raise with_person_line(
             ValueError("Cinema Seedream aspectRatio must be a positive width:height ratio"),
-            "Write the aspect ratio as width:height with positive numbers, like 16:9.") from None
+            "The aspect ratio isn’t written as width:height. Use positive numbers, like 16:9.") from None
     if not (0 < width <= 14142 and 0 < height <= 14142 and 2560 * 1440 <= width * height <= 4096 * 4096):
         raise with_person_line(
             ValueError("Cinema Seedream aspectRatio cannot fit supported image dimensions; use a less extreme ratio"),
-            "This aspect ratio is too extreme for Cinema Seedream. Use a less extreme ratio.")
+            "That aspect ratio is too wide or too tall for Cinema Seedream. Choose a less extreme one.")
     return {"width": width, "height": height}
+
+
+def _shot_reference_cap_line(base_model: str, count: int, cap: int) -> str:
+    """The person's line for a shot over its base model's reference cap (design).
+    It follows "Nebula couldn’t generate the shot because", so it opens with the
+    base model's name; the exception keeps the specific text for agents."""
+    from execution.maker_routes import definition_for
+
+    try:
+        name = person_line._without_aside(definition_for(base_model).get("displayName"))
+    except ValueError:
+        name = ""
+    images = "reference image" if cap == 1 else "reference images"
+    return (f"{name or 'The base model'} takes up to {cap} {images} and this shot has {count}. "
+            "Remove some, or choose another base model. Nothing was sent.")
+
+
+def _check_shot_reference_cap(base_model: str, image_urls: list[str], cap: int) -> None:
+    """``check_reference_cap`` with the person's line on its refusal; the
+    check, its limit and its exception are unchanged."""
+    try:
+        check_reference_cap(base_model, image_urls, cap)
+    except ValueError as exc:
+        with_person_line(exc, _shot_reference_cap_line(base_model, len(image_urls), cap))
+        raise
 
 
 def _build_base_node(
@@ -468,7 +494,7 @@ async def handle_cinema_scene(
             full_prompt, image_urls = append_reference_guidance(full_prompt, image_urls, role_refs)
             # Applies even without a Character bundle; no adapter may silently
             # truncate the combined Character, shot and Reference Set images.
-            check_reference_cap(base_model, image_urls, model_max_refs)
+            _check_shot_reference_cap(base_model, image_urls, model_max_refs)
 
             # Inject the bundle's seed for deterministic identity — ONLY when a
             # bundle is present, so the existing seedless behaviour is untouched.

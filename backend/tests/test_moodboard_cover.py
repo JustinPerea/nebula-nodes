@@ -1,6 +1,6 @@
 """A board's cover: which image it opens on (Justin, 2026-10-20: "Go").
 
-GM found that a board always opened on image #1 and nothing could change it.
+Design found that a board always opened on image #1 and nothing could change it.
 The fix is a cover pick, not a reorder: C7 keeps image numbers fixed, and
 every "#4" in notes, readings and agent messages depends on that. A board
 saves ``coverImageId``, the cover image's own id; its ``thumbnail`` is that

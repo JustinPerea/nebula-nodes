@@ -1,4 +1,4 @@
-"""Who may stop a run (Justin, 2026-10-20, Q61 a).
+"""Who may stop a run (Justin, 2026-10-20).
 
 Agents stop only runs an agent started. A run the person started is theirs to
 stop: an agent (or an unnamed script, the `nebula` CLI without

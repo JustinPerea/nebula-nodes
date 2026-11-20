@@ -1,3 +1,9 @@
+/* The hidden attribute wins over any display rule (a class that sets display: flex would
+   otherwise draw an element the markup hides). `until-found` keeps the browser's own way. */
+[hidden]:not([hidden="until-found"]) {
+  display: none !important;
+}
+
 *,
 *::before,
 *::after {
@@ -67,8 +73,8 @@ a {
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 999px;
   box-shadow: 0 8px 30px rgb(0 0 0 / 45%);
-  background: rgb(32 16 13 / 96%);
-  color: #ffb49f;
+  background: var(--sr-error-surface);
+  color: var(--sr-error);
   font-size: 12px;
   line-height: 1.25;
   letter-spacing: 0.01em;
@@ -118,8 +124,8 @@ a {
   padding: 8px 14px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 999px;
-  background: rgb(32 16 13 / 96%);
-  color: #ffb49f;
+  background: var(--sr-error-surface);
+  color: var(--sr-error);
   font-size: 12px;
   line-height: 1.25;
   letter-spacing: 0.01em;
@@ -163,8 +169,8 @@ a {
 }
 
 @keyframes backend-offline-flash {
-  0% { background: rgb(92 36 26 / 98%); border-color: rgb(255 180 159 / 60%); }
-  100% { background: rgb(32 16 13 / 96%); border-color: rgb(255 255 255 / 14%); }
+  0% { background: var(--sr-error-surface-strong); border-color: var(--sr-error-border); }
+  100% { background: var(--sr-error-surface); border-color: rgb(255 255 255 / 14%); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,4 +1,4 @@
-"""Every asset proposal posts an Update (Justin's Q92 a, 2026-10-21).
+"""Every asset proposal posts an Update (Justin's ruling, 2026-10-21).
 
 "a) Keep the wording, and each proposal also posts an Update ("Claude Code
 asks to change the cover of X", with Review)." A cover proposal shows on the
@@ -43,7 +43,7 @@ def test_a_cover_proposal_posts_one_update_with_review(api):
     _pin(api, A, api.person)
     view = _propose(api, {"cover": C}, note="Use the dusk shot please").json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert note["text"] == "Claude Code asks to change the cover of Dusk"
+    assert note["text"] == "Asks to change the cover of “Dusk”"
     assert note["author"]["kind"] == "agent" and note["author"]["name"] == "Claude Code"
     assert note["source"] == "nebula"
     assert note["proposal"] == {"id": view["id"], "kind": "project", "targetId": api.dusk, "cover": "image",
@@ -78,7 +78,7 @@ def test_a_send_notes_proposal_posts_an_update_without_the_boards_text(api):
     assert put.status_code == 200, put.text
     view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert note["text"] == "Claude Code asks to turn on “Moodboard notes to generators” for Dusk board"
+    assert note["text"] == "Asks to turn on “Moodboard notes to generators” for “Dusk board”"
     assert _review(note) == {"kind": "proposal.review", "proposalId": view["id"], "target": "moodboard",
                              "targetId": board["id"]}
     text = json.dumps(note)
@@ -108,7 +108,7 @@ def test_a_re_proposal_replaces_the_update_instead_of_stacking(api):
     assert _review(mine)["proposalId"] == first["id"]
     api.client.delete(f"/api/canvas/proposals/{first['id']}", headers=CLAUDE)
     mine = next(n for n in _proposal_notes(api) if n["author"]["name"] == "Claude Code")
-    assert mine["resolvedAt"] and mine["outcome"] == "Withdrawn by Claude Code"
+    assert mine["resolvedAt"] and mine["outcome"] == "Withdrawn"
 
 
 def test_no_open_project_means_no_update_but_the_proposal_opens(api):
@@ -246,7 +246,7 @@ def test_an_update_whose_proposal_is_gone_after_a_restart_resolves(api, monkeypa
     monkeypatch.setattr(api.main, "asset_proposals", asset_proposals.AssetProposalBook(api.clock))
     listed = api.client.get("/api/canvas/agent-notes", headers=CLAUDE).json()["notes"]
     (note,) = [n for n in listed if n["about"] == "proposal"]
-    # Q108 a: it says what happened (tests/test_proposal_restart_outcome.py).
+    # It says what happened (tests/test_proposal_restart_outcome.py).
     assert note["outcome"] == "Closed: Nebula restarted" and note["resolvedBy"] == {"kind": "system"}
 
 

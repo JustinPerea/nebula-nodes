@@ -145,11 +145,69 @@ describe('Jev result under the card field', () => {
     renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
     const edited = `Check this catalog shot. ${String(s.params?.question)}`;
     fireEvent.change(screen.getByLabelText('Question'), { target: { value: edited } });
-    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked Judge this product photo against the full brief/);
+    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked \u201CJudge this product photo against the full brief/);
     cleanup();
     // Trimmed to its first 120 characters, it is a different question too.
     renderLive(node('j2', JEV_DECIDE, { question: String(s.params?.question).slice(0, 120) }, s.outputs, 'complete'));
-    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked Judge this product photo/);
+    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked \u201CJudge this product photo/);
+  });
+
+  const FULL = 'Judge this product photo against the full brief';
+  const renderCut = () => {
+    const s = sample(fixture.decide, 'longer than the report line');
+    renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
+    const asked = screen.getByTestId('jev-asked');
+    // The result echoes the report's copy of the question (whitespace collapsed, cut at 300).
+    const echoed = asked.title.slice(1, -1);
+    return { asked, full: echoed };
+  };
+  const visibleOf = (asked: HTMLElement) => asked.querySelector('[data-testid="jev-asked-visible"]') as HTMLElement;
+  const closingQuotes = (root: HTMLElement) => (root.textContent?.match(/\u201D/g) ?? []).length;
+
+  it('renders the uncut question inline with one closing quote right after the text', () => {
+    const { asked, full } = renderCut();
+    const visible = visibleOf(asked);
+    expect(visible.textContent).toBe(`Asked \u201C${full}\u201D`);
+    expect(visible).toHaveAttribute('aria-hidden', 'true');
+    expect(visible.lastChild?.textContent).toBe('\u201D');
+    expect(visible.querySelectorAll('span')).toHaveLength(2);
+    expect(asked).not.toHaveAttribute('data-clamped');
+  });
+
+  it('cuts at a word with U+2026 and the closing quote right after it when the full text does not fit', () => {
+    const lineHeight = vi.spyOn(window, 'getComputedStyle').mockReturnValue({ lineHeight: '20px' } as CSSStyleDeclaration);
+    // A paragraph that holds 40 characters a line: its height follows its text.
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      const visible = this.querySelector('[data-testid="jev-asked-visible"]');
+      return Math.ceil((visible?.textContent?.length ?? 0) / 40) * 20;
+    });
+    try {
+      const { asked, full } = renderCut();
+      const visible = visibleOf(asked);
+      expect(visible.textContent?.length).toBeLessThanOrEqual(80);
+      expect(visible.textContent).toMatch(/^Asked \u201CJudge this product photo\b.*[^ ,;:]\u2026\u201D$/);
+      expect(visible.textContent).not.toContain('...');
+      expect(closingQuotes(visible)).toBe(1);
+      const kept = visible.textContent!.slice('Asked \u201C'.length, -2);
+      expect(full.startsWith(kept)).toBe(true);
+      expect(/\s/.test(full[kept.length])).toBe(true);
+      // The title and the accessible text keep the whole question.
+      expect(asked.title).toBe(`\u201C${full}\u201D`);
+      expect(asked.querySelector('.jev-result__sr-only')?.textContent).toBe(`Asked \u201C${full}\u201D`);
+    } finally {
+      lineHeight.mockRestore();
+      height.mockRestore();
+    }
+  });
+
+  it('holds the whole question in a visually hidden span and in the title', () => {
+    const { asked, full } = renderCut();
+    expect(full.length).toBeGreaterThan(FULL.length);
+    const hidden = asked.querySelector('.jev-result__sr-only');
+    expect(hidden).not.toHaveAttribute('aria-hidden');
+    expect(hidden?.textContent).toBe(`Asked \u201C${full}\u201D`);
+    expect(asked.title).toBe(`\u201C${full}\u201D`);
   });
 
   it('treats a blank Pick Best question as its default, which is what it asked', () => {
@@ -163,7 +221,7 @@ describe('Jev result under the card field', () => {
     renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
     fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is the logo visible?' } });
     const asked = screen.getByTestId('jev-asked');
-    expect(asked).toHaveTextContent('Asked Is the product on a plain white background?');
+    expect(asked).toHaveTextContent('Asked \u201CIs the product on a plain white background?\u201D');
     expect(screen.getByTestId('jev-result')).toBeInTheDocument();
   });
 

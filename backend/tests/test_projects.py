@@ -355,8 +355,8 @@ async def test_delayed_execution_event_keeps_its_admitted_project_revision(works
 @pytest.mark.asyncio
 @pytest.mark.parametrize("endpoint", ["graph", "quick"])
 async def test_synchronous_runs_block_project_switch_until_settled(workspace, monkeypatch, endpoint):
-    """An agent's run blocks a switch until it ends. A quick run doesn't (round
-    12 of PR #114): its nodes are temporary and nothing writes back by node id."""
+    """An agent's run blocks a switch until it ends. A quick run doesn't (PR #114):
+    its nodes are temporary and nothing writes back by node id."""
     import asyncio
     from starlette.requests import Request
     client, graph, _, _ = workspace
@@ -654,7 +654,7 @@ def test_trash_expires_after_thirty_days(workspace):
 
 
 def test_restore_may_pass_the_project_limit_and_a_create_still_may_not(workspace, monkeypatch):
-    """Justin, 2026-10-29 (PR #199 fix round 12): a restore from Recently
+    """Justin, 2026-10-29 (PR #199): a restore from Recently
     deleted may pass the project limit; the limit applies to new projects."""
     client, graph, store, _ = workspace
     a = create(client, "A")

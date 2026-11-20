@@ -877,7 +877,7 @@ def test_a_link_whose_real_folder_is_beside_the_catalog_still_purges(tmp_path):
 
 
 def test_a_store_linked_to_nothing_keeps_the_id_and_never_reaches_global(tmp_path):
-    """LOW-1: a store folder linked to a disk that isn't mounted is unpaired
+    """A store folder linked to a disk that isn't mounted is unpaired
     (the id stays listed); once the disk is back, the store is still
     linked on its own, so the boards are neither deleted nor moved to Global."""
     from services.asset_project_rehome import AssetRoot, rehome_legacy_assets
@@ -923,7 +923,7 @@ def test_a_loop_at_the_store_root_is_unpaired_without_resolving(ws, person, monk
 
 
 def test_a_folder_beside_another_catalog_is_never_paired(tmp_path, monkeypatch):
-    """LOW-2: ``NEBULA_STATE_DIR=~/.nebula/state`` (a copied catalog) with all
+    """``NEBULA_STATE_DIR=~/.nebula/state`` (a copied catalog) with all
     three roots set to their ``~/.nebula`` defaults, while the real
     ``~/.nebula/projects/catalog.json`` is there: unpaired. And the mirror, a
     copy at ``<data>/projects`` beside the real ``<data>/state/projects``."""
@@ -955,7 +955,7 @@ def test_a_folder_beside_another_catalog_is_never_paired(tmp_path, monkeypatch):
 
 
 def test_a_linked_trash_or_side_folder_inside_a_paired_store_is_never_followed(tmp_path):
-    """LOW-4: a paired store whose ``.trash`` and ``.notes`` link to another
+    """A paired store whose ``.trash`` and ``.notes`` link to another
     store's: nothing in either goes."""
     from services.moodboard_store import BOARD_SIDE_FOLDERS
 
@@ -977,7 +977,7 @@ def test_a_linked_trash_or_side_folder_inside_a_paired_store_is_never_followed(t
     assert record.is_file() and (other / ".trash" / "b-binned.json").is_file() and notes.is_file()
 
 
-# -- review 3's surviving mutants, pinned -------------------------------------------
+# -- Surviving mutants, pinned -------------------------------------------
 
 
 def test_a_listed_id_back_in_recently_deleted_is_done_and_deletes_nothing(tmp_path):

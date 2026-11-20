@@ -1,6 +1,6 @@
 """Channel readiness (services/channel_listeners.py): whether a Claude Code
 session listens to the canvas, per agent session, for the Message box's lines
-(GM r50: "not connected" and "listener stopped" are separate states).
+(design: "not connected" and "listener stopped" are separate states).
 
 A --channel listener posts POST /api/agent/channel while it runs and deletes
 its entry when its session ends; one that goes quiet past the TTL is gone.
@@ -123,7 +123,7 @@ BAD_TOKEN_LINE = ("Nebula couldn’t connect this listener because its token isn
 
 def test_only_an_agent_token_registers_a_listener(ready):
     """Justin, 2026-11-03: a name alone (tokenless) can't register, so the
-    person's messages never reach it; GM r81's lines say why."""
+    person's messages never reach it; design's lines say why."""
     for headers in (CLAUDE, {**CLAUDE, "X-Nebula-Agent-Session": "sess-a"}, PERSON, {}):
         refused = ready.client.post("/api/agent/channel", headers=headers, json={"state": "listening"})
         assert refused.status_code == 401 and refused.json()["detail"] == NO_TOKEN_LINE
@@ -147,7 +147,7 @@ IN_APP_LINE = ("Nebula couldn’t connect this listener because it uses an in-ap
 
 
 def test_an_in_app_agents_turn_token_never_registers_a_listener(ready, monkeypatch):
-    """J3 (Justin, 2026-11-04; boundary LOW-3): an in-app agent's turn token
+    """J3 (Justin, 2026-11-04): an in-app agent's turn token
     is verified, but only a Settings app token listens."""
     from commons.actors import agent_registry
     monkeypatch.setattr(agent_registry, "lookup", lambda token: {"runner": "claude", "session": "chat1"}
@@ -163,7 +163,7 @@ def test_an_in_app_agents_turn_token_never_registers_a_listener(ready, monkeypat
 
 
 def test_revoking_a_token_drops_its_listeners_at_once(ready, monkeypatch):
-    """Boundary LOW-1: the revoke route drops that app's entries and tells
+    """The revoke route drops that app's entries and tells
     the person's tabs, not 45 s later at the TTL."""
     monkeypatch.setattr(app_tokens, "valid_id", lambda app_id: app_id.isalnum())
     monkeypatch.setattr(ready.main.app_token_store, "revoke", lambda app_id: app_id == "claude1")
@@ -261,7 +261,7 @@ def test_channel_status_says_whether_this_server_listens_and_what_nebula_sees(to
     assert mcp_server.channel_status()["thisServer"]["reason"] == "idle"
 
 
-# -- round 5, D2: one session is one process ------------------------------------------------
+# -- One session is one process ------------------------------------------------
 
 def test_a_second_process_on_the_same_session_is_refused_while_the_first_lives(ready):
     first = _beat(ready, nonce="process-one-0001")
@@ -324,7 +324,7 @@ def test_the_mcp_listener_sends_its_own_nonce_with_each_beat_and_its_goodbye():
 
 
 def test_one_missed_beat_never_makes_a_live_listener_stale():
-    # Review 4 NIT-3: beats every 15 s with a 5 s timeout. One that failed
+    # Beats every 15 s with a 5 s timeout. One that failed
     # leaves a gap of up to 35 s; at 25 s the live listener read as stale.
     clock = Clock()
     book = channel_listeners.ListenerBook(clock)
@@ -338,7 +338,7 @@ def test_one_missed_beat_never_makes_a_live_listener_stale():
 
 
 def test_another_process_holding_the_session_is_told_apart_from_none():
-    # Review 4 LOW-4: PR C's inbox, accepted and held routes refuse a
+    # PR C's inbox, accepted and held routes refuse a
     # process whose nonce isn't the entry's.
     book = channel_listeners.ListenerBook(Clock())
     claude = AgentIdentity(id="app:claude1", name="Claude Code", color="#C3E86B", verified=True)

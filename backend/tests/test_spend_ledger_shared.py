@@ -765,7 +765,7 @@ def test_the_pricing_refusal_gives_the_reason_then_the_raw_error():
         "Nebula couldn’t check this run’s cost because it can’t read the pricing table. ASK.")
 
 
-# -- round 3 (check of round 2: L2, L3, L4) ----------------------------------------------------------
+# -- the ledger's file reads ----------------------------------------------------------
 
 def _fails_once(ledger: agent_spend.SpendLedger, monkeypatch) -> None:
     """The ledger's next file read finds something it can't open; the reads

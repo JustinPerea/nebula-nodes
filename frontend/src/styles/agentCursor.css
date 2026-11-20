@@ -207,15 +207,15 @@
   color: var(--agent-ink, #0b0b0c);
 }
 
-/* error: one sideways shake, and the halo flashes danger once. The spec
-   names --sr-danger, but in Slava that bare alias is the orange accent;
-   the danger red is --sr-danger-ink (the destructive-colour ratchet, GM r11). */
+/* error: one sideways shake, and the halo flashes the error tone once. It marks
+   an agent error, not a destructive action, so it reads --sr-error (design:
+   the red is only for buttons that delete or remove). */
 .agent-cursor__shake {
   animation: agent-cursor-shake var(--agent-cursor-shake) both;
 }
 
-.agent-cursor__danger {
-  fill: var(--sr-danger-ink, #ff887d);
+.agent-cursor__error {
+  fill: var(--sr-error);
   opacity: 0;
   animation: agent-cursor-flash var(--agent-cursor-flash) both;
 }
@@ -234,7 +234,7 @@
 }
 
 /* Still frames (reduced motion, spec §3): no sweep, breath, shake or ring. */
-.agent-cursor[data-still='true'][data-expr='error'] .agent-cursor__danger {
+.agent-cursor[data-still='true'][data-expr='error'] .agent-cursor__error {
   opacity: var(--agent-cursor-halo-opacity);
 }
 
@@ -330,13 +330,10 @@
   transition: opacity var(--agent-cursor-say-fade);
 }
 
-/* GM - Design, PR #211 r9 item 4: a name pill whose fill is under 3:1
-   against the canvas (lib/agentCursorLook.ts pillEdge) gets a 1px edge,
-   white at 0.4, outside the pill so it sits on the canvas: about 3.7:1 on
-   Slava's #000. The classic skin's #111 is lighter, so it also takes the
-   edge for the fills that clear 3:1 on #000 only. */
-.agent-cursor[data-edge='both'] .agent-cursor__name,
-body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor__name {
+/* A name pill whose fill is under 3:1 against the canvas (lib/agentCursorLook.ts
+   pillEdge) gets a 1px edge, white at 0.4, outside the pill so it sits on the
+   canvas: about 3.7:1 on #000. The rule keys on data-edge='both'. */
+.agent-cursor[data-edge='both'] .agent-cursor__name {
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.4), 0 1px 3px rgb(0 0 0 / 0.35);
 }
 
@@ -547,7 +544,7 @@ body:not(.app-slava-restraint) .agent-cursor[data-edge='classic'] .agent-cursor_
   .agent-cursor[data-expr='think'] .agent-cursor__halo,
   .agent-cursor__orbit,
   .agent-cursor__shake,
-  .agent-cursor__danger,
+  .agent-cursor__error,
   .agent-cursor__press,
   .agent-cursor__ring,
   .agent-cursor__field-mark[data-blink='true'],

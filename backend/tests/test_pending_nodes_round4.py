@@ -1,7 +1,7 @@
-"""Placeholders, round 4 (review 3 of feat/agent-presence, GM - Design's
-round-4 rulings of 2026-10-25).
+"""Placeholders (feat/agent-presence, design's
+rulings of 2026-10-25).
 
-Justin, Q133 b: the person's direct run makes the placeholders it needs
+Justin: the person's direct run makes the placeholders it needs
 normal and runs them, but when any of them calls a paid model Nebula ALWAYS
 asks first, and the backend refuses a direct run that doesn't name exactly
 those placeholders. These tests hold that on every route that runs or prices
@@ -21,7 +21,7 @@ from tests.test_pending_nodes import (  # noqa: F401 - fixture
 
 GM_ONE = ("Nothing ran. This run includes 1 paid node Claude Code is still setting up, and Nebula asks "
           "before running those. Click “Run” again to review it.")
-# A shot's refusal ends with the shot panel's words (GM - Design, round 5).
+# A shot's refusal ends with the shot panel's words (design).
 GM_SHOT = GM_ONE.replace("Click “Run” again to review it.", "Generate again to review it.")
 
 
@@ -121,7 +121,7 @@ def _person_route(pend, route: str, target: str, cine: str | None):
     ("graph-run", "skips"),
 ])
 def test_route_table_a_paid_placeholder_never_runs_unconfirmed_for_the_person(pend, route, expect):
-    """Q133 on every route: the person's run either skips an agent's paid
+    """On every route: the person's run either skips an agent's paid
     placeholder (nothing priced, still pending) or refuses until the person
     confirmed exactly it (409 placeholder_confirm_required)."""
     ids = _paid_chain(pend)
@@ -332,7 +332,7 @@ def test_the_undo_plan_compares_what_the_ready_entry_kept():
     assert plan.skipped[0]["reason"] == "changed since"
 
 
-# -- GM round 4, items 4 and 6 -------------------------------------------------------------------
+# -- Design, items 4 and 6 -------------------------------------------------------------------
 
 def test_the_refusal_says_gms_words_plural_and_several_agents(pend):
     ids = _paid_chain(pend)

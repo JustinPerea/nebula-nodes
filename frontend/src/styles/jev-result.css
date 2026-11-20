@@ -2,7 +2,9 @@
  * Jev results on the canvas (JevResult.tsx): Decide, Pick Best and Box.
  *
  * Quiet by default, like every Slava card: monochrome type, one tone per
- * result (pass green, fail orange, unsure yellow), figures in mono. Motion is
+ * result (design: a verdict is a routing outcome, so pass and fail both take the
+ * neutral tone and the word carries the verdict; unsure is yellow because it needs
+ * a person), figures in mono. Motion is
  * a single reveal when a result arrives: bars and meters grow from the left
  * and the Box outline draws itself, on the same sampled spring the workspace
  * dock uses (~2% overshoot). Reduced motion shows the final state at once.
@@ -14,10 +16,8 @@ body.app-slava-restraint {
   --jev-width: 300px;
   --jev-track: rgba(255, 255, 255, 0.07);
   --jev-rest: rgba(255, 255, 255, 0.24);
-  --jev-pass: var(--sr-success);
-  --jev-pass-soft: var(--sr-success-soft);
-  --jev-fail: var(--sr-accent);
-  --jev-fail-soft: var(--sr-accent-soft);
+  --jev-pass: var(--sr-ink-light);
+  --jev-fail: var(--sr-ink-light);
   --jev-unsure: var(--sr-warning);
   --jev-unsure-soft: var(--sr-warning-soft);
 }
@@ -96,7 +96,6 @@ body.app-slava-restraint .jev-result__badge {
   font-family: var(--sr-mono);
   font-size: var(--sr-type-micro);
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -110,6 +109,32 @@ body.app-slava-restraint .jev-result__question {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
+}
+
+/* A quoted question is one inline run, "Asked", the opening quote, the text, the closing quote, so a
+   wrapped second line starts at the left edge. The component cuts the text to two lines (cutToFit)
+   and sets data-fit once it has measured; only then is the base two-line clamp dropped, so a question
+   that can't be measured still stops at two lines. The accessible copy of the whole question is the
+   visually hidden span. */
+body.app-slava-restraint .jev-result__question--quoted { position: relative; }
+
+body.app-slava-restraint .jev-result__question--quoted[data-fit] {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+body.app-slava-restraint .jev-result__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  user-select: none;
 }
 
 body.app-slava-restraint .jev-result__muted { color: var(--sr-ink-meta); }
@@ -648,20 +673,8 @@ body.app-slava-restraint .jev-details__notes {
 }
 
 .model-node__jev-field-label {
-  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #777;
-}
-
-.model-node__jev-field-note {
-  font-size: 10px;
-  color: #777;
-}
-
-body:not(.app-slava-restraint) .model-node__jev-field .model-node__jev-input {
-  min-height: 0;
-  resize: none;
 }
 
 body.app-slava-restraint .model-node__jev-field {

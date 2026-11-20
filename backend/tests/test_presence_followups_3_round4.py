@@ -1,4 +1,4 @@
-"""PR #204 round 4 (review 2 LOW-1 and NIT-2): a shared asset Update's ``asks`` and
+"""PR #204: a shared asset Update's ``asks`` and
 ``firstSince`` stay true when an ask closes while a new one is posting, and a refresh
 after an undo reviews the newest open ask.
 
@@ -39,7 +39,7 @@ def _close_and_follow(canvas, seen: dict, pid: str) -> None:
 
 
 def test_an_ask_closed_before_the_new_one_is_written_isnt_counted(canvas, monkeypatch):
-    """Review 2's probe: p1 closes (and its follow runs) while p2's Update is being posted,
+    """Probe: p1 closes (and its follow runs) while p2's Update is being posted,
     before the write. The Update counts only p2."""
     book, _c, p1 = _cover_setup(canvas, monkeypatch)
     notes = canvas.main.agent_notes
@@ -108,7 +108,7 @@ def test_a_new_ask_with_nothing_closing_writes_once(canvas, monkeypatch):
 
 
 def test_an_undo_reopening_the_newer_of_two_reviews_it_again(canvas, monkeypatch):
-    """Review 2 NIT-2: the refresh after an undo reviews the newest open ask, not the oldest."""
+    """The refresh after an undo reviews the newest open ask, not the oldest."""
     book, _c, d, p1, p2 = _two_asks(canvas, monkeypatch)
     item = _whole(canvas, d)
     removal = _delete(canvas, d)["removal"]  # p2 used d's image: it closes
@@ -123,7 +123,7 @@ def test_an_undo_reopening_the_newer_of_two_reviews_it_again(canvas, monkeypatch
 
 
 def test_an_undo_reopening_the_only_ask_says_its_count_in_one_change(canvas, monkeypatch):
-    """Review 2 NIT-2's reopen_no_share: the reopen writes the count itself, so the tabs get one
+    """reopen_no_share: the reopen writes the count itself, so the tabs get one
     "changed" that already says one, not an Update without it and then a second one."""
     book, c, p1 = _cover_setup(canvas, monkeypatch)
     item = _whole(canvas, c)

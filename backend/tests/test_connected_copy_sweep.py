@@ -1,9 +1,9 @@
-"""Nebula says connected, never wired (GM - Design, 2026-10-25), beyond the
+"""Nebula says connected, never wired (design, 2026-10-25), beyond the
 cursor bubbles (test_connected_copy.py): the canvas record (`nebula watch`,
 `nebula history`), edit and undo summaries, refusals, the CLI, the MCP tool
 docs agents read, the docs and the node descriptions.
 
-Second pass (GM - Design's ruling on the leftovers): the verb is "connect"
+Second pass (design's ruling on the leftovers): the verb is "connect"
 everywhere ("Can't connect", "Connect it:", "Connect the audio track ..."), an
 unwired required input is "a required input with nothing connected", and the
 noun is "connection(s)" ("Connections" in project size, CONNECTIONS: in
@@ -15,7 +15,7 @@ and every docstring in mcp_server.py (agents read the MCP tools' docs), with
 `backtick spans` and the --wire / --unwire flags taken out first, and fails on
 "wire", "wires", "wired", "wiring" or "unwired", apart from the field keys,
 reason codes, part names and pricing tokens listed in ALLOWED (code
-identifiers, which GM said to leave alone). Other docstrings are for people
+identifiers, which design said to leave alone). Other docstrings are for people
 reading the code.
 """
 from __future__ import annotations
@@ -66,7 +66,8 @@ def test_an_edit_summary_says_connected_and_disconnected(api, monkeypatch):  # n
     response = api.client.post("/api/graph/apply", headers=CODEX, json=body)
     assert response.status_code == 200, response.text
     assert response.json()["summary"] == "connected 1, disconnected 1"
-    assert lines[-1] == "Codex edited the canvas: connected 1, disconnected 1"
+    # The counts stay for agents; the Agent log's row is the agent's own (design).
+    assert lines == []
 
 
 def test_an_edit_that_removes_and_connects_one_node_is_refused_in_connected_words(api):  # noqa: F811
@@ -89,7 +90,7 @@ def test_a_restore_line_in_the_agent_log_says_connected(api, monkeypatch):  # no
     response = api.client.post("/api/graph/restore", headers=PERSON, json={
         "action": "redo", "nodes": [], "remove": [], "wire": [_edge(text, image)], "unwire": []})
     assert response.status_code == 200, response.text
-    assert lines[-1].endswith("0 changed, 1 connected, 0 disconnected")
+    assert lines == []  # the person's own undo and redo leave no Agent log row (design)
 
 
 def test_the_moodboard_note_and_the_in_app_agent_prompt_say_connected():
@@ -224,7 +225,7 @@ def test_the_ratchet_reads_mcp_docstrings_and_skips_backticks_and_flags():
     assert WIRE_WORDS.search(_NOT_PROSE.sub("", "deletes nodes or wires")) is not None
 
 
-# -- second pass: GM - Design's ruling on the leftovers --------------------------------------
+# -- second pass: design's ruling on the leftovers --------------------------------------
 
 def _texts(rel: str) -> str:
     """Every string in a backend file as a person or agent reads it: an
@@ -252,7 +253,8 @@ VERB_AND_NOUN_PINS = {
         ". Disconnect them in the same edit (`unwire`), or pick a model that takes them.",
         "There's no connection {}.{} → {}.{}; ", "look_at_canvas lists the current connections.",
         "nodes and {} connections ", " is no longer on the canvas, so its connection can't be put back.",
-        "the connection {}.{} → {}.{} can't come back: {}", "`images` (Image, several connections)",
+        "Nebula couldn’t put back the connection from {} to ", "{} because the two nodes don’t take that connection now.",
+        "`images` (Image, several connections)",
     ],
     "cli/commands/upload.py": ["Connect it: nebula connect {}:{} <node>:<port>"],
     "cli/commands/graph.py": ["Deleted {} ({}) and its connections", "error: no connection {} → {} (`nebula graph` lists them)"],
@@ -273,7 +275,7 @@ VERB_AND_NOUN_PINS = {
                                 'connect "moodboard" to its "moodboard" input instead.',
                                 "before you connect or set it.", "adds and connects in one step",
                                 "connect +mb:moodboard to its moodboard input instead."],
-    "services/canvas_undo.py": ["puts {} connection{} back", "the connection {} can't come back: {} is gone"],
+    "services/canvas_undo.py": ["puts {} connection{} back", "Nebula couldn’t put back the connection from {} to "],
     "services/canvas_edits.py": ["unwire must be a list of connections",
                                  "an edit needs at least one node, connection, param change, rename, move, removal or unwire"],
     "services/canvas_proposals.py": ["{} is a connection {}, not {}",
@@ -428,7 +430,7 @@ def test_an_agent_run_with_two_inputs_on_the_sized_port_names_them(api, monkeypa
             "Disconnect all but one, or propose it.") in detail
 
 
-# -- third pass: GM - Design's words for the leftovers, and the review's findings ----------
+# -- third pass: design's words for the leftovers, and the review's findings ----------
 
 def test_arrange_says_each_step_of_connecting_the_nodes():
     from services.canvas_edits import ArrangeRequest
@@ -588,7 +590,7 @@ def test_nebula_delete_keeps_the_id(capsys, ref, label, shown):
     assert capsys.readouterr().out == shown + "\n"
 
 
-# -- the docs agents read: the same ratchet over their prose (review 3, finding 6) -------------
+# -- the docs agents read: the same ratchet over their prose -------------
 
 # Prose the docs ratchet doesn't read: fenced code, `backtick spans`, the
 # --wire / --unwire flags, and the one line that names the old word to say

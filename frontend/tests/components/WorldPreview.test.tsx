@@ -3,13 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorldEnvironmentViewerProps } from '../../src/components/nodes/WorldEnvironmentViewer';
 
 vi.mock('../../src/components/nodes/WorldEnvironmentViewer', () => ({
-  WorldEnvironmentViewer: ({ src, navigationMode, resetToken }: WorldEnvironmentViewerProps) => (
+  WorldEnvironmentViewer: ({ src, navigationMode, resetToken, onStatusChange }: WorldEnvironmentViewerProps) => (
     <div
       data-testid="world-environment-viewer"
       data-src={src}
       data-navigation={navigationMode}
       data-reset={resetToken}
-    />
+    >
+      <button type="button" onClick={() => onStatusChange?.('ready')}>mock ready</button>
+      <button type="button" onClick={() => onStatusChange?.('error')}>mock error</button>
+    </div>
   ),
 }));
 
@@ -46,6 +49,18 @@ describe('WorldPreview', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+  });
+
+  it('reads the viewer status as words, lower case after the dot', async () => {
+    render(<WorldPreview value={world} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Explore 3D world: Moonlit courtyard' }));
+    await screen.findByTestId('world-environment-viewer');
+    const statusText = () => screen.getAllByRole('status').find((node) => node.classList.contains('world-modal__status'))?.textContent ?? '';
+    expect(statusText()).toMatch(/ · loading$/);
+    fireEvent.click(screen.getByRole('button', { name: 'mock ready' }));
+    expect(statusText()).toMatch(/ · ready$/);
+    fireEvent.click(screen.getByRole('button', { name: 'mock error' }));
+    expect(statusText()).toMatch(/ · couldn\u2019t load$/);
   });
 
   it('stays thumbnail-only until expanded, then defaults desktop to the 500K splat', async () => {
@@ -226,6 +241,23 @@ describe('WorldPreview', () => {
       "Nebula couldn’t download the world because the server isn’t answering. Check that Nebula is running, then try again.",
     );
     expect(screen.getByRole('alert')).not.toHaveTextContent('CORS detail');
+    // Design: a because line is drawn neutral (becauseLine.css), so the alert is marked.
+    expect(screen.getByRole('alert')).toHaveAttribute('data-line-because');
+    expect(screen.getByRole('alert')).toHaveClass('world-modal__download-error');
+  });
+
+  it('marks the download error as a because line when the server says the file is gone', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "That reference isn't there anymore. Reload to get the latest references." }), { status: 404 })));
+    render(<WorldPreview value={world} />);
+    fireEvent.click(screen.getByRole('button', { name: /Explore 3D world/i }));
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', { name: /Panorama/i }));
+
+    // The real download-error branch renders the line through LineText, so the span carries the
+    // marker only when the message has a because clause.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/because it isn’t there anymore/);
+    expect(alert).toHaveAttribute('data-line-because');
   });
 
   it('downloads a JPEG panorama with a truthful JPEG filename', async () => {

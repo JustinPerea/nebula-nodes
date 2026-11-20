@@ -3,16 +3,20 @@
 .review-reference { width:100%; height:auto; max-height:72vh; object-fit:contain; display:block; }
 .review-progress { flex-shrink:0; text-align:right; }
 .review-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:24px; }
-.review-actions .commons-button--primary { margin:0; }
 body.app-slava-restraint .review-actions .commons-button--primary { margin:0; }
-.review-grade { padding:10px 0; border-bottom:1px solid #ced7c4; }
+.review-grade { padding:10px 0; border-bottom:1px solid var(--evaluation-card-rule); }
 .review-grade label { margin:4px 0; }
 .review-grade strong { display:block; margin-top:6px; font-weight:600; font-size:16px; }
 .review-grade .review-reason { font-size:12px; margin:8px 0 0; }
-.review-grade meter { display:block; width:100%; height:14px; margin:10px 0; accent-color:#5d7842; }
+.review-axis-meter { position:relative; display:block; width:100%; height:14px; margin:10px 0; background:var(--evaluation-meter-track); border-radius:7px; }
+/* The fill runs from the centre to the value in the ink fill (design): square at the centre, rounded at the outer end. */
+.review-axis-fill { position:absolute; top:0; bottom:0; width:calc(var(--axis-reach) * 50%); background:var(--evaluation-meter-fill); }
+.review-axis-fill[data-side="positive"] { left:50%; border-radius:0 7px 7px 0; }
+.review-axis-fill[data-side="negative"] { right:50%; border-radius:7px 0 0 7px; }
+.review-axis-tick { position:absolute; top:0; bottom:0; left:50%; width:1px; transform:translateX(-0.5px); background:var(--evaluation-meter-tick); }
 .review-axis-ends { display:flex; justify-content:space-between; font-size:11px; }
 .evaluation-role .review-swatch-label { width:auto; height:auto; border:0; background:none; font-size:11px; }
-.review-keyword { border:1px solid #a9b99a; border-radius:4px; padding:5px 9px; }
+.review-keyword { border:1px solid var(--evaluation-chip-edge); border-radius:4px; padding:5px 9px; }
 .review-footer { margin-top:30px; }
 .commons-review details { margin-top:20px; }
 .commons-review dt { margin-top:12px; font-size:11px; }

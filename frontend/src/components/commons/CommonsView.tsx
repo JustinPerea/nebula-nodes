@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, FocusEvent as ReactFocusEvent, RefObject } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -232,8 +233,8 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
       const budget = status.worker.budget ?? '∞';
       return (
         <span className="commons-status commons-status--stopped">
-          <StatusText text={`Stopped · call budget used (${status.worker.budget_used}/${budget})`}
-            title={`Library analysis is stopped because it used ${status.worker.budget_used} of this run’s ${budget} calls. Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
+          <StatusText text={`Stopped · call budget used, ${groupedCount(status.worker.budget_used)} of ${groupedCount(budget)}`}
+            title={`Library analysis is stopped because it used ${groupedCount(status.worker.budget_used)} of this run’s ${groupedCount(budget)} calls. Restart Nebula to reset it. Analysis then stays paused until ${then}.`} />
         </span>
       );
     }
@@ -254,16 +255,16 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
   const waiting = status.queue.queued ?? 0;
   const held = status.queue.held ?? 0;
   // Agent adds over today's cap wait in the Inbox: a part of every worker status.
-  const tail = held ? ` · ${held} held` : '';
+  const tail = held ? ` · ${groupedCount(held)} held` : '';
   const heldNote = held
-    ? ` ${held} ${plural(held, 'reference added by an agent is held until you accept it', 'references added by agents are held until you accept them')} in the Inbox.`
+    ? ` ${groupedCount(held)} ${plural(held, 'reference added by an agent is held until you accept it', 'references added by agents are held until you accept them')} in the Inbox.`
     : '';
   const { state, running } = status.worker;
   if (!running && state !== 'budget_exhausted') {
-    const queued = waiting ? ` ${waiting} ${plural(waiting, 'reference is', 'references are')} waiting to be read.` : '';
+    const queued = waiting ? ` ${groupedCount(waiting)} ${plural(waiting, 'reference is', 'references are')} waiting to be read.` : '';
     return (
       <span className="commons-status commons-status--stopped">
-        <StatusText text={`Stopped${waiting ? ` · ${waiting} queued` : ''}${tail}`}
+        <StatusText text={`Stopped${waiting ? ` · ${groupedCount(waiting)} queued` : ''}${tail}`}
           title={`Library analysis is stopped.${queued}${heldNote} Start runs it while Nebula is open.`} />
         <button type="button" className="commons-button commons-button--primary" disabled={readOnly} {...offlineMark(readOnly)} onClick={onStart}>Start</button>
       </span>
@@ -273,8 +274,8 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
   let title: string;
   if (state === 'budget_exhausted') {
     const budget = status.worker.budget ?? '∞';
-    text = `Stopped · call budget used (${status.worker.budget_used}/${budget})`;
-    title = `Library analysis is stopped because it used ${status.worker.budget_used} of this run’s ${budget} calls. Restart Nebula to reset it.`;
+    text = `Stopped · call budget used, ${groupedCount(status.worker.budget_used)} of ${groupedCount(budget)}`;
+    title = `Library analysis is stopped because it used ${groupedCount(status.worker.budget_used)} of this run’s ${groupedCount(budget)} calls. Restart Nebula to reset it.`;
   } else if (state === 'cap_reached' || status.meter.remaining === 0) {
     // Settings takes a cap from 0: a cap of 0 never resets, and a cap lowered
     // below today's calls is not the number made (review of sf).
@@ -284,16 +285,16 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
       title = 'Library analysis is paused. Settings has “Analysis calls per day” at 0, so it reads nothing. Raise it to resume.';
     } else {
       const resets = clockTime(new Date(status.meter.resets_at));
-      text = `Paused until ${resets} · daily cap`;
-      title = `Library analysis is paused. It made ${calls} analysis calls today, and Settings has “Analysis calls per day” at ${cap}. It resumes on its own at ${resets}.`;
+      text = 'Paused · daily cap';
+      title = `Library analysis is paused. It made ${groupedCount(calls)} analysis calls today, and Settings has “Analysis calls per day” at ${groupedCount(cap)}. Resumes at ${resets}, when the daily cap resets.`;
     }
   } else if (state === 'paused_load') {
-    text = `Paused · computer busy (${status.load}/${status.load_threshold})`;
-    // GM, round 3f: drop "load average".
-    title = `Library analysis is paused while this computer is busy. Its load is ${status.load}, above the ${status.load_threshold} set in “Pause above load” in Settings. It resumes on its own when the load drops.`;
+    // Design: the reading lives in the tooltip so the line fits beside Stop.
+    text = 'Paused · computer busy';
+    title = `Library analysis is paused while this computer is busy. Load ${status.load} is above your pause limit of ${status.load_threshold} (“Pause above load”, under Meter in Settings). Analysis resumes on its own when the load drops.`;
   } else if (waiting || state === 'analyzing') {
-    text = `Analyzing${waiting ? ` · ${waiting} queued` : ''}`;
-    title = `Library analysis is reading references${waiting ? `: ${waiting} waiting` : ''}.`;
+    text = `Analyzing${waiting ? ` · ${groupedCount(waiting)} queued` : ''}`;
+    title = `Library analysis is reading references${waiting ? `: ${groupedCount(waiting)} waiting` : ''}.`;
   } else {
     text = 'Idle';
     title = 'Library analysis is running and has nothing to read. New references are read as they arrive.';
@@ -688,7 +689,7 @@ function CommonsViewBody({ view }: {
     try {
       const { results } = await commonsApi.uploadFiles(collectionId, files);
       const failed = results.filter((r) => !r.ok);
-      setNotice(`Added ${results.length - failed.length} of ${results.length}.`);
+      setNotice(`Added ${groupedCount(results.length - failed.length)} of ${groupedCount(results.length)}.`);
       // Never the backend's raw `error` (GM): its reason code, mapped.
       setUploadFailures(failed.map(uploadFailureCopy));
       setError(null);
@@ -724,7 +725,7 @@ function CommonsViewBody({ view }: {
   const importMoodboards = async () => {
     try {
       const r = await commonsApi.importMoodboards();
-      setNotice(`Imported ${r.added} from ${r.collections} moodboards; skipped ${r.skipped.length}.`);
+      setNotice(`Imported ${groupedCount(r.added)} from ${groupedCount(r.collections)} moodboards; skipped ${groupedCount(r.skipped.length)}.`);
       await loadCollections();
       refresh();
     } catch (e) {

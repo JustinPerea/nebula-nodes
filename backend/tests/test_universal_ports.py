@@ -147,8 +147,8 @@ def _backend_result(case: dict) -> dict:
 def _expected(case: dict) -> dict:
     """The picker's result, with the fixture's `backendChanges` for the case:
     a fixed table, written out, never derived from the code under test (PR
-    #198 review 2, N1). A Replicate model's settings are labeled by their key
-    in sentence case there ("Guidance scale"; GM, PR #198 r1 item 7)."""
+    #198). A Replicate model's settings are labeled by their key
+    in sentence case there ("Guidance scale"; design, PR #198)."""
     return {**case["expected"], **{key: value for key, value in PICKER["backendChanges"].get(case["name"], {}).items()
                                    if key != "why"}}
 
@@ -458,7 +458,7 @@ def _two_photos_on_an_eye(api):
 
 
 def test_a_proposal_model_swap_lists_the_wires_accept_removes(api):
-    """GM - Design, PR #216 r3 (9): a model change in a proposal drops the
+    """Design, PR #216 (9): a model change in a proposal drops the
     wires the new model has no port for, as the picker does for the person;
     the view lists them, the plan line and the count say so, and Accept
     removes exactly those."""
@@ -480,7 +480,7 @@ def test_a_proposal_model_swap_lists_the_wires_accept_removes(api):
     import main as main_module
     from services.canvas_proposals import update_text
 
-    assert update_text(main_module.canvas_proposals.get(view["id"])) == "Claude Desktop proposes 3 changes on the canvas"
+    assert update_text(main_module.canvas_proposals.get(view["id"])) == "Proposes 3 changes on the canvas"
     accepted = api.client.post(f"/api/canvas/proposals/{view['id']}/accept",
                                headers={**PERSON, "X-Nebula-Proposal-Key": _proposal_key(api, view["id"])}, json={})
     assert accepted.status_code == 200, accepted.text
@@ -586,6 +586,34 @@ def test_the_picker_route_configures_the_node_and_prunes_its_wires(api):
     assert unnamed.status_code == 403, unnamed.text
     assert unnamed.json()["code"] == "person_required"
     assert "PUT /api/graph/node" in unnamed.json()["detail"]
+
+
+def test_the_picker_routes_agent_row_names_the_node_and_the_model_and_the_person_makes_none(api, monkeypatch):
+    """The row is the acting agent's own (design): "Set “Eye”’s model to Claude
+    Sonnet 4.5", the model by its catalog name, never its provider or id. Only
+    the person reaches this route today, so no agent row shows; with the gate
+    lifted (below) the row is the agent's, and the person's own pick makes none."""
+    import main as main_module
+
+    _warm_openrouter()
+    eye = api.graph.add_node("openrouter-universal", {"model": "openai/gpt-4o"})
+    api.graph.set_label(eye, "Eye")
+
+    def rows():
+        return [(event["agent"]["name"], event.get("say")) for event in api.sent
+                if event.get("type") == "agentPresence" and event.get("say")]
+
+    lines: list[str] = []
+    monkeypatch.setattr(main_module, "publish_action", lines.append)
+    assert api.client.post(f"/api/graph/node/{eye}/model", headers=PERSON,
+                           json={"model": "openai/gpt-4o"}).status_code == 200
+    assert rows() == [] and lines == []
+    monkeypatch.setattr(main_module, "require_person", lambda *args, **kwargs: None)
+    assert api.client.post(f"/api/graph/node/{eye}/model", headers=AGENT,
+                           json={"model": "anthropic/claude-sonnet-4.5"}).status_code == 200
+    assert rows() == [("Claude Desktop", "Set “Eye”’s model to Claude Sonnet 4.5")]
+    assert [event["nodeIds"] for event in api.sent if event.get("type") == "agentPresence"] == [[eye]]
+    assert lines == []
 
 
 def test_the_picker_route_for_replicate_returns_the_inspectors_controls(api):
@@ -776,7 +804,7 @@ def test_a_model_change_that_leaves_only_the_basic_ports_refuses_their_wires(api
     assert api.graph.edges == []
 
 
-# -- round 3b (GM - Design, PR #216 r4; review 2 wire-drop and plan pins) ----
+# -- (design, PR #216; wire-drop and plan pins) ----
 
 def _swap(api, eye, model="anthropic/claude-sonnet-4.5", **extra):
     return api.client.post("/api/canvas/proposals", headers=AGENT, json={
@@ -789,7 +817,7 @@ def _accept(api, proposal_id):
 
 
 def test_a_cleared_model_is_refused_with_unwire(api):
-    """GM r4 8: the drop applies only to a swap to a known model; clearing the
+    """Design: the drop applies only to a swap to a known model; clearing the
     model keeps the agents' `unwire` refusal (SKILL.md, MCP-SETUP.md, the
     edit_canvas docstring and the CLI help say so)."""
     _warm_openrouter()
@@ -802,7 +830,7 @@ def test_a_cleared_model_is_refused_with_unwire(api):
 
 
 def test_the_same_model_again_with_ports_read_again_says_inputs_updated(api):
-    """GM r4 8: the model line reads "GPT-4o · inputs updated" (never "X → X")
+    """Design: the model line reads "GPT-4o · inputs updated" (never "X → X")
     and the wires its re-read ports drop are listed as removed."""
     _warm_openrouter()
     photos, eye, _ask = _two_photos_on_an_eye(api)
@@ -822,7 +850,7 @@ def test_the_same_model_again_with_ports_read_again_says_inputs_updated(api):
 
 
 def test_a_failed_read_at_accept_tells_the_person_and_keeps_the_proposal(api, monkeypatch):
-    """Review 2 wire-drop LOW-4: when the provider can't be read at Accept the
+    """When the provider can't be read at Accept the
     person reads their own line (never the agents' `unwire`), and the
     proposal stays open, so Accept works once the read does."""
     import main as main_module
@@ -863,7 +891,7 @@ def test_a_failed_read_at_accept_tells_the_person_and_keeps_the_proposal(api, mo
 
 
 def test_accept_refuses_a_removed_wire_re_pointed_to_another_node(api):
-    """Review 2 R1: the drop check compares the wires, not their count."""
+    """The drop check compares the wires, not their count."""
     _warm_openrouter()
     photos, eye, _ask = _two_photos_on_an_eye(api)
     view = _swap(api, eye).json()["proposal"]
@@ -892,7 +920,7 @@ def _banana_between(api):
 
 
 def test_a_swap_drops_wires_on_the_output_side_too(api):
-    """Review 2 R10: a wire leaving the node from an output the new model
+    """A wire leaving the node from an output the new model
     doesn't have is dropped and listed, as one arriving is."""
     _warm_openrouter()
     photo, banana, eye = _banana_between(api)
@@ -903,7 +931,7 @@ def test_a_swap_drops_wires_on_the_output_side_too(api):
 
 
 def test_accept_refuses_a_removed_wire_moved_to_another_port(api):
-    """Review 2 R2: same nodes, same count, another handle."""
+    """Same nodes, same count, another handle."""
     _warm_openrouter()
     _photo, banana, eye = _banana_between(api)
     view = _swap(api, banana).json()["proposal"]
@@ -916,7 +944,7 @@ def test_accept_refuses_a_removed_wire_moved_to_another_port(api):
 
 
 def test_a_reopen_checks_the_wires_it_removes(api):
-    """Review 2 R3/R4 (B20): the reopen's misfit check stages with drops and
+    """B20: the reopen's misfit check stages with drops and
     compares them, as Accept does."""
     import asyncio
 
@@ -933,7 +961,7 @@ def test_a_reopen_checks_the_wires_it_removes(api):
 
 
 def test_accept_journals_each_removed_wire_as_the_persons(api):
-    """Review 2 R5-R7, R13 (B19): one edge.removed per dropped wire, by the
+    """R13 (B19): one edge.removed per dropped wire, by the
     person, naming the proposal, in the journal's words."""
     import main as main_module
 
@@ -941,7 +969,7 @@ def test_accept_journals_each_removed_wire_as_the_persons(api):
     photos, eye, _ask = _two_photos_on_an_eye(api)
     view = _swap(api, eye).json()["proposal"]
     created = [e for e in main_module.canvas_events.read(after=0, limit=200)["events"] if e["kind"] == "proposal.created"]
-    # Review 2 N1: the journal counts the removals as the Update does.
+    # The journal counts the removals as the Update does.
     assert created[-1]["data"]["removes"] == 2
     assert _accept(api, view["id"]).status_code == 200
     removed = [e for e in main_module.canvas_events.read(after=0, limit=200)["events"] if e["kind"] == "edge.removed"]
@@ -953,7 +981,7 @@ def test_accept_journals_each_removed_wire_as_the_persons(api):
 
 
 def test_wire_words_are_pinned(api):
-    """Review 2 L5 (B14, B15, B23): the exact names and port label on a
+    """B14, B15, B23: the exact names and port label on a
     removed wire (read on the live graph: the staged one has no "images"),
     and on a new wire into a renamed new node."""
     _warm_openrouter()
@@ -971,7 +999,7 @@ def test_wire_words_are_pinned(api):
 
 
 def test_the_cli_prints_each_removed_wire(api):
-    """Review 2 R11."""
+    """The CLI prints each removed wire."""
     from cli.formatter import format_proposal
 
     _warm_openrouter()
@@ -983,14 +1011,14 @@ def test_the_cli_prints_each_removed_wire(api):
 
 
 def test_names_follow_a_rename_while_the_proposal_is_open(api):
-    """GM r4 4 (review 2 N2): the card, the plan line and get_proposal read
+    """Design: the card, the plan line and get_proposal read
     the node's name now; the note stays as the agent wrote it; the canvas
     hears the new view."""
     _warm_openrouter()
     photos, eye, _ask = _two_photos_on_an_eye(api)
     view = _swap(api, eye, run=[eye]).json()["proposal"]
     assert view["cost"]["notReady"][0]["person"].startswith("“Second take” ")
-    # Review 3 LOW-2: an edit that renames nothing re-sends nothing, the far
+    # An edit that renames nothing re-sends nothing, the far
     # ends of the wires Accept removes counted as shown already.
     api.sent.clear()
     api.client.put(f"/api/graph/node/{eye}/label", headers=PERSON, json={"label": "Second take"})
@@ -1015,7 +1043,7 @@ def test_names_follow_a_rename_while_the_proposal_is_open(api):
     api.sent.clear()
     api.client.put(f"/api/graph/node/{eye}/label", headers=PERSON, json={"label": "Final look"})
     assert not [m for m in api.sent if m.get("type") == "proposalOpened"]
-    # Review 3 LOW-2: the far end of a wire Accept removes follows a rename
+    # The far end of a wire Accept removes follows a rename
     # too, on the card (a re-send) and in get_proposal.
     renamed = api.client.put(f"/api/graph/node/{photos[0]}/label", headers=PERSON, json={"label": "Hero photo"})
     assert renamed.status_code == 200, renamed.text
@@ -1038,7 +1066,7 @@ def test_names_follow_a_rename_while_the_proposal_is_open(api):
 
 
 def test_a_universal_nodes_paid_run_names_its_model(api):
-    """GM r4 3 (review 2 L3): "Claude Sonnet 4.5 on your OpenRouter key",
+    """Design: "Claude Sonnet 4.5 on your OpenRouter key",
     never "OpenRouter on your OpenRouter key"."""
     _warm_openrouter()
     _photos, eye, _ask = _two_photos_on_an_eye(api)
@@ -1052,7 +1080,7 @@ def test_a_universal_nodes_paid_run_names_its_model(api):
 
 
 def test_universal_nodes_name_the_chosen_model_everywhere(api):
-    """GM r5 (shot 03): "“Second look” · GPT-4o", never "· OpenRouter", in
+    """Design (shot 03): "“Second look” · GPT-4o", never "· OpenRouter", in
     the panel titles as in the plan line; one helper
     (canvas_proposals.model_label) feeds both, and get_proposal and the CLI
     read the same view."""

@@ -40,6 +40,11 @@ import '../../styles/world-preview.css';
 import { useDialogFocusTrap } from '../../hooks/useDialogFocusTrap';
 import { failureMessage } from '../../lib/errorCopy';
 import { ModalPortal } from '../ModalPortal';
+import { LineText } from '../LineText';
+
+/** What a person reads for the viewer's state, after the splat detail and a dot ("100K splats · loading"):
+ * written words rather than the stored value, lower case after the dot (design). */
+const VIEWER_STATUS_LABELS: Record<WorldViewerStatus, string> = { loading: 'loading', ready: 'ready', error: 'couldn’t load' };
 
 const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
@@ -276,7 +281,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
                 <RotateCcw size={15} strokeWidth={1.7} aria-hidden="true" />
               </button>
               <span className={`world-modal__status world-modal__status--${viewerStatus}`} role="status" aria-live="polite">
-                {activeOption ? `${activeOption.detail} · ${viewerStatus}` : 'No splat preview'}
+                {activeOption ? `${activeOption.detail} · ${VIEWER_STATUS_LABELS[viewerStatus]}` : 'No splat preview'}
               </span>
             </div>
 
@@ -384,7 +389,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
                 )}
                 {downloadState?.status === 'error' && (
                   <span className="world-modal__download-error" role="alert">
-                    {downloadState.message}
+                    <LineText text={downloadState.message} />
                   </span>
                 )}
               </div>

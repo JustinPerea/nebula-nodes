@@ -189,7 +189,7 @@ describe('Q2: a grade starting and finishing, through the pane\'s poll', () => {
 
 async function correct() {
   fireEvent.click(await screen.findByText('Edit grades'));
-  fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'serif' } });
+  fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
 }
 
 describe('Q3: what unsaved corrections lock', () => {

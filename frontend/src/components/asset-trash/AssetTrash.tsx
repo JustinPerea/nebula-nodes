@@ -1,6 +1,8 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, RotateCcw, X } from 'lucide-react';
 import { storedImageView } from '../../lib/storedImage';
+import { writtenDateTime } from '../../lib/writtenDateTime';
 import { OutsideImageNote } from '../OutsideImageNote';
 import { InNoticeRegion } from '../InNoticeRegion';
 import {
@@ -51,7 +53,7 @@ function thumbnailOf(item: TrashedItem): string | null {
 function deletedLine(item: TrashedItem): string {
   const date = new Date(item.deletedAt);
   const when = Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date)
+    ? writtenDateTime(date)
     : '';
   const who = deletedByLabel(item);
   return ['Deleted', when, who ? `by ${who}` : ''].filter(Boolean).join(' ');
@@ -220,12 +222,12 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
       <div className="asset-trash__header">
         <button type="button" className="asset-trash__toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
           <ChevronRight aria-hidden="true" />Recently deleted
-          <span className="asset-trash__count" aria-hidden="true">{items.length}</span>
+          <span className="asset-trash__count" aria-hidden="true">{groupedCount(items.length)}</span>
         </button>
         {open && items.length > 0 && (() => {
           const shown = items;
           const lost = atStake?.(shown) ?? null;
-          const ask = shown.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${shown.length} ${noun.counted} for good?`;
+          const ask = shown.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${groupedCount(shown.length)} ${noun.counted} for good?`;
           return <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy} lock={purgeLock} prompt={lost ? `${ask} ${lost.text}` : ask} title={lost?.title}
             onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, shown),
               () => onPurged?.(shown.map((item) => item.id)))} />;

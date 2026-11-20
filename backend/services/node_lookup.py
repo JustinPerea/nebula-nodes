@@ -3,7 +3,7 @@
 Agents name a node type the way the canvas shows it ("Moodboard") as often as
 by id (`nebula-moodboard`). Lookups (`nebula info`/`describe`, MCP
 `describe_node`) take either: an id always wins, and a display name counts
-when exactly one node type has it, ignoring case and outer spaces. Writes
+when exactly one node type has it (or had it before a rename), ignoring case and outer spaces. Writes
 (edit_canvas, propose_change, `nebula apply`/`propose`/`create`/`quick`) take
 ids only, since they store and bill by id and a display name can be renamed or
 come to be shared; their refusal names the node the text was the name of
@@ -14,6 +14,8 @@ from __future__ import annotations
 import difflib
 import re
 from typing import Any, Mapping, NamedTuple
+
+from services.node_route import FORMER_DEFAULT_TITLES
 
 Definitions = Mapping[str, Mapping[str, Any]]
 
@@ -39,13 +41,16 @@ def display_name(definitions: Definitions, definition_id: str) -> str:
 
 def named(text: str, definitions: Definitions) -> tuple[str, ...]:
     """Ids of the node types the text names, other than by its exact id: the
-    display name, or the id, equal to it ignoring case and outer spaces. Sorted."""
+    display name, the id, or the name it had before a rename
+    (FORMER_DEFAULT_TITLES: "Jev Box (experimental)"), equal to it ignoring
+    case and outer spaces. Sorted."""
     key = _key(text)
     if not key:
         return ()
     return tuple(sorted(
         definition_id for definition_id, definition in definitions.items()
-        if key in (definition_id.casefold(), _key(str(definition.get("displayName") or "")))
+        if key in (definition_id.casefold(), _key(str(definition.get("displayName") or "")),
+                   _key(FORMER_DEFAULT_TITLES.get(definition_id, "")))
     ))
 
 

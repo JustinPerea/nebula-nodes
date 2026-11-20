@@ -120,8 +120,6 @@ describe('the layer order: no chip over a menu', () => {
   it('the chips\' box uses the chips token, and every transient layer uses the transient one', () => {
     expect(read('agentEdgeChips.css')).toMatch(/\.agent-edge-chips \{[^}]*z-index:\s*var\(--sr-layer-edge-chips/);
     expect(read('slava-restraint.css')).toMatch(/\.context-menu,\s*body\.app-slava-restraint \.connection-popup \{[^}]*z-index:\s*var\(--sr-layer-transient\)/);
-    expect(read('panels.css')).toMatch(/body:not\(\.app-slava-restraint\) \.context-menu \{\s*z-index:\s*var\(--sr-layer-transient/);
-    expect(read('panels.css')).toMatch(/body:not\(\.app-slava-restraint\) \.connection-popup \{\s*z-index:\s*var\(--sr-layer-transient/);
     expect(read('asset-move.css')).toMatch(/z-index:\s*var\(--sr-layer-transient/);
     expect(read('canvas-toolbar.css')).toMatch(/toolbar--actions-open \{\s*z-index:\s*var\(--sr-layer-transient/);
   });

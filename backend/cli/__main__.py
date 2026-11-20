@@ -344,7 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the person accepts, and lists them (`removes` lines, removedEdges in --json); a --set that "
             "clears the model is refused, and `nebula apply` "
             "still refuses that change until you --unwire them. Each proposal also "
-            "posts an Update (\"Codex proposes 3 changes on the canvas\", with Review) that the person sees "
+            "posts an Update (\"Proposes 3 changes on the canvas\" under your name, with Review) that the person sees "
             "on every screen, so don't also send a `nebula note` about it; `nebula notes` shows how it ended."
         ),
     )
@@ -519,17 +519,26 @@ def build_parser() -> argparse.ArgumentParser:
     # -- Execution --
     wait_help = ("Seconds to wait before returning 'still running' (default 100). "
                  "The run keeps going either way; exit code 2 means it was still running.")
+    verbose_help = ("Print every output value whole. Without it, a dict, a list or a string over 200 "
+                    "characters prints as one line with its size")
+    json_help = "Print the raw result JSON (the exit code is the same)"
     run_p = sub.add_parser("run", help="Execute a node and its dependencies")
     run_p.add_argument("node_ref", help="Node reference (e.g. n2)")
     run_p.add_argument("--wait", type=float, default=100.0, help=wait_help)
+    run_p.add_argument("--verbose", action="store_true", help=verbose_help)
+    run_p.add_argument("--json", action="store_true", help=json_help)
 
     run_all_p = sub.add_parser("run-all", help="Execute the entire graph")
     run_all_p.add_argument("--wait", type=float, default=100.0, help=wait_help)
+    run_all_p.add_argument("--verbose", action="store_true", help=verbose_help)
+    run_all_p.add_argument("--json", action="store_true", help=json_help)
 
     result_p = sub.add_parser("result", help="Results of a run that was still running")
     result_p.add_argument("run_id", help="Run id (printed by `nebula run`)")
     result_p.add_argument("--wait", type=float, default=0.0,
                           help="Wait up to this many seconds for it to finish (max 300)")
+    result_p.add_argument("--verbose", action="store_true", help=verbose_help)
+    result_p.add_argument("--json", action="store_true", help=json_help)
 
     cancel_p = sub.add_parser("cancel", help="Stop a run")
     cancel_p.add_argument("run_id", help="Run id (printed by `nebula run`)")
@@ -912,9 +921,11 @@ def main() -> None:
         "clear": lambda: graph.run_clear(client, force=args.force),
         "path": lambda: path.run(client, args.node_ref),
         "splat": lambda: splat.run(client, args.node_ref, args.port),
-        "run": lambda: execute.run_node(client, args.node_ref, wait=args.wait),
-        "run-all": lambda: execute.run_all(client, wait=args.wait),
-        "result": lambda: execute.run_result(client, args.run_id, wait=args.wait),
+        "run": lambda: execute.run_node(client, args.node_ref, wait=args.wait, verbose=args.verbose,
+                                          as_json=args.json),
+        "run-all": lambda: execute.run_all(client, wait=args.wait, verbose=args.verbose, as_json=args.json),
+        "result": lambda: execute.run_result(client, args.run_id, wait=args.wait, verbose=args.verbose,
+                                              as_json=args.json),
         "cancel": lambda: execute.run_cancel(client, args.run_id),
         "spend": lambda: spend.run(client),
         "status": lambda: (agents_cmd.run_status(client, args) if agents_cmd.wants_status_line(args)

@@ -1,11 +1,11 @@
 """Agents propose Idol runs when a Hugging Face token is set (a product
-decision, PR #203 round 7; where the check sits, Justin decided 2026-10-31).
+decision, PR #203; where the check sits, Justin decided 2026-10-31).
 
 With HF_TOKEN set, an Idol run uses the person's own ZeroGPU allowance, and
 past it Hugging Face bills a PRO, Team or Enterprise account's prepaid
 credits. Nebula prices Idol at $0 (sourced) and keeps it that way: the route
-carries a separate "may bill" flag (RouteSpec ``mayBillWithKey``). Until
-round 19 ``agent_spend.decide`` refused an agent's whole run that included
+carries a separate "may bill" flag (RouteSpec ``mayBillWithKey``). Until the Idol gate change,
+``agent_spend.decide`` refused an agent's whole run that included
 such a node; now only the Hugging Face call is gated: every agent run route
 (/api/execute, /api/execute-node, /api/graph/run, /api/quick and
 /api/cinema/generate-shot) starts the run, and the Idol node stops at its
@@ -209,7 +209,7 @@ def test_nebula_run_and_mcp_run_nodes_start_an_agents_idol_run_with_or_without_a
     assert any(idol in ran for ran in gated.ran)
 
 
-# -- a Cinema shot (review 7, LOW-3) and the person's run over a placeholder ---------------
+# -- a Cinema shot and the person's run over a placeholder ---------------
 
 
 def _idol_shot(api, headers):
@@ -254,7 +254,7 @@ def _idol_placeholder(api):
 
 
 def test_the_persons_run_over_an_idol_placeholder_without_a_token_needs_no_confirm(gated):
-    """GM, PR #203 r15 item 2: free with no token, so no paid confirm on its own."""
+    """Design, PR #203: free with no token, so no paid confirm on its own."""
     gated.keys({})
     idol = _idol_placeholder(gated)
     response = _execute(gated, PERSON, "r-free", idol)
@@ -273,7 +273,7 @@ def test_the_persons_run_over_an_idol_placeholder_with_a_token_still_asks(gated)
     assert gated.ran == []
 
 
-# -- one "token is set" for the gate, the handler and Settings (review 7, NIT-4) -----------
+# -- one "token is set" for the gate, the handler and Settings -----------
 
 
 def _key_cases():

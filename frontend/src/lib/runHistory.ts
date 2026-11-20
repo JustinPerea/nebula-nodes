@@ -41,6 +41,8 @@ export interface ActiveRun {
 export interface RunSnapshotNode {
   id: string;
   definitionId: string;
+  /** The name the person gave the node when it ran. Absent when it ran under its default title. */
+  label?: string;
   params: Record<string, unknown>;
   outputs: Record<string, unknown>;
 }
@@ -54,6 +56,9 @@ export interface RunSnapshotEdge {
 }
 
 export interface RunGraphSnapshot {
+  /** Set when the snapshot kept the person's node names (`label`), so a node with no label
+   * ran unnamed. Absent on records saved before names were kept. */
+  labelsKept?: true;
   nodes: RunSnapshotNode[];
   edges: RunSnapshotEdge[];
 }

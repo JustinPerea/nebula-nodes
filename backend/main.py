@@ -220,8 +220,8 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, kept_lines, nothing_went_back,
-    plan_undo, touched_nodes,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, activity_line, build_inverse, capture_before, kept_lines,
+    nothing_went_back, plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
@@ -272,7 +272,7 @@ from services import channel_listeners
 from services import person_thread
 from services import push_ledger
 from services import pending_nodes
-from services.run_done_cards import AgentRunBook, done_text, thumbnail_for
+from services.run_done_cards import AgentRunBook, done_text, thumbnail_for, waiting_text
 from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
@@ -5400,9 +5400,9 @@ async def upload_file_consolidated(
         # The same record /api/graph/node keeps: the history, `nebula watch`
         # and the chat's action line credit the node to whoever uploaded it
         # (an agent's `nebula upload` / upload_file, or the person's drop).
-        publish_action(f"Added {node_type} ({node_id})")
         _journal("node.added", project_id=written_to, **added_event)
-        await _show_agent({"nodeId": node_id}, say=f"Added {_quoted(_node_label(node_id))}", did=_did("Added", node_id))
+        await _show_agent({"nodeId": node_id}, say=f"Added {_quoted(_node_label(node_id))}", did=_did("Added", node_id),
+                          nodes=[node_id])
         response["nodeId"] = node_id
         if node_type == "image-input":
             response["thumbUrl"] = url
@@ -7853,6 +7853,7 @@ async def _show_agent(
     log_whole: bool = False,
     person_say: str | None = None,
     proposal_id: str | None = None,
+    nodes: Sequence[str] | None = None,
 ) -> None:
     """Move the calling agent's cursor; a no-op for the browser's own requests.
 
@@ -7876,6 +7877,9 @@ async def _show_agent(
     ``proposal_id`` is the proposal a ``propose`` cursor waits on: the event
     carries it (``proposalId``), so a tab ends the cursor's held state when
     that proposal is settled, and a reload's replay still knows which.
+    ``nodes`` are the canvas nodes the action touched, as a structured field
+    of the event (``nodeIds``) for a reader that needs them: a line names
+    nodes by their canvas names, never ids (design).
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -7893,7 +7897,7 @@ async def _show_agent(
         if log is not None and clean_log(log, whole=log_whole) == clean_say(say):
             log = None
         event = _point(identity, target=target, origin=origin, action=action, say=say, did=did, log=log,
-                       log_whole=log_whole)
+                       log_whole=log_whole, node_ids=nodes)
         if proposal_id:
             event["proposalId"] = proposal_id
         person = _person_form(event, identity, headers, shown=shows)
@@ -7910,7 +7914,8 @@ async def _show_agent(
 
 
 async def _say_agent_action(say: str, *, target: dict[str, Any] | None = None, action: str = "click",
-                            names: dict[str, Any] | None = None) -> None:
+                            names: dict[str, Any] | None = None, nodes: Sequence[str] | None = None,
+                            agent: AgentIdentity | None = None, log: str | None = None) -> None:
     """Tell open canvases what the calling agent did. With no ``target``
     (a run of the whole canvas, a board's delete), no cursor can go: it is
     the cursor's own event without a target, so the Agent log lists it under
@@ -7925,13 +7930,22 @@ async def _say_agent_action(say: str, *, target: dict[str, Any] | None = None, a
     session's numbered one ("Claude · 2"), never a second unnumbered cursor
     that displaces session 1. A no-op for the browser's own requests; like
     _show_agent, it never fails the route that called it.
+
+    The row is the agent's own, so its words never repeat its name. ``agent``
+    is the agent the row belongs to when it is not the caller: the person
+    accepting a proposal makes the request, and the row is under the agent
+    that proposed it. ``nodes`` are the canvas nodes the action touched, a
+    structured field of the event (``nodeIds``), as in _show_agent. ``log``
+    is Nebula's own whole line for the Agent log when ``say`` (the bubble,
+    cut at its width) holds less of it; it is never cut.
     """
     headers = current_request_headers()
-    identity = identify_agent(headers)
+    identity = agent or identify_agent(headers)
     if identity is None:
         return
     try:
-        event = _point(identity, target=target, action=action, say=say, names=names)
+        whole = {"log": log, "log_whole": True} if log and log != say else {}
+        event = _point(identity, target=target, action=action, say=say, names=names, node_ids=nodes, **whole)
         # With no target the person form is the event and its id (the Agent
         # log lists it once by it); with one, the session's numbered cursor.
         await _broadcast_presence(event, _person_form(event, identity, headers))
@@ -8199,11 +8213,14 @@ class _RenderingSceneRefusal(CodedRefusal):
     any run rendering them can be stopped), so the canvas can word a
     multi-select delete's kept scene in GM's form (PR #198 review 4, M1) and
     put back only those shots of a refused save (review 5), without reading
-    it out of the line."""
+    it out of the line. ``run_ids`` (not in the answer) names the runs, for
+    the undo line that says which."""
 
-    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any]) -> None:
+    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any],
+                 run_ids: Sequence[str] = ()) -> None:
         super().__init__(status_code, detail, {"code": "rendering_shots", "rendering": rendering})
         self.rendering = rendering
+        self.run_ids = list(run_ids)
 
 
 def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
@@ -8234,7 +8251,7 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     # agent refusal"); a no-op for the person's own request.
     _log_agent_refusal(specific)
     raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(specific, person, route="canvas"),
-                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable})
+                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable}, run_ids)
 
 
 _agent_log_tasks: set[asyncio.Task[None]] = set()
@@ -8516,6 +8533,53 @@ def _quoted(label: str) -> str:
     shows it (GM - Design, 2026-10-25: Connecting “A” to “B”), without
     doubling quotes already around the name (services/node_names.py)."""
     return node_names.quoted(label)
+
+
+def _named_nodes(node_ids: Sequence[str]) -> str:
+    """Nodes by their canvas names in an Agent log row (design): up to 3 by
+    name, "“A”", "“A” and “B”", "“A”, “B” and “C”"; from 4 a count, "4
+    nodes". The one rule every row that lists nodes uses (the undo lines'
+    too: services/node_names.node_name_list)."""
+    return node_names.node_name_list([_node_label(node_id) for node_id in node_ids])
+
+
+def _cli_run_line(results: Mapping[str, Any], errors: Mapping[str, Any], gated: Iterable[str], seconds: float,
+                  pending_note: str | None, *, stopped: Iterable[str] = (),
+                  names: Mapping[str, str] | None = None) -> str:
+    """The agent's row for a finished CLI run (design), in canvas words and
+    whole seconds: "Ran “Hero shot” and “Sky” in 12 s"; with a failure "Ran 4
+    nodes in 12 s. “Hero shot” failed."; nodes a gate skipped "“Sky” was
+    skipped by a gate", then the placeholders' skip line. One sentence has no
+    period; two or more end each with one.
+
+    ``stopped`` are the nodes that stopped at a call only the person may make
+    (a proposal, r211 item 3): they didn't run and didn't fail, so they are
+    neither in the ran list nor the failed sentence; the row says what the
+    done card says, "“Idol” is waiting for you to run it because it could bill
+    your Hugging Face account." (run_done_cards.waiting_text). ``names`` are
+    the run's own node names by id, taken when the run was admitted: a node
+    that has left the canvas since is still named, never by its id."""
+    waiting = [node_id for node_id in errors if node_id in set(stopped)]
+    failed = [node_id for node_id in errors if node_id not in set(waiting)]
+    gone = list(gated)
+    ran = [*results, *failed]
+    known = dict(names or {})
+
+    def listed(node_ids: Sequence[str]) -> str:
+        return node_names.node_name_list([known.get(node_id) or _node_label(node_id) for node_id in node_ids])
+
+    took = "under 1 s" if seconds < 0.5 else f"{round(seconds)} s"
+    sentences = [f"Ran {listed(ran)} in {took}" if ran else "Nothing ran"]
+    if failed:
+        sentences.append(f"{listed(failed)} failed")
+    if waiting:
+        sentences.append(waiting_text({node_id: known.get(node_id) or _node_label(node_id) for node_id in waiting},
+                                      waiting).rstrip("."))
+    if gone:
+        sentences.append(f"{listed(gone)} {'was' if len(gone) == 1 else 'were'} skipped by a gate")
+    if pending_note:
+        sentences.append(pending_note.rstrip("."))
+    return sentences[0] if len(sentences) == 1 else " ".join(f"{sentence}." for sentence in sentences)
 
 
 # The Agents panel's verb for a point_at with nothing else behind it (Q125
@@ -9564,6 +9628,18 @@ async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _mark_tab_connected(snapshot: dict[str, Any]) -> None:
+    """Add ``view.connected``: a canvas tab is open now (any socket without an
+    agent marker, so a tab opened without the person link counts: it draws the
+    canvas and reports its view too), and ``view.kept``: that tab keeps edits of
+    its own, which hides its view from agents. ``stale`` stays "no view report
+    in 30 s", so a tab that is open but quiet reads as connected and stale
+    (design: the states in `nebula context`)."""
+    view = snapshot.setdefault("view", {})
+    view["connected"] = manager.canvas_open()
+    view["kept"] = manager.kept_in_tab()
+
+
 @app.get("/api/canvas/snapshot")
 async def get_canvas_snapshot() -> dict[str, Any]:
     """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors.
@@ -9572,6 +9648,7 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     read = selection_context.snapshot(cli_graph, node_registry)
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
     snapshot.update(tab_only_fields(read))
+    _mark_tab_connected(snapshot)
     # Why a node's last run failed, as its card says it (services/node_errors.py).
     key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
@@ -9725,6 +9802,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
     # The selection's nodes only the person's tab has, counted (review 17 agents-docs LOW-2).
     snapshot.update(tab_only_fields(read))
+    _mark_tab_connected(snapshot)
     catalog = project_store.read()  # every project's name, for the boards part
     active_id = catalog.get("activeProjectId")
     projects = catalog.get("projects") or {}
@@ -12149,7 +12227,6 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     ]
     created = _rf_created(list(id_map.values()), edge_ids)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Accepted {personal_agents.in_sentence(proposal.agent.name)}’s proposal ({counted(len(id_map), 'node')})")
     try:
         await manager.broadcast_raw(_proposal_closed_message(proposal))
     except Exception:  # noqa: BLE001
@@ -12319,10 +12396,10 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
         ref = question_set.update
         if not ref or question_set.is_open:
             continue
+        by = _question_resolved_by(question_set)
         try:
             result = await asyncio.to_thread(agent_notes.resolve_questions, ref["projectId"], ref["id"],
-                                             outcome=question_outcome_line(question_set),
-                                             by=_question_resolved_by(question_set))
+                                             outcome=question_outcome_line(question_set, closed_by=by), by=by)
         except (NoteError, ProjectStoreError):
             continue
         if result is None:
@@ -12701,7 +12778,7 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
                 by = _RESOLVED_BY.get(proposal.status) or (
                     {"kind": "agent", "name": proposal.agent.name} if proposal.status == "withdrawn" else {"kind": "system"})
                 result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                                 outcome=asset_outcome_line(proposal), by=by, proposal_id=proposal.id,
+                                                 outcome=asset_outcome_line(proposal, closed_by=by), by=by, proposal_id=proposal.id,
                                                  closed=_proposal_closed)
                 op, extra = "resolved", ({"unread": result["unread"]} if result else {})
         except (NoteError, ProjectStoreError):
@@ -12873,7 +12950,7 @@ async def _settle_proposal_updates() -> None:
         # open proposal still shares (the same agent's other ask on that
         # target) is the close handling's to retarget (_follow_asset_updates);
         # resolving it here, while that follow is under way, left the open ask
-        # under "Withdrawn by …".
+        # under "Withdrawn".
         if known and kind in _ASSET_UPDATE_KINDS and _shares_update(project_id, note["id"]):
             continue
         # Not in memory: Nebula restarted while it was open (Q108 a).
@@ -12988,10 +13065,11 @@ async def _follow_canvas_updates(proposals: list[Proposal], *, actor: Mapping[st
         ref = proposal.update
         if not ref or proposal.is_open:
             continue
+        by = _canvas_resolved_by(proposal, actor)
         try:
             result = await asyncio.to_thread(agent_notes.resolve_proposal, ref["projectId"], ref["id"],
-                                             outcome=canvas_outcome_line(proposal),
-                                             by=_canvas_resolved_by(proposal, actor), proposal_id=proposal.id,
+                                             outcome=canvas_outcome_line(proposal, closed_by=by),
+                                             by=by, proposal_id=proposal.id,
                                              closed=_proposal_closed)
         except (NoteError, ProjectStoreError):
             continue
@@ -13367,7 +13445,11 @@ async def accept_asset_proposal(proposal_id: str) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         pass
     await _follow_asset_updates([proposal])
-    publish_action(f"Accepted {personal_agents.in_sentence(proposal.agent.name)}’s proposal to {asset_proposal_summary(proposal)}")
+    # A row under the agent that proposed it, in the person's voice (design):
+    # the project cover is a link to one of the project's images and has no
+    # number anywhere, so it is "another image"; a moodboard's cover would be
+    # "image 3" (moodboard_edits), not a project's.
+    await _say_agent_action(f"You accepted its proposal to {asset_proposal_summary(proposal)}", agent=proposal.agent)
     return {"status": "accepted", "proposalId": proposal.id, "kind": proposal.kind,
             "targetId": proposal.target_id, **outcome}
 
@@ -16123,6 +16205,9 @@ def _graph_edit_origin() -> dict[str, Any]:
     link = _canvas_edit_link.get()
     if link:
         origin.update({key: link[key] for key in ("id", "undoes", "redoes") if key in link})
+        # Only the undo's own sync says it kept parts (the toast), never a journal event of its context.
+        if "undoes" in link and _undo_kept_parts.get():
+            origin["kept"] = True
     # The nodes this edit deleted, with the pins and proposals each delete
     # removed: a canvas that didn't send the edit keeps them in its undo step,
     # so its Cmd+Z puts them back too (_reattach_removed_pins).
@@ -16682,10 +16767,15 @@ async def _observe_agent_run(event: ExecutionEvent, run_id: str | None) -> None:
         await _broadcast_status_events([change])
 
 
-async def _finish_agent_run(run_id: str, *, cancelled: bool = False) -> None:
+async def _finish_agent_run(run_id: str, *, cancelled: bool = False, run_row_follows: bool = False) -> None:
     """The run ended: its marks go, and unless it was stopped, the agent's
     done card goes on the run's project's Updates (GM - Design, 2026-10-25).
-    One per run; never fails the run."""
+    One per run; never fails the run.
+
+    ``run_row_follows``: the run's own Agent log row ("Ran 4 nodes in 12 s.
+    “Hero shot” failed.", _cli_run_line) is about to be said, so the done
+    card's Agent log echo is skipped (design: one row per action). The card
+    itself stays in Updates."""
     run, events = agent_runs.finish(run_id)
     await _broadcast_status_events(events)
     record = execution_runs.get(run_id)
@@ -16696,15 +16786,17 @@ async def _finish_agent_run(run_id: str, *, cancelled: bool = False) -> None:
     if not succeeded and not failed:
         return  # nothing ran (every node skipped): nothing finished or failed
     try:
-        await _post_run_done(run, succeeded, failed)
+        await _post_run_done(run, succeeded, failed, log_echo=not run_row_follows)
     except Exception:  # noqa: BLE001 - the card is a notice; the run's own result stands
         logging.getLogger("nebula.done_cards").exception("could not post the done card for run %s", run_id)
 
 
-async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> None:
+async def _post_run_done(run: Any, succeeded: list[str], failed: list[str], *, log_echo: bool = True) -> None:
     labels = {node_id: _node_label(node_id) for node_id in run.planned}
+    # The card sits under the agent's header in Updates, and the Agent log row has its own: the line
+    # doesn't repeat the name (design r211).
     text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed,
-                              stopped=run.stopped)
+                              stopped=run.stopped, named=False)
     last = run.planned[-1]
     ref: dict[str, Any] = {"id": run.run_id, "nodeIds": list(run.planned), "lastNodeId": last, "outcome": outcome}
     if outcome != "failure" and succeeded:
@@ -16723,8 +16815,9 @@ async def _post_run_done(run: Any, succeeded: list[str], failed: list[str]) -> N
         await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                     unread=result["unread"], removed=result["removed"]))
         _journal_note(note, "canvas", actor=actor_for_identity(run.agent))
-    if outcome != "success":
-        # GM: "A failed run gets a card, plus the Agent log line."
+    if outcome != "success" and log_echo:
+        # GM: "A failed run gets a card, plus the Agent log line." Not when the
+        # run has its own row (a CLI run): that row names the failed nodes.
         try:
             # A stop for a proposal: the Agent log keeps the whole line, the
             # bubble its whole sentences that fit, never a cut word (GM, PR
@@ -17285,8 +17378,8 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     _journal_node_added(short_id)
     created = copy.deepcopy(cli_graph.nodes[short_id])
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Added {definition_id} ({short_id})")
-    await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
+    await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id),
+                      nodes=[short_id])
     return created
 
 
@@ -17336,16 +17429,13 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     _person_touched([edge["source"], edge["target"]])
     _journal_edge("edge.added", edge)  # before any await (round 8 of PR #114)
     await _broadcast_graph_sync(edit=True)
-    publish_action(
-        f"Connected {edge['source']}:{edge['sourceHandle']} → "
-        f"{edge['target']}:{edge['targetHandle']}"
-    )
     await _show_agent(
         {"nodeId": edge["target"], "handle": edge["targetHandle"]},
         origin={"nodeId": edge["source"], "handle": edge["sourceHandle"]},
         action="drag",
         say=f"Connecting {_quoted(_node_label(edge['source']))} to {_quoted(_node_label(edge['target']))}",
         did=_did("Connected", edge["target"]),
+        nodes=[edge["source"], edge["target"]],
     )
     return {"connection": f"{edge['source']}:{edge['sourceHandle']} -> {edge['target']}:{edge['targetHandle']}"}
 
@@ -17463,21 +17553,18 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     if edge is not None:
         _journal_edge("edge.added", edge)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Added {definition_id} ({short_id})")
     if edge is not None:
-        publish_action(
-            f"Connected {src}:{connect_spec.get('sourceHandle', '')} → "
-            f"{dst}:{connect_spec.get('targetHandle', '')}"
-        )
         await _show_agent(
             {"nodeId": dst, "handle": connect_spec.get("targetHandle", "")},
             origin={"nodeId": src, "handle": connect_spec.get("sourceHandle", "")},
             action="drag",
             say=f"Added {_quoted(_node_label(short_id))} and connected it",
             did=_did("Added", short_id),
+            nodes=[src, dst],
         )
     else:
-        await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id))
+        await _show_agent({"nodeId": short_id}, say=f"Added {_quoted(_node_label(short_id))}", did=_did("Added", short_id),
+                          nodes=[short_id])
     return response
 
 
@@ -17609,7 +17696,6 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
     }
     if created:
         await _broadcast_graph_sync(edit=True)
-        publish_action(f"Connected Cinema {node_id}:{port_id} to Veo ({target['id']})")
     return response
 
 
@@ -17959,8 +18045,6 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         scene_keys.note_write(_scene_scope(), node_id, _canvas_change_actor() if scene_key_after != scene_key_before else None,
                               scene_key_after, writing_agent)
     await _broadcast_graph_sync(edit=True)
-    if params:
-        publish_action(f"Updated {node_id} params")
     # What changed, as the card names it (GM - Design, round 16 of PR #195):
     # never the raw keys. The fields the agent sent that changed, when any
     # did, not ones a default filled in after.
@@ -17972,7 +18056,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     # there (PR #198 review 2, N4: "Updated “<node>”" is gone for good).
     await _show_agent({"nodeId": node_id}, shows="type" if keys else None,
                       words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
-                      did=_did("Changed", node_id) if keys else None)
+                      did=_did("Changed", node_id) if keys else None, nodes=[node_id] if keys else None)
     return updated
 
 
@@ -17982,8 +18066,50 @@ def _names_and(names: Sequence[str]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
+def _plain_edit_line(*, connected: Sequence[tuple[tuple[str, str], tuple[str, str]]],
+                     disconnected: Sequence[tuple[tuple[str, str], tuple[str, str]]],
+                     removed: Sequence[tuple[str, str]], readied: Sequence[tuple[str, str]]) -> tuple[str, list[str]]:
+    """The Agent log row (and the nodes it touched, for the zoom manifest) of
+    an apply that adds, changes, renames and moves nothing: it only connects,
+    disconnects, removes or makes placeholders ready (design r211 item 4).
+    Nodes are (id, name), wires ((id, name), (id, name)) from the source to
+    the target. One kind says its own words ("Connected “A” to “B”",
+    "Disconnected “A” from “B”", "Removed “A” and “B”", "Removed 4 nodes",
+    "Made “A” ready"); several wires of one kind name the nodes they join;
+    several kinds share the verb "Changed" over every node they touched, as
+    the row of an edit with a focus node does (_edit_log_line)."""
+    def distinct(pairs: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
+        return list({node_id: (node_id, name) for node_id, name in pairs}.values())
+
+    def listed(pairs: Sequence[tuple[str, str]]) -> str:
+        return node_names.node_name_list([name for _, name in pairs])
+
+    wired = distinct(end for wire in connected for end in wire)
+    unwired = distinct(end for wire in disconnected for end in wire)
+    kinds = [kind for kind in (("Connected", wired), ("Disconnected", unwired), ("Removed", distinct(removed)),
+                               ("Made", distinct(readied))) if kind[1]]
+    touched = distinct(end for _, group in kinds for end in group)
+    ids = [node_id for node_id, _ in touched]
+    if len(kinds) != 1:
+        return (f"Changed {listed(touched)}" if kinds else ""), ids
+    verb, group = kinds[0]
+    if verb == "Connected":
+        if len(connected) == 1:
+            (_, source), (_, target) = connected[0]
+            return f"Connected {_quoted(source)} to {_quoted(target)}", ids
+        return f"Connected {listed(group)}", ids
+    if verb == "Disconnected":
+        if len(disconnected) == 1:
+            (_, source), (_, target) = disconnected[0]
+            return f"Disconnected {_quoted(source)} from {_quoted(target)}", ids
+        return f"Disconnected {listed(group)}", ids
+    if verb == "Made":
+        return f"Made {listed(group)} ready", ids
+    return f"Removed {listed(group)}", ids
+
+
 def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
-                   others: Sequence[tuple[str, str]] = ()) -> str:
+                   others: Sequence[tuple[str, str]] = (), renamed_from: str | None = None) -> str:
     """An edit_canvas with no note, as the Agent log and the Message box's
     working line word it (GM r83.1; never the bubble's terse "changed 1",
     never an "and N more" hybrid). ``others`` are the edit's other nodes, as
@@ -17994,13 +18120,22 @@ def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
     Several nodes name the nodes and drop the settings: "Changed “Hero
     shot” and “Sky”", "Changed “Hero shot”, “Sky” and “Prompt”", from 4
     "Changed 4 nodes". Their verb is the one they all share, else
-    "Changed"."""
+    "Changed". Nodes with the same name are counted ("Added 2 “Combine Text”
+    nodes"), the names rule of node_names.node_name_list (design r211). One
+    rename says from what: "Renamed “Combine Text” to “Prefix”" (``renamed_from``
+    is the old name); two or more renames are a count, "Renamed 2 nodes"
+    (design r212). A mix says "Changed" only when the verbs differ: nodes
+    that were only added say "Added …", only removed "Removed …"."""
     node = _quoted(_node_label(node_id))
     if others:
         verbs = {verb, *(other_verb for other_verb, _ in others)}
         word = verb if len(verbs) == 1 else "Changed"
-        names = [node, *(_quoted(name) for _, name in others)]
-        return f"{word} {len(names)} nodes" if len(names) >= 4 else f"{word} {_names_and(names)}"
+        if word == "Renamed":
+            # Two or more renames count; one names both ends (design r212 item 2).
+            return f"Renamed {len(others) + 1} nodes"
+        return f"{word} {node_names.node_name_list([_node_label(node_id), *(name for _, name in others)])}"
+    if verb == "Renamed" and renamed_from and renamed_from != _node_label(node_id):
+        return f"Renamed {_quoted(renamed_from)} to {node}"
     if verb != "Changed" or not keys:
         return f"{verb} {node}"
     record = cli_graph.nodes.get(node_id) or {}
@@ -18202,7 +18337,12 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
     for edge in removed:
         _journal_edge("edge.removed", edge)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Set {node_id}'s model to {model}")
+    # Only the person reaches this route (require_person above), so no agent is
+    # in scope today and no row shows; it speaks as the acting agent's own row
+    # if the route is ever opened to one. The model by its catalog name.
+    await _say_agent_action(
+        f"Set {_quoted(_node_label(node_id))}’s model to {universal_ports.model_name(definition_id, model, data)}",
+        nodes=[node_id])
     return {
         "params": configured.params,
         "dynamicInputPorts": configured.inputs,
@@ -18243,10 +18383,10 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
         )
     await _broadcast_graph_sync(edit=True)
     if current != previous:
-        publish_action(f"Renamed {node_id}")
         # An agent's rename is an action like any edit (the Agents panel's
         # line, Q125 item 2); a no-op for the person's own.
-        await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(current)}", did=_did("Renamed", node_id))
+        await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(previous)} to {_quoted(current)}",
+                          did=_did("Renamed", node_id), nodes=[node_id])
     return {"id": node_id, "label": current}
 
 
@@ -18352,12 +18492,13 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         await _broadcast_graph_sync(moved=normalized, arranged={"id": arrange.id, "nodeIds": sorted(normalized)})
     else:
         await _broadcast_graph_sync(edit=True, moved=normalized)
-    publish_action(f"Updated layout for {len(normalized)} node(s)")
     if moved:
         if arrange is None:
             # An agent's move (`nebula move`) is an action too (the Agents
-            # panel's line, Q125 item 2); a no-op for the person's drags.
-            await _show_agent({"nodeId": moved[0]}, action="move", say=f"Moved {_quoted(_node_label(moved[0]))}",
+            # panel's line, Q125 item 2); a no-op for the person's drags. It
+            # names every node that moved (design): "Moved “A” and “B”",
+            # from 4 "Moved 4 nodes". The cursor goes to the first.
+            await _show_agent({"nodeId": moved[0]}, action="move", say=f"Moved {_named_nodes(moved)}",
                               did=_did("Moved", moved[0]))
     if arrange is not None:
         return {"status": "arranged", "count": len(normalized), "positions": normalized}
@@ -18479,7 +18620,7 @@ async def clear_graph(force: bool = False) -> dict:
     agent_presence.forget_graph()
     await _forget_status_anchors()
     await _broadcast_graph_sync(edit=True, cleared=True)
-    publish_action("Cleared the canvas")
+    await _say_agent_action("Cleared the canvas")
     if detached:
         await _broadcast_pins()
     await _broadcast_closed_proposals(closed)
@@ -18705,13 +18846,17 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
                                     fields=_recovery_field_labels([node]) if state == "params" else ())
         if state == "recovery" and not live_checkpoint:
             person = _shared_id_delete_person(node_id, holding) or person
-        raise _node_refusal(
+        refusal = _node_refusal(
             409,
             f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
             "Check Marble, then resolve its exact recovery/ambiguity record "
             "first.",
             person,
         )
+        # The kind, for the undo line (_undo_cannot_remove); not in the answer.
+        refusal.kind = "paid_state"  # type: ignore[attr-defined]
+        refusal.state = state  # type: ignore[attr-defined]
+        raise refusal
 
 
 def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, Any]) -> bool:
@@ -18863,11 +19008,15 @@ async def delete_graph_node(node_id: str) -> dict:
     finally:
         _removals_ctx.reset(token)
     _renew_kept_removals(removals)
-    publish_action(f"Removed {node_id}")
     last_point = agent_presence.last_point(node_id)
     await _announce_removed_nodes(entries)
     if last_point is not None:
-        await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label})
+        await _show_agent(last_point, say=f"Removed {_quoted(label)}", did={"verb": "Removed", "nodeId": None, "label": label},
+                          nodes=[node_id])
+    else:
+        # No tab has reported where the node was drawn (the canvas is hidden, or
+        # no tab shows it): the agent's row still goes, without a cursor.
+        await _say_agent_action(f"Removed {_quoted(label)}", nodes=[node_id])
     # What the delete removed, for its undo (POST /api/graph/restore `removals`).
     # `label` is its name as the canvas showed it (the type's name when it has none): `nebula delete` says it.
     # `syncSeq`: the graphSync that sent it (_synced_seq).
@@ -19134,6 +19283,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         for change in additions.params
     }
     labels_before = {key: _node_label(key) for key in spec.rename if not key.startswith("+")}
+    # The wires an apply cuts, named as the canvas shows their nodes now: a node that goes in the same edit has no name after.
+    unwired_names = [((edge.source, _node_label(edge.source)), (edge.target, _node_label(edge.target)))
+                     for edge in spec.unwire]
     undo_before = _canvas_undo_before(spec, shown)
 
     removed: list[dict[str, Any]] = []
@@ -19297,7 +19449,6 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     ])
     if made_pending:
         _schedule_pending_expiry()
-    publish_action(f"{identity.name} edited the canvas: {summary}")
     focus = next(iter(added), None) or next(iter(changed or list(renamed) or list(moves)), None)
     if focus is not None and focus in cli_graph.nodes:
         verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
@@ -19314,9 +19465,22 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # Agent log and the Message box's working line get the person's
         # words (GM r79.2: "Changed “Prompt” on “Hero shot”").
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
-                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []), others),
+                          log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []), others,
+                                                               renamed_from=labels_before.get(focus)),
                           person_say=None if note else said,
                           shows="type" if verb == "Changed" else None)
+    else:
+        # No node was added, changed, renamed or moved: a connect, a disconnect,
+        # a remove or a placeholder made ready is still the agent's action and
+        # has its row (design r211 item 4).
+        plain, plain_ids = _plain_edit_line(
+            connected=[((wire["source"], _node_label(wire["source"])), (wire["target"], _node_label(wire["target"])))
+                       for wire in wired_rows],
+            disconnected=unwired_names,
+            removed=[(str(gone["id"]), str(gone["name"])) for gone in removed],
+            readied=[(node_id, _node_label(node_id)) for node_id in made_ready])
+        if plain:
+            await _say_agent_action(additions.note if note else plain, nodes=plain_ids)
     undo = _canvas_undo_keep(identity, undo_after)
     _canvas_edit_link.reset(edit_link)
     return {
@@ -19605,8 +19769,8 @@ async def _restore_graph(
                 continue
             if str(current.get("definitionId") or "") != definition_id:
                 raise HTTPException(status_code=409, detail=(
-                    f"{node_id} is a different node now, so this step can't be put back. "
-                    "Reload the canvas to see the current graph."))
+                    f"Nebula couldn\u2019t undo this step because \u201c{_node_label(node_id, candidate)}\u201d "
+                    "is a different node now. Reload the canvas to see the current version."))
             # A node that is still there changes only what the item sends: the
             # canvas leaves out params and name when the step didn't touch them.
             if "params" in raw:
@@ -19763,8 +19927,6 @@ async def _restore_graph(
         _removals_ctx.reset(removals_token)
     _renew_kept_removals(removals)
     await _announce_removed_nodes(entries)
-    publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
-                   f"{len(changed)} changed, {len(wired)} connected, {len(unwired)} disconnected")
     # The proposals their deletes closed open again where they still fit (GM, 2026-10-23).
     undone = await _reopen_removed_proposals(putting_back, project_id)
     return {
@@ -19802,7 +19964,8 @@ async def _restore_graph(
 # a count of clears from this same base or from 0).
 canvas_undo_book = CanvasUndoBook(
     persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None,
-    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT)
+    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT,
+    type_name=lambda definition_id: _undo_type_name(definition_id))
 
 
 def _advance_canvas_revision_after_a_failed_load() -> None:
@@ -19820,6 +19983,10 @@ if _live_graph_load_failed:
 # The edit the current request makes ({id}, or {id, undoes|redoes, of?}): it
 # tags the request's journal events (_journal) and its graphSync (_graph_edit_origin).
 _canvas_edit_link: ContextVar[dict[str, Any] | None] = ContextVar("canvas_edit_link", default=None)
+# True while an undo's own sync is sent after it kept parts (_graph_edit_origin
+# copies it onto that sync only; the edit link, which every journal event of the
+# undo carries, never holds it).
+_undo_kept_parts: ContextVar[bool] = ContextVar("undo_kept_parts", default=False)
 
 
 def _open_project_brief() -> tuple[str | None, str]:
@@ -19837,6 +20004,7 @@ def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, A
         moved=[key for key in spec.move if not key.startswith("+")],
         shown=shown,
         ready=list(spec.ready),
+        name_of=_node_label,
     )
 
 
@@ -19845,7 +20013,7 @@ def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, An
     and the project it was made in. Built later, it would take in whatever
     another request changed while this one was still broadcasting."""
     project_id, project_name = _open_project_brief()
-    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
+    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added, name_of=_node_label),
             "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id),
             "mark": canvas_undo_book.mark()}
 
@@ -19886,11 +20054,43 @@ def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any
     return None
 
 
+def _undo_paid_because(state: str | None, node: Mapping[str, Any]) -> str:
+    """The because-clause of the undo's can't-remove line for each World Labs
+    state _ensure_node_deletable computes (design); each wording is here only."""
+    if state == "active":
+        return "its World Labs run is still starting. Undo again in a moment."
+    if state == "ambiguity":
+        return ("it has a World Labs run that isn\u2019t settled. Ask the person to check it in Marble and "
+                "confirm in the notice at the top of their screen.")
+    if state == "recovery":
+        return ("it has a World Labs run that isn\u2019t settled. Ask the person to check the run in Marble, then use "
+                f"{FORGET_BUTTON} in run history.")
+    return ("its settings hold a World Labs ID. Ask the person to check it in Marble, then clear "
+            f"{_quoted_fields(_recovery_field_labels([dict(node)]))}.")
+
+
 def _undo_cannot_remove(node_id: str, node: dict[str, Any]) -> str | None:
+    """Why an undo leaves a node it would remove, as one line naming nodes
+    (design), chosen by the kind of refusal _ensure_node_deletable raised, not
+    by its words: World Labs paid state (one line per state), a Cinema scene with a shot still
+    running, else the refusal's own text after a plain "left it as it is"."""
     try:
         _ensure_node_deletable(node_id, node)
     except HTTPException as exc:
-        return str(exc.detail)
+        name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(
+            str(node.get("label") or _node_label(node_id)))
+        lead = f"Nebula left {name} as it is"
+        if isinstance(exc, _RenderingSceneRefusal) and exc.run_ids:
+            what, several = _shot_names([int(n) for n in exc.rendering["shots"]])
+            runs = exc.run_ids
+            ids = ("run " + runs[0]) if len(runs) == 1 else "runs " + ", ".join(runs[:-1]) + " and " + runs[-1]
+            return f"{lead} because {what} {'are' if several else 'is'} still running as {ids}."
+        if getattr(exc, "kind", None) == "paid_state":
+            return f"{lead} because {_undo_paid_because(getattr(exc, 'state', None), node)}"
+        logging.getLogger("nebula.undo").info("undo kept %s: a removal refusal of an unlisted kind (%s, status %s)",
+                    node_id, type(exc).__name__, exc.status_code)
+        text = re.sub(rf"(?<![\w-]){re.escape(node_id)}(?![\w-])", lambda _m: name, str(exc.detail)).strip()
+        return f"{lead}. {text}"
     return None
 
 
@@ -19981,6 +20181,13 @@ def _undo_param_label(definition_id: str, key: str) -> str:
     return str((param or {}).get("label") or "").split(" \u00b7 ")[0].strip() or _undo_key_words(key)
 
 
+def _undo_type_name(definition_id: str) -> str:
+    """A card type's display name (the canvas title), for an undo line about a node
+    that is gone and whose name the inverse never recorded; "" when unknown."""
+    definition = node_registry.get_all().get(definition_id)
+    return node_route.canvas_title(definition) if definition else ""
+
+
 def _undo_key_words(key: str) -> str:
     """A param key in lower-case words: filePath and file_path both give "file path"."""
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key).replace("_", " ").lower()
@@ -19989,7 +20196,7 @@ def _undo_key_words(key: str) -> str:
 def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
     """The parts an undo left, in its reply's message: the kept lines are
     sentences already, so they join with a space and take no lead-in. A line
-    that isn't a full sentence (a ran-since or moved-since note) gets its stop."""
+    that lacks its stop (an entry from an older record) gets one."""
     return " ".join(line if line.endswith((".", "!", "?")) else line + "." for line in kept_lines(skipped))
 
 
@@ -20050,7 +20257,8 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
                      cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
-                     ran=_undo_ran_since(record), name_of=_node_label, param_label=_undo_param_label)
+                     ran=_undo_ran_since(record), name_of=_node_label, param_label=_undo_param_label,
+                     type_name=_undo_type_name)
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:
@@ -20072,9 +20280,12 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         # With the restore's own events, before any await (round 8 of PR #114).
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
+            "name": _quoted(_node_label(wire["target"]))[1:-1],
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
-            "message": (f"the connection {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
-                        f"can't come back: {wire['reason']}")} for wire in wire_skips]
+            # The restore's own reason names ports and ids; the line says what the person can see.
+            "message": (f"Nebula couldn\u2019t put back the connection from {_quoted(_node_label(wire['source']))} to "
+                        f"{_quoted(_node_label(wire['target']))} because the two nodes don\u2019t take that "
+                        "connection now.")} for wire in wire_skips]
         record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
         record.last_skipped = skipped
         canvas_undo_book.note_events(undo_id, canvas_events.events_of_edit(undo_id))
@@ -20089,7 +20300,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             "skipped": len(skipped)},
             summary=f"undid {_undo_owner_text(owner, by=actor)} ({done or 'no change'}){left}")
         said.update(skipped=skipped, done=done, left=left)
+        if any(item.get("nodeId") for item in skipped):
+            # The sync this restore sends carries it (_graph_edit_origin), so
+            # the toast says the undo kept parts (design: "Codex undid part
+            # of its edit."), when the Agent log's line (activity_line)
+            # names a kept node. A context value, not a key on the edit link: the
+            # link rides every journal event of this undo, `kept` must not.
+            kept_marks.append(_undo_kept_parts.set(True))
 
+    kept_marks: list[Any] = []
     context = _canvas_edit_link.set(link)
     try:
         # The pins and proposals the edit's deletes removed go back with the nodes.
@@ -20098,15 +20317,15 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                                       journal_done=journal_undone)
         skipped, done, left = said["skipped"], said["done"], said["left"]
     finally:
+        for mark in kept_marks:
+            _undo_kept_parts.reset(mark)
         _canvas_edit_link.reset(context)
         if said:
             # The proposals it reopened are journaled after its edit.undone
             # (their fit check awaits): the link lists them too (review 8).
             _note_link_events(undo_id)
-    stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
-    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
-                   + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"
-                      if stays else ""))
+    # The agent's own row, so its words leave out the name (design).
+    await _say_agent_action(activity_line(None, skipped, _node_label))
     extras = _undo_extras_text(result)
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
@@ -20364,16 +20583,13 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         _person_touched([str(body.get("source") or ""), str(body.get("target") or "")])
         _journal_edge("edge.removed", body)  # before any await (round 8 of PR #114)
         await _broadcast_graph_sync(edit=True)
-        publish_action(
-            f"Disconnected {body.get('source', '')}:{body.get('sourceHandle', '')} → "
-            f"{body.get('target', '')}:{body.get('targetHandle', '')}"
-        )
         if body.get("target") in cli_graph.nodes:
             await _show_agent(
                 {"nodeId": body["target"]},
                 say=(f"Disconnected {_quoted(_node_label(str(body.get('source', ''))))} "
                      f"from {_quoted(_node_label(body['target']))}"),
                 did=_did("Disconnected", body["target"]),
+                nodes=[str(body.get("source") or ""), body["target"]],
             )
     return {"status": "deleted" if removed else "not_found"}
 
@@ -21044,9 +21260,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     exported = await _broadcast_graph_sync(graph_replaced=True, edit=True, renumbered=renumbered,
                                           **({"dropped_ports": stray_ports} if stray_ports else {}))
     await _say_stray_ports(_stray_log_lines(port_reports))
-    publish_action(
-        f"Loaded graph ({counted(len(cli_graph.nodes), 'node')}, {counted(len(cli_graph.edges), 'edge')})"
-    )
+    await _say_agent_action("Loaded a saved canvas")
     held = await _note_waiting_canvas_guarded(hold, "replaced")
     return {
         **({"heldCanvas": True} if held else {}),
@@ -21152,7 +21366,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     _journal_cluster(list(id_map.values()), created_edge_ids)  # before any await (round 8 of PR #114)
     created = _rf_created(list(id_map.values()), created_edge_ids)
     await _broadcast_graph_sync(edit=True)
-    publish_action(f"Created cluster ({counted(len(id_map), 'node')})")
+    await _say_agent_action(f"Grouped {_named_nodes(list(id_map.values()))}")
 
     return {"idMap": id_map, **created}
 
@@ -24855,9 +25069,17 @@ def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None,
 def _switch_notice(start: dict[str, Any] | None, project: dict[str, Any], *, created: bool) -> dict[str, Any] | None:
     if start is None:
         return None
-    verb = "Made and opened" if created else "Opened"
-    publish_action(f"{verb} project “{project['name']}”")
     return {**start, "projectId": project["id"], "projectName": project["name"], "created": created}
+
+
+async def _say_project_switch(start: dict[str, Any] | None, project: dict[str, Any], *, created: bool) -> None:
+    """The agent's row for a switch it made (design): "Opened “Spring
+    campaign”" or "Made “Spring campaign”", under the agent that switched. The
+    person's own switch (``start`` is None) says nothing, and a caller with no
+    agent name has no row to put it under (_say_agent_action)."""
+    if start is None:
+        return
+    await _say_agent_action(f"{'Made' if created else 'Opened'} {_quoted(str(project['name']))}")
 
 
 async def _broadcast_projects_changed(change: str, project_id: str | None = None, **more: Any) -> None:
@@ -25002,6 +25224,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     _journal_project_change("project.created", project)
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
                                 project_switch=_switch_notice(start, project, created=True))
+    await _say_project_switch(start, project, created=True)
     await _broadcast_projects_changed("created", project["id"])
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "canvasRevision": _canvas_revision(),
@@ -25156,7 +25379,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         _note_project_switch(project_id, actor)
     _renumber_node_records(project_id, renumbered)
     # The person's own reopen in place says nothing in the agents' activity
-    # line (_switch_notice's publish_action is for a switch they didn't make).
+    # line (_say_project_switch is for a switch they didn't make).
     notice = (_switch_notice(start, project, created=False) if actor is not None
               else {**start, "projectId": project_id, "projectName": project["name"], "created": False}
               if start is not None else None)
@@ -25164,6 +25387,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
                                 project_switch=notice,
                                 renumbered=renumbered, proposals_kept=reopen_in_place,
                                 **({"dropped_ports": dropped_ports} if dropped_ports else {}))
+    await _say_project_switch(start, project, created=False)
     await _say_stray_ports(stray_log)
     await _broadcast_projects_changed("opened", project_id)
     # What opening changed that the person should know (a folded Krea node's
@@ -26528,12 +26752,9 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     async def announce() -> None:
         # The canvas says "Running X" / "Ran X" only for a run that started
         # (review 10's F3: one its fence refused still said it ran).
-        publish_action(
-            f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
-        )
         if target:
             await _show_agent({"nodeId": target}, shows="run", say=f"Running {_quoted(_node_label(target))}",
-                              did=_did("Ran", target))
+                              did=_did("Ran", target), nodes=[target])
         else:
             # The whole canvas has no one node to point at: the Agent log only.
             await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
@@ -26542,7 +26763,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # A run that crashed after it started is a failed run, never an error
     # answer an agent could read as "didn't start" (report_failure).
     response = await _cli_run_response(run_id, None if wait is None else float(wait), report_failure=True)
-    return _hide_run_key_echoes({**response, **synced})
+    return _hide_run_key_echoes(_with_result_names({**response, **synced}))
 
 
 # The Agent Log's heading for a run its pre-call check stopped: the card's
@@ -26714,6 +26935,15 @@ async def _execute_cli_run(
     # route put agents' placeholders (and what needs them) here already.
     skipped: dict[str, str] = outcome.setdefault("skipped", {})
     gated: set[str] = set()
+    # Who started the run and what its nodes are called, taken as the run is
+    # admitted: the row at the end can't look either up again (the agent's
+    # token may be revoked by then, a node may have left the canvas).
+    recorded = agent_runs.get(run_id)
+    run_agent = recorded.agent if recorded is not None else None
+    name_of = _run_names(sub_nodes)
+    node_names_at_start = {node.id: name_of(node.id) for node in sub_nodes}
+    # Set once the run came through whole: its own Agent log row is said below.
+    run_row_follows = False
 
     async def collect_events(event: ExecutionEvent) -> None:
         # The response carries what each node made or why it failed. The
@@ -26755,9 +26985,14 @@ async def _execute_cli_run(
         )
         if _execution_is_cancelling(run_id):
             raise asyncio.CancelledError
+        # With no agent recorded there is no row to rely on: the done card keeps its echo.
+        run_row_follows = run_agent is not None
     except asyncio.CancelledError:
         await _finalize_cancelled_execution(sub_nodes, run_id)
-        publish_action(f"Stopped after {len(results)} node(s)")
+        stopped_after = node_names.node_name_list([node_names_at_start.get(node_id) or _node_label(node_id)
+                                                   for node_id in results])
+        await _say_agent_action(f"Stopped after {stopped_after} ran" if results else "Stopped before any node ran",
+                                agent=run_agent)
         raise
     except Exception as exc:
         if _execution_is_cancelling(run_id):
@@ -26768,7 +27003,7 @@ async def _execute_cli_run(
         await _release_paid_worldlabs_starts(run_id)
         _settle_hold(run_id)
         # The agent's done card, before the journal forgets who started the run.
-        await _finish_agent_run(run_id)
+        await _finish_agent_run(run_id, run_row_follows=run_row_follows)
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 
@@ -26777,19 +27012,14 @@ async def _execute_cli_run(
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync(run_params=run_id)
 
-    skipped_note = f", {len(gated)} skipped by a gate" if gated else ""
     # Agents' placeholders the run skipped, in GM's skip line (Q125 item 3).
     pending_note = pending_nodes.skip_line(pending_summary)
-    skipped_note += f". {pending_note}" if pending_note else ""
-    if errors:
-        publish_action(
-            f"Ran {len(results) + len(errors)} node(s) in {duration:.1f}s — "
-            f"{len(errors)} errored: {', '.join(errors.keys())}{skipped_note}"
-        )
-    else:
-        publish_action(
-            f"Ran {len(results)} node(s) cleanly in {duration:.1f}s{skipped_note}"
-        )
+    # The agent's own row; a run with no agent name (no marker) shows none.
+    # The bubble keeps the whole sentences that fit; the Agent log the whole row (a stop for the
+    # person's OK is a sentence of its own that must never be cut: GM r39).
+    row = _cli_run_line(results, errors, gated, duration, pending_note,
+                        stopped=outcome.get("stopped") or (), names=node_names_at_start)
+    await _say_agent_action(_whole_sentences(row), log=row, nodes=list(errors) or None, agent=run_agent)
 
     return {
         "results": results,
@@ -26890,13 +27120,14 @@ async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
         return {"runId": run_id, "status": "cancelled", "source": "canvas", "neverStarted": True}
     if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
         response = await _canvas_run_response(run_id, wait)
-        return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
-                                     "nodes": reports.progress(run_id)})
+        return _hide_run_key_echoes(_with_result_names(
+            {**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
+             "nodes": reports.progress(run_id)}))
     response = await _cli_run_response(run_id, wait, report_failure=True)
     if response.get("status") == "running" and reports.known(run_id):
         response = {**response, "nodes": reports.progress(run_id),
                     "startedBy": actor_record(canvas_events.run_actor(run_id))}
-    return _hide_run_key_echoes(response)
+    return _hide_run_key_echoes(_with_result_names(response))
 
 
 def _agent_key_secrets() -> list[str]:
@@ -26920,6 +27151,43 @@ def _hide_run_key_echoes(response: dict[str, Any]) -> dict[str, Any]:
     from services.key_echoes import hide_in_run
 
     return hide_in_run(response, _agent_key_secrets())
+
+
+def _with_result_names(response: dict[str, Any]) -> dict[str, Any]:
+    """A run response with ``names`` (node id -> its name as the canvas shows
+    it) and ``ports`` (node id -> {output port id: label}) for the nodes in
+    ``results``, so the CLI and MCP print a collapsed output by name without
+    reading the canvas (a read of /api/graph or the snapshot notes the
+    reader's Cinema scene keys, which a run result must not do). A node no
+    longer on the canvas is left out: the caller names it by its id."""
+    results = response.get("results") if isinstance(response, dict) else None
+    if not isinstance(results, dict) or not results:
+        return response
+    definitions = node_registry.get_all()
+    names: dict[str, str] = {}
+    ports: dict[str, dict[str, str]] = {}
+    failed = 0
+    first: Exception | None = None
+    for node_id in results:
+        node = cli_graph.nodes.get(str(node_id))
+        if not node:
+            continue
+        try:
+            definition_id = str(node.get("definitionId") or "")
+            definition = definitions.get(definition_id)
+            name = node_route.node_name(definition, node.get("label"), definition_id or str(node_id))
+            labels = {str(p.get("id")): p.get("label")
+                      for p in node_ports(definition_id, node.get("params"), definition, "outputPorts")
+                      if isinstance(p, dict)}
+        except Exception as exc:  # noqa: BLE001 - a finished run, perhaps a paid one, must still return its results
+            failed += 1
+            first = first or exc
+            continue  # this node is named by its id and its ports by their ids in words
+        names[str(node_id)] = name
+        ports[str(node_id)] = labels
+    if failed:
+        logging.getLogger("nebula.run").debug("%d node(s) left unnamed in a run result", failed, exc_info=first)
+    return {**response, "names": names, "ports": ports}
 
 
 def _run_reports():

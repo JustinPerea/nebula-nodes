@@ -1,4 +1,4 @@
-"""The proposal card's plan line (GM - Design, 2026-11-01: the canvas proposal
+"""The proposal card's plan line (design, 2026-11-01: the canvas proposal
 card redesign). One line under the agent's note says what Accept changes and
 costs, by node name and never by id; the view carries it as `plan`, so the
 card, `nebula proposal` and MCP read the same words."""
@@ -66,7 +66,7 @@ def test_change_one_run_another():
 
 
 def test_runs_say_their_class_paid_plan_may_cost_never_free():
-    """GM, PR #203 r11 item 2, r19 item 1 (the frontend's old line 1, now the backend's)."""
+    """Design, PR #203 (the frontend's old line 1, now the backend's)."""
     entries = [_entry("a", "A", model="GPT Image 2", billed="your OpenAI key"),
                _entry("b", "B", model="GPT Image 2", billed="your OpenAI key"),
                _entry("+k", "Krea 2")]
@@ -108,7 +108,7 @@ def test_adds_with_connections_and_counts_from_four():
     one = _view(nodes=[{"ref": "+k", "name": "Krea 2"}], edges=[{}])
     assert plan_line(one) == "Adds “Krea 2” and 1 connection · nothing runs until you choose"
     three = _view(nodes=[{"ref": f"+{i}", "name": f"N{i}"} for i in range(3)], edges=[{}, {}])
-    # GM - Design, PR #216 r4: the connections close the list of the nodes added.
+    # Design, PR #216: the connections close the list of the nodes added.
     assert plan_line(three) == "Adds “N0”, “N1”, “N2” and 2 connections · nothing runs until you choose"
     four = _view(params=[{**HERO, "nodeId": f"n{i}", "title": f"T{i}"} for i in range(4)])
     assert plan_line(four) == "Changes 4 nodes · nothing runs until you choose"
@@ -118,12 +118,12 @@ def test_adds_and_runs_the_new_node():
     view = _view(nodes=[{"ref": "+k", "name": "Krea 2"}], edges=[{}], run=["+k"], cost={
         "paidRuns": 1, "estimate": {"low": 0.07, "high": 0.07, "open": True},
         "nodes": [_entry("+k", "Krea 2", billed="your Krea API key")]})
-    # GM - Design, PR #216 r3: the verbs merge onto the node, and "plus" carries the connections.
+    # Design, PR #216: the verbs merge onto the node, and "plus" carries the connections.
     assert plan_line(view) == "Adds and runs “Krea 2” plus 1 connection · Krea 2 on your Krea API key · $0.07 + unpriced"
 
 
 def test_an_add_a_change_and_a_run_never_take_a_serial_comma():
-    """GM - Design, PR #216 r1 and r3: the same node changed and run is one
+    """Design, PR #216: the same node changed and run is one
     group, whatever else is added; groups join with ", ", and a name list
     never has a serial comma."""
     alt = {"nodeId": "n3", "name": "Alt still (n3)", "title": "Alt still", "model": "GPT Image 2",
@@ -143,7 +143,7 @@ def test_an_add_a_change_and_a_run_never_take_a_serial_comma():
 def test_several_paid_runs_are_a_count_and_free_runs_say_free():
     view = _view(run=["n4", "n5"], cost={"paidRuns": 3, "upTo": True, "nodes": [
         _entry("n4", "A", node_id="n4"), _entry("n5", "B", node_id="n5"), _entry("n3", "C", node_id="n3")]})
-    # The chip's "Up to" carries a run that may be skipped (GM - Design, PR #216 r3).
+    # The chip's "Up to" carries a run that may be skipped (design, PR #216).
     assert plan_line(view) == "Runs “A” and “B” · 3 paid runs · no list price"
     free = _view(run=["n4"], cost={"freeRuns": 1, "nodes": [_entry("n4", "Upscale", paid=False, node_id="n4")]})
     assert plan_line(free) == "Runs “Upscale” · free"
@@ -154,8 +154,8 @@ def _waiting(**cost):
 
 
 def test_a_run_waiting_on_placeholders_keeps_its_words():
-    """GM - Design, round 4: "runs nothing until Codex finishes 2 nodes", or
-    "agents finish" for several; review 4, M2: it counts the placeholders
+    """Design: "runs nothing until Codex finishes 2 nodes", or
+    "agents finish" for several: it counts the placeholders
     themselves (`placeholders`), and a backend without that count keeps `count`.
     Moved here from the canvas's own tests with the line (2026-11-01)."""
     assert plan_line(_waiting(pendingSkipped={"count": 2, "placeholders": 1, "agents": ["Codex"]})) == (
@@ -208,7 +208,7 @@ def test_the_view_card_cli_and_mcp_read_the_same_names(api):  # noqa: F811 - pyt
     assert (entry["name"], entry["model"], entry["billedTo"]) == ("Hero shot", "Krea 2", "your Krea plan")
     # The CLI prints the card's line word for word, beside its own id lines.
     assert f"  card     {view['plan']}" in format_proposal(view).splitlines()
-    # The not-ready line names the node in curly quotes (GM - Design, PR #216 r1).
+    # The not-ready line names the node in curly quotes (design, PR #216).
     assert view["cost"]["notReady"][0]["person"] == "“Hero shot” needs your Krea plan. Sign in to Krea in Settings."
     # get_proposal (MCP) and the HTTP read return the same view.
     again = api.client.get(f"/api/canvas/proposals/{view['id']}", headers={"X-Nebula-Agent": "Claude Code"})
@@ -260,7 +260,7 @@ def test_mcp_reads_the_plan_and_every_field_it_is_made_from(api, monkeypatch):  
 
 def test_a_route_line_names_the_node_in_curly_quotes():
     """node_route.route_unavailable_line starts with the model's name; the
-    card names the node, quoted (GM - Design, PR #216 r1)."""
+    card names the node, quoted (design, PR #216)."""
     import main
 
     flux = {"displayName": "FLUX 3"}
@@ -271,7 +271,7 @@ def test_a_route_line_names_the_node_in_curly_quotes():
     assert main._quoted_name_line("needs a key", "Hero shot", flux) == "needs a key"
 
 
-# -- round 3 (GM - Design, PR #216 r3; review 1 M1, L1-L3, N1) ---------------
+# -- (design, PR #216) ---------------
 
 KREA = {"nodeId": "n4", "name": "Krea 2 (n4)", "title": "Krea 2", "model": "Krea 2",
         "changes": {"model": {"from": "a", "to": "b"}}}
@@ -300,7 +300,7 @@ def test_gm_r3_examples_word_for_word():
 
 
 def test_nodes_merge_by_id_never_by_name():
-    """GM - Design, PR #216 r3 (6): another node with a name already said
+    """Design, PR #216: another node with a name already said
     reads "another “Image”"; two in one group, "2 “Image” nodes"; no model."""
     image = {**KREA, "nodeId": "n2", "title": "Image", "model": "GPT Image 2"}
     another = _view(params=[image], run=["n7"], names={"n2": "Image", "n7": "Image"},
@@ -312,14 +312,14 @@ def test_nodes_merge_by_id_never_by_name():
 
 
 def test_adds_two_runs_one():
-    """Review 1 L1 (mutant B2): the run names the node it runs, not both
-    (GM - Design, PR #216 r4: "runs “A”" after the nodes added)."""
+    """Mutant B2: the run names the node it runs, not both
+    (design, PR #216: "runs “A”" after the nodes added)."""
     view = _view(nodes=[{"ref": "+a", "name": "A"}, {"ref": "+b", "name": "B"}], run=["+a"], cost={"freeRuns": 1})
     assert plan_line(view) == "Adds “A” and “B”, runs “A” · free"
 
 
 def test_an_unnamed_run_target_never_reads_none_or_turns_the_rest_into_a_count():
-    """Review 1 L1 (mutant B4) and L3."""
+    """Mutant B4: a run target with no name."""
     view = _view(params=[KREA], run=["n4", "n9"], cost={"freeRuns": 2})
     line = plan_line(view)
     assert line == "Changes and runs “Krea 2”, runs 1 node · free"
@@ -329,16 +329,16 @@ def test_an_unnamed_run_target_never_reads_none_or_turns_the_rest_into_a_count()
 
 
 def test_a_change_whose_run_waits_on_placeholders_never_says_changes_and_runs():
-    """Review 1 L1 (mutant B11)."""
+    """Mutant B11: a run held by placeholders."""
     view = _view(params=[KREA], run=["n4"], cost={"pendingSkipped": {"count": 1, "agents": ["Codex"]}})
     assert plan_line(view) == "Changes “Krea 2” · runs nothing until Codex finishes 1 node"
 
 
 def test_a_name_in_quotes_is_quoted_once():
-    """Review 1 N1."""
+    """A name in quotes is quoted once."""
     view = _view(params=[{**KREA, "title": "“Hero”"}])
     assert plan_line(view) == "Changes “Hero” · nothing runs until you choose"
-    # Review 3 NIT-3: only quotes that wrap a name come off; its own
+    # Only quotes that wrap a name come off; its own
     # apostrophe stays, as on the card (cardQuoted).
     assert plan_line(_view(params=[{**KREA, "title": "Artists'"}])) == "Changes “Artists'” · nothing runs until you choose"
     assert plan_line(_view(params=[{**KREA, "title": "'90s look"}])) == "Changes “'90s look” · nothing runs until you choose"
@@ -351,14 +351,14 @@ def test_a_name_with_and_in_it_keeps_the_groups_comma():
 
 def _unquoted(group: str) -> str:
     """The group with each quoted name as one word. No other rewrite: the
-    merged verb's "and" counts too (review 2 L1)."""
+    merged verb's "and" counts too."""
     import re
 
     return re.sub(r"“[^”]*”", "Q", group)
 
 
 def test_no_group_holds_two_ands_outside_quoted_names():
-    """Review 1 M1: every combination of adds, changes, runs, connections and
+    """Every combination of adds, changes, runs, connections and
     removals, up to four nodes each."""
     import itertools
 
@@ -373,14 +373,14 @@ def test_no_group_holds_two_ands_outside_quoted_names():
                      names={f"n{50 + i}": f"Other {i}" for i in range(run_other)},
                      cost={"freeRuns": len(run)})
         for group in plan_groups(view):
-            # The merged verb's own "and" ("Adds and runs") counts (review 2 L1).
+            # The merged verb's own "and" ("Adds and runs") counts.
             assert _unquoted(group).count(" and ") <= 1, (group, view)
             checked += 1
     assert checked > 1000
 
 
 def test_change_count_counts_every_operation():
-    """GM - Design, PR #216 r2-r3: node added, node changed, connection added,
+    """Design, PR #216: node added, node changed, connection added,
     connection removed are one each; field lines don't count."""
     from services.canvas_proposals import ParamChange, ProposalSpec, ProposedEdge, ProposedNode
 
@@ -392,7 +392,7 @@ def test_change_count_counts_every_operation():
 
 
 def test_a_name_is_quoted_only_where_the_line_starts_with_the_model():
-    """Review 1 L2: the node's own name is no lead, so a line that starts
+    """The node's own name is no lead, so a line that starts
     with a word that happens to be the node's name is left alone."""
     import main
 
@@ -404,7 +404,7 @@ def test_a_name_is_quoted_only_where_the_line_starts_with_the_model():
 
 
 def test_a_route_line_takes_the_nodes_name_in_place_of_the_model():
-    """Review 1 L2's structural fix: route_unavailable_line names the node
+    """Structural fix: route_unavailable_line names the node
     itself when given its name, so nothing has to match a prefix."""
     from services import node_route
     from tests.test_node_route import CASES, _definition
@@ -415,7 +415,7 @@ def test_a_route_line_takes_the_nodes_name_in_place_of_the_model():
         if not node_route.has_routes(definition) or not case.get("unavailableLine"):
             continue
         params = node_route.with_wired_blockers(definition, case["params"], case.get("wiredCounts") or case.get("wired", ()))
-        # The card names the node by its type, in quotes (GM, PR #203 r32);
+        # The card names the node by its type, in quotes (design, PR #203);
         # given the node's own name (quoted by the function) it names that.
         model = str(definition.get("displayName") or "")
         plain = node_route.route_unavailable_line(definition, params, case["apiKeys"]) or ""
@@ -427,14 +427,14 @@ def test_a_route_line_takes_the_nodes_name_in_place_of_the_model():
     assert checked > 0
 
 
-# -- round 3b (GM - Design, PR #216 r4; review 2 L1, L2) ---------------------
+# -- (design, PR #216) ---------------------
 
 def _new(*names):
     return [{"ref": f"+{name.lower()}", "name": name} for name in names]
 
 
 def test_gm_r4_added_nodes_that_all_run():
-    """GM r4 1: every added node also runs → "runs both", "runs all 3", and
+    """Design: every added node also runs → "runs both", "runs all 3", and
     from 4 a count; one added node keeps "Adds and runs"."""
     two = _view(nodes=_new("A", "B"), edges=[{}], run=["+a", "+b"], cost={"freeRuns": 2})
     assert plan_line(two) == "Adds “A”, “B” and 1 connection, runs both · free"
@@ -449,7 +449,7 @@ def test_gm_r4_added_nodes_that_all_run():
 
 
 def test_gm_r4_only_some_added_nodes_run():
-    """GM r4 1: "If only some added nodes run, name them"."""
+    """Design: "If only some added nodes run, name them"."""
     view = _view(nodes=_new("A", "B"), edges=[{}], run=["+a"], cost={"freeRuns": 1})
     assert plan_line(view) == "Adds “A”, “B” and 1 connection, runs “A” · free"
     # A name that doesn't tell them apart is a count of them.
@@ -461,7 +461,7 @@ def test_gm_r4_only_some_added_nodes_run():
 
 
 def test_gm_r4_changed_nodes_that_run_follow_the_same_rule():
-    """Review 2 L1: no merged verb before two names ("Changes and runs “A”
+    """No merged verb before two names ("Changes and runs “A”
     and “B”"), so no group says "and" twice."""
     params = [{**KREA, "nodeId": "n1", "title": "A"}, {**KREA, "nodeId": "n2", "title": "B"}]
     both = _view(params=params, run=["n1", "n2"], cost={"freeRuns": 2})
@@ -478,7 +478,7 @@ def test_other_runs_join_the_run_named_last():
     assert plan_line(both) == "Changes “A” and “B”, runs both plus “C” · free"
     some = _view(params=params, run=["n1", "n9"], names={"n9": "C"}, cost={"freeRuns": 2})
     assert plan_line(some) == "Changes “A” and “B”, runs “A” and “C” · free"
-    # After a single merged group the other runs keep their own group (GM r3 5).
+    # After a single merged group the other runs keep their own group (design).
     single = _view(params=params[:1], run=["n1", "n9"], names={"n9": "C"}, cost={"freeRuns": 2})
     assert plan_line(single) == "Changes and runs “A”, runs “C” · free"
     # Added nodes that run, then changed ones that don't: the other runs get their own group.
@@ -488,8 +488,8 @@ def test_other_runs_join_the_run_named_last():
 
 
 def test_gm_r4_another_after_a_count_and_every_group_keeps_its_verb():
-    """GM r4 2: "Keep "another" after a count; every group keeps its verb".
-    The groups keep r3's order (changes before other runs), so GM's example
+    """Design: "Keep "another" after a count; every group keeps its verb".
+    The groups keep order (changes before other runs), so design's example
     "Runs 2 “Image” nodes, changes another “Image”" reads with the change first."""
     params = [{**KREA, "nodeId": "n1", "title": "Image"}, {**KREA, "nodeId": "n2", "title": "Image"}]
     view = _view(params=params, run=["n7"], names={"n7": "Image"}, cost={"freeRuns": 1})
@@ -500,7 +500,7 @@ def test_gm_r4_another_after_a_count_and_every_group_keeps_its_verb():
 
 
 def test_l2_a_group_that_counted_its_nodes_said_no_name():
-    """Review 2 L2: "Adds 4 nodes, runs another “Image”" pointed back at a
+    """"Adds 4 nodes, runs another “Image”" pointed back at a
     name the reader never saw."""
     nodes = [{"ref": "+a", "name": "Image"}, *_new("B", "C", "D")]
     view = _view(nodes=nodes, run=["n7"], names={"n7": "Image"}, cost={"freeRuns": 1})
@@ -508,7 +508,7 @@ def test_l2_a_group_that_counted_its_nodes_said_no_name():
 
 
 def test_a_quoted_name_is_quoted_once_in_the_not_ready_line(api):  # noqa: F811 - pytest fixture
-    """Review 2 L4: the plan line's rule for the card's other lines."""
+    """The plan line's rule for the card's other lines."""
     node_id = api.graph.add_node("krea-2-generate", {"_kreaAuth": "api-token"})
     api.graph.set_label(node_id, "“Hero shot”")
     response = _propose(api, {"note": "Try it", "params": [{"nodeId": node_id, "params": {"_kreaAuth": "mcp"}}],

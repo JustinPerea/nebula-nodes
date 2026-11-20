@@ -133,7 +133,7 @@ def test_cli_ordinary_export_and_import_roundtrip(tmp_path):
 
 def test_cli_load_of_a_bundle_restores_it_through_the_backend(tmp_path, capsys):
     # #184 refused a .nebula.zip here and sent the person to Load graph. Since
-    # Q123 a (Justin: "Yes: `nebula load` and an MCP tool open a bundle,
+    # (Justin: "Yes: `nebula load` and an MCP tool open a bundle,
     # restoring its files, as Load graph does.") it goes to the restore, with
     # rewriteLinks; a refusal there prints as one error line, no traceback.
     import io

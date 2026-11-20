@@ -34,8 +34,9 @@ yourself.
 
 Set `NEBULA_AGENT_NAME` (for example `export NEBULA_AGENT_NAME="Claude Code"`)
 so your cursor and edits show under your name (the person's Agent log lists
-each of your edits, runs and moodboard changes under it too; a setting is
-named by its label as the Inspector shows it, never its key). `nebula apply` and
+each of your edits, runs and moodboard changes under it too, one row per
+action in the canvas's words: nodes by their names, never ids, and a setting
+by its label as the Inspector shows it, never its key). `nebula apply` and
 `nebula propose` need it (or `--as NAME`).
 
 ## Start here
@@ -283,7 +284,9 @@ It also prints `Undo: nebula undo <token>`. Run that to take your edit back
 changed or removed comes back, and anything the person changed since stays
 as it is (the output lists it). A run counts as a change: a node the person
 (or another agent) ran since your edit stays with its params, name and
-input connections ("n3 ran since (run by the person), so it stays"). Nodes only
+input connections ("The person ran “Brief” after that step, so Nebula left it
+as it is." or "Codex ran “Brief” after that step, …"; every line names nodes,
+never ids). Nodes only
 you ran still go, so you can undo your own experiments. A node you deleted
 comes back with the person's pins on it ("Back on its node: pin_…"; one the
 person deleted since prints "Couldn't re-attach …" with why) and the
@@ -410,6 +413,10 @@ reason (only the person can add a key).
 ```bash
 nebula run n5          # a node and what feeds it; waits up to 100 s
 nebula run-all         # the whole canvas
+# A string, or a dict or list whose JSON is over 200 characters, prints as one line ("“Preview” ·
+# moodboard bundle, 51 KB. Add --verbose to print it."; “Preview”’s images · … when the node
+# has more than one port of results); add --verbose to run, run-all or result to
+# print it whole, or --json for the raw result.
 nebula result <run-id> --wait 100   # a run still going (exit 2 = still running)
 nebula cancel <run-id>
 nebula path n5         # the local file of a node's image
@@ -544,10 +551,10 @@ on a `removes` line. The person accepts or rejects it on the canvas; you
 can't accept it. Its output's `card` line is what the person reads under
 your note, word for word (what changes and runs by node name, the model and
 who pays, the price); check it says what you meant. Each proposal also posts an Update the person sees on
-every screen ("Codex proposes 3 changes on the canvas", with Review, which
+every screen ("Proposes 3 changes on the canvas" under your name, with Review, which
 takes them to the canvas and its bar), so don't also post a `nebula note`
 about it. `nebula notes` shows how it ended: `[Accepted]`, `[Rejected]`,
-`[Withdrawn by <you>]`, `[Expired]`, `[No longer fits]` or
+`[Withdrawn]`, `[Expired]`, `[No longer fits]` or
 `[Closed: Nebula restarted]` (ask again then). Proposing again after you
 withdraw one replaces the withdrawn one's Update.
 
@@ -1059,8 +1066,8 @@ agent's proposal notes. MCP: `set_status`, `list_agents`.
 While your run is on a node, the person sees your mark above it ("Running
 FLUX.2 [pro] · 0:41"); `nebula agents` lists each agent's running nodes and
 placeholders too. When a run you started ends, Nebula posts your done card
-in Updates ("Codex finished “Hero shots”.", "Codex finished 2 of 3 nodes.
-“Upscale” failed.") with a thumbnail and Show on canvas; read it with
+in Updates, under your name ("Finished “Hero shots”.", "Finished 2 of 3
+nodes. “Upscale” failed.", "Run of 3 nodes failed.") with a thumbnail and Show on canvas; read it with
 `nebula notes` (MCP `list_notes`, `about: "run"`). You don't post it
 yourself, and a newer card for the same node replaces yours.
 

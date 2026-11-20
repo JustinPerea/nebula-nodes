@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { apiFetch } from '../lib/backend';
 import { getSettings } from '../lib/api';
+import { useAgentLogStore, type AgentLogEntry } from '../store/agentLogStore';
 
 /**
  * Captures canvas-mutation events with each node's screen-space bounding
@@ -13,18 +14,14 @@ import { getSettings } from '../lib/api';
  * heuristics because we have AGENT TELEMETRY, not just voice signals.
  *
  * Lifecycle: init on mount (one manifest per page load — refresh = new
- * manifest). Subscribes to `nebula:agent-log-entry` events (already
- * dispatched by ChatPanel for thinking-stream lines and other action
- * publishers). Parses node IDs (n1, n2, …) out of the message, queries
- * the React Flow DOM for each, and POSTs the bounding rect.
+ * manifest). Subscribes to the Agent log and reads each new row's `nodeIds`,
+ * the nodes the agent's action touched (a structured field of the row: its
+ * words name nodes by canvas name, never by id). Queries the React Flow DOM
+ * for each and POSTs the bounding rect.
  *
  * Browser must be FULLSCREEN during recording so getBoundingClientRect()
  * coords match Screen Studio's screen-space pixels 1:1.
  */
-const NODE_ID_RE = /\b(n\d+)\b/g;
-
-type AgentLogDetail = { source: string; message: string };
-
 export function useZoomManifest(): void {
   const { getNode } = useReactFlow();
   const [enabled, setEnabled] = useState(false);
@@ -53,17 +50,10 @@ export function useZoomManifest(): void {
       .then(() => { ready = true; })
       .catch((e) => console.warn('[zoom-manifest] init failed:', e));
 
-    function handler(e: Event) {
+    function record(entry: AgentLogEntry) {
       if (!ready) return;
-      const detail = (e as CustomEvent<AgentLogDetail>).detail;
-      if (!detail || !detail.message) return;
-      const message = detail.message;
-      const ids = new Set<string>();
-      let match: RegExpExecArray | null;
-      NODE_ID_RE.lastIndex = 0;
-      while ((match = NODE_ID_RE.exec(message)) !== null) {
-        ids.add(match[1]);
-      }
+      const message = entry.message;
+      const ids = new Set<string>(entry.nodeIds ?? []);
       if (ids.size === 0) return;
 
       // Multiply by devicePixelRatio so the captured bounds match the
@@ -96,9 +86,11 @@ export function useZoomManifest(): void {
       });
     }
 
-    window.addEventListener('nebula:agent-log-entry', handler);
-    return () => {
-      window.removeEventListener('nebula:agent-log-entry', handler);
-    };
+    // Each row once: the rows added since the last change, by id.
+    const unsubscribe = useAgentLogStore.subscribe((state, previous) => {
+      const seen = new Set(previous.entries.map((entry) => entry.id));
+      for (const entry of state.entries) if (!seen.has(entry.id)) record(entry);
+    });
+    return unsubscribe;
   }, [enabled, getNode]);
 }

@@ -118,7 +118,7 @@ describe('the leave popover\'s reason line', () => {
     const tabs = await screen.findByRole('tablist', { name: 'Commons sections' });
     fireEvent.click(within(tabs).getByRole('tab', { name: /^Blind labeling/ }));
     await screen.findByText('Describe the visual language.');
-    fireEvent.change(screen.getByLabelText('type style'), { target: { value: 'humanist_sans' } });
+    fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'humanist_sans' } });
     await waitFor(() => expect(commonsUnsaved()).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: 'Back to Canvas' }));
     fireEvent.click(within(popover()).getByRole('button', { name: 'Save and leave' }));

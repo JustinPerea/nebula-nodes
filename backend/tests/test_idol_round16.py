@@ -1,4 +1,4 @@
-"""PR #203 round 16: GM r30.
+"""PR #203: the merged Agent log line for refused runs, and how a settings save writes.
 
 Item 1: every refused run the person sees in the Agent log reads the merged
 line, whoever asked for it (an MCP agent, a CLI agent, an in-app chat turn),
@@ -60,7 +60,7 @@ CASES = [
                  "Add it in Settings, then run the nodes again."),
     ([GPT, GPT, TTS], f"{HEADING} 2 “GPT Image 2” nodes and “OpenAI TTS” need your OpenAI API key. "
                       "Add it in Settings, then run the nodes again."),
-    # GM r35 item 1: the count inside the reason's sentence from 4.
+    # Design: the count inside the reason's sentence from 4.
     ([GPT, GPT, GPT, TTS], f"{HEADING} 4 nodes need your OpenAI API key. Add it in Settings, then run the "
                            "nodes again."),
 ]
@@ -167,9 +167,9 @@ def test_a_long_log_line_is_kept_when_its_start_is_the_bubble(monkeypatch):
     assert len(event["log"]) > agent_presence.MAX_SAY_CHARS
 
 
-# -- section 2, review 15 (settings-keychain): every way a save can write ------------------------
+# -- section 2 (settings-keychain): every way a save can write ------------------------
 # Atomic where that is safe, in place where it isn't, refused only when
-# neither way can write, with the line naming the real cause (GM r31 items 1
+# neither way can write, with the line naming the real cause (design items 1
 # and 2).
 
 import errno  # noqa: E402
@@ -203,7 +203,7 @@ def _saved(path):
 
 
 def _left(folder):
-    # without the private temp folder when empty (round 23b)
+    # without the private temp folder when empty
     return sorted(p.name for p in folder.iterdir()
                   if not (p.name == settings.TEMP_FOLDER and p.is_dir() and not any(p.iterdir())))
 
@@ -226,7 +226,7 @@ def client_delete_ok():
     return _person().delete("/api/settings/api-keys/FAL_KEY").status_code == 200
 
 
-@pytest.mark.unprivileged  # root ignores the ACL, so its rename isn't refused (review 16, tests NIT-2's scan)
+@pytest.mark.unprivileged  # root ignores the ACL, so its rename isn't refused
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS ACLs (chmod +a)")
 def test_an_acl_that_denies_delete_saves_in_place_and_keeps_the_acl(home_file):
     subprocess.run(["chmod", "+a", "everyone deny delete", str(home_file)], check=True)
@@ -276,8 +276,8 @@ def _xattrs(path):
 
 @pytest.mark.skipif(not hasattr(os, "setxattr") and not shutil.which("xattr"), reason="no xattr support")
 def test_a_file_with_its_own_extended_attribute_keeps_it(home_file):
-    """Since round 17 the attribute is carried onto the new file, so the save
-    stays atomic (review 16, settings MEDIUM-1 a; tests/test_idol_round17_settings.py)."""
+    """The attribute is now carried onto the new file, so the save
+    stays atomic (part a; tests/test_idol_round17_settings.py)."""
     _set_xattr(home_file, "nebula-tag", b"kept")
     assert _put().status_code == 200
     assert _saved(home_file) == ["saved"] and "nebula-tag" in _xattrs(home_file)
@@ -361,7 +361,7 @@ def test_a_missing_settings_folder_is_made_this_users_only_and_the_save_lands(ho
 @pytest.mark.parametrize("executable", [False, True], ids=["plain-file", "executable-file"])
 def test_a_file_where_the_folder_must_be_gets_its_own_409_never_a_500(home_file, executable):
     # Literal modes the marker scan proves keep access, so this runs as root
-    # too (review 16, tests NIT-1).
+    # too.
     shutil.rmtree(home_file.parent)
     home_file.parent.write_text("a file, not a folder", encoding="utf-8")
     home_file.parent.chmod(0o755 if executable else 0o644)
@@ -380,7 +380,7 @@ def main_person_headers():
 
 
 def test_a_desktop_key_save_works_with_a_read_only_settings_file(home_file, monkeypatch):
-    """credentials/update keeps only the read check (review 15, MEDIUM-2);
+    """credentials/update keeps only the read check;
     PUT still refuses."""
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {"OPENAI_API_KEY": "sk-desktop-0000"})
     monkeypatch.setattr(settings, "settings_write_block",
@@ -412,7 +412,7 @@ def test_a_save_cut_short_after_the_temp_file_leaves_no_copy(home_file, monkeypa
 
 def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, monkeypatch):
     """Read through the module's own seams only, never a process-wide patch
-    of os.fsync or tempfile.mkstemp (review 16, tests NIT-3): once the keys
+    of os.fsync or tempfile.mkstemp: once the keys
     are written and flushed (_carry_owner, the step after the fsync) the
     temp file is 0600; it takes the file's mode only after that, just
     before the rename."""
@@ -424,7 +424,7 @@ def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, mon
         seen.append(("written", stat.S_IMODE(os.fstat(fd).st_mode), b"fal-secret" in os.pread(fd, 1 << 16, 0)))
         real_owner(fd, before)
 
-    def renamed(src, dst, **dir_fd):  # round 23c: the temp is a name in the folder open as src_dir_fd
+    def renamed(src, dst, **dir_fd):  # The temp is a name in the folder open as src_dir_fd
         seen.append(("renamed", stat.S_IMODE(os.stat(src, dir_fd=dir_fd.get("src_dir_fd")).st_mode)))
         real_replace(src, dst, **dir_fd)
 
@@ -435,10 +435,10 @@ def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, mon
 
 
 def test_stale_temp_files_beside_the_settings_are_swept_at_startup(home_file):
-    """Only Nebula's own temp names since round 17 (review 16, settings
-    LOW-1; tests/test_idol_round17_settings.py has the person's look-alikes).
-    Since round 18 the sweep holds the save's lock, so a fresh temp file is
-    a save cut short too, and goes (review 17, settings MEDIUM-1)."""
+    """Only Nebula's own temp names go
+    (tests/test_idol_round17_settings.py has the person's look-alikes).
+    The sweep holds the save's lock, so a fresh temp file is
+    a save cut short too, and goes."""
     folder = home_file.parent
     old = folder / ".settings-nebula-123-abc12345.tmp"
     old.write_text(json.dumps(SAVED), encoding="utf-8")
@@ -457,7 +457,7 @@ def test_stale_temp_files_beside_the_settings_are_swept_at_startup(home_file):
     assert not fresh.exists()
 
 
-# -- GM r31 item 4: the Vertex paste error -----------------------------------
+# -- Design: the Vertex paste error -----------------------------------
 
 VERTEX_PASTE_LINE = ("The Vertex AI service account key saved in Settings isn’t a valid key file. "
                      "Paste the whole key file again.")

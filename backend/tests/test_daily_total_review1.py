@@ -1,7 +1,7 @@
-"""The daily total, PR #212 round 2: review 1's findings and GM - Design's
-answers to it (2026-10-31). Each test here fails on the round-1 head
+"""The daily total, PR #212: findings and design's
+answers to it (2026-10-31). Each test here fails on the head before the review fixes
 (696c3c85): the first-turn read names the total; only callers that name
-themselves get the automatic proposal; full proposal slots get GM's line and
+themselves get the automatic proposal; full proposal slots get design's line and
 a neutral Agent log line; retries arriving together open one proposal; the
 202 answer, the dedupe keys and the run-note cleanup are pinned; the other
 kinds of caller, moodboard reads and Cinema shots are held; chat spend from
@@ -27,10 +27,10 @@ from tests.conftest import PERSON  # noqa: E402
 from tests.test_daily_total import AGENTS, CLAUDE, PAID, _node, api, price  # noqa: E402,F401
 
 CODEX = {"X-Nebula-Agent": "Codex"}
-# GM - Design, 2026-10-31, verbatim (amounts filled in).
+# Design, 2026-10-31, verbatim (amounts filled in).
 SLOTS_FULL = ("This would pass the $5 daily total, and you already have 3 open proposals. Wait until the person "
               "accepts or rejects one, then propose it again.")
-# GM - Design, PR #212 r2, item 2: the log's source column names the agent, so the
+# Design, PR #212: the log's source column names the agent, so the
 # sentence reads whole without it.
 SLOTS_FULL_LOG = ("Couldn’t run “Fourth” because it would pass the $5 daily total and all 3 proposal slots "
                   "are full.")
@@ -146,7 +146,7 @@ def test_one_node_in_two_projects_is_two_proposals(api, monkeypatch):
 
 def test_fifty_retries_arriving_together_open_one_proposal(api, monkeypatch):
     """_open_canvas_proposal awaits its measure before it creates; with the
-    measure yielding, every retry used to pass the dedupe first (review 1, L-1)."""
+    measure yielding, every retry used to pass the dedupe first."""
     price(3.0)
     writer = _node(api, "Writer")
     _over(api)
@@ -439,7 +439,7 @@ def test_nebula_context_prints_the_daily_total():
 
 
 def test_the_in_app_chat_prompt_says_a_waiting_run_was_already_proposed():
-    """The in-app chat agents read only this (review 1 of PR #212, LOW-3)."""
+    """The in-app chat agents read only this (PR #212)."""
     from services.chat_session import NEBULA_MCP_PRIMER
 
     text = " ".join(NEBULA_MCP_PRIMER.split())
@@ -448,10 +448,10 @@ def test_the_in_app_chat_prompt_says_a_waiting_run_was_already_proposed():
     assert "A run answered 'waiting' was already sent as a proposal" in text
 
 
-# -- Justin's Q165: the total alone makes an unpriced node ask ---------------------------
+# -- Justin's ruling: the total alone makes an unpriced node ask ---------------------------
 
 SKETCH_BAR = "“Writer” has no list price, so Nebula can’t count it toward the $5 daily total."
-SKETCH_UPDATE = "Claude Code wants to run “Writer”. It has no list price, so Nebula can’t count it toward the $5 daily total."
+SKETCH_UPDATE = "Wants to run “Writer”. It has no list price, so Nebula can’t count it toward the $5 daily total."
 
 
 def _unpriced() -> None:

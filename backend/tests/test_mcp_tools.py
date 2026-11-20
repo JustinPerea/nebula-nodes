@@ -366,7 +366,7 @@ def test_propose_change_warns_about_run_nodes_that_cannot_run(nebula, monkeypatc
 
 
 def test_propose_change_reminds_the_agent_its_unrunnable_proposal_is_still_open(nebula, monkeypatch):
-    """Q109: FLUX.2 with only an OpenAI key is kept with its warning; the next
+    """FLUX.2 with only an OpenAI key is kept with its warning; the next
     proposal (GPT Image 2) says the first is still open and names withdraw_proposal."""
     import main
 
@@ -561,7 +561,8 @@ def test_undo_canvas_edit_puts_back_what_edit_and_remove_did(nebula):
     built = _build()
     image = built["idMap"]["+img"]
     removed = mcp_server.remove_from_canvas(node_ids=[image])
-    assert removed["undo"]["token"] and image in removed["undo"]["summary"]
+    assert removed["undo"]["token"] and "“Nano Banana”" in removed["undo"]["summary"]
+    assert image not in removed["undo"]["summary"]
     back = mcp_server.undo_canvas_edit(removed["undo"]["token"])
     assert back["status"] == "undone" and back["added"] == [image]
     graph = http.get("/api/graph").json()

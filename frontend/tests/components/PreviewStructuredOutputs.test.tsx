@@ -228,11 +228,11 @@ describe('Preview card fallback for structured values', () => {
     const many = Array.from({ length: 3000 }, (_, i) => `item ${i}`);
     const { container, unmount } = renderPreview({ type: 'Any', value: big });
     expect(container.textContent!.length).toBeLessThan(4000);
-    expect(screen.getByText('5000 items')).toBeInTheDocument();
+    expect(screen.getByText('5,000 items')).toBeInTheDocument();
     unmount();
     const second = renderPreview({ type: 'Array', value: many });
     expect(second.container.textContent!.length).toBeLessThan(4000);
-    expect(screen.getByText('3000 items')).toBeInTheDocument();
+    expect(screen.getByText('3,000 items')).toBeInTheDocument();
     expect(screen.getByText('item 0')).toBeInTheDocument();
   });
 

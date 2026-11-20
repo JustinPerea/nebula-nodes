@@ -1,4 +1,4 @@
-"""Undo puts back everything a delete removed (GM - Design, 2026-10-23, item 1:
+"""Undo puts back everything a delete removed (design, 2026-10-23:
 "Make undo complete ... Reopen a proposal only if it's still valid against
 the restored graph. If one can't be reopened, the Undo notice says so").
 

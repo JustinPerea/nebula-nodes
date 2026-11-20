@@ -1,4 +1,4 @@
-"""The Message box thread, round 4 (review 2 of #223/#225, Justin 2026-11-04).
+"""The Message box thread, (#223/#225, Justin 2026-11-04).
 
 - J1: replying takes a Settings agent token, the same as listening: a name
   alone (any name, however rotated), an in-app agent's turn token and a
@@ -7,10 +7,10 @@
 - J2: the `nebula` CLI reads NEBULA_APP_TOKEN_FILE (strictly, never into
   the environment), so a reply from the listening Claude's own shell is the
   listening session's: it settles the person's message.
-- Boundary LOW-1: revoking a token settles its listener's messages in flight.
-- Boundary LOW-2: the inbox and accept find a message in any project, and
+- Revoking a token settles its listener's messages in flight.
+- The inbox and accept find a message in any project, and
   a lost journal stretch or a failed read re-arms the inbox.
-- Live L1 / parity B7, NIT-2, NIT-3, LOW-2, live L3.
+- Live-check and parity findings (L1, B7, L3).
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ from tests.test_person_thread_round3 import _person_rows, _reply, paced  # noqa:
 # -- J1: a reply takes a Settings token -------------------------------------------------------
 
 def test_rotating_names_never_posts_a_reply(paced):
-    """Review 2 MEDIUM-1: 20 tokenless replies under 20 names used to all post."""
+    """20 tokenless replies under 20 names used to all post."""
     answers = [_reply(paced, f"r{n}", headers={"X-Nebula-Agent": f"Claude Code {n}"}) for n in range(20)]
     assert {(a.status_code, a.json()["detail"], a.headers["X-Nebula-Code"]) for a in answers} == {
         (401, person_thread.REPLY_NO_TOKEN_LINE, "reply_no_token")}
@@ -58,7 +58,7 @@ def test_a_revoked_token_gets_the_replys_own_line_and_the_listener_routes_r81s(t
     refused = _reply(thread, "hi", headers=bogus)
     assert refused.status_code == 401 and refused.json()["detail"] == person_thread.REPLY_BAD_TOKEN_LINE
     assert refused.headers["X-Nebula-Code"] == "reply_token_invalid"
-    # Parity NIT-2: the listener's own routes answer a bad token as registering does.
+    # The listener's own routes answer a bad token as registering does.
     for method, path in (("get", "/api/agent/thread/inbox"), ("post", "/api/agent/thread/accepted"),
                          ("post", "/api/agent/thread/held")):
         answer = getattr(thread.client, method)(path, headers=bogus, **({"json": {"messageIds": []}}
@@ -76,7 +76,7 @@ def test_the_reply_lines_follow_the_copy_rules():
 
 
 def test_the_agent_lines_are_gm_r94s_verbatim():
-    """GM r94: the words, and the command on its own line."""
+    """Design: the words, and the command on its own line."""
     command = "nebula mcp connect claude-code --channel"
     assert person_thread.REPLY_NO_TOKEN_LINE.split("\n") == [
         "Nebula couldn’t post this reply because this agent has no token. Copy one from Settings › Connect your "
@@ -157,7 +157,7 @@ def test_the_cli_sends_the_token_in_the_file_and_never_puts_it_in_the_environmen
 
 
 def test_the_token_file_wins_over_a_token_in_the_environment(token_file, monkeypatch):
-    # D3 (round 5; review 3 LOW-1/LOW-3): the MCP server's order, so the
+    # D3: the MCP server's order, so the
     # shell and the listener are one agent even when an old NEBULA_APP_TOKEN
     # is still exported.
     monkeypatch.setenv("NEBULA_APP_TOKEN", "from-env")
@@ -177,7 +177,7 @@ def test_a_bad_token_file_fails_closed_even_with_a_good_token_in_the_environment
 
 
 def test_has_token_is_true_only_when_a_token_is_sent(monkeypatch, tmp_path):
-    # Review 3 NIT: with a personal agent's NEBULA_AGENT_TOKEN_FILE set, the
+    # With a personal agent's NEBULA_AGENT_TOKEN_FILE set, the
     # app file isn't read, so (with nothing else) no token goes.
     assert not nebula_api.has_token({"NEBULA_AGENT_TOKEN_FILE": "/x", "NEBULA_APP_TOKEN_FILE": "/y"})
     assert nebula_api.has_token({"NEBULA_AGENT_TOKEN_FILE": "/x", "NEBULA_APP_TOKEN": "t"})
@@ -187,14 +187,14 @@ def test_has_token_is_true_only_when_a_token_is_sent(monkeypatch, tmp_path):
 
 
 def test_a_personal_agents_token_file_keeps_the_app_file_unread(token_file, monkeypatch):
-    # Review 3 LOW-2/LOW-6 B2: the NEBULA_AGENT_TOKEN_FILE guard.
+    # The NEBULA_AGENT_TOKEN_FILE guard.
     monkeypatch.setenv("NEBULA_AGENT_TOKEN_FILE", "/nonexistent")
     assert nebula_api.app_token_from_file() is None
     assert "Authorization" not in nebula_api.with_identity({"X-Nebula-Agent": "Claude Code"})
 
 
 def test_the_file_token_is_cached_per_path(token_file, monkeypatch, tmp_path):
-    # Review 3 LOW-6 B1: a changed NEBULA_APP_TOKEN_FILE reads the new file.
+    # A changed NEBULA_APP_TOKEN_FILE reads the new file.
     assert nebula_api.app_token_from_file() == "nbl_app_" + "a" * 40
     other = str(app_token_file.write(tmp_path / "other", "ba9876543210", "nbl_app_" + "b" * 40))
     monkeypatch.setenv("NEBULA_APP_TOKEN_FILE", other)
@@ -206,7 +206,7 @@ def test_a_token_file_open_to_others_fails_closed_without_the_token(token_file):
     with pytest.raises(nebula_api.NebulaAPIError) as refused:
         nebula_api.with_identity()
     assert "a" * 40 not in refused.value.detail
-    # GM r97: r94's shape, the reason as a clause after the variable, the command on its own line.
+    # Design: the same shape as the agent lines above, the reason as a clause after the variable, the command on its own line.
     assert refused.value.detail == (
         "Nebula couldn’t read this agent’s token because NEBULA_APP_TOKEN_FILE points to a file other users "
         "can read. Copy a new one from Settings › Connect your agent, then run this command.\n"
@@ -235,8 +235,8 @@ def test_each_token_file_reason_reads_as_a_clause(token_file, content, clause):
 
 
 def test_a_reply_from_the_listening_sessions_own_shell_settles_its_message(thread):
-    """Review 2 MEDIUM-2 / live M1: `nebula reply` from Claude's Bash has the
-    token (J2) but the CLI's cursor session, not the MCP process's."""
+    """Live M1: `nebula reply` from Claude's Bash has the
+    token but the CLI's cursor session, not the MCP process's."""
     a = _listen(thread, SESSION_A)
     sent = _send(thread, a, "make it warmer").json()["row"]
     thread.client.post("/api/agent/thread/accepted", headers=SESSION_A, json={"messageIds": [sent["id"]]})
@@ -282,7 +282,7 @@ def test_the_cli_without_a_token_says_so_and_without_a_name_says_how(monkeypatch
 
 
 def test_the_cli_counts_characters_as_nebula_does(monkeypatch, capsys):
-    """Parity NIT-3: an emoji family or a letter with its accent is one."""
+    """An emoji family or a letter with its accent is one."""
     from cli.commands import thread as thread_cmd
 
     sent = []
@@ -365,7 +365,7 @@ def _spanning(thread):
     push = take(state, 100.0)
     assert push.wake == "message"
     # The listener marks what it pushed as taken (Listener._accept): a reply
-    # then names it (replyTo), which is what ends the span (round 5, D1).
+    # then names it (replyTo), which is what ends the span.
     thread.client.post("/api/agent/thread/accepted", headers=SESSION_A, json={"messageIds": push.message_ids})
     assert state._reply_due_at is not None
     return state
@@ -419,7 +419,7 @@ def test_a_narrowed_thread_still_journals_the_replys_id(shell, thread, monkeypat
     assert state._reply_due_at is None
 
 
-# -- boundary LOW-1: revoke settles the messages in flight --------------------------------------
+# -- Revoke settles the messages in flight --------------------------------------
 
 def test_revoking_a_listeners_token_settles_its_messages_in_flight(thread, monkeypatch):
     from services import app_tokens
@@ -441,7 +441,7 @@ def test_revoking_a_listeners_token_settles_its_messages_in_flight(thread, monke
     assert _send(thread, a, "too late").status_code == 409
 
 
-# -- boundary LOW-2: the inbox across projects, and re-armed --------------------------------------
+# -- The inbox across projects, and re-armed --------------------------------------
 
 def test_a_message_sent_before_a_project_switch_still_reaches_its_listener(thread):
     a = _listen(thread, SESSION_A)

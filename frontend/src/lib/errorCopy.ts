@@ -23,6 +23,7 @@
  * site (warnFailure), lost connections aren't.
  */
 
+import { groupedCount } from './groupedCount';
 import { backendText } from './backendText';
 import { isOfflineRefusal } from './backendConnection';
 import { OFFLINE_VERBS, reconnectsLine } from './useBackendOffline';
@@ -359,7 +360,7 @@ export function closeBatchFailedLine(error: unknown, held: boolean = personGateH
  * the Commons turned off (round 18k): it destroyed nothing, so its line is neutral
  * (CommonsErrorLine). */
 export function isBecauseFailure(text: string): boolean {
-  return NEBULA_COULDNT.test(text) || /^Commons is turned off because /.test(text);
+  return NEBULA_COULDNT.test(text) || /^(?:Commons is turned off|[^.!?]{1,60} stopped) because /.test(text);
 }
 
 /** GM r41: the close's line says to try again (the close button beside it is the retry), or
@@ -486,6 +487,19 @@ export const NEBULA_NOT_ANSWERING_COPY = 'Nebula isn’t answering. Make sure it
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */
 export const BACKEND_NOT_RUNNING_COPY = 'Nebula’s backend isn’t running. Start it, then reload.';
+/** Design: the first load of the projects while Nebula's server can't be reached yet. It tries again by
+ * itself (1, 2, 4, 8, 16 s), and its button reads "Try now". Once the tries run out the line is today's,
+ * with "Try again". */
+export const FIRST_LOAD_RETRYING_COPY = 'Nebula can’t reach its server yet. Trying again…';
+/** Design: why "New project" is off until the first load lands (its title). */
+export const NEW_PROJECT_WAITING_TITLE = 'You can make a project when Nebula reaches its server.';
+/** Design: how long a project open waits for the server before it stops waiting. */
+export const OPEN_TIMEOUT_MS = 20_000;
+/** Design: a project open the server never answered. Ends in "Try again." as the button's own words, so it
+ * stands whole beside the button. */
+export function openTimedOutLine(project: string): string {
+  return `Nebula couldn’t open “${project}” because the server didn’t respond. Try again.`;
+}
 /**
  * GM r12 (2), PR #204 round 9: the Commons with no person session. The person's session is one
  * per launch and never expires on its own (backend services/person_session.py; commons/actors.py
@@ -722,7 +736,7 @@ const LEADS_A_CLAUSE = /^(?:That|This|These|Those|The|There|It|Its|Your|You|A|An
 /** The first words of the provider and app names Nebula's own lines open with ("Krea’s style images …", "Paper
  * can’t find …"): a short copy of the copy lint's proper names (scripts/copy-lint-rules.json), not the whole list,
  * to keep the startup bundle small. tests/nameLeads.guard.test.ts fails when the lint learns a name this list lacks. */
-const NAME_LEADS = /^(?:Gemini|Nano|Veo|Kling|Claude|Codex|Remotion|Hugging|World Labs|Black Forest|Nebula|Krea|Obsidian|Figma|Google|Vertex|Anthropic|Replicate|Runway|Ideogram|Meshy|Higgsfield|Seedream|Seedance|Grok|Luma|Recraft|Demucs|Whisper|Lyria|Imagen|Hunyuan|Quiver|Nous|Chrome|Electron|Opus|Sonnet|Haiku|Lottie|Tripo|Rodin|Qwen|Pika|Vidu|Topaz|Magnific|Hailuo|Paper|Wan|Jev|Speridlabs|Hermes|Mac|Windows|Linux|Cinema Studio|Character Studio|Moodboard Studio|Creator Studio|Commons|Agent Log|Marble|Finder)\b/;
+const NAME_LEADS = /^(?:Gemini|Nano|Veo|Kling|Claude|Codex|Remotion|Hugging|World Labs|Black Forest|Nebula|Krea|Obsidian|Figma|Google|Vertex|Anthropic|Replicate|Runway|Ideogram|Meshy|Higgsfield|Seedream|Seedance|Grok|Luma|Recraft|Demucs|Whisper|Lyria|Imagen|Hunyuan|Quiver|Nous|Chrome|Electron|Opus|Sonnet|Haiku|Lottie|Tripo|Rodin|Qwen|Pika|Vidu|Topaz|Magnific|Hailuo|Paper|Wan|Jev|Speridlabs|Idol|Hermes|Mac|Windows|Linux|Cinema Studio|Character Studio|Moodboard Studio|Creator Studio|Commons|Agent Log|Marble|Finder)\b/;
 
 /** Whether a reason's first word can follow "because": a lead word (lower-cased by the rule), a lower-case word,
  * a quoted name or a {} slot, a name Nebula knows (NAME_LEADS), or a name written with a capital inside it or a
@@ -1330,7 +1344,7 @@ export function countsInstead(count: number): boolean {
  * lines (lib/placeholderRunConfirm).
  */
 export function nodeNameList(names: string[]): string {
-  if (countsInstead(names.length)) return `${names.length} nodes`;
+  if (countsInstead(names.length)) return `${groupedCount(names.length)} nodes`;
   const groups = new Map<string, number>();
   for (const name of names) groups.set(name, (groups.get(name) ?? 0) + 1);
   return joinedList([...groups].map(([name, count]) => (count === 1 ? `“${name}”` : `${count} “${name}” nodes`)));
@@ -1345,7 +1359,7 @@ export function nodeNameList(names: string[]): string {
  */
 export function agentNameList(names: string[]): string {
   const agents = [...new Set(names)];
-  if (countsInstead(agents.length)) return `${agents.length} agents`;
+  if (countsInstead(agents.length)) return `${groupedCount(agents.length)} agents`;
   return joinedList(agents.map((name, at) => (at === 0 ? name : agentNameInSentence(name))));
 }
 

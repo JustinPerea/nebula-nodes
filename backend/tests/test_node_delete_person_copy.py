@@ -1,10 +1,10 @@
 """A refused node delete: the person reads written copy, agents keep the detail.
 
-Review of error-copy round 2: the canvas alert read "Couldn't delete the node.
+Review of error-copy: the canvas alert read "Couldn't delete the node.
 Cannot delete n3: it has unresolved World Labs paid state. Check Marble, then
 resolve its exact recovery/ambiguity record first." and "Couldn't delete the
-node. Node n3 not found": an internal id and technical words (GM: never ids
-in what the person reads). GM's split for refusals (error-copy round 2):
+node. Node n3 not found": an internal id and technical words (design: never ids
+in what the person reads). Design's split for refusals (error-copy):
 "People get the written line and agents keep the specific detail." The
 person's canvas is a browser page (Origin or Sec-Fetch-Site) with no agent
 marker, with or without this launch's person token (a plain tab has none).
@@ -33,10 +33,10 @@ CLI = {"X-Nebula-Client": "nebula-cli"}
 # The packaged desktop renderer (a file: page) sends no Origin, but does send Sec-Fetch-Site.
 DESKTOP = {"Sec-Fetch-Site": "same-site", **CANVAS_PARAMS_VERSION}
 
-# Round 3 (GM): "'settle' and 'start' are internal." These nodes' start is
+# Design: "'settle' and 'start' are internal." These nodes' start is
 # still in flight (has_active_node), so the line says to let the run finish;
 # tests/test_error_copy_round3.py has the line for each other record.
-PAID_PERSON = "A World Labs run is still starting. Try again in a moment."  # GM, round 13 of PR #114
+PAID_PERSON = "A World Labs run is still starting. Try again in a moment."  # Design, PR #114
 GONE_PERSON = "That node isn’t on the canvas anymore."
 
 

@@ -90,7 +90,7 @@ def test_a_google_login_with_a_cloud_project_may_be_a_code_assist_license(tmp_pa
 
 @pytest.mark.parametrize("selected", ["compute-default-credentials", "cloud-shell"])
 def test_a_machine_sign_in_never_says_google_cloud_credentials(tmp_path, home, selected):
-    # GM r28 item 1 (PR #203): Google's own term stays out of every person line.
+    # Design (PR #203): Google's own term stays out of every person line.
     write_settings(home, selected)
     result = check(fake_gemini(tmp_path, "0.64.0", NEW_HELP), home, tmp_path)
     assert result.ready and "credentials" not in result.note.lower()

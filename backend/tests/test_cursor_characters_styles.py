@@ -70,7 +70,7 @@ def test_the_character_part_labels_are_the_studios():
 
 
 def test_each_character_part_label_is_a_visible_label_of_the_definition_panel():
-    """The pin GM asked for: the label a part goes by is the text the panel shows."""
+    """The pin design asked for: the label a part goes by is the text the panel shows."""
     panel = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "components" / "character-studio"
              / "CharacterDefinitionPanel.tsx").read_text(encoding="utf-8")
     shown = re.findall(r'className="character-def__label">\s*([^<{]+?)\s*(?:\(|\{|<)', panel)
@@ -1003,7 +1003,7 @@ def test_nebula_character_list_and_show(api, monkeypatch, capsys):
     assert '"scope": "global"' in run("list", "--json", "--global")
 
 
-# -- GM round 1: a Character can only be looked at ------------------------------------------------------
+# -- Design: a Character can only be looked at ------------------------------------------------------
 
 @pytest.mark.parametrize("action", ["type", "click"])
 @pytest.mark.parametrize("extra", [{}, {"view": 2}, {"part": "traits"}])
@@ -1051,7 +1051,7 @@ def test_point_at_and_the_cli_say_what_was_stored_for_a_character(api):
                                            "Claude \u2192 character \u201cMara\u201d"]
 
 
-# -- GM round 1, R1: an item deleted while the point route reads ------------------------------------
+# -- Design: an item deleted while the point route reads ------------------------------------
 
 def _delete_during_first_lookup(monkeypatch, name, act):
     """The route's first lookup reads the item, then `act` changes it before the
@@ -1395,7 +1395,7 @@ def test_a_rename_while_the_point_reads_does_not_refuse_it(api, monkeypatch):
     assert made.json()["anchorNames"] == {"character": "Mara Vance"}  # the name as the second look read it
 
 
-# -- GM round 1, R2: a name cut at 80 characters keeps a joined emoji whole ----------------------------
+# -- Design: a name cut at 80 characters keeps a joined emoji whole ----------------------------
 
 FAMILY = "\U0001F468‍\U0001F469‍\U0001F467"  # man, ZWJ, woman, ZWJ, girl: characters 79 to 83
 LONG_NAME = "a" * 78 + FAMILY + "tail"

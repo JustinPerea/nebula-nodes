@@ -92,7 +92,7 @@ def test_every_commit_keeps_a_last_good_copy(tmp_path):
     assert oct(store.backup_path.stat().st_mode & 0o777) == "0o600"
     _add(store, "Beta")
     # .bak is the catalog each commit replaced (one commit behind, a hard
-    # link: review 1 of PR #199, L6); the damaged file holds the newest.
+    # link); the damaged file holds the newest.
     assert _names(json.loads(store.backup_path.read_text())) == {"Alpha"}
     # No temporary copy is left behind.
     assert not list(store.root.glob(".catalog-backup.*")) and not list(store.root.glob(".catalog-bak.*"))
@@ -136,7 +136,7 @@ def test_corrupt_json_restores_the_last_good_copy_and_keeps_the_damaged_file(tmp
 
     assert _names(catalog) == {"Alpha", "Beta"}
     # The damaged file can't say which project was open, so none is: never
-    # the copy's, which may not be the live canvas's (review 1, H1).
+    # the copy's, which may not be the live canvas's.
     assert catalog["activeProjectId"] is None
     # Open tabs hold the old list: a new revision makes them reload.
     assert catalog["workspaceRevision"] != revision
@@ -248,7 +248,7 @@ def test_with_nothing_to_rebuild_from_it_refuses_as_before_and_changes_nothing(t
 
 def _commit_without_copy(store: ProjectStore, monkeypatch, mutate) -> None:
     """A commit whose change is in catalog.json only. .bak is the catalog a
-    commit replaced (review 1, L6), so every commit is one: the latest change
+    commit replaced, so every commit is one: the latest change
     is only in the file that may then be damaged."""
     with store.transaction() as catalog:
         mutate(catalog)
@@ -348,7 +348,7 @@ def test_a_project_moved_to_recently_deleted_after_the_copy_stays_there(tmp_path
 def test_a_project_deleted_for_good_after_the_copy_stays_deleted_by_the_side_file(tmp_path, monkeypatch):
     """A delete for good as the latest commit, then a catalog.json that can't
     be read at all: catalog-purged.json, written right after that commit,
-    proves it (review 4 of PR #199, L-3), so it stays deleted and says so.
+    proves it (PR #199), so it stays deleted and says so.
     Before it, nothing proved it and the project came back from the copy."""
     store = _store(tmp_path)
     _alpha, beta = _add(store, "Alpha", "Beta")

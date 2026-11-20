@@ -1,4 +1,4 @@
-"""The Message box thread, round 5 (review 3 of #223/#225; coordinator D1-D3, GM r100).
+"""The Message box thread, (#223/#225; coordinator D1-D3, design).
 
 - D1: a reply's event names the message it answers (``replyTo``, both forms)
   and never a session or a listener id.
@@ -7,11 +7,11 @@
   session's message, takes its label and flies its cursor. A terminal that
   is no listening session answers the agent's one fresh listener; with two
   or more, Nebula won't guess (replyTo None, and a note says why).
-- GM r100.3: a reply goes to the thread of the message it answers, with an
+- Design: a reply goes to the thread of the message it answers, with an
   Update on the open project naming it ("Claude Code replied in “Coast”."),
-  whose Open opens that thread; no message and no project: r100's line.
+  whose Open opens that thread; no message and no project: the refusal line.
 - `nebula pin resolve` from the session's shell ends that pin's span.
-- Rows carry ``rev`` (review 3 LOW-4), and the review 3 survivors B6, B7, B13.
+- Rows carry ``rev``, and the remaining review findings (B6, B7, B13).
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def _notes_of(thread, project_id: str) -> list[dict]:
     return list(catalog["projects"][project_id].get("agentNotes") or [])
 
 
-# -- GM r100.3: the reply goes where its message is -------------------------------------------
+# -- Design: the reply goes where its message is -------------------------------------------
 
 @pytest.mark.parametrize("way", ["first to second", "second to first"])
 def test_a_reply_after_a_project_switch_goes_to_its_messages_thread_both_ways(thread, way):
@@ -95,7 +95,7 @@ def test_a_reply_after_a_project_switch_goes_to_its_messages_thread_both_ways(th
 
 def test_a_reply_saved_in_another_project_keeps_no_node_of_the_open_canvas(thread):
     # The node is on the other project's canvas, not the open one: it is
-    # ignored (review 4; GM r108 b: no cursor flies, the Update is the signal).
+    # ignored (design: no cursor flies, the Update is the signal).
     first = thread.project_id
     coast = _new_project(thread, "Coast")
     a = _listen(thread, SESSION_A)
@@ -118,7 +118,7 @@ def test_a_reply_in_the_open_project_posts_no_update(thread):
 
 
 def test_the_oldest_open_push_is_answered_first_across_projects(thread):
-    # Review 4 (the push ledger): oldest first follows the order Claude
+    # The push ledger: oldest first follows the order Claude
     # answers its queued pushes in.
     coast = _new_project(thread, "Coast")
     a = _listen(thread, SESSION_A)
@@ -146,7 +146,6 @@ def test_no_message_and_no_project_open_is_refused_with_r100s_line(paced):
 
 
 def test_a_store_error_refunds_the_pace(paced, monkeypatch):
-    # Review 3 LOW-6 B6.
     real = paced.main.thread_book.add_reply
 
     def broken(*a, **k):
@@ -176,7 +175,7 @@ def test_the_reply_event_names_the_message_and_never_a_session_or_listener(threa
 # -- D2: the shell is its listener's session ------------------------------------------------------
 
 def test_two_sessions_on_one_token_each_shell_answers_its_own_message(thread):
-    # Review 3 MEDIUM-1: two Claude Code sessions under one Settings token.
+    # Two Claude Code sessions under one Settings token.
     a, b = _listen(thread, SESSION_A), _listen(thread, SESSION_B)
     to_a = _send(thread, a, "for a").json()["row"]
     _accept(thread, SESSION_A, to_a)
@@ -192,7 +191,7 @@ def test_two_sessions_on_one_token_each_shell_answers_its_own_message(thread):
 
 
 def test_a_shell_reply_flies_the_listening_sessions_cursor(thread):
-    # GM r100.1: one Claude is one cursor. A terminal that isn't a listening
+    # Design: one Claude is one cursor. A terminal that isn't a listening
     # session (its own cursor session) answering the one fresh listener
     # flies that listener's cursor, never a "Claude Code · 2".
     n1 = thread.main.cli_graph.add_node("text-input", {"value": "a"})
@@ -217,7 +216,7 @@ def test_with_two_fresh_listeners_a_stray_terminal_isnt_guessed(thread):
         "Nebula posted this reply but couldn’t tell which message it answers because 2 Claude Code sessions are "
         "listening and this terminal isn’t one of them. Reply from the Claude Code the person messaged. To stop "
         "this, start each Claude Code with this command, which gives it its own session that its terminals share.\n"
-        "nebula mcp connect claude-code --channel")  # GM r108, string 3
+        "nebula mcp connect claude-code --channel")  # Design
 
 
 def test_a_crashed_sessions_leftover_never_blocks_the_answer(thread):
@@ -233,7 +232,7 @@ def test_a_crashed_sessions_leftover_never_blocks_the_answer(thread):
 
 
 def test_the_launch_command_makes_a_session_id_per_launch():
-    # Review 4 (all three lenses): no uuidgen (Debian/Ubuntu ship it apart,
+    # No uuidgen (Debian/Ubuntu ship it apart,
     # and without it every launch was the bare session "cc-"). POSIX only:
     # the shell's clock and its own process id, at each launch.
     from cli.commands import mcp_connect
@@ -306,7 +305,7 @@ def test_a_shell_pin_answer_ends_only_its_own_sessions_pin_span(thread):
     assert b_state._reply_due_at is not None  # a sibling's answer never ends B's
 
 
-# -- channel_status and `nebula channel` agree for a tokenless caller (NIT-2) ----------------------
+# -- channel_status and `nebula channel` agree for a tokenless caller ----------------------
 
 def test_channel_status_without_a_token_says_what_nebula_channel_says(monkeypatch):
     import mcp_server
@@ -320,7 +319,7 @@ def test_channel_status_without_a_token_says_what_nebula_channel_says(monkeypatc
     assert seen["detail"].endswith("\nnebula mcp connect claude-code --channel")
 
 
-# -- LOW-4: every change to a row raises its rev -------------------------------------------------
+# -- Every change to a row raises its rev -------------------------------------------------
 
 def test_rows_carry_a_rev_that_each_change_raises(thread):
     a = _listen(thread, SESSION_A)
@@ -333,7 +332,7 @@ def test_rows_carry_a_rev_that_each_change_raises(thread):
     assert reply["rev"] == 1
 
 
-# -- review 3 LOW-6: B7 (the inbox's open project first) and B13 (token-file clauses) -------------
+# -- B7 (the inbox's open project first) and B13 (token-file clauses) -------------
 
 def test_the_inbox_lists_the_open_projects_messages_first(thread):
     coast = _new_project(thread, "Coast")

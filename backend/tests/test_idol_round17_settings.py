@@ -1,17 +1,17 @@
-"""PR #203 round 17, section 2: review 16's settings findings.
+"""PR #203, section 2: settings findings.
 
-- MEDIUM-1: no save loses settings.json. A file whose ACL and extended
+- No save loses settings.json. A file whose ACL and extended
   attributes can be carried stays atomic; an in-place write grows the file
   first, writes the new JSON over the old, then cuts it, so it parses at
   every step, keeps a verified copy of the old file in Nebula's own folder
   (put back at the next start when the file doesn't parse), and every save
   holds an exclusive lock.
-- LOW-1: the startup sweep removes only Nebula's own temp names.
-- LOW-2: the temp file's group (S15) and a file that turns read-only before
+- The startup sweep removes only Nebula's own temp names.
+- The temp file's group (S15) and a file that turns read-only before
   the in-place write (S16).
-- NIT-2: every missing folder level is 0700, and the line names the folder
-  that refuses (GM r33 item 5).
-- NIT-3: the in-place write never follows a symlink or writes a file other
+- Every missing folder level is 0700, and the line names the folder
+  that refuses (design).
+- The in-place write never follows a symlink or writes a file other
   than the one it decided on.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ DARWIN = sys.platform == "darwin"
 
 @pytest.fixture
 def shared_temp_name(monkeypatch):
-    """Put the one shared temp name back (round 23 gave each save a name of
+    """Put the one shared temp name back (gave each save a name of
     its own): for the tests of what a save does when it meets a file at
     that name, the leftover of an older version or a staged race."""
     monkeypatch.setattr(settings, "_new_temp", settings.temp_path_for)
@@ -65,7 +65,7 @@ def _parses(path: Path) -> dict:
 
 def _left(folder: Path) -> list[str]:
     """What is in ``folder``, without the private temp folder when it is
-    empty (round 23b: each save's temp lives in one, which stays)."""
+    empty (each save's temp lives in one, which stays)."""
     return sorted(p.name for p in folder.iterdir()
                   if not (p.name == settings.TEMP_FOLDER and p.is_dir() and not any(p.iterdir())))
 
@@ -348,7 +348,7 @@ def test_two_processes_saving_at_once_take_turns(keyed, tmp_path, kind):
 # -- the copy and the restore at start ---------------------------------------------------
 
 def copy_body(path: str, text: str, next_text: str = '{"favorites": []}\n') -> dict:
-    """A copy as _keep_backup writes it (round 18: marked, hashed, with the
+    """A copy as _keep_backup writes it (marked, hashed, with the
     text being written)."""
     return {"nebula": "settings-copy", "version": 1, "path": path,
             "sha256": settings._copy_digest(Path(path), text, next_text), "text": text, "next": next_text}
@@ -553,7 +553,7 @@ def test_an_xattr_and_posix_acl_file_stays_atomic_and_keeps_both_on_linux(keyed)
 def test_metadata_that_cant_be_carried_writes_in_place_and_leaves_no_temp(keyed, monkeypatch):
     """Through the one seam every system's copy goes through
     (settings._copy_metadata), so the same branch runs on macOS and Linux
-    (round 18: patching the platform's own calls passed only on macOS)."""
+    (patching the platform's own calls passed only on macOS)."""
     monkeypatch.setattr(settings, "_has_own_metadata", lambda path: True)
     tried: list[str] = []
 
@@ -596,7 +596,7 @@ def test_linux_an_xattr_that_cant_be_set_on_the_new_file_writes_in_place(keyed, 
 
 class _FakeLinuxXattrs:
     """Linux's xattr calls over a dict, so the Linux copy runs on any system.
-    The calls take descriptors (round 23d), keyed here by the file's
+    The calls take descriptors, keyed here by the file's
     (device, inode); a path is accepted too."""
 
     def __init__(self, refuse: bool) -> None:
@@ -626,7 +626,7 @@ class _FakeLinuxXattrs:
 def test_the_linux_copy_as_linux_runs_it(keyed, monkeypatch, refuse):
     """The platform "linux" with Linux's xattr calls (faked), through the
     module's own seams (settings._PLATFORM, _listxattr, _getxattr,
-    _setxattr; review 17, tests MEDIUM-1: never sys.platform or os's own,
+    _setxattr: never sys.platform or os's own,
     which every test shares): an xattr the temp file refuses writes in
     place; one it takes is copied, then the rename. This runs the Linux
     branch on macOS too."""
@@ -650,7 +650,7 @@ def test_the_linux_copy_as_linux_runs_it(keyed, monkeypatch, refuse):
         assert copied == [{"user.nebula-tag": b"kept"}]
 
 
-# -- LOW-1: the sweep removes only Nebula's own names ------------------------------------
+# -- The sweep removes only Nebula's own names ------------------------------------
 
 def test_the_sweep_keeps_every_file_nebula_didnt_name(keyed, tmp_path, monkeypatch):
     folder = keyed.parent
@@ -701,12 +701,12 @@ def test_a_save_names_its_temp_file_as_the_sweep_knows_it(keyed, monkeypatch):
     monkeypatch.setattr(settings, "_replace", look)
     settings.save_settings({"favorites": []})
     [name] = names
-    # Round 23: the shared name, then this save's process id and a token (round 18 had the shared name alone).
+    # The shared name, then this save's process id and a token (had the shared name alone).
     assert re.fullmatch(r"\.settings\.json\.nebula-tmp-%d-[0-9a-f]{16}" % os.getpid(), name), name
     assert name.startswith(settings.temp_path_for(keyed).name + "-")
 
 
-# -- LOW-2: mutants S15 and S16 ---------------------------------------------------------
+# -- Mutants S15 and S16 ---------------------------------------------------------
 
 def _with_gid(real: os.stat_result, gid: int) -> os.stat_result:
     fields = list(real[:10])
@@ -778,7 +778,7 @@ def test_a_refused_in_place_write_is_the_file_line(keyed, monkeypatch, err):
     assert refused.value.cause == "file" and refused.value.where == keyed
 
 
-# -- NIT-2: every missing level 0700; the folder that refuses is named ---------------------
+# -- Every missing level 0700; the folder that refuses is named ---------------------
 
 def test_every_missing_folder_level_is_made_this_users_only(home_file, tmp_path, monkeypatch):
     path = tmp_path / "home" / "a" / "b" / "settings.json"
@@ -826,7 +826,7 @@ def test_a_level_made_by_the_save_that_refuses_the_next_names_it(home_file, tmp_
     assert stat.S_IMODE((top / "a").stat().st_mode) == 0o700
 
 
-# -- NIT-3: the in-place write writes the file it decided on, never through a link ----------
+# -- The in-place write writes the file it decided on, never through a link ----------
 
 def test_a_symlink_swapped_in_after_the_decision_is_never_written_through_in_place(keyed, tmp_path, monkeypatch):
     other = _hard_link(keyed)  # in place

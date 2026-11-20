@@ -153,11 +153,11 @@ describe('GM PR #202 r1: the Commons proposals line while the tab is held', () =
     setUpdates([update('pa_a', 'ast_1', { proposal: { changes: 2 } }), update('pa_b', 'ast_2', { at: new Date(T0 + 1).toISOString() })]);
     const { container } = render(<CommonsProposalsLine onOpen={() => {}} />);
     expect(lines(container)).toHaveLength(2);
-    act(() => setUpdates([update('pa_a', 'ast_1', { proposal: { changes: 2 }, resolvedAt: new Date(T0 + 9).toISOString(), outcome: 'Withdrawn by Codex' }),
+    act(() => setUpdates([update('pa_a', 'ast_1', { proposal: { changes: 2 }, resolvedAt: new Date(T0 + 9).toISOString(), outcome: 'Withdrawn' }),
       update('pa_b', 'ast_2', { at: new Date(T0 + 1).toISOString() })]));
     expect(lines(container).map((line) => line.dataset.heldCommons)).toEqual(['pa_b']);
     expect(lines(container)).toHaveLength(1);
-    act(() => setUpdates([update('pa_a', 'ast_1', { proposal: { changes: 2 }, resolvedAt: new Date(T0 + 9).toISOString(), outcome: 'Withdrawn by Codex' }),
+    act(() => setUpdates([update('pa_a', 'ast_1', { proposal: { changes: 2 }, resolvedAt: new Date(T0 + 9).toISOString(), outcome: 'Withdrawn' }),
       update('pa_b', 'ast_2', { at: new Date(T0 + 1).toISOString(), resolvedAt: new Date(T0 + 10).toISOString(), outcome: 'Expired' })]));
     expect(lines(container)).toHaveLength(0);
   });

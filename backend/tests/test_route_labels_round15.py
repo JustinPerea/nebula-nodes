@@ -1,4 +1,4 @@
-"""Review 14, L-I, and GM - Design, round 15, item 3: "a confirm row names
+"""Design: "a confirm row names
 the route that actually runs, and that route's price ... Never show the
 Krea price for a run that doesn't go through Krea." The agent-facing twin
 is a proposal's cost: each run node's `provider` and its "paid · <provider>"
@@ -22,7 +22,7 @@ def test_cost_for_a_krea_copy_names_the_route_with_the_keys_set():
     from services.canvas_proposals import cost_for
 
     grok = _definitions()[GROK]
-    # GM - Design, round 16 (b): a label the route builds reads "<model> via <provider>".
+    # Design (b): a label the route builds reads "<model> via <provider>".
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x"}) == {"kind": "paid", "provider": "xai",
                                                                "label": "paid · Grok Imagine 2.0 via xAI"}
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"})["provider"] == "xai"
@@ -31,7 +31,7 @@ def test_cost_for_a_krea_copy_names_the_route_with_the_keys_set():
     # A Krea-only input that arrives by connection keeps it on Krea.
     assert cost_for(grok, {}, None, {"XAI_API_KEY": "x", "KREA_API_TOKEN": "k"},
                     wired={"style_images"})["provider"] == "krea"
-    # Keys are required (GM, PR #203 r15 item 1); on Krea's alone it is Krea.
+    # Keys are required (design, PR #203); on Krea's alone it is Krea.
     assert cost_for(grok, {}, None, {"KREA_API_TOKEN": "k"})["provider"] == "krea"
 
 

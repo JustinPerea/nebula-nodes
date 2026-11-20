@@ -267,8 +267,8 @@ describe('the Commons status tooltips', () => {
   ])('the daily cap resumes at local time written like "12:00 AM" (%s)', (resets, written) => {
     const line = title(status({ worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
       meter: { calls: 20, cap: 20, remaining: 0, resets_at: resets.toISOString() } }));
-    expect(line.title).toBe(`Library analysis is paused. It made 20 analysis calls today, and Settings has “Analysis calls per day” at 20. It resumes on its own at ${written}.`);
-    expect(line.text).toBe(`Paused until ${written} · daily cap`);
+    expect(line.title).toBe(`Library analysis is paused. It made 20 analysis calls today, and Settings has “Analysis calls per day” at 20. Resumes at ${written}, when the daily cap resets.`);
+    expect(line.text).toBe('Paused · daily cap');
   });
 
   it('writes the time the same way in every locale', () => {
@@ -277,12 +277,12 @@ describe('the Commons status tooltips', () => {
     vi.spyOn(Date.prototype, 'toLocaleTimeString').mockReturnValue('00:00');
     const line = title(status({ worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
       meter: { calls: 20, cap: 20, remaining: 0, resets_at: new Date(2026, 8, 28, 0, 0).toISOString() } }));
-    expect(line.title).toMatch(/It resumes on its own at 12:00 AM\.$/);
+    expect(line.title).toMatch(/Resumes at 12:00 AM, when the daily cap resets\.$/);
     vi.restoreAllMocks();
   });
 
-  it('a busy computer: GM\'s words, no "load average"', () => {
+  it('a busy computer: the reading is in the tooltip, no "load average"', () => {
     const line = title(status({ worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 41.5, load_threshold: 32 }));
-    expect(line.title).toBe('Library analysis is paused while this computer is busy. Its load is 41.5, above the 32 set in “Pause above load” in Settings. It resumes on its own when the load drops.');
+    expect(line.title).toBe('Library analysis is paused while this computer is busy. Load 41.5 is above your pause limit of 32 (“Pause above load”, under Meter in Settings). Analysis resumes on its own when the load drops.');
   });
 });

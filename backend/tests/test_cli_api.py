@@ -1190,10 +1190,10 @@ class TestOutputsRestore:
     def test_restore_opens_a_bundle_whose_graph_is_over_the_save_limit(
         self, client, tmp_path, monkeypatch
     ):
-        # Q121 a (Justin, 2026-10-24): "Bundles work like plain files: Load
+        # (Justin, 2026-10-24): "Bundles work like plain files: Load
         # graph opens a bundle whose graph is over 16 MiB as a new project, up
         # to the bundle limit". The restore returns the graph; the import that
-        # follows decides about the save limit (Q120), as for a plain .nebula.
+        # follows decides about the save limit, as for a plain .nebula.
         import zipfile
 
         main_module = self._use_isolated_output_root(monkeypatch, tmp_path)
@@ -1546,7 +1546,8 @@ class TestChatAgentDispatch:
         original = AGENT_RUNNERS[agent]
 
         async def attributed_runner(*_args, **_kwargs):
-            publish_action("Added text-input as n1")
+            # What still publishes: a refused run's line no agent cursor carried (design).
+            publish_action("Nebula couldn’t start the run. Add a prompt, then run the node again.")
             yield {
                 "type": "tool_use",
                 "toolUseId": "tool-1",
@@ -1708,7 +1709,7 @@ class TestCinemaScenePersistsScene:
         "aspectRatio": "1:1",
         "shots": [{"id": "s1", "prompt": "x"}],
     }
-    # Every write fills a scene's missing fields (PR #198 fix round 2, M2):
+    # Every write fills a scene's missing fields (PR #198, M2):
     # this one only lacks the version.
     _STORED = {"version": 1, **_SCENE}
 
@@ -1823,7 +1824,7 @@ class TestCinemaScenePersistsScene:
         assert client.get("/api/graph").json()["nodes"] == []
 
     def test_import_drops_a_shot_output_no_shot_owns(self, client):
-        """PR #198 review 4, L1: a port no shot owns (a removed shot's late
+        """PR #198: a port no shot owns (a removed shot's late
         image, or a made-up one) is dropped on a lenient import, with any wire
         from it, instead of refusing the file; its value never lands."""
         response = client.post("/api/graph/import", json={

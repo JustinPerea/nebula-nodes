@@ -1,17 +1,17 @@
-"""PR #203 round 10: one cost class with the Krea plan and the sourced $0 in
+"""PR #203: one cost class with the Krea plan and the sourced $0 in
 it, refusals worded for their reader where they are written, and a settings
 signal for the person's tabs that names the keys it changed.
 
-- GM r18 item 1: a sourced $0 is free, never paid (model_pricing.cost_class).
-- GM r19 item 1 (review 9, cost MEDIUM-1): a run on the Krea plan is its own
+- Design: a sourced $0 is free, never paid (model_pricing.cost_class).
+- Design: a run on the Krea plan is its own
   class, out of "N paid" and the figure, with a ``plan`` reason.
-- Review 9, keys MEDIUM-1: each refusal names its reader's own call
+- Each refusal names its reader's own call
   (services/agent_words), and the CLI prints it as it came.
-- Review 9, keys LOW-1 and GM r19 item 7: settingsChanged goes to the
+- Design: settingsChanged goes to the
   person's tabs only, with the names of the keys that changed.
-- Review 9, keys NIT-1: a save writes back what it wasn't asked to change.
-- Review 9, keys LOW-4: describe_node's per-route billing row reads the class.
-- GM r18 item 3: the empty-key refusal's words.
+- A save writes back what it wasn't asked to change.
+- describe_node's per-route billing row reads the class.
+- Design: the empty-key refusal's words.
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ REGISTRY = NodeRegistry().get_all()
 SHIPPED = json.loads((BACKEND / "data" / "model_pricing.json").read_text(encoding="utf-8"))
 
 
-# -- one cost class (GM r18 item 1, r19 item 1) ---------------------------------------------
+# -- one cost class (design) ---------------------------------------------
 
 
 @pytest.mark.parametrize("case", CASES["classCases"], ids=[case["name"] for case in CASES["classCases"]])
@@ -63,8 +63,8 @@ def test_each_node_gets_the_shared_cost_class(case):
     assert result["sourcedZero"] is expected["sourcedZero"]
     for node in expected["plan"]:
         assert result["reasons"][node] == {"kind": "plan"}
-    # Each node's reason, as the frontend's tooltip groups them (GM, PR #203
-    # r20 item 2: the same reasons, so the merged line agrees; round 11).
+    # Each node's reason, as the frontend's tooltip groups them (design, PR #203:
+    # the same reasons, so the merged line agrees).
     if "reasons" in expected:
         assert result["reasons"] == expected["reasons"]
 
@@ -117,12 +117,12 @@ def test_a_proposal_counts_a_krea_plan_run_apart_from_paid(keyed):  # noqa: F811
 # uses_krea_account (the Krea plan). Everything that counts a node reads
 # model_pricing.cost_class.
 CLASS_PARTS = {
-    # key_billing_host (round 13) is where a key-billing run runs, which
+    # key_billing_host is where a key-billing run runs, which
     # key_billing_account names; it replaced key_billing_account's own read.
     "key_billing": {("services/node_route.py", "may_bill"), ("services/node_route.py", "key_billing_host"),
                     ("services/model_pricing.py", "cost_class")},
     "uses_krea_account": {("services/model_pricing.py", "cost_class")},
-    # The spend gate reads the one class too (review 10, NIT-5): may_bill is
+    # The spend gate reads the one class too: may_bill is
     # its documented twin, read by nothing outside the tests.
     "may_bill": set(),
 }
@@ -171,7 +171,7 @@ def test_the_class_ratchet_catches_a_second_reader(tmp_path):
     assert "in cost_class" not in reported
 
 
-# -- each refusal in its reader's words (review 9, keys MEDIUM-1) ---------------------------
+# -- each refusal in its reader's words ---------------------------
 
 
 def _refusal_constants() -> dict[str, str]:
@@ -249,7 +249,7 @@ def test_the_cli_says_it_is_the_cli_on_every_request_and_is_no_agent_marker():
 
 def test_a_live_re_read_keeps_a_plan_run_out_of_free():
     """A token set after the proposal re-reads Idol (live_cost); the run on
-    the Krea plan stays counted apart, never as free (GM r19 item 1)."""
+    the Krea plan stays counted apart, never as free (design)."""
     from types import SimpleNamespace
 
     proposal = SimpleNamespace(key_params={"+i": {}}, cost={
@@ -263,7 +263,7 @@ def test_a_live_re_read_keeps_a_plan_run_out_of_free():
 
 
 def test_the_cli_prints_a_refusal_exactly_as_it_came(capsys):
-    """Review 9, keys MEDIUM-1: _fail rewrites nothing, MCP words included
+    """_fail rewrites nothing, MCP words included
     (a refusal worded for MCP reaches the CLI only from a caller that didn't
     say it is the CLI, and stays as written)."""
     from cli.client import NebulaClient
@@ -290,7 +290,7 @@ def test_one_table_and_a_name_beside_its_command_is_kept():
         "Propose it: `nebula propose --note \"<why>\" --run n2 --run n3`.")
 
 
-# -- the settings signal (review 9, keys LOW-1; GM r19 item 7) -------------------------------
+# -- the settings signal (design) -------------------------------
 
 
 @pytest.fixture
@@ -316,7 +316,7 @@ def _heard(socket) -> list[dict]:
     raise AssertionError("no marker")
 
 
-_promoted = wait_for_promote  # round 11 imports it by this name
+_promoted = wait_for_promote  # Imports it by this name
 
 
 def test_the_signal_reaches_the_persons_tab_and_never_an_agent(sockets):
@@ -347,7 +347,7 @@ def test_a_replaced_key_is_named_and_a_masked_echo_changes_nothing(sockets, monk
         {"type": "settingsChanged", "keys": ["OPENAI_API_KEY"]}, {"type": "settingsChanged", "keys": []}]
 
 
-# -- a save changes only what it was asked to (review 9, keys NIT-1) -------------------------
+# -- a save changes only what it was asked to -------------------------
 
 
 def test_a_save_writes_back_every_entry_it_was_not_asked_to_change(sockets):
@@ -369,7 +369,7 @@ def test_a_save_writes_back_every_entry_it_was_not_asked_to_change(sockets):
     assert settings.load_settings()["apiKeys"] == {"OPENAI_API_KEY": "sk-padded-1111", "FAL_KEY": "fal-3333"}
 
 
-# -- GM r18 item 3, and the shared "can be stored" predicate (review 9, keys NIT-2) ----------
+# -- Design's empty-key refusal, and the shared "can be stored" predicate ----------
 
 
 def test_the_empty_key_refusal_says_nothing_was_saved():
@@ -388,7 +388,7 @@ def test_what_settings_stores_matches_the_field(case):
     assert stored == case["stored"]
 
 
-# -- describe_node's billing row reads the class (review 9, keys LOW-4) ----------------------
+# -- describe_node's billing row reads the class ----------------------
 
 
 def test_each_routes_billing_row_follows_the_cost_class():

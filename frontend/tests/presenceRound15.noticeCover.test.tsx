@@ -183,7 +183,7 @@ describe('lineUncovered: a layer the line shows through doesn\'t cover it (GM r2
     added.push(overlay);
     overlay.className = 'mask-painter__overlay';
     document.body.append(overlay);
-    expect(getComputedStyle(overlay).backgroundColor).toMatch(/rgba\(6, 12, 16, 0\.72\)/);
+    expect(getComputedStyle(overlay).backgroundColor).toMatch(/rgba\(0, 0, 0, 0\.72\)/);
     expect(coveredBy(overlay)).toBe(true);
   });
   it('a dim at 0.4 (the prompt), 0.45 (a dialog), 0.59, a transparent wrapper, a hidden layer: not a cover', () => {

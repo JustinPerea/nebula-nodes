@@ -1,8 +1,8 @@
-"""Question sets, final pass (Q125 item 1, same PR, 2026-10-24).
+"""Question sets, final pass (same PR, 2026-10-24).
 
 Two rules on the set's Update, the person's only way into an open set:
 
-- GM - Design's copy: once the set closes, the line is past tense for every
+- Design's copy: once the set closes, the line is past tense for every
   closed outcome ("{agent} asked a question." / "{agent} asked {n}
   questions."); while it is open it stays "{agent} has a question." / "{agent}
   has {n} questions.". It changes on the stored Update, so the person, an
@@ -27,9 +27,12 @@ ONE = {"questions": [{"text": "Square or wide?", "options": ["Square", "Wide"]}]
 PICK_WIDE = {"answers": [{"questionId": "q1", "choices": ["Wide"]}]}
 
 
-# -- past tense once closed (GM - Design) ------------------------------------------------
+# -- past tense once closed (design) ------------------------------------------------
 
 def test_closed_update_text_is_past_tense():
+    assert closed_update_text("Has a question") == "Asked a question"
+    assert closed_update_text("Has 2 questions") == "Asked 2 questions"
+    # A line saved while the line still began with the agent's name.
     assert closed_update_text("Claude Code has a question.") == "Claude Code asked a question."
     assert closed_update_text("Claude Code has 2 questions.") == "Claude Code asked 2 questions."
     # Only the template's own end changes, whatever the agent is called.
@@ -59,11 +62,11 @@ def _close(api, set_id: str, outcome: str) -> None:
 
 
 @pytest.mark.parametrize("outcome, line", [
-    ("answered", "Answered."), ("dismissed", "Dismissed."), ("withdrawn", "Withdrawn by Claude Code."),
+    ("answered", "Answered."), ("dismissed", "Dismissed."), ("withdrawn", "Withdrawn."),
 ])
 @pytest.mark.parametrize("body, open_text, closed_text", [
-    (TWO, "Claude Code has 2 questions.", "Claude Code asked 2 questions."),
-    (ONE, "Claude Code has a question.", "Claude Code asked a question."),
+    (TWO, "Has 2 questions", "Asked 2 questions"),
+    (ONE, "Has a question", "Asked a question"),
 ])
 def test_a_closed_sets_update_is_past_tense_for_the_person_and_agents(kept, outcome, line, body, open_text,
                                                                       closed_text):
@@ -87,14 +90,14 @@ def test_a_closed_sets_update_is_past_tense_for_the_person_and_agents(kept, outc
 def test_an_open_set_still_says_has_after_a_restart(kept):
     _ask(kept)
     kept.restart()
-    assert _question_note(_notes_listing(kept, headers=CODEX))["text"] == "Claude Code has 2 questions."
+    assert _question_note(_notes_listing(kept, headers=CODEX))["text"] == "Has 2 questions"
 
 
 def test_a_set_loaded_from_the_record_and_closed_after_a_restart_is_past_tense(kept):
     set_id = _ask(kept).json()["questions"]["id"]
     kept.restart()
     _close(kept, set_id, "answered")
-    assert _question_note(_notes_listing(kept, headers=CODEX))["text"] == "Claude Code asked 2 questions."
+    assert _question_note(_notes_listing(kept, headers=CODEX))["text"] == "Asked 2 questions"
 
 
 def test_the_restart_line_is_past_tense_too(kept):
@@ -105,7 +108,7 @@ def test_the_restart_line_is_past_tense_too(kept):
         store.commit(catalog)
     kept.restart()
     note = _question_note(_notes_listing(kept, headers=CODEX))
-    assert (note["text"], note["outcome"]) == ("Claude Code asked a question.", "Closed when Nebula restarted.")
+    assert (note["text"], note["outcome"]) == ("Asked a question", "Closed when Nebula restarted.")
 
 
 def test_an_update_closed_before_this_change_reads_past_tense(kept):

@@ -59,8 +59,8 @@ describe('GM r29 item 1: the note dialog names its node', () => {
     expect(screen.getByRole('dialog', { name: 'Note for agents on “Text Input” n4' })).toBeTruthy();
     // Styled like the card's id chip: its font, size, colour and edge.
     const css = readFileSync('src/styles/prompt-dialog.css', 'utf8');
-    const rule = /\.prompt-dialog__node-id \{([^}]*)\}/.exec(css)?.[1] ?? '';
-    for (const decl of ['font-family: ui-monospace', 'font-size: 10px', 'color: #777', 'background: #252525', 'border: 1px solid #333'])
+    const rule = /body\.app-slava-restraint \.prompt-dialog__node-id \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    for (const decl of ['font-family: var(--sr-mono)', 'font-size: var(--sr-type-meta)', 'color: var(--sr-ink-light)', 'background: transparent', 'border: none'])
       expect(rule, decl).toContain(decl);
   });
 

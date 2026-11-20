@@ -1,11 +1,11 @@
-"""PR #200 fix round 14 (GM r22 Q1 and Q3).
+"""PR #200 (design).
 
-- Q3: the hidden-text refusal counts hidden characters, never bytes. 280
+- The hidden-text refusal counts hidden characters, never bytes. 280
   emoji each with a stray FE0F, and 280 family ZWJ sequences (about 25 bytes
   each), save; so does any long mix of them. No note limit counts bytes.
 - The events feed and the summaries cut a note's preview on a character's
   edge, never through a family.
-- Q1: the person gate's 403 keeps its code for agents (agent_refused) and for
+- The person gate's 403 keeps its code for agents (agent_refused) and for
   a tab that isn't the person (person_required); the canvas reads the code
   and shows "Notes can only be added from the Nebula canvas.".
 """

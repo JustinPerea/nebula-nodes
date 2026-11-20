@@ -1,12 +1,12 @@
-"""Nebula says connected, never wired (GM - Design, 2026-10-25).
+"""Nebula says connected, never wired (design, 2026-10-25).
 
 The agent's cursor bubbles name nodes by their label in curly quotes, as the
 Agents panel does, falling back to the node type's name when a node has no
 label: Connecting “A” to “B”, Added “X” and connected it, Disconnected “A”
 from “B”, and the same quotes on Added, Renamed, Moved, Removed, Running and
-Updated. The Agent log (publish_action) is the technical record: it keeps
-port ids and the arrow and swaps only the verb (Connected a:b → c:d,
-Disconnected a:b → c:d). Neither ever says wired.
+Updated. The Agent log has one row per action, the agent's own (design): the
+runner-labelled ids-and-arrow line (publish_action) is gone, and the nodes an
+action touched ride the row as ``nodeIds``. Neither ever says wired.
 """
 from __future__ import annotations
 
@@ -52,7 +52,8 @@ def test_connecting_names_both_nodes_in_quotes_and_the_log_says_connected(logged
     assert response.status_code == 200, response.text
     # The unlabeled image node falls back to its type's name.
     assert _says(sent)[-1] == "Connecting “Hero prompt” to “GPT Image 2.5”"
-    assert lines[-1] == f"Connected {text}:text → {image}:prompt"
+    assert _presence_events(sent)[-1]["nodeIds"] == [text, image]
+    assert lines == []  # no second, runner-labelled row
     _no_wired(sent, lines)
 
 
@@ -72,7 +73,8 @@ def test_disconnecting_names_both_nodes_and_the_log_says_disconnected(logged):
         "source": text, "sourceHandle": "text", "target": image, "targetHandle": "prompt"})
     assert response.json()["status"] == "deleted"
     assert _says(sent)[-1] == "Disconnected “Hero prompt” from “GPT Image 2.5”"
-    assert lines[-1] == f"Disconnected {text}:text → {image}:prompt"
+    assert _presence_events(sent)[-1]["nodeIds"] == [text, image]
+    assert lines == []
     _no_wired(sent, lines)
 
 
@@ -86,7 +88,8 @@ def test_adding_and_connecting_in_one_call_says_connected(logged):
     assert response.status_code == 200, response.text
     new_id = response.json()["id"]
     assert _says(sent)[-1] == "Added “GPT Image 2.5” and connected it"
-    assert lines[-1] == f"Connected {text}:text → {new_id}:prompt"
+    assert _presence_events(sent)[-1]["nodeIds"] == [text, new_id]
+    assert lines == []
     _no_wired(sent, lines)
 
 
@@ -101,16 +104,16 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
     node = graph.add_node("text-input", {"value": "a"})
     assert client.put(f"/api/graph/node/{node}/label", headers=AGENT,
                       json={"label": "Hero shots"}).status_code == 200
-    assert _says(sent)[-1] == "Renamed “Hero shots”"
+    assert _says(sent)[-1] == "Renamed “Text Input” to “Hero shots”"
     assert client.put("/api/graph/layout", headers=AGENT,
                       json={"positions": {node: {"x": 900, "y": 640}}}).status_code == 200
     assert _says(sent)[-1] == "Moved “Hero shots”"
     # A params update that names no param changes nothing, so it says nothing
-    # (PR #198 review 2, N4): the last line is still the move.
+    # (PR #198): the last line is still the move.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
     assert [say for say in _says(sent) if say][-1] == "Moved “Hero shots”"
     # A params update that names params says which, by the card's label in
-    # curly quotes (GM - Design, round 16 of PR #195; GM, r18 of PR #114):
+    # curly quotes (design, PRs #195 and #114):
     # no node, never the raw key.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
     assert _says(sent)[-1] == "Set “Text”"
@@ -122,7 +125,7 @@ def test_updating_an_unlabeled_node_falls_back_to_its_type_name(logged):
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
     # The Agents panel's line names it by its type: Changed “Text Input”.
     assert (_presence_events(sent)[-1].get("did") or {}).get("label") == "Text Input"
-    # An empty change says and logs nothing (PR #198 review 2, N4).
+    # An empty change says and logs nothing (PR #198).
     before = (len(_presence_events(sent)), len(lines))
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
     assert not any(event.get("say") or event.get("log") for event in _presence_events(sent)[before[0]:])
@@ -157,8 +160,8 @@ def test_a_refused_run_bubble_names_the_node_in_quotes(logged):
     assert body["status"] == "failed"
     [event] = [event for event in _presence_events(sent) if str(event.get("say")).startswith("“GPT Image 2.5”")]
     # Its first sentence names what's needed; the action lives on the card and
-    # in the log (GM, PR #203 r39 item 5).
+    # in the log (design, PR #203).
     assert event["say"] == "“GPT Image 2.5” needs a prompt and your OpenAI API key."
-    # The Agent log's line rides on the cursor's event, once (GM, PR #203 r30 item 1).
+    # The Agent log's line rides on the cursor's event, once (design, PR #203).
     assert event["log"].startswith("Nebula couldn’t start the run. “GPT Image 2.5” needs")
     assert not any(line.startswith("Nebula couldn’t start the run.") for line in lines)

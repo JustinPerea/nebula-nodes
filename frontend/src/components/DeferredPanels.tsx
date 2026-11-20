@@ -11,6 +11,7 @@ import {
   DeferredNodeInspectorPopover,
   DeferredOnboardingOverlay,
   DeferredRunHistoryPanel,
+  DeferredSettings,
 } from '../lib/deferredChunks';
 import { CHAT_SEND_EVENT, type ChatSendDetail } from '../lib/chatSend';
 import { COMMAND_PALETTE_OPEN_EVENT, isPaletteHotkey, paletteOpenRequestApplies } from '../lib/commandPaletteKeys';
@@ -48,6 +49,10 @@ const closeRunHistory = () => {
   if (ui.panels.history.visible) ui.togglePanel('history');
 };
 const closeTour = () => useUIStore.setState({ onboardingActive: false, onboardingStep: 0 });
+const closeSettings = () => {
+  const ui = useUIStore.getState();
+  if (ui.leftDock === 'settings') ui.setLeftDock(null);
+};
 const closeConnectionPopup = () => useUIStore.getState().hideConnectionPopup();
 
 /**
@@ -101,6 +106,24 @@ export function RunHistoryPanel() {
     <DeferredBoundary chunk={DeferredRunHistoryPanel} retryKey={opens} onChunkError={closeRunHistory} failed={null}>
       <Suspense fallback={null}>
         <DeferredRunHistoryPanel />
+      </Suspense>
+    </DeferredBoundary>
+  );
+}
+
+/**
+ * The Settings dock. Closed at every start and drawing nothing while closed, so
+ * it mounts on the first open and stays mounted (its own exit animation and
+ * Escape and focus handling run as before). A failed chunk closes the dock
+ * again and retries on the next open.
+ */
+export function SettingsPanel() {
+  const { opened, opens } = useOpens(useUIStore((s) => s.panels.settings.visible));
+  if (!opened) return null;
+  return (
+    <DeferredBoundary chunk={DeferredSettings} retryKey={opens} onChunkError={closeSettings} failed={null}>
+      <Suspense fallback={null}>
+        <DeferredSettings />
       </Suspense>
     </DeferredBoundary>
   );

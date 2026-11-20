@@ -1,6 +1,6 @@
-"""A failed Commons analysis says why, by kind (GM - Design, error-copy round 3, item 4).
+"""A failed Commons analysis says why, by kind (design, error-copy).
 
-GM: heading "Couldn't analyze this reference.", with the reason mapped from
+Design: heading "Couldn't analyze this reference.", with the reason mapped from
 last_error's kind:
   - network, timeout or provider 5xx -> "The analysis service didn't respond."
   - the model refused or couldn't read the image -> "The analyzer couldn't read this image."

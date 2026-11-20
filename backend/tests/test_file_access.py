@@ -247,7 +247,7 @@ def test_graph_import_content_is_checked_before_clearing_graph(tmp_path, protect
     path.write_text(json.dumps({"nodes": [{"id": "bad", "definitionId": "image-input", "params": {"filePath": str(protected / "private.png")}}], "edges": []}))
     client = Mock()
     # `nebula load` names its surface with the client's own headers (a local
-    # read, PR #203 round 12); nothing goes to Nebula before the file is checked.
+    # read, PR #203); nothing goes to Nebula before the file is checked.
     client._identity_headers.return_value = {"X-Nebula-Surface": "cli"}
     with pytest.raises(SystemExit):
         run_load(client, str(path))

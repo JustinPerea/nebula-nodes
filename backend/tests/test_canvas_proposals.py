@@ -253,7 +253,7 @@ def test_submit_returns_a_view_broadcasts_the_key_to_browsers_only_and_journals(
     assert len(opened) == 1 and len(opened[0]["acceptKey"]) >= 24
     assert all(m.get("type") != "proposalOpened" for m in api.sent)
     events = api.journal.read(after=0)["events"]
-    # Journaled when it was made, before its Update (round 8 of PR #114).
+    # Journaled when it was made, before its Update (PR #114).
     assert [e["kind"] for e in events][-2:] == ["proposal.created", "note.posted"]
     event = events[-2]
     assert event["kind"] == "proposal.created" and event["actor"]["name"] == "Claude Code"
@@ -301,9 +301,9 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     response = _propose(api, body).json()
     cost = response["proposal"]["cost"]
     need = "needs OPENAI_API_KEY in Settings > Providers"
-    # `missing` stays find_nodes' words for agents; `person` is the bar's line (round 3f);
+    # `missing` stays find_nodes' words for agents; `person` is the bar's line;
     # `reason` is that line without the name, for one node and for several, which
-    # the bar merges by (PR #203 round 15).
+    # the bar merges by (PR #203).
     assert cost["notReady"] == [{"ref": "+img", "nodeId": None, "name": "GPT Image 2", "missing": need,
                                  "person": "“GPT Image 2” needs your OpenAI API key. Add it in Settings.",
                                  "reason": {"one": "needs your OpenAI API key. Add it in Settings.",
@@ -829,7 +829,7 @@ def test_a_run_of_several_approved_nodes_goes_through_execute(api, runs):
 
 
 def test_everything_an_accept_journals_carries_its_proposal(api):
-    # Review 1 of PR #114 (L3): nebula-mcp --channel told the accept's own
+    # PR #114: nebula-mcp --channel told the accept's own
     # node, wire and param events apart from the person's edits by the
     # summary's " (accepted from X)", which a node name can imitate. Each
     # now names the proposal in data, which only the accept route sets.
@@ -856,7 +856,7 @@ def test_everything_an_accept_journals_carries_its_proposal(api):
 
 
 def test_the_run_the_canvas_starts_for_an_accept_names_the_proposal(api, monkeypatch):
-    # Review 1 of PR #114 (L5): the channel took any run of a listed node in
+    # PR #114: the channel took any run of a listed node in
     # the 120 s after an accept for the proposal's own run, so a run the
     # person started by hand there counted as the agent's. The run that
     # carries the accept's approval now names the proposal in its run events.
@@ -886,7 +886,7 @@ def test_the_run_the_canvas_starts_for_an_accept_names_the_proposal(api, monkeyp
 @pytest.mark.parametrize("route", ["/api/execute", "/api/execute-node"])
 @pytest.mark.parametrize("refusal", ["claim", "register"])
 def test_a_run_refused_after_its_approval_is_taken_forgets_its_proposal(api, monkeypatch, route, refusal):
-    # Review 2 of PR #114 (L3b): a refusal inside _require_run_spend_approval
+    # PR #114 (L3b): a refusal inside _require_run_spend_approval
     # forgot the run's proposal mark, but one after it (the paid-start claim,
     # registering the run) kept it until it aged out. The refusal itself is
     # unchanged: same status and text, and the approval stays used.
@@ -921,7 +921,7 @@ def test_a_run_refused_after_its_approval_is_taken_forgets_its_proposal(api, mon
 
 
 def test_an_abandoned_proposal_wait_frees_its_waiter_slot(api):
-    # The same slots as /api/canvas/events (review 1, M2): get_proposal's
+    # The same slots as /api/canvas/events: get_proposal's
     # wait must free its slot when the agent's client goes away.
     from services.canvas_events import MAX_WAITERS
 
@@ -1281,7 +1281,7 @@ class _UnrunnableWaitClient(FakeClient):
 
 @pytest.mark.parametrize("status", ["rejected", "expired", "withdrawn", "invalidated", "accepted"])
 def test_cli_propose_json_wait_drops_the_withdraw_call_once_the_proposal_closed(status):
-    """Review Q109: `propose --json --wait` printed withdrawWith (and the
+    """`propose --json --wait` printed withdrawWith (and the
     warning's "withdraw this one first") for a proposal the person had already
     closed, so following it failed with 409."""
     client = _UnrunnableWaitClient({"p_1": [{"id": "p_1", "status": status}],
@@ -1413,7 +1413,7 @@ def test_a_cinema_scene_is_paid_by_its_base_model():
     assert cost_for(scene, {"scene": "unreadable"}, definitions, {})["kind"] == "paid"
 
 
-# -- a proposal that can't run here: kept, and the agent withdraws it before proposing something else (Q109) --
+# -- a proposal that can't run here: kept, and the agent withdraws it before proposing something else --
 
 OPENAI_ONLY = {"apiKeys": {"OPENAI_API_KEY": "sk-test"}}
 
@@ -1425,7 +1425,7 @@ def _image_body(prompt_node: str, definition_id: str, note: str = "Hero shot") -
 
 
 def test_an_unrunnable_proposal_is_kept_and_its_warning_names_the_withdraw_call(api, monkeypatch):
-    """Justin, Q109: "Keep it with the warning, and tell the agent to withdraw
+    """Justin: "Keep it with the warning, and tell the agent to withdraw
     it before proposing something else." FLUX.2 with only an OpenAI key."""
     monkeypatch.setattr(api.main, "load_settings", lambda: OPENAI_ONLY)
     n1 = api.graph.add_node("text-input", {"value": "a dune"})
@@ -1482,7 +1482,7 @@ def test_each_surface_names_its_own_withdraw_call():
     ready = agent_wording({"proposal": {"id": "p_1", "cost": {"notReady": []}}}, lister=READY_NODES_MCP,
                           withdraw=WITHDRAW_MCP)
     assert ready == {"proposal": {"id": "p_1", "cost": {"notReady": []}}}
-    # One that already closed (Q112: it closed while its Update was written)
+    # One that already closed (it closed while its Update was written)
     # can't be withdrawn, so it gets neither line; its other open ones still do.
     closed = agent_wording({**answer, "proposal": {**answer["proposal"], "status": "invalidated"}},
                            lister=READY_NODES_MCP, withdraw=WITHDRAW_MCP)
@@ -1607,7 +1607,7 @@ def test_cli_propose_as_a_named_agent_names_withdraw_with_as(api, monkeypatch):
     assert answer["withdrawWith"] == f"nebula proposal withdraw {answer['proposal']['id']} --as Codex"
 
 
-# -- a personal agent's name inside a sentence (GM, copy sweep 2026-11-14) -----------
+# -- a personal agent's name inside a sentence (design, copy sweep 2026-11-14) -----------
 
 @pytest.mark.parametrize("name,said", [
     ("Your Claude", "your Claude"),        # lower-cased inside a sentence

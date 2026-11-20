@@ -1,6 +1,6 @@
-"""Every journal event names the project its write went to (review 7 of PR #114, round 8).
+"""Every journal event names the project its write went to (PR #114).
 
-Review 7's T3: a node deleted on project A while the person opened project B
+A node deleted on project A while the person opened project B
 and pinned there during the delete's graphSync await. node.removed and
 pin.detached were journaled after the await, tagged with B: an agent on B read
 A's change as B's. The same held for every route that awaited between its
@@ -187,7 +187,7 @@ def test_a_disconnect_is_journaled_with_its_project_before_a_switch(race):
     race.check({"edge.removed"})
 
 
-# -- a delete and what it removed (review 7's T3) --------------------------------
+# -- a delete and what it removed --------------------------------
 
 @pytest.mark.parametrize("trigger", ["graphSync", "canvasPins"])
 def test_a_delete_and_the_pin_it_detached_are_journaled_with_its_project(race, trigger):
@@ -358,8 +358,8 @@ def test_a_rename_is_journaled_before_a_switch(race):
     race.check({"project.renamed"})
 
 
-# -- review 8 (round 9) ---------------------------------------------------------------
-# Item 1: an undo's link keeps every event it journaled. Round 8 took the
+# -- an undo's link keeps every event it journaled -----------------
+# An undo's link keeps every event it journaled. The old code took the
 # link's events in journal_done, before _undo_removals journaled pin.reattached
 # and proposal.reopened under the same link, so the link (and the person's
 # later Cmd+Z of that undo, edit.undone.data.events) missed them. Now the pins
@@ -447,7 +447,7 @@ def test_the_persons_linked_cmd_z_keeps_the_pins_and_proposals_it_put_back_in_it
 
 # Item 2: an upload whose sync fails rolls its node back in the project it was
 # written to. Node ids restart per project, so the rollback by id on whatever
-# graph was live deleted B's n1 after a switch (review 8, P2).
+# graph was live deleted B's n1 after a switch.
 
 def _png() -> bytes:
     import io
@@ -479,7 +479,7 @@ def test_a_failed_upload_sync_after_a_switch_never_touches_the_project_open(race
 
 
 # Item 3: a proposal an undo would reopen, while another project opened during
-# its fit check's await: it stays closed (review 8, P3).
+# its fit check's await: it stays closed.
 
 @pytest.mark.parametrize("b_has_n1", [False, True])
 def test_an_undo_never_reopens_a_proposal_after_another_project_opened(race, monkeypatch, b_has_n1):
@@ -518,11 +518,11 @@ def test_an_undo_never_reopens_a_proposal_after_another_project_opened(race, mon
     assert not [m for m in race.browser[browser_before:] if m.get("type") == "proposalOpened"]
 
 
-# -- review 9 (round 10) ---------------------------------------------------------------
-# Item 2: a timer armed inside an undo ran with the undo's request context
+# -- a timer armed inside an undo ----------------------------------
+# A timer armed inside an undo ran with the undo's request context
 # (loop.call_later copies it), so a reopened proposal's later proposal.expired,
 # and every other proposal swept with it, carried the undo's edit tag and could
-# land in the link's events (review 9, Q1). Timers now run in a fresh context.
+# land in the link's events. Timers now run in a fresh context.
 
 def _propose_value(race: Race, headers: dict, node_id: str, value: str) -> str:
     made = race.client.post("/api/canvas/proposals", headers=headers, json={
@@ -553,7 +553,7 @@ def _async_client(race: Race):
 
 def test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link(race, monkeypatch):
     """Driven by the proposals' clock and by events, never a real-time
-    budget (review 16 of PR #203, tests LOW-2: on a loaded runner more than
+    budget (PR #203: on a loaded runner more than
     the old 0.4 s passed before the undo reached p1, which was then already
     past due and stayed closed). The clock stands still until the undo is
     inside p2's slow Update write, so p1 reopens whatever the load; then p1
@@ -610,7 +610,7 @@ def test_a_reopened_proposals_expiry_never_carries_the_undos_edit_link(race, mon
 
 # Item 4: the person's Cmd+Z of an agent's undo, while that undo still awaits a
 # later proposal's fit check, lists the proposals it reopened before then
-# (review 9, Q2): the link takes each proposal.reopened as it is journaled.
+# The link takes each proposal.reopened as it is journaled.
 
 def test_the_persons_cmd_z_during_a_later_proposals_check_lists_an_earlier_reopen(race, monkeypatch):
     import asyncio
@@ -650,7 +650,7 @@ def test_the_persons_cmd_z_during_a_later_proposals_check_lists_an_earlier_reope
 
 
 # Item 3: a link kept only its oldest 50 events, so a big undo's
-# pin.reattached / proposal.reopened fell off silently (review 9, Q6, a
+# pin.reattached / proposal.reopened fell off silently (a
 # 55-node delete). Every pin.* and proposal.* event is kept; only the bulk
 # node and wire events are capped, and a cut says so (eventsTruncated, eventsTotal).
 

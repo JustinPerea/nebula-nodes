@@ -4,10 +4,57 @@
   min-height:0;
   width:100%;
   overflow:auto;
-  background:#1c211d;
-  color:#e5e9df;
+  background:var(--evaluation-ground);
+  color:var(--evaluation-ink);
   padding:28px;
   font-size:13px;
+  /* Design: the two evaluation panes read the app's tokens through these --evaluation-* tokens,
+   * defined once here and read by every rule in the two evaluation stylesheets. A different
+   * treatment is a change to this one rule. */
+  /* Ground and ink */
+  --evaluation-ground:var(--sr-canvas-elevated);
+  --evaluation-ink:var(--sr-ink);
+  --evaluation-body-ink:var(--sr-ink-light);
+  --evaluation-eyebrow-ink:var(--sr-ink-meta);
+  --evaluation-unsaved-ink:var(--sr-warning);
+  /* Panels, rows and reference buttons on the ground; the current reference in the accent */
+  --evaluation-panel-edge:var(--sr-edge-strong);
+  --evaluation-row-rule:var(--sr-edge);
+  --evaluation-dialog-edge:var(--sr-edge-strong);
+  --evaluation-nav-edge:var(--sr-edge-strong);
+  --evaluation-nav-ink:var(--sr-ink);
+  --evaluation-current-fill:var(--sr-accent-soft);
+  --evaluation-current-edge:var(--sr-accent-border-strong);
+  /* The labeling form and review card on the Commons panel surface, and what sits on it */
+  --evaluation-card-fill:var(--sr-glass-strong);
+  --evaluation-card-ink:var(--sr-ink);
+  --evaluation-card-body-ink:var(--sr-ink-light);
+  --evaluation-card-muted-ink:var(--sr-ink-meta);
+  --evaluation-card-rule:var(--sr-edge);
+  --evaluation-field-fill:var(--sr-surface-control-focus);
+  --evaluation-field-ink:var(--sr-ink);
+  --evaluation-field-edge:var(--sr-edge-strong);
+  --evaluation-button-fill:var(--sr-surface-control-active);
+  --evaluation-button-ink:var(--sr-ink);
+  --evaluation-button-edge:var(--sr-edge-strong);
+  --evaluation-primary-fill:var(--sr-accent-soft);
+  --evaluation-primary-ink:var(--sr-accent);
+  --evaluation-primary-edge:var(--sr-accent-border);
+  --evaluation-control-accent:var(--sr-accent);
+  --evaluation-meter-track:var(--sr-node-progress-track);
+  /* The review meters fill in ink, not the accent: the fill stays ink so the primary stays the one
+   * orange action on the card, and grey reads better on the track (design). */
+  --evaluation-meter-fill:var(--sr-ink-light);
+  --evaluation-meter-tick:var(--sr-ink-meta);
+  --evaluation-chip-edge:var(--sr-edge-strong);
+  /* --sr-ink-faint (white at .20) used as an edge, the only token at that strength */
+  --evaluation-swatch-edge:var(--sr-ink-faint);
+  /* The reference image's markers sit on the image, not on a surface */
+  --evaluation-marker-fill:var(--sr-ink-bold);
+  --evaluation-marker-ink:var(--sr-canvas);
+  --evaluation-marker-edge:var(--sr-canvas);
+  --evaluation-crosshair-ink:var(--sr-ink-bold);
+  --evaluation-crosshair-shadow:var(--sr-canvas);
 }
 .evaluation-heading {
   display:flex;
@@ -19,7 +66,7 @@
 .commons-evaluation small,
 .commons-eyebrow {
   letter-spacing:1.5px;
-  color:#a0b28f;
+  color:var(--evaluation-eyebrow-ink);
   font-size:10px;
 }
 /* A section's eyebrow line: its name (the h2) and its descriptor, in the
@@ -58,12 +105,12 @@
 }
 .commons-evaluation p {
   line-height:1.7;
-  color:#a8b4a0;
+  color:var(--evaluation-body-ink);
 }
 .evaluation-setup {
   max-width:640px;
   padding:25px;
-  border:1px solid #495443;
+  border:1px solid var(--evaluation-panel-edge);
   border-radius:8px;
 }
 .evaluation-setup label {
@@ -74,9 +121,6 @@
 .commons-evaluation input:not([type=checkbox]):not([type=range]),.commons-evaluation select {
   width:100%;
   padding:9px;
-  background:#f9faf5;
-  color:#2b3824;
-  border:1px solid #adb99e;
   border-radius:4px;
   font:inherit;
 }
@@ -93,18 +137,18 @@
   top:0;
 }
 .evaluation-workspace nav button {
-  border:1px solid #485440;
+  border:1px solid var(--evaluation-nav-edge);
   padding:12px;
   background:transparent;
-  color:#cbd5c1;
+  color:var(--evaluation-nav-ink);
   text-align:left;
   border-radius:4px;
   display:flex;
   justify-content:space-between;
 }
 .evaluation-workspace nav button[aria-current] {
-  background:#3b4b2e;
-  border-color:#afcc85;
+  background:var(--evaluation-current-fill);
+  border-color:var(--evaluation-current-edge);
 }
 .evaluation-workspace button:disabled,
 /* PR #204 round 18o (GM r51 Q3): a reference button locked by unsaved edits stays focusable
@@ -138,14 +182,14 @@
   width:23px;
   height:23px;
   border-radius:50%;
-  background:#fff;
-  color:#222;
-  border:1px solid #222;
+  background:var(--evaluation-marker-fill);
+  color:var(--evaluation-marker-ink);
+  border:1px solid var(--evaluation-marker-edge);
   text-align:center;
 }
 .evaluation-crosshair {
-  color:white;
-  text-shadow:0 0 2px #000;
+  color:var(--evaluation-crosshair-ink);
+  text-shadow:0 0 2px var(--evaluation-crosshair-shadow);
   font-size:24px;
   display:none;
 }
@@ -153,16 +197,16 @@
   display:block;
 }
 .evaluation-form {
-  background:#eff1e8;
-  color:#293822;
+  background:var(--evaluation-card-fill);
+  color:var(--evaluation-card-ink);
   padding:24px;
   border-radius:8px;
 }
 .evaluation-form p {
-  color:#6d7a63;
+  color:var(--evaluation-card-body-ink);
 }
 .evaluation-form small {
-  color:#6d7a63;
+  color:var(--evaluation-card-muted-ink);
 }
 .evaluation-form fieldset {
   border:0;
@@ -180,33 +224,23 @@
 }
 .evaluation-form input[type=checkbox] {
   margin-right:8px;
-  accent-color:#5d7842;
+  accent-color:var(--evaluation-control-accent);
 }
 .evaluation-form input[type=range] {
   display:block;
   width:100%;
-  accent-color:#5d7842;
+  accent-color:var(--evaluation-control-accent);
   margin:14px 0;
 }
 .evaluation-axis {
   padding:8px 0;
-  border-bottom:1px solid #ced7c4;
+  border-bottom:1px solid var(--evaluation-card-rule);
 }
 .evaluation-axis>div {
   display:flex;
   justify-content:space-between;
   align-items:center;
   font-size:10px;
-}
-.evaluation-form .commons-button {
-  background:#d9e1cf;
-  color:#314529;
-  border:1px solid #a9b99a;
-}
-.evaluation-form .commons-button--primary {
-  background:#41582f;
-  color:white;
-  margin:20px 0 0;
 }
 .evaluation-form .evaluation-role {
   display:flex;
@@ -217,7 +251,7 @@
   width:30px;
   height:30px;
   flex-shrink:0;
-  border:1px solid #0002;
+  border:1px solid var(--evaluation-swatch-edge);
   border-radius:4px;
 }
 .evaluation-role select {
@@ -244,21 +278,16 @@
   display:flex;
   justify-content:space-between;
   align-items:center;
-  border-bottom:1px solid #46543f;
+  border-bottom:1px solid var(--evaluation-row-rule);
   padding:12px 0;
 }
 .evaluation-hash {
   overflow-wrap:anywhere;
 }
-/* Focus: the app's neutral ring on the green-black panel. The form is a
- * light card (#eff1e8), where the light ring would not show (1.1:1), so it
- * takes the token's dark twin. Both beat the Commons view's own focus rule. */
+/* Focus: the app's neutral ring, on the page and on the form card alike. The rule beats the
+ * Commons view's own focus rule. */
 body.app-slava-restraint .commons-view .commons-evaluation :focus-visible {
   outline:var(--sr-focus-outline);
-  outline-offset:3px;
-}
-body.app-slava-restraint .commons-view .commons-evaluation .evaluation-form :focus-visible {
-  outline:var(--sr-focus-outline-on-light);
   outline-offset:3px;
 }
 @media(max-width:1000px) {
@@ -302,13 +331,14 @@ body.app-slava-restraint .commons-view .commons-evaluation .evaluation-form :foc
   min-width:0;
 }
 body.app-slava-restraint .evaluation-form .commons-button {
-  background:#d9e1cf;
-  color:#314529;
-  border:1px solid #a9b99a;
+  background:var(--evaluation-button-fill);
+  color:var(--evaluation-button-ink);
+  border:1px solid var(--evaluation-button-edge);
 }
 body.app-slava-restraint .evaluation-form .commons-button--primary {
-  background:#41582f;
-  color:white;
+  background:var(--evaluation-primary-fill);
+  color:var(--evaluation-primary-ink);
+  border-color:var(--evaluation-primary-edge);
   margin:20px 0 0;
 }
 .evaluation-heading {
@@ -327,17 +357,18 @@ body.app-slava-restraint .evaluation-form .commons-button--primary {
   flex-shrink:0;
 }
 body.app-slava-restraint .commons-evaluation select,body.app-slava-restraint .commons-evaluation input:not([type=checkbox]):not([type=range]) {
-  background:#f9faf5;
-  color:#2b3824;
-  border:1px solid #adb99e;
+  background:var(--evaluation-field-fill);
+  color:var(--evaluation-field-ink);
+  border:1px solid var(--evaluation-field-edge);
+  color-scheme:dark;
 }
 body.app-slava-restraint .commons-evaluation input::placeholder {
-  color:#6d7a63;
+  color:var(--evaluation-card-muted-ink);
 }
 .evaluation-close {
   margin:16px 0;
   padding:16px 18px;
-  border:1px solid #a9b99a;
+  border:1px solid var(--evaluation-dialog-edge);
   border-radius:8px;
   max-width:620px;
 }
@@ -363,9 +394,7 @@ body.app-slava-restraint .commons-evaluation input::placeholder {
 .evaluation-close .review-actions .commons-button--primary {
   margin:0;
 }
-/* A panel's Save with "Unsaved" beside it while the draft is unsaved
- * (commons-leave), in the panel's own muted ink and the section eyebrow's
- * letterforms (#157's heading pattern, .commons-eyebrow). */
+/* A panel's Save with "Unsaved" beside it while the draft is unsaved (commons-leave). */
 .evaluation-save {
   display:flex;
   flex-wrap:wrap;
@@ -377,9 +406,8 @@ body.app-slava-restraint .evaluation-save .commons-button--primary,
 .evaluation-save .commons-button--primary {
   margin:0;
 }
+/* Design: a state word in sentence case, at the app's state-word size, in the warning tone. */
 .commons-unsaved {
-  color:#6d7a63;
-  font-size:10px;
-  letter-spacing:1.5px;
-  text-transform:uppercase;
+  color:var(--evaluation-unsaved-ink);
+  font-size:11px;
 }

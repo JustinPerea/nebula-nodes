@@ -1,10 +1,10 @@
-"""Follow-ups to PR #195 (agent presence), review 23 L-1.
+"""Follow-ups to PR #195 (agent presence).
 
 The pin routes relied on the fence middleware's check alone. Between that
 check and the route body the event loop turns a few times, and an agent's
 project open waiting at its last await could commit there: the person's note,
 written for A's n1, was then pinned to B's n1 and journaled to the agent
-working in B (review 23, be/test_r23_pins.py).
+working in B (be/test_r23_pins.py).
 
 Now every FENCE_BEFORE_ROUTE route checks again as its body starts, in the
 same synchronous step (``graph_write`` wraps it), so no route can rely on the
@@ -75,7 +75,7 @@ def _park_the_open_until_the_fence_passes(main, monkeypatch, b: str):
 
 @pytest.mark.asyncio
 async def test_L1_a_switch_that_commits_between_the_fence_and_the_route_refuses_the_note(api, monkeypatch):
-    """Review 23's WINDOW probe: the note is refused (409), pinned nowhere and journaled nowhere."""
+    """WINDOW probe: the note is refused (409), pinned nowhere and journaled nowhere."""
     main = api.main
     api.client.post("/api/graph/apply", headers=CLAUDE,
                     json={"nodes": [{"ref": "+p", "definitionId": "text-input", "params": {"value": "A"}}]})
@@ -189,7 +189,7 @@ def test_L1_agents_and_the_person_still_write_through_the_recheck(api):
     assert r.status_code == 200, r.text
 
 
-# -- Fix round 2 of PR #200 (review 2 L-2, GM 2026-10-28 answer 5) ---------------
+# -- PR #200 (design 2026-10-28) ---------------
 # Shift+Enter makes lines in the note dialog; agents get the note exactly as
 # written: its newlines kept end to end (the store, look_at_canvas and
 # start_here, `nebula pins`), every other control character still dropped.
@@ -233,7 +233,6 @@ def test_L2_agents_read_the_lines_in_start_here_mcp_and_the_cli():
         assert part["open"][0]["text"] == "first line\nsecond line", via
         assert "more" not in part, via
     # `nebula pins`: the note under its pin, every line indented the same
-    # (fix round 5, review 5 LOW-4).
     assert format_pin(pin, now=None).startswith('pin_1 on n4')
     assert format_pin(pin, now=None).endswith(':\n    first line\n    second line')
     start = {"pins": agent_start.pins_part([pin], via="cli")}
@@ -241,7 +240,7 @@ def test_L2_agents_read_the_lines_in_start_here_mcp_and_the_cli():
     assert '  pin_1 on n4:\n    first line\n    second line' in text
 
 
-# -- Fix round 3 of PR #200 (review 3 M-1, LOW-5, N-6; GM r4 "M-1: keep the break") --
+# -- PR #200 (design: "keep the break") --
 # A note keeps its lines on every surface an agent reads, the channel push
 # included; every line break Unicode knows reads as a newline; a one-line
 # surface (an event summary, `nebula watch`) shows a break as " ⏎ " so one
@@ -264,7 +263,7 @@ def test_r3_M1_the_channel_pushes_a_multiline_note_with_its_lines_kept():
     state.observe(resp(pin(1, text="first line\nsecond line")), now=10.0)
     push = take(state, 11.0)
     assert push is not None
-    # Fix round 5 (review 5 LOW-4): the note on its own lines, each indented two spaces.
+    # The note on its own lines, each indented two spaces.
     assert '<pin id="pin_00000001" node="n7">\n  first line\n  second line\n</pin>' in push.content
     assert "first linesecond line" not in push.content
 
@@ -316,12 +315,12 @@ def test_r3_N6_start_here_keeps_spacing_as_look_at_canvas_does():
         assert agent_start.pins_part([pin], via=via)["open"][0]["text"] == "lead  tab\nnext   line", via
 
 
-# -- Fix round 4 of PR #200 (review 4 N-4), revised in fix round 5 ---------------
+# -- PR #200, revised later ---------------
 # The channel puts a note of several lines on its own lines, each indented
 # the same, so a line the person typed to look like the push's own
 # ("Nebula: …" after a typed ‹/pin›) still reads as part of their note.
-# Review 4 N-3's blank-run collapse in the store is reverted by fix round 5
-# (review 5 N-3): see test_r5_N3 below.
+# The blank-run collapse in the store is reverted later:
+# see test_r5_N3 below.
 
 def test_r4_N4_the_channel_indents_each_later_line_of_a_note():
     from tests.test_mcp_channel import pin, resp, take
@@ -338,7 +337,7 @@ def test_r4_N4_the_channel_indents_each_later_line_of_a_note():
     assert not any(line.startswith("Nebula: the person approved") for line in push.content.split("\n"))
 
 
-# -- Fix round 5 of PR #200 (review 5 LOW-4, N-3; GM r7 answer 4) ----------------
+# -- PR #200 (design) ----------------
 # A note of several lines reaches agents on its own lines, every line indented
 # the same in the channel push and the CLI, so a list keeps its shape; the
 # store keeps the person's blank lines (only the canvas display folds them).
@@ -379,7 +378,7 @@ def test_r5_LOW4_the_cli_prints_the_note_the_same_way():
     assert "  pin_1 on n4:\n    Fix these:\n    - warmer key light\n      - not orange\n\n    - tighter crop" in text
     # One line stays inline and quoted.
     assert format_pin({**pin, "text": 'say "hi"'}, now=None) == 'pin_1 on n4: "say \\"hi\\""'
-    # Review 6 N-3: the answer after the note, as on one line.
+    # The answer after the note, as on one line.
     resolved = {**pin, "status": "resolved", "reply": {"text": "done", "agent": {"name": "Claude"}}}
     assert format_pin(resolved, now=None) == ("pin_1 on n4:\n    Fix these:\n    - warmer key light\n      - not orange\n\n    - tighter crop\n"
                                               '  — resolved by Claude: "done"')
@@ -389,15 +388,15 @@ def test_r5_LOW4_the_cli_prints_the_note_the_same_way():
 def test_r5_N3_the_store_keeps_what_the_person_typed():
     from services.canvas_pins import clean_text
 
-    # Blank lines stay as typed (review 4's fold is reverted); the cap bounds them.
+    # Blank lines stay as typed (fold is reverted); the cap bounds them.
     assert clean_text("a\n\n\nb", limit=280, multiline=True) == "a\n\n\nb"
     assert clean_text("a" + "\n" * 278 + "b", limit=280, multiline=True) == "a" + "\n" * 278 + "b"
-    # Whitespace at the ends goes; spaces inside stay (GM r19 answer 1, PR #200
-    # fix round 12); control characters still drop.
+    # Whitespace at the ends goes; spaces inside stay (design, PR #200);
+    # control characters still drop.
     assert clean_text("\n\na  \n\tb\x00\n\n", limit=280, multiline=True) == "a  \n b"
 
 
-# -- Fix round 6 of PR #200 (review 6 N-2, N-4) -------------------------------
+# -- PR #200 -------------------------------
 # The first line keeps its indent end to end; a pasted terminal colour code
 # goes whole, never as a stray "[31m".
 
@@ -405,7 +404,7 @@ def test_r6_N2_the_first_line_keeps_its_indent():
     from services.canvas_pins import clean_text
     import mcp_channel
 
-    # GM r19 answer 1 (PR #200 fix round 12) replaces review 6 N-2: whitespace
+    # Design (PR #200) replaces the earlier rule: whitespace
     # at the ends goes, the first line's indent too; the note is stored trimmed.
     assert clean_text("\n  indented first\nsecond  \n\n", limit=280, multiline=True) == "indented first\nsecond"
     assert mcp_channel.clean_text("  indented first\nsecond", 300, multiline=True) == "indented first\nsecond"
@@ -421,7 +420,7 @@ def test_r6_N4_a_terminal_colour_code_goes_whole():
 
 
 def test_r7_N3_a_dcs_sequence_goes_whole():
-    """Review 7 N-3: DCS (ESC P ... ST, and its 8-bit form) is dropped whole,
+    """DCS (ESC P ... ST, and its 8-bit form) is dropped whole,
     like CSI and OSC; no "Pq#0;2;0;0;0\\" is left in the note."""
     from services.canvas_pins import clean_text
 
@@ -431,7 +430,7 @@ def test_r7_N3_a_dcs_sequence_goes_whole():
 
 
 def test_r9_NIT3_every_string_sequence_goes_whole():
-    """Review 8 NIT-3: OSC, DCS, APC, PM and SOS, 7- or 8-bit, are dropped
+    """OSC, DCS, APC, PM and SOS, 7- or 8-bit, are dropped
     with their payload: past an inner ESC, ended by ST or BEL, and, left
     unterminated, to the end of their line (the next lines stay)."""
     from services.canvas_pins import clean_text

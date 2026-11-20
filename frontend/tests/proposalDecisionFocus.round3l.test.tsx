@@ -162,7 +162,7 @@ describe('round 3l (GM r69 a): focus moved elsewhere while the decision is out s
     expect(document.activeElement).toBe(canvas);
   });
 
-  it('a mouse decision says nothing and moves nothing', async () => {
+  it('a mouse decision says nothing (its focus move is pinned in proposalDecisionFocus.pointer)', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     net.apiFetch.mockResolvedValue(respond(200, { status: 'rejected' }));
     render(<ProposalBar />);

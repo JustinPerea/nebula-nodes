@@ -154,7 +154,7 @@ async def test_generate_adapts_native_nebula_moodboard_to_krea_style_refs() -> N
     # The brief joins the prompt in the engine, for every generator
     # (services/moodboard_brief.apply_to_generator), not here a second time.
     assert body["prompt"] == "A product photograph"
-    # Q21 b: the board's images share out its 0.6 (weights 0.5 and 1.0).
+    # The board's images share out its 0.6 (weights 0.5 and 1.0).
     assert body["image_style_references"] == [
         {"url": "https://assets.example/a.png", "strength": 0.2},
         {"url": "https://assets.example/b.png", "strength": 0.4},
@@ -199,7 +199,7 @@ async def test_an_unanalyzed_native_moodboard_sends_its_heaviest_images_first() 
             {"KREA_API_TOKEN": "krea-token"},
         )
 
-    # Heaviest first; Q21 b: the two share out the board's 1.0.
+    # Heaviest first: the two share out the board's 1.0.
     assert captured["body"]["image_style_references"] == [
         {"url": "https://assets.example/b.png", "strength": 0.6667},
         {"url": "https://assets.example/a.png", "strength": 0.3333},

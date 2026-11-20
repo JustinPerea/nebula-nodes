@@ -1,4 +1,4 @@
-"""Round 5d of #225: one message, delivered once.
+"""Of #225: one message, delivered once.
 
 A message's row has three states after its listener goes away: lapsed
 (waiting: the same agent and session may come back inside the window),
@@ -18,7 +18,7 @@ WINDOW = channel_listeners.LAPSE_WINDOW_SECONDS
 
 
 def test_the_lapse_window_is_the_sends_span_cap():
-    """Round 5e: a lapse is a stopped process (beats go on while Claude works),
+    """A lapse is a stopped process (beats go on while Claude works),
     so the window is the send's 10 minutes, not the ledger's 24 hours."""
     from mcp_channel import DELIBERATE_SPAN_CAP
     from services import push_ledger

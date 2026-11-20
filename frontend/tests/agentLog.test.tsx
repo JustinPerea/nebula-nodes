@@ -70,6 +70,16 @@ describe('agent log store', () => {
     expect(useAgentPresenceStore.getState().agents).toEqual({});
   });
 
+  it('keeps the nodes an action touched as a field of its row, apart from its words (design)', () => {
+    emit(action('Connecting “Hero prompt” to “GPT Image 2.5”', { nodeIds: ['n1', 'n2'], at: 1_000 }));
+    emit(action('Cleared the canvas', { target: undefined, at: 2_000 }));
+    emit(action('Set “Seed”', { nodeIds: ['n3', '', 7 as unknown as string], at: 3_000 }));
+    const entries = useAgentLogStore.getState().entries;
+    expect(entries.map((entry) => entry.nodeIds)).toEqual([['n1', 'n2'], undefined, ['n3']]);
+    // The words name the nodes by their canvas names: no id in a row.
+    expect(entries.every((entry) => !/\bn\d+\b/.test(entry.message))).toBe(true);
+  });
+
   it('skips events with nothing to say and cleans an unsafe colour', () => {
     emit(action(''));
     emit(action('   '));
@@ -115,9 +125,11 @@ describe('AgentLog panel', () => {
     const source = rows[0].querySelector('.agent-log__source');
     expect(source?.textContent).toBe('Claude Code');
     expect(rows[0].style.getPropertyValue('--agent-log-source-color')).toBe('#3FC1A5');
-    expect(rows[0].querySelector('.agent-log__time')?.textContent).toBe(
-      new Date(Date.UTC(2026, 9, 20, 14, 6, 0)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    );
+    // The time of day written "3:06 PM", with no seconds (design).
+    const at = new Date(Date.UTC(2026, 9, 20, 14, 6, 0));
+    const hours = at.getHours();
+    expect(rows[0].querySelector('.agent-log__time')?.textContent)
+      .toBe(`${hours % 12 || 12}:${String(at.getMinutes()).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`);
     expect(document.querySelector('.agent-log__count')?.textContent).toBe('2 events');
     expect(document.querySelector('.agent-log')?.getAttribute('data-status')).toBe('Claude Code');
   });

@@ -1,12 +1,12 @@
-"""PR #199 fix round 12 (GM r16).
+"""PR #199 (design).
 
-- GM r16, 1: a name made from one in another family names its source ("Recovered
-  Alpha copy", then "copy 2"; GM r23 a's shape since round 17); a family never repeats.
-- GM r16, 3: a lost row's own name is reused only when it is free, and free
+- Design: a name made from one in another family names its source ("Recovered
+  Alpha copy", then "copy 2"; design's shape); a family never repeats.
+- Design: a lost row's own name is reused only when it is free, and free
   counts Recently deleted: "Beta" still there gives "Recovered Beta".
-- GM r16, 5: the person-facing lines the backend writes (the agent's
+- Design: the person-facing lines the backend writes (the agent's
   saved-canvas reply the CLI prints, the copy-waits sentence) use the curly ’.
-- GM r16 (MCP): while the person's tab keeps edits Nebula couldn't save after
+- Design (MCP): while the person's tab keeps edits Nebula couldn't save after
   a restore, an agent's canvas write, run or project switch is refused with
   409 canvas_kept_in_tab, and MCP, the CLI and the graph-file tools say the
   code; the person's own requests pass.
@@ -40,7 +40,7 @@ def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
             "trash": {f"{i + 100:032x}": {"name": name} for i, name in enumerate(trash)}}
 
 
-# -- GM r16, 1: a copy names its source; a family never repeats -----------------------------
+# -- Design: a copy names its source; a family never repeats -----------------------------
 
 @pytest.mark.parametrize(("source", "names", "want"), [
     ("Recovered Alpha", (), "Recovered Alpha copy"),
@@ -57,9 +57,9 @@ def test_r16_1_a_copy_names_its_source_and_never_says_copy_twice(source, names, 
 
 
 @pytest.mark.parametrize(("source", "names", "want"), [
-    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),  # GM r29, 2
+    ("Recovered Alpha", ("Recovered Alpha",), "Recovered Alpha copy"),  # Design
     ("Alpha copy", (), "Recovered Alpha copy"),
-    # GM r25, 5: never "copy 2 2"; the number is raised.
+    # Design: never "copy 2 2"; the number is raised.
     ("Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 3"),
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),
 ])
@@ -69,11 +69,11 @@ def test_r16_1_a_recovered_copy_never_says_recovered_twice_in_a_row(source, name
     assert not got.startswith("Recovered Recovered")
 
 
-# -- GM r16, 3: free counts Recently deleted --------------------------------------------------
+# -- Design: free counts Recently deleted --------------------------------------------------
 
 @pytest.mark.parametrize(("lost", "names", "trash", "want"), [
     ("Beta", (), ("Beta",), "Recovered Beta"),
-    ("Beta", (), ("Beta", "Recovered Beta"), "Recovered Beta copy"),  # GM r29, 2
+    ("Beta", (), ("Beta", "Recovered Beta"), "Recovered Beta copy"),  # Design
     ("Beta", ("Recovered Beta",), ("Beta",), "Recovered Beta copy"),
     # Only the "Recovered" name is in Recently deleted: "Beta" itself is free.
     ("Beta", (), ("Recovered Beta",), "Beta"),
@@ -91,10 +91,10 @@ def test_r16_3_the_live_canvas_of_a_project_in_recently_deleted_is_filed_as_reco
     catalog = {"projects": {"a" * 32: {"name": "Alpha"}}, "trash": {owner: {"name": "Beta"}}}
     assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta"
     catalog["trash"]["c" * 32] = {"name": "Recovered Beta"}
-    assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta copy"  # GM r29, 2
+    assert main_module._filed_canvas_name(catalog, owner) == "Recovered Beta copy"  # Design
 
 
-# -- GM r16, 5: the backend's person-facing lines use ’ ---------------------------------------
+# -- Design: the backend's person-facing lines use ’ ---------------------------------------
 
 STRAIGHT = re.compile(r"[A-Za-z]'[A-Za-z]")
 
@@ -114,7 +114,7 @@ def test_r16_5_the_lines_the_cli_prints_to_people_use_curly_apostrophes():
     }
 
 
-# -- GM r16 (MCP): agents wait while the person's tab keeps edits -----------------------------
+# -- Design (MCP): agents wait while the person's tab keeps edits -----------------------------
 
 def _settles(check, seconds: float = 3.0) -> bool:
     end = time.monotonic() + seconds
@@ -145,7 +145,7 @@ AGENT_WRITES = {
     "create": lambda client: client.post("/api/projects", headers=CODEX, json={"name": "Codex's", "workspaceRevision": _rev(client)}),
     "open": lambda client: client.post(f"/api/projects/{client.app.state.fix12_other}/open", headers=CODEX,
                                        json={"workspaceRevision": _rev(client)}),
-    # PR #199 r27: deleting the open project empties the live canvas the kept tab's save would open over.
+    # PR #199: deleting the open project empties the live canvas the kept tab's save would open over.
     "delete-open": lambda client: client.request("DELETE", f"/api/projects/{client.app.state.fix12_active}", headers=CODEX,
                                                  json={"workspaceRevision": _rev(client)}),
 }

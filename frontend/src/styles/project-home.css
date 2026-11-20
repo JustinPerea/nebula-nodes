@@ -38,7 +38,7 @@ body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.p
 @keyframes project-home-settings-exit { to { opacity: 0; transform: translateY(-8px) scale(0.96); } }
 body.app-slava-restraint .project-home__main { width: min(100%, 1248px); margin: 0 auto; padding: 72px clamp(24px, 5vw, 64px) 64px; }
 body.app-slava-restraint .project-home__welcome { display: flex; align-items: center; justify-content: space-between; gap: 32px; margin-bottom: 56px; }
-body.app-slava-restraint .project-home__eyebrow { margin-bottom: 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__eyebrow { margin-bottom: 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sr-ink-light); }
 body.app-slava-restraint .project-home h1 { font-size: clamp(27px, 3vw, 36px); font-weight: 500; line-height: 1.16; letter-spacing: -0.045em; }
 body.app-slava-restraint .project-home__intro { margin-top: 14px; color: var(--sr-ink-light); font-size: 14px; line-height: 1.6; }
 body.app-slava-restraint .project-home button { font-family: var(--sr-ui); cursor: pointer; }
@@ -206,7 +206,6 @@ body.app-slava-restraint .project-home__error button:disabled { opacity: 0.55; c
 body.app-slava-restraint .project-home__notices { display: grid; gap: 12px; margin-bottom: 28px; }
 body.app-slava-restraint .project-home__notices .project-home__notice,
 body.app-slava-restraint .project-home__notices .project-home__error { margin-bottom: 0; }
-body.app-slava-restraint .project-home__notice--copy { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 8px 8px 16px; }
 body.app-slava-restraint .project-home__notice-text { min-width: 0; overflow-wrap: anywhere; }
 /* Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen that can't go yet, under its card. */
 body.app-slava-restraint .project-home__card-lock { margin: 0; padding: 0 16px 12px; color: var(--sr-ink-meta); font-family: var(--sr-ui); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
@@ -228,8 +227,11 @@ body.app-slava-restraint .project-home__notice-close:focus-visible { outline: va
 body.app-slava-restraint .project-home__notice:focus-visible,
 body.app-slava-restraint .project-home__error:focus-visible,
 body.app-slava-restraint .project-home #recent-projects-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
+body.app-slava-restraint .project-home #project-home-title:focus-visible { outline: var(--sr-focus-outline); outline-offset: 4px; }
 /* design: the Projects notice is a fill, no edge (the canvas pin toast floats, so it keeps its own). */
 body.app-slava-restraint .project-home__notice { padding: 14px 16px; margin-bottom: 28px; border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); color: var(--sr-ink); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+/* Design: the notice with a close button lays out as a row; it follows the base rule so its padding wins. */
+body.app-slava-restraint .project-home__notice--copy { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 8px 8px 16px; }
 body.app-slava-restraint .project-home__restore { display: flex; align-items: flex-start; gap: 12px; }
 body.app-slava-restraint .project-home__restore-text { flex: 1; min-width: 0; padding-top: 6px; }
 /* GM r6 (bug 2): 6px between outcomes, so a wrapped line doesn't read as two;

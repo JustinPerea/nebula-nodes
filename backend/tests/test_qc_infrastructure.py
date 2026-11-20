@@ -168,7 +168,7 @@ async def test_injected_vision_client_cannot_bypass_request_timeout(
         await client.aclose()
 
 
-# PR #208 round 4 (review 3 R1, N1): a reference opens as it shows on the
+# PR #208: a reference opens as it shows on the
 # node, EXIF turn included, so an EXIF-rotated opaque reference is measured
 # upright (open_rgb, for video frames, doesn't turn it).
 

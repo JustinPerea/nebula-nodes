@@ -1,8 +1,8 @@
-"""Placeholders (Q125 item 3): nodes an agent is still setting up.
+"""Placeholders: nodes an agent is still setting up.
 
-Justin, 2026-10-24, merge-oks Q125 ("Yes, all four, in that order"), item 3:
+Justin, 2026-10-24, merge-oks ("Yes, all four, in that order"):
 "A node an agent is about to fill shows as a placeholder in its colour ...
-edit_canvas gains pending: true." GM - Design, 2026-10-25: "Run skips pending
+edit_canvas gains pending: true." design, 2026-10-25: "Run skips pending
 nodes, along with any node downstream that needs their output ... The person
 running a pending node directly counts as their edit: it turns normal and
 runs ... turns normal on run, on pending false, after 10 min idle, or on any
@@ -486,7 +486,7 @@ def test_the_person_running_a_placeholder_directly_turns_it_normal_and_runs_it(p
 
 
 def test_the_person_running_a_node_downstream_of_placeholders_runs_them_all(pend):
-    """GM: "The person running a pending node directly counts as their edit:
+    """Design: "The person running a pending node directly counts as their edit:
     it turns normal and runs." Running +b directly runs what feeds it (the
     run's scope is the node and its ancestors), so the placeholders it needs
     are the person's run too: all turn normal and run, nothing is skipped."""
@@ -509,7 +509,7 @@ def test_the_persons_direct_run_leaves_placeholders_outside_its_scope(pend):
     assert _owner(pend, ids["+b"])["id"] == CLAUDE_ID  # downstream of the target: not this run
 
 
-# -- Q133: a paid placeholder in the person's direct run needs their confirmation ----------
+# -- A paid placeholder in the person's direct run needs their confirmation ----------
 
 def _paid_chain(api, headers=CLAUDE) -> dict[str, str]:
     """+p (free text) → +i (a paid image model), both the agent's placeholders."""
@@ -537,14 +537,14 @@ def _direct(pend, target, confirmed=None, headers=PERSON, cost=None):
 
 def _confirm_cost(response) -> float:
     """The total Nebula's refusal says the run costs: what the canvas's dialog
-    asks again with, and the person confirms (review 4, M1)."""
+    asks again with, and the person confirms."""
     assert response.status_code == 409, response.text
     return response.json()["detail"]["estimate"]["high"]
 
 
 @pytest.mark.parametrize("confirmed", [None, [], ["+p"], ["+i", "+p"], ["+i", "other"]])
 def test_the_persons_direct_run_of_a_paid_placeholder_needs_their_confirmation(pend, confirmed):
-    """Justin, Q133 b: "ALWAYS ask first when any of them is a paid model".
+    """Justin: "ALWAYS ask first when any of them is a paid model".
     The backend holds it too: a run that would make a paid placeholder normal
     runs only when the request names exactly those placeholders, so a missed
     dialog, a stale tab or another client can't skip it. Nothing runs, is
@@ -721,10 +721,10 @@ def test_run_skips_unit():
     assert pending_nodes.skip_summary({}) is None
 
 
-# -- GM - Design's rulings of 2026-10-25, round 3 ------------------------------------------------------
+# -- Design's rulings of 2026-10-25 ------------------------------------------------------
 
 def test_the_skip_line_names_the_agent_when_every_skip_is_one_agents():
-    """GM: "The Run skip line names the agent when every skipped node belongs
+    """Design: "The Run skip line names the agent when every skipped node belongs
     to one agent (downstream nodes count toward the agent whose pending node
     blocked them), and says "agents" only when they come from more than one"."""
     assert pending_nodes.skip_line({"count": 1, "agents": ["Codex"]}) == "Skipped 1 node Codex is still setting up."
@@ -735,7 +735,7 @@ def test_the_skip_line_names_the_agent_when_every_skip_is_one_agents():
 
 
 def test_a_skipped_placeholders_reason_is_gms_tooltip_line(pend):
-    """GM: the Skipped badge's tooltip on a skipped placeholder reads
+    """Design: the Skipped badge's tooltip on a skipped placeholder reads
     "Skipped: Codex is still setting this up." (the canvas puts "Skipped: "
     before the reason, lib/gating.ts skippedLabel)."""
     ids = _chain(pend, headers=CODEX)
@@ -745,22 +745,19 @@ def test_a_skipped_placeholders_reason_is_gms_tooltip_line(pend):
     assert _skips(pend)[ids["+p"]] == "Codex is still setting this up."
 
 
-def test_the_agent_log_line_counts_placeholder_skips(pend, monkeypatch):
-    """The run's line in the Agent log (publish_action) counted a gate's skips
-    only; a run that skipped placeholders says so in GM's skip line."""
-    said: list[str] = []
-    monkeypatch.setattr(pend.main, "publish_action", said.append)
+def test_the_agent_log_line_counts_placeholder_skips(pend):
+    """The run's row in the Agent log (the agent's own, design) says a run that
+    skipped placeholders did, in the placeholders' skip line, as its own sentence."""
     _chain(pend)  # Claude Code's three placeholders
-    pend.graph.add_node("text-input", {"value": "free"})
+    free = pend.graph.add_node("text-input", {"value": "free"})
+    pend.graph.set_label(free, "Free text")
     result = pend.client.post("/api/graph/run", headers=CODEX, json={}).json()
     assert result["nodesExecuted"] == 1
-    ran = [line for line in said if line.startswith("Ran ")]
-    assert len(ran) == 1, said
-    assert ran[0].endswith(". Skipped 3 nodes Claude Code is still setting up."), ran[0]
-
-
+    ran = [(m["agent"]["name"], m["say"]) for m in pend.sent
+           if m.get("type") == "agentPresence" and str(m.get("say")).startswith("Ran ")]
+    assert ran == [("Codex", "Ran “Free text” in under 1 s. Skipped 3 nodes Claude Code is still setting up.")]
 def test_a_proposals_cost_leaves_out_what_its_run_will_skip(pend):
-    """GM: every place the person sees a cost before a run matches what will
+    """Design: every place the person sees a cost before a run matches what will
     actually run. An accepted proposal's run skips placeholders and what
     needs them (it isn't the person's direct run), so its cost leaves them out."""
     ids = _chain(pend, headers=CODEX)

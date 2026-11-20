@@ -109,7 +109,7 @@ def test_the_blue_as_a_large_cluster_conflicts_with_the_silver_palette():
 def test_the_research_cases_that_are_consistent():
     # Silver leads, as on a silver tonalist board. (A board of pearl #eae0c8
     # alone averages warm yellow, C 0.034, and would trip the cast line:
-    # a tuning case for GM's labels, noted in implementation-notes.md.)
+    # a tuning case for design's labels, noted in implementation-notes.md.)
     palette = [("#c0c0c0", 0.4), ("#eae0c8", 0.15), ("#e2dfd2", 0.15)]
     levels = worst(gm(palette=palette, accents=[("#6495ed", 0.002)], pinned=()))
     assert levels == {}

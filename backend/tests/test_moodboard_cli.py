@@ -400,7 +400,7 @@ def test_download_works_inside_a_running_event_loop():
 
 
 def test_the_backend_has_no_url_fetching_for_boards(app):
-    # A link handed to the backend directly is refused (Q98), not downloaded:
+    # A link handed to the backend directly is refused, not downloaded:
     # only this process downloads, then uploads (services/stored_image_refs.py).
     with pytest.raises(NebulaAPIError) as refused:
         app.api.request("POST", "/api/moodboards", json={
@@ -1349,7 +1349,7 @@ def test_mcp_set_aside_is_the_excluded_switch(app, tmp_path):
 
 
 def test_show_says_a_board_at_strength_zero_sends_nothing(capsys, monkeypatch):
-    # Q36 a (Justin 2026-10-20): strength 0 turns the board off for every
+    # Justin, 2026-10-20: strength 0 turns the board off for every
     # node it's wired into, so its brief isn't "sent to generators".
     off = {"id": "mb_off", "name": "Off", "mode": "look", "strength": 0.0, "images": [],
            "brief": {"styleBrief": "Quiet coastal mornings.", "negativePrompt": "blurry"}}
@@ -1395,7 +1395,7 @@ def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_pa
     # An analysis saved before alpha counted reads as out of date everywhere.
     store = MoodboardStore()
     store.update(board["id"], analysis={**analyze_moodboard(store.get(board["id"])), "version": 5})
-    line = "These colors counted transparent areas as dark. Analyze again to update them."  # GM r1, verbatim
+    line = "These colors counted transparent areas as dark. Analyze again to update them."  # Design, verbatim
     assert ALPHA_OUTDATED == line
     assert mcp_server.moodboard_get(board["id"])["analysis"]["outdated"] == line
     assert [b["analysis"]["outdated"] for b in mcp_server.moodboard_list(project_id="none")] == [line]
@@ -1406,15 +1406,15 @@ def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_pa
     assert ALPHA_OUTDATED in out and "changes include edits to the board" not in out
 
     # Its brief is built from those colours, and says so on every surface
-    # (review 1 M1, GM r2 verbatim): a run analyzes again and sends a new one.
+    # Design, verbatim: a run analyzes again and sends a new one.
     brief_line = "This brief uses the old colors. The next run analyzes the board again and sends an updated one."
     assert mcp_server.moodboard_get(board["id"])["brief"]["outdated"] == brief_line
     assert [b["brief"]["outdated"] for b in mcp_server.moodboard_list(project_id="none")] == [brief_line]
     out = _cli(app, ["moodboard", "show", board["id"]], capsys)
-    # Right after the brief's text (GM r5 on #208).
+    # Right after the brief's text (design on #208).
     brief_text = mcp_server.moodboard_get(board["id"])["brief"]["styleBrief"]
     assert f"  Brief sent to generators (generated):\n    {brief_text}\n    {brief_line}\n" in out
-    # A hand-written brief keeps its words, and at strength 0 nothing is sent (GM r5).
+    # A hand-written brief keeps its words, and at strength 0 nothing is sent (design).
     override_line = "This brief uses the old colors. The next run sends it with the updated ones."
     store.update(board["id"], by="agent", briefOverride={"text": "Dusk light."})
     assert mcp_server.moodboard_get(board["id"])["brief"]["outdated"] == override_line

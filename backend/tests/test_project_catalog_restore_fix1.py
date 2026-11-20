@@ -1,4 +1,4 @@
-"""PR #199 review 1: a restored project list never puts one project's canvas
+"""PR #199: a restored project list never puts one project's canvas
 into another, says what an older copy decided, and stays cheap and bounded
 (2026-10-27).
 
@@ -128,7 +128,7 @@ def _create(client, name: str) -> str:
 
 
 def test_h1_the_review_probe_never_saves_betas_canvas_into_alpha(app):
-    """Review 1's probe: Alpha (two nodes), then Beta opened with one node.
+    """Probe: Alpha (two nodes), then Beta opened with one node.
     The older copy has Alpha open. catalog.json is zero-filled and .bak
     overwritten with zeros: the restore comes from .bak.1."""
     client, store, graph, state = app
@@ -159,7 +159,7 @@ def test_h1_the_review_probe_never_saves_betas_canvas_into_alpha(app):
     assert after["activeProjectId"] == recovered[0]["id"]
     assert json.loads(state.read_text())["projectId"] == recovered[0]["id"]
     saved = dict(body["catalogRestore"]["recoveredCanvas"])
-    assert saved.pop("filedAt") == recovered[0]["createdAt"]  # GM r10's order
+    assert saved.pop("filedAt") == recovered[0]["createdAt"]  # Design's order
     assert saved == {"id": recovered[0]["id"], "name": "Recovered canvas"}
     assert "Recovered canvas" in body["catalogRestore"]["note"]
     # Listing again files nothing more.
@@ -450,7 +450,7 @@ def _zero_inside(raw: bytes, entry_id: str) -> bytes:
 
 
 def test_m1_several_records_cut_in_one_file_each_get_their_group(tmp_path):
-    """Live check of fix round 1: three torn pages in one file. The record cut
+    """Live check: three torn pages in one file. The record cut
     after a whole record that followed an earlier cut lost its group, so a
     restore from Recently deleted the copy didn't have went unreported."""
     store = _store(tmp_path)
@@ -514,7 +514,7 @@ def test_m1_start_here_and_the_cli_carry_the_older_copys_outcomes():
 
 
 def test_m1_a_damaged_file_not_read_to_its_end_never_claims_nothing_was_lost(tmp_path):
-    """Live check of fix round 1: catalog.json and .bak zero-filled, .bak.1 the
+    """Live check: catalog.json and .bak zero-filled, .bak.1 the
     base. What the damaged file held is unknown, and the record, the agents'
     note and the CLI say so (the notice then never says no projects were
     missing). A file that parses (only its shape wrong) was read whole."""
@@ -562,7 +562,7 @@ def test_l1_a_rebuild_past_the_size_limit_refuses_and_changes_nothing(tmp_path, 
     real = store.prepare
     calls = {"n": 0}
 
-    def limited(catalog, **kwargs):  # the restore passes restoring=True (fix round 13)
+    def limited(catalog, **kwargs):  # the restore passes restoring=True
         calls["n"] += 1
         if catalog["projects"]:
             raise store_module.ProjectLimitError("Project storage limit reached", "storage")

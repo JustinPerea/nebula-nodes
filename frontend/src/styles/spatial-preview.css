@@ -1,5 +1,4 @@
 .spatial-preview {
-  --spatial-preview-accent: var(--node-category-color, #65a9ff);
   display: grid;
   gap: 8px;
   width: 100%;
@@ -9,10 +8,6 @@
   padding: 10px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 7px;
-  background:
-    radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--spatial-preview-accent) 14%, transparent), transparent 52%),
-    #151515;
-  color: #d8d8d8;
   font-size: 11px;
   line-height: 1.35;
 }
@@ -63,7 +58,6 @@
 
 .spatial-preview__eyebrow {
   overflow: hidden;
-  color: #8f9cac;
   font-size: 9px;
   font-weight: 650;
   letter-spacing: 0.09em;
@@ -76,7 +70,6 @@
   display: block;
   min-width: 0;
   overflow: hidden;
-  color: #f2f2f2;
   font-size: 12px;
   font-weight: 620;
   letter-spacing: -0.01em;
@@ -87,7 +80,6 @@
 .spatial-preview__subtitle {
   display: -webkit-box;
   overflow: hidden;
-  color: #909090;
   font-size: 10px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -107,11 +99,10 @@
   padding: 6px 7px;
   border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 5px;
-  background: rgb(255 255 255 / 3%);
 }
 
 .spatial-preview__metric dt {
-  color: #737b84;
+  color: var(--sr-ink-meta);
   font-size: 8px;
   font-weight: 650;
   letter-spacing: 0.06em;
@@ -122,7 +113,6 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #d4d8dd;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 9px;
   text-overflow: ellipsis;
@@ -143,7 +133,7 @@
   border: 1px solid color-mix(in srgb, var(--spatial-preview-accent) 24%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--spatial-preview-accent) 8%, transparent);
-  color: #aeb7c2;
+  color: var(--sr-ink-light);
   font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -156,7 +146,6 @@
 }
 
 .spatial-preview__assets-label {
-  color: #737b84;
   font-size: 8px;
   font-weight: 650;
   letter-spacing: 0.06em;
@@ -172,8 +161,6 @@
   padding: 4px 6px;
   border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 4px;
-  background: rgb(255 255 255 / 3%);
-  color: #bdc9d7;
   cursor: pointer;
 }
 
@@ -197,32 +184,35 @@
 }
 
 .spatial-preview__asset small {
-  color: #737b84;
   font-size: 8px;
 }
 
 .spatial-preview__asset-overflow {
-  color: #737b84;
   font-size: 8px;
 }
 
 .spatial-preview--invalid {
   max-height: 120px;
-  border-color: rgb(238 159 98 / 24%);
-  background: rgb(90 45 22 / 12%);
-}
-
-.spatial-preview--invalid .spatial-preview__eyebrow {
-  color: #d99b71;
 }
 
 body.app-slava-restraint .spatial-preview {
-  --spatial-preview-accent: var(--sr-accent, #ff5a1f);
+  --spatial-preview-accent: var(--sr-accent);
   border-color: rgb(255 255 255 / 12%);
   background:
     radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--spatial-preview-accent) 12%, transparent), transparent 52%),
     #191919;
   color: #e4e0da;
+}
+
+/* Design: a representation that can't render is something that went wrong, so the
+ * Slava card takes the error tokens too (the rule above would otherwise hide it). */
+body.app-slava-restraint .spatial-preview--invalid {
+  border-color: var(--sr-error-border);
+  background: var(--sr-error-soft);
+}
+
+body.app-slava-restraint .spatial-preview--invalid .spatial-preview__eyebrow {
+  color: var(--sr-error);
 }
 
 /* Structured cards contain text; unlike photographs they must start below
@@ -237,6 +227,7 @@ body.app-slava-restraint .spatial-preview__metric dd {
   color: #e4e0da;
 }
 
+/* palette-exempt: a warm neutral of the Slava card, not a status; left for the neutral sweep */
 body.app-slava-restraint .spatial-preview__subtitle,
 body.app-slava-restraint .spatial-preview__eyebrow,
 body.app-slava-restraint .spatial-preview__assets-label,
@@ -251,6 +242,7 @@ body.app-slava-restraint .spatial-preview__asset {
   background: rgb(255 255 255 / 4%);
 }
 
+/* palette-exempt: a warm neutral of the Slava card, not a status; left for the neutral sweep */
 body.app-slava-restraint .spatial-preview__asset {
   color: #d8d0c7;
 }

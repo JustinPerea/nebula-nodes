@@ -1,4 +1,4 @@
-"""Proposals for changes outside the graph (audit U16; Justin's Q60 a, 2026-10-20).
+"""Proposals for changes outside the graph (audit U16; Justin's ruling, 2026-10-20).
 
 `propose_change` carries only graph changes. This covers the person's calls
 that live on an asset or a project:
@@ -211,7 +211,7 @@ def test_an_agent_cover_on_the_open_project_reads_the_live_canvas(api):
 # -- proposing a cover ----------------------------------------------------------
 
 def test_an_abandoned_asset_proposal_wait_frees_its_waiter_slot(api):
-    # Review 1 of PR #114 (M2): the same 32 slots as /api/canvas/events.
+    # PR #114: the same 32 slots as /api/canvas/events.
     import asyncio
 
     from services.canvas_events import MAX_WAITERS
@@ -347,6 +347,10 @@ def test_only_the_persons_canvas_accepts_with_the_key(api):
     assert closed[-1] == {"type": "assetProposalClosed", "proposalId": view["id"], "status": "accepted",
                           "reason": None, "kind": "project", "targetId": api.dusk}
     assert any(m.get("type") == "projectsChanged" for m in api.sent)
+    # The person's accept is a row under the agent that proposed it, in their
+    # voice (design); a project's cover has no image number, so "another image".
+    rows = [(m["agent"]["name"], m["say"]) for m in api.sent if m.get("type") == "agentPresence" and m.get("say")]
+    assert rows[-1] == ("Claude Code", "You accepted its proposal to make another image the cover of “Dusk”")
     # Decided once.
     assert api.client.post(path, headers={**api.person, KEY: key}).status_code == 409
 
@@ -427,7 +431,7 @@ def test_the_persons_canvas_gets_open_asset_proposals_with_keys_on_hello(api):
 # -- moodboards: Send notes to generators ------------------------------------------------
 
 def _board(api, *, send_notes=False) -> dict:
-    # A board's images are Nebula's own files (Q98): a real upload.
+    # A board's images are Nebula's own files: a real upload.
     made = api.client.post("/api/moodboards", json={
         "name": "Dusk board", "images": [{"url": stored_image_urls(1, name="dusk")[0]}], "projectId": api.active,
         "sendNotes": send_notes,
@@ -460,7 +464,7 @@ def test_an_agent_proposes_sending_a_boards_notes_and_the_person_accepts_in_stud
     changed = [m for m in api.sent if m.get("type") == "storedAssetChanged" and m.get("id") == board["id"]]
     assert changed and "tab" not in (changed[-1].get("edit") or {})
     assert _events(api, "proposal.accepted")[-1]["data"]["kind"] == "moodboard"
-    # Q91 a: the accepted change is journaled like any field write, by name only.
+    # The accepted change is journaled like any field write, by name only.
     fields = _events(api, "board.fields")
     assert [event["data"]["fields"] for event in fields] == [["sendNotes"]]
     assert fields[0]["data"]["boardId"] == board["id"]
@@ -468,7 +472,7 @@ def test_an_agent_proposes_sending_a_boards_notes_and_the_person_accepts_in_stud
 
 
 def test_an_accepted_board_proposals_write_names_the_proposal_and_the_persons_never_does(api):
-    # Review 2 of PR #114 (L1): the accept's board write was journaled as the
+    # PR #114: the accept's board write was journaled as the
     # person's own board.fields with no mark, so nebula-mcp --channel counted
     # it as the person's edit and gated the agent's next push. The accept
     # route now names the proposal in its data, as canvas accepts do; a
@@ -543,7 +547,7 @@ def _accept_refused(api, monkeypatch, body: dict, name: str = "Dusk board"):
 
 
 def test_a_refused_board_accept_with_no_readable_detail_says_what_is_known_and_what_to_do(api, monkeypatch):
-    """Design r161: the line names the moodboard, claims no cause, and says Nebula closed the proposal (it did)."""
+    """Design: the line names the moodboard, claims no cause, and says Nebula closed the proposal (it did)."""
     refused = _accept_refused(api, monkeypatch, {})
     assert refused.status_code == 409
     # Accept is not live after this refusal: accept_asset_proposal closes the proposal as invalidated.

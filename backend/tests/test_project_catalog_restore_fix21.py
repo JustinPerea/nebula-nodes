@@ -1,21 +1,21 @@
-"""PR #199 fix round 21: review 19's backend items and GM r32.
+"""PR #199: backend items and design.
 
-- reopen-handoff MEDIUM-1, LOW-1, NIT-2 (GM r32 1): the open/replacement
+- Design: the open/replacement
   hold is the backend's own verdict, read with no side effect
   (``_graph_replacement_hold``: GET /api/projects/open-hold, the listing's
   ``openHold``, and ``hold`` on the open route's 409), with the held node and
   the project it belongs to; agents read it in list_projects and `nebula
   projects`. The states are one list both sides read
   (tests/data/replacement_hold_states.json).
-- reopen-handoff LOW-3 (agents-docs LOW-1): a run result's landing stamp
+- A run result's landing stamp
   (``resultLandedAt``) is kept with it, so a handoff after a restart still
   knows which run is newer; equal times keep Nebula's.
-- reopen-handoff LOW-4: a refused delete is never silent (``deletesKept``).
-- reopen-handoff NIT-1: mutants B4, B12, B13b, B16; agents-docs NIT-1 (M3).
-- agents-docs LOW-2: a recovered copy's source, for agents.
-- agents-docs NIT-2 (GM r32 5): the person's newer result replacing a
+- A refused delete is never silent (``deletesKept``).
+- Mutants B4, B12, B13b, B16.
+- A recovered copy's source, for agents.
+- Design: the person's newer result replacing a
   node's is journaled (``node.result``).
-- agents-docs GM question (GM r32 6): the `nebula watch` line for a reopen in place.
+- Design's question: the `nebula watch` line for a reopen in place.
 """
 from __future__ import annotations
 
@@ -147,7 +147,7 @@ def test_a_recovery_of_the_open_projects_node(app, recoveries):
 
 
 def test_a_recovery_of_another_projects_node_names_that_project(app, recoveries):
-    """GM r32 1 (item 8): node ids repeat across projects; the record's run
+    """Design: node ids repeat across projects; the record's run
     says whose it is, and the name comes from that project's copy."""
     client, *_ = app
     alpha, delta = _alpha_then_delta(client)
@@ -392,7 +392,7 @@ def test_a_the_states_file_is_every_state_the_verdict_answers(app, recoveries, m
     seen.append(_hold(client)["state"])
     monkeypatch.setattr(main_module, "_graph_recovery_bootstrap_error", "x")
 
-    def unwritable():  # round 22: the read tries the journal write the press makes
+    def unwritable():  # The read tries the journal write the press makes
         raise ProviderRecoveryPersistenceError("provider recovery journal write failed")
 
     monkeypatch.setattr(recoveries, "verify_writable", unwritable)
@@ -413,7 +413,7 @@ def test_a_agents_read_the_hold_in_list_projects_and_nebula_projects(app, recove
     _alpha_then_delta(client)
     recoveries.set(run_id="wl-run-delta", node_id="n1", resume_operation_id="op-1", existing_world_id=None)
     listed = project_client.list_projects(NebulaAPI("http://testserver", client=client), headers=CODEX)
-    # Round 22 (review 20 agents-docs LOW-5): the note says the state, the node, its project and what clears it.
+    # The note says the state, the node, its project and what clears it.
     note = ("Opening or switching projects is held (recovery): \u201cDelta World\u201d (n1) in the open project "
             "\u201cDelta\u201d has a saved World Labs recovery ID; the person forgets it in Run history.")
     assert listed["openHold"]["state"] == "recovery" and listed["openHold"]["note"] == note
@@ -472,7 +472,7 @@ def test_b_a_landing_is_stamped_on_the_live_node_and_its_stored_copy(app, monkey
 
 
 def test_b_a_restart_between_the_agents_run_and_the_handoff_keeps_the_agents_later_result(app, monkeypatch):
-    """The reviewer's probe (agents-docs LOW-1), with a real restart: the
+    """The reviewer's probe, with a real restart: the
     agent's run of n2 landed after the open; Nebula restarts; the tab's
     handoff holds an older run's result. The stamp kept with n2's result
     says the agent's is newer."""
@@ -790,7 +790,7 @@ def test_19_nothing_is_journaled_when_nebulas_result_stands(app):
     assert not _events("node.result", since)
 
 
-# -- item 21 (GM r32 6): `nebula watch` for a reopen in place ---------------------------------------------
+# -- Design: `nebula watch` for a reopen in place ---------------------------------------------
 
 def _replaced(since: int) -> dict:
     return _events("canvas.replaced", since)[-1]
@@ -840,7 +840,7 @@ def test_agent_docs_describe_round_21():
     skill = flat((ROOT / "skills/nebula/SKILL.md").read_text())
     for text in (setup, skill):
         assert "openHold" in text and "/api/projects/open-hold" in text
-        assert "Opening or switching projects is held (" in text  # round 22: the note names the state
+        assert "Opening or switching projects is held (" in text  # The note names the state
         assert "resultLandedAt" in text and "Equal times keep Nebula's result" in text
         assert "the side with a time wins" in text
         assert "`node.result`" in text

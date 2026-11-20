@@ -6,6 +6,8 @@
  * in the same value already gives a width of 1px or less.
  */
 
+import { collectVars as collectVarsFromLib } from '../../scripts/lib/css-values.mjs';
+
 /** Split on whitespace outside parentheses. */
 export function tokens(value: string): string[] {
   const out: string[] = [];
@@ -95,15 +97,8 @@ function shadowIsBar(shadow: string): boolean {
 
 /** Custom property name -> every value any stylesheet gives it. */
 export type Vars = Map<string, string[]>;
-export function collectVars(sources: string[]): Vars {
-  const vars: Vars = new Map();
-  for (const source of sources) {
-    for (const m of source.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)/g)) {
-      vars.set(m[1], [...(vars.get(m[1]) ?? []), m[2].trim()]);
-    }
-  }
-  return vars;
-}
+/** The one reader of custom properties, shared with scripts/check-left-edge.mjs (scripts/lib/css-values.mjs). */
+export const collectVars = collectVarsFromLib as (sources: string[]) => Vars;
 
 function shadowsAreBar(value: string, vars: Vars | undefined, seen: Set<string>): boolean {
   return splitTop(clean(value)).some((shadow) => {

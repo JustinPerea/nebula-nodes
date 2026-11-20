@@ -108,7 +108,7 @@
 }
 
 .agent-log__resize:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline: var(--sr-focus-outline);
   outline-offset: -2px;
 }
 
@@ -160,7 +160,7 @@
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: var(--sr-accent, #ff5a1f);
+  background: var(--sr-accent);
   color: var(--sr-on-accent, #0a0a0b);
   font-size: 10px;
   font-weight: 600;
@@ -218,7 +218,7 @@
 }
 
 .message-box__item[data-focus-target]:focus {
-  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline: var(--sr-focus-outline);
   outline-offset: -2px;
   border-radius: 6px;
 }
@@ -474,7 +474,7 @@
 .message-box__context-remove:focus-visible,
 .message-box__recipient-chip:focus-visible,
 .message-box__menu-item:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline: var(--sr-focus-outline);
   outline-offset: 1px;
 }
 
@@ -605,7 +605,7 @@
 /* The field clears its own outline: the row it sits in draws the token
    ring while it has keyboard focus (the house focus rule). */
 .message-box__field-row:has(.message-box__field:focus-visible) {
-  outline: var(--sr-focus-outline, 2px solid #7aa9ff);
+  outline: var(--sr-focus-outline);
   outline-offset: 1px;
 }
 

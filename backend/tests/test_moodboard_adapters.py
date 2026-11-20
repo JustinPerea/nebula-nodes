@@ -267,7 +267,7 @@ def test_sources_are_dated_and_real():
 
 
 def test_weight_normalize_matches_mode():
-    """Rule 13 (Q21 b): native needs sum-to-strength, at-creation sum-to-one,
+    """Rule 13: native needs sum-to-strength, at-creation sum-to-one,
     select rank, and a native range is the vendor's, read from the schema
     Nebula records."""
     krea = copy.deepcopy(_table()["entries"]["krea-2-generate"])
@@ -287,7 +287,7 @@ def test_weight_normalize_matches_mode():
     assert "nano-banana: weight mode at-creation needs normalize sum-to-one (has rank)" in _problems(
         _with_entry("nano-banana", _refs(weight={"mode": "at-creation", "field": "image_weights",
                                                  "normalize": "rank"})))
-    # "none" (strength x weight, the pre-Q21 behaviour) is for test fixtures only.
+    # "none" (strength x weight, the earlier behaviour) is for test fixtures only.
     raw = {**_table()["entries"]["krea-2-generate"]["weight"], "normalize": "none"}
     assert "krea-2-generate: weight normalize none is for test fixtures only" in _problems(
         _with_entry("krea-2-generate", {**krea, "weight": raw}))

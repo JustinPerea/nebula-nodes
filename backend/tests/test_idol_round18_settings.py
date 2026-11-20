@@ -1,20 +1,20 @@
-"""PR #203 round 18, section 2: review 17's settings findings and GM r36 B6.
+"""PR #203, section 2: settings findings from review and design's rulings.
 
-- MEDIUM-1: the copy an in-place save keeps, the file a restore replaced
+- The copy an in-place save keeps, the file a restore replaced
   and every temp file live in <state>/settings-copy (0700), on every agent
   deny list; the save's temp file beside settings.json has one fixed name,
   also denied; the start sweep, holding the lock, removes any left.
-- LOW-1: the restore holds the save's lock throughout (mutant N22).
-- LOW-2: the restore keeps the replaced file aside and only trusts a copy
+- The restore holds the save's lock throughout (mutant N22).
+- The restore keeps the replaced file aside and only trusts a copy
   that is provably Nebula's (marker, hash, path, file checks).
-- LOW-3: PUT and DELETE settings hold the lock from their read to their
+- PUT and DELETE settings hold the lock from their read to their
   save, so two saves of different keys both survive.
-- NIT-2: the copy folder's missing levels are 0700; a state path through a
+- The copy folder's missing levels are 0700; a state path through a
   file is the not_a_folder 409, never a 500.
-- NIT-3: a pwrite that takes no bytes (mutant N9).
-- NIT-4: F_FULLFSYNC where the system has it, and the folder synced after
+- A pwrite that takes no bytes (mutant N9).
+- F_FULLFSYNC where the system has it, and the folder synced after
   each rename (mutants N2 and N12 too: every sync is seen).
-- GM r36 B6a: the line for a copy folder Nebula can't change; B6b: the
+- Design B6a: the line for a copy folder Nebula can't change; B6b: the
   restored line, with its reason only when it is known.
 """
 from __future__ import annotations
@@ -71,7 +71,7 @@ def _stop(*children: subprocess.Popen | None) -> None:
             child.communicate()
 
 
-# -- MEDIUM-1: the copy folder and the fixed temp names are on every deny list --------------
+# -- The copy folder and the fixed temp names are on every deny list --------------
 
 def _protected_paths(keyed: Path) -> list[Path]:
     copy = settings.backup_path(keyed)
@@ -146,7 +146,7 @@ def test_an_in_place_save_keeps_its_copy_and_temp_only_in_the_copy_folder(home_s
     assert list(settings.temp_folder_for(settings.settings_copy_folder()).iterdir()) == []
 
 
-# -- MEDIUM-1: the start sweep, under the lock --------------------------------------------
+# -- The start sweep, under the lock --------------------------------------------
 
 def test_the_start_sweep_removes_every_temp_file_left_and_moves_a_round_17_copy(home_state, keyed):
     left = [settings.temp_path_for(keyed), keyed.parent / ".settings-nebula-123-abcd_123.tmp"]
@@ -198,7 +198,7 @@ def test_a_temp_file_a_cut_save_left_is_replaced_by_the_next_save(keyed, shared_
     assert _parses(keyed) == {"favorites": ["next"]} and not temp.exists()
 
 
-# -- LOW-1: the restore holds the save's lock throughout (N22) ----------------------------
+# -- The restore holds the save's lock throughout (N22) ----------------------------
 
 HOLD_IN_PLACE = """
 import os, time
@@ -269,7 +269,7 @@ def test_the_restore_reads_judges_writes_and_drops_inside_the_lock(keyed, monkey
     assert held == [keyed]
 
 
-# -- LOW-2: the replaced file is kept; only Nebula's own copy is trusted --------------------
+# -- The replaced file is kept; only Nebula's own copy is trusted --------------------
 
 def _cut_copy(path: Path) -> tuple[bytes, bytes]:
     """A copy for an in-place save of NEW over OLD, and the file as that
@@ -301,7 +301,7 @@ def test_a_restore_keeps_the_file_it_replaces_aside_this_users_only(home_state, 
 
 
 def test_two_restores_of_the_same_broken_file_keep_it_once_and_of_another_keep_both(home_state, keyed):
-    """Round 19 (review 18, settings LOW-2 and tests-ci NIT-1): an aside
+    """An aside
     file is named by a hash of its bytes, not by the time, so no clock
     decides this: the same file twice is kept once, a different one apart."""
     kept = []
@@ -324,7 +324,7 @@ def test_a_restore_that_cant_keep_the_file_aside_changes_nothing(home_state, key
         raise OSError(errno.ENOSPC, "full")
 
     monkeypatch.setattr(settings, "_keep_aside", refuse)
-    # Said, not silent (review 19 of PR #203, settings LOW-3): NotRestored.
+    # Said, not silent (PR #203): NotRestored.
     result = settings.restore_settings_from_backup()
     assert isinstance(result, settings.NotRestored) and result.why.errno == errno.ENOSPC
     assert keyed.read_bytes() == mixed and settings.backup_path(keyed).exists()
@@ -375,7 +375,7 @@ def test_a_copy_that_isnt_provably_nebulas_own_file_is_left_and_never_restored(k
     assert keyed.read_bytes() == mixed and os.path.lexists(target)
 
 
-# -- GM r36 B6b: the restored line, journaled and logged, through MCP, the CLI and chat ------
+# -- Design B6b: the restored line, journaled and logged, through MCP, the CLI and chat ------
 
 RESTORED_BECAUSE = ("Nebula restored your settings from its saved copy because the last save didn’t finish. "
                     "The file it replaced is kept at {kept}.")
@@ -459,7 +459,7 @@ def test_the_cut_short_check_knows_each_step_of_the_in_place_write():
     assert not settings._cut_short(old[:9], old, shorter)       # the cut leaves the new JSON whole
 
 
-# -- LOW-3: PUT and DELETE hold the lock from the read to the save --------------------------
+# -- PUT and DELETE hold the lock from the read to the save --------------------------
 
 HOLD_TRANSACTION = """
 import os, time
@@ -484,7 +484,7 @@ def test_two_interleaved_settings_writes_of_different_keys_both_survive(keyed, t
     waits; this backend's PUT or DELETE starts then and must wait at its
     read, so A's key and this write both survive.
 
-    Round 19 (review 18, tests-ci LOW-1): the wait's deadline is set past
+    The wait's deadline is set past
     anything the test waits for, so events decide it, never the wall clock;
     the request's own exception is kept as its answer."""
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})
@@ -592,7 +592,7 @@ def test_a_lock_whose_target_keeps_changing_stops_at_the_deadline(keyed, monkeyp
     assert outcome == "raised" and isinstance(refused, OSError) and refused.errno == errno.EAGAIN
 
 
-# -- NIT-2: the copy folder's levels, and a state path through a file ----------------------
+# -- The copy folder's levels, and a state path through a file ----------------------
 
 def test_every_missing_level_of_the_copy_folder_is_this_users_only(keyed, tmp_path, monkeypatch):
     state = tmp_path / "home" / "s1" / "s2"
@@ -632,7 +632,7 @@ def test_a_state_path_through_a_file_is_the_not_a_folder_line(keyed, tmp_path, m
     assert keyed.read_bytes() == before
 
 
-# -- GM r36 B6a: Nebula's folder takes no copy -------------------------------------------
+# -- Design B6a: Nebula's folder takes no copy -------------------------------------------
 
 COPY_LINE = ("Nothing was saved because Nebula isn’t allowed to change {folder}, where it keeps a copy while it "
              "saves. Check the folder’s permissions, then try again.")
@@ -668,7 +668,7 @@ def test_the_copy_folder_line_by_reader_and_on_the_desktop_state_path(keyed, mon
         assert refusal.fields["code"] == "settings_unwritable"
 
 
-# -- NIT-3: a pwrite that takes no bytes (N9) ----------------------------------------------
+# -- A pwrite that takes no bytes ----------------------------------------------
 
 def test_a_pwrite_that_takes_no_bytes_fails_and_leaves_the_file_and_its_copy(keyed, monkeypatch):
     _hard_link(keyed)
@@ -689,7 +689,7 @@ def test_a_pwrite_that_takes_no_bytes_fails_and_leaves_the_file_and_its_copy(key
     assert settings.backup_path(keyed).exists()  # the put-back failed too: kept for the next start
 
 
-# -- NIT-4: F_FULLFSYNC, and the folder synced after each rename (N2, N12) --------------------
+# -- F_FULLFSYNC, and the folder synced after each rename (N2, N12) --------------------
 
 @pytest.fixture
 def syncs(monkeypatch):

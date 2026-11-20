@@ -1,5 +1,5 @@
 """Every graphSync carries ``syncSeq``, and the answers to a restore and a
-node delete name the sync that sent them (PR #205 review 8, held undo).
+node delete name the sync that sent them (PR #205, held undo).
 
 A canvas reads any sync numbered below an answer's as one Nebula read before
 it applied that edit, so such a sync never undoes it there. The numbers grow

@@ -279,7 +279,7 @@ def test_agent_graph_edits_move_the_cursor_but_browser_edits_do_not(api):
         "Added “Text Input”",
         "Added “GPT Image 2.5”",
         "Connecting “Text Input” to “GPT Image 2.5”",
-        # The field's label on the card, in quotes, never the key (GM, r18 of PR #114).
+        # The field's label on the card, in quotes, never the key (design of PR #114).
         "Set “Quality”",
     ]
     drag = events[2]
@@ -324,7 +324,7 @@ def test_mcp_point_at_and_look_name_the_cursor(monkeypatch):
     mcp_server.look_at_canvas()
     point, look = calls
     assert point["url"].endswith("/api/canvas/cursor")
-    # Fix round 9, M-2: each MCP server sends its own session beside the name.
+    # Each MCP server sends its own session beside the name.
     assert point["headers"] == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": mcp_server._AGENT_SESSION}
     assert point["json"] == {
         "target": {"nodeId": "n2", "handle": "prompt"},
@@ -376,6 +376,9 @@ def test_an_agents_whole_canvas_run_is_said_with_no_cursor_and_a_node_run_points
     assert client.post("/api/graph/run", json={"wait": 5}, headers=agent).status_code == 200
     assert client.post("/api/graph/run", json={"wait": 5, "targetNodeId": node_id}, headers=agent).status_code == 200
 
-    whole, one = _presence_events(sent)
+    # Each run is two rows, the agent's: what it started and, when it ends, what it did (design).
+    whole, whole_done, one, one_done = _presence_events(sent)
     assert whole["say"] == "Running 2 nodes" and "target" not in whole
+    assert whole_done["say"] == "Ran 2 “Text Input” nodes in under 1 s" and "target" not in whole_done
     assert one["say"] == "Running “Text Input”" and one["target"] == {"nodeId": node_id}
+    assert one_done["say"] == "Ran “Text Input” in under 1 s" and "target" not in one_done

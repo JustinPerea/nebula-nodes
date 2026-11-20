@@ -6,9 +6,6 @@
   padding: 0;
   overflow: hidden;
   border: 1px solid rgba(125, 211, 252, 0.2);
-  border-radius: 8px;
-  background: #070b10;
-  color: #f3f7fa;
   cursor: pointer;
   text-align: left;
   isolation: isolate;
@@ -17,15 +14,6 @@
 .world-preview--compact {
   min-height: 188px;
   border-radius: 12px;
-}
-
-.world-preview:hover {
-  border-color: rgba(103, 232, 249, 0.58);
-}
-
-.world-preview:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #67e8f9);
-  outline-offset: var(--sr-focus-offset, 2px);
 }
 
 .world-preview__thumbnail,
@@ -50,11 +38,6 @@
 .world-preview__placeholder {
   display: grid;
   place-items: center;
-  color: rgba(165, 243, 252, 0.72);
-  background:
-    radial-gradient(circle at 48% 42%, rgba(34, 211, 238, 0.2), transparent 28%),
-    repeating-radial-gradient(circle at 50% 55%, rgba(125, 211, 252, 0.14) 0 1px, transparent 1px 16px),
-    #070b10;
 }
 
 .world-preview__shade {
@@ -76,13 +59,8 @@
   gap: 5px;
   padding: 4px 7px;
   border: 1px solid rgba(165, 243, 252, 0.26);
-  border-radius: 999px;
-  background: rgba(2, 8, 12, 0.7);
-  color: #cffafe;
-  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   backdrop-filter: blur(8px);
 }
 
@@ -103,31 +81,13 @@
 }
 
 .world-preview__copy strong {
-  color: #fff;
-  font-size: 12px;
   font-weight: 650;
-}
-
-.world-preview__copy span {
-  color: rgba(226, 232, 240, 0.68);
-  font-size: 10px;
 }
 
 .world-preview__cta {
   right: 11px;
   bottom: 13px;
-  color: #a5f3fc;
-  font-size: 10px;
   font-weight: 650;
-}
-
-.world-preview--invalid {
-  display: grid;
-  place-items: center;
-  gap: 7px;
-  min-height: 120px;
-  color: rgba(226, 232, 240, 0.56);
-  font-size: 11px;
 }
 
 body.app-slava-restraint .model-node--world-surface {
@@ -150,18 +110,12 @@ body.app-slava-restraint .model-node--world-surface .world-preview {
   box-shadow: var(--sr-shadow-node-media);
 }
 
-body:not(.app-slava-restraint) .model-node__preview--world {
-  padding: 8px 10px 10px;
-}
-
 .world-modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 20000;
   display: grid;
   place-items: center;
   padding: 22px;
-  background: rgba(0, 3, 7, 0.82);
   backdrop-filter: blur(12px);
 }
 
@@ -173,10 +127,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   min-height: 420px;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 16px;
-  background: #080b10;
-  color: #e8eef4;
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.62);
 }
 
 .world-modal__header,
@@ -201,8 +151,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 }
 
 .world-modal__eyebrow {
-  color: #67e8f9;
-  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -211,9 +159,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-modal__heading h2 {
   margin: 0;
   overflow: hidden;
-  color: #f8fafc;
-  font-size: 16px;
-  font-weight: 620;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -237,12 +182,16 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   min-height: 30px;
   border: 1px solid rgba(148, 163, 184, 0.23);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
   color: rgba(241, 245, 249, 0.78);
   font: inherit;
   font-size: 11px;
   text-decoration: none;
   cursor: pointer;
+}
+
+.world-modal__button,
+.world-modal__icon-button {
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .world-modal__button {
@@ -254,10 +203,10 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   padding: 0;
 }
 
+/* palette-exempt: the World surface is tinted in its port colour (design) */
 .world-modal__button:hover,
 .world-modal__icon-button:hover,
-.world-modal__segmented button:hover,
-.world-modal__segmented button.is-active {
+.world-modal__segmented button:hover {
   border-color: rgba(103, 232, 249, 0.55);
   background: rgba(34, 211, 238, 0.1);
   color: #cffafe;
@@ -271,7 +220,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-modal__button:focus-visible,
 .world-modal__icon-button:focus-visible,
 .world-modal__segmented button:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #67e8f9);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
@@ -282,34 +231,17 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 
 .world-modal__segmented {
   display: inline-flex;
-  padding: 2px;
   border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.18);
 }
 
 .world-modal__segmented button {
   min-height: 26px;
   padding: 3px 9px;
-  border-color: transparent;
-  background: transparent;
 }
 
 .world-modal__status {
   margin-left: auto;
-  color: rgba(203, 213, 225, 0.62);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9px;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.world-modal__status--ready {
-  color: #86efac;
-}
-
-.world-modal__status--error {
-  color: #fca5a5;
 }
 
 .world-modal__stage {
@@ -328,10 +260,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   margin: 0;
   padding: 6px 9px;
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 7px;
-  background: rgba(2, 6, 10, 0.72);
-  color: rgba(226, 232, 240, 0.7);
-  font-size: 10px;
   pointer-events: none;
   backdrop-filter: blur(8px);
 }
@@ -359,13 +287,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   touch-action: none;
 }
 
-.world-environment-viewer__interactive-canvas:focus-visible {
-  /* A negative offset keeps the native focus paint inside the clipped stage.
-   * Unlike an inset shadow, the outline is painted above canvas pixels. */
-  outline: var(--sr-focus-outline, 3px solid #67e8f9);
-  outline-offset: -2px;
-}
-
 .world-environment-viewer__backdrop,
 .world-environment-viewer__fallback > img,
 .world-modal__lazy-loading > img,
@@ -391,7 +312,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
   align-items: center;
   justify-content: center;
   gap: 9px;
-  color: rgba(226, 232, 240, 0.74);
+  color: var(--sr-ink);
   font-size: 12px;
   text-align: center;
 }
@@ -406,8 +327,7 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-environment-viewer__spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(103, 232, 249, 0.18);
-  border-top-color: #67e8f9;
+  border: 2px solid var(--sr-pending-soft);
   border-radius: 50%;
   animation: world-spin 800ms linear infinite;
 }
@@ -458,9 +378,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-modal__failure p {
   max-width: 420px;
   margin: 0;
-  color: rgba(226, 232, 240, 0.74);
-  font-size: 13px;
-  line-height: 1.45;
 }
 
 .world-modal__footer {
@@ -471,9 +388,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 .world-modal__metadata {
   min-width: 0;
   overflow: hidden;
-  color: rgba(148, 163, 184, 0.68);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 9px;
   text-transform: uppercase;
 }
 
@@ -485,7 +399,6 @@ body:not(.app-slava-restraint) .model-node__preview--world {
 
 .world-modal__download-error {
   max-width: 280px;
-  color: #fca5a5;
   font-size: 10px;
   line-height: 1.35;
 }
@@ -586,8 +499,10 @@ body.app-slava-restraint .world-modal__footer {
   border-top-color: var(--sr-edge);
 }
 
+/* Design: an eyebrow is a label, so it takes the light ink (meta ink measures under 4.5:1 here at
+   this size); the accent is for the primary action, the selection and the agent. */
 body.app-slava-restraint .world-modal__eyebrow {
-  color: var(--sr-accent);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-micro);
 }
 
@@ -660,6 +575,12 @@ body.app-slava-restraint .world-modal__metadata {
   font-size: var(--sr-type-micro);
 }
 
+/* Loading is the base state of the status line; design reads it as neutral
+   pending ink, a step above the metadata's meta ink. */
+body.app-slava-restraint .world-modal__status {
+  color: var(--sr-ink-light);
+}
+
 body.app-slava-restraint .world-modal__status--ready {
   color: var(--sr-success);
 }
@@ -680,7 +601,7 @@ body.app-slava-restraint :is(
 }
 
 body.app-slava-restraint .world-modal__failure p {
-  color: var(--sr-ink-light);
+  color: var(--sr-ink);
   font-size: var(--sr-type-body);
   line-height: var(--sr-line-body);
 }
@@ -694,8 +615,8 @@ body.app-slava-restraint .world-modal__help {
 }
 
 body.app-slava-restraint .world-environment-viewer__spinner {
-  border-color: var(--sr-accent-soft);
-  border-top-color: var(--sr-accent);
+  border-color: var(--sr-pending-soft);
+  border-top-color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint :is(
@@ -738,6 +659,10 @@ body.app-slava-restraint :is(
     height: 100dvh;
     min-height: 0;
     border: 0;
+  }
+
+  /* Full-screen modal: square corners, after the panel radius set above. */
+  body.app-slava-restraint .world-modal {
     border-radius: 0;
   }
 
@@ -758,17 +683,16 @@ body.app-slava-restraint :is(
   }
 
   .world-modal__segmented--quality {
-    max-width: none;
     overflow: visible;
   }
 
+  body.app-slava-restraint .world-modal__segmented--quality {
+    max-width: none;
+  }
+
   .world-modal__header-actions .world-modal__button {
-    width: 30px;
     flex: 0 0 30px;
-    gap: 0;
     overflow: hidden;
-    padding: 0;
-    font-size: 0;
     white-space: nowrap;
   }
 
@@ -782,7 +706,7 @@ body.app-slava-restraint :is(
 
   .world-modal__header-actions .world-modal__button svg {
     flex: 0 0 auto;
-    color: var(--sr-accent, #cffafe);
+    color: var(--sr-accent);
   }
 
   .world-modal__status,
@@ -817,13 +741,12 @@ body.app-slava-restraint :is(
 }
 
 /* A World v2 splat the viewer can't show says why in the status line
-   (WorldSplatPreview, GM PR #203 r1): a sentence, so not the status's
-   uppercase mono micro type. */
+   (WorldSplatPreview): a sentence, so body type rather than the status's
+   mono micro type (design). */
 .world-modal__status[data-splat-failure],
 body.app-slava-restraint .world-modal__status[data-splat-failure] {
   font-family: inherit;
   font-size: 12px;
   letter-spacing: 0;
-  text-transform: none;
   text-align: right;
 }

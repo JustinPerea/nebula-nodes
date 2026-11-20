@@ -5,11 +5,11 @@ import { PromptDialog, type PromptRequest } from '../components/commons/CommonsP
  * An in-view replacement for window.prompt, which the Electron shell doesn't implement.
  * `ask` resolves to the entered text, or null when cancelled.
  */
-export function useCommonsPrompt(): [(label: string, initial?: string) => Promise<string | null>, ReactNode] {
+export function useCommonsPrompt(): [(label: string, initial?: string, hint?: string) => Promise<string | null>, ReactNode] {
   const [request, setRequest] = useState<PromptRequest | null>(null);
   const ask = useCallback(
-    (label: string, initial = '') =>
-      new Promise<string | null>((resolve) => setRequest({ label, initial, resolve })),
+    (label: string, initial = '', hint?: string) =>
+      new Promise<string | null>((resolve) => setRequest({ label, initial, hint, resolve })),
     [],
   );
   const element = request ? (

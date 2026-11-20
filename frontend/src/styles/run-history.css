@@ -61,7 +61,8 @@
 }
 .run-history__status {
   font-size: 10px;
-  text-transform: uppercase;
+  /* Design: a status word is a badge, not a field label, so it reads in
+     sentence case ("Running", "Failed", "Complete"). */
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }
@@ -125,9 +126,9 @@
 .run-history__paper-snapshot audio { width: 100%; }
 .run-history__paper-snapshot code { font-size: 9px; overflow-wrap: anywhere; user-select: text; }
 body.app-slava-restraint .run-history__paper-stale { color: var(--sr-ink, #1a1a1a); }
-body.app-slava-restraint .run-history__paper-snapshot a { color: var(--sr-accent, #5d70cc); }
-body:not(.app-slava-restraint) .run-history__paper-stale { color: #e8c99e; }
-body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; }
+/* Design: a link is light ink with an underline, and full ink on hover. */
+body.app-slava-restraint .run-history__paper-snapshot a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
+body.app-slava-restraint .run-history__paper-snapshot a:hover { color: var(--sr-ink); }
 
 .run-history__safeguards {
   margin: 2px 0 12px;
@@ -189,19 +190,18 @@ body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; 
 }
 .run-history__safeguards button:disabled {
   cursor: progress;
-  opacity: 0.45;
 }
 
 /* ---- status dot colors (semantic, skin-agnostic) ---- */
 .run-history__dot--running {
-  background: var(--sr-warning, #f5c518);
+  background: var(--sr-ink-light, rgba(150, 150, 150, 0.8));
   animation: run-history-pulse 1.2s ease-in-out infinite;
 }
 .run-history__dot--complete {
-  background: var(--sr-success, #34d399);
+  background: var(--sr-success);
 }
 .run-history__dot--failed {
-  background: var(--sr-danger, #ef4444);
+  background: var(--sr-error);
 }
 .run-history__dot--cancelled {
   background: var(--sr-ink-meta, rgba(150, 150, 150, 0.6));
@@ -223,11 +223,11 @@ body.app-slava-restraint .run-history__sub {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.55));
 }
 body.app-slava-restraint .run-history__status-note {
-  color: var(--sr-danger, #b42318);
+  color: var(--sr-error);
 }
-body.app-slava-restraint .run-history__status--running { color: var(--sr-warning, #f5c518); }
-body.app-slava-restraint .run-history__status--complete { color: var(--sr-success, #34d399); }
-body.app-slava-restraint .run-history__status--failed { color: var(--sr-danger, #ef4444); }
+body.app-slava-restraint .run-history__status--running { color: var(--sr-ink-light, rgba(0, 0, 0, 0.55)); }
+body.app-slava-restraint .run-history__status--complete { color: var(--sr-success); }
+body.app-slava-restraint .run-history__status--failed { color: var(--sr-error); }
 body.app-slava-restraint .run-history__status--cancelled { color: var(--sr-ink-meta, rgba(0, 0, 0, 0.45)); }
 body.app-slava-restraint .run-history__empty {
   color: var(--sr-ink-meta, rgba(0, 0, 0, 0.5));
@@ -274,47 +274,6 @@ body.app-slava-restraint .run-history__stop:not(:disabled) {
   color: var(--sr-ink, rgba(255, 255, 255, 0.92));
 }
 
-/* ---- legacy (non-Slava) visual treatment ---- */
-body:not(.app-slava-restraint) .run-history__item {
-  border: 1px solid #2a2a2a;
-  background: #1a1a1a;
-}
-body:not(.app-slava-restraint) .run-history__trigger {
-  color: #e0e0e0;
-}
-body:not(.app-slava-restraint) .run-history__sub {
-  color: #888;
-}
-body:not(.app-slava-restraint) .run-history__status-note {
-  color: #fca5a5;
-}
-body:not(.app-slava-restraint) .run-history__empty {
-  color: #777;
-}
-body:not(.app-slava-restraint) .run-history__safeguards {
-  border: 1px solid #383838;
-  background: #1e1e1e;
-  color: #d6d6d6;
-}
-body:not(.app-slava-restraint) .run-history__safeguards button {
-  border: 1px solid #383838;
-  background: #242424;
-  color: #d6d6d6;
-}
-body:not(.app-slava-restraint) .run-history__replay {
-  border: 1px solid #383838;
-  color: #d6d6d6;
-  background: #242424;
-}
-body:not(.app-slava-restraint) .run-history__replay:not(:disabled):hover {
-  background: #303030;
-}
-body:not(.app-slava-restraint) .run-history__action:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-
 .run-history__batch-details {
   margin-top: 6px;
   font-size: 11px;
@@ -329,14 +288,19 @@ body:not(.app-slava-restraint) .run-history__action:disabled {
   margin-top: 8px;
 }
 
-.run-history__batch-result a { color: var(--accent, #b9a8ff); }
+.run-history__batch-result a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
+.run-history__batch-result a:hover { color: var(--sr-ink); }
 
-.run-history__batch-result pre {
+/* design: the caption is model output, prose, so it draws in the body face, not mono. */
+.run-history__batch-result .run-history__batch-text {
   max-height: 140px;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0;
+  font-family: var(--sr-ui);
+  font-size: inherit;
+  line-height: inherit;
 }
 
 /* GM r13: Clear run history wipes the whole list, so red on hover. */

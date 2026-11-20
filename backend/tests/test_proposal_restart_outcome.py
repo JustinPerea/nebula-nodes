@@ -1,4 +1,4 @@
-"""An Update whose ask was open when Nebula restarted (Justin's Q108 a, 2026-10-21).
+"""An Update whose ask was open when Nebula restarted (Justin's ruling, 2026-10-21).
 
 "a) "Closed: Nebula restarted" (the agent can ask again)." Proposals live in
 memory and Updates are saved with the project, so after a restart an asset
@@ -141,7 +141,7 @@ def test_the_docs_name_the_restart_outcome_not_expired():
 
 
 def test_agents_are_told_updates_show_on_every_screen():
-    """Q107 a: the Updates corner is on every screen, with the open project's list."""
+    """The Updates corner is on every screen, with the open project's list."""
     import mcp_server
 
     assert "every screen" in (mcp_server.post_note.__doc__ or "")

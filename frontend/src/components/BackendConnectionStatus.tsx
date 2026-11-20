@@ -29,7 +29,7 @@ export const OFFLINE_LINE_ID = 'nebula-offline-line';
  * Each health probe is numbered as it starts and an answer older than the
  * newest one applied is ignored (review 13, L4).
  */
-export function BackendConnectionStatus({ placement = 'workspace' }: {
+export function BackendConnectionStatus({ placement = 'workspace', bannerHidden = false }: {
   /** GM r17 (C): on the home screen the banner sits right under its top bar
    * (the workspace's place, below both bars, covered the heading there).
    * GM, PR #198 r2: every other screen but the canvas is a studio, and there
@@ -37,6 +37,9 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
    * (StudioOfflineRow, rendered by WorkspaceHeader); this keeps probing and
    * pulsing but shows nothing of its own. */
   placement?: 'workspace' | 'home' | 'studio';
+  /** Design: Projects' first-load line already names what it waits on (the server), so the
+   * banner stays away while it shows; it keeps probing and comes back once the line goes. */
+  bannerHidden?: boolean;
 } = {}) {
   const offline = useBackendOffline();
   const banner = useRef<HTMLDivElement>(null);
@@ -100,7 +103,7 @@ export function BackendConnectionStatus({ placement = 'workspace' }: {
   // The banner is part of the top line the proposal card stays under (GM -
   // Design, PR #216 r4 7): it marks the root while it shows, so the notice
   // region places its stack again (lib/bottomBar.ts noticeTopLimit).
-  const shown = offline && placement !== 'studio';
+  const shown = offline && placement !== 'studio' && !bannerHidden;
   useEffect(() => {
     if (!shown) return undefined;
     document.documentElement.setAttribute(BANNER_SHOWN_ATTR, '');

@@ -53,7 +53,7 @@ body.app-slava-restraint .asset-trash__error {
   line-height: 1.45;
 }
 
-body.app-slava-restraint .asset-trash__error { color: var(--sr-danger); }
+body.app-slava-restraint .asset-trash__error { color: var(--sr-error); }
 
 body.app-slava-restraint .asset-trash__list {
   display: flex;
@@ -209,7 +209,7 @@ body.app-slava-restraint .asset-trash__toast-close svg { width: 14px; height: 14
 body.app-slava-restraint .moodboard-node__open-error,
 body.app-slava-restraint .character-node__open-error {
   margin-top: 4px;
-  color: var(--sr-danger);
+  color: var(--sr-error);
   font-size: 10px;
   line-height: 1.35;
 }

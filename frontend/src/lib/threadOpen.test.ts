@@ -114,7 +114,10 @@ describe('GM r108 D2: Open focuses the reply’s row, its ring inside the log’
       .find(([, selectors]) => selectors.split(',').some((one) => one.trim() === '.message-box__item[data-focus-target]:focus'));
     expect(rule).toBeDefined();
     const body = rule![2];
-    const width = Number(/outline:[^;]*?(\d+)px/.exec(body)?.[1]);
+    // The ring's width is the token's, defined once in slava-restraint.css.
+    const tokens = readFileSync(join(__dirname, '../styles/slava-restraint.css'), 'utf8');
+    expect(body).toMatch(/outline:\s*var\(--sr-focus-outline\)/);
+    const width = Number(/--sr-focus-outline:\s*(\d+)px/.exec(tokens)?.[1]);
     const offset = Number(/outline-offset:\s*(-?\d+)px/.exec(body)?.[1]);
     expect(width).toBeGreaterThan(0);
     // Inside the row: an offset at least as far in as the ring is wide.

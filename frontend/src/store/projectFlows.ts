@@ -1,4 +1,5 @@
 
+import { groupedCount } from '../lib/groupedCount';
 import { adoptRenumberedSelection, nodeCardTitle, releaseKeptCanvas, useGraphStore, hasUnsavedSceneEdits, isTabLocalNode, keepCanvasLocally, runsThatNeverStarted } from './graphStore';
 import { isCanvasKept, pulseKeptCanvas, setKeptCanvasSaving } from '../lib/keptCanvas';
 import { useUIStore } from './uiStore';
@@ -19,7 +20,7 @@ import { refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
 import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, waitUntilOnline } from '../lib/backendConnection';
-import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, oneLine } from '../lib/errorCopy';
+import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, FIRST_LOAD_RETRYING_COPY, isBackendUnreachable, isNoAnswer, nodeNameList, OPEN_TIMEOUT_MS, openTimedOutLine, notConnectedBecause, oneLine } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
@@ -38,7 +39,7 @@ import { sameValue, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { WORLD_LABS_NEEDS_CHECK, deleteRefusalText } from '../lib/worldLabsWaiting';
 import { withRestoreCopy } from '../components/projects/restoreCopyLoader';
-import { applyingSync, cancelPendingSaves, captureProjectSnapshot, core, detailsFor, dismissedHeldNotes, dismissedRestores, type FiledCopy, type GraphSyncEvent, heldLine, KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, type KeptEdits, type KeptStudio, type ListingNotices, loggedRestores, markDirty, measured, PARAMS_UPDATED, type PendingRecovery, type ProjectRetry, type ProjectState, type ProjectSwitchNotice, relistIfStale, type ReopenSaid, RESTORED_LIST_UNSAVED, type SavedUnderNote, summary, TAB, typingInStudioField, type UIStateNow, useProjectStore, viewingOf } from './projectStore';
+import { applyingSync, cancelPendingSaves, captureProjectSnapshot, core, detailsFor, dismissedHeldNotes, dismissedRestores, type FiledCopy, FIRST_LOAD_TRIES, firstLoadDelay, type GraphSyncEvent, heldLine, type OpenInDoubt, KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, type KeptEdits, type KeptStudio, type ListingNotices, loggedRestores, markDirty, measured, PARAMS_UPDATED, type PendingRecovery, type ProjectRetry, type ProjectState, type ProjectSwitchNotice, relistIfStale, type ReopenSaid, RESTORED_LIST_UNSAVED, type SavedUnderNote, summary, TAB, typingInStudioField, type UIStateNow, useProjectStore, viewingOf } from './projectStore';
 
 const set = useProjectStore.setState;
 const get = useProjectStore.getState;
@@ -421,6 +422,32 @@ export async function refreshOpenHold(): Promise<void> {
   } catch { /* Offline or refused: the last verdict stands until the next read. */ }
 }
 
+/** Design: how long the read of Nebula's verdict behind a second refusal waits (a quarter of the open's wait). */
+const OPEN_HOLD_READ_TIMEOUT_MS = 5_000;
+
+/** Reads Nebula's verdict now, 5 s at most, and keeps it as the verdict whatever a newer read
+ * does meanwhile: the caller decides from this value. Null when the read failed or got no answer
+ * (the stored verdict is then left as it was, and never trusted by the caller). */
+async function readOpenHoldWithin(ms: number): Promise<{ hold: OpenHold | null } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const answer = await Promise.race([
+      api.getOpenHold(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('The hold read got no answer in time.')), ms); }),
+    ]);
+    const hold = readOpenHold(answer?.hold);
+    core.openHoldSeq += 1;
+    core.openHoldBasis = holdBasisNow();
+    if (hold) holdArrived();
+    useProjectStore.setState({ openHold: hold });
+    return { hold };
+  } catch {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export function watchOpenHold(): () => void {
   core.holdWatchers += 1;
   if (core.holdWatchers === 1) {
@@ -549,6 +576,58 @@ function followReopenLineNow(current: NonNullable<typeof core.shownReopen>): voi
   shown.stop();
 }
 
+/** Design: the person's open waited 20 s with no answer. */
+class OpenTimedOut extends Error {
+  constructor() { super('The open got no answer in time.'); this.name = 'OpenTimedOut'; }
+}
+
+/** Waits for the open's answer, 20 s at most. Whichever comes first settles it; an answer that
+ * arrives after the timeout is ignored, not applied: the person was told the open failed, may
+ * have gone on to something else, and the switch would replace the canvas under them. */
+function withinOpenTimeout<T>(pending: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new OpenTimedOut()), OPEN_TIMEOUT_MS);
+    pending.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
+  });
+}
+
+/** Design: whether `event` is the commit of the person's open of `id` sent with revision `sent`:
+ * the graph replaced, that project open, the revision moved on, and nobody else's switch (the
+ * person's open of another project carries no switch notice; a reopen in place carries this
+ * tab's own). */
+function commitOf(event: GraphSyncEvent, revision: string, id: string, sent: string): boolean {
+  const notice = event.projectSwitch;
+  return event.graphReplaced === true && event.activeProjectId === id && revision !== sent
+    && (!notice || (byPerson(notice) && notice.actor.tab === TAB_ID));
+}
+
+/** Design: a refusal (409) of an open or create sent while an earlier open was in doubt. The
+ * projects are read again; when the revision moved on from the one it was sent with (that open
+ * landed meanwhile, or anything else did), the action goes once more with the new one: the stale
+ * view came from this tab's own open. Returns that revision, or null to keep the refusal. */
+async function revisionAfterRefusal(error: unknown, sent: string): Promise<string | null> {
+  if (!(error instanceof api.ProjectRequestError && error.status === 409)) return null;
+  const generation = ++core.listingGeneration;
+  const list = await api.listProjects();
+  if (generation === core.listingGeneration) {
+    useProjectStore.setState({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list) });
+  }
+  if (list.workspaceRevision === sent) return null;
+  useProjectStore.setState({ workspaceRevision: list.workspaceRevision });
+  return list.workspaceRevision;
+}
+
+/** Design: an open timed out. It stays in doubt until a sync shows it landed or that it no
+ * longer can (workspaceSync); a sync of its commit seen while it waited is handled at once. */
+function noteOpenInDoubt(id: string): void {
+  const flight = core.openInFlight;
+  if (!flight || flight.id !== id) return;
+  const name = useProjectStore.getState().projects.find((project) => project.id === id)?.name ?? 'the project';
+  const doubt: OpenInDoubt = { id, name, sent: flight.sent, newer: null, held: flight.synced };
+  core.opensInDoubt = [...core.opensInDoubt.filter((item) => item.id !== id), doubt];
+  if (doubt.held) replayWhenIdle();
+}
+
 async function activate(action: () => Promise<api.ProjectActivation>, retry: { action: 'open'; id: string } | { action: 'create'; name?: string },
   then?: () => Promise<void>, inPlace = false, quiet = false): Promise<boolean> {
   const state = useProjectStore.getState();
@@ -569,6 +648,12 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     return false;
   }
   useProjectStore.setState({ busy: true, error: null, errorRetry: null, editsSavedAs: null });
+  // Design: the opens in doubt when this action began: it is newer than each (going back to the
+  // project already loaded sends nothing and never gets here, so it isn't).
+  const before = [...core.opensInDoubt];
+  for (const doubt of before) doubt.newer = 'pending';
+  let landed = false;
+  let resent = false;
   let reserved = false;
   // Round 19 (GM): new graph writes wait from here; those on their way go
   // first, 15 s at most, with "Saving…" on the project bar. One that failed
@@ -580,6 +665,9 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
   // doesn't go puts it back (review 18 MEDIUM-2: it stayed "Saving…").
   const statusBefore = state.saveStatus;
   try {
+    // Design: after an open timed out, read the projects and the revision first, so this
+    // open or create isn't refused as stale; a failed read says so with this action's Try again.
+    if (core.relistBeforeAction) await listNow();
     if (getProjectContext()) {
       draining = true;
       useProjectStore.setState({ saveStatus: 'saving' });
@@ -605,7 +693,29 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     }
     reserved = useGraphStore.getState().reserveGraphImport();
     if (!reserved) throw runStillGoing(heading);
-    const result = await action();
+    const send = () => (retry.action === 'open' ? withinOpenTimeout(action()) : action());
+    // The action reads the revision when it runs: the one it goes with.
+    const sent = useProjectStore.getState().workspaceRevision;
+    if (retry.action === 'open') core.openInFlight = { id: retry.id, sent, synced: null };
+    let result: api.ProjectActivation;
+    try {
+      result = await send();
+    } catch (error) {
+      if (before.length === 0) throw error;
+      let fresh: string | null;
+      try {
+        fresh = await revisionAfterRefusal(error, sent);
+      } catch {
+        // The read failed: the refusal stands, and the next action reads first.
+        resent = true;
+        throw error;
+      }
+      if (fresh === null) throw error;
+      // Once only: a second refusal says so, with Try again.
+      resent = true;
+      if (core.openInFlight) core.openInFlight.sent = fresh;
+      result = await send();
+    }
     useGraphStore.getState().releaseGraphImport({ discardSuspended: true });
     reserved = false;
     const backendVersion = backendParamsVersion(result.paramsVersion);
@@ -616,6 +726,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
       return false;
     }
     applyProject(result.project, result.workspaceRevision, false, heading, result.canvasRevision);
+    landed = true;
     if (draining) {
       draining = false;
       useGraphStore.getState().finishCanvasReplacement({ kind: 'switch', project: leaving ?? '', cutOff, show: leaving !== null });
@@ -636,7 +747,24 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // Labs hold that began meanwhile, or Nebula's own 409): back to the
     // canvas, where Stop and the World Labs notice are, with the line
     // (review 18 MEDIUM-2, GM r30 item 2). Nothing was replaced.
-    if (inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id
+    // (A second refusal after the one resend has its own line below, for an in-place reopen too.)
+    // A second stale-revision 409 only: when the resend's 409 is Nebula's own hold (its carried
+    // verdict, or the one read now: the test the branch below uses), the hold handling stays.
+    let refusedAgain = resent && error instanceof api.ProjectRequestError && error.status === 409;
+    if (refusedAgain && inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id) {
+      // The open's own reservation isn't a hold: let it go before asking (as the branch does).
+      if (reserved) { useGraphStore.getState().releaseGraphImport(); reserved = false; }
+      // Design: a second refusal is read fresh and decided from that read alone: a stored verdict
+      // can name a run that has just ended, and a second stale 409 is when that happens. A read that
+      // fails or gets no answer in time leaves the out-of-date line with Try again.
+      const carried = noteRefusalHold((error as api.ProjectRequestError).hold);
+      if (carried) refusedAgain = false;
+      else {
+        const fresh = await readOpenHoldWithin(OPEN_HOLD_READ_TIMEOUT_MS);
+        if (fresh) refusedAgain = !reopenHold(retry.id, true);
+      }
+    }
+    if (inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id && !(error instanceof OpenTimedOut) && !refusedAgain
       && !(reserved && !(error instanceof api.ProjectRequestError && error.status < 500))) {
       const project = useProjectStore.getState().activeProject?.name ?? '';
       // The open's own reservation isn't a hold: let it go before asking.
@@ -653,7 +781,8 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
         // one open here (reopenHold is null for any other: reopenGivesIds;
         // mutant W17 of review 20).
         const carried = noteRefusalHold(error.hold);
-        if (!carried && !hold) await refreshOpenHold();
+        // Bounded like the second refusal's read: a read that never answers must not hold busy.
+        if (!carried && !hold) await readOpenHoldWithin(OPEN_HOLD_READ_TIMEOUT_MS);
         if (carried || !hold) hold = reopenHold(retry.id, true);
       }
       if (hold) {
@@ -690,7 +819,28 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // landed (the reason line is the open's own: Try again redoes it). A
     // create isn't: a second one could make a second project, so its Try
     // again only reloads, and says so.
-    if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
+    if (error instanceof OpenTimedOut && retry.action === 'open') {
+      // Design: no answer in 20 s. Nothing was applied, and the answer, if it comes later, is
+      // dropped (see withinOpenTimeout). The open is in doubt, not failed: the server may still
+      // commit it, and its sync then decides (workspaceSync, noteOpenInDoubt). The tab stays
+      // initialized, so the other cards' Open and New project work at once; the next action
+      // re-reads the projects and their revision first (relistBeforeAction). Try again does the
+      // same read and then opens it unless that already landed (the lost-reply path). A quiet
+      // reopen (activate's own second try) says nothing, as its refusal doesn't.
+      noteOpenInDoubt(retry.id);
+      core.relistBeforeAction = true;
+      if (!quiet) {
+        const name = useProjectStore.getState().projects.find((project) => project.id === retry.id)?.name ?? 'the project';
+        const line = openTimedOutLine(name);
+        useProjectStore.setState({ screen: 'home', error: line, errorDetails: null, errorRetry: { action: 'load', reopen: retry.id } });
+      }
+    } else if (resent && error instanceof api.ProjectRequestError && error.status === 409) {
+      // Design: refused again after it went once more with the new revision (or the read for it
+      // failed): its line, and Try again reads the projects first (then opens it, for an open).
+      core.relistBeforeAction = true;
+      showError(error, offered);
+      useProjectStore.setState({ errorRetry: retry.action === 'open' ? { action: 'load', reopen: retry.id } : { action: 'load' } });
+    } else if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
       if (retry.action === 'open') {
         preserveWorkspaceConflict(failureMessage(error, "Couldn’t open the project."), undefined, undefined,
           { action: 'load', reopen: retry.id });
@@ -699,6 +849,9 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     return false;
   }
   finally {
+    // Design: set before busy clears, which is when a held sync of an earlier open is handled.
+    for (const doubt of before) doubt.newer = landed ? 'landed' : 'failed';
+    if (retry.action === 'open') core.openInFlight = null;
     if (reserved) useGraphStore.getState().releaseGraphImport();
     // Not switched: the writes that waited go to the project still open,
     // and the bar says what it said before the drain.
@@ -728,8 +881,16 @@ async function listNow(): Promise<void> {
   const generation = ++core.listingGeneration;
   const list = await api.listProjects();
   if (generation === core.listingGeneration) {
+    // Design: while an open is in doubt the tab's revision is unconfirmed (that open may have
+    // landed), so the listed one is taken with a project loaded too; an open the listing shows
+    // can no longer land (the revision moved on, to something else) is settled.
+    const unconfirmed = core.relistBeforeAction || core.opensInDoubt.length > 0;
+    core.opensInDoubt = core.opensInDoubt.filter((doubt) => doubt.held || doubt.typing
+      || list.workspaceRevision === doubt.sent || list.activeProjectId === doubt.id);
     useProjectStore.setState((state) => ({ projects: list.projects, trash: list.trash ?? [], ...listingNotices(list),
-      ...(!state.activeProject ? { workspaceRevision: list.workspaceRevision } : {}) }));
+      ...(!state.activeProject || unconfirmed ? { workspaceRevision: list.workspaceRevision } : {}) }));
+    // Design: read, so an open that timed out no longer makes the next action re-read first.
+    core.relistBeforeAction = false;
   }
 }
 
@@ -1954,9 +2115,15 @@ export function remapSnapshotIds(snapshot: ProjectSnapshot, renumbered: Record<s
 }
 
 
+/** Design: following the commit of the person's own open that timed out (OpenInDoubt). 'open':
+ * nothing newer since, so it lands as the open would have (the canvas shows, the timed-out line
+ * goes). 'quiet': a newer open or create didn't land, so the tab only keeps in step with the
+ * server, and the newer action's line stays. */
+interface OwnOpenFollow { mode: 'open' | 'quiet'; name: string }
+
 async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string } | null,
   snapshot: ProjectSnapshot | null, unsaved: boolean, cutOff: CutOffSave[] = [], pending?: HandoffPending,
-  renumbered: Record<string, string> = {}): Promise<void> {
+  renumbered: Record<string, string> = {}, own?: OwnOpenFollow): Promise<void> {
   // Round 20 (M1): read-only from the moment the tab sees the switch until
   // the new canvas is loaded (the caller set it before the snapshot).
   // A reopen of the project this window holds that no agent made (the
@@ -1987,7 +2154,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
   // The held edits' screen already up (the person's own switch, say) keeps
   // its cause: this switch adds no agent line to it.
   const alreadyHeld = Boolean(useProjectStore.getState().unsavedEdits);
-  useProjectStore.setState({ busy: true, error: null, errorRetry: null });
+  useProjectStore.setState(own?.mode === 'quiet' ? { busy: true } : { busy: true, error: null, errorRetry: null });
+  // The newer action's line, put back after the load (which clears the line).
+  const { error: keptError, errorDetails: keptDetails, errorRetry: keptRetry } = useProjectStore.getState();
   const following = { notices: [notice] };
   core.followingSwitch = following;
   const latest = () => following.notices[following.notices.length - 1];
@@ -2047,6 +2216,9 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     core.keepWindowView = keep;
     try { await whenSent(() => loadWorkspace(), { waitOnNoAnswer: true }); } finally { core.keepWindowView = null; }
     if (keep && getProjectContext()) adoptRenumberedSelection(keep.renumbered, keep.selected, keep.inspected);
+    if (own?.mode === 'quiet' && keptError && !useProjectStore.getState().error) {
+      useProjectStore.setState({ error: keptError, errorDetails: keptDetails, errorRetry: keptRetry });
+    }
     // GM (round 19): the line only when the handoff failed, naming who switched.
     followed = true;
     const show = handoffFailed && typeof notice.previousProjectName === 'string';
@@ -2064,7 +2236,14 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // window is now, not where it was when the follow began (review 20
     // NIT-5: one that left Projects meanwhile isn't put back).
     const onProjects = useProjectStore.getState().screen === 'home';
-    if (getProjectContext()) useProjectStore.setState({ screen: onProjects && byPerson(latest()) ? 'home' : 'workspace' });
+    // Design: the person's own open that landed late shows its canvas, as its answer would have.
+    const ownOpened = own?.mode === 'open' && useProjectStore.getState().activeProject?.id === notice.projectId;
+    if (getProjectContext()) useProjectStore.setState({ screen: !ownOpened && onProjects && byPerson(latest()) ? 'home' : 'workspace' });
+    if (ownOpened && getProjectContext()) {
+      core.personOpenedId = notice.projectId;
+      core.personInputSaidFor = null;
+      focusCanvasSoon();
+    }
     // A delete this tab said that Nebula kept is never silent (review 19
     // item 5): the node is back on the canvas, and the line says why.
     if (deletesKept.length > 0 && getProjectContext()) sayDeletesKept(deletesKept);
@@ -2072,7 +2251,7 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
       // Never silent: "Couldn’t delete “X”. It has a saved World Labs …", as
       // the canvas says a refused delete.
       useGraphStore.getState().notify(deleteRefusalText(deletesHeld.length === 1 ? "Couldn’t delete the node."
-        : `Couldn’t delete ${deletesHeld.length} nodes.`, deletesHeld.length, deletesHeld), 'info');
+        : `Couldn’t delete ${groupedCount(deletesHeld.length)} nodes.`, deletesHeld.length, deletesHeld), 'info');
     }
     // The toast names the project the tab landed on (round 17, review 16
     // M1), from the newest switch to it; the way back is the project this
@@ -2106,6 +2285,15 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     // GM r9 (2): a refused recovered copy says what it was doing, as the other load screens do.
     if (showNotConnectedLoad(error, savingCopy ? 'save your unsaved edits' : 'switch projects', { screen: 'home', initialized: false, dirty: Boolean(core.pendingRecovery) })) return;
     const newest = latest();
+    if (own) {
+      // Design: the person's own open that timed out, then landed, and couldn't be followed: its
+      // timed-out line again (a newer action's line stays), and Try again loads what is open now.
+      const line = own.mode === 'quiet' ? useProjectStore.getState().error ?? openTimedOutLine(own.name) : openTimedOutLine(own.name);
+      useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(core.pendingRecovery),
+        error: line, errorDetails: detailsFor(line, error),
+        errorRetry: own.mode === 'open' ? { action: 'load', reopen: notice.projectId } : { action: 'load' } });
+      return;
+    }
     // Try again loads what is open now (initialize), as the line says.
     // Nebula's own reopen lands on Projects with the line that ends at the
     // failure and [Open “Delta”] (GM r29, 1 on PR #199), in the neutral box;
@@ -2214,6 +2402,9 @@ function holdFollowWhileTyping(event: GraphSyncEvent): boolean {
       if (!held || typingInStudioField()) return;
       held.stop();
       core.heldFollow = null;
+      // The wait is over: a replay that is still held marks its doubt again, and one that
+      // stops short (a kept canvas, a version change) leaves it to the normal expiry.
+      for (const doubt of core.opensInDoubt) delete doubt.typing;
       for (const next of held.events) workspaceSync(next);
     }, 0);
   };
@@ -2222,6 +2413,84 @@ function holdFollowWhileTyping(event: GraphSyncEvent): boolean {
   const stopView = useUIStore.subscribe(release);
   core.heldFollow = { events: [event], stop: () => { document.removeEventListener('focusout', release, true); stopView(); } };
   return true;
+}
+
+
+/** Follow `notice` away from the project this tab holds, handing off what it hasn't saved. */
+function followWithHandoff(event: GraphSyncEvent, notice: ProjectSwitch, context: { id: string; revision: string }, own?: OwnOpenFollow): void {
+  startFollowing(notice);
+  const stopped = useGraphStore.getState().beginAgentSwitch();
+  const captured = captureProjectSnapshot();
+  const unsaved = JSON.stringify(captured) !== core.lastSaved || stopped.force;
+  // Review 16 HIGH-1: an agent that reopened the project this tab shows
+  // gave its tab-local nodes Nebula's ids; the handoff speaks of them by
+  // those ids, so Nebula merges the person's latest typing into the node it
+  // renumbered instead of adding the old one back beside it (Nebula maps
+  // the rest of the snapshot by the same map, so both ends agree).
+  const renumbered = renumberedOf(event);
+  // (The handoff's unsent values, `stopped.pending`, are only ever for
+  // nodes Nebula holds, nN ids, which an open never renumbers: nothing to
+  // map there.)
+  const snapshot = remapSnapshotIds(captured, renumbered);
+  void followProjectSwitch(notice, context, snapshot, unsaved, stopped.cutOff, stopped.pending, renumbered, own);
+}
+
+
+/** Design: the person's open that timed out (OpenInDoubt) and the syncs that settle it. Returns
+ * true when `event` was its commit and is handled (or held) here. */
+function settleOpenInDoubt(event: GraphSyncEvent, revision: string, busy: boolean): boolean {
+  const flight = core.openInFlight;
+  if (flight && commitOf(event, revision, flight.id, flight.sent)) flight.synced = event;
+  if (core.opensInDoubt.length === 0) return false;
+  // A commit held for a Studio field in progress keeps its doubt, and the syncs after it wait
+  // behind it in order (an agent's edit to that project, a run's output), so none of them is
+  // read as another tab's switch away from a project this tab itself left.
+  if (core.heldFollow && core.opensInDoubt.some((item) => item.typing)) { core.heldFollow.events.push(event); return true; }
+  const doubt = [...core.opensInDoubt].reverse().find((item) => commitOf(event, revision, item.id, item.sent));
+  // Anything else past the revision an open went with: that open can no longer land (Nebula
+  // refuses a stale revision), and syncs come in the order Nebula committed them.
+  core.opensInDoubt = core.opensInDoubt.filter((item) => item === doubt || item.held || item.typing || revision === item.sent);
+  if (!doubt) return false;
+  // Busy (the newer action under way, or a follow): handled once it isn't, not dropped.
+  if (busy) { doubt.held = event; replayWhenIdle(); return true; }
+  const context = getProjectContext();
+  // A Studio field the person is typing in finishes first (as for an agent's switch).
+  if (context && doubt.newer !== 'landed' && holdFollowWhileTyping(event)) { doubt.typing = true; return true; }
+  core.opensInDoubt = core.opensInDoubt.filter((item) => item !== doubt);
+  // A newer open or create landed after this commit: what it opened is what the server has.
+  if (doubt.newer === 'landed') return true;
+  const own: OwnOpenFollow = { mode: doubt.newer === null ? 'open' : 'quiet', name: doubt.name };
+  const state = useProjectStore.getState();
+  // The person's open of another project carries no switch notice: this tab's own, as a reopen
+  // in place's is. Followed as the person's (no toast, no way back), with the same handoff.
+  const notice: ProjectSwitch = event.projectSwitch ?? {
+    actor: { kind: 'person', tab: TAB_ID }, projectId: doubt.id, projectName: doubt.name,
+    previousProjectId: context?.id ?? null, previousProjectName: context ? state.activeProject?.name ?? null : null,
+    previousRevision: context?.revision ?? doubt.sent,
+  };
+  if (context) followWithHandoff(event, notice, context, own);
+  else void followProjectSwitch(notice, null, null, false, [], undefined, {}, own);
+  return true;
+}
+
+
+/** Design: the held syncs of opens in doubt are handled once the tab isn't busy. */
+function replayWhenIdle(): void {
+  if (core.doubtReplay) return;
+  const stop = useProjectStore.subscribe((state) => {
+    if (state.busy) return;
+    stop();
+    core.doubtReplay = null;
+    setTimeout(() => {
+      for (const doubt of [...core.opensInDoubt]) {
+        const held = doubt.held;
+        if (!held) continue;
+        doubt.held = null;
+        workspaceSync(held);
+      }
+    }, 0);
+  });
+  core.doubtReplay = stop;
 }
 
 
@@ -2260,6 +2529,7 @@ export function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
   const context = getProjectContext();
   const state = useProjectStore.getState();
   if (!revision) return;
+  if (!synthetic && settleOpenInDoubt(event, revision, state.busy)) return;
   if (state.busy) {
     // Another switch while this tab follows the last one (offline, the
     // follow waits for Nebula): kept, so the follow names where it lands.
@@ -2306,21 +2576,7 @@ export function workspaceSync(event: GraphSyncEvent, synthetic = false): void {
     // every value typed that Nebula may not have, even when the autosave
     // already saved that canvas (Nebula's switch saved its own, without it).
     // Round 20 (M1): read-only from here until the new canvas is loaded.
-    startFollowing(event.projectSwitch);
-    const stopped = useGraphStore.getState().beginAgentSwitch();
-    const captured = captureProjectSnapshot();
-    const unsaved = JSON.stringify(captured) !== core.lastSaved || stopped.force;
-    // Review 16 HIGH-1: an agent that reopened the project this tab shows
-    // gave its tab-local nodes Nebula's ids; the handoff speaks of them by
-    // those ids, so Nebula merges the person's latest typing into the node it
-    // renumbered instead of adding the old one back beside it (Nebula maps
-    // the rest of the snapshot by the same map, so both ends agree).
-    const renumbered = renumberedOf(event);
-    // (The handoff's unsent values, `stopped.pending`, are only ever for
-    // nodes Nebula holds, nN ids, which an open never renumbers: nothing to
-    // map there.)
-    const snapshot = remapSnapshotIds(captured, renumbered);
-    void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved, stopped.cutOff, stopped.pending, renumbered);
+    followWithHandoff(event, event.projectSwitch, context);
     return;
   }
   const snapshot = captureProjectSnapshot();
@@ -2746,8 +3002,17 @@ export const actions = {
   },
     initialize: async () => {
     if (get().initialized) return;
+    // Design: a load of the person's own (mount, Try now, Try again, the server coming back)
+    // starts the tries again and takes the timer's place; the timer's own keeps its count and
+    // leaves the "trying again" line up while it loads.
+    const auto = core.firstLoadAuto;
+    core.firstLoadAuto = false;
+    clearTimeout(core.firstLoadTimer);
+    core.firstLoadTimer = undefined;
+    if (!auto) { core.firstLoadStopped = false; core.firstLoadFailures = 0; }
     if (core.initializing) return core.initializing;
-    set({ loading: true, error: null, errorRetry: null });
+    core.firstLoadLine = null;
+    set(auto ? { loading: true } : { loading: true, error: null, errorRetry: null });
     core.initializing = (async () => {
       // GM r9 (2): the verb fits what was refused: saving the recovered edits, or the load.
       let saving = true;
@@ -2757,6 +3022,8 @@ export const actions = {
         await recoverPendingWork();
         saving = false;
         await loadWorkspace();
+        // Design: a try that landed takes the "trying again" line away.
+        if (get().error === FIRST_LOAD_RETRYING_COPY) set({ error: null, errorRetry: null });
       } catch (error) {
         // Refused for good: the held edits' screen says it (holdRefusedEdits).
         if (error instanceof EditsRefused) return;
@@ -2779,8 +3046,23 @@ export const actions = {
         const line = error instanceof RequestFailedError && error.storageFull
           ? oneLine({ heading: LOAD_HEADING, reason: LOAD_DISK_FULL }) : copy.reason;
         const shown = core.pendingRecovery && general ? `Nebula couldn’t ${failedWhat(LOAD_HEADING)}.` : line;
+        // Design: no server yet (not a refusal): try again by itself, 1, 2, 4, 8 and 16 s later,
+        // with its own line; after those, today's line and "Try again".
+        const unreachable = isBackendUnreachable(error);
+        if (unreachable && !core.firstLoadStopped && core.firstLoadFailures < FIRST_LOAD_TRIES) {
+          const delay = firstLoadDelay(core.firstLoadFailures++);
+          core.firstLoadLine = FIRST_LOAD_RETRYING_COPY;
+          set({ error: FIRST_LOAD_RETRYING_COPY, errorDetails: null, errorRetry: { action: 'load', unreachable: true, retrying: true } });
+          core.firstLoadTimer = setTimeout(() => {
+            core.firstLoadTimer = undefined;
+            core.firstLoadAuto = true;
+            void useProjectStore.getState().initialize();
+          }, delay);
+          return;
+        }
+        if (unreachable) core.firstLoadLine = shown;
         set({ error: shown, errorDetails: detailsFor(shown, error),
-          errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
+          errorRetry: refusedForGood(error) ? { action: 'load', full: true } : unreachable ? { action: 'load', unreachable: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); core.initializing = null; }
       // GM r9 decision 1: back from a reload for an update, in the copy

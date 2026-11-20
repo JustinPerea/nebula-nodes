@@ -76,24 +76,17 @@ function sides(shorthand: string): { top: number; right: number; bottom: number;
 describe('review 20 NIT-6 (GM): the swap on promote moves nothing inside the box', () => {
   const css = readFileSync(resolve(process.cwd(), 'src/styles/asset-proposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const base = declarations(css, '.asset-proposal');
-  const held = declarations(css, '.asset-proposal--held');
   const padding = sides(base.padding);
   const edge = px(base.border.split(/\s+/)[0]);
-  const realLeftEdge = px(base['border-left'].split(/\s+/)[0]);
 
-  it('the content starts 15px in on both: a 3px edge + 12px, and a 1px edge + 14px', () => {
-    const real = realLeftEdge + padding.left;
-    const placeholder = px(held['border-left-width']) + px(held['padding-left'] ?? `${padding.left}px`);
-    expect(real).toBe(15);
-    expect(placeholder).toBe(real);
+  it('the content starts 11px in on both: neither card has a coloured edge, so the 1px edge + 10px padding is the same all round', () => {
+    expect(base['border-left']).toBeUndefined();
+    expect(padding).toEqual({ top: 10, right: 10, bottom: 10, left: 10 });
+    expect(edge + padding.left).toBe(11);
   });
 
-  it('the top and the right side are the same on both (the placeholder sets neither)', () => {
-    for (const name of Object.keys(held)) {
-      expect(name).not.toMatch(/^(padding(-top|-right)?|border(-top|-right)?(-width)?|border-width|gap|margin|font|line-height)$/);
-    }
-    // 1px edge + 10px padding on top, on both.
-    expect(edge + padding.top).toBe(11);
+  it('the placeholder sets no box of its own, so the swap moves nothing', () => {
+    expect(() => declarations(css, '.asset-proposal--held')).toThrow(/no rule/);
   });
 });
 

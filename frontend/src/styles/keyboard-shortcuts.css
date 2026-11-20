@@ -55,7 +55,7 @@
 .keyboard-shortcuts__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 5%)); color: var(--sr-ink, #fff); }
 
 .keyboard-shortcuts__close:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 

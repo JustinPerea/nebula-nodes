@@ -1,12 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { NODE_DEFINITIONS } from '../src/constants/nodeDefinitions';
+import { canvasTitle } from '../src/lib/directRoute';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { BatchRunInspection } from '../src/components/panels/BatchRunInspection';
+import { openOutputLabel } from '../src/lib/openOutputLabel';
 import type { RunRecord } from '../src/lib/runHistory';
 import { getBackendBaseUrl } from '../src/lib/backend';
 import { useGraphStore } from '../src/store/graphStore';
 
 function record(status: RunRecord['status']): RunRecord {
-  return { id: 'batch-run', trigger: 'graph', startedAt: 1, status, snapshot: { nodes: [], edges: [] },
+  return { id: 'batch-run', trigger: 'graph', startedAt: 1, status, snapshot: { labelsKept: true, nodes: [{ id: 'model', definitionId: 'batch', label: 'Prefix', params: {}, outputs: {} }], edges: [] },
     batchOutputs: { model: [
       { image: { type: 'Image', value: 'http://127.0.0.1:9292/api/outputs/first.png' }, text: { type: 'Text', value: 'First caption' } },
       { video: { type: 'Video', value: '/api/outputs/second.mp4' } },
@@ -19,12 +22,121 @@ describe('historical batch result access', () => {
     await getBackendBaseUrl();
     render(<BatchRunInspection record={record(status)} />);
     fireEvent.click(screen.getByText('Batch results · 2'));
-    expect(screen.getByText('model · Result 1')).toBeInTheDocument();
-    expect(screen.getByText('model · Result 2')).toBeInTheDocument();
+    expect(screen.getByText('Prefix · Result 1')).toBeInTheDocument();
+    expect(screen.getByText('Prefix · Result 2')).toBeInTheDocument();
     expect(screen.getByText('First caption')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open image · image' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/first.png');
-    expect(screen.getByRole('link', { name: 'Open video · video' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/second.mp4');
+    expect(screen.getByRole('link', { name: 'Open image, Prefix · Result 1' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/first.png');
+    expect(screen.getByRole('link', { name: 'Open video, Prefix · Result 2' })).toHaveAttribute('href', 'http://localhost:8000/api/outputs/second.mp4');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('names the port only when it says something the kind does not', () => {
+    expect(openOutputLabel('Image', 'image')).toBe('Open image');
+    expect(openOutputLabel('Image', 'mask')).toBe('Open image · mask');
+    expect(openOutputLabel('SVG', 'svg')).toBe('Open SVG');
+    expect(openOutputLabel('SVG', 'logo')).toBe('Open SVG · logo');
+    expect(openOutputLabel('Mesh', 'Mesh')).toBe('Open mesh');
+  });
+
+  it('reads two-word types as words and matches the port ignoring case and non-letters', () => {
+    expect(openOutputLabel('DepthMap', 'depth_map')).toBe('Open depth map');
+    expect(openOutputLabel('DepthMap', 'depthMap')).toBe('Open depth map');
+    expect(openOutputLabel('DepthMap', 'DepthMap')).toBe('Open depth map');
+    expect(openOutputLabel('DepthMap', 'preview')).toBe('Open depth map · preview');
+    expect(openOutputLabel('Mask', 'mask')).toBe('Open mask');
+    expect(openOutputLabel('Image', 'image_2')).toBe('Open image · image_2');
+    expect(openOutputLabel('PointCloud', 'cloud')).toBe('Open point cloud · cloud');
+  });
+
+  it('links mask and depth map outputs in words, each with a unique accessible name', () => {
+    const saved = record('complete');
+    saved.batchOutputs = { model: [
+      { mask: { type: 'Mask', value: '/api/outputs/m.png' }, depth_map: { type: 'DepthMap', value: '/api/outputs/d.png' } },
+      { image: { type: 'Image', value: '/api/outputs/a.png' } },
+    ] };
+    render(<BatchRunInspection record={saved} />);
+    const mask = screen.getByRole('link', { name: 'Open mask, Prefix · Result 1' });
+    const depth = screen.getByRole('link', { name: 'Open depth map, Prefix · Result 1' });
+    expect(mask).toHaveTextContent('Open mask');
+    expect(depth).toHaveTextContent('Open depth map');
+    const names = screen.getAllByRole('link').map((link) => link.getAttribute('aria-label'));
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('draws the caption in the body face, not a pre', () => {
+    const { container } = render(<BatchRunInspection record={record('complete')} />);
+    expect(container.querySelector('pre')).toBeNull();
+    expect(screen.getByText('First caption').tagName).toBe('P');
+  });
+
+  describe('node names', () => {
+    const run = (nodes: RunRecord['snapshot']['nodes']): RunRecord => {
+      const saved = record('complete');
+      saved.snapshot = { labelsKept: true, nodes, edges: [] };
+      saved.batchOutputs = { model: [{ text: { type: 'Text', value: 'x' } }] };
+      return saved;
+    };
+    const live = (nodes: unknown[]) => useGraphStore.setState({ nodes: nodes as never });
+    const original = useGraphStore.getState().nodes;
+    afterEach(() => useGraphStore.setState({ nodes: original }));
+
+    it('uses the name the node ran under, even after a rename', () => {
+      live([{ id: 'model', position: { x: 0, y: 0 }, data: { label: 'Renamed', definitionId: 'batch', params: {}, outputs: {}, state: 'idle' } }]);
+      render(<BatchRunInspection record={run([{ id: 'model', definitionId: 'batch', label: 'Hero', params: {}, outputs: {} }])} />);
+      expect(screen.getByText('Hero · Result 1')).toBeInTheDocument();
+    });
+
+    it('uses the default card title for an unnamed node, never its id', () => {
+      const definition = NODE_DEFINITIONS.batch;
+      render(<BatchRunInspection record={run([{ id: 'model', definitionId: 'batch', params: {}, outputs: {} }])} />);
+      expect(screen.getByText(`${canvasTitle(definition)} · Result 1`)).toBeInTheDocument();
+      expect(screen.queryByText(/model/)).not.toBeInTheDocument();
+    });
+
+    it('reads a node deleted from the live graph from its snapshot', () => {
+      live([]);
+      render(<BatchRunInspection record={run([{ id: 'model', definitionId: 'batch', label: 'Gone', params: {}, outputs: {} }])} />);
+      expect(screen.getByText('Gone · Result 1')).toBeInTheDocument();
+    });
+
+    const liveBatch = (label: string, definitionId = 'batch') => live([{ id: 'model', position: { x: 0, y: 0 },
+      data: { label, definitionId, params: {}, outputs: {}, state: 'idle' } }]);
+    const oldRun = (definitionId = 'batch'): RunRecord => {
+      const saved = run([{ id: 'model', definitionId, params: {}, outputs: {} }]);
+      delete saved.snapshot.labelsKept;
+      return saved;
+    };
+
+    it('an older record reads the live node name when the definition matches', () => {
+      liveBatch('Hero');
+      render(<BatchRunInspection record={oldRun()} />);
+      expect(screen.getByText('Hero · Result 1')).toBeInTheDocument();
+    });
+
+    it('an older record ignores a live node with a different definition', () => {
+      liveBatch('Hero', 'text-input');
+      render(<BatchRunInspection record={oldRun()} />);
+      expect(screen.getByText(`${canvasTitle(NODE_DEFINITIONS.batch)} · Result 1`)).toBeInTheDocument();
+    });
+
+    it('a record that kept names reads an unnamed run by its default title, though the canvas names it now', () => {
+      liveBatch('Hero');
+      render(<BatchRunInspection record={run([{ id: 'model', definitionId: 'batch', params: {}, outputs: {} }])} />);
+      expect(screen.getByText(`${canvasTitle(NODE_DEFINITIONS.batch)} · Result 1`)).toBeInTheDocument();
+    });
+
+    it('falls back to the live node when the snapshot lacks it', () => {
+      live([{ id: 'model', position: { x: 0, y: 0 }, data: { label: 'Live name', definitionId: 'batch', params: {}, outputs: {}, state: 'idle' } }]);
+      render(<BatchRunInspection record={run([])} />);
+      expect(screen.getByText('Live name · Result 1')).toBeInTheDocument();
+    });
+
+    it('reads "Node" when neither the snapshot nor the canvas has it, never the id', () => {
+      live([]);
+      render(<BatchRunInspection record={run([])} />);
+      expect(screen.getByText('Node · Result 1')).toBeInTheDocument();
+      expect(screen.queryByText(/model/)).not.toBeInTheDocument();
+    });
   });
 
   it('does not turn saved text or unsafe schemes into executable links', () => {
@@ -61,8 +173,8 @@ describe('historical batch result access', () => {
         }, outputs: {}, state: 'idle',
       } }] });
       rendered.rerender(<BatchRunInspection record={saved} />);
-      expect(screen.getByText('model · Red logo')).toBeInTheDocument();
-      expect(screen.getByText('model · Blue logo')).toBeInTheDocument();
+      expect(screen.getByText('Prefix · Red logo')).toBeInTheDocument();
+      expect(screen.getByText('Prefix · Blue logo')).toBeInTheDocument();
       expect(screen.getByText('Colors: red')).toBeInTheDocument();
       expect(screen.getByText('Colors: blue')).toBeInTheDocument();
       expect(screen.queryByText(/Changed palette|yellow|purple/)).not.toBeInTheDocument();
@@ -77,8 +189,20 @@ describe('historical batch result access', () => {
     const saved = record('complete');
     saved.batchVariants = { model: [{ index: 0, label: 'Misaligned label', lineage: [] }] };
     render(<BatchRunInspection record={saved} />);
-    expect(screen.getByText('model · Result 1')).toBeInTheDocument();
-    expect(screen.getByText('model · Result 2')).toBeInTheDocument();
+    expect(screen.getByText('Prefix · Result 1')).toBeInTheDocument();
+    expect(screen.getByText('Prefix · Result 2')).toBeInTheDocument();
     expect(screen.queryByText(/Misaligned label/)).not.toBeInTheDocument();
+  });
+});
+
+describe('captured run snapshots', () => {
+  it('mark that node names were kept', async () => {
+    const { captureRunSnapshotForTest } = await import('../src/store/graphStore');
+    const node = (id: string, label: string) => ({ id, position: { x: 0, y: 0 },
+      data: { label, definitionId: 'batch', params: {}, outputs: {}, state: 'idle' } }) as never;
+    const snap = captureRunSnapshotForTest([node('a', 'Hero'), node('b', NODE_DEFINITIONS.batch.displayName)], []);
+    expect(snap.labelsKept).toBe(true);
+    expect(snap.nodes[0].label).toBe('Hero');
+    expect(snap.nodes[1].label).toBeUndefined();
   });
 });

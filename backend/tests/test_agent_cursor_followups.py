@@ -1,17 +1,17 @@
-"""Agent cursors, the #211 follow-up (review 9, GM - Design r23).
+"""Agent cursors, the #211 follow-up (design).
 
-- r23 item 2, as GM r24 Q2 rules it (#219): a node move is an arrival for a
+- As design rules it (#219): a node move is an arrival for a
   cursor on it only when it changes the cursor's target chain (the other
   cursors linked to it through targets 16 canvas units apart). The backend
   gives it a new arrival time, keeps the order of the cursors one move
   carries, and tells the person's tabs (only them), so every tab and a
   reload stack it the same way. Every route that moves nodes does it
-  (#219 review 1, MEDIUM-1): the layout route, apply and undo/redo.
-- LOW-1: the arrival radius is measured from where the cursor arrived, so a
+  (#219): the layout route, apply and undo/redo.
+- The arrival radius is measured from where the cursor arrived, so a
   run of small moves can't keep an early arrival over any distance.
-- LOW-2 / NIT-3: arrivals strictly increase, so two sessions never tie and a
+- Arrivals strictly increase, so two sessions never tie and a
   clock stepped back never puts a new arrival first.
-- LOW-5: each person form has an id the Agent log de-dupes on; agents read
+- Each person form has an id the Agent log de-dupes on; agents read
   exactly what they read before.
 """
 from __future__ import annotations
@@ -35,10 +35,10 @@ def _form(presence: AgentPresence, raw: str, target: dict, say: str = "") -> dic
     return presence.person_form(_event(presence, target, say=say), AGENT, session=raw)
 
 
-# -- LOW-1: no creep -----------------------------------------------------------
+# -- No creep -----------------------------------------------------------
 
 def test_small_moves_cannot_keep_an_arrival_over_any_distance():
-    """Review 9's probe: 29 moves of 15 px kept the first arrival over 435 px.
+    """Probe: 29 moves of 15 px kept the first arrival over 435 px.
     Each move is measured from where the cursor arrived, so it arrives again
     once it is more than ARRIVAL_RADIUS from there."""
     clock = Clock()
@@ -64,7 +64,7 @@ def test_small_moves_cannot_keep_an_arrival_over_any_distance():
     assert _form(presence, "s1", {"x": 420 + ARRIVAL_RADIUS, "y": 0})["since"] == kept
 
 
-# -- LOW-2 / NIT-3: strictly increasing ----------------------------------------
+# -- Strictly increasing ----------------------------------------
 
 def test_arrivals_in_one_millisecond_or_after_the_clock_steps_back_still_come_in_order():
     clock = Clock()
@@ -78,7 +78,7 @@ def test_arrivals_in_one_millisecond_or_after_the_clock_steps_back_still_come_in
     assert replayed == sorted([*sinces, later])
 
 
-# -- r24 Q2: a carry is an arrival when it changes the target chain --------------
+# -- A carry is an arrival when it changes the target chain --------------
 
 def _boxes(**nodes: tuple[float, float]) -> dict:
     return {node_id: {"x": x, "y": y} for node_id, (x, y) in nodes.items()}
@@ -144,7 +144,7 @@ def test_a_move_onto_a_point_cursor_joins_its_chain():
 
 
 def test_a_drag_its_undo_and_the_drag_again_is_no_arrival():
-    """Review 1, MEDIUM-1's side effect: the old running total of carried
+    """Side effect: the old running total of carried
     distance went stale across an undo (+10, -10 uncounted, +10 = 20 > 16).
     The chain is read from where things are, so nothing builds up."""
     clock = Clock()
@@ -194,7 +194,7 @@ def test_a_node_target_is_its_header_middle_as_the_tab_draws_it():
 
 
 def test_a_deleted_nodes_cursor_keeps_its_arrival_at_the_point_it_falls_back_to():
-    """Review 1, LOW-2: forget_node moves the anchor to the fallback point,
+    """forget_node moves the anchor to the fallback point,
     so the next event there is no new arrival."""
     clock = Clock()
     presence = AgentPresence(clock)
@@ -318,7 +318,7 @@ def test_every_position_write_in_main_goes_out_in_a_graph_sync_that_carries():
         assert "_broadcast_graph_sync(" in inspect.getsource(getattr(main, name))
 
 
-# -- LOW-5: the log's event id ---------------------------------------------------
+# -- The log's event id ---------------------------------------------------
 
 def test_each_person_form_has_its_own_id_the_replay_keeps_it_and_agents_never_see_it(sockets):
     api = sockets
@@ -338,7 +338,7 @@ def test_each_person_form_has_its_own_id_the_replay_keeps_it_and_agents_never_se
     assert AgentPresence(Clock())._event_id() != AgentPresence(Clock())._event_id()
 
 
-# -- #219 r47 copy: an apply's say on the person's tabs ------------------------
+# -- #219 copy: an apply's say on the person's tabs ------------------------
 
 def test_an_edits_say_names_what_each_count_is_of():
     from main import _edit_say
@@ -353,7 +353,7 @@ def test_an_edits_say_names_what_each_count_is_of():
 
 
 def test_an_apply_says_moved_1_node_to_the_person_and_agents_read_what_they_did(sockets):
-    """GM r47's copy check: the bubble after an agent's apply is Nebula's
+    """Design's copy check: the bubble after an agent's apply is Nebula's
     own words, so the person's tabs (and a reload) get person copy. Agents
     still read the apply's summary, word for word."""
     api = sockets
@@ -365,7 +365,7 @@ def test_an_apply_says_moved_1_node_to_the_person_and_agents_read_what_they_did(
     assert reply.json()["summary"] == "moved 1"
     (person,) = [json.loads(t) for t in _presence_frames(api.person_socket)]
     (agent,) = [json.loads(t) for t in _presence_frames(api.listener)]
-    # The Agent log keeps the line naming the node (#225, GM r83.1); the
+    # The Agent log keeps the line naming the node (#225, design); the
     # bubble has the person's words.
     assert person["say"] == "Moved 1 node" and person["log"] == "Moved “Text Input”"
     assert agent["say"] == "moved 1"
@@ -374,11 +374,11 @@ def test_an_apply_says_moved_1_node_to_the_person_and_agents_read_what_they_did(
 
 
 def test_the_shared_chain_fixture_backend_side():
-    """GM r47: one chain definition. The same cases run through the tab's
+    """Design: one chain definition. The same cases run through the tab's
     chainPoint and targetChains (frontend/tests/agentCursorLook.test.ts).
     Each target goes through the backend's own _target_point, with the
     nodes' sizes from a view report at the case's zoom: a port counts as its
-    node's header middle (r62), and the zoom changes no chain."""
+    node's header middle, and the zoom changes no chain."""
     from pathlib import Path
 
     from services.agent_presence import _target_chains
@@ -406,11 +406,11 @@ def test_the_shared_chain_fixture_backend_side():
 
 
 def test_the_shared_carry_traces_backend_side():
-    """GM r75.3: the drop's arrival on the traces the tab runs too
+    """Design: the drop's arrival on the traces the tab runs too
     (frontend/tests/agentCursorLayer.test.tsx). a, arrived first, rides n2;
     h, arrived second, points at a port on n1. Dropped at each point of the
     path, a arrives (its chain changes) exactly from ``arrivalFrom`` on: never
-    onto h's drawn tip, which counts at n1's header (r62), and onto the header
+    onto h's drawn tip, which counts at n1's header, and onto the header
     once within ARRIVAL_RADIUS of it. h never arrives (n1 didn't move). With no
     arrival a keeps its place: plain arrival order, which is what the tab
     lays out for a drawn overlap during the drag too."""
@@ -418,7 +418,7 @@ def test_the_shared_carry_traces_backend_side():
 
     traces = json.loads((Path(__file__).parent / "fixtures" / "cursor_chains.json").read_text())["traces"]
     assert {t["zoom"] for t in traces} == {0.1, 0.25, 0.5, 1, 2}
-    # r85: a left input near the header (y 62) at 0.25, 0.5 and 1.
+    # A left input near the header (y 62) at 0.25, 0.5 and 1.
     assert sorted(t["zoom"] for t in traces if t["h"]["port"]["x"] < 0 and t["h"]["port"]["y"] == 62) == [0.25] * 3 + [0.5] * 3 + [1] * 3
     assert sum(t["arrivalFrom"] is None for t in traces) >= 9
     assert sum(t["arrivalFrom"] is not None for t in traces) >= 3
@@ -446,10 +446,10 @@ def test_the_shared_carry_traces_backend_side():
         assert arrived_at == expected, trace["name"]
 
 
-# -- #219 review 2 (round 3c) ----------------------------------------------------
+# -- #219 ----------------------------------------------------
 
 def test_an_expired_cursor_joins_no_chain():
-    """Review 2, LOW-2 B5: a cursor past PRESENCE_TTL_SECONDS is gone from
+    """A cursor past PRESENCE_TTL_SECONDS is gone from
     every tab, so a carry onto where it was is no arrival, even before any
     new event clears its slot."""
     from services.agent_presence import PRESENCE_TTL_SECONDS
@@ -473,7 +473,7 @@ def test_an_expired_cursor_joins_no_chain():
 
 
 def test_a_node_with_no_stored_position_keeps_its_box_when_its_siblings_shift_it():
-    """Review 2, LOW-3: main._display_positions puts a node with no stored
+    """main._display_positions puts a node with no stored
     position right of the others, so its computed spot shifts when a sibling
     gets a position or is deleted. An open canvas doesn't move it for that,
     so the carry doesn't either: no false arrival. Its first stored position
@@ -498,7 +498,7 @@ def test_a_node_with_no_stored_position_keeps_its_box_when_its_siblings_shift_it
 
 
 def test_a_sibling_placed_by_the_layout_route_moves_no_unplaced_node(sockets):
-    """LOW-3 through main: the person's first drag of agent-made node B
+    """Through main: the person's first drag of agent-made node B
     stores its position; agent-made C, never placed, is computed 250 units
     left now, next to q. No arrival: the canvas never moved C."""
     api = sockets
@@ -521,10 +521,10 @@ def test_a_sibling_placed_by_the_layout_route_moves_no_unplaced_node(sockets):
 
 
 def test_a_person_say_takes_the_log_out_of_the_person_form_only(sockets):
-    """Review 2, LOW-2 B7: with ``person_say``, the person's tabs show it as
+    """With ``person_say``, the person's tabs show it as
     the bubble; agents read ``say`` and ``log`` as before. The person's form
     keeps a ``log`` that says something else (the nodes an edit named, #225
-    GM r83.1) and drops one that would repeat the bubble."""
+    Design) and drops one that would repeat the bubble."""
     import asyncio
 
     from services.agent_presence import request_headers_scope

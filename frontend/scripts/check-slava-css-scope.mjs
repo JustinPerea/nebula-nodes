@@ -1,5 +1,14 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import {
+  collectCssFiles,
+  compact,
+  computeLineStarts,
+  isNeutralValue,
+  lineForOffset,
+  parseDeclarations,
+  parseRules,
+} from './lib/css-scan.mjs';
 
 const ROOT = process.cwd();
 const STYLES_DIR = join(ROOT, 'src', 'styles');
@@ -38,17 +47,6 @@ const VISUAL_PROPS = new Set([
   'stroke',
   'text-shadow',
 ]);
-
-const NEUTRAL_VALUES = [
-  /^none(?:\s*!important)?$/i,
-  /^0(?:\s*!important)?$/i,
-  /^0px(?:\s*!important)?$/i,
-  /^transparent(?:\s*!important)?$/i,
-  /^inherit(?:\s*!important)?$/i,
-  /^currentcolor(?:\s*!important)?$/i,
-  /^unset(?:\s*!important)?$/i,
-  /^initial(?:\s*!important)?$/i,
-];
 
 const SENSITIVE_SELECTOR_PATTERNS = [
   /\.agent-log(?:__|--|\b)/,
@@ -114,98 +112,12 @@ if (violations.length > 0) {
 
 console.log(`Slava CSS scope guard passed (${files.length} shared style files scanned).`);
 
-function collectCssFiles(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    const stat = statSync(path);
-    if (stat.isDirectory()) {
-      out.push(...collectCssFiles(path));
-    } else if (entry.endsWith('.css')) {
-      out.push(path);
-    }
-  }
-  return out;
-}
-
-function parseRules(css, baseOffset = 0) {
-  const rules = [];
-  let cursor = 0;
-  while (cursor < css.length) {
-    const open = css.indexOf('{', cursor);
-    if (open === -1) break;
-    const close = findMatchingBrace(css, open);
-    if (close === -1) break;
-
-    const selectorStart = findSelectorStart(css, open);
-    const selector = css.slice(selectorStart, open).trim();
-    const body = css.slice(open + 1, close);
-
-    if (selector.startsWith('@')) {
-      rules.push(...parseRules(body, baseOffset + open + 1));
-    } else if (selector) {
-      rules.push({
-        selector,
-        body,
-        bodyStart: baseOffset + open + 1,
-      });
-    }
-
-    cursor = close + 1;
-  }
-  return rules;
-}
-
-function findMatchingBrace(css, openIndex) {
-  let depth = 0;
-  for (let i = openIndex; i < css.length; i += 1) {
-    if (css[i] === '{') depth += 1;
-    if (css[i] === '}') depth -= 1;
-    if (depth === 0) return i;
-  }
-  return -1;
-}
-
-function findSelectorStart(css, openIndex) {
-  const prevClose = css.lastIndexOf('}', openIndex);
-  const prevSemicolon = css.lastIndexOf(';', openIndex);
-  const prevBoundary = Math.max(prevClose, prevSemicolon);
-  return prevBoundary + 1;
-}
-
-function parseDeclarations(body, bodyStart) {
-  const declarations = [];
-  const parts = body.split(';');
-  let offset = 0;
-
-  for (const part of parts) {
-    const colon = part.indexOf(':');
-    if (colon === -1) {
-      offset += part.length + 1;
-      continue;
-    }
-
-    const prop = part.slice(0, colon).trim().toLowerCase();
-    const value = part.slice(colon + 1).trim();
-    const propOffset = bodyStart + offset + part.indexOf(prop);
-    declarations.push({ prop, value, offset: propOffset });
-    offset += part.length + 1;
-  }
-
-  return declarations;
-}
-
 function hasSensitiveSelector(selector) {
   return SENSITIVE_SELECTOR_PATTERNS.some((pattern) => pattern.test(selector));
 }
 
 function isScopedSelector(selector) {
   return SCOPED_SELECTOR_PATTERNS.some((pattern) => pattern.test(selector));
-}
-
-function isNeutralValue(value) {
-  const normalized = value.trim().toLowerCase();
-  return NEUTRAL_VALUES.some((pattern) => pattern.test(normalized));
 }
 
 function isColorlessBorderGeometry(prop, value) {
@@ -215,27 +127,4 @@ function isColorlessBorderGeometry(prop, value) {
     /\b(?:solid|dashed|dotted|double)\b/.test(normalized)
     && !/(#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|color-mix\(|var\(|currentcolor|white|black|transparent)/i.test(normalized)
   );
-}
-
-function computeLineStarts(text) {
-  const starts = [0];
-  for (let i = 0; i < text.length; i += 1) {
-    if (text[i] === '\n') starts.push(i + 1);
-  }
-  return starts;
-}
-
-function lineForOffset(lineStarts, offset) {
-  let low = 0;
-  let high = lineStarts.length - 1;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    if (lineStarts[mid] <= offset) low = mid + 1;
-    else high = mid - 1;
-  }
-  return high + 1;
-}
-
-function compact(selector) {
-  return selector.replace(/\s+/g, ' ');
 }

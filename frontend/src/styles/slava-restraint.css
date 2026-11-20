@@ -78,14 +78,25 @@ body.app-slava-restraint {
 
   --sr-warning: #F5C518;
   --sr-warning-soft: rgba(245, 197, 24, 0.12);
-  --sr-error: var(--sr-accent);
-  --sr-error-soft: var(--sr-accent-soft);
-  --sr-error-border: var(--sr-accent-border);
-  --sr-danger: var(--sr-error);
-  --sr-danger-soft: var(--sr-error-soft);
-  --sr-danger-border: var(--sr-error-border);
+  --sr-warning-border: rgba(245, 197, 24, 0.34);
+  /* Design: --sr-error is something that went wrong, and it takes the warning
+     tone. It is never the accent (the accent is the primary action, the
+     selected state and the agent). --sr-danger* is the destructive red, a
+     different thing: it is defined once in styles/disabled-buttons.css (:root)
+     and used only by destructive controls. */
+  --sr-error: var(--sr-warning);
+  --sr-error-soft: var(--sr-warning-soft);
+  --sr-error-border: var(--sr-warning-border);
+  /* Design: an opaque error surface, for a pill that floats over content
+     (the offline line); --sr-error-soft is translucent. The strong one is
+     the brief flash when an edit is tried offline. */
+  --sr-error-surface: color-mix(in srgb, var(--sr-error) 8%, var(--sr-canvas-elevated));
+  --sr-error-surface-strong: color-mix(in srgb, var(--sr-error) 22%, var(--sr-canvas-elevated));
   --sr-success: rgba(110, 231, 183, 0.90);
   --sr-success-soft: rgba(110, 231, 183, 0.12);
+  --sr-success-border: rgba(110, 231, 183, 0.30);
+  /* Ink on a solid success fill (a done badge): dark, the same as on the accent. */
+  --sr-on-success: #0A0A0B;
   --sr-pending: var(--sr-ink-light);
   --sr-pending-soft: rgba(255, 255, 255, 0.06);
   --sr-disabled-opacity: 0.48;
@@ -311,10 +322,8 @@ body.app-slava-restraint {
   /* Keyboard focus: a light neutral ring (GM - Design, sf). Orange already
    * means the agent and the primary action, so focus is drawn in the primary
    * type colour, which carries no meaning of its own and clears 3:1 on every
-   * dark surface (tests/focusRingCss.test.ts). The twin is for the one light
-   * surface a ring sits on: the Commons evaluation form. */
+   * dark surface (tests/focusRingCss.test.ts). */
   --sr-focus-outline: 2px solid var(--sr-ink);
-  --sr-focus-outline-on-light: 2px solid var(--sr-canvas);
   --sr-focus-offset: 2px;
 
   --sr-layer-panel: 10;
@@ -395,8 +404,9 @@ body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-li
 
 /* PR #204 round 18h (GM r38 3d): when a notice that held focus leaves and nothing else can take it,
  * focus goes to the start of the page (the canvas, a screen's <main>) only so it never drops to
- * <body> (lib/noticeLeave FOCUS_START_ATTR, set until it blurs). No ring marks that. */
-body.app-slava-restraint [data-focus-start]:focus-visible {
+ * <body> (lib/noticeLeave FOCUS_START_ATTR, set until it blurs). No ring marks that, unless a
+ * keyboard decision put it there (data-focus-decided, ProposalBar): that one keeps the ring below. */
+body.app-slava-restraint [data-focus-start]:not([data-focus-decided]):focus-visible {
   outline: none !important;
 }
 
@@ -493,19 +503,6 @@ body.app-slava-restraint {
   }
 }
 
-/* Transient class is added only for transitions where Slava is the previous
- * or next skin. It is intentionally not nested under .app-slava-restraint so
- * the mask survives the frame where the Slava body class is being removed. */
-body.app-skin-switching-slava #root {
-  animation: slava-skin-switch-mask 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  body.app-skin-switching-slava #root {
-    animation: none;
-  }
-}
-
 body.app-slava-restraint .react-flow,
 body.app-slava-restraint .react-flow__pane {
   background: transparent;
@@ -583,6 +580,7 @@ body.app-slava-restraint .chat-panel.chat-panel--exiting {
 }
 
 body.app-slava-restraint .panel {
+  /* The launcher badge's ring for a row or tab in this panel: its own surface, not the rail's. */
   --agent-launcher-surface: rgb(22, 22, 24);
   z-index: var(--sr-layer-panel);
   background: var(--sr-glass);
@@ -805,8 +803,7 @@ body.app-slava-restraint .context-menu {
 }
 
 body.app-slava-restraint .context-menu__item,
-body.app-slava-restraint .connection-popup__item,
-body.app-slava-restraint .connection-popup__category-label--button {
+body.app-slava-restraint .connection-popup__item {
   border-radius: var(--sr-radius-control);
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
@@ -817,8 +814,7 @@ body.app-slava-restraint .connection-popup__category-label--button {
 }
 
 body.app-slava-restraint .context-menu__item:hover:not(:disabled, [aria-disabled='true']),
-body.app-slava-restraint .connection-popup__item:hover:not(:disabled),
-body.app-slava-restraint .connection-popup__category-label--button:hover {
+body.app-slava-restraint .connection-popup__item:hover:not(:disabled) {
   background: var(--sr-surface-control-hover);
   color: var(--sr-ink-bold);
 }
@@ -871,6 +867,20 @@ body.app-slava-restraint .connection-popup__category-label {
   font-size: var(--sr-type-meta);
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* Design: the category label drawn as a button keeps the meta heading look; hover is main's row
+   hover, the same fill and ink the item rows take, so every row in the list hovers alike. */
+body.app-slava-restraint .connection-popup__category-label--button {
+  border-radius: var(--sr-radius-control);
+  transition:
+    background-color var(--sr-motion-fast),
+    color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .connection-popup__category-label--button:hover {
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
 }
 
 body.app-slava-restraint .connection-popup__close {
@@ -1200,7 +1210,7 @@ body.app-slava-restraint .chat__tool-status {
 }
 
 body.app-slava-restraint .chat__system--error {
-  color: var(--sr-danger);
+  color: var(--sr-error);
 }
 
 /* GM, Q116 a: a person-only refusal in the chat: GM's line, the agents' text
@@ -1227,6 +1237,21 @@ body.app-slava-restraint .chat__system--success {
   color: var(--sr-success);
 }
 
+/* Design: a `backtick` span in a chat or error line is inline code (lib/codeSpans). The mono face,
+   the line's own colour (so the error, neutral or because tone carries over) and size (the mono
+   face's x-height equals the sans', 0.55em against 0.546em, so no shrink), no box. It sits
+   on the line as one unit: it moves to the next line whole and wraps inside only when it is wider
+   than the line itself. */
+body.app-slava-restraint .code-span {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+  font-family: var(--sr-mono);
+  /* A command is typed as shown: no ligatures ("--" stays two hyphens). */
+  font-variant-ligatures: none;
+  overflow-wrap: anywhere;
+}
+
 body.app-slava-restraint .chat__tool-header {
   color: var(--sr-ink-light);
 }
@@ -1247,11 +1272,11 @@ body.app-slava-restraint .chat__tool-body {
 
 body.app-slava-restraint .chat__tool--error,
 body.app-slava-restraint .chat__tool--error .chat__tool-output {
-  border-color: var(--sr-danger-border);
+  border-color: var(--sr-error-border);
 }
 
 body.app-slava-restraint .chat__tool--error .chat__tool-output {
-  color: var(--sr-danger);
+  color: var(--sr-error);
 }
 
 body.app-slava-restraint .chat-panel__input {
@@ -1349,8 +1374,8 @@ body.app-slava-restraint .chat-panel__send:disabled {
 
 body.app-slava-restraint .chat-panel__send--stop {
   border-color: var(--sr-accent-border-medium);
-  background: var(--sr-danger-soft);
-  color: var(--sr-danger);
+  background: var(--sr-accent-soft);
+  color: var(--sr-accent);
 }
 
 body.app-slava-restraint .chat-panel__send--stop:hover {
@@ -1371,7 +1396,7 @@ body.app-slava-restraint .chat-panel__chip {
 }
 
 body.app-slava-restraint .chat-panel__chip--error {
-  border-color: var(--sr-accent-border-strong);
+  border-color: var(--sr-error-border);
 }
 
 body.app-slava-restraint .chat-panel__chip-label {
@@ -1382,7 +1407,7 @@ body.app-slava-restraint .chat-panel__chip-label {
 }
 
 body.app-slava-restraint .chat-panel__chip-error {
-  color: var(--sr-danger);
+  color: var(--sr-error);
 }
 
 body.app-slava-restraint .chat-panel__chip-close {
@@ -1409,7 +1434,7 @@ body.app-slava-restraint .chat-panel__notice {
 body.app-slava-restraint .chat-panel__thinking {
   border: 1px solid var(--sr-accent-border);
   border-radius: var(--sr-radius-control-lg);
-  background: var(--sr-danger-soft);
+  background: var(--sr-accent-soft);
   box-shadow: none;
 }
 
@@ -1429,7 +1454,7 @@ body.app-slava-restraint .chat-panel__thinking-header:hover {
 
 body.app-slava-restraint .chat-panel__thinking-indicator,
 body.app-slava-restraint .chat-panel__thinking-label {
-  color: var(--sr-danger);
+  color: var(--sr-accent);
 }
 
 body.app-slava-restraint .chat-panel__thinking-caret,
@@ -1788,10 +1813,6 @@ body.app-slava-restraint .chat-panel__chip-spinner::before {
   animation: slava-dot-matrix-beam 960ms steps(4, end) infinite;
 }
 
-body.app-slava-restraint .toolbar__button--executing {
-  position: relative;
-}
-
 body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
   opacity: 0;
 }
@@ -2070,7 +2091,7 @@ body.app-slava-restraint .inspector__actions {
 }
 
 body.app-slava-restraint .inspector__model-error {
-  color: var(--sr-accent);
+  color: var(--sr-error);
   font-family: var(--sr-mono);
 }
 
@@ -2314,6 +2335,10 @@ body.app-slava-restraint .toolbar__button {
     border-color 120ms ease,
     box-shadow 120ms ease,
     transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body.app-slava-restraint .toolbar__button--executing {
+  position: relative;
 }
 
 body.app-slava-restraint .toolbar__button::after {
@@ -2896,6 +2921,12 @@ body.app-slava-restraint .agent-log__entry--muted .agent-log__msg {
 @media (prefers-reduced-motion: reduce) {
   body.app-slava-restraint .agent-log--executing .agent-log__signal-cell {
     animation: none;
+  }
+
+  /* After the hide and notice-action rules above, which set the transitions. */
+  body.app-slava-restraint .agent-log__hide,
+  body.app-slava-restraint .agent-log-hidden-notice__action {
+    transition: none;
   }
 }
 
@@ -4229,10 +4260,11 @@ body.app-slava-restraint .canvas-tabs-wrap {
   gap: 6px;
 }
 
-/* While following, above the mask painter's scrim (1000) and agent cursors
-   (1001), as CanvasTabs.css raises it; this skin rule is more specific, so
-   it needs its own twin (fix round 3 of PR #200, LOW-3: live, the scrim
-   still covered the bar). */
+/* While following an agent's switch, the pill (and its "Opening “X”…" bar)
+   sits above a full-screen modal's scrim, the mask painter's (z-index 1000)
+   and agent cursors (1001), as it does over the other editors, so the bar
+   that says why the canvas is read-only shows. Below dialogs (10000) and
+   the offline row. */
 body.app-slava-restraint .canvas-tabs-wrap[data-following] {
   z-index: 1002;
 }
@@ -4673,7 +4705,7 @@ body.app-slava-restraint .final-export__start {
 }
 
 body.app-slava-restraint .final-export__error {
-  color: var(--line-warning, #ff7a68);
+  color: var(--line-warning, var(--sr-error));
   overflow-wrap: anywhere;
 }
 
@@ -4787,13 +4819,13 @@ body.app-slava-restraint .editor-tl__clip {
 body.app-slava-restraint .editor-tl__clip--edited {
   border-color: var(--sr-accent-border);
   background:
-    linear-gradient(135deg, rgba(255, 90, 31, 0.26), rgba(255, 90, 31, 0.14));
+    linear-gradient(135deg, color-mix(in srgb, var(--sr-accent) 26%, transparent), color-mix(in srgb, var(--sr-accent) 14%, transparent));
 }
 
 body.app-slava-restraint .editor-tl__clip--selected {
   outline: 1px solid var(--sr-accent);
   outline-offset: 1px;
-  box-shadow: 0 0 12px rgba(255, 90, 31, 0.18);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--sr-accent) 18%, transparent);
 }
 
 body.app-slava-restraint .editor-tl__clip-handle {
@@ -4822,7 +4854,7 @@ body.app-slava-restraint .editor-tl__clip-vol {
 
 body.app-slava-restraint .editor-tl__playhead {
   background: var(--sr-accent);
-  box-shadow: 0 0 8px rgba(255, 90, 31, 0.58);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--sr-accent) 58%, transparent);
 }
 
 @media (max-width: 820px) {
@@ -4906,9 +4938,9 @@ body.app-slava-restraint .edit-node__speed-badge {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: var(--sr-accent-soft);
-  border: 1px solid var(--sr-accent-border);
-  color: var(--sr-accent);
+  background: var(--sr-surface-control);
+  border: 1px solid var(--sr-edge-strong);
+  color: var(--sr-ink-meta);
   font-family: var(--sr-mono, monospace);
   font-size: 8px;
   padding: 1px 5px;

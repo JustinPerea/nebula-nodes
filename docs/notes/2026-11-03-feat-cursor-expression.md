@@ -24,7 +24,7 @@ states show there.
 | run | the halo gives way to a thin 120° arc orbiting the arrow for one turn (1.2 s) | a full thin circle for 1.2 s |
 | propose | dashed halo; mark slot: the ghost card's dashed outline | the same |
 | wait | dashed halo; mark slot: the pin's badge with its note glyph | the same |
-| error | one sideways shake, ±4 px on a low-damping spring; the halo flashes red once (400 ms) | a red halo for the gesture's length |
+| error | one sideways shake, ±4 px on a low-damping spring; the halo flashes the error tone once (400 ms; yellow, `--sr-error`, since design moved errors off the red, which is only for delete and remove) | an error-tone halo for the gesture's length |
 
 ## The state machine (`lib/agentCursorExpression.ts`)
 

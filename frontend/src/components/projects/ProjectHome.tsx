@@ -6,15 +6,17 @@ import { editsRecoveredToast, filedCopyLine, OPEN_RECENTLY_DELETED, restoreCopyF
 import type { CanvasLimit, CanvasLimitContext, NoticeNow } from './catalogRestoreCopy';
 import { ProjectCounts } from './projectFacts';
 import { editedDate } from './editedDate';
+import { homeLineDrawn } from './homeLine';
 import { UndoToast } from './UndoToast';
 import { useRestoreCopyState, type RestoreCopy } from './restoreCopyLoader';
 import { actorLabel } from '../../lib/trash';
+import { writtenDay } from '../../lib/writtenDate';
 import { removalNote } from './trashDays';
 import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } from '../../lib/projectPurgeCopy';
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
-import { failureMessage, besideButton } from '../../lib/errorCopy';
+import { failureMessage, besideButton, NEW_PROJECT_WAITING_TITLE } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
 import { editsSavedLine } from './unsavedEditsCopy';
@@ -77,8 +79,8 @@ export interface ProjectHomeProps {
    * PR #199, 1): Nebula's own reopen this tab couldn't follow, in the
    * neutral box (nothing was lost) with [Open “<openFollowedName>”].
    * 'partLoad' (GM r24, c): a flow's chunk didn't load; the same box with
-   * [Try again]. */
-  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad';
+   * [Try again]. 'retrying' (design): the first load is trying again by itself; [Try now]. */
+  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad' | 'retrying';
   /** The project [Open “…”] opens, with retry 'openFollowed'. */
   openFollowedName?: string | null;
   /** The open project's reopen that can't go yet (review 18 MEDIUM-2, GM r30
@@ -101,6 +103,8 @@ export interface ProjectHomeProps {
    * counts come with it: while it couldn't (a tab that isn't connected as you), they show
    * nothing rather than a 0 nobody counted. */
   workLoaded?: boolean;
+  /** Design: the first load found no server (retrying or out of tries): New project waits, and says why. */
+  serverWaiting?: boolean;
   trash?: TrashedProject[];
   /** The project the person just moved to Recently deleted (the Undo
    * toast). Its Undo may pass the project limit (Justin, 2026-10-29), so it
@@ -323,7 +327,7 @@ function ProjectCard({ project, busy, offline = false, counts = true, onOpen, on
 function deletedDate(value: string): string {
   const date = new Date(value);
   return Number.isFinite(date.getTime())
-    ? `Deleted ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)}`
+    ? `Deleted ${writtenDay(date)}`
     : 'Deleted';
 }
 
@@ -656,7 +660,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   agentClosedNote = null, onDismissAgentClosedNote = noop,
   canvasHeldUnreadable = null, onDismissCanvasHeldUnreadable = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
-  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, retryPersonOnly = false }: ProjectHomeProps) {
+  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, serverWaiting = false, retryPersonOnly = false }: ProjectHomeProps) {
   const retryLock = usePersonLock('delete projects for good', retry !== 'none' && retryPersonOnly);
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
@@ -664,11 +668,22 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   // "Try again" (a read) still work.
   const offline = useBackendOffline();
   const locked = busy || offline;
+  const waitsForLoad = !workLoaded;
   const stack = useRef<HTMLDivElement>(null);
   const recentHeading = useRef<HTMLHeadingElement>(null);
+  const pageTitle = useRef<HTMLHeadingElement>(null);
+  // Design: where focus lands when the page has to put it somewhere (the notice stack emptied, a
+  // purge finished): "Recent projects", and while that heading is hidden (the first load has not
+  // landed) the page's own title, which is always drawn. A hidden element takes no focus, and the
+  // body is never the answer. The title, not the first-load line's button: that line goes away.
+  const loadedNow = useRef(workLoaded);
+  useEffect(() => { loadedNow.current = workLoaded; }, [workLoaded]);
+  const landing = useMemo(() => ({
+    get current(): HTMLElement | null { return (loadedNow.current ? recentHeading.current : null) ?? pageTitle.current; },
+  }), []) as RefObject<HTMLElement | null>;
   // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
   const errorKept = useOfflineFirstBecause(error ?? null);
-  const showError = !unsavedEdits && Boolean(errorKept);
+  const showError = homeLineDrawn(errorKept, unsavedEdits);
   const current = useMemo<NoticeNow>(() => ({ projects, trash, canvasNotFiled, projectLimit }), [projects, trash, canvasNotFiled, projectLimit]);
   // The waiting line, unless the restore notice already says the limit.
   // Review 13 of PR #199 (LOW-1): the restore copy loads when one of its
@@ -686,17 +701,17 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
     ...(unsavedEdits ? ['held' as const] : editsSavedAs ? ['saved' as const] : []),
     ...(showError ? ['error' as const] : []),
   ];
-  const { track } = useNoticeStackFocus(noticeKeys, stack, recentHeading);
-  // GM #198 r22 Q2: the notice saying where Try again saved the edits takes
+  const { track } = useNoticeStackFocus(noticeKeys, stack, landing);
+  // Design: the notice saying where Try again saved the edits takes
   // the banner's place, and focus goes to its × (never [Open]), unless the
   // person had moved on to something else. While the projects loaded, the
   // stack rule may have parked focus on "Recent projects": that counts as
-  // still the banner's.
+  // still the banner's (the page's title while that heading is hidden).
   const savedAsCopy = copyNotice?.open ? copyNotice : null;
   useEffect(() => {
     if (!savedAsCopy) return;
     const active = document.activeElement;
-    if (active && active !== document.body && active.isConnected && active !== recentHeading.current
+    if (active && active !== document.body && active.isConnected && active !== recentHeading.current && active !== pageTitle.current
       && !stack.current?.contains(active)) return;
     stack.current?.querySelector<HTMLElement>(`[data-notice="copy"] ${NOTICE_DISMISS}`)?.focus();
   }, [savedAsCopy]);
@@ -733,9 +748,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       : undefined;
     const target = row?.querySelector<HTMLElement>('button')
       ?? document.querySelector<HTMLElement>('#recently-deleted-title button')
-      ?? recentHeading.current;
+      ?? landing.current;
     target?.focus();
-  }, [trash]);
+  }, [trash, landing]);
   // A purge that failed (busy came and went, the rows are still there) drops
   // its target, so a later expiry or another tab doesn't move focus.
   useEffect(() => {
@@ -762,8 +777,12 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       </header>
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">
-          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title">A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
-          <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
+          <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title" ref={pageTitle} tabIndex={-1}>A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
+          {/* Until the first load lands there is no project list to add to (design): it keeps focus and its
+              tooltip (aria-disabled, as a locked control does) and says why when the server is what it waits on. */}
+          <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)}
+            {...(waitsForLoad ? { 'aria-disabled': true as const, ...(serverWaiting ? { title: NEW_PROJECT_WAITING_TITLE } : {}) } : {})}
+            onClick={waitsForLoad ? undefined : () => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
         {/* Every notice on the home, in page order, under one focus rule
@@ -799,27 +818,31 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               <span className="project-home__notice-actions">
                 <button type="button" className="project-home__notice-restore" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
                   {retry === 'partLoad' ? 'Try again' : <>Open “{openFollowedName}”</>}</button></span></div></div>
-          : showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
+          : showError && <div {...track('error')}>{/* Design: the first load trying again by itself is neutral, like the line after the tries
+              (a because line, drawn neutral by styles/becauseLine.css): nothing is lost while it waits. */}
+            <div className="project-home__error" role="alert" tabIndex={-1} data-line-box="" {...(retry === 'retrying' ? { 'data-line-neutral': '' } : {})}>
             {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
               : <span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
             {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
-              {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : 'Try again'}</button>}
+              {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : retry === 'retrying' ? 'Try now' : 'Try again'}</button>}
             <PersonLockLine lock={retryLock} place="control" /></div></div>}
         </div>}
         </div>
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
-            <h2 id="recent-projects-title" ref={recentHeading} tabIndex={-1}>Recent projects{projects.length > 0 && <span className="project-home__count" aria-hidden="true">{projects.length}</span>}</h2>
+            {/* Design: no heading over a list that hasn't loaded yet. */}
+            <h2 id="recent-projects-title" ref={recentHeading} tabIndex={-1} hidden={!workLoaded || undefined}>Recent projects{projects.length > 0 && <span className="project-home__count" aria-hidden="true">{projects.length}</span>}</h2>
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
             : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} counts={workLoaded} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover}
               lockLine={reopenHold?.id === project.id ? reopenHold.line : null} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
-                : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
+                : !error && !unsavedEdits && workLoaded && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)}
+                  onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
       </main>

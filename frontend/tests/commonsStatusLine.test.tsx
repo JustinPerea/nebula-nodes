@@ -71,12 +71,12 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
   // anything still blocking after that." A used budget needs a restart first.
   ['the sealed-labels pause with the call budget used', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false,
     worker: { state: 'budget_exhausted', running: false, budget_used: 40, budget: 40 } },
-    'Stopped · call budget used (40/40)', null,
+    'Stopped · call budget used, 40 of 40', null,
     [/^Library analysis is stopped because it used 40 of this run’s 40 calls/,
       /Restart Nebula to reset it\. Analysis then stays paused until the reference labels are sealed\.$/]],
   ['the agent-review pause with the call budget used', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: true,
     worker: { state: 'budget_exhausted', running: false, budget_used: 40, budget: 40 } },
-    'Stopped · call budget used (40/40)', null,
+    'Stopped · call budget used, 40 of 40', null,
     [/^Library analysis is stopped because it used 40 of this run’s 40 calls/,
       /Restart Nebula to reset it\. Analysis then stays paused until the agent review is closed\.$/]],
   ['a stopped worker', { worker: stopped }, 'Stopped', 'Start',
@@ -84,12 +84,12 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
   ['a stopped worker with a queue', { worker: stopped, queue: queue(12, 3) }, 'Stopped · 12 queued · 3 held', 'Start',
     [/^Library analysis is stopped\./, /12 references are waiting to be read/, /3 references added by agents are held until you accept them in the Inbox/, /Start runs it/]],
   ['a busy machine', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 41.5, load_threshold: 32 },
-    'Paused · computer busy (41.5/32)', 'Stop',
-    [/^Library analysis is paused while this computer is busy/, /Its load is 41\.5, above the 32 set in “Pause above load” in Settings\./, /resumes on its own/]],
+    'Paused · computer busy', 'Stop',
+    [/^Library analysis is paused while this computer is busy\./, /Load 41\.5 is above your pause limit of 32 \(“Pause above load”, under Meter in Settings\)\./, /resumes on its own/]],
   ['the daily cap', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
     meter: { calls: 20, cap: 20, remaining: 0, resets_at: RESETS_AT } },
-    `Paused until ${resetTime} · daily cap`, 'Stop',
-    [/^Library analysis is paused\. It made 20 analysis calls today, and Settings has “Analysis calls per day” at 20\./, new RegExp(`resumes on its own at ${resetTime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)]],
+    'Paused · daily cap', 'Stop',
+    [/^Library analysis is paused\. It made 20 analysis calls today, and Settings has “Analysis calls per day” at 20\./, new RegExp(`Resumes at ${resetTime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, when the daily cap resets\\.`)]],
   // Settings takes a cap from 0 (review of sf): a cap of 0 never resets, and a
   // cap lowered below today's calls reports the calls made, not the cap.
   ['a daily cap of 0', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
@@ -98,10 +98,10 @@ const cases: Array<[string, Partial<CommonsStatus>, string, string | null, RegEx
     [/^Library analysis is paused\. Settings has “Analysis calls per day” at 0, so it reads nothing\. Raise it to resume\.$/]],
   ['a cap lowered below today\'s calls', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null },
     meter: { calls: 25, cap: 10, remaining: 0, resets_at: RESETS_AT } },
-    `Paused until ${resetTime} · daily cap`, 'Stop',
-    [/It made 25 analysis calls today, and Settings has “Analysis calls per day” at 10\./, /resumes on its own at/]],
+    'Paused · daily cap', 'Stop',
+    [/It made 25 analysis calls today, and Settings has “Analysis calls per day” at 10\./, /Resumes at /]],
   ['a used budget', { worker: { state: 'budget_exhausted', running: false, budget_used: 40, budget: 40 } },
-    'Stopped · call budget used (40/40)', null,
+    'Stopped · call budget used, 40 of 40', null,
     [/^Library analysis is stopped because it used 40 of this run’s 40 calls/, /Restart Nebula to reset it\.$/]],
   ['an analyzing worker', { worker: { state: 'analyzing', running: true, budget_used: 0, budget: null }, queue: queue(12, 0) },
     'Analyzing · 12 queued', 'Stop', [/^Library analysis is reading references: 12 waiting\.$/]],
@@ -140,23 +140,39 @@ it.each(cases)('says %s in a short status, with the full explanation as its tool
   }
 });
 
-// The parts (counts, load, the reset time) make some statuses longer than the
-// state alone. The longest realistic ones, measured live at Inter 400 11px:
-// "Paused · computer busy (140.2/128) · 99 held" 235.8 px beside Stop (245 px
-// of room at 1280), "Stopped · call budget used (9999/9999) · 99 held" 257.5
-// px with no control (301 px). Characters stand in for pixels here (jsdom
-// has no layout); the ellipsis stays as the safety net beyond these.
+// The parts (counts, the reset time) make some statuses longer than the state
+// alone. Live widths at Inter 400 11px with the Updates chip showing (the
+// normal state): the status has 190 px beside Stop or Start and 246 px with no
+// control, at both 1280 and 1440. Natural widths of the longest realistic ones
+// beside a control: "Paused · computer busy · 99 held" 174.6 px, "Stopped ·
+// 9,999 queued · 999 held" 180.9, "Analyzing · 999 queued · 99 held" 171.8,
+// "Paused · daily cap · 99 held" 143.3. With no control: "Stopped · call budget
+// used, 9,999 of 9,999" 222.7 (the hold branch, no tail). The budget line with
+// held adds can run past its room: "... 9,999 of 9,999 · 99 held" is 271.1 and
+// "... 999 of 999 · 99 held" 251.9, so they take the ellipsis (below); "... 999
+// of 999 · 9 held" is 245.0 and fits. Characters stand in for pixels here
+// (jsdom has no layout); the ellipsis stays as the safety net beyond these.
 it.each([
-  // 44 characters since GM's "computer busy" (it matches the tooltip's "this computer"): 235.8 px, measured.
-  ['beside a control', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 140.2, load_threshold: 128, queue: queue(0, 99) }, 44],
+  // The busy line keeps its reading in the tooltip, so it is the shortest of these.
+  ['beside a control', { worker: { state: 'paused_load', running: true, budget_used: 0, budget: null }, load: 140.2, load_threshold: 128, queue: queue(0, 99) }, 32],
   ['beside a control', { worker: stopped, queue: queue(9999, 999) }, 43],
   ['beside a control', { worker: { state: 'analyzing', running: true, budget_used: 0, budget: null }, queue: queue(999, 99) }, 43],
   ['beside a control', { worker: { state: 'cap_reached', running: true, budget_used: 0, budget: null }, queue: queue(0, 99),
-    meter: { calls: 999, cap: 999, remaining: 0, resets_at: '2026-09-28T23:59:00' } }, 43],
-  ['with no control', { worker: { state: 'budget_exhausted', running: false, budget_used: 9999, budget: 9999 }, queue: queue(0, 99) }, 48],
+    meter: { calls: 999, cap: 999, remaining: 0, resets_at: '2026-09-28T23:59:00' } }, 28],
+  ['with no control', { evaluation_waiting: true, evaluation_state: 'open', evaluation_assisted: false,
+    worker: { state: 'budget_exhausted', running: false, budget_used: 9999, budget: 9999 } }, 42],
 ] as Array<[string, Partial<CommonsStatus>, number]>)('keeps a long realistic status short enough to show whole %s', (_, patch, cap) => {
   const { text } = rendered(status(patch));
   expect([...text].length, `"${text}"`).toBeLessThanOrEqual(cap);
+});
+
+// The budget is set by a developer (NEBULA_COMMONS_CALL_BUDGET), so this line
+// may take the ellipsis; the tooltip still carries both numbers and the held count.
+it('lets the call-budget worst case with held adds truncate, and keeps its numbers in the title', () => {
+  const { text, title } = rendered(status({ worker: { state: 'budget_exhausted', running: false, budget_used: 9999, budget: 9999 }, queue: queue(0, 99) }));
+  expect(text).toBe('Stopped · call budget used, 9,999 of 9,999 · 99 held');
+  expect(title).toMatch(/used 9,999 of this run’s 9,999 calls/);
+  expect(title).toMatch(/99 references added by agents are held/);
 });
 
 it('promises nothing it cannot keep: a stopped worker never resumes on its own', () => {

@@ -1,4 +1,4 @@
-"""Agents ask the person questions and wait for the answers (Q125 item 1).
+"""Agents ask the person questions and wait for the answers.
 
 Justin, 2026-10-24: "Yes, all four, in that order", then "go with your
 suggestions". Item 1 of four: an agent asks 1-5 questions, the person
@@ -258,10 +258,10 @@ def test_update_words_follow_gm_copy():
     book = QuestionBook(Clock())
     one = book.create(agent=ME, project_id="p", spec=parse_questions({"questions": [{"text": "Crop?"}]}))
     two = book.create(agent=ME, project_id="p", spec=parse_questions(TWO))
-    assert update_text(one) == "Claude Code has a question."
-    assert update_text(two) == "Claude Code has 2 questions."
+    assert update_text(one) == "Has a question"
+    assert update_text(two) == "Has 2 questions"
     for status, line in (("answered", "Answered."), ("dismissed", "Dismissed."),
-                         ("withdrawn", "Withdrawn by Claude Code.")):
+                         ("withdrawn", "Withdrawn.")):
         made = book.create(agent=OTHER if status == "withdrawn" else ME, project_id="p",
                            spec=parse_questions({"questions": [{"text": "Crop?"}]}))
         made.agent = ME
@@ -291,11 +291,11 @@ def test_asking_posts_one_update_with_answer_and_sends_the_key_to_the_browser_on
     assert view["status"] == "open" and view["id"].startswith("qs_")
     assert view["nodeIds"] == [n1] and body["dropped"] == ["n99"]
     (note,) = _question_updates(asked)
-    assert note["text"] == "Claude Code has 2 questions."
+    assert note["text"] == "Has 2 questions"
     assert note["source"] == "nebula" and note["author"]["name"] == "Claude Code"
     assert note["refs"] == [n1]
     assert note["actions"] == [{"label": "Answer", "op": {"kind": "question.answer", "questionId": view["id"]}}]
-    # GM 2026-10-29 (the held needs-you count): how many it asks, as its line says, and when.
+    # Design 2026-10-29 (the held needs-you count): how many it asks, as its line says, and when.
     assert note["questions"] == {"id": view["id"], "count": 2, "since": view["createdAt"]}
     assert view["update"] == {"id": note["id"], "projectId": asked.project_id}
     # Template words only: the questions and the note are the form's, not the Update's.
@@ -313,7 +313,7 @@ def test_asking_posts_one_update_with_answer_and_sends_the_key_to_the_browser_on
 def test_one_question_says_a_question(asked):
     _ask(asked, {"questions": [{"text": "Square or wide?", "options": ["Square", "Wide"]}]}, headers=CODEX)
     (note,) = _question_updates(asked)
-    assert note["text"] == "Codex has a question."
+    assert note["text"] == "Has a question"
 
 
 def test_only_a_named_agent_asks(asked):
@@ -439,7 +439,7 @@ def test_only_the_asker_withdraws(asked):
     assert response.status_code == 200
     assert response.json()["questions"]["status"] == "withdrawn"
     (note,) = _question_updates(asked)
-    assert note["outcome"] == "Withdrawn by Claude Code."
+    assert note["outcome"] == "Withdrawn."
     assert _answer(asked, set_id, GOOD_ANSWERS).status_code == 409
 
 
@@ -486,7 +486,7 @@ def test_a_wait_returns_as_soon_as_the_person_answers(asked):
 
 
 def test_an_abandoned_answers_wait_frees_its_waiter_slot(asked):
-    # Review 1 of PR #114 (M2): the waits share /api/canvas/events' 32 slots,
+    # PR #114: the waits share /api/canvas/events' 32 slots,
     # and a client that went away held one for the rest of its wait.
     from services.canvas_events import MAX_WAITERS
 

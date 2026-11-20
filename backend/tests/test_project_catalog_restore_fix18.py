@@ -1,19 +1,19 @@
-"""PR #199 fix round 18 (review 16; GM r25 and r26), the backend's part.
+"""PR #199 (design), the backend's part.
 
-- HIGH-1 (both lenses): an agent's reopen of the project the tab shows
+- An agent's reopen of the project the tab shows
   renumbers a duplicated or pasted node (U -> n2), and the tab's handoff,
   taken before the open, still holds U. The handoff now learns the open's
   {old: new}: one n2 with the tab's late typing, on disk and live.
-- MEDIUM-1: the boot renumbering takes the project's newer values, numbers
+- The boot renumbering takes the project's newer values, numbers
   past every id the project used, and reloads a tab from before the boot.
-- NIT-1 (renumber-everywhere): CLIGraph itself refuses a non-nN id.
-- NIT-3: the boot's renumbering rides on first syncs only until a
+- CLIGraph itself refuses a non-nN id.
+- The boot's renumbering rides on first syncs only until a
   replacement or the person's read of the project.
-- kept-ui-rules NIT-3: imported output types read the shared port rule.
-- agents-grace NIT-1 and NIT-2: the kept marker in a folder Nebula can't
+- Imported output types read the shared port rule.
+- The kept marker in a folder Nebula can't
   write, and a directory where it goes.
-- GM r25 5: copy names never say "copy 2 2" or "Recovered" twice.
-- GM r26: agents are never offered a tab-local id in the selection.
+- Design: copy names never say "copy 2 2" or "Recovered" twice.
+- Design: agents are never offered a tab-local id in the selection.
 """
 from __future__ import annotations
 
@@ -109,10 +109,10 @@ def _lands_once(client, store, delta: str, new: str, value: str) -> None:
     assert again.json()["renumbered"] == {}
 
 
-# -- HIGH-1: the handoff learns the open's ids --------------------------------------------
+# -- The handoff learns the open's ids --------------------------------------------
 
 def test_high1_an_agents_reopen_lands_the_tabs_late_typing_on_one_node(app):
-    """Review 16 renumber-everywhere's RE16 (typing variant)."""
+    """renumber-everywhere's RE16 (typing variant)."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
     opened = _open(client, delta, headers=CODEX)
@@ -124,7 +124,7 @@ def test_high1_an_agents_reopen_lands_the_tabs_late_typing_on_one_node(app):
 
 
 def test_high1_the_agents_grace_probe_p2_lands_on_the_new_id(app):
-    """Review 16 agents-grace's P2: the tab's autosave built before the
+    """agents-grace's P2: the tab's autosave built before the
     renumbering lands after it."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client, "dup")
@@ -201,7 +201,7 @@ def test_high1_a_handoff_from_anyone_but_the_persons_tab_keeps_the_stored_copy(a
 
 
 def test_high1_the_open_lists_the_renumbered_nodes_as_nebulas(app):
-    """Review 16 NIT-2's B13: at the open the new ids are Nebula's nodes
+    """At the open the new ids are Nebula's nodes
     (_backendNodeIds), so an agent's delete of one isn't undone by the next
     read, which would keep it as a node only the tab had."""
     client, store, *_ = app
@@ -220,7 +220,7 @@ def test_high1_the_handoffs_renumbering_ends_with_the_handoff(app):
     new = _open(client, delta, headers=CODEX).json()["renumbered"][DUP]
     kept = _on_disk(store, delta)[main_module._HANDOFF_RENUMBERED]
     assert {key: kept[key] for key in ("revision", "map")} == {"revision": old_rev, "map": {DUP: new}}
-    # Round 19 (review 17 MEDIUM-1): the node as the open loaded it, the handoff's baseline.
+    # The node as the open loaded it, the handoff's baseline.
     assert kept["base"][new]["params"] == {"value": "dup-old"}
     _create(client, "Alpha")  # the person's own switch ends every handoff
     assert main_module._HANDOFF_RENUMBERED not in _on_disk(store, delta)
@@ -235,7 +235,7 @@ def test_high1_a_renumbering_is_read_only_for_its_own_handoff():
     assert main_module._handoff_renumbering({}, "r1") == {}
 
 
-# -- MEDIUM-1: the boot renumbering ---------------------------------------------------------
+# -- The boot renumbering ---------------------------------------------------------
 
 def _legacy_state(client, store, state: Path, *, live_value: str, project_value: str,
                   label: str | None = None, position: dict | None = None, history: list | None = None) -> str:
@@ -276,7 +276,7 @@ def _boot(state: Path) -> CLIGraph:
 
 
 def test_medium1_boot_renumber_prefers_the_projects_typing_over_state_json(app):
-    """Review 16 renumber-everywhere's test, as it was written."""
+    """renumber-everywhere's test, as it was written."""
     client, store, _graph, state = app
     delta = _legacy_state(client, store, state, live_value="dup-first", project_value="dup-first dup-second")
     _boot(state)
@@ -364,7 +364,7 @@ def test_nit3_an_agents_read_doesnt_end_it(app):
     assert main_module._boot_first_sync().get("graphReplaced") is True
 
 
-# -- NIT-1: the live graph refuses a non-nN id itself -----------------------------------------
+# -- The live graph refuses a non-nN id itself -----------------------------------------
 
 def test_nit1_cligraph_refuses_a_uuid_id_on_every_write(tmp_path):
     state = tmp_path / "state.json"
@@ -403,7 +403,7 @@ def test_nit1_the_commit_uses_the_same_rule():
     main_module._require_backend_node_ids({"nodes": [{"id": "n1"}]})
 
 
-# -- kept-ui-rules NIT-3: imported outputs read the shared rule ------------------------------
+# -- Imported outputs read the shared rule ------------------------------
 
 def test_kept_ui_nit3_imported_output_types_read_the_shared_port_rule(monkeypatch):
     check = main_module._imported_output_type_is_valid
@@ -417,11 +417,11 @@ def test_kept_ui_nit3_imported_output_types_read_the_shared_port_rule(monkeypatc
     assert check("Text", "Image")
 
 
-# -- agents-grace NIT-1 and NIT-2: the kept marker ------------------------------------------
+# -- The kept marker ------------------------------------------
 
 @pytest.mark.unprivileged
 def test_grace_nit1_a_marker_in_a_folder_nebula_cant_write_pauses_no_boot(tmp_path, monkeypatch):
-    """Review 16 agents-grace's probe: three boots held a grace each."""
+    """agents-grace's probe: three boots held a grace each."""
     folder = tmp_path / "state"
     folder.mkdir()
     marker = folder / main_module.KEPT_MARKER_NAME
@@ -468,7 +468,7 @@ def test_grace_nit2_a_directory_at_the_marker_path_is_tried_once(tmp_path, monke
     assert len(calls) == 2
 
 
-# -- GM r25 5: copy names ---------------------------------------------------------------------
+# -- Design: copy names ---------------------------------------------------------------------
 
 def _named(*names: str) -> dict:
     return {"projects": {f"{index:032x}": {"name": name} for index, name in enumerate(names)}, "trash": {}}
@@ -500,7 +500,7 @@ def test_gm_r25_5_copy_names(source, taken, want):
 
 @pytest.mark.parametrize(("source", "taken", "want"), [
     ("X", (), "Recovered X"),
-    ("X", ("Recovered X",), "Recovered X copy"),  # GM r29, 2
+    ("X", ("Recovered X",), "Recovered X copy"),  # Design
     ("X copy", (), "Recovered X copy"),
     ("X copy 2", (), "Recovered X copy 2"),
     ("X copy 2", ("Recovered X copy 2",), "Recovered X copy 3"),
@@ -508,7 +508,7 @@ def test_gm_r25_5_copy_names(source, taken, want):
     ("Recovered X 2", ("Recovered X 2",), "Recovered X 2 copy"),
     ("Recovered Delta", ("Recovered Delta", "Recovered Delta copy"), "Recovered Delta copy 2"),
     ("Recovered Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 3"),
-    ("Shot 7", (), "Recovered Shot 7"),  # GM r29 2: no number in a name is read
+    ("Shot 7", (), "Recovered Shot 7"),  # Design: no number in a name is read
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),
     ("Recovered canvas 2", ("Recovered canvas 2",), "Recovered canvas 2 copy"),
     ("X (recovered)", (), "Recovered X"),
@@ -529,7 +529,7 @@ def test_gm_r25_5_every_backend_copy_follows_the_rule(app):
     assert store_module.lost_row_name("Recovered Delta", _named("Recovered Delta")) == "Recovered Delta copy"
 
 
-# -- GM r26: no tab-local id offered to agents in the selection -------------------------------
+# -- Design: no tab-local id offered to agents in the selection -------------------------------
 
 def test_gm_r26_a_selected_tab_local_node_is_left_out_of_what_agents_read(app):
     client, *_ = app

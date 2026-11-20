@@ -78,7 +78,7 @@ def api(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module.manager, "broadcast_raw", ignore)
     monkeypatch.setattr(main_module.manager, "broadcast_browser", ignore)
     # No canvas is open unless a test opens one: the arrange line reads
-    # manager.canvas_open() (PR #203 round 13; a socket another test left
+    # manager.canvas_open() (PR #203; a socket another test left
     # registered once made it say a canvas was open).
     monkeypatch.setattr(main_module.manager, "active_connections", [])
     monkeypatch.setattr(main_module.manager, "browser_connections", set())
@@ -411,7 +411,7 @@ def test_nebula_undo_lists_what_it_left_as_is(api):
 
 
 def test_nebula_undo_says_a_node_the_person_ran_since_stays(api):
-    """Q82: the person's run counts as changed since; `nebula undo` says so."""
+    """The person's run counts as changed since; `nebula undo` says so."""
     import time
 
     from tests.conftest import PERSON
@@ -436,7 +436,7 @@ def test_nebula_undo_says_a_node_the_person_ran_since_stays(api):
     out = io.StringIO()
     assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
     assert out.getvalue().splitlines() == [
-        "Undone: removed 1.", f"  {combined} ran since (run by the person), so it stays"]
+        "Undone: removed 1.", "  The person ran “Combine Text” after that step, so Nebula left it as it is."]
     assert combined in api.graph.nodes and rerouted not in api.graph.nodes
 
 
@@ -464,7 +464,7 @@ def test_nebula_undo_counts_a_wire_it_took_away_and_lists_each_part_once(api):
     out = io.StringIO()
     assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
     assert out.getvalue().splitlines() == [
-        "Undone: disconnected 1.", f"  {added} ran since (run by the person), so it stays"]
+        "Undone: disconnected 1.", "  The person ran “Text Input” after that step, so Nebula left it as it is."]
     assert api.graph.edges == [] and added in api.graph.nodes
 
 
@@ -495,9 +495,9 @@ def test_nebula_undo_lists_each_part_once_when_nothing_went_back(api):
     lines = text.splitlines()
     assert lines[0].startswith("Nothing went back")
     assert "Left as is" not in lines[0]
-    assert sorted(lines[1:]) == sorted([f"  {added} ran since (run by the person), so it stays",
+    assert sorted(lines[1:]) == sorted(["  The person ran “Text Input” after that step, so Nebula left it as it is.",
                                         "  “Text Input” changed after that step, so Nebula left it as it is."])
-    assert text.count("ran since (run by the person)") == 1 and text.count("changed after that step") == 1
+    assert text.count("The person ran “Text Input” after that step") == 1 and text.count("changed after that step") == 1
 
 
 def test_nebula_undo_of_a_steps_plan_goes_newest_first_and_stops_at_a_refusal(api, capsys):

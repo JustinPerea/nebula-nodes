@@ -120,7 +120,7 @@ describe('NodeLibrary accessible authoring', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Search nodes' }), { target: { value: 'animate a logo' } });
     const kling = screen.getByRole('button', { name: 'Kling 3.0 (Krea)' });
     expect(kling).toHaveAttribute('tabindex', '0');
-    expect(kling).toHaveAccessibleDescription(/Start image \(optional\).*End image \(optional\).*Video/);
+    expect(kling).toHaveAccessibleDescription(/Start image\s·\soptional.*End image\s·\soptional.*Video/);
     expect(addNode).not.toHaveBeenCalled();
     expect(executeGraph).not.toHaveBeenCalled();
     expect(useGraphStore.getState().nodes).toBe(graph.nodes);

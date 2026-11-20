@@ -3,8 +3,8 @@
    constant size. Position and the pop-in come from JS; CSS only fades. */
 
 .canvas-pin-layer {
-  --pin-color: #e8a33d;
-  --pin-ink: #1a1408;
+  --pin-color: var(--sr-ink);
+  --pin-ink: var(--sr-canvas);
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -63,9 +63,7 @@
   left: 16px;
   top: -11px;
   width: 220px;
-  /* 12px at the left: the status edge's 3px sits over the 1px border, so
-     the text keeps its place. */
-  padding: 8px 10px 8px 12px;
+  padding: 8px 10px;
   border: 1px solid #333;
   border-radius: 6px;
   background: #1a1a1a;
@@ -81,25 +79,6 @@
 .canvas-pin[data-side='left'] .canvas-pin__card {
   left: auto;
   right: 16px;
-}
-
-/* GM r22 Q2 (PR #200 fix round 14): the card's left status edge, its own
-   element, full height over the card's left border: the pin colour while
-   open, the author's colour once resolved. Nothing else on the card takes
-   it, so the Delete row is never tinted. */
-.canvas-pin__edge {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  left: -1px;
-  width: 3px;
-  border-radius: 6px 0 0 6px;
-  background: var(--pin-color);
-  pointer-events: none;
-}
-
-.canvas-pin--resolved .canvas-pin__edge {
-  background: var(--agent-color, #5b9dff);
 }
 
 .canvas-pin__text {
@@ -173,11 +152,11 @@
   gap: 10px;
   max-width: min(420px, calc(100vw - 32px));
   padding: 8px 10px 8px 12px;
-  border: 1px solid #5a2a26;
+  /* The edge and ink come from the --kept and --notice modifiers below. */
+  border: 1px solid transparent;
   border-radius: 6px;
   background: #1a1a1a;
   box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
-  color: #f2b8b2;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
 }
@@ -303,7 +282,7 @@
 }
 
 .canvas-pin-kept-more:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 

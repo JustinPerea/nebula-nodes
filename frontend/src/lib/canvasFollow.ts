@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import { useSyncExternalStore } from 'react';
 import { becauseLine } from './errorCopy';
 import { agentNameInSentence } from './personalAgentName';
@@ -122,7 +123,7 @@ export function followingReason(switching: FollowingSwitch | null): string {
  * opens." */
 export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number,
   byNebula = false): string {
-  const what = count !== undefined && count >= 2 ? `${count} nodes` : node === null ? 'the canvas' : `“${node}”`;
+  const what = count !== undefined && count >= 2 ? `${groupedCount(count)} nodes` : node === null ? 'the canvas' : `“${node}”`;
   if (byNebula) return `You can run ${what} when “${project}” opens.`;
   return followingLine({ heading: '', what: `run ${what}` }, { agent, projectName: project });
 }

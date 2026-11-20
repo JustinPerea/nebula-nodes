@@ -361,7 +361,7 @@ body.app-slava-restraint .settings-row__dot {
 
 body.app-slava-restraint .settings-row__dot--ok {
   background: var(--sr-success);
-  box-shadow: 0 0 8px rgba(110, 231, 183, 0.45);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--sr-success) 45%, transparent);
 }
 
 body.app-slava-restraint .settings-row__dot--warn { background: var(--sr-warning); }
@@ -464,7 +464,7 @@ body.app-slava-restraint .settings-row__foot {
 
 body.app-slava-restraint .settings-row__error {
   margin: 0;
-  color: var(--sr-danger);
+  color: var(--sr-error);
   font-size: var(--sr-type-label);
 }
 
@@ -535,7 +535,7 @@ body.app-slava-restraint .settings-sa__drop--over {
   background: var(--sr-accent-soft);
 }
 
-body.app-slava-restraint .settings-sa__drop--ready { border-style: solid; border-color: rgba(110, 231, 183, 0.3); }
+body.app-slava-restraint .settings-sa__drop--ready { border-style: solid; border-color: var(--sr-success-border); }
 body.app-slava-restraint .settings-sa__file { color: var(--sr-success); font-size: var(--sr-type-label); }
 
 body.app-slava-restraint .settings-sa__account {
@@ -601,7 +601,7 @@ body.app-slava-restraint .settings-apps__title {
   font: 500 var(--sr-type-body) var(--sr-ui);
 }
 body.app-slava-restraint .settings-apps__head .settings-hint { margin: 0; }
-body.app-slava-restraint .settings-apps code { font: var(--sr-type-label) var(--sr-mono); color: var(--sr-ink); }
+body.app-slava-restraint .settings-apps code:not(.code-span) { font: var(--sr-type-label) var(--sr-mono); color: var(--sr-ink); }
 /* The name gets its own line; the limit and Create share the next. */
 body.app-slava-restraint .settings-apps__new .settings-model-limit__controls { flex-wrap: wrap; }
 /* GM r14 (5), PR #204 round 9: Connect's lock line, on its own row under the controls, in the
@@ -871,7 +871,7 @@ body.app-slava-restraint .settings-folder__input {
 
 body.app-slava-restraint .settings-folder__input::placeholder { color: var(--sr-ink-faint); }
 body.app-slava-restraint .settings-folder__input:focus { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
-body.app-slava-restraint .settings-folder__input[aria-invalid="true"] { border-color: var(--sr-danger-border); }
+body.app-slava-restraint .settings-folder__input[aria-invalid="true"] { border-color: var(--sr-error-border); }
 body.app-slava-restraint .settings-folder__hint { margin-top: 6px; }
 body.app-slava-restraint .settings-folder .settings-row__error { margin-top: 6px; }
 

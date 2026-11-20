@@ -1,4 +1,4 @@
-"""PR #204 round 7 (review 5 NIT-1, MEDIUM-2): the chat socket echoes a message's `ref` on its
+"""PR #204: the chat socket echoes a message's `ref` on its
 person_required refusal, so the tab reads each refusal against the promote that message went
 out under, and knows which permission answer was refused. A ref that isn't a short string is
 left out."""

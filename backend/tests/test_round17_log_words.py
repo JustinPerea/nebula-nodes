@@ -1,11 +1,11 @@
-"""Round 17 (GM, item 2): the Agent log line for an agent setting fields.
+"""Design: the Agent log line for an agent setting fields.
 
-GM, verbatim: "Mixed labelled and unlabelled fields: labelled first in card
+Design, verbatim: "Mixed labelled and unlabelled fields: labelled first in card
 order, then raw keys, no serial comma. "Set “Aspect ratio”, “Seed” and
 seed_mode". Cap at 4 names then "and N more": "Set “Aspect ratio”, “Seed”,
 seed_mode, cfg and 2 more"."
 
-The cursor's bubble is unchanged (round 16): labels only, counted from three.
+The cursor's bubble is unchanged: labels only, counted from three.
 """
 from __future__ import annotations
 
