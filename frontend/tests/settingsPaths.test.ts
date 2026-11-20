@@ -2,8 +2,13 @@
  * Every "Settings > ..." path in the app's copy names a tab and a section that exist.
  *
  * Copy reaches the person from two places: the frontend (string literals and JSX text under frontend/src) and the
- * backend (string literals under backend/**\/*.py: node readiness lines, chat refusals, CLI and MCP text). Both are
- * read as text, comments and docstrings included, so a path written anywhere is held to the same names.
+ * backend (string literals under backend/**\/*.py: node readiness lines, chat refusals, CLI and MCP text). Agents read
+ * paths too: the markdown they are given (docs/, skills/, .claude/skills/, .agents/skills/, backend/**\/*.md, the
+ * repo's top-level notes) and the CLI package (nebula/). All are read as text, comments and docstrings included, so a
+ * path written anywhere is held to the same names.
+ *
+ * A path is read as a person reads it: one that wraps across consecutive comment lines is joined, doubled spaces and
+ * non-breaking spaces count as one space, and a name must have the real name's case ("Personal Agents" is wrong).
  *
  * The real names come from the Settings components: the tabs from SettingsTabs.tsx, and each tab's sections from the
  * headings (<h3>/<h4>) and folder labels of the files that tab renders. A path may start at a tab ("Settings >
@@ -70,8 +75,34 @@ function opening(text: string, names: readonly string[]): string | undefined {
 
 export type BadPath = { path: string; why: string };
 
+const COMMENT_LINE = /^\s*(?:\/\/+|#+|\*(?!\/)|\/\*+|<!--)/;
+const COMMENT_MARKER = /^\s*(?:\/\/+|#+|\*(?!\/)|\/\*+|<!--)[ \t]?/;
+
+/** The text as a person reads it: consecutive comment lines joined into one line (the way check-internal-ids joins
+ * them), a path that breaks after its ">" (or opens the next line with one) joined, and runs of spaces made one. */
+export function readAsProse(text: string): string {
+  const lines = text.replace(/\u00a0/g, ' ').split('\n');
+  const out: string[] = [];
+  for (const line of lines) {
+    const last = out.length - 1;
+    if (last >= 0 && COMMENT_LINE.test(out[last]) && COMMENT_LINE.test(line)) out[last] = `${out[last].trimEnd()} ${line.replace(COMMENT_MARKER, '').trim()}`;
+    else out.push(line);
+  }
+  return out.join('\n')
+    .replace(/>[ \t]*\n[ \t]*(?:(?:\/\/+|#+|\*(?!\/))[ \t]*)?(?=\S)/g, '> ')
+    .replace(/(\bSettings(?: >[ \t]*[^\n>.,;:()"'`<]+?)*)[ \t]*\n[ \t]*(?:(?:\/\/+|#+|\*(?!\/))[ \t]*)?>/g, '$1 >')
+    .replace(/[ \t]{2,}/g, ' ');
+}
+
+/** The longest known name that opens `text` when case is ignored: the real name written in another case. */
+function openingAnyCase(text: string, names: readonly string[]): string | undefined {
+  return [...names].sort((a, b) => b.length - a.length)
+    .find((name) => new RegExp(`^${escape(name)}(?![\\p{L}\\p{N}])`, 'iu').test(text));
+}
+
 /** Each "Settings > ..." path in `text` that names a tab or section the Settings don't have. */
-export function badSettingsPaths(text: string, tree: readonly Node[] = settingsTree()): BadPath[] {
+export function badSettingsPaths(source: string, tree: readonly Node[] = settingsTree()): BadPath[] {
+  const text = readAsProse(source);
   const bad: BadPath[] = [];
   const everySection = (nodes: readonly Node[]): Node[] => nodes.flatMap((n) => [n, ...everySection(n.children)]);
   const sections = tree.flatMap((tab) => tab.children.filter((c) => !Object.values(PROVIDER_LABELS).includes(c.name)).flatMap((c) => everySection([c])));
@@ -85,6 +116,11 @@ export function badSettingsPaths(text: string, tree: readonly Node[] = settingsT
       const pool = first ? [...tree, ...sections] : [...level];
       const name = opening(rest, pool.map((n) => n.name));
       if (name === undefined) {
+        const cased = openingAnyCase(rest, pool.map((n) => n.name));
+        if (cased !== undefined) {
+          bad.push({ path: `Settings > ${[...used, rest.slice(0, cased.length)].join(' > ')}`, why: `the name is "${cased}", in that case` });
+          break;
+        }
         const seen = (/^[^\n.,;:()"'`<>]+/.exec(rest)?.[0] ?? '').trim();
         // A path that stops where its prose does ("Settings > Providers and add a key") has no unknown name.
         const known = used.length > 0 || !/^[A-Z]/.test(seen);
@@ -104,11 +140,15 @@ export function badSettingsPaths(text: string, tree: readonly Node[] = settingsT
   return bad;
 }
 
-function files(dir: string, ext: RegExp, skip: RegExp): string[] {
+/** Dated notes (docs/notes/): each records what the copy said when it was written, the old text in its before columns
+ * included, so a path in one is history, not a claim about today's Settings. Everything else in docs/ is read. */
+const HISTORY = /[\\/]docs[\\/]notes[\\/]/;
+
+function files(dir: string, ext: RegExp, skip: RegExp, history?: RegExp): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
-    if (skip.test(path)) return [];
-    return statSync(path).isDirectory() ? files(path, ext, skip) : ext.test(entry) ? [path] : [];
+    if (skip.test(path) || history?.test(path + '/')) return [];
+    return statSync(path).isDirectory() ? files(path, ext, skip, history) : ext.test(entry) ? [path] : [];
   });
 }
 
@@ -158,17 +198,55 @@ describe('badSettingsPaths', () => {
   });
 });
 
+describe('badSettingsPaths reads a path the way a person does', () => {
+  it('reads a path wrapped across comment lines', () => {
+    expect(badSettingsPaths('// Turn it on in Settings > Preferences >\n// Run cost, then send again.'))
+      .toEqual([{ path: 'Settings > Preferences > Run cost', why: 'not a section of Preferences' }]);
+    expect(badSettingsPaths('# Open Settings >\n# Interface.')).toEqual([{ path: 'Settings > Interface', why: 'not a tab or a section' }]);
+    expect(badSettingsPaths('/**\n * See Settings > Preferences >\n * Personal agents.\n */')).toEqual([]);
+    expect(badSettingsPaths('// Open Settings\n// > Preferences > Run cost.')).toHaveLength(1);
+  });
+
+  it('fails a segment whose case differs from the real name', () => {
+    expect(badSettingsPaths('Open Settings > Preferences > Personal Agents.')).toEqual([{ path: 'Settings > Preferences > Personal Agents', why: 'the name is "Personal agents", in that case' }]);
+    expect(badSettingsPaths('Open Settings > preferences > personal agents.')).toHaveLength(1);
+    expect(badSettingsPaths('Add a key in Settings > providers.')).toHaveLength(1);
+    expect(badSettingsPaths('Open Settings > Preferences > Personal agents.')).toEqual([]);
+  });
+
+  it('reads doubled spaces as one', () => {
+    expect(badSettingsPaths('Open Settings  >  Preferences >  Personal  agents.')).toEqual([]);
+    expect(badSettingsPaths('Open Settings  >  Preferences >  Run  cost.')).toHaveLength(1);
+    expect(badSettingsPaths('Open Settings\u00a0>\u00a0Preferences >\u00a0Run cost.')).toHaveLength(1);
+  });
+});
+
 describe('every Settings path in the app\'s copy names a tab and a section that exist', () => {
   const skip = /node_modules|[\\/]\.venv|[\\/]venv[\\/]|[\\/]tests?[\\/]|__pycache__|\.test\.|[\\/]dist[\\/]/;
+  const ROOT = join(FRONTEND, '..');
+  const exists = (dir: string) => { try { return statSync(dir).isDirectory(); } catch { return false; } };
+  // Agent-facing markdown: the docs, every skills folder, the backend's own notes and the repo's top-level files.
+  const markdownDirs = ['docs', 'skills', '.claude/skills', '.agents/skills'].map((d) => join(ROOT, d)).filter(exists);
+  const topLevel = readdirSync(ROOT).filter((f) => /\.md$/.test(f)).map((f) => join(ROOT, f));
   const sources = [
     ...files(join(FRONTEND, 'src'), /\.(ts|tsx)$/, skip),
-    ...files(BACKEND, /\.py$/, skip),
+    ...files(BACKEND, /\.(py|md)$/, skip),
+    ...files(join(ROOT, 'nebula'), /\.py$/, skip),
+    ...markdownDirs.flatMap((dir) => files(dir, /\.md$/, skip, HISTORY)),
+    ...topLevel,
   ];
 
   it('reads the frontend and the backend', () => {
     expect(sources.some((f) => f.endsWith('ChatModelPicker.tsx'))).toBe(true);
     expect(sources.some((f) => f.endsWith('personal_agents.py'))).toBe(true);
     expect(sources.length).toBeGreaterThan(300);
+  });
+
+  it('also reads what agents read: docs, skills and the CLI package', () => {
+    for (const tail of [join('docs', 'CHAT-SETUP.md'), join('skills', 'nebula', 'SKILL.md'), join('commons', 'skill.md'), join('nebula', '__main__.py')]) {
+      expect(sources.some((f) => f.endsWith(tail)), tail).toBe(true);
+    }
+    expect(sources.some((f) => f.includes(join('.claude', 'skills')))).toBe(true);
   });
 
   it('has no wrong path', () => {

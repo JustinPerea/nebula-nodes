@@ -6392,7 +6392,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
     from services.chat_actions import register_action_handler, unregister_action_handler
     from services.chat_models import ChatModelSelectionError, chat_refusal_message, validate_chat_model_selection
     from services.chat_lines import (AGENT_UNKNOWN_LINE, COMMONS_ON_LINE, NUMBER_TOO_LARGE_LINE, OLD_REQUEST_LINE,
-                                     RELOAD_LINE, RESPONSE_RUNNING_LINE)
+                                     RELOAD_LINE, RESPONSE_RUNNING_LINE, grant_overlap_refusal)
     from services.acp_session import ENDED_UNKNOWN_LINE
 
     await websocket.accept()
@@ -6571,6 +6571,15 @@ async def chat_websocket(websocket: WebSocket) -> None:
                                     commons_actors.agent_registry.set_model(agent_token, str(event["model"]))
                                 event = {**event, "sessionId": workspace_session.id, "brand": workspace_session.brand}
                             enqueue(event)
+            except GrantOverlapsProtectedDir as exc:
+                task = asyncio.current_task()
+                if task is not None and task.cancelling():
+                    raise
+                # The turn's folder grants overlap Nebula's private storage: the CLI never ran, so a refusal.
+                # The raw text names Nebula's own paths, so it goes to the log only.
+                logging.getLogger("nebula.chat").warning("chat turn refused: %s", exc)
+                enqueue(grant_overlap_refusal(agent))
+                terminal_done = {"type": "done"}
             except ChatModelSelectionError as exc:
                 task = asyncio.current_task()
                 if task is not None and task.cancelling():

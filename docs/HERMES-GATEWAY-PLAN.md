@@ -50,12 +50,12 @@ flowchart LR
    "api_server is not in the retry queue — nothing to resume." The key is also read only when the
    adapter is built [S2 l.1196, l.4462-4478; S16]. Then
    `curl -s http://127.0.0.1:8642/health` should print `{"status": "ok"}` [S1 "GET /health"].
-3. Settings > Connect your agent > Hermes: name it (say "Hermes"), pick a color and a daily limit,
+3. Settings > Connect your agent: name it (say "Hermes"), pick a color and a daily limit,
    Connect. Paste the printed `mcp_servers.nebula` entry into `~/.hermes/config.yaml`. It sets
    `trust: untrusted`, so every Nebula tool without `readOnlyHint` asks first [S10]. With the
    token-file branch merged, the entry carries `NEBULA_APP_TOKEN_FILE` instead of the raw token.
 4. The running gateway picks up a new `mcp_servers` entry within about a minute, no restart [S9 "Reloading"].
-5. In Nebula: Settings > Personal agents > Hermes: paste the API key, keep the address
+5. In Nebula: Settings > Personal agents, on the Hermes row: paste the API key, keep the address
    `http://127.0.0.1:8642`, pick the Connect app from step 3, press **Check**, switch it on.
 
 ### What Nebula does

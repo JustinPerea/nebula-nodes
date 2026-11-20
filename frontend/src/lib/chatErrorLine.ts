@@ -31,7 +31,9 @@ export const WHOLE_LINE_CODES = new Set([
   // A personal agent Nebula could not start or reach (services/personal_agents.py, services/acp_session.py).
   'personal_agent_unknown', 'personal_agent_disabled', 'personal_agent_not_installed', 'personal_agent_needs_node',
   'personal_agent_needs_setup', 'personal_agent_changed', 'personal_agent_limit', 'personal_agent_shutting_down',
-  'personal_agent_start_timeout', 'personal_agent_start_failed', 'acp_version_unsupported',
+  'personal_agent_start_timeout', 'personal_agent_start_failed', 'acp_version_unsupported', 'personal_agent_start_interrupted',
+  // A Claude or Codex turn Nebula declined to start (services/chat_lines.py, services/codex_session.py): the CLI never ran.
+  'agent_grant_overlap', 'agent_knowledge_unavailable', 'codex_features_refused', 'codex_chatgpt_required',
 ]);
 
 /** Connection faults, worded once. Only a connection-shaped message (an errno or "connection refused"), never any "timed out". */

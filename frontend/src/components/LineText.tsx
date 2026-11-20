@@ -10,9 +10,10 @@ export const BECAUSE_ATTR = 'data-line-because';
 
 /**
  * `failure` keeps the warning colour on a line that is a failure to run or a loss (a node card's run failure, "deleted somewhere else"); the default draws a because failure neutral.
- * `because` says outright that the line is a because line (drawn neutral), for a surface that knows it and must not depend on the words matching isBecauseFailure (the chat's error line names an agent of any name).
+ * `warning` draws the warning ink on any line, even one that is a because line (a not-connected line, "isn’t connected as you"): the chat's refusals and stops are whole lines in the warning tone whatever their words. It changes the ink only; the line still registers.
+ * `because` says outright that the line is a because line (drawn neutral), for a surface that knows it and must not depend on the words matching isBecauseFailure (a line that names a person's own agent, "Hermes v2.0 stopped because …").
  */
-export type LineTone = 'failure' | 'because';
+export type LineTone = 'failure' | 'because' | 'warning';
 
 /**
  * A line's words, registered while they are mounted (lib/notConnectedLine, PR #204 round 9): a
@@ -70,7 +71,8 @@ export function LineText({ text, className, children, tone, code }: { text: stri
     const element = own ? ref.current : ref.current?.parentElement;
     if (!element || words === null) return;
     registration.current?.update(words);
-    if (tone === 'because' || isBecauseLine(words) || (tone !== 'failure' && isBecauseFailure(words))) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
+    if (tone === 'warning') element.removeAttribute(BECAUSE_ATTR);
+    else if (tone === 'because' || isBecauseLine(words) || (tone !== 'failure' && isBecauseFailure(words))) element.setAttribute(BECAUSE_ATTR, own ? 'own' : '');
     else element.removeAttribute(BECAUSE_ATTR);
   }, [own, words, tone]);
   // Offline first, bare: the surface's element goes too when the line is all it holds.

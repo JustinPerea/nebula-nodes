@@ -37,9 +37,12 @@ _refresh_sequence: dict[str, int] = {}
 CLI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 
 
-# Where the chat's own model and agent menu is, by the name its heading shows
-# (frontend/src/components/panels/ChatModelPicker.tsx: "Model & thinking").
-CHAT_MODEL_MENU = "Model & thinking"
+# The button a person clicks to pick a model or an agent, by its visible label
+# (frontend/src/components/panels/ChatModelPicker.tsx: "Choose model"). Lines name this
+# button, never the dialog's own heading.
+CHOOSE_MODEL = "Choose model"
+# The command each CLI answers "am I signed in?" with, for a line that tells the person to check.
+_CLI_AUTH_CHECK = {"claude": "claude auth status", "codex": "codex login status"}
 _CLI_SIGN_IN = {
     "claude": "Run `claude` in a terminal and sign in",
     "codex": "Run `codex` in a terminal and sign in with your ChatGPT account",
@@ -56,16 +59,20 @@ def chat_refusal_message(code: str, agent: str, fallback: str) -> str:
     if code in {"model_invalid", "effort_invalid"}:
         return _RELOAD
     if code == "model_required":
-        return f"No model is selected. Pick a model in the chat\u2019s {CHAT_MODEL_MENU} menu, then send again."
+        return f"No model is selected. Pick one with {CHOOSE_MODEL} at the top of the chat, then send again."
     if code == "model_unsupported":
-        return f"That model isn\u2019t offered anymore. Open the {CHAT_MODEL_MENU} menu, pick another, then send again."
+        return f"That model isn\u2019t offered anymore. Pick another with {CHOOSE_MODEL}, then send again."
     if code == "effort_unsupported":
-        return (f"This model doesn\u2019t support that effort level. Pick another level in the "
-                f"{CHAT_MODEL_MENU} menu, then send again.")
+        return f"This model doesn\u2019t support that thinking effort. Pick another with {CHOOSE_MODEL}, then send again."
     if code == "auth_required":
         return f"{cli} isn\u2019t signed in, so Nebula can\u2019t list its models. {_CLI_SIGN_IN.get(agent, 'Sign in to it in a terminal')}, then send again."
     if code in {"catalog_unavailable", "catalog_cleanup_failed"}:
         return f"Nebula couldn\u2019t get the model list from {cli}. Check that it\u2019s installed and signed in, then send again."
+    if code == "auth_unknown":
+        check = _CLI_AUTH_CHECK.get(agent, agent)
+        return f"Nebula couldn\u2019t tell whether {cli} is signed in. Run `{check}` in a terminal to check, then send again."
+    if code == "catalog_invalid":
+        return f"{cli} sent a model list Nebula couldn\u2019t read. Update {cli}, then send again."
     if code == "catalog_timeout":
         return f"{cli} took too long to list its models. Send again in a moment."
     if code == "cli_not_installed":

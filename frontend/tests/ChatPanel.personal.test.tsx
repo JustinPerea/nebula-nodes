@@ -23,7 +23,7 @@ import { PersonalAgentsSection } from '../src/components/panels/settings/Persona
 import { normalizeAgentEventSource } from '../src/lib/agentEvents';
 import { useUIStore } from '../src/store/uiStore';
 import { notePersonPromoted, reportPersonRequired } from '../src/lib/personSession';
-import { personRequiredCopy } from '../src/lib/errorCopy';
+import { chatPersonRequiredCopy, personRequiredCopy } from '../src/lib/errorCopy';
 const initialUI = useUIStore.getState();
 const TOKEN = 'person-token-for-tests';
 
@@ -489,6 +489,16 @@ describe('the chat line per event kind', () => {
     expect(failureOf(text)).toBeNull();
   });
 
+  it('an oversized-event notice (a system event) is neutral and the turn goes on to its answer', async () => {
+    const notice = 'Part of the reply was too large to show, so Nebula skipped it.';
+    await sendAndReceive({ type: 'system', text: notice }, { type: 'text', text: 'The rest of the reply.' });
+    expect(await screen.findByText(notice)).toBeInTheDocument();
+    expect(toneOf(notice)).toBe('neutral');
+    expect(screen.getByText('The rest of the reply.')).toBeInTheDocument();
+    // It is not a stop: nothing says the agent stopped.
+    expect(screen.queryByText(/stopped/)).toBeNull();
+  });
+
   it('a limit line (a system event) stays neutral and unchanged', async () => {
     await sendAndReceive({ type: 'system', text: 'Fake Agent declined to continue.' });
     expect(await screen.findByText('Fake Agent declined to continue.')).toBeInTheDocument();
@@ -511,6 +521,19 @@ describe('person_required in the chat says what this tab was doing', () => {
     await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: BACKEND, ref: socket.sent[0].ref, source: 'system' }); socket.receive({ type: 'done' }); });
     const line = await screen.findByText(SEND_TAB);
     expect(line.parentElement?.querySelector('details')?.textContent).toContain(BACKEND);
+  });
+
+  it('draws the person-required line in the warning ink, as a plain refusal is', async () => {
+    const socket = await connected();
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: BACKEND, ref: socket.sent[0].ref, source: 'system' }); socket.receive({ type: 'done' }); });
+    const line = await screen.findByText(chatPersonRequiredCopy('send', false));
+    const box = line.closest('[data-chat-system-tone]');
+    expect(box?.getAttribute('data-chat-system-tone')).toBe('error');
+    // The warning ink is the line not being marked a neutral because line (LineText draws a marked one in the neutral ink).
+    expect(line.closest('[data-line-because]')).toBeNull();
+    expect(box?.querySelector('[data-line-because]')).toBeNull();
   });
 
   it('the desktop app says "window" and "Quit Nebula"', async () => {

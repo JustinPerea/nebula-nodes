@@ -277,6 +277,15 @@ describe('colour', () => {
     expect(container.querySelector('[data-testid="b"]')?.hasAttribute('data-line-because')).toBe(false);
   });
 
+  it('draws tone="warning" in the warning ink even on a not-connected line, which tone="failure" leaves neutral', () => {
+    const line = 'This tab isn’t connected as you, so it can’t start a chat. Open the link Nebula printed when it started, then send again.';
+    const { container } = render(<><p data-testid="a"><LineText text={line} tone="warning" /></p>
+      <p data-testid="b"><LineText text={line} tone="failure" /></p><p data-testid="c"><LineText text="Claude stopped because boom." tone="warning" /></p></>);
+    expect(container.querySelector('[data-testid="a"]')?.hasAttribute('data-line-because')).toBe(false);
+    expect(container.querySelector('[data-testid="b"]')?.hasAttribute('data-line-because')).toBe(true);
+    expect(container.querySelector('[data-testid="c"]')?.hasAttribute('data-line-because')).toBe(false);
+  });
+
   it('marks a line with no reason too, and leaves a line that is not a failure alone', () => {
     const { container } = render(<><p data-testid="a"><LineText text="Nebula couldn’t load your projects." /></p>
       <p data-testid="b"><LineText text="Saved." /></p></>);

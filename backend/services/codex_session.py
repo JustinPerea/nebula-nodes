@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import stat
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from services.chat_lines import (CODEX_CHATGPT_CODE, CODEX_FEATURES_CODE, grant_overlap_refusal, not_installed_refusal,
+                                 start_refusal)
+from services.chat_models import chat_refusal_message
 from services.agent_process import (
     spawn_agent_process,
     terminate_agent_process_tree,
@@ -46,11 +50,17 @@ CODEX_FORBIDDEN_API_ENV_KEYS = (
     "OPENAI_ACCESS_TOKEN",
     "CODEX_ACCESS_TOKEN",
 )
-CODEX_CHATGPT_REQUIRED_MESSAGE = (
-    "Codex agent is restricted to ChatGPT account login in Nebula. "
-    "Current Codex auth is {mode}. Use “Connect ChatGPT account” in Nebula, "
-    "or run `codex logout` then `codex login` without `--with-api-key`."
-)
+
+
+class PreflightRefusal(str):
+    """Why a Codex turn was refused before it ran: the line for the chat, with its error ``code``."""
+
+    code: str
+
+    def __new__(cls, text: str, code: str = CODEX_FEATURES_CODE) -> "PreflightRefusal":
+        self = super().__new__(cls, text)
+        self.code = code
+        return self
 
 _codex_login_lock = asyncio.Lock()
 _codex_login_task: asyncio.Task[None] | None = None
@@ -480,26 +490,26 @@ async def codex_feature_preflight(exec_args: list[str], workdir: Path) -> str | 
                 stdin=asyncio.subprocess.DEVNULL, cwd=str(workdir), env=env,
             )
         except FileNotFoundError:
-            return "`codex` binary not found in PATH"
+            return PreflightRefusal(chat_refusal_message("cli_not_installed", "codex", ""), "cli_not_installed")
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), PREFLIGHT_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
-            return "Codex's feature check didn't finish, so the turn was not started."
+            return PreflightRefusal("Codex’s feature check took too long, so it didn’t start. Send again in a moment.")
         finally:
             if proc.returncode is None:
                 await terminate_agent_process_tree(proc)
     if proc.returncode != 0:
         detail = stderr.decode("utf-8", errors="replace").strip()[-400:]
-        return ("This Codex version refused Nebula's agent settings, so the turn was not started"
-                f"{': ' + detail if detail else '.'} Update the reviewed feature list in "
-                "services/agent_profiles.py for this Codex version.")
+        # (For a developer: the fix is the reviewed feature list in services/agent_profiles.py.)
+        why = f": {detail.rstrip('.')}." if detail else "."
+        return PreflightRefusal(f"This version of Codex refused Nebula’s agent settings{why} Update Codex, then send again.")
     unreviewed = unreviewed_codex_features(stdout.decode("utf-8", errors="replace"))
     if unreviewed is None:
-        return "Couldn't read Codex's feature list, so the turn was not started."
+        return PreflightRefusal("Nebula couldn’t read Codex’s feature list, so it didn’t start. Update Codex, then send again.")
     if unreviewed:
-        return ("Codex has features on that Nebula hasn't reviewed for its agent ("
-                + ", ".join(unreviewed) + "), so the turn was not started. Review them and add each "
-                "to CODEX_ALLOWED_FEATURES or CODEX_DISABLED_FEATURES in services/agent_profiles.py.")
+        # (For a developer: add each to CODEX_ALLOWED_FEATURES or CODEX_DISABLED_FEATURES in services/agent_profiles.py.)
+        return PreflightRefusal("Codex has features on that Nebula hasn’t reviewed (" + ", ".join(unreviewed)
+                                + "), so it didn’t start. Update Nebula, then send again.")
     return None
 
 
@@ -526,22 +536,17 @@ async def _require_codex_chatgpt_login() -> dict[str, Any] | None:
     if status.get("installed") and status.get("loggedIn") and status.get("mode") == "chatgpt":
         return None
 
+    # A refusal: Codex never ran, so no `stop`.
     mode = status.get("mode")
     if not status.get("installed"):
-        mode_label = "not installed"
-    elif not status.get("loggedIn"):
-        mode_label = "not logged in"
-    elif mode == "api":
-        mode_label = "API-key billing mode"
-    elif mode == "access_token":
-        mode_label = "access-token mode"
-    else:
-        mode_label = str(mode or "unknown mode")
-
-    return {
-        "type": "error", "stop": "error",
-        "message": CODEX_CHATGPT_REQUIRED_MESSAGE.format(mode=mode_label),
-    }
+        return not_installed_refusal("codex")
+    if not status.get("loggedIn"):
+        return start_refusal(CODEX_CHATGPT_CODE,
+                             "Codex isn’t signed in. Use “Connect ChatGPT account” in Nebula, then send again.")
+    how = {"api": "an API key", "access_token": "an access token"}.get(str(mode), "a sign-in Nebula doesn’t accept")
+    return start_refusal(CODEX_CHATGPT_CODE, (
+        f"Codex is using {how}, and Nebula needs a ChatGPT account. "
+        "Use “Connect ChatGPT account” in Nebula, then send again."))
 
 
 def _normalize_codex_event(ev: dict[str, Any]) -> list[dict[str, Any]]:
@@ -659,12 +664,14 @@ async def run_codex(
     try:
         args = _codex_base_args(effective_model, effective_effort, agent_cwd, backend_url)
     except GrantOverlapsProtectedDir as exc:
-        yield {"type": "error", "stop": "error", "message": str(exc)}
+        # A refusal: the CLI never ran. The raw text names Nebula's own paths, so it goes to the log only.
+        logging.getLogger(__name__).warning("codex turn refused: %s", exc)
+        yield grant_overlap_refusal("codex")
         yield {"type": "done"}
         return
     refusal = await codex_feature_preflight(args, agent_cwd)
     if refusal:
-        yield {"type": "error", "stop": "error", "message": refusal}
+        yield start_refusal(getattr(refusal, "code", CODEX_FEATURES_CODE), str(refusal))
         yield {"type": "done"}
         return
     if session_id:
@@ -686,7 +693,7 @@ async def run_codex(
             limit=64 * 1024 * 1024,
         )
     except FileNotFoundError:
-        yield {"type": "error", "stop": "error", "message": "`codex` binary not found in PATH"}
+        yield not_installed_refusal("codex")
         yield {"type": "done"}
         return
 

@@ -303,3 +303,17 @@ async def test_unavailable_selection_never_silently_falls_back(monkeypatch, raw_
     with pytest.raises(chat_models.ChatModelSelectionError) as error:
         await chat_models.validate_chat_model_selection("codex", raw_model, raw_effort)
     assert error.value.code == code
+
+
+def test_every_catalog_code_the_cli_discovery_raises_has_its_own_chat_line():
+    """A code the catalog raises (auth_unknown and catalog_invalid once fell through to the REST text) must
+    read as a chat line for both CLIs, not as its fallback."""
+    import re
+    source = (Path(chat_models.__file__)).read_text()
+    codes = set(re.findall(r'_DiscoveryError\(\s*"([a-z_]+)"', source))
+    assert {"auth_unknown", "catalog_invalid", "auth_required"} <= codes
+    for code in codes:
+        for agent in ("claude", "codex"):
+            line = chat_models.chat_refusal_message(code, agent, "FALLBACK")
+            assert line != "FALLBACK", (code, agent)
+            assert line.endswith("then send again.") or line.endswith("Send again in a moment."), (code, agent, line)

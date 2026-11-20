@@ -295,7 +295,7 @@ async def test_settings_switch_off_or_delete_stops_the_running_agent(ws_env, cha
     stale = await socket.until_done()
     assert stale[0]["code"] == "personal_session_ended"
     assert stale[0]["message"] == ("Fake Agent stopped because it was switched off or changed in Settings. "
-                                   "If it’s still on there, send again.")
+                                   "If it’s still switched on, send again.")
     assert stale[0]["stop"] == "ended" and stale[0]["reason"] == "agent_changed"
     # Another socket can't learn why someone else's session ended.
     assert ws_env.manager.ended_message(session["sessionId"], "someone-else") is None

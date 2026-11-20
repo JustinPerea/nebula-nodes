@@ -28,6 +28,8 @@ from tests.conftest import PERSON
 AGENT = {"X-Nebula-Agent": "Claude Desktop"}
 JSON = {"content-type": "application/json"}
 HUGE_INT = "1" + "0" * 400  # 10**400: past float's range
+NUMBER_TOO_LARGE = ("A number in that message is too large for Nebula to read. "
+                    "Reload the page, then send again.")
 LONG_INT = "9" * 4301        # past int()'s 4,300-digit limit
 
 
@@ -470,9 +472,11 @@ def test_ws_chat_answers_a_frame_with_a_number_out_of_range(api):
     with api.client.websocket_connect("/ws/chat") as ws:
         ws.send_text('{"type": "cancel", "n": %s}' % LONG_INT)
         event = ws.receive_json()
-        assert event["type"] == "error" and LONG_INT[:40] in event["message"]
+        # The chat shows its own line; the REST path keeps JsonNumberOutOfRange's text (tests above).
+        assert event["type"] == "error" and event["message"] == NUMBER_TOO_LARGE
+        assert LONG_INT[:40] not in event["message"]
         ws.send_text('{"type": "cancel", "n": NaN}')
-        assert "NaN" in ws.receive_json()["message"]
+        assert ws.receive_json()["message"] == NUMBER_TOO_LARGE
         ws.send_json({"type": "cancel"})
         assert ws.receive_json()["type"] == "cancellation"
 

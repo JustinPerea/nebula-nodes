@@ -45,8 +45,7 @@ describe('the chat stream error line', () => {
     expect(line('A response is still running. Stop it and wait for it to stop, then send again.', { source: 'system' }))
       .toBe('A response is still running. Stop it and wait for it to stop, then send again.');
     // A stop is never shown alone: it opens with the agent, whatever its reason's full stop.
-    expect(line('Skipped an oversized stream event (likely a huge tool result). Continuing.'))
-      .toBe('Claude stopped. Skipped an oversized stream event (likely a huge tool result). Continuing.');
+    expect(line('Skipped a large event. Continuing.')).toBe('Claude stopped. Skipped a large event. Continuing.');
   });
 
   it('is a because line, so it is drawn neutral', () => {
@@ -295,5 +294,31 @@ describe('the chat’s person_required wording, by what the tab was doing', () =
         expect(notConnectedKind(text), text).toBe(reason === 'debug-port' ? 'defers' : 'fix');
       }
     }
+  });
+});
+
+describe('a turn Claude or Codex was refused before the CLI ran is a whole line, not a stop', () => {
+  const REFUSALS: ReadonlyArray<readonly [string, string]> = [
+    ['cli_not_installed', 'Claude Code isn’t installed. Install it, then send again.'],
+    ['agent_grant_overlap', 'Nebula didn’t start Claude Code, because a folder it would get access to overlaps storage Nebula keeps private. Check that Nebula’s output and Commons folders don’t overlap, then send again.'],
+    ['agent_knowledge_unavailable', 'Nebula couldn’t copy its reference files for Claude Code, so it didn’t start. Check that Nebula’s folder is intact, then send again.'],
+    ['codex_features_refused', 'Codex has features on that Nebula hasn’t reviewed (browser_use), so it didn’t start. Update Nebula, then send again.'],
+    ['codex_chatgpt_required', 'Codex is using an API key, and Nebula needs a ChatGPT account. Use “Connect ChatGPT account” in Nebula, then send again.'],
+    ['personal_agent_start_interrupted', 'Fake Agent couldn’t start, because the chat closed it first. Send again to start a new conversation.'],
+  ];
+
+  it.each(REFUSALS)('reads %s as its own line in the warning tone, with no "Claude stopped"', (code, message) => {
+    // The backend sends a code and no stop, and no source "system" for a Claude or Codex turn.
+    const shown = chatErrorLine({ message, code, source: 'claude', agentName: 'Claude' });
+    expect(shown).toEqual({ text: message, tone: 'error' });
+    expect(shown.text).not.toMatch(/ stopped/);
+  });
+
+  it('would read the same line as a stop if its code were not listed', () => {
+    expect(chatErrorLine({ message: REFUSALS[1][1], code: 'unlisted_code', source: 'claude', agentName: 'Claude' }).text).toMatch(/^Claude stopped/);
+  });
+
+  it('keeps the lines for older code-less backends: the missing-command text still reads as a stop', () => {
+    expect(line('`codex` binary not found in PATH', { agentName: 'Codex' })).toBe('Codex stopped because its command wasn’t found. Check that it is installed.');
   });
 });

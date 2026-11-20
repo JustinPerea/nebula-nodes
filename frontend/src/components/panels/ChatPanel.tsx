@@ -154,9 +154,9 @@ type SystemLine = {
   /** Text behind a collapsed Details toggle under the line: a person-only
    * refusal's own words, written for agents (GM, Q116 a). */
   details?: string;
-  /** The warning tone: LineText keeps the warning colour on a line whose words would otherwise read as a neutral because line
-   * ("Claude stopped because …", "Nebula couldn’t …"). Set on a stop error and on a refusal; an ended session is neutral. */
-  failure?: true;
+  /** An error-class line that stays in the neutral ink (a failed Stop notice, which is a because line). Any other line
+   * with `tone: 'error'` is drawn in the warning ink, by its tone alone: a stop error, a refusal, the person-gate line. */
+  neutralInk?: true;
   /** Its only reason was this tab not being connected as the person: it goes
    * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
   personGate?: true;
@@ -409,13 +409,17 @@ export function AssistantBubble({ message, agentName, onPermission }: {
         }
         if (part.kind === 'system') {
           const tone = part.tone ?? 'neutral';
+          // The warning ink follows the tone, so a line that is built as an error can't miss it (LineText would draw a
+          // because failure, or a not-connected line, neutral): every error-tone system line is warning ink, except one
+          // that says neutralInk.
+          const inkTone = tone === 'error' && !part.neutralInk ? 'warning' : undefined;
           return (
             <div
               key={idx}
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.details ? <><LineText text={part.text} tone={part.failure ? 'failure' : undefined} code /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} tone={part.failure ? 'failure' : undefined} code />}
+              {part.details ? <><LineText text={part.text} tone={inkTone} code /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} tone={inkTone} code />}
             </div>
           );
         }
@@ -1300,7 +1304,7 @@ export function ChatPanel() {
             setMessages((prev) => markThinkingCompleted(prev));
             const errorPart = (turnAgentName: string | undefined): SystemLine => {
               const line = chatErrorLine({ message: event.message == null ? null : errText, code: event.code, source: event.source, stop: event.stop, agentName: turnAgentName ?? agentNameRef.current });
-              return { kind: 'system', text: line.text, tone: line.tone, ...(line.details ? { details: line.details } : {}), ...(line.tone === 'error' ? { failure: true as const } : {}) };
+              return { kind: 'system', text: line.text, tone: line.tone, ...(line.details ? { details: line.details } : {}) };
             };
             upsertAssistant((msg) => ({
               ...msg,

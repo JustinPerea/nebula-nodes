@@ -510,10 +510,10 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
     """How to start ``agent_id``: absolute argv, extra env and timeouts."""
     view = get_agent(state_dir, agent_id, home)
     if view is None:
-        raise PersonalAgentError("personal_agent_unknown", "No personal agent with that id")
+        raise PersonalAgentError("personal_agent_unknown", "Nebula doesn’t recognize that personal agent. Pick another with Choose model, then send again.")
     if view.status != "ready":
         messages = {
-            "disabled": f"{view.displayName} is switched off in Settings > Preferences > Personal agents.",
+            "disabled": f"{view.displayName} is switched off. Turn it on in Settings > Preferences > Personal agents, then send again.",
             "not_installed": f"{view.displayName} isn’t installed. {view.note}".strip(),
             "needs_node": f"{view.displayName} needs setup. {view.note}",
             "needs_setup": f"{view.displayName} needs setup. {view.note}",
@@ -539,7 +539,7 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
             key = _nebula_key(preset.key_option)
             if not key:
                 raise PersonalAgentError("personal_agent_needs_setup",
-                                         f"Add a Gemini API key in Settings > Providers to use {in_sentence(view.displayName)}.")
+                                         f"{view.displayName} needs a Gemini API key. Add one in Settings > Providers, then send again.")
             env["GEMINI_API_KEY"] = key
             # Read before the overlay replaces the system settings path: the
             # CLI looks for system-defaults.json next to that file.

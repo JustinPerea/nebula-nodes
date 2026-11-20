@@ -30,8 +30,7 @@ from tests.test_commons_integration import isolated_app  # noqa: F401
 pytestmark = pytest.mark.usefixtures("person")
 
 RELOAD = "Nebula couldn’t read that message. Reload the page, then send again."
-UNKNOWN_AGENT = ("Nebula doesn’t recognize the agent for this chat. Pick one in the Model & thinking menu, "
-                 "then send again.")
+UNKNOWN_AGENT = "Nebula doesn’t recognize the agent for this chat. Pick another with Choose model, then send again."
 ENDED_UNKNOWN = "This chat’s agent stopped. Send again to start a new conversation."
 
 
@@ -57,7 +56,7 @@ def _send(message="hi", **extra):
 def test_ended_lines_per_reason():
     line = acp_session.ended_line
     assert line("agent_changed", "Your Gemini") == (
-        "Your Gemini stopped because it was switched off or changed in Settings. If it’s still on there, send again.")
+        "Your Gemini stopped because it was switched off or changed in Settings. If it’s still switched on, send again.")
     assert line("commons_enabled", "Your Gemini") == (
         "Your Gemini stopped because Commons is on. Pick Claude or Codex to keep chatting.")
     assert line("idle", "Your Gemini") == "Your Gemini stopped after it sat idle. Send again to start a new conversation."
@@ -71,11 +70,11 @@ def test_ended_lines_per_reason():
     ("model_invalid", "claude", RELOAD),
     ("effort_invalid", "codex", RELOAD),
     ("model_required", "claude",
-     "No model is selected. Pick a model in the chat’s Model & thinking menu, then send again."),
+     "No model is selected. Pick one with Choose model at the top of the chat, then send again."),
     ("model_unsupported", "claude",
-     "That model isn’t offered anymore. Open the Model & thinking menu, pick another, then send again."),
+     "That model isn’t offered anymore. Pick another with Choose model, then send again."),
     ("effort_unsupported", "codex",
-     "This model doesn’t support that effort level. Pick another level in the Model & thinking menu, then send again."),
+     "This model doesn’t support that thinking effort. Pick another with Choose model, then send again."),
     ("auth_required", "claude",
      "Claude Code isn’t signed in, so Nebula can’t list its models. Run `claude` in a terminal and sign in, "
      "then send again."),
@@ -88,6 +87,12 @@ def test_ended_lines_per_reason():
      "Nebula couldn’t get the model list from Codex. Check that it’s installed and signed in, then send again."),
     ("catalog_timeout", "codex", "Codex took too long to list its models. Send again in a moment."),
     ("cli_not_installed", "claude", "Claude Code isn’t installed. Install it, then send again."),
+    ("auth_unknown", "claude",
+     "Nebula couldn’t tell whether Claude Code is signed in. Run `claude auth status` in a terminal to check, then send again."),
+    ("auth_unknown", "codex",
+     "Nebula couldn’t tell whether Codex is signed in. Run `codex login status` in a terminal to check, then send again."),
+    ("catalog_invalid", "claude", "Claude Code sent a model list Nebula couldn’t read. Update Claude Code, then send again."),
+    ("catalog_invalid", "codex", "Codex sent a model list Nebula couldn’t read. Update Codex, then send again."),
 ])
 def test_model_refusal_lines(code, agent, text):
     assert chat_models.chat_refusal_message(code, agent, "fallback") == text
@@ -184,6 +189,10 @@ async def test_a_send_while_a_response_runs_is_a_system_refusal(isolated_app, mo
      "Claude Code took too long to list its models. Send again in a moment."),
     ("catalog_unavailable", {"code": "catalog_unavailable", "message": "REST text"},
      "Nebula couldn’t get the model list from Claude Code. Check that it’s installed and signed in, then send again."),
+    ("auth_unknown", {"code": "auth_unknown", "message": "Claude CLI authentication status is unavailable."},
+     "Nebula couldn’t tell whether Claude Code is signed in. Run `claude auth status` in a terminal to check, then send again."),
+    ("catalog_invalid", {"code": "catalog_invalid", "message": "The local CLI returned oversized metadata."},
+     "Claude Code sent a model list Nebula couldn’t read. Update Claude Code, then send again."),
 ])
 async def test_catalog_refusals_reach_the_chat_in_the_new_wording(isolated_app, monkeypatch, code, catalog_error, text):
     async def catalog(agent, *, refresh=False):
@@ -203,9 +212,9 @@ async def test_catalog_refusals_reach_the_chat_in_the_new_wording(isolated_app, 
     ("  ", None, "model_invalid", RELOAD),
     ("m", "  ", "effort_invalid", RELOAD),
     ("gone", None, "model_unsupported",
-     "That model isn’t offered anymore. Open the Model & thinking menu, pick another, then send again."),
+     "That model isn’t offered anymore. Pick another with Choose model, then send again."),
     ("m", "turbo", "effort_unsupported",
-     "This model doesn’t support that effort level. Pick another level in the Model & thinking menu, then send again."),
+     "This model doesn’t support that thinking effort. Pick another with Choose model, then send again."),
 ])
 async def test_model_choice_refusals_reach_the_chat(isolated_app, monkeypatch, model, effort, code, text):
     async def catalog(agent, *, refresh=False):
@@ -231,7 +240,7 @@ async def test_no_model_picked_and_no_default_is_a_refusal(isolated_app, monkeyp
     task = await _run(socket, _send(agent="claude", effort="low"))
     error = await socket.next("error")
     assert error["code"] == "model_required" and "stop" not in error
-    assert error["message"] == "No model is selected. Pick a model in the chat’s Model & thinking menu, then send again."
+    assert error["message"] == "No model is selected. Pick one with Choose model at the top of the chat, then send again."
     await _finish(socket, task)
 
 
@@ -343,7 +352,7 @@ async def test_an_agent_that_ignores_cancel_is_an_error_stop_on_the_next_send(ws
 @pytest.mark.parametrize("reason, text", [
     ("idle", "Fake Agent stopped after it sat idle. Send again to start a new conversation."),
     ("agent_changed", "Fake Agent stopped because it was switched off or changed in Settings. "
-                      "If it’s still on there, send again."),
+                      "If it’s still switched on, send again."),
     ("commons_enabled", "Fake Agent stopped because Commons is on. Pick Claude or Codex to keep chatting."),
     ("shutdown", "Fake Agent stopped because Nebula closed. Send again to start a new conversation."),
     ("closed_by_person", ENDED_UNKNOWN),
@@ -421,7 +430,32 @@ async def test_settings_switching_the_agent_off_mid_turn_is_an_ended_stop(acp_en
     assert events[-1] == {"type": "error", "code": "personal_session_ended", "stop": "ended",
                           "reason": "agent_changed",
                           "message": "Fake Agent stopped because it was switched off or changed in Settings. "
-                                     "If it’s still on there, send again."}
+                                     "If it’s still switched on, send again."}
+
+
+@pytest.mark.asyncio
+async def test_a_start_cut_short_by_settings_reaches_the_chat_as_a_refusal(ws_env, monkeypatch):
+    ws_env.register({"initDelay": 0.3})
+    real_open = ws_env.manager.open
+
+    async def open_and_switch_off_meanwhile(*args, **kwargs):
+        opening = asyncio.create_task(real_open(*args, **kwargs))
+        assert await wait_until(lambda: "initialize" in ws_env.methods())
+        personal_agents.update_agent(main._STATE_DIR, "fake", {"enabled": False})
+        await ws_env.manager.close_stale(main._STATE_DIR)
+        return await opening
+
+    monkeypatch.setattr(ws_env.manager, "open", open_and_switch_off_meanwhile)
+    socket = Socket()
+    task = asyncio.create_task(main.chat_websocket(socket))
+    send(socket)
+    events = await socket.until_done()
+    error = next(e for e in events if e["type"] == "error")
+    assert error["code"] == "personal_agent_changed" and "stop" not in error and "reason" not in error
+    assert error["message"] == ("Fake Agent couldn’t start, because it was switched off or changed in Settings. "
+                                "If it’s still switched on, send again.")
+    socket.disconnect()
+    await asyncio.wait_for(task, 5)
 
 
 # -- start failures are refusals -----------------------------------------------------------
