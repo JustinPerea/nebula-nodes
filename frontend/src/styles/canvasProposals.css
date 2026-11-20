@@ -989,7 +989,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   font-weight: 500;
 }
 
-.canvas-undo-notice__action--quiet:hover {
+.canvas-undo-notice__action--quiet:hover:not(:disabled) {
   background: rgb(255 255 255 / 0.08);
 }
 

@@ -55,7 +55,9 @@ describe("the Inspector's missing-key line", () => {
   it('draws neutral in the Slava skin: the card\'s ink, not the accent box', () => {
     const key = rule('slava-restraint.css', 'body.app-slava-restraint .inspector__notice--key');
     expect(key).toMatch(/color:\s*var\(--sr-ink-light\)/);
-    expect(key).toMatch(/border-color:\s*var\(--sr-edge-strong\)/);
+    // Design: a note is a fill alone; the base rule's `border: none` stands.
+    expect(key).not.toMatch(/border/);
+    expect(rule('slava-restraint.css', 'body.app-slava-restraint .inspector__notice')).toMatch(/border:\s*none/);
     expect(key).not.toMatch(/accent|warning/);
     const card = rule('slava-restraint.css', 'body.app-slava-restraint .model-node__error--key');
     expect(card).toMatch(/color:\s*var\(--sr-ink-light\)/);

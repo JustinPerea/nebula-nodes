@@ -24,11 +24,11 @@ function rule(selector: string): Record<string, string> {
 }
 
 describe('Add\'s lock line lines up with the because line\'s words (GM r21 1)', () => {
-  it('the line\'s rail and padding are the shared tokens, and the words\' inset is their sum', () => {
+  it('the line\'s padding is the shared token and the words\' inset is that padding (design: no bar down the edge)', () => {
     const tokens = rule('body.app-slava-restraint');
-    expect(tokens['--commons-line-text-x']).toBe('calc(var(--commons-line-rail) + var(--commons-line-pad-x))');
+    expect(tokens['--commons-line-text-x']).toBe('var(--commons-line-pad-x)');
     const line = rule('body.app-slava-restraint .commons-notice');
-    expect(line['border-left']).toBe('var(--commons-line-rail) solid currentColor');
+    expect(line['border-left']).toBeUndefined();
     expect(line.padding).toBe('6px var(--commons-line-pad-x)');
   });
 

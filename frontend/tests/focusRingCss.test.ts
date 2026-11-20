@@ -354,7 +354,6 @@ const CLEARED: Record<string, string> = {
   'styles/panels.css::.chat-panel__textarea': 'body.app-slava-restraint .chat-panel__textarea:focus-visible',
   // The Message box's field (#225): the row it sits in draws the ring.
   'styles/messageBox.css::.message-box__field': '.message-box__field-row:has(.message-box__field:focus-visible)',
-  'styles/slava-restraint.css::body.app-slava-restraint .chat-panel__model-search': 'body.app-slava-restraint .chat-panel__model-search:focus-visible',
   'styles/slava-restraint.css::body.app-slava-restraint .chat-panel__textarea': 'body.app-slava-restraint .chat-panel__textarea:focus-visible',
   'styles/settings.css::body.app-slava-restraint .settings-search input': 'body.app-slava-restraint .settings-search:has(input:focus-visible)',
   'styles/settings.css::body.app-slava-restraint .settings-key__input': 'body.app-slava-restraint .settings-key:has(.settings-key__input:focus-visible)',
