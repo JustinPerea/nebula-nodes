@@ -50,7 +50,20 @@ describe('check-error-tokens', () => {
     'ready state paints the warning literal': ['.row__ready { color: #f5c518; }'],
     'ok state reads the warning soft tint': ['.row--ok { background: var(--sr-warning-soft); }'],
     'done state reaches warning through a local property': ['.row { --tone: var(--sr-warning); } .row--done { color: var(--tone); }'],
-    'nested error rule is not read': ['.thing__error { & .x { color: var(--sr-danger); } }'],
+    'error state uses an 8-digit danger ink literal': ['.chip--error { color: #ff887dcc; }'],
+    'error state uses an 8-digit danger hover literal': ['.chip--error { color: #ff9a9133; }'],
+    'nested &--error reads danger under a neutral parent': ['.run { &--error { color: var(--sr-danger); } }'],
+    'nested &.is-error paints the accent under a neutral parent': ['.run { &.is-error { border-color: var(--sr-accent); } }'],
+    'nested &__delete reads error under a neutral parent': ['.thing { &__delete { color: var(--sr-error); } }'],
+    'nested error inside a media query reads danger': ['.run { @media (min-width: 1px) { &--error { color: var(--sr-danger); } } }'],
+    'doubly nested error state reads danger': ['.run { .row { &--error { color: var(--sr-danger); } } }'],
+    'nested error state with a comma list reads danger': ['.a, .b { &--error { color: var(--sr-danger); } }'],
+    'error state beside a nested block reads danger': ['.run--error { color: var(--sr-danger); & .x { color: red; } }'],
+    'not-done state reads the warning tone': ['.row--not-done { color: var(--sr-warning); }'],
+    'not-ok state reads the warning tone': ['.row--not-ok { color: var(--sr-warning); }'],
+    'not-pass state reads the error tone': ['.row--not-pass { color: var(--sr-error); }'],
+    'not-running state reads the warning tone': ['.row--not-running { color: var(--sr-warning); }'],
+    'ready state is not exempted by a :not group elsewhere': ['.row--ready:not(.row--x) { color: var(--sr-warning); }'],
   };
   for (const [name, sheets] of Object.entries(bad)) {
     it(`fails: ${name}`, () => expect(hits(...sheets).length).toBeGreaterThan(0));
@@ -77,6 +90,14 @@ describe('check-error-tokens', () => {
     'a done state reads success': ['.run__dot--done { background: var(--sr-success); }'],
     'a local property that is neutral passes': ['.panel { --tone: var(--sr-ink-light); } .panel__error { color: var(--tone); }'],
     'a local property declared in another file is not followed': ['.panel { --tone: var(--sr-accent); }', '.panel__error { color: var(--tone); }'],
+    'an error container descendant under nesting is not an error state': ['.thing--error { & .x { color: var(--sr-danger); } }'],
+    'nested &--error reads error': ['.run { &--error { color: var(--sr-error); } }'],
+    'nested &__delete reads danger': ['.thing { &__delete { color: var(--sr-danger); } }'],
+    'a neutral nested rule passes': ['.run { color: red; & .x { color: var(--sr-accent); } }'],
+    'a not-ready modifier may read the warning tone': ['.row--not-ready { color: var(--sr-warning); }'],
+    'a :not(ready) selector styles the not-ready case': ['.row:not(.row--ready) { color: var(--sr-warning); }'],
+    'a pass-through class is not a pass state': ['.pass-through { color: var(--sr-warning); }'],
+    'a :not(error) selector is not an error state': ['.chip:not(.chip--error) { color: var(--sr-accent); }'],
     'comment mentioning the accent': ['/* .x__error { color: var(--sr-accent); } */ .y { color: red; }'],
   };
   for (const [name, sheets] of Object.entries(fine)) {

@@ -4,7 +4,10 @@ import { pathToFileURL } from 'node:url';
 import {
   collectCssFiles,
   compact,
+  bodyHasBrace,
   computeLineStarts,
+  findMatchingBrace,
+  findSelectorStart,
   lineForOffset,
   parseDeclarations,
   parseRules,
@@ -33,13 +36,18 @@ import {
 //      the warning literal.
 // The state words are read from the element and modifier, not the BEM block, so
 // `.personal-warning__accept` (a button in a warning dialog) is not an error state, and
-// `not-ready` is not a ready state. Selectors are classified by the last compound of each part, so the children of an error
+// `not-ready` is not a ready state, and `.pass-through` is not a pass state. A :not(...) group is
+// dropped before a selector is read, so `.row:not(.row--ready)` styles the not-ready case.
+// Selectors are classified by the last compound of each part, so the children of an error
 // container (a Retry button inside `.chat__tool--error`) are not error states. A selector that
 // is both error and destructive (`.kept-delete-chooser__error`) is an error state.
+// Nested CSS is flattened first: a nested selector with & is resolved against each part of its
+// parent (`.run { &--error {} }` reads as `.run--error`, `&.is-error` as `.run.is-error`), one
+// without & is a descendant (`.run { .x {} }` reads as `.run .x`), and the declarations the
+// parent holds beside the nested blocks are read under the parent selector.
 // Limits: a custom property is followed one level, and only when it is declared in the same
 // file (`--x: var(--sr-accent)` in one rule, `var(--x)` in an error rule of that file). A chain
-// of two local properties, or a property declared in another file, is not followed. CSS nesting
-// under an error or destructive selector is not read, so it fails.
+// of two local properties, or a property declared in another file, is not followed.
 
 const SRC = join(process.cwd(), 'src');
 const TOKEN_NAME = /^--(?:sr-(?:error|danger)|jev-fail)(?![\w])/;
@@ -47,11 +55,14 @@ const ACCENT_VAR = /var\(\s*(--sr-accent(?![\w])[\w-]*)/gi;
 const VAR_REF = /var\(\s*(--[\w-]+)/g;
 const ACCENT_LITERAL = /#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
 const ERROR_STATE = /error|fail|invalid|refused|warn|blocked|denied|rejected/i;
-const CALM_STATE = /(?<![a-z0-9])(?<!not-)(?:running|pass|passed|done|ready|ok|success)(?![a-z0-9])/i;
+// A calm word is a whole class or modifier word: `.row--ready` and `.is-done` match, `.pass-through`
+// does not, and `not-ready` (the state that needs attention) is the one not- form that is exempt.
+const CALM_STATE = /(?<![a-z0-9])(?:running|pass|passed|done|ok|success|(?<!not-)ready)(?![a-z0-9-])/i;
+const NOT_GROUP = /:not\((?:[^()]|\([^()]*\))*\)/g;
 const ATTENTION_USE = /var\(\s*--sr-(?:warning|error)(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const WARNING_LITERAL = /#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const DESTRUCTIVE = /danger|delete|destructive|--clear|discard|forget|trash__trigger/i;
-const DANGER_USE = /var\(\s*--sr-danger(?![\w])|#ff887d(?![0-9a-f])|#ff9a91(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*70\s*[, ]\s*60\b/i;
+const DANGER_USE = /var\(\s*--sr-danger(?![\w])|#ff887d(?:[0-9a-f]{2})?(?![0-9a-f])|#ff9a91(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*70\s*[, ]\s*60\b/i;
 const ERROR_USE = /var\(\s*--sr-error(?![\w])|#f5c518(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*245\s*[, ]\s*197\s*[, ]\s*24\b/i;
 const ACCENT_USE = /var\(\s*--sr-accent(?![\w])|#ff5a1f(?:[0-9a-f]{2})?(?![0-9a-f])|rgba?\(\s*255\s*[, ]\s*90\s*[, ]\s*31\b/i;
 
@@ -70,11 +81,10 @@ function main() {
 export function findErrorTokenHits(sheets) {
   const parsed = sheets.map(({ file, source }) => {
     const css = stripComments(source);
-    const rules = parseRules(css);
+    const rules = parseRules(css).flatMap((rule) => flattenNested(rule));
     // Custom properties declared in this file, for the one-level lookup.
     const local = new Map();
     for (const rule of rules) {
-      if (rule.nested) continue;
       for (const d of parseDeclarations(rule.body, rule.bodyStart)) {
         if (!d.prop.startsWith('--')) continue;
         if (!local.has(d.prop)) local.set(d.prop, []);
@@ -88,7 +98,6 @@ export function findErrorTokenHits(sheets) {
   const defs = new Map();
   for (const sheet of parsed) {
     for (const rule of sheet.rules) {
-      if (rule.nested) continue;
       for (const d of parseDeclarations(rule.body, rule.bodyStart)) {
         if (!d.prop.startsWith('--')) continue;
         if (!defs.has(d.prop)) defs.set(d.prop, []);
@@ -116,17 +125,11 @@ export function findErrorTokenHits(sheets) {
   for (const sheet of parsed) {
     for (const rule of sheet.rules) {
       const selector = compact(rule.selector);
-      const parts = selector.split(',').map((part) => part.trim());
+      const parts = selector.split(',').map((part) => part.replace(NOT_GROUP, '').trim());
       const errorState = parts.some((part) => ERROR_STATE.test(stateOf(part)));
       const calm = parts.some((part) => CALM_STATE.test(stateOf(part)));
       const destructive = !errorState && parts.some((part) => DESTRUCTIVE.test(lastCompound(part)));
       const lineAt = (offset) => lineForOffset(sheet.lineStarts, offset);
-      if (rule.nested) {
-        if (parts.some((part) => ERROR_STATE.test(stateOf(part)) || DESTRUCTIVE.test(lastCompound(part)))) {
-          hits.push({ file: sheet.file, line: lineAt(rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
-        }
-        continue;
-      }
       for (const d of parseDeclarations(rule.body, rule.bodyStart)) {
         const value = compact(d.value);
         const seen = followLocal(value, sheet.local);
@@ -149,6 +152,46 @@ export function findErrorTokenHits(sheets) {
     }
   }
   return hits;
+}
+
+/**
+ * A rule with its nested blocks taken out: the parent with its own declarations, then one rule per
+ * nested block with its selector resolved against the parent (recursively).
+ */
+function flattenNested(rule) {
+  if (!rule.nested) return [rule];
+  const out = [];
+  let own = rule.body;
+  let cursor = 0;
+  while (cursor < rule.body.length) {
+    const open = rule.body.indexOf('{', cursor);
+    if (open === -1) break;
+    const close = findMatchingBrace(rule.body, open);
+    if (close === -1) break;
+    const start = Math.max(cursor, findSelectorStart(rule.body, open));
+    const inner = rule.body.slice(start, open).trim();
+    const innerRule = {
+      selector: resolveNested(inner, rule.selector),
+      body: rule.body.slice(open + 1, close),
+      bodyStart: rule.bodyStart + open + 1,
+      nested: bodyHasBrace(rule.body.slice(open + 1, close)),
+    };
+    out.push(...flattenNested(innerRule));
+    own = own.slice(0, start) + ' '.repeat(close + 1 - start) + own.slice(close + 1);
+    cursor = close + 1;
+  }
+  return [{ ...rule, body: own, nested: false }, ...out];
+}
+
+/** A nested selector read against its parent: & becomes each parent part; no & means a descendant. An @-rule keeps the parent. */
+function resolveNested(inner, parent) {
+  if (inner.startsWith('@')) return parent;
+  const parentParts = parent.split(',').map((part) => part.trim());
+  return inner
+    .split(',')
+    .map((part) => part.trim())
+    .flatMap((part) => parentParts.map((p) => (part.includes('&') ? part.replaceAll('&', p) : `${p} ${part}`)))
+    .join(', ');
 }
 
 /** The state words of a part: its last compound without the BEM block (`.personal-warning__accept` -> `.accept`). */
