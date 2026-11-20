@@ -410,7 +410,7 @@ def test_an_agent_cant_remove_or_rewrite_a_persons_show(with_person_show, correc
 
 
 def test_an_agent_cant_override_a_path_a_person_corrected_last(with_person_show):
-    with pytest.raises(rec.RecordInvalid, match="last corrected by a person"):
+    with pytest.raises(rec.RecordInvalid, match="A person corrected brand"):
         _fix(with_person_show, [{"path": "brand", "op": "set", "value": "beta"}], "agent")
     # A model's show a person edited is the person's on that path too.
     edited = _fix(with_person_show, [{"path": "shows.p1", "op": "set", "value": None}], "person")
@@ -444,3 +444,39 @@ def test_an_agent_cant_reverse_a_persons_keyword(read_record):
         _fix(person, [{"path": "structure.read.reader_1.keywords", "op": "add", "value": word}], "agent")
     other = read_record["structure"]["read"]["reader_1"]["keywords"][1]
     _fix(person, [{"path": "structure.read.reader_1.keywords", "op": "remove", "value": other}], "agent")
+
+
+def test_a_record_approved_while_it_is_read_keeps_its_approval_and_gets_no_reading(folder, item):
+    # The server checks approval before the model call; this is the check under the lock, after it.
+    store.save(rec.build_record(item, clock=CLOCK), rendering_png(item.image), item.data, item.ext, folder)
+    directory = folder / rec.record_id(hashlib.sha256(item.data).hexdigest())
+    approved = store.load(directory)
+    approved["status"], approved["approved_by"], approved["approved_at"] = "approved", "person", "2026-11-19T12:00:00Z"
+    store.write(directory, approved)
+    with pytest.raises(rec.RecordInvalid, match="approved while it was being read"):
+        store.modify(directory, lambda fresh: reader.apply_read(fresh, item.image, landing_structured(), model="fake-reader"))
+    after = store.load(directory)
+    assert after["status"] == "approved" and after["structure"]["read"] is None
+
+
+
+def test_a_persons_set_on_a_list_blocks_an_agents_add_or_remove_there(read_record):
+    # Written straight into the record: the whitelist doesn't offer a set on keywords today, but a person's
+    # set on a list or a parent path must still cover an agent's later add or remove under it.
+    word = read_record["structure"]["read"]["reader_1"]["keywords"][0]
+    record = copy.deepcopy(read_record)
+    record["corrections"].append({"path": "structure.read.reader_1.keywords", "op": "set", "value": [word],
+                                  "actor": "person", "at": "2026-11-19T12:00:00Z"})
+    for op in ("add", "remove"):
+        with pytest.raises(rec.RecordInvalid, match="A person corrected"):
+            _fix(record, [{"path": "structure.read.reader_1.keywords", "op": op, "value": word}], "agent")
+
+
+def test_an_agents_own_later_entry_doesnt_release_a_persons_choice(read_record):
+    record = copy.deepcopy(read_record)
+    record["corrections"] += [
+        {"path": "brand", "op": "set", "value": "acme", "actor": "person", "at": "2026-11-19T12:00:00Z"},
+        {"path": "brand", "op": "set", "value": "beta", "actor": "agent", "at": "2026-11-19T12:01:00Z"},
+    ]
+    with pytest.raises(rec.RecordInvalid, match="A person corrected brand"):
+        _fix(record, [{"path": "brand", "op": "set", "value": "gamma"}], "agent")

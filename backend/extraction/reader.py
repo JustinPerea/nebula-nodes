@@ -365,6 +365,10 @@ def apply_read(record: dict[str, Any], image: Image.Image, structured: dict[str,
     read is replaced: ``structure.read``, the region measures and the model-origin shows; shows a person or
     an agent added stay. Pending read requests are answered by the read, so they are cleared.
     """
+    if record.get("status") != "proposal":
+        # Checked here, under the record's lock, as well as before the model
+        # call: a person can approve the record while Claude is reading it.
+        raise rec.RecordInvalid("That record was approved while it was being read, so the reading wasn't saved.")
     palette = record["structure"]["measured"]["palette"]
     read, shows = validate_read(structured, len(palette), vocab or load_vocabulary(), image.size, model=model,
                                 read_at=rec._stamp(clock))

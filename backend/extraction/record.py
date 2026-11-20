@@ -429,23 +429,31 @@ def _keep_persons_choices(record: dict[str, Any], view: dict[str, Any], parts: l
     """An agent's correction never removes, replaces or overrides what a person chose.
 
     Refused: anything under a show whose origin is "person" (stored, or added by a person's correction), and
-    a set on a path whose latest correction is a person's (an add or remove of an item a person already added
-    or removed). The agent can add its own show under another id, or ask for a read."""
+    any correction a person's correction bears on, whoever wrote last: a person's set covers its path, parents
+    and children; an agent's add or remove of an item a person added or removed is refused too. The agent can add its own show under another id, or ask for a read."""
     path = ".".join(parts)
     way_out = "Add your own show under another id, or use extraction_request_read to ask the person."
     if parts[0] == "shows" and len(parts) >= 2:
         show = view["shows"].get(parts[1])
         if isinstance(show, dict) and show.get("origin") == "person":
             raise RecordInvalid(f"{path} belongs to a show a person wrote or kept, and a person's show stays as it is. {way_out}")
-    for item in reversed(record["corrections"]):
-        if op == "set":
-            if not _related(item["path"], path):
-                continue
-        elif not (item["path"] == path and item.get("value") == value):
+    # Any person's correction that bears on this one blocks it, whoever wrote
+    # last: only a person releases a person's choice. A person's set covers its
+    # path, its parents and its children; for an agent's set, so does any person
+    # correction on a related path; for an add or remove, a person's add or
+    # remove of the same item.
+    for item in record["corrections"]:
+        if item.get("actor") != "person":
             continue
-        if item["actor"] == "person":
-            raise RecordInvalid(f"{path} was last corrected by a person, and a person's correction stays. {way_out}")
-        break
+        other = str(item.get("path"))
+        if item.get("op") == "set" and _related(other, path):
+            blocked = True
+        elif op == "set":
+            blocked = _related(other, path)
+        else:
+            blocked = other == path and item.get("value") == value
+        if blocked:
+            raise RecordInvalid(f"A person corrected {other}, and a person's correction stays. {way_out}")
 
 
 def add_corrections(record: dict[str, Any], corrections: Iterable[dict[str, Any]], actor: str, *,
