@@ -32,7 +32,7 @@ describe('a state after the dot never repeats its route', () => {
   it.each([
     ['disconnected', `Krea sign-in ·${NBSP}setup required`],
     ['needs_auth', `Krea sign-in ·${NBSP}setup required`],
-    ['connecting', `Krea sign-in ·${NBSP}finish setup`],
+    ['connecting', `Krea sign-in ·${NBSP}setup not finished`],
     ['connected', `Krea sign-in ·${NBSP}signed in`],
   ] as const)('reads a Krea sign-in that is %s without "Krea" or "sign-in" twice', (status, expected) => {
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true, kreaConnectionMode: 'mcp', kreaConnection: { status } } });

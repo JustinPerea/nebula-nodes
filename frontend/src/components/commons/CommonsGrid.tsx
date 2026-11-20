@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { CommonsMedia } from './CommonsMedia';
 import { analysisBadge } from '../../lib/commonsFormat';
@@ -48,8 +49,8 @@ function tileBadges(row: SearchRow, proposed?: ReadonlySet<string>): TileBadge[]
   }
   if (row.media === 'video') badges.push({ key: 'video', className: '', text: MEDIA_LABELS.video, label: MEDIA_LABELS.video });
   if (row.comment_count > 0) {
-    badges.push({ key: 'count', className: 'commons-badge--count', text: `${row.comment_count} ✎`,
-      label: `${row.comment_count} comments` });
+    badges.push({ key: 'count', className: 'commons-badge--count', text: `${groupedCount(row.comment_count)} ✎`,
+      label: `${groupedCount(row.comment_count)} comments` });
   }
   return badges;
 }

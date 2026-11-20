@@ -1,3 +1,4 @@
+import { groupedCount } from '../../../lib/groupedCount';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
@@ -36,7 +37,7 @@ interface Entry {
 }
 
 function plural(count: number, word: string) {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
+  return `${groupedCount(count)} ${word}${count === 1 ? '' : 's'}`;
 }
 
 /**

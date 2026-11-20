@@ -1,3 +1,4 @@
+import { groupedCount, countNoun } from '../../lib/groupedCount';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { commonsApi } from '../../lib/commonsApi';
 import { deviceStateLabel, type CommonsStatus, type FolderLink } from '../../lib/commonsTypes';
@@ -238,8 +239,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         <h3 className="commons-heading">Meter</h3>
         {status && (
           <p className="commons-meta">
-            Analysis calls today {status.meter.calls} / {status.meter.cap}
-            {status.agent_adds ? ` · agent adds ${status.agent_adds.calls} / ${status.agent_adds.cap}` : ''}
+            Analysis calls today {groupedCount(status.meter.calls)} / {groupedCount(status.meter.cap)}
+            {status.agent_adds ? ` · agent adds ${groupedCount(status.agent_adds.calls)} / ${groupedCount(status.agent_adds.cap)}` : ''}
             {' · '}resets {writtenDateTime(status.meter.resets_at)}
           </p>
         )}
@@ -280,7 +281,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             {candidates.map((c) => (
               <li key={c.term} className="commons-list__item">
                 <strong>{c.term}</strong>
-                <span className="commons-meta">×{c.count}</span>
+                <span className="commons-meta">×{groupedCount(c.count)}</span>
                 {c.assets.slice(0, 6).map((id) => (
                   <button key={id} type="button" className="commons-link" onClick={() => onOpenAsset(id)}>{id.slice(-6)}</button>
                 ))}
@@ -297,7 +298,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.reanalyzeStale();
-              showMessage(`Queued ${r.queued} stale item${r.queued === 1 ? '' : 's'} for re-analysis.`);
+              showMessage(`Queued ${countNoun(r.queued, 'stale item')} for re-analysis.`);
             })}
           >
             Re-analyze stale
@@ -306,7 +307,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             type="button" className="commons-button" disabled={readOnly} {...offlineMark(readOnly)}
             onClick={() => run(async () => {
               const r = await commonsApi.importMoodboards();
-              showMessage(`Imported ${r.added} from ${r.collections} moodboard${r.collections === 1 ? '' : 's'}; skipped ${r.skipped.length}.`);
+              showMessage(`Imported ${groupedCount(r.added)} from ${countNoun(r.collections, 'moodboard')}; skipped ${groupedCount(r.skipped.length)}.`);
             })}
           >
             Import moodboards

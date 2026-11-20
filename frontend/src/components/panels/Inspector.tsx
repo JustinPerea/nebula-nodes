@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useId } from 'react';
 import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
@@ -447,7 +448,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <span className="inspector__empty-grid" aria-hidden="true" />
         {canvasSelectedCount >= 2 ? (
           <>
-            <span className="inspector__empty-title">{`${canvasSelectedCount} nodes selected`}</span>
+            <span className="inspector__empty-title">{`${groupedCount(canvasSelectedCount)} nodes selected`}</span>
             <span className="inspector__empty-line">Select one node to see its settings.</span>
           </>
         ) : (

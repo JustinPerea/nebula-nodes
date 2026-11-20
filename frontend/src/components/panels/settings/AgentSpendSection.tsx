@@ -1,3 +1,4 @@
+import { groupedCount } from '../../../lib/groupedCount';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusHandover } from '../../../hooks/useFocusHandover';
 import { X } from 'lucide-react';
@@ -205,7 +206,7 @@ export function AgentSpendSection() {
                 <span className="settings-agent-spent" data-testid="settings-agent-outside-spent">
                   {' '}{counted ? holdSentence(!blocked && outsideLimit !== null) : <>
                     {spentUsd(outside.view.outside.spentUsd)} in the last 24 hours
-                    {outside.view.outside.kreaPlanRuns > 0 && `, ${outside.view.outside.kreaPlanRuns} Krea plan runs`}.
+                    {outside.view.outside.kreaPlanRuns > 0 && `, ${groupedCount(outside.view.outside.kreaPlanRuns)} Krea plan runs`}.
                   </>}
                 </span>
               )}
@@ -295,7 +296,7 @@ function PersonalAgentSpend({ view, held }: {
             <span className="settings-pref__description">
               {held ?? <>
                 {spentUsd(agent.spentUsd)} in the last 24 hours
-                {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}
+                {agent.kreaPlanRuns > 0 && `, ${groupedCount(agent.kreaPlanRuns)} Krea plan runs`}
               </>}, inside the budget above
             </span>
           </span>

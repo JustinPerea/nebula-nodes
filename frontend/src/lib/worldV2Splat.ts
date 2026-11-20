@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import type { WorldSplatRepresentation, WorldValueV2 } from '../types/spatial';
 import { isSafeWorldUrl } from './worldValue';
 
@@ -29,7 +30,7 @@ export function splatSourceLine(world: WorldValueV2): string {
 /** "262,144 Gaussians", "1 Gaussian"; null without a count. */
 export function gaussianCountText(count: number | undefined): string | null {
   if (count === undefined || !Number.isFinite(count) || count < 0) return null;
-  return `${count.toLocaleString('en-US')} ${count === 1 ? 'Gaussian' : 'Gaussians'}`;
+  return `${groupedCount(count)} ${count === 1 ? 'Gaussian' : 'Gaussians'}`;
 }
 
 /** "Splat · PLY": the asset row on the card and in the dialog. */

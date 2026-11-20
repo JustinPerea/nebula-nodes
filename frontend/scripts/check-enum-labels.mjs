@@ -40,7 +40,7 @@ import ts from 'typescript';
 //      The label shape passes a written-out unit ("Size (pixels)", "Duration (seconds)") and a
 //      count ("Images (3)"); a brand in parentheses ("Claude (Anthropic)") is an aside and fails;
 //   6. a date shown through `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` or
-//      `Intl.DateTimeFormat` where the receiver is a date (`new Date(x)`, or a name matching
+//      `Intl.DateTimeFormat` (called with or without `new`) where the receiver is a date (`new Date(x)`, or a name matching
 //      date, when or moment, a camelCase `...At` or `...Date` suffix, or a snake_case `..._at`
 //      or `..._date`; `format` and `elapsedTime` are not dates): write it with `writtenDate`,
 //      `writtenDateTime` or `writtenTime` (lib/writtenDate), spelled out with no seconds
@@ -63,6 +63,7 @@ export const ALLOWED_NAMES = [
 
 /** An option that shows its value on purpose. By file (under src) and the value expression, with the reason. */
 export const ALLOWED = [
+  { file: 'lib/writtenDate.ts', value: "date.toLocaleDateString('en-US',{month:'long',day:'numeric'})", why: 'writtenDay is the one written-date helper: it spells the month out in English with the locale pinned, and every other date goes through it' },
   { file: 'components/commons/CommonsDetail.tsx', value: 'badge.label', why: 'analysisBadge() returns a label from STATE_LABELS (sentence case); the runtime test covers every state' },
   { file: 'components/commons/CommonsDetail.tsx', value: 'membership.brand', why: 'a brand badge shows the brand\'s own name, which is not a stored enum value' },
   { file: 'components/commons/CommonsGrid.tsx', value: 'badge.text', why: 'the tile renders a list of badges built in tileBadges() from label maps; the runtime test covers each' },
@@ -158,7 +159,8 @@ function attrExpression(attr, sf) {
 
 /** The hits in one source text: { line, reason }. */
 export function findEnumLabelHits(text, file = 'x.tsx') {
-  // A .ts file is read for its strings only: the JSX and date rules are the .tsx shapes.
+  // A .ts file is read for its strings and its date formatting (the lib's date helpers are .ts);
+  // the JSX rules are the .tsx shapes.
   const stringsOnly = file.endsWith('.ts');
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, stringsOnly ? ts.ScriptKind.TS : ts.ScriptKind.TSX);
   const hits = [];
@@ -166,6 +168,7 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   const visit = (node) => {
     if (stringsOnly) {
       parenAsideHit(node);
+      dateFormatHit(node);
       ts.forEachChild(node, visit);
       return;
     }
@@ -214,7 +217,9 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   function parenAsideHit(node) {
     if (!TEXT_NODES.has(node.kind)) return;
     const text = node.text.replace(/\s+/g, ' ').trim();
-    if (!stringsOnly && /[ \u00a0]·(?!\u00a0) ?(?:optional|required|beta|experimental|deprecated|default|recommended)\b/.test(node.text)) {
+    // Whitespace collapses to one ordinary space first (a newline after the dot is a plain space), keeping U+00A0.
+    const spaced = node.text.replace(/[ \t\r\n]+/g, ' ');
+    if (!stringsOnly && /[ \u00a0]·(?!\u00a0) ?(?:optional|required|beta|experimental|deprecated|default|recommended)\b/.test(spaced)) {
       hits.push({ line: at(node), value: text, reason: `"${text}" builds the aside form without the no-break space after the dot: write it with aside(label, note) (lib/labelAside) so the dot starts the line with its note` });
     }
     // A status word after the dot starts lower case ("Google API · setup required", design).
@@ -222,6 +227,7 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
     if (capital) {
       hits.push({ line: at(node), value: text, reason: `"${capital[0].trim()}" after a middle dot starts with a capital: the word after the dot is lower case (" · setup required"); lower-case it where the label is joined (afterDot in lib/labelAside)` });
     }
+    if (!stringsOnly && node.kind === ts.SyntaxKind.JsxText) dotThenExpression(node, spaced);
     const flagged = /\((?:optional|required|beta|experimental|deprecated|default|recommended)\)/i.exec(text);
     if (flagged) {
       hits.push({ line: at(node), value: text, reason: `"${flagged[0]}" in a person line: the note goes beside the label as an aside (" · optional"), or in a placeholder` });
@@ -237,8 +243,22 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
     if (/^(?:[A-Za-z⌘⌥⇧^]+\+)*[A-Za-z0-9⌘⌥⇧^]+(?: or (?:[A-Za-z⌘⌥⇧^]+\+)*[A-Za-z0-9⌘⌥⇧^]+)?$/.test(aside) && /[+⌘⌥⇧]|^(?:Ctrl|Cmd|Shift|Alt)/.test(aside)) return; // a key shortcut
     hits.push({ line: at(node), value: text, reason: `"${text}" has a parenthesised aside: a label reads as its name; put the note beside it as an aside or a placeholder` });
   }
+  const ASIDE_NOTE = /^(?:optional|required|beta|experimental|deprecated|default|recommended)\b/i;
+  /** JSX text that ends in " · " (an ordinary space after the dot) with the note in the next node: `{label} · {'optional'}`. */
+  function dotThenExpression(node, spaced) {
+    if (!/ · $/.test(spaced)) return;
+    const kids = node.parent.children;
+    const next = kids[kids.indexOf(node) + 1];
+    if (!next || !ts.isJsxExpression(next) || !next.expression) return;
+    const expr = unwrap(next.expression);
+    const literal = isStringLiteral(expr) ? expr.text : (ts.isTemplateExpression(expr) ? expr.head.text : null);
+    if (literal === null || !ASIDE_NOTE.test(literal.trim())) return;
+    hits.push({ line: at(node), value: exprText(next, sf), reason: `"· {${exprText(expr, sf)}}" builds the aside form from separate nodes with an ordinary space after the dot: write it with aside(label, note) (lib/labelAside) so the dot starts the line with its note` });
+  }
   const WRITTEN_UNITS = /^(?:pixels?|seconds?|minutes?|hours?|days?|milliseconds?|frames?|bytes?|kilobytes?|megabytes?|gigabytes?|percent|degrees?|characters?|words?|tokens?)$/i;
   const FORMATTERS = new Set(['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']);
+  // These exist only on Date but read an ordinary name too often to flag on any receiver: they fail on a date receiver.
+  const DATE_STRING_METHODS = new Set(['toDateString', 'toTimeString', 'toUTCString', 'toGMTString']);
   // toLocaleDateString and toLocaleTimeString exist only on Date: they are flagged on any receiver.
   // toLocaleString is also a Number method, so it is flagged only when the receiver is a date by name:
   // date, when, moment (any case), a camelCase `...At` / `...Date` suffix (`createdAt`), a snake_case
@@ -249,7 +269,9 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   const DURATION_PART = new Set(['elapsed', 'duration', 'ms', 'sec', 'secs', 'seconds']);
   // What is timed, in a "...Time" name that is a length of time (`renderTime`, `waitTime`, `latency`): it
   // excludes only the time-word match, so `lastRunAt` and `loadedAt` still read as dates.
-  const TIMED_PART = new Set(['render', 'load', 'wait', 'latency', 'response', 'run', 'cpu', 'frame', 'total']);
+  // A count of times or a bound ("maxTime", "minTime", "avgTime", "timeCount") is a number too.
+  const TIMED_PART = new Set(['render', 'load', 'wait', 'latency', 'response', 'run', 'cpu', 'frame', 'total',
+    'max', 'min', 'avg', 'mean', 'median', 'count', 'num', 'number', 'sum']);
   const TIME_PART = new Set(['time', 'timestamp', 'ts', 'stamp']);
   const DATE_NAME_CASED = (name) => {
     const parts = nameParts(name);
@@ -275,8 +297,12 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
       && (node.expression.name.text !== 'toLocaleString' || isDateReceiver(node.expression.expression))) {
       hits.push({ line: at(node), value: exprText(node, sf), reason: `${node.expression.name.text}() on a date shows the browser's raw format: use writtenDate, writtenDateTime or writtenTime (lib/writtenDate)` });
     }
-    // new Intl.DateTimeFormat(...): its output is a date a person reads.
-    if (ts.isNewExpression(node) && node.expression.getText(sf) === 'Intl.DateTimeFormat') {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && DATE_STRING_METHODS.has(node.expression.name.text) && isDateReceiver(node.expression.expression)) {
+      hits.push({ line: at(node), value: exprText(node, sf), reason: `${node.expression.name.text}() on a date shows a raw format: use writtenDate, writtenDateTime or writtenTime (lib/writtenDate)` });
+    }
+    // Intl.DateTimeFormat(...) with or without `new`: its output is a date a person reads.
+    if ((ts.isNewExpression(node) || ts.isCallExpression(node)) && node.expression.getText(sf) === 'Intl.DateTimeFormat') {
       hits.push({ line: at(node), value: exprText(node, sf), reason: 'Intl.DateTimeFormat in a person line: use writtenDate, writtenDateTime or writtenTime (lib/writtenDate)' });
     }
   }

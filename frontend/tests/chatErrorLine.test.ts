@@ -71,7 +71,10 @@ describe('the chat stream error line', () => {
   });
 
   it('keeps the words of a timeout that is not a connection fault', () => {
-    expect(line('Command timed out after 120s')).toBe('Claude stopped because command timed out after 120s.');
+    expect(line('Command timed out after 120s')).toBe('Claude stopped because its command timed out after 120s.');
+    expect(line('Process exited unexpectedly')).toBe('Claude stopped because its process exited unexpectedly.');
+    expect(line('Request was rejected')).toBe('Claude stopped because its request was rejected.');
+    expect(line('Commander lost the thread')).toBe('Claude stopped because commander lost the thread.');
     expect(line('MCP tool call timed out')).toBe('Claude stopped because MCP tool call timed out.');
     expect(line('connection timed out')).toBe('Claude stopped because the connection timed out.');
   });
@@ -82,6 +85,24 @@ describe('the chat stream error line', () => {
     const long = `boom ${'x'.repeat(220)}`;
     expect(full(long)).toMatchObject({ text: 'Claude stopped because its command failed.', details: long });
     expect(full('connection refused').details).toBeUndefined();
+  });
+
+  it('shows a long single-line refusal written for the person as it is, with the error tone and no Details', () => {
+    const apiKey = 'Codex agent is restricted to ChatGPT account login in Nebula. Current Codex auth is API-key billing mode. Use “Connect ChatGPT account” in Nebula, or run `codex logout` then `codex login` without `--with-api-key`.';
+    expect(apiKey.length).toBeGreaterThan(200);
+    expect(full(apiKey, { agentName: 'Codex' })).toEqual({ text: apiKey, because: false });
+    const features = 'Codex has features on that Nebula hasn\'t reviewed for its agent (browser_use, js_repl), so the turn was not started. Review them and add each to CODEX_ALLOWED_FEATURES or CODEX_DISABLED_FEATURES in services/agent_profiles.py.';
+    expect(features.length).toBeGreaterThan(200);
+    expect(full(features, { agentName: 'Codex' })).toEqual({ text: features, because: false });
+  });
+
+  it('puts a 6-line stack trace and a long non-sentence dump behind Details', () => {
+    const trace = ['Traceback (most recent call last):', '  File "a.py", line 3, in run', '    go()', '  File "b.py", line 9, in go', '    raise ValueError("nope")', 'ValueError: nope.'].join('\n');
+    expect(full(trace)).toEqual({ text: 'Claude stopped because its command failed.', because: true, details: trace });
+    const dump = `Traceback ${'frame '.repeat(50)}ended`;
+    expect(full(dump)).toMatchObject({ text: 'Claude stopped because its command failed.', details: dump });
+    const multiSentence = 'Something failed. '.repeat(15).trim();
+    expect(full(`${multiSentence}\nmore`).details).toBeDefined();
   });
 
   it('capitalises a whole line from the backend unless it opens with an identifier, and drops an Error lead', () => {

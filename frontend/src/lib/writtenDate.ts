@@ -17,3 +17,13 @@ export function writtenTime(stored: Moment): string {
   const moment = new Date(stored ?? NaN);
   return Number.isNaN(+moment) ? '' : clockTime(moment);
 }
+
+/** Whether a stored "YYYY-MM-DD…" names a day that exists ("2026-02-30" does not): `new Date` rolls such a day into the next month, so the parts are checked first. A string with no date prefix passes (the caller's own parse decides). */
+export function isRealCalendarDay(stored: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(stored);
+  if (!match) return true;
+  const [year, month, day] = [+match[1], +match[2], +match[3]];
+  const check = new Date(Date.UTC(2000, month - 1, day));
+  check.setUTCFullYear(year);
+  return check.getUTCFullYear() === year && check.getUTCMonth() === month - 1 && check.getUTCDate() === day;
+}

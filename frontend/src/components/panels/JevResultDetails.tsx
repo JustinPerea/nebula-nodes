@@ -1,3 +1,4 @@
+import { groupedCount } from '../../lib/groupedCount';
 import type { JevResult } from '../../lib/jev';
 import {
   decideMode, isCloseCall, jevRunCost, judgedImages, probabilityRows, requestedAlias, splitLines,
@@ -66,7 +67,7 @@ export function JevResultDetails({ result, params }: JevResultDetailsProps) {
   if (result.kind === 'decide') facts.push(['Probability', String(result.probability)]);
   if (report?.model) facts.push(['Model', report.model]);
   if (alias) facts.push(['Asked for', alias]);
-  if (report) facts.push(['Input tokens', report.inputTokens === null ? 'unknown' : report.inputTokens.toLocaleString('en-US')]);
+  if (report) facts.push(['Input tokens', report.inputTokens === null ? 'unknown' : groupedCount(report.inputTokens)]);
   if (cost) facts.push(['Cost', `≈ ${cost}`]);
   if (judgedImages(report)) facts.push(['Images', report!.fields.Images]);
   if (report?.fields['Request id']) facts.push(['Request id', report.fields['Request id']]);

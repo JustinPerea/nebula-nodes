@@ -1,5 +1,5 @@
 import { clockTime } from './clockTime';
-import { writtenDay } from './writtenDate';
+import { isRealCalendarDay, writtenDay } from './writtenDate';
 
 // Its own module: the first load pulls in writtenDay and writtenTime, and most callers of this one are lazy.
 
@@ -13,6 +13,8 @@ type Moment = string | number | Date | null | undefined;
  */
 export function writtenDateTime(stored: Moment, now: Date = new Date()): string {
   if (stored == null) return '';
+  // An impossible day ("2026-02-30") would roll into the next month: it reads as it came.
+  if (typeof stored === 'string' && !isRealCalendarDay(stored)) return stored;
   // A date with no time is read as written, in local time: no moment to convert.
   const dateOnly = typeof stored === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(stored);
   const moment = new Date(dateOnly ? `${stored}T00:00` : stored);

@@ -64,6 +64,10 @@ const bad: Array<[string, string]> = [
   ['a plain space after the dot of an optional aside in JSX', `const a = <span>Moodboard · optional</span>;`],
   ['a plain space after the dot of a default aside in a string', `const a = <span>{'10 · default'}</span>;`],
   ['a no-break space before the dot (the old form)', `const a = <span>{'Moodboard\u00a0· optional'}</span>;`],
+  ['a dot then a newline then the aside word in JSX text', "const a = <span>Moodboard ·\n  optional</span>;"],
+  ['a dot, an ordinary space and a note in a separate expression', `const a = <span>{label} · {'optional'}</span>;`],
+  ['a dot, an ordinary space and a template note in a separate expression', "const a = <span>{label} · {`default`}</span>;"],
+  ['a capitalised note in a separate expression after the dot', `const a = <span>{label} · {'Optional'}</span>;`],
   ['a capitalised status word after the dot (JSX)', `const a = <span>Google API · Setup required</span>;`],
   ['a capitalised status word after the aside dot', `const a = <span>{'Google API ·\u00a0Setup required'}</span>;`],
   ['toLocaleString on a time-named value', `const a = <p>{resetTime.toLocaleString()}</p>;`],
@@ -150,17 +154,34 @@ const fine: Array<[string, string]> = [
   ['toLocaleString on a number', `const a = <p>{count.toLocaleString('en-US')}</p>;`],
   ['toLocaleString on a plain identifier', `const a = <p>{limit.toLocaleString()}</p>;`],
   ['a written date', `const a = <p>{writtenDateTime(batch.closed_at)}</p>;`],
+  ['nodeCount.toLocaleString (a count, not a date)', `const a = <p>{nodeCount.toLocaleString()}</p>;`],
+  ['maxTime.toLocaleString (a bound, a number)', `const a = <p>{maxTime.toLocaleString()}</p>;`],
+  ['minTime.toLocaleString (a bound, a number)', `const a = <p>{minTime.toLocaleString()}</p>;`],
+  ['avgTime.toLocaleString (an average, a number)', `const a = <p>{avgTime.toLocaleString()}</p>;`],
+  ['an aside built with aside() across nodes', `const a = <span>{aside(label, 'optional')}</span>;`],
+  ['a dot then a dynamic note in separate nodes (not an aside word)', `const a = <span>{name} · {count} items</span>;`],
+  ['a no-break space after the dot, written in JSX text across lines', "const a = <span>Moodboard ·\u00a0optional</span>;"],
 ];
 
 // .ts files are read for the word check only.
 const badTs: Array<[string, string]> = [
+  ['Intl.DateTimeFormat called without new in a .ts file', `export const f = (d: Date) => Intl.DateTimeFormat('en', { month: 'long' }).format(d);`],
+  ['new Intl.DateTimeFormat in a .ts file', `export const f = (d: Date) => new Intl.DateTimeFormat('en', { month: 'long' }).format(d);`],
+  ['toLocaleDateString on any receiver in a .ts file', `export const f = (d: Date) => d.toLocaleDateString();`],
+  ['toLocaleString on a createdAt in a .ts file', `export const f = (row: { createdAt: Date }) => row.createdAt.toLocaleString();`],
+  ['toDateString on a date name', `export const f = (createdAt: Date) => createdAt.toDateString();`],
+  ['toTimeString on new Date', `export const f = () => new Date().toTimeString();`],
+  ['toUTCString on a date name', `export const f = (row: { closedAt: Date }) => row.closedAt.toUTCString();`],
   ['a parenthesised default in a placeholder', `export const a = { placeholder: 'Rachel (default)' };`],
   ['a parenthesised optional appended in a lib', "export const b = (l: string) => `${l} (optional)`;"],
 ];
 const fineTs: Array<[string, string]> = [
+  ['toLocaleString on a count in a .ts file', `export const f = (nodeCount: number) => nodeCount.toLocaleString();`],
+  ['toDateString on a name that is not a date', `export const f = (thing: { toDateString(): string }) => thing.toDateString();`],
+  ['toLocaleString on maxTime in a .ts file', `export const f = (maxTime: number) => maxTime.toLocaleString();`],
   ['a label shape in a .ts file (too noisy outside JSX)', `export const a = 'Claude (Anthropic)';`],
   ['a middle-dot aside in a .ts file', `export const a = { placeholder: 'Rachel · default' };`],
-  ['a date formatter in a .ts file', `export const a = (d: Date) => d.toLocaleString();`],
+  ['toLocaleString on an unnamed receiver in a .ts file', `export const a = (d: Date) => d.toLocaleString();`],
 ];
 
 describe('check-enum-labels', () => {

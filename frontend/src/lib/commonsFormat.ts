@@ -1,6 +1,7 @@
 import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
 import { capitalised, type AnalysisState, type Collection } from './commonsTypes';
-import { writtenDay } from './writtenDate';
+import { groupedCount } from './groupedCount';
+import { isRealCalendarDay, writtenDay } from './writtenDate';
 
 export { writtenDay, writtenTime } from './writtenDate';
 export { writtenDateTime } from './writtenDateTime';
@@ -65,7 +66,7 @@ export function withCollection(list: readonly Collection[], created: Collection)
  */
 export function writtenDate(stored: string, now: Date = new Date()): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(stored);
-  if (!match || +match[2] < 1 || +match[2] > 12) return stored;
+  if (!match || +match[2] < 1 || +match[2] > 12 || !isRealCalendarDay(stored)) return stored;
   const date = match[4] ? new Date(stored) : new Date(+match[1], +match[2] - 1, +match[3]);
   return Number.isNaN(+date) ? stored : writtenDay(date, now);
 }
@@ -102,6 +103,6 @@ export function scanSummaryText(summary: Record<string, unknown> | null | undefi
   const unknown = [...counts.keys()].filter((key) => !Object.hasOwn(SCAN_COUNT_WORDS, key));
   const parts = [...known, ...unknown]
     .filter((key) => counts.get(key) !== 0)
-    .map((key) => `${counts.get(key)} ${Object.hasOwn(SCAN_COUNT_WORDS, key) ? SCAN_COUNT_WORDS[key] : key.replace(/_/g, ' ')}`);
+    .map((key) => `${groupedCount(counts.get(key) ?? 0)} ${Object.hasOwn(SCAN_COUNT_WORDS, key) ? SCAN_COUNT_WORDS[key] : key.replace(/_/g, ' ')}`);
   return parts.length > 0 ? parts.join(' · ') : 'nothing new';
 }

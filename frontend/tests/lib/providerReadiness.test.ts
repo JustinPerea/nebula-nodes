@@ -336,7 +336,7 @@ describe('provider readiness without generation', () => {
 
   it.each([
     ['disconnected', 'Setup required'],
-    ['connecting', 'Finish setup'],
+    ['connecting', 'Setup not finished'],
     ['needs_auth', 'Setup required'],
     ['error', 'Connection unavailable'],
   ] as const)('does not substitute a token for saved Krea MCP mode while %s', (status, label) => {

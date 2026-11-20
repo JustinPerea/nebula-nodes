@@ -11,4 +11,8 @@ describe('a project card\'s counts', () => {
     const { container } = render(<ProjectCounts project={{ nodeCount: 1, edgeCount: 1 }} />);
     expect(container.textContent).toBe('1 node · 1 connection');
   });
+  it('groups a large count by the locale: "1,248 nodes" and "3,102 connections"', () => {
+    const { container } = render(<ProjectCounts project={{ nodeCount: 1248, edgeCount: 3102 }} />);
+    expect(container.textContent?.replace(/\u00a0/g, ' ')).toBe('1,248 nodes · 3,102 connections');
+  });
 });

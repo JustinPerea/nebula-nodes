@@ -113,7 +113,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
       detail: 'The saved Krea sign-in status has not loaded yet. This recipe keeps its Krea workspace billing connection.' };
     if (status === 'connected') return { label: 'Signed in', tone: 'neutral', setupTarget, connectionLabel: 'Krea sign-in',
       detail: 'Uses the signed-in Krea workspace and its compute units. This model is checked against that account when you explicitly run it.' };
-    return { label: status === 'connecting' ? 'Finish setup' : status === 'error' ? 'Connection unavailable' : 'Setup required',
+    return { label: status === 'connecting' ? 'Setup not finished' : status === 'error' ? 'Connection unavailable' : 'Setup required',
       tone: 'warning', setupTarget, connectionLabel: 'Krea sign-in', detail: 'This recipe uses Krea sign-in. Sign in to Krea in Settings; an API key doesn’t replace it.' };
   }
   if (def.apiProvider === 'nous') {

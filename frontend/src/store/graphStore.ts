@@ -1,3 +1,4 @@
+import { groupedCount } from '../lib/groupedCount';
 import { create, type StateCreator } from 'zustand';
 import type { SaveUndoStep } from '../lib/graphFileShared';
 import type { SaveUndoWalk, UndoWalkStep } from '../lib/saveFixStep';
@@ -7471,7 +7472,7 @@ function deletedNotice(count: number, step: UndoEntry, kept: readonly KeptScene[
 /** The nodes stay on the canvas (their delete wasn't confirmed). GM's
  * pattern: "Couldn’t delete the node." then the reason, each reason once. */
 function deletionHeading(count: number): string {
-  return count === 1 ? "Couldn’t delete the node." : `Couldn’t delete ${count} nodes.`;
+  return count === 1 ? "Couldn’t delete the node." : `Couldn’t delete ${groupedCount(count)} nodes.`;
 }
 
 /** The backend's World Labs lines read as GM's trimmed ones (rounds 4 and

@@ -5,6 +5,7 @@
  * reads, so a scene saved before that (or one that reached the canvas some
  * other way) still opens instead of blanking the studio.
  */
+import { groupedCount } from './groupedCount';
 import type { ActiveRun } from './runHistory';
 import { becauseLine, nodeNameList } from './errorCopy';
 import { RUN_LOCK_VERBS, lockLine, runFinishesLine } from './runLock';
@@ -190,7 +191,7 @@ export function runLockedLine(action: 'delete' | 'duplicate' | 'undo' | 'redo' |
   // finishes." as Delete does, and Cmd+V "You can paste when the run finishes."
   if (action !== 'delete' && action !== 'duplicate') return runFinishesLine(RUN_LOCK_VERBS[action]);
   // GM r6: several nodes are named, up to 3, grouped by title, counted from 4.
-  const what = names && names.length > 1 ? nodeNameList([...names]) : count === 1 ? name ?? 'the node' : `${count} nodes`;
+  const what = names && names.length > 1 ? nodeNameList([...names]) : count === 1 ? name ?? 'the node' : `${groupedCount(count)} nodes`;
   return runFinishesLine(`${action} ${what}`);
 }
 
@@ -198,7 +199,7 @@ export function runLockedLine(action: 'delete' | 'duplicate' | 'undo' | 'redo' |
  * Delete key is off during the run, and never silently. GM PR #205 r1: "You
  * can delete the connection when the run finishes." ("the 2 connections"). */
 export function runLockedWiresLine(count: number): string {
-  return runFinishesLine(`delete ${count === 1 ? 'the connection' : `the ${count} connections`}`);
+  return runFinishesLine(`delete ${count === 1 ? 'the connection' : `the ${groupedCount(count)} connections`}`);
 }
 
 /** GM, PR #198 r3 item 1: the scene's Delete, disabled while a shot

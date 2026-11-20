@@ -1,3 +1,4 @@
+import { groupedCount } from './groupedCount';
 import type { ModelNodeDefinition } from '../types';
 import { countsInstead, nodeNameList } from './errorCopy';
 import { formatChipEstimate } from './pricing';
@@ -126,7 +127,7 @@ export function notReadyShown(
   // The Accept line stays in view whatever the count: it says why Accept is
   // locked (review 13 of PR #203, copy NIT-3).
   const accept = lines.filter((line) => line.accept);
-  return { lines: [{ key: 'count', text: `${rows.length} nodes can’t run here yet.` }, ...accept], inDetails: lines };
+  return { lines: [{ key: 'count', text: `${groupedCount(rows.length)} nodes can’t run here yet.` }, ...accept], inDetails: lines };
 }
 
 /** The person's line ("“GPT Image 2” needs your OpenAI API key. Add it in
