@@ -1156,7 +1156,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
   });
 });
 
-describe('the name pill edge (GM - Design, PR #211 r9 item 4)', () => {
+describe('the name pill edge (design)', () => {
   it('pins the rule: under 3:1 on the canvas, #000', () => {
     expect(AGENT_CURSOR_PILL_EDGE).toEqual({ minContrast: 3, slavaCanvas: '#000000' });
   });

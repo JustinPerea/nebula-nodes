@@ -41,7 +41,12 @@ import {
 //     `[x="y"]`) is not recognised;
 //   - a legacy class or `:not(.app-slava-restraint)` that is not in the leftmost compound
 //     (`html body:not(...)`) is not reported;
-//   - the import graph is ignored: a twin in a lazily loaded sheet still counts.
+//   - the import graph is ignored: a twin in a lazily loaded sheet still counts;
+//   - body and html classes are read from literal `document.body.classList.*` and
+//     `document.documentElement.classList.*` calls. A write the reader cannot see through fails
+//     the check instead (`className =`, `setAttribute('class', …)`, or add/toggle/replace with a
+//     non-literal argument), but an alias (`const b = document.body; b.classList.add('x')`) is
+//     not seen at all: set body classes through the literal form.
 
 const SRC = join(import.meta.dirname, '..', 'src');
 const SKINS = join(SRC, 'lib', 'skins.ts');
@@ -188,6 +193,25 @@ export function readBodyClasses(sources) {
   return [...names];
 }
 
+/** Writes to body or html classes that readBodyClasses cannot read, so a class they set would be
+ *  missed and its rules wrongly reported as dead. `remove` is allowed: removing a class adds none. */
+export function findUnreadBodyClassWrites(sources) {
+  const hits = [];
+  const forms = [
+    /document\.(?:body|documentElement)\.className\s*\+?=(?!=)/g,
+    /document\.(?:body|documentElement)\.setAttribute\(\s*['"`]class['"`]/g,
+    /document\.(?:body|documentElement)\.classList\.(?:add|toggle|replace)\(\s*(?!['"`])/g,
+  ];
+  for (const { file, source } of sources) {
+    for (const form of forms) {
+      for (const match of source.matchAll(form)) {
+        hits.push({ file, line: source.slice(0, match.index).split('\n').length, text: match[0] });
+      }
+    }
+  }
+  return hits;
+}
+
 function loadSheet(source, file) {
   const css = stripComments(source);
   const starts = computeLineStarts(css);
@@ -283,7 +307,14 @@ function collectSourceFiles(dir) {
 
 function main() {
   const files = collectCssFiles(SRC);
-  const bodyClasses = readBodyClasses(collectSourceFiles(SRC).map((file) => readFileSync(file, 'utf8')));
+  const sources = collectSourceFiles(SRC).map((file) => ({ file: relative(SRC, file), source: readFileSync(file, 'utf8') }));
+  const unread = findUnreadBodyClassWrites(sources);
+  if (unread.length > 0) {
+    console.error('These change the classes on body or html in a form check-skin-shadows cannot read, so it could report live CSS as dead. Use document.body.classList.add/toggle/remove with string literals.');
+    for (const hit of unread) console.error(`  src/${hit.file}:${hit.line} ${hit.text}`);
+    process.exit(1);
+  }
+  const bodyClasses = readBodyClasses(sources.map(({ source }) => source));
   const legacy = readLegacyBodyClasses(readFileSync(SKINS, 'utf8'));
   const sheets = files.map((file) => ({ file: relative(SRC, file), source: readFileSync(file, 'utf8') }));
   const hits = findSkinShadows(sheets, legacy, bodyClasses);

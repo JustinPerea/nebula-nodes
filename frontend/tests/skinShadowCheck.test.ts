@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { findSkinShadows, readBodyClasses, readLegacyBodyClasses } from '../scripts/check-skin-shadows.mjs';
+import { findSkinShadows, findUnreadBodyClassWrites, readBodyClasses, readLegacyBodyClasses } from '../scripts/check-skin-shadows.mjs';
 
 /**
  * scripts/check-skin-shadows.mjs runs in `npm run lint` (design: the app has one appearance, so a
@@ -168,6 +168,34 @@ describe('check-skin-shadows: body classes', () => {
       "el.classList.add('not-body');",
     ]);
     expect(names.sort()).toEqual(['agent-log-open', 'x-one', 'x-two']);
+  });
+
+  it('reads remove, replace and a string of several names', () => {
+    const names = readBodyClasses([
+      "document.body.classList.remove('gone');",
+      "document.documentElement.classList.replace('old-one', 'new-one');",
+      "document.body.classList.add('a-one b-two');",
+    ]);
+    expect(names.sort()).toEqual(['a-one', 'b-two', 'gone', 'new-one', 'old-one']);
+  });
+
+  it('fails on body or html class writes it cannot read', () => {
+    const at = (source: string) => findUnreadBodyClassWrites([{ file: 'x.ts', source }]);
+    expect(at("document.body.className = 'x';")).toHaveLength(1);
+    expect(at("document.documentElement.className += ' x';")).toHaveLength(1);
+    expect(at("document.body.setAttribute('class', 'x');")).toHaveLength(1);
+    expect(at('document.body.classList.add(name);')).toHaveLength(1);
+    expect(at('document.documentElement.classList.toggle(cls, on);')).toHaveLength(1);
+    expect(at('document.body.classList.add(...names);')).toHaveLength(1);
+  });
+
+  it('passes the literal forms, removals of a list and comparisons', () => {
+    const at = (source: string) => findUnreadBodyClassWrites([{ file: 'x.ts', source }]);
+    expect(at("document.body.classList.add('x');")).toEqual([]);
+    expect(at('document.body.classList.toggle(`y`, on);')).toEqual([]);
+    expect(at('document.body.classList.remove(...LEGACY_BODY_CLASSES);')).toEqual([]);
+    expect(at("if (document.body.className === 'x') {}")).toEqual([]);
+    expect(at('if (active === document.body) {}')).toEqual([]);
   });
 });
 
