@@ -5211,7 +5211,21 @@ type's name. Other kept lines read "“Brief” changed after that step, so
 Nebula left it as it is.", "“Brief” was connected to “Hero” after that step,
 …", "“Brief” is a different node now, …", "“Brief” was moved after that
 step, so Nebula left it where it is." and "“Brief” changed after that step,
-so Nebula left it as a normal node.". The rest is one restore through the
+so Nebula left it as a normal node.". A node that can't be removed now reads, by the kind of refusal:
+"Nebula left “Brief” as it is because it has unresolved World Labs paid
+state. Check Marble, then resolve its recovery or ambiguity record first.",
+or, for a Cinema scene, "Nebula left “Scene” as it is because “Shot 2” is
+still running as run ‹run id›." (several: "…because “Shot 2” and “Shot 3” are
+still running as runs ‹a› and ‹b›."); any other refusal reads "Nebula left
+“Brief” as it is. ‹the refusal, with ids replaced by names›". The
+person's activity line is "Codex undid its edit." when nothing was kept, else
+"Codex undid its edit except “Hero” and “Brief”, which ran after that.", "…
+except “Notes”, which changed after that." or both ("…except “Hero”, which ran
+after that, and “Notes”, which changed after that."); from 4 parts they are
+counted ("…except 4 parts that ran or changed after that."). The person's own
+Cmd+Z on a node that became something else is refused with "Nebula couldn’t
+undo this step because “Brief” is a different node now. Reload the canvas to
+see the current version.". The rest is one restore through the
 same staging as the canvas's Cmd+Z, so it lands whole or not at all, and
 the person can undo the undo. `status` is `undone`; `skipped` when nothing
 could go back (the token keeps working, for when the person puts a changed

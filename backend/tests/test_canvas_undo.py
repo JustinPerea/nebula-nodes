@@ -1224,13 +1224,14 @@ def test_several_setting_names_share_one_sentence():
     assert item["message"] == "“Hero”’s model and seed are the person’s to change back. Ask them with propose_change."
 
 
-def test_the_node_that_cannot_be_removed_now_is_named_in_its_reason_too():
+def test_the_cannot_remove_line_is_kept_as_the_hook_gives_it():
     nodes = {"n1": _node(label="Brief")}
     inverse = _inverse(added=[{"id": "n1", "definitionId": "text-input", "params": {}, "label": "Brief"}])
-    plan = plan_undo(inverse, nodes, [], cannot_remove=lambda node_id, _n: f"Cannot delete {node_id}: it is paid.",
+    line = "Nebula left “Brief” as it is because “Shot 2” is still running as run r1."
+    plan = plan_undo(inverse, nodes, [], cannot_remove=lambda _id, _n: line,
                      refused_change=_no_refusal, name_of=lambda _id: "Brief")
     [item] = plan.skipped
-    assert item["message"] == "Nebula left “Brief” as it is. Cannot delete “Brief”: it is paid."
+    assert (item["reason"], item["nodeId"], item["message"]) == ("can't be removed now", "n1", line)
 
 
 def test_an_inverse_kept_without_names_falls_back_to_the_card_type_then_the_id():
@@ -1304,21 +1305,49 @@ def test_the_ran_since_line_names_several_runners_with_the_list_helper():
     assert anon["message"] == "An unnamed client ran “Brief” after that step, so Nebula left it as it is."
 
 
-def test_the_activity_line_names_the_nodes_that_ran_after_the_edit():
-    assert activity_line("Codex", "removed 1", 2, ["Hero", "Brief"]) == (
-        "Codex undid its edit except “Hero” and “Brief”, which ran after that. Undone: removed 1.")
-    assert activity_line("Codex", "", 1, ["Hero"]) == "Codex undid its edit except “Hero”, which ran after that."
-    assert activity_line("Codex", "", 4, ["A", "B", "C", "D"]) == (
-        "Codex undid its edit except 4 nodes that ran after that.")
-    assert activity_line("Codex", "removed 1", 3, ["Hero", "Brief"]) == (
-        "Codex undid its edit except “Hero” and “Brief”, which ran after that. Undone: removed 1. "
-        "Left 1 other part as it is.")
-    assert activity_line("Codex", "removed 1", 4, ["Hero", "Brief"]) .endswith("Left 2 other parts as they are.")
-    # Nothing ran since: the line is as it was.
-    assert activity_line("Codex", "removed 1", 0, []) == "Codex undid its edit: removed 1"
-    assert activity_line("Codex", "removed 1", 2, []) == "Codex undid its edit: removed 1; left 2 parts as is"
-    for line in (activity_line("Codex", "removed 1", 2, ["Hero", "Brief"]), activity_line("Codex", "", 4, list("ABCD"))):
-        assert ":" not in line.split("Undone")[0] and "(" not in line
+def _ran_skip(node_id):
+    return {"nodeId": node_id, "part": "node", "reason": "ran since", "message": f"Codex ran “{node_id}” after that step."}
+
+
+def _kept_skip(node_id, reason="changed since"):
+    return {"nodeId": node_id, "part": "params", "reason": reason, "message": f"“{node_id}” changed after that step."}
+
+
+def test_the_activity_line_has_no_counts_colon_or_parens_in_all_its_forms():
+    ran = _ran_skip
+    kept = _kept_skip
+    assert activity_line("Codex", []) == "Codex undid its edit."
+    assert activity_line("Codex", [{"part": "wire", "reason": "gone since", "message": "x"}]) == "Codex undid its edit."
+    assert activity_line("Codex", [ran("Hero"), ran("Brief")]) == (
+        "Codex undid its edit except “Hero” and “Brief”, which ran after that.")
+    assert activity_line("Codex", [kept("Notes")]) == "Codex undid its edit except “Notes”, which changed after that."
+    assert activity_line("Codex", [kept("Notes", "moved since")]) == (
+        "Codex undid its edit except “Notes”, which moved after that.")
+    assert activity_line("Codex", [kept("Notes", "wired since")]) == (
+        "Codex undid its edit except “Notes”, which connected after that.")
+    assert activity_line("Codex", [kept("Notes", "removed since")]) == (
+        "Codex undid its edit except “Notes”, which removed after that.")
+    # Kept reasons that differ read as "changed"; a node counts once however many of its parts were kept.
+    assert activity_line("Codex", [kept("A", "moved since"), kept("B", "wired since")]) == (
+        "Codex undid its edit except “A” and “B”, which changed after that.")
+    assert activity_line("Codex", [kept("Notes"), kept("Notes", "moved since"), ran("Hero")]) == (
+        "Codex undid its edit except “Hero”, which ran after that, and “Notes”, which changed after that.")
+    assert activity_line("Codex", [ran("Hero"), kept("Notes")]) == (
+        "Codex undid its edit except “Hero”, which ran after that, and “Notes”, which changed after that.")
+    assert activity_line("Codex", [ran(n) for n in "ABCD"]) == "Codex undid its edit except 4 nodes that ran after that."
+    assert activity_line("Codex", [kept(n) for n in "ABCD"]) == (
+        "Codex undid its edit except 4 parts that changed after that.")
+    assert activity_line("Codex", [ran("A"), ran("B"), kept("C"), kept("D"), kept("D", "moved since")]) == (
+        "Codex undid its edit except 4 parts that ran or changed after that.")
+    assert activity_line("Codex", [ran(n) for n in "ABCDE"]) == "Codex undid its edit except 5 nodes that ran after that."
+    for line in (activity_line("Codex", [ran("Hero"), kept("Notes")]), activity_line("Codex", [ran(n) for n in "ABCD"])):
+        assert ":" not in line and "(" not in line
+
+
+def test_a_removed_node_is_named_by_its_skip_and_a_nameless_one_by_the_fallback():
+    skip = {"nodeId": "n7", "part": "params", "reason": "removed since", "message": ""}
+    assert activity_line("Codex", [skip], lambda _id: "Mixer") == (
+        "Codex undid its edit except “Mixer”, which removed after that.")
 
 
 def test_the_routes_activity_line_names_the_nodes_that_ran(api, monkeypatch):
@@ -1331,7 +1360,7 @@ def test_the_routes_activity_line_names_the_nodes_that_ran(api, monkeypatch):
     _person_runs(api, combined)
     result = _undone(api, applied["undo"]["token"])
     assert result["status"] == "undone"
-    assert lines[-1] == "Claude Code undid its edit except “Mixer”, which ran after that. Undone: removed 1."
+    assert lines[-1] == "Claude Code undid its edit except “Mixer”, which ran after that."
     assert not _NODE_ID.search(lines[-1])
 
 
@@ -1345,7 +1374,7 @@ def test_the_routes_activity_line_counts_four_or_more_nodes(api, monkeypatch):
     for ref in ("+0", "+1", "+2", "+3"):
         _person_runs(api, applied["idMap"][ref])
     assert _undone(api, applied["undo"]["token"])["status"] == "undone"
-    assert lines[-1] == "Claude Code undid its edit except 4 nodes that ran after that. Undone: removed 1."
+    assert lines[-1] == "Claude Code undid its edit except 4 nodes that ran after that."
 
 
 def test_the_cli_and_the_reply_carry_the_same_named_lines(api):

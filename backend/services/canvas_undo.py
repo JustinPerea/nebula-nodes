@@ -400,7 +400,9 @@ def plan_undo(
     only when nothing else exists. The skipped entries keep ``nodeId`` and the
     other structured fields.
 
-    ``cannot_remove`` says why a node can't be deleted now (paid state), and
+    ``cannot_remove`` says why a node can't be deleted now as the whole line
+    for the skipped entry, naming nodes (paid state, a shot still running),
+    and
     ``refused_change`` why a param change isn't the agent's to make (who
     bills a run, notes to generators); both None when it is fine."""
     skipped: list[dict[str, Any]] = []
@@ -490,9 +492,7 @@ def plan_undo(
             else:
                 refusal = cannot_remove(node_id, now)
                 if refusal:
-                    reason, message = "can't be removed now", (
-                        f"Nebula left {name(node_id)} as it is. "
-                        + re.sub(rf"(?<![\w-]){re.escape(node_id)}(?![\w-])", lambda _m: name(node_id), refusal))
+                    reason, message = "can't be removed now", refusal
         if reason:
             kept.add(node_id)
             skipped.append({"nodeId": node_id, "part": "node", "reason": reason, "message": message})
@@ -689,26 +689,56 @@ def kept_lines(skipped: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def activity_line(agent: str, done: str, parts_left: int, ran_names: list[str]) -> str:
-    """The person's activity line for an agent's undo (design): "Codex undid its
-    edit except “Hero” and “Brief”, which ran after that." with no colon and no
-    parens; from 4 nodes "…except 4 nodes that ran after that." ``done`` is the
-    reply's "removed 1, put back 2" and ``parts_left`` the skipped parts (the
-    ran nodes among them). Without a node that ran the line is as it was:
-    "Codex undid its edit: removed 1; left 1 part as is". With one, what went
-    back and what else was left follow as their own sentences."""
-    if not ran_names:
-        left = f"; left {parts_left} part{'s' if parts_left != 1 else ''} as is" if parts_left else ""
-        return f"{agent} undid its edit: {done or 'no change'}{left}"
-    listed = node_name_list([quoted(name)[1:-1] for name in ran_names])
-    line = f"{agent} undid its edit except {listed}" + (", which ran after that." if len(ran_names) < 4
-                                                       else " that ran after that.")
-    if done:
-        line += f" Undone: {done}."
-    other = parts_left - len(ran_names)
-    if other > 0:
-        line += f" Left {other} other part{'s' if other != 1 else ''} as {'it is' if other == 1 else 'they are'}."
-    return line
+_KEPT_VERBS = {"changed since": "changed", "moved since": "moved", "wired since": "connected",
+               "removed since": "removed"}
+
+
+def _quoted_name(item: Mapping[str, Any], fallback: Callable[[str], str] | None) -> str:
+    """The node a skip names, as its line quotes it (a removed node has no
+    live name), else the fallback's, else the id."""
+    found = re.search(r"\u201c([^\u201d]+)\u201d", str(item.get("message") or ""))
+    node_id = str(item.get("nodeId") or "")
+    return found.group(1) if found else (fallback(node_id) if fallback else node_id)
+
+
+def activity_line(agent: str, skipped: list[dict[str, Any]], name_of: Callable[[str], str] | None = None) -> str:
+    """The person's activity line for an agent's undo (design), no counts in
+    the short forms, no colon, no parens. Nothing kept: "Codex undid its
+    edit." Parts kept (a part is a node, counted once): "Codex undid its edit
+    except “Hero” and “Brief”, which ran after that.", "…except “Notes”, which
+    changed after that." (the kept verb when they agree: moved, connected,
+    removed; else "changed"), and both: "…except “Hero”, which ran after that,
+    and “Notes”, which changed after that." From 4 parts in all they are
+    counted: "…except 4 parts that ran or changed after that." (only ran: "4
+    nodes that ran"; only changed: "4 parts that changed")."""
+    ran: dict[str, str] = {}
+    kept: dict[str, str] = {}
+    verbs: dict[str, set[str]] = {}
+    for item in skipped:
+        node_id = item.get("nodeId")
+        if not node_id:
+            continue  # a wire isn't a node
+        if item.get("reason") == "ran since":
+            ran[node_id] = _quoted_name(item, name_of)
+        else:
+            kept[node_id] = _quoted_name(item, name_of)
+            verbs.setdefault(node_id, set()).add(_KEPT_VERBS.get(str(item.get("reason")), "changed"))
+    kept = {node_id: shown for node_id, shown in kept.items() if node_id not in ran}
+    if not ran and not kept:
+        return f"{agent} undid its edit."
+    all_verbs = set().union(*(verbs[node_id] for node_id in kept)) if kept else set()
+    verb = next(iter(all_verbs)) if len(all_verbs) == 1 else "changed"
+    total = len(ran) + len(kept)
+    if total >= 4:
+        what = (f"{total} parts that ran or changed" if ran and kept else f"{total} nodes that ran" if ran
+                else f"{total} parts that changed")
+        return f"{agent} undid its edit except {what} after that."
+    clauses = []
+    if ran:
+        clauses.append(f"{node_name_list(list(ran.values()))}, which ran after that")
+    if kept:
+        clauses.append(f"{node_name_list(list(kept.values()))}, which {verb} after that")
+    return f"{agent} undid its edit except {', and '.join(clauses)}."
 
 
 def nothing_went_back(skipped: list[dict[str, Any]], left: str = "") -> str:

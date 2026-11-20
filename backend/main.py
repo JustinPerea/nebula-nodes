@@ -8199,11 +8199,14 @@ class _RenderingSceneRefusal(CodedRefusal):
     any run rendering them can be stopped), so the canvas can word a
     multi-select delete's kept scene in GM's form (PR #198 review 4, M1) and
     put back only those shots of a refused save (review 5), without reading
-    it out of the line."""
+    it out of the line. ``run_ids`` (not in the answer) names the runs, for
+    the undo line that says which."""
 
-    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any]) -> None:
+    def __init__(self, status_code: int, detail: str, rendering: dict[str, Any],
+                 run_ids: Sequence[str] = ()) -> None:
         super().__init__(status_code, detail, {"code": "rendering_shots", "rendering": rendering})
         self.rendering = rendering
+        self.run_ids = list(run_ids)
 
 
 def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
@@ -8234,7 +8237,7 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     # agent refusal"); a no-op for the person's own request.
     _log_agent_refusal(specific)
     raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(specific, person, route="canvas"),
-                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable})
+                                 {"shotIds": shots, "shots": numbers, "stoppable": stoppable}, run_ids)
 
 
 _agent_log_tasks: set[asyncio.Task[None]] = set()
@@ -18705,13 +18708,16 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
                                     fields=_recovery_field_labels([node]) if state == "params" else ())
         if state == "recovery" and not live_checkpoint:
             person = _shared_id_delete_person(node_id, holding) or person
-        raise _node_refusal(
+        refusal = _node_refusal(
             409,
             f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
             "Check Marble, then resolve its exact recovery/ambiguity record "
             "first.",
             person,
         )
+        # The kind, for the undo line (_undo_cannot_remove); not in the answer.
+        refusal.kind = "paid_state"  # type: ignore[attr-defined]
+        raise refusal
 
 
 def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, Any]) -> bool:
@@ -19605,8 +19611,8 @@ async def _restore_graph(
                 continue
             if str(current.get("definitionId") or "") != definition_id:
                 raise HTTPException(status_code=409, detail=(
-                    f"{node_id} is a different node now, so this step can't be put back. "
-                    "Reload the canvas to see the current graph."))
+                    f"Nebula couldn\u2019t undo this step because \u201c{_node_label(node_id, candidate)}\u201d "
+                    "is a different node now. Reload the canvas to see the current version."))
             # A node that is still there changes only what the item sends: the
             # canvas leaves out params and name when the step didn't touch them.
             if "params" in raw:
@@ -19889,10 +19895,28 @@ def _undo_refused_change(node_id: str, definition_id: str, before: dict[str, Any
 
 
 def _undo_cannot_remove(node_id: str, node: dict[str, Any]) -> str | None:
+    """Why an undo leaves a node it would remove, as one line naming nodes
+    (design), chosen by the kind of refusal _ensure_node_deletable raised, not
+    by its words: World Labs paid state, a Cinema scene with a shot still
+    running, else the refusal's own text after a plain "left it as it is"."""
     try:
         _ensure_node_deletable(node_id, node)
     except HTTPException as exc:
-        return str(exc.detail)
+        name = _quoted(_node_label(node_id)) if node_id in cli_graph.nodes else _quoted(
+            str(node.get("label") or _node_label(node_id)))
+        lead = f"Nebula left {name} as it is"
+        if isinstance(exc, _RenderingSceneRefusal) and exc.run_ids:
+            what, several = _shot_names([int(n) for n in exc.rendering["shots"]])
+            runs = exc.run_ids
+            ids = ("run " + runs[0]) if len(runs) == 1 else "runs " + ", ".join(runs[:-1]) + " and " + runs[-1]
+            return f"{lead} because {what} {'are' if several else 'is'} still running as {ids}."
+        if getattr(exc, "kind", None) == "paid_state":
+            return (f"{lead} because it has unresolved World Labs paid state. "
+                    "Check Marble, then resolve its recovery or ambiguity record first.")
+        logging.getLogger("nebula.undo").info("undo kept %s: a removal refusal of an unlisted kind (%s, status %s)",
+                    node_id, type(exc).__name__, exc.status_code)
+        text = re.sub(rf"(?<![\w-]){re.escape(node_id)}(?![\w-])", lambda _m: name, str(exc.detail)).strip()
+        return f"{lead}. {text}"
     return None
 
 
@@ -20115,8 +20139,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             # The proposals it reopened are journaled after its edit.undone
             # (their fit check awaits): the link lists them too (review 8).
             _note_link_events(undo_id)
-    stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
-    publish_action(activity_line(identity.name, done, len(skipped), [_node_label(node_id) for node_id in stays]))
+    publish_action(activity_line(identity.name, skipped, _node_label))
     extras = _undo_extras_text(result)
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",

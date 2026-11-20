@@ -547,3 +547,56 @@ def test_an_amount_never_raises_and_never_lies_about_nothing():
         positive = isinstance(value, float) and math.isfinite(value) and value > 0
         assert (amount == "$0") == (not positive), (value, amount)
         assert (spent == "$0.00") == (not positive), (value, spent)
+
+
+# -- the undo's can't-remove line is one sentence per kind of refusal (design) ------
+
+
+def test_an_undo_that_would_remove_a_node_with_paid_state_says_why(api, monkeypatch):  # noqa: F811
+    _client, graph, _sent = api
+    node = graph.add_node("text-input", {"value": "x"})
+    graph.set_label(node, "Brief")
+    monkeypatch.setattr(main_module.provider_start_guard, "list",
+                        lambda: [{"nodeId": node, "runId": "r1", "kind": "worldlabs"}])
+    assert main_module._undo_cannot_remove(node, graph.nodes[node]) == (
+        "Nebula left “Brief” as it is because it has unresolved World Labs paid state. "
+        "Check Marble, then resolve its recovery or ambiguity record first.")
+
+
+def test_an_undo_that_would_remove_a_scene_with_a_rendering_shot_names_the_run(api, rendering):  # noqa: F811
+    _client, graph, _sent = api
+    node = graph.add_node("cinema-scene", {"scene": _scene("s1", "s2", "s3")})
+    graph.set_label(node, "Opening")
+    main_module._note_cinema_render("run-a", node, "s2")
+    rendering.add("run-a")
+    assert main_module._undo_cannot_remove(node, graph.nodes[node]) == (
+        "Nebula left “Opening” as it is because “Shot 2” is still running as run run-a.")
+    main_module._note_cinema_render("run-b", node, "s3")
+    rendering.add("run-b")
+    assert main_module._undo_cannot_remove(node, graph.nodes[node]) == (
+        "Nebula left “Opening” as it is because “Shot 2” and “Shot 3” are still running as runs run-a and run-b.")
+
+
+def test_an_unlisted_kind_of_removal_refusal_reads_after_a_plain_left_it(api, monkeypatch):  # noqa: F811
+    _client, graph, _sent = api
+    node = graph.add_node("text-input", {"value": "x"})
+    graph.set_label(node, "Brief")
+
+    def refuse(node_id, _node, **_kw):
+        raise main_module.HTTPException(status_code=409, detail=f"Krea is still rendering {node_id}.")
+
+    monkeypatch.setattr(main_module, "_ensure_node_deletable", refuse)
+    assert main_module._undo_cannot_remove(node, graph.nodes[node]) == (
+        "Nebula left “Brief” as it is. Krea is still rendering “Brief”.")
+
+
+def test_the_delete_routes_refusals_keep_their_answers(api, rendering):  # noqa: F811
+    _client, graph, _sent = api
+    node = graph.add_node("cinema-scene", {"scene": _scene("s1", "s2")})
+    main_module._note_cinema_render("run-c", node, "s2")
+    rendering.add("run-c")
+    with pytest.raises(main_module.CodedRefusal) as caught:
+        main_module._ensure_node_deletable(node, graph.nodes[node])
+    assert caught.value.status_code == 409
+    assert caught.value.rendering == {"shotIds": ["s2"], "shots": [2], "stoppable": True}
+    assert caught.value.run_ids == ["run-c"]
