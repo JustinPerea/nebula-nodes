@@ -243,6 +243,8 @@ describe('failedWhat', () => {
   // and reason as they are. A new one fails here, so it is named before it ships.
   const KNOWN_MISSES = [
     'components/agent-notes/agentRosterModel.ts | Agents',
+    // The label of the "heading" region role (ROLE_LABELS), not a line's heading.
+    'extraction/read.ts | Heading',
     'lib/lockPlacement.ts | h1, h2, h3, h4, h5, h6, [role="heading"]',
     'lib/nodeErrorCopy.ts | Waiting for you to run it',
     'lib/personThread.test.ts | x',
