@@ -298,9 +298,9 @@ const plain = (line: string) => {
  * the display's own strip, the same rule (services/canvas_pins.py
  * shown_text): no C0 but line breaks, no C1, no ESC, no format characters;
  * each line loses its trailing spaces and the note its blank lines at the
- * ends. A note also folds each run of blank lines to one break (review 4
- * N-3) unless `fold: false` (a tooltip of the whole note). `multiline:
- * false` (a reply) is one line, spaces collapsed.
+ * ends. A note also folds each run of blank lines to one break (design) unless
+ * `fold: false` (a tooltip of the whole note). `multiline: false` (a reply) is
+ * one line, spaces collapsed.
  */
 export function pinDisplayText(text: string | null | undefined, { multiline = true, fold = true }: { multiline?: boolean; fold?: boolean } = {}): string {
   const raw = (text ?? '').replace(ESCAPES, '');

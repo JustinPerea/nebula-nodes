@@ -26,9 +26,9 @@ CANCEL_FILTER_BITS = 1_048_576
 CANCEL_FILTER_HASHES = 7
 CANCEL_FILTER_BYTES = CANCEL_FILTER_BITS // 8
 # The status bar shows a hold's message after its heading ("A World Labs run
-# needs your check."), and agents read it in providerHolds. Error copy round
-# 3c (GM - Design): "People never see the word "start"; they ran a World Labs
-# job." GM's words for both. No fact an agent needs was in the old words.
+# needs your check."), and agents read it in providerHolds. Error copy (design):
+# "People never see the word "start"; they ran a World Labs job." Design's words
+# for both. No fact an agent needs was in the old words.
 AMBIGUITY_MESSAGE = (
     "World Labs may have started this run without sending back its ID, so Nebula can't tell if it was "
     "billed. Check the job in Marble before you unlock the node, and don't run it again until you have."

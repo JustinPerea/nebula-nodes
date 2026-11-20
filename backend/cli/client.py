@@ -91,8 +91,8 @@ class NebulaClient:
         else:
             # Printed as the backend wrote it: every request says it comes
             # from the CLI (X-Nebula-Surface), so a refusal names `nebula`
-            # commands where it is written (services/agent_words; review 9 of
-            # PR #203, keys MEDIUM-1), never rewritten here.
+            # commands where it is written (services/agent_words; design),
+            # never rewritten here.
             message = exc.detail
             payload = exc.payload if isinstance(exc.payload, dict) else {}
             if payload.get("code") in AGENT_REFUSAL_CODES:

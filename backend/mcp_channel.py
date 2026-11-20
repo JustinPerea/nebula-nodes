@@ -2069,8 +2069,8 @@ class Listener:
                     return  # the session is gone
                 self.pushes += 1
                 if push.group and self._group is not None:
-                    # Every push with messages or answers is reported (review
-                    # 4: answer-only pushes too): Nebula records it, and a
+                    # Every push with messages or answers is reported (design:
+                    # answer-only pushes too): Nebula records it, and a
                     # reply then names it.
                     self._group.start_soon(self._say_accepted, push.group, list(push.message_ids),
                                            list(push.question_ids))

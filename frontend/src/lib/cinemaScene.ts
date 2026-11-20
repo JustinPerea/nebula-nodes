@@ -173,9 +173,9 @@ export function renderingRemovalLine(action: 'undo' | 'redo', shots: RenderingSh
   return becauseLine({ heading, reason: `it would remove ${text}, which ${several ? 'are' : 'is'} still running. ${end}` });
 }
 
-/** GM, PR #198 r4 item 3: the Delete over several scenes with shots
- * rendering: "Stop the runs first." with a Stop control, else (GM PR #205
- * r1) "You can delete them when the running shots finish." */
+/** The Delete over several scenes with shots rendering (design): "Stop the runs
+ * first." with a Stop control, else "You can delete them when the running shots
+ * finish." */
 export function scenesDeleteBlockTitle(stoppable: boolean): string {
   return stoppable ? 'Stop the runs first.' : lockLine(RUN_LOCK_VERBS.deleteThem, 'runningShots');
 }

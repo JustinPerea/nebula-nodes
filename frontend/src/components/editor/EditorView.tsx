@@ -39,11 +39,11 @@ export function EditorView() {
 
   // The transport row and the timeline are this screen's bottom bar: both
   // publish their top edge, so the app's notices sit 8 px above the
-  // transport, over the preview's bottom edge (GM - Design, 2026-10-23, round
-  // 4: "A notice should never sit over a timeline being edited, even one that
-  // shares its column."; round 4b: "publish the transport's top edge as well,
-  // so notices sit over the preview's bottom edge. Cut, Vol and zoom are
-  // being used while someone edits."). Measured again when either changes
+  // transport, over the preview's bottom edge (design, 2026-10-23: "A notice
+  // should never sit over a timeline being edited, even one that shares its
+  // column."; "publish the transport's top edge as well, so notices sit over
+  // the preview's bottom edge. Cut, Vol and zoom are being used while someone
+  // edits."). Measured again when either changes
   // size (the transport wraps to two rows when a clip is selected), on a
   // resize, and when they come or go; the empty editor has neither.
   const transportRef = useRef<HTMLDivElement>(null);

@@ -349,20 +349,13 @@ function stripPrefix(part) {
   return part.startsWith(`${PREFIX} `) ? part.slice(PREFIX.length + 1) : part;
 }
 
-/** Expand :is(a, b) at the end of a part into its alternatives (the only form the icon list needs). */
-function expandIs(part) {
-  const match = /^(.*?)(?::is|:where)\(([^()]*)\)(.*)$/.exec(part);
-  if (!match) return [part];
-  return splitTopLevel(match[2]).map((alt) => `${match[1]}${alt}${match[3]}`.trim());
-}
-
 /** One space around > + ~ and runs of spaces collapsed, so `.a+.b` and `.a  +  .b` match the listed `.a + .b`. */
 export function normaliseCombinators(selector) {
   return selector.replace(/\s*([>+~])\s*/g, ' $1 ').replace(/\s+/g, ' ').trim();
 }
 
 function isIconOnly(part) {
-  return expandIs(normaliseCombinators(stripPrefix(part))).every((alt) => ICON_ONLY.has(normaliseCombinators(alt)));
+  return expandAlternatives(normaliseCombinators(stripPrefix(part))).every((alt) => ICON_ONLY.has(normaliseCombinators(alt)));
 }
 
 function isDecoration(part) {

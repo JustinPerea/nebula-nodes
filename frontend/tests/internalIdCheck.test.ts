@@ -227,6 +227,54 @@ describe('check-internal-ids: what counts', () => {
   });
 });
 
+describe('check-internal-ids: ids split across comment lines', () => {
+  it('counts an id wrapped across two // lines, on the line where it starts', () => {
+    const found = scanSource('a.ts', 'const a = 1;\n// (PR #9001 round\n// 901; the gap)\nconst b = 2;\n');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ line: 2, kind: 'round', match: 'round 901' });
+    expect(count('a.ts', '// the fix, review\n// 901 of PR #9001\n')).toBe(1);
+    expect(count('a.ts', '  // (Q\n  // 901)\n')).toBe(0); // Q and its number are not an id when split mid-token
+  });
+
+  it('counts an id wrapped across two lines of a block, with or without the * prefix', () => {
+    expect(count('a.ts', '/*\n * (PR #9001 round\n * 901; the gap)\n */\n')).toBe(1);
+    expect(count('a.ts', '/**\n * (PR #9001 round\n   901; the gap)\n */')).toBe(1);
+    expect(count('a.css', '/* the gap (PR #9001 round\n   901) */')).toBe(1);
+  });
+
+  it('counts an id wrapped across two # lines in Python and in shell', () => {
+    expect(count('a.py', 'x = 1\n# (PR #9001 round\n# 901; the gap)\ny = 2\n')).toBe(1);
+    expect(count('a.py', '    # (PR #9001 round\n    # 901)\n')).toBe(1);
+    expect(count('a.sh', 'echo hi\n# (PR #9001 round\n# 901)\n')).toBe(1);
+  });
+
+  it('joins a wrapped trailing comment with the standalone lines that continue it', () => {
+    // The first line is a comment after code; the next line holds only a comment, so it continues it.
+    expect(count('a.ts', 'const x = 1; // round\n// 901\n')).toBe(1);
+    expect(count('a.py', 'x = 1  # round\n# 901\n')).toBe(1);
+    // A line with code before its marker never continues a comment above it.
+    expect(count('a.ts', '// round\nconst x = 1; // 901\n')).toBe(0);
+  });
+
+  it('does not join two comments with a code line or a blank line between them', () => {
+    expect(count('a.ts', '// (PR #9001 round\nconst x = 1;\n// 901)\n')).toBe(0);
+    expect(count('a.ts', '// (PR #9001 round\n\n// 901)\n')).toBe(0);
+    expect(count('a.py', '# (PR #9001 round\nx = 1\n# 901)\n')).toBe(0);
+    expect(count('a.ts', '/* round */\n/* 901 */\n')).toBe(0);
+  });
+
+  it('counts a split id once, and leaves a run with no id at zero', () => {
+    expect(count('a.ts', '// round\n// 901\n// round\n// 902\n')).toBe(2);
+    expect(count('a.ts', '// the shot order\n// is kept\n')).toBe(0);
+  });
+
+  it('keeps the line-end rules: a review id ending a line still counts beside prose', () => {
+    expect(count('a.ts', '// the gap (review 901\n// of the rows)\n')).toBe(1);
+    expect(count('a.ts', '// review 901\n// the gap\n')).toBe(1);
+    expect(count('a.ts', '// round\n// 3 decimal places\n')).toBe(0); // the arithmetic skip applies to a joined run too
+  });
+});
+
 describe('check-internal-ids: what is scanned', () => {
   it('skips data fixtures, dependencies, lockfiles and the check itself', () => {
     expect(isScanned('frontend/src/a.ts')).toBe(true);

@@ -2305,8 +2305,8 @@ async def _read_catalog_off_loop() -> None:
     except Exception:  # noqa: BLE001 - the request reads it again and answers its own error
         pass
 
-# Which routes a canvas tab's write must say its project and canvas for (round
-# 20 of PR #195, review 19 H2): every route that changes the graph or starts
+# Which routes a canvas tab's write must say its project and canvas for
+# (design): every route that changes the graph or starts
 # work on the canvas carries the marker ``graph_write``, and the fence
 # (project_workspace_fence) reads it from the route the request matches, never
 # from the path. tests/test_round20_fence.py walks every non-GET route: each is
@@ -5465,9 +5465,8 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
 # backend's own restart closes the socket, and the tab says keptEdits again
 # after its next hello (it reconnects every 3 s). Without this, an agent's
 # write in that gap landed on a canvas the tab won't show. Each closed kept
-# tab holds its own grace, so another tab's kept:false never ends it (review
-# 14 NIT-1); a tab that said kept:false before closing ends nothing, as it
-# held none.
+# tab holds its own grace, so another tab's kept:false never ends it (design);
+# a tab that said kept:false before closing ends nothing, as it held none.
 KEPT_GRACE_SECONDS = 10.0
 # A restart (GM r22 on PR #199, 5): the kept tabs are remembered in the state
 # dir (KEPT_MARKER_NAME), and the grace starts again when the new backend
@@ -6320,8 +6319,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await manager.send_direct(websocket, json.dumps(_channel_listeners_message()))
                 # The Message box's thread, person form (services/person_thread.py).
                 await manager.send_direct(websocket, json.dumps(await asyncio.to_thread(_thread_sync_message)))
-                # Where each World Labs record was written (PR #199 round
-                # 23): the graphSync this socket got first was the agents' form.
+                # Where each World Labs record was written (design): the
+                # graphSync this socket got first was the agents' form.
                 await manager.send_direct(websocket, json.dumps({"type": "providerRecoveryPlaces",
                                                       "places": _person_recovery_places()}))
                 # Now the person's canvas: their pins with registered variants kept.
@@ -7935,8 +7934,8 @@ async def _show_agent(
         if person is not None and person is not event and person_say:
             # In place: the slot keeps this dict for the replay.
             person["say"] = clean_say(person_say)
-            # The Agent log keeps its own line (the nodes an edit named, GM
-            # r83.1) unless it now says what the bubble says.
+            # The Agent log keeps its own line (the nodes an edit named, design)
+            # unless it now says what the bubble says.
             if clean_say(str(person.get("log") or "")) in ("", person["say"]):
                 person.pop("log", None)
         await _broadcast_presence(event, person)
@@ -11614,8 +11613,8 @@ def _not_ready_nodes(
                 "nodeId": None if node_id in ref_for else node_id,
                 "name": name,
                 "missing": need,
-                # The line the proposal bar and layer show (error copy round
-                # 3f): the key by its provider, the node by its name. Agents
+                # The line the proposal bar and layer show (error copy, design):
+                # the key by its provider, the node by its name. Agents
                 # keep `missing`, find_nodes' words, as before.
                 "person": _quoted_name_line(node_readiness.instance_missing_line(
                     definition, node.get("params") or {}, keys, krea_signed_in, definitions,
@@ -11756,9 +11755,9 @@ async def _open_canvas_proposal(
         raise HTTPException(status_code=400 if exc.status_code == 409 else exc.status_code,
                             detail=exc.detail) from exc
     # An agent can't propose a canvas the person's Save couldn't save: the
-    # staged canvas is measured as its own edits are, shape and size (review
-    # 7 of PR #205, limits MEDIUM-1; review 8, limits MEDIUM-1). Proposing is
-    # agent-only (identity above), so the person's skip never applies.
+    # staged canvas is measured as its own edits are, shape and size (design).
+    # Proposing is agent-only (identity above), so the person's skip never
+    # applies.
     _refuse_agent_growth_past_save_limit(candidate)
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
@@ -13424,8 +13423,8 @@ async def _apply_asset_proposal(proposal: AssetProposal) -> dict[str, Any]:
             detail = str(json.loads(bytes(answer.body)).get("detail") or "")
         except Exception:  # noqa: BLE001
             pass
-        # A refusal with a readable detail keeps it. One with none says what is known and what to do (design
-        # r161): the moodboard declined and it may have changed somewhere else. The proposal is not kept open:
+        # A refusal with a readable detail keeps it. One with none says what is known and what to do (design):
+        # the moodboard declined and it may have changed somewhere else. The proposal is not kept open:
         # accept_asset_proposal closes it as invalidated when this raises, so the line says Nebula closed it.
         shown = clean_name(proposal.target_name, 60, ellipsis=True)
         named = f"\u201c{shown}\u201d" if shown else "the moodboard"
@@ -13966,8 +13965,7 @@ async def credentials_update(body: dict[str, Any]) -> dict:
             detail=f"unknown provider: {provider}",
         )
     # `check` asks only whether the write would be accepted. Anything but a
-    # boolean is refused, so a typo ("true", 1) never writes the key (review
-    # 13 of PR #203, NIT-2).
+    # boolean is refused, so a typo ("true", 1) never writes the key (design).
     check = body.get("check", False)
     if not isinstance(check, bool):
         raise HTTPException(status_code=422, detail="check must be true or false")
@@ -13977,8 +13975,7 @@ async def credentials_update(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=422, detail=refusal)
     # The file holds this backend's other settings: one it can't read gets
     # the 409 before any key changes, as PUT /api/settings does. Only the
-    # read check: this writes the backend's memory, never the file (review
-    # 15 of PR #203, settings-keychain MEDIUM-2).
+    # read check: this writes the backend's memory, never the file (design).
     _saved_settings_or_409(writes_file=False)
     if check:
         return {"status": "ok"}
@@ -16628,9 +16625,9 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         _journal_provider_hold("startAmbiguity", "held", run_id=run_id, node_id=event.node_id, kind=event.kind,
                                durable=event.durable, actor=canvas_events.run_actor(run_id))
         # The hold above is kept; the canvas puts the event on its node by id,
-        # so not from a run whose canvas was cleared or replaced since (round
-        # 12, as the recovery event below; unreachable while Clear, import and
-        # a switch wait for runs).
+        # so not from a run whose canvas was cleared or replaced since (as the
+        # recovery event below; unreachable while Clear, import and a switch
+        # wait for runs).
         if not _run_canvas_moved(run_id, "start-ambiguity event"):
             await manager.broadcast(event)
         if run_id is not None:
@@ -19900,8 +19897,8 @@ async def _restore_graph(
     # A redo of a delete (or an undo of an add) deletes like any delete: its
     # own removal records, which the canvas keeps for the next undo.
     entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was removed{note}")
-    # Every event of the restore is journaled here, before any await (round
-    # 8 of PR #114): it names the project the restore was made in.
+    # Every event of the restore is journaled here, before any await (design):
+    # it names the project the restore was made in.
     for edge in unwired:
         _journal_edge("edge.removed", edge, note=note)
     _journal_removed_nodes(entries, note=note, pin_reason=lambda gone: f"{gone['name']} was removed{note}")
@@ -22930,8 +22927,8 @@ def _hold_live_canvas(exported: dict[str, Any], *, capped: bool = False) -> dict
     # Its content's own digest (review 8 of PR #199, L-1): checked before a
     # salvaged copy is filed, and again at the filing.
     entry["itemsDigest"] = project_store_module.held_items_digest(entry["nodes"], entry["edges"])
-    # An agent's copy held aside keeps its own name and agent (L-1 of review
-    # 10): filed as the agent's whatever the catalog still says of it.
+    # An agent's copy held aside keeps its own name and agent (design): filed
+    # as the agent's whatever the catalog still says of it.
     if copied := cli_graph_module.copy_note_of(cli_graph.copy_note, owner):
         entry["copy"] = {"name": copied["name"], "agent": copied["agent"]}
     if capped and (size := _held_snapshot_bytes(entry)) > MAX_PROJECT_BYTES:
@@ -23243,8 +23240,8 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
             _drop_held_copies_of_live()
             filed_project = _file_live_canvas(catalog, exported, name=_filed_canvas_name(catalog, previous_owner))
             filed = ("filed", (filed_project, previous_owner))
-            # Its protection in the same commit as the filing (review 9,
-            # M-1): state.json says this project owns the live canvas now
+            # Its protection in the same commit as the filing (design):
+            # state.json says this project owns the live canvas now
             # (_file_live_canvas), so a crash before the agent's write
             # leaves it open and protected, as a listing's filing does.
             _mark_fresh_filing(catalog, filed_project["id"])
@@ -23266,8 +23263,8 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
         # project". A project protected again after a restore already was
         # one: "kept" (GM r15 on PR #199).
         was_filed = filed is not None or bool((project_store_module.canvas_pending_of(catalog)["fresh"] or {}).get("filed"))
-        # Closed in this commit; its protection stays with it (review 9,
-        # M-1): if the owner write below fails, the next settle opens it
+        # Closed in this commit; its protection stays with it (design): if
+        # the owner write below fails, the next settle opens it
         # again still protected, and an agent's next write closes it again.
         project = fresh
         # The live canvas is this project's: saved into it first, so a
@@ -23930,9 +23927,9 @@ def _settle_live_canvas(catalog: dict[str, Any], exported: dict[str, Any]) -> tu
             _copy_filings[project["id"]] = copied
             _set_canvas_copies(catalog, drop=[owner], prune=True)
         else:
-            # The person's canvas: protected in this same commit (review 9,
-            # M-1), so no failed write or crash after it leaves the project
-            # open and unprotected. Copies that no longer exist go too (nit 3).
+            # The person's canvas: protected in this same commit (design), so no
+            # failed write or crash after it leaves the project open and
+            # unprotected. Copies that no longer exist go too.
             _mark_fresh_filing(catalog, project["id"])
             _set_canvas_copies(catalog, prune=True)
         print(f"[projects] the live canvas isn't a project in the list (it was {owner!r}): "

@@ -122,9 +122,8 @@ export function Settings() {
   // (keyDrafts) and are never touched; a row the person is in stays where it
   // stands until they leave it (ProvidersTab).
   // A change made elsewhere while this tab's own write is in flight is read
-  // once the writes settle: a read now would be dropped for the write's
-  // newer confirmation, and the change would never reach the panel (review
-  // 11 of PR #203, copy MEDIUM-1).
+  // once the writes settle: a read now would be dropped for the write's newer
+  // confirmation, and the change would never reach the panel (design).
   useEffect(() => {
     if (!visible) return;
     const heard = (event: Event) => {

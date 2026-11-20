@@ -326,8 +326,8 @@ export function Canvas() {
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   // Offline is read-only (GM, round 14 of PR #114).
-  // Offline or following an agent's switch: one read-only state (GM round
-  // 22, A). Selecting stays local view state; it is published unless offline.
+  // Offline or following an agent's switch: one read-only state (design).
+  // Selecting stays local view state; it is published unless offline.
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   const offline = lock.offline;
@@ -863,16 +863,16 @@ export function Canvas() {
         return;
       }
 
-      // Delete or Backspace — delete the selected nodes and wires. Review 8,
-      // M-1: this was React Flow's own deleteKeyCode, which listens on the
-      // document, takes a focused button (a dialog's Cancel) as fair game and
-      // never asked whether a modal dialog is open, so a node behind the
-      // placeholder dialog was deleted. Here it goes through the same guard as
-      // every canvas key (isCanvasShortcutTarget, above), keeps React Flow's
-      // rules (bare key only, nothing in `.nokey`, not while a run goes, one
-      // delete per press). Review 9, L-4: it deletes through the store in one
-      // undo step, nodes and wires together (React Flow's deleteElements took
-      // two: the wires, then the nodes); a node holding World Labs state
+      // Delete or Backspace — delete the selected nodes and wires (design):
+      // this was React Flow's own deleteKeyCode, which listens on the document,
+      // takes a focused button (a dialog's Cancel) as fair game and never asked
+      // whether a modal dialog is open, so a node behind the placeholder dialog
+      // was deleted. Here it goes through the same guard as every canvas key
+      // (isCanvasShortcutTarget, above), keeps React Flow's rules (bare key
+      // only, nothing in `.nokey`, not while a run goes, one delete per press).
+      // It deletes through the store in one undo step, nodes and wires together
+      // (React Flow's deleteElements took two: the wires, then the nodes); a
+      // node holding World Labs state
       // stays (as onBeforeDelete had it), and "Deleted the node." with Undo
       // still shows.
       if ((event.key === 'Delete' || event.key === 'Backspace') && !isCtrlOrCmd && !event.altKey && !event.shiftKey) {

@@ -12,8 +12,8 @@ import { useHeldLook } from '../../hooks/useHeldLook';
  * from 4 a count); no event pushes them out. [Try again] retries every
  * scene its line names, each once: the scenes that fail stay in the line,
  * and a scene whose stop clears leaves it, so the line shrinks or goes.
- * While a try is on its way the line stays, its [Try again] disabled (GM
- * r29 call 2: aria-disabled, so focus stays on it), so a second press can't
+ * While a try is on its way the line stays, its [Try again] disabled
+ * (aria-disabled, so focus stays on it; design), so a second press can't
  * queue another; GM r30: the line is aria-busy, the button greys after a
  * moment (useHeldLook) and has no reason tooltip.
  * No hold and no × on any of them (GM r29 #5, r32 answer 3): the line goes

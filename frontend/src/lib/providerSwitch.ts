@@ -36,10 +36,10 @@ export interface SwitchContext {
   name?: string;
 }
 
-/** 'connected': a Space route's Hugging Face token is set (Idol's, GM PR #203
- * r4), the green dot and "Connected". A keyless route (RouteSpec.optionalKeys)
- * has no third state: its cell is empty ('none') without its optional key,
- * and reads "Connected" with it. */
+/** 'connected': a Space route's Hugging Face token is set (Idol's; design), the
+ * green dot and "Connected". A keyless route (RouteSpec.optionalKeys) has no
+ * third state: its cell is empty ('none') without its optional key, and reads
+ * "Connected" with it. */
 export type KeyState = 'set' | 'missing' | 'signed-in' | 'sign-in' | 'connected' | 'none';
 
 export interface ProviderRow {
@@ -359,11 +359,11 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   };
 }
 
-/** A plan run before the person signs in to Krea (GM, PR #203 r21 item 6, r41
- * item 2, r26 item 3: "“Hero shot” runs on Krea, which needs you to sign in.
- * Sign in from Settings, or switch to fal.ai."), the node's own name in quotes
- * (the renamed label, else the model's); names who can take it when Nebula
- * knows (r32 item 4); "or choose another provider" only when no route can. */
+/** A plan run before the person signs in to Krea (design: "“Hero shot” runs on
+ * Krea, which needs you to sign in. Sign in from Settings, or switch to
+ * fal.ai."), the node's own name in quotes (the renamed label, else the
+ * model's); names who can take it when Nebula knows; "or choose another
+ * provider" only when no route can. */
 function kreaSignInLine(definition: ModelNodeDefinition, routed: Params, planRouteId: string | null, context: SwitchContext): string {
   const others = routesThatCanTake(definition, routed, context.apiKeys, planRouteId)
     .map((routeId) => routeDisplayName(routeById(definition, routeId)));

@@ -759,9 +759,8 @@ FREE = "free"
 # Each class as an agent reads it in a proposal's cost: the entry's `label`
 # (canvas_proposals.cost_for), the count it is in (summarize_cost) and what
 # it means. propose_change's tool description is written from this table
-# (mcp_server), so a class added here is in what an MCP agent reads (review
-# 10 of PR #203, LOW-2); tests/test_idol_round11.py checks it holds every
-# class cost_class returns.
+# (mcp_server), so a class added here is in what an MCP agent reads (design);
+# tests/test_idol_round11.py checks it holds every class cost_class returns.
 CLASS_ENTRIES: dict[str, dict[str, str]] = {
     PAID: {"label": '"paid · <provider>"', "count": "paidRuns",
            "means": "a provider call billed per run, summed in `cost.estimate` at its list price when it has one"},

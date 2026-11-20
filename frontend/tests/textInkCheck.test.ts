@@ -312,6 +312,25 @@ describe('check-text-ink: icon-only controls need meta ink', () => {
     expect(css('.project-home__rename { color: var(--sr-ink-light); }', ':root { --sr-ink-light: rgba(255, 255, 255, 0.55); }')).toEqual([]);
   });
 
+  it('reads a nested :is() or :where() in an ICON_ONLY selector, as expandAlternatives does', () => {
+    const forms = [
+      'body.app-slava-restraint :is(.project-home__rename, :is(.agent-log__hide, .panel__group-chevron))',
+      'body.app-slava-restraint :is(.project-home__rename, :where(.agent-log__hide, .panel__group-chevron))',
+      'body.app-slava-restraint :where(:is(.project-home__rename, .agent-log__hide), .panel__group-chevron)',
+    ];
+    for (const selector of forms) {
+      const found = css(`${selector} { color: var(--sr-ink-faint); }`, FAINT);
+      expect(found).toHaveLength(1);
+      expect(found[0].iconTooDim).toBe(true);
+      expect(css(`${selector} { color: var(--sr-ink-meta); }`)).toEqual([]);
+    }
+    // One alternative that is not listed keeps the whole selector out of the icon exception.
+    const mixed = 'body.app-slava-restraint :is(.project-home__rename, :is(.agent-log__hide, .not-an-icon-control))';
+    const found = css(`${mixed} { color: var(--sr-ink-faint); }`, FAINT);
+    expect(found).toHaveLength(1);
+    expect(found[0].iconTooDim).not.toBe(true);
+  });
+
   it('lists the icon-only controls that moved from faint to meta ink', () => {
     for (const selector of ['.panel__group-chevron', '.inspector__favorite-button', '.agent-log__hide', '.agent-log-hidden-notice__icon', '.editor-breadcrumb__arrow']) {
       expect(ICON_ONLY.has(selector)).toBe(true);

@@ -305,9 +305,9 @@ function personsWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): s
   return `${opening} Nebula’s project list is full. ${NOTHING_LOST} ${sizeCapAdvice(context.trashHasItems)}`;
 }
 
-/** The person's line when canvas-held.json couldn't be read and a canvas
- * held aside may be lost (the listing's `canvasHeldUnreadable`; review 6 of
- * PR #199, L-1). Default wording until GM answers. */
+/** The person's line when canvas-held.json couldn't be read and a canvas held
+ * aside may be lost (the listing's `canvasHeldUnreadable`; design). Default
+ * wording until design answers. */
 export function canvasHeldUnreadableLine(count: number | null | undefined, kept = true): string {
   const end = kept ? ` ${KEPT}` : '';
   if (count === 1) {

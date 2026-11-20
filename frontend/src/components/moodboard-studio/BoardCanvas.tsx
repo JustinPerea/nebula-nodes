@@ -218,11 +218,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // at (boardFitFollow): a fitted camera kept at another column size, or with
   // cards added since, would be a stale fit. A camera the person moved opens
   // exactly as kept.
-  // "The view is fitted" travels with the kept camera (#210 round 6s, GM
-  // r105 2): List and back isn't a pan, so the flag comes back with it. A
-  // whole-board fit reopens fitted (above); a Show's or the chip's framing
-  // reopens where it was and frames its cards again if they changed while
-  // the view was away (reframeOnOpen).
+  // "The view is fitted" travels with the kept camera (design): List and back
+  // isn't a pan, so the flag comes back with it. A whole-board fit reopens
+  // fitted (above); a Show's or the chip's framing reopens where it was and
+  // frames its cards again if they changed while the view was away
+  // (reframeOnOpen).
   const savedPlaced = useRef(savedViewport ? useBoardCanvasStore.getState().placed[boardKey] ?? null : null).current;
   const startsFitted = useRef(!savedViewport || useBoardCanvasStore.getState().fitted[boardKey] === true
     || savedPlaced?.kind === 'board').current;
@@ -646,12 +646,12 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // Cards that arrive after the board mounts (it opens before they load) get
   // the fit on open once there are some.
   const hasCards = nodes.length > 0;
-  // A camera a Show or the chip framed, kept from earlier in the visit (GM
-  // r105 2), opens where it was kept; if what it framed changed while the
-  // view was away (a card moved, the notice band changed), it is framed again
-  // at once, as a whole-board fit is on open. Once, when the view has its
-  // size, its camera and its cards; a move the person makes first clears
-  // the flag, so there is nothing to frame.
+  // A camera a Show or the chip framed, kept from earlier in the visit
+  // (design), opens where it was kept; if what it framed changed while the view
+  // was away (a card moved, the notice band changed), it is framed again at
+  // once, as a whole-board fit is on open. Once, when the view has its size,
+  // its camera and its cards; a move the person makes first clears the flag, so
+  // there is nothing to frame.
   const reframePending = useRef(savedPlaced !== null && savedPlaced.kind !== 'board' && !startsFitted);
   const reframeOnOpen = useCallback(() => {
     const at = placed.current;

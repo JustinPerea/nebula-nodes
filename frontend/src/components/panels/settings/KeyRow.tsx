@@ -69,9 +69,8 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
   // "Hugging Face token", "OpenAI API key", "Krea · API key": what screen
   // readers hear, the noun said once.
   const credentialName = nameOf(spec);
-  // The provider's own noun on the buttons too, the word its link uses:
-  // "Add token", "Save token" for Hugging Face and Replicate (GM, PR #203
-  // r23; r25 item 3).
+  // The provider's own noun on the buttons too, the word its link uses: "Add
+  // token", "Save token" for Hugging Face and Replicate (design).
   const noun = credentialNoun(spec);
 
   useEffect(() => {

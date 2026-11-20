@@ -163,9 +163,9 @@ export interface ProjectDeletion {
   activeProjectId: string | null; workspaceRevision: string;
 }
 
-/** A refused project call: its heading names the call (GM, error-copy round
- * 2), its reason is the backend's or GM's line for the status, and `status`
- * stays for the store's retry and conflict rules. */
+/** A refused project call: its heading names the call (design), its reason is
+ * the backend's or design's line for the status, and `status` stays for the
+ * store's retry and conflict rules. */
 export class ProjectRequestError extends RequestFailedError {
   constructor(reason: string, status: number,
     options: { heading?: string; detail?: unknown; storageFull?: boolean; storageLimit?: StorageLimit | null;

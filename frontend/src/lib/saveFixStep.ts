@@ -42,8 +42,7 @@ function sameRecord(a: unknown, b: unknown): boolean {
 /** Whether two nodes write the same entry in Save's file (serializeGraph
  * reads only these parts). A snapshot step copies each node and its params
  * object (createSnapshot), never the values in them, so its unchanged nodes
- * hold the canvas's own values: the same content, a new object (review 8 of
- * PR #205, limits LOW-3). */
+ * hold the canvas's own values: the same content, a new object (design). */
 function sameNode(a: Node<NodeData>, b: Node<NodeData>): boolean {
   return a.type === b.type && a.data?.label === b.data?.label && a.data?.definitionId === b.data?.definitionId
     && Object.is(a.position?.x, b.position?.x) && Object.is(a.position?.y, b.position?.y)
