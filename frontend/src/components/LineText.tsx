@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { isBecauseLine, registerLine, type LineRegistration } from '../lib/notConnectedLine';
 import { isBecauseFailure } from '../lib/errorCopy';
+import { withCodeSpans } from '../lib/codeSpans';
 import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
 
@@ -79,6 +80,6 @@ export function LineText({ text, className, children, tone }: { text: string | n
     return () => { element.hidden = false; };
   }, [own, hide]);
   if (!text) return null;
-  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? text}</span>;
-  return <>{hide ? null : children ?? text}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
+  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : children ?? withCodeSpans(text)}</span>;
+  return <>{hide ? null : children ?? withCodeSpans(text)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
 }
