@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Questions an agent asked the person (Q125 item 1): the store the socket
- * feeds, kept by agent for the Agents panel to come (item 2), with the
+ * Questions an agent asked the person: the store the socket
+ * feeds, kept by agent for the Agents panel to come, with the
  * person's drafts kept per set until Send or Dismiss.
  */
 

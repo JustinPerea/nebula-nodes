@@ -1,9 +1,9 @@
-// PR #200 fix round 19.
-// - GM r29 item 1: the note dialog's heading names its node, "Note for agents
+// PR #200.
+// - Design: the note dialog's heading names its node, "Note for agents
 //   on “Text Input”", by the title its card shows; another node with the same
 //   title adds this one's bare id (styled like the card's id chip); a long
 //   title stays one line, its full name in the tooltip.
-// - Review 16 LOW-1 (GM r29: the Q116a line): a pin delete refused because
+// - Design (the person-only line): a pin delete refused because
 //   this tab isn't connected as the person says how to fix it, never "try
 //   again in a moment". (Add and delete are the only person-gated pin writes;
 //   add already reads the code.)
@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('GM r29 item 1: the note dialog names its node', () => {
+describe('the note dialog names its node', () => {
   it('a unique title: "Note for agents on “Text Input”", no id', () => {
     useGraphStore.setState({ nodes: [node('n1'), node('n2', 'Sky prompt')] } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
@@ -52,7 +52,7 @@ describe('GM r29 item 1: the note dialog names its node', () => {
     render(<PinComposer />);
     const id = document.querySelector('.prompt-dialog__node-id');
     expect(id?.textContent).toBe('n4');
-    // What shows: the heading, then the chip (GM r30 item 1 keeps a hidden
+    // What shows: the heading, then the chip (design keeps a hidden
     // whole copy for the field's name beside a cut one).
     expect(document.querySelector('.prompt-dialog__heading-text')?.textContent).toBe('Note for agents on “Text Input”');
     expect(heading()?.lastElementChild?.previousElementSibling?.textContent).toBe('n4');
@@ -74,18 +74,18 @@ describe('GM r29 item 1: the note dialog names its node', () => {
     expect(text?.getAttribute('title')).toBe(`Note for agents on “${long}”`);
     const css = readFileSync('src/styles/prompt-dialog.css', 'utf8');
     const rule = /\.prompt-dialog__heading-text \{([^}]*)\}/.exec(css)?.[1] ?? '';
-    // GM r30 item 1 (fix round 20): cut in JS by grapheme, never by CSS
+    // Design: cut in JS by grapheme, never by CSS
     // text-overflow (r30heading tests the cut).
     for (const decl of ['white-space: nowrap', 'overflow: hidden']) expect(rule, decl).toContain(decl);
     expect(rule).not.toContain('text-overflow');
   });
 });
 
-describe('review 16 LOW-1: a refused pin delete', () => {
+describe('a refused pin delete', () => {
   const seed = () => useCanvasPinsStore.setState({ pins: [{ id: 'pin_a', text: 'a note', anchor: { nodeId: 'n1' }, position: null,
     status: 'open', createdAt: '', detached: false, reply: null }] } as never);
 
-  it('not connected as the person (403 person_required): the Q116a line, the pin kept', async () => {
+  it('not connected as the person (403 person_required): the person-only line, the pin kept', async () => {
     seed();
     api.deletePin.mockRejectedValue(refused(403, 'person_required'));
     render(<PinComposer />);

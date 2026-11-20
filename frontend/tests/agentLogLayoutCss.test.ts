@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Review (2026-10-20): with the Agent log shown by default (Q38), the
+// Review (2026-10-20): with the Agent log shown by default, the
 // collapsed log sat on the minimap's bottom 40 px, and at 1280 px wide on
 // the right end of the proposal bar (its Accept button). jsdom has no
 // layout, so these pin the reservation rules; the live check measures them.
@@ -20,7 +20,7 @@ describe('the right column keeps clear of the Agent log', () => {
     expect(body).toMatch(/bottom:[^;]*var\(--agent-log-h\)/);
   });
 
-  // GM - Design, PR #216 r1: only one clearance ever applies. The notice
+  // Design, PR #216: only one clearance ever applies. The notice
   // region already ends left of a docked log (--agent-log-clearance), so the
   // card's own room rule and its left shift here counted the log twice and
   // pushed the card off screen below ~950 px. tests/proposalCardPlace.test.tsx

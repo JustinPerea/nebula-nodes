@@ -5,9 +5,9 @@ import type { AgentPresenceEvent } from '../src/lib/wsClient';
 import type { Box, ResolverEnv } from '../src/lib/agentAnchorResolve';
 
 /**
- * PR #233 review 1, M5 (a cursor handed to a layer that can't resolve it
- * holds its last spot, GM - Design 6) and B2 (a leave takes a launcher dot
- * with it). The harness is tests/agentCursorHandoff.test.tsx's: both layers
+ * PR #233: a cursor handed to a layer that can't resolve it
+ * holds its last spot (design), and a leave takes a launcher dot
+ * with it. The harness is tests/agentCursorHandoff.test.tsx's: both layers
  * in one jsdom tree over a mocked React Flow.
  */
 
@@ -170,7 +170,7 @@ afterEach(() => {
 const RAIL: Box = { left: 8, top: 300, width: 44, height: 44 };
 const idle = async () => { await act(async () => { await Promise.resolve(); }); };
 
-describe('M5: a hand-off waits for the receiving layer', () => {
+describe('a hand-off waits for the receiving layer', () => {
   it('the canvas layer holds its spot while the screen layer can\'t resolve the item, with no fade', () => {
     renderBoth(true);
     send(event());
@@ -230,7 +230,7 @@ describe('M5: a hand-off waits for the receiving layer', () => {
   });
 });
 
-describe('B2: a leave takes the cursor and its launcher dot', () => {
+describe('a leave takes the cursor and its launcher dot', () => {
   it('a cursor parked at the rail shows a dot; the leave event removes both', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const rail = document.createElement('div');

@@ -18,7 +18,7 @@ import { resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/grap
 import { useUIStore } from '../src/store/uiStore';
 import { useCinemaUploadStore, type CinemaReferenceUpload } from '../src/store/cinemaUploadStore';
 
-// GM PR #205 r18: the Cinema shot panel while a shot is blocked. Generate N
+// Design, PR #205: the Cinema shot panel while a shot is blocked. Generate N
 // says it is refused as Generate shot does, the Variations stepper (it only
 // sets the count) stays live, and the status line never says "Ready to
 // generate" while a lock line says otherwise.
@@ -54,7 +54,7 @@ afterEach(() => {
   useCinemaUploadStore.setState({ uploads: [] });
 });
 
-describe('GM PR #205 r18 item 1: Generate N while the shot is blocked', () => {
+describe('design, PR #205: Generate N while the shot is blocked', () => {
   it('aria-disabled and the same description as Generate shot', () => {
     const spec = scene();
     useCinemaUploadStore.setState({ uploads: [blocked()] });
@@ -72,7 +72,7 @@ describe('GM PR #205 r18 item 1: Generate N while the shot is blocked', () => {
   });
 });
 
-describe('GM PR #205 r18 item 2: the Variations stepper stays live while the shot is blocked', () => {
+describe('design, PR #205: the Variations stepper stays live while the shot is blocked', () => {
   it('a blocked shot: − and + set the count within 1 and 4; Generate N follows it, still refused', () => {
     const spec = scene();
     useCinemaUploadStore.setState({ uploads: [blocked()] });
@@ -104,7 +104,7 @@ describe('GM PR #205 r18 item 2: the Variations stepper stays live while the sho
   });
 });
 
-describe('GM PR #205 r18 item 3: no "Ready to generate" while a lock line shows', () => {
+describe('design, PR #205: no "Ready to generate" while a lock line shows', () => {
   it('blocked by an upload: no status line; removing it brings "Ready to generate" back', () => {
     const spec = scene();
     useCinemaUploadStore.setState({ uploads: [blocked()] });
@@ -132,7 +132,7 @@ describe('GM PR #205 r18 item 3: no "Ready to generate" while a lock line shows'
   });
 });
 
-describe('review 8 item 17 (GM default): Generate all\'s line for failed shared uploads says "generate all"', () => {
+describe('Generate all\'s line for failed shared uploads says "generate all" (design\'s default)', () => {
   const shared = (name: string, canRetry: boolean): CinemaReferenceUpload => ({ id: `s-${name}`, attempt: 'x', nodeId: 'n1', name,
     status: 'error', error: 'Upload failed.', canRetry });
   const generateAll = (root: HTMLElement) => button(root, 'Generate all');

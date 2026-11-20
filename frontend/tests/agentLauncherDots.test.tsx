@@ -11,7 +11,7 @@ import { AGENT_CURSOR_EXPIRE_MS, AGENT_CURSOR_IDLE_MS, useAgentPresenceStore } f
 import { useBoardCanvasStore } from '../src/store/boardCanvasStore';
 
 /**
- * Phase 3 slice 8: the launcher's activity dot (GM - Design 2). A cursor
+ * Phase 3 slice 8: the launcher's activity dot (design). A cursor
  * parked at a launcher (its surface isn't open) puts a 6 px agent-colour dot
  * on it; two agents two dots, three two dots and "+1"; the dot dims at the 20 s
  * idle and goes on exit, a new target or the prune. The screen layer draws it.
@@ -298,7 +298,7 @@ describe('the dim, and when the dot goes', () => {
     expect(more()).toBeNull();
   });
 
-  it('a deleted board takes its cursors and their dots (GM 4)', () => {
+  it('a deleted board takes its cursors and their dots', () => {
     put('launcher', 'moodboard:b1', { left: 900, top: 200, width: 280, height: 40 });
     put('launcher', 'moodboard', RAIL_BOX);
     renderLayer();

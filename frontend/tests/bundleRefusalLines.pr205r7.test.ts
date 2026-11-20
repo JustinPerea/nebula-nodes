@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bundleRefusalLine, loadFromFile } from '../src/lib/graphFile';
 import { CANVAS_NOTICE_EVENT, type CanvasNoticeDetail } from '../src/lib/canvasNotice';
 
-// GM PR #205 r11 item 2: a bundle whose graph.json the backend's restore
+// Design, PR #205: a bundle whose graph.json the backend's restore
 // refuses for its shape reads, under "Nebula couldn’t load the canvas.", the
 // line the same check gives a plain file. The line is picked by the answer's
 // `code` (backend main._graph_file_refusal), never by its words; the
@@ -49,7 +49,7 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'showOpenFilePicker');
 });
 
-describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', () => {
+describe('a bundle’s graph.json refused by the restore (design #205)', () => {
   it.each([
     ['nested too deeply', 400, { detail: 'graph.json is nested too deeply', code: 'graph_too_complex' },
       'This file is too complex to open.'],
@@ -71,14 +71,14 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
   ])('%s: the plain file’s line under the load heading; the backend’s words go to the log', async (_case, status, body, line) => {
     const { result, said, errors } = await loadBundleAnswering(answer(status, body));
     expect(result).toBeNull();
-    // GM #205 r12 item 2: a line with its own "Nebula couldn’t open this file because …" takes no heading.
+    // Design #205: a line with its own "Nebula couldn’t open this file because …" takes no heading.
     expect(said.mock.calls).toEqual([[line.startsWith('Nebula couldn’t ') ? line : underLoad(line)]]);
     expect(said.mock.calls[0][0]).not.toContain(body.detail);
     // The log keeps the engine's exact reason.
     expect(errors).toHaveBeenCalledWith('[nebula] graph load', body.detail);
   });
 
-  // GM PR #205 r12: graph.json that isn't a Nebula graph, and the zip's own
+  // Design, PR #205: graph.json that isn't a Nebula graph, and the zip's own
   // checks. Each kind, as the backend sends it, and the line under the
   // load heading; the backend's words go to the log.
   const DAMAGED = 'This file is damaged or isn’t a Nebula canvas.';
@@ -102,7 +102,7 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
     ['bundle_expands_too_far', 413, 'Zip bundle expands beyond the restore limit', { limitBytes: 8 }, COMPLEX],
     ['bundle_unsafe_ratio', 413, 'Zip bundle member has an unsafe compression ratio', { maxRatio: 250 }, COMPLEX],
     ['bundle_restore_failed', 500, 'Could not restore zip bundle assets', {}, 'Its files couldn’t be copied. Try again.'],
-    // GM PR #205 r16 item 3: the sizes in the size lines' MB.
+    // Design, PR #205: the sizes in the size lines' MB.
     ['bundle_member_too_large', 413, 'Zip bundle member is too large',
       { sizeBytes: 3 * 1024 ** 3, limitBytes: 256 * 1024 * 1024 }, 'One of its files is 3 GB. Nebula opens files up to 256 MB.'],
     ['bundle_upload_too_large', 413, 'Zip bundle exceeds the compressed upload limit',
@@ -128,7 +128,7 @@ describe('a bundle’s graph.json refused by the restore (GM #205 r11 item 2)', 
   });
 
   it.each([
-    // Review 8 of PR #205 (limits LOW-4, lines-inspector LOW-3): the person
+    // PR #205: the person
     // never reads the backend's words. A refusal with no line reads as a
     // damaged file; the words stay in the console.
     ['an unknown code', 400, { detail: 'graph.json has a new problem', code: 'graph_something_new' }],
@@ -166,9 +166,9 @@ describe('bundleRefusalLine', () => {
   });
 });
 
-// GM PR #205 r16 item 3: the import's own checks, for a plain file and a
+// Design, PR #205: the import's own checks, for a plain file and a
 // bundle's graph.json alike (backend _import_stage_refusal), by code.
-describe('the import’s own checks (GM #205 r16 item 3)', () => {
+describe('the import’s own checks (design #205)', () => {
   const NODE = 'This file uses a node this version of Nebula doesn’t have.';
   it.each([
     ['unknown_definition', NODE],
@@ -179,14 +179,14 @@ describe('the import’s own checks (GM #205 r16 item 3)', () => {
     expect(bundleRefusalLine({ code, detail: 'unknown node definition no-such-node' })).toBe(line);
   });
   it('a member or upload size with no limit keeps the answer as it was', () => {
-    // With the limit and no size, the line names the limit (GM PR #205 r17
-    // item 3: cinemaUploadLock.pr205r9.test.ts).
+    // With the limit and no size, the line names the limit (design, PR #205:
+    // cinemaUploadLock.pr205r9.test.ts).
     expect(bundleRefusalLine({ code: 'bundle_member_too_large', sizeBytes: 8 })).toBeNull();
     expect(bundleRefusalLine({ code: 'bundle_upload_too_large', sizeBytes: 9 })).toBeNull();
   });
 });
 
-// Review 8 of PR #205 (limits LOW-4, lines-inspector LOW-3): a refusal of the
+// PR #205: a refusal of the
 // file with no line reads as a damaged file; an answer that isn't the file's
 // refusal keeps its own line.
 describe('loadRefusalLine', () => {

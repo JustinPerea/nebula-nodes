@@ -1,9 +1,9 @@
-// PR #200 fix round 14, GM r23 (answers to review 13) and review 13 NIT-3.
-// Item 1 (the selectors) is the backend's and the shared corpus's
+// PR #200, design's answers and a counter nit.
+// The selectors are the backend's and the shared corpus's
 // (backend/tests/test_pin_text_r23.py; the corpus's `note` is what the
 // canvas shows, registered variants kept, and agentPresenceFollowups.r12text
-// checks this side gives it). Here: item 2's lines and the removed-node
-// state, item 3's counter, item 4's announcements, NIT-3.
+// checks this side gives it). Here: the lines, the removed-node
+// state, the counter, the announcements.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RequestFailedError, personRequiredCopy } from '../src/lib/errorCopy';
@@ -22,7 +22,7 @@ const { MAX_PIN_TEXT, PIN_REFUSAL_COPY, noteLength, pinDisplayText, pinRefusalLi
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 // The app draws its notices in the notice region, which stays usable beside
-// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+// an open dialog (ModalPortal isolates everything else, design, PR #203).
 const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 const { useGraphStore } = await import('../src/store/graphStore');
@@ -59,19 +59,19 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('GM r23 item 2: the lines', () => {
-  it('reads GM\'s lines by code, word for word', () => {
+describe('the pin refusal lines', () => {
+  it('reads design\'s lines by code, word for word', () => {
     expect(PIN_REFUSAL_COPY.openNotesFull).toBe('This canvas has 100 open notes. Resolve or delete some, then add this one.');
     expect(PIN_REFUSAL_COPY.nodeGone).toBe('That node was removed, so the note wasn’t added.');
     expect(pinRefusalLine(refused(409, 'open_notes_full'), 'add')).toBe(PIN_REFUSAL_COPY.openNotesFull);
     expect(pinRefusalLine(refused(404, 'pin_node_gone'), 'add')).toBe(PIN_REFUSAL_COPY.nodeGone);
-    // A tab not connected as the person: the banner's own line (review 13 L-1).
+    // A tab not connected as the person: the banner's own line.
     expect(pinRefusalLine(refused(403, 'person_required'), 'add')).toBe(personRequiredCopy());
     expect(pinRefusalLine(refused(403, 'agent_refused'), 'add')).toBe(PIN_REFUSAL_COPY.canvasOnly);
   });
 });
 
-describe('GM r23 item 2: a removed node holds Send note', () => {
+describe('a removed node holds Send note', () => {
   it('Nebula says the node went: Send note disabled with the line as its reason; Cancel live, the text kept', async () => {
     api.createPin.mockRejectedValue(refused(404, 'pin_node_gone'));
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
@@ -106,7 +106,7 @@ describe('GM r23 item 2: a removed node holds Send note', () => {
   });
 
   it('a node the canvas hasn\'t loaded is not "removed"', () => {
-    // A note in the field (GM r30 item 3: an empty one can't be sent anyway).
+    // A note in the field (design: an empty one can't be sent anyway).
     useCanvasPinsStore.setState({ drafts: { '': 'warmer' } });
     useCanvasPinsStore.getState().compose({ nodeId: 'n7' });
     render(<><NoticeRegion /><PinComposer /></>);
@@ -124,7 +124,7 @@ describe('GM r23 item 2: a removed node holds Send note', () => {
   });
 });
 
-describe('GM r23 item 3 and review 13 NIT-3: the counter', () => {
+describe('the counter', () => {
   const CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
   it('a note_too_long refusal turns "N left" on; the next edit leaving more than 30 hides it, with a fade', async () => {
     api.createPin.mockRejectedValue(refused(422, TOO_LONG_CODE));
@@ -162,7 +162,7 @@ describe('GM r23 item 3 and review 13 NIT-3: the counter', () => {
   });
 });
 
-describe('GM r23 item 4: screen readers', () => {
+describe('screen readers', () => {
   const CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
   it('the visible counter is not live; one polite region speaks at 30, 10 and 0 left only', async () => {
     render(<PromptDialog request={{ label: 'Note for agents', initial: '', resolve: () => {} }} onDone={() => {}} cap={CAP} multiline confirmLabel="Send note" />);
@@ -208,7 +208,7 @@ describe('GM r23 item 4: screen readers', () => {
   });
 });
 
-describe('GM r23 item 1 on the canvas: a registered variant is kept, an unregistered one dropped', () => {
+describe('on the canvas: a registered variant is kept, an unregistered one dropped', () => {
   it('matches the corpus the backend wrote', () => {
     const cases = (corpus as { cases: Array<{ name: string; typed: string; note: string; agent: string }> }).cases;
     for (const c of cases.filter((x) => x.name.startsWith('GM r23') || x.name.startsWith('fuzz r23'))) {

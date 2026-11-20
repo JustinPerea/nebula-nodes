@@ -1,4 +1,4 @@
-// PR #200 fix round 18, GM r27 item 4 (review 15 NIT 3): Nebula refused a
+// PR #200, design: Nebula refused a
 // note with pin_node_gone while the canvas still shows the node (its sync
 // not in yet). Send note comes back on the next sync naming that node or
 // after 5 s, whichever is first; a sync that says the node really is gone
@@ -61,7 +61,7 @@ async function refusedWhileShown() {
   expect(send().title).toBe(PIN_REFUSAL_COPY.nodeGone);
 }
 
-describe('GM r27 item 4: a pin_node_gone refusal while the canvas still shows the node', () => {
+describe('a pin_node_gone refusal while the canvas still shows the node', () => {
   it('no sync arrives: Send note is live again after 5 s, not before', async () => {
     await refusedWhileShown();
     await act(async () => { vi.advanceTimersByTime(4900); });

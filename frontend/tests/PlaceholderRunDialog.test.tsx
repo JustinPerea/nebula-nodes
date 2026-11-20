@@ -4,8 +4,8 @@ import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import { askPlaceholderRun } from '../src/components/askPlaceholderRun';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
-// Q133 (Justin, 2026-10-25): the in-app dialog before the person's direct run
-// of paid placeholders. GM - Design's copy, verbatim.
+// Justin, 2026-10-25: the in-app dialog before the person's direct run
+// of paid placeholders. Design's copy, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const cursor = { id: 'self:cursor', name: 'Cursor', color: '#5B8DEF', verified: false };
@@ -27,7 +27,7 @@ const several: PlaceholderRunConfirm = {
 afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 
 describe('PlaceholderRunDialog', () => {
-  it("draws GM's copy: heading, intro, a row per paid placeholder with its agent's dot or ring, the free line, the total, the buttons", () => {
+  it("draws design's copy: heading, intro, a row per paid placeholder with its agent's dot or ring, the free line, the total, the buttons", () => {
     render(<PlaceholderRunDialog model={several} onDone={() => {}} />);
     const dialog = screen.getByRole('alertdialog', { name: 'Run 3 nodes the agents are still setting up?' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');

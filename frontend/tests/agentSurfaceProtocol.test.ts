@@ -70,10 +70,10 @@ describe('the surface anchor', () => {
   });
 });
 
-describe('default says on a moodboard (GM - Design r4 item 4)', () => {
+describe('default says on a moodboard', () => {
   const board = 'Desert light';
 
-  it('are GM’s strings, word for word', () => {
+  it('are design’s strings, word for word', () => {
     expect(SURFACE_SAY_EXAMPLES.map(({ action, line }) => `${action}: ${line}`)).toEqual([
       'look: Looking at “Desert light”',
       'look: Looking at image 12 on “Desert light”',
@@ -133,7 +133,7 @@ describe('the part labels', () => {
     expect(Object.keys(AGENT_SURFACES.moodboard.subParts)).toEqual(tuple('IMAGE_PARTS'));
   });
 
-  // GM: each label must be the one the Studio shows for that control.
+  // Design: each label must be the one the Studio shows for that control.
   const studio = (file: string) => read(`components/moodboard-studio/${file}`);
 
   it('Name, Direction and Avoid are the Studio’s own field labels', () => {
@@ -148,13 +148,13 @@ describe('the part labels', () => {
     const brief = studio('MoodboardBrief.tsx');
     expect(brief).toContain(`label="${AGENT_SURFACE_PART_LABELS.colors} that must appear"`);
     expect(brief).toContain(`label="${AGENT_SURFACE_PART_LABELS['colors-out']}"`);
-    // Each row is its own control: the keep-out row has its own anchor (review 1, C6).
+    // Each row is its own control: the keep-out row has its own anchor.
     expect(brief).toMatch(/label="Colors that must appear"\s+anchor=\{agentAnchor\(board, null, 'colors'\)\}/);
     expect(brief).toMatch(/label="Colors to keep out"\s+anchor=\{agentAnchor\(board, null, 'colors-out'\)\}/);
   });
 
   it('Note is the Studio’s "Image note" field', () => {
-    // The Studio's label is "Image note"; GM's list says "Note" (the line for it, "Writing a note on
+    // The Studio's label is "Image note"; design's list says "Note" (the line for it, "Writing a note on
     // image 12", doesn't use the label). Pinned as what it is, so a rename on either side shows here.
     expect(studio('BoardSidePanel.tsx')).toContain(`<span>Image ${AGENT_SURFACE_PART_LABELS.note.toLowerCase()}</span>`);
   });

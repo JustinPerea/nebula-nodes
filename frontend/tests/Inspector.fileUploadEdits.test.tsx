@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { ModelNodeDefinition, NodeData } from '../src/types';
 
-// fix/file-param-upload-edits (#208 round 8c): a file picked into a file
+// fix/file-param-upload-edits (#208): a file picked into a file
 // param lands over the node's params as they are when the upload answers,
 // not as the pick's render saw them. An edit made while it uploads, the
 // person's or an agent's, stays; the provider snap runs on it as on any

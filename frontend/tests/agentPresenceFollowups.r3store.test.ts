@@ -1,13 +1,13 @@
 /**
- * Fix round 3 of PR #200 (review 3 and GM's round 3 answers), the store side:
- * - M-2: an interrupted note is kept per project. A second interruption on
- *   another project never replaces the first (review 3's A → B (typed) → C).
- *   GM: "one note per project. On another project, name its project: “Your
+ * PR #200 (the PR review and design's answers), the store side:
+ * - An interrupted note is kept per project. A second interruption on
+ *   another project never replaces the first (the reviewer's A → B (typed) → C).
+ *   Design: "one note per project. On another project, name its project: “Your
  *   note for “Alpha” wasn’t sent because Codex started opening “Second
  *   canvas”.” On its own project the line stays as it is. Notices stack,
  *   newest at the bottom, each with its own Copy note and ×." Only the
  *   person's × drops one.
- * - N-3: a failed send's error stays on its project.
+ * - A failed send's error stays on its project.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
@@ -159,7 +159,7 @@ const agentOpensSlow = (from: string, fromName: string, to: string, revision: st
 };
 const lines = (here: string) => pins.getState().kept.map((note) => keptNoteLine(note, here));
 
-describe('M-2: interrupted notes are kept per project; a second never replaces the first', () => {
+describe('interrupted notes are kept per project; a second never replaces the first', () => {
   beforeEach(() => { resetPins(); revisionNow = 'rev-a'; });
   afterEach(() => resetPins());
 
@@ -244,7 +244,7 @@ describe('M-2: interrupted notes are kept per project; a second never replaces t
   });
 });
 
-describe('N-3: a failed send\'s error stays on its project', () => {
+describe('a failed send\'s error stays on its project', () => {
   beforeEach(() => resetPins());
   afterEach(() => resetPins());
 

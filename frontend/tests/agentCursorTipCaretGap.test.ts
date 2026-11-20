@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AGENT_CURSOR_ARROW_PATH } from '../src/lib/agentCursorLook';
 
-// GM: the tip caret sits 3 px clear of the arrow's white outline, or the two read as one
+// Design: the tip caret sits 3 px clear of the arrow's white outline, or the two read as one
 // "skip" glyph. Measured from the arrow's own path and stroke, so a new arrow shape or a
 // wider outline can't quietly close the gap.
 const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');

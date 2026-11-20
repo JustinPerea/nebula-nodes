@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * PR #233 review 1, C1: the launcher dot's idle dim (opacity 0.45, set inline
+ * PR #233: the launcher dot's idle dim (opacity 0.45, set inline
  * from JS) never showed in a browser: the fade-in animation ended at opacity 1
  * and, filling `both`, held that over the inline value (an animation beats a
  * non-!important inline style). jsdom reads only the inline style, so this

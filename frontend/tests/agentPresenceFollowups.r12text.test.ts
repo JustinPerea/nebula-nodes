@@ -1,7 +1,7 @@
-// PR #200 fix round 12 (review 11 MEDIUM-1 and NIT-3, GM r19 answer 1): the
+// PR #200 (design): the
 // dialog's strip and count give exactly what the backend's do, case for case,
 // over the shared corpus (backend/tests/fixtures/pin_text_cases.json: the
-// named cases GM asked for and a seeded fuzz; the backend's half is
+// named cases design asked for and a seeded fuzz; the backend's half is
 // test_pin_text_as_typed.py).
 import { beforeAll, describe, expect, it } from 'vitest';
 import corpus from '../../backend/tests/fixtures/pin_text_cases.json';
@@ -10,7 +10,7 @@ import { MAX_PIN_TEXT, noteLength, pinDisplayText, pinTextIsLoaded, pinTextReady
 type Case = { name: string; typed: string; note: string; noteLength: number; reply: string; replyLength: number };
 const cases = (corpus as { cases: Case[] }).cases;
 
-// The Unicode data is a lazy chunk (review 13 L-2): until it lands every rule
+// The Unicode data is a lazy chunk: until it lands every rule
 // errs toward hiding, so the corpus is checked only once it is in. Without
 // this wait the file raced its own import and failed whenever the chunk was
 // slower than the first test (alone, every time; in CI, now and then).
@@ -20,7 +20,7 @@ beforeAll(async () => {
 });
 
 describe('the shared pin-text corpus', () => {
-  it('has the cases GM asked for and the fuzz', () => {
+  it('has the cases design asked for and the fuzz', () => {
     const names = cases.map((c) => c.name);
     for (const name of ['family emoji', 'England flag', 'text and emoji hearts', '32 selectors on a letter', 'only whitespace']) expect(names).toContain(name);
     expect(cases.length).toBeGreaterThan(400);
@@ -62,7 +62,7 @@ describe('the shared pin-text corpus', () => {
       const points = Array.from(pinDisplayText(typed, { fold: false }));
       points.forEach((char, i) => {
         const code = char.codePointAt(0)!;
-        // GM r21 (fix round 13): one selector, right after a base Unicode
+        // Design: one selector, right after a base Unicode
         // lists it for. In this pool: FE0E/FE0F after ♥ or 1, E0100 after 葛.
         expect(code, JSON.stringify(typed)).not.toBe(0x34f);
         if (code === 0xfe0e || code === 0xfe0f) expect(['♥', '1'], JSON.stringify(typed)).toContain(points[i - 1]);

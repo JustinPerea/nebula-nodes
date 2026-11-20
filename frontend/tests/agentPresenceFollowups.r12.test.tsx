@@ -1,11 +1,11 @@
-// PR #200 fix round 12 (GM r18).
-// Q1: a note with too much hidden text gets a neutral toast that says only
+// PR #200 (design).
+// A note with too much hidden text gets a neutral toast that says only
 // what to do, and the dialog stays open with the note as typed.
 // Captures: the Settings remove-key confirm is filled once open; three
 // neutral controls that had no pressed state take the toolbar's press.
 // (Forget ID's frame is the ratchet's frameFindings.)
-// Review 11: MEDIUM-1, marks that draw nothing are hidden text; LOW-1, a
-// full note refuses a keystroke instead of dropping its end; NIT-1, a cut
+// Also: marks that draw nothing are hidden text; a
+// full note refuses a keystroke instead of dropping its end; a cut
 // never lands inside an escape code a longer start keeps whole.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,7 +27,7 @@ beforeAll(() => pinTextReady);
 const { PromptDialog } = await import('../src/components/PromptDialog');
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 // The app draws its notices in the notice region, which stays usable beside
-// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+// an open dialog (ModalPortal isolates everything else, design, PR #203).
 const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
@@ -43,8 +43,8 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('GM r18 Q1: too much hidden text', () => {
-  it('the copy is the one line GM wrote, with no "Couldn\'t save the note." over it', () => {
+describe('too much hidden text', () => {
+  it('the copy is the one line design wrote, with no "Couldn\'t save the note." over it', () => {
     expect(HIDDEN_TEXT_COPY).toBe('This note has too much hidden text to save. Paste it as plain text, then try again.');
   });
 
@@ -89,7 +89,7 @@ describe('GM r18 Q1: too much hidden text', () => {
   it('the notice toast takes the kept note\'s neutral colours, never the error red', () => {
     const sheet = css('styles/canvasPins.css');
     const shared = /\.canvas-pin-toast--kept,\s*\.canvas-pin-toast--notice \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
-    // GM r24: the shared neutral notice tokens (noticeRegion.css), the same values.
+    // Design: the shared neutral notice tokens (noticeRegion.css), the same values.
     expect(shared).toMatch(/border-color: var\(--notice-neutral-edge, #333\)/);
     expect(shared).toMatch(/color: var\(--notice-neutral-ink, #d8d8d8\)/);
     expect(sheet).not.toMatch(/\.canvas-pin-toast--notice[^{]*\{[^}]*(danger|#ff|red)/i);
@@ -124,7 +124,7 @@ describe('captures', () => {
   });
 });
 
-describe('review 11 MEDIUM-1: marks that draw nothing are hidden text', () => {
+describe('marks that draw nothing are hidden text', () => {
   // Case for case with the backend: agentPresenceFollowups.r12text.test.ts (the shared corpus).
   it('280 letters each carrying 32 selectors count 280 and show none of them', () => {
     const smuggled = Array.from({ length: MAX_PIN_TEXT }, (_, i) => String.fromCharCode(0x61 + (i % 26))
@@ -134,14 +134,14 @@ describe('review 11 MEDIUM-1: marks that draw nothing are hidden text', () => {
   });
 });
 
-describe('review 11 NIT-1: fitNote never cuts inside an escape code a longer start keeps', () => {
+describe('fitNote never cuts inside an escape code a longer start keeps', () => {
   it('279 x, a colour code, "yz": keeps the whole code and "y"', () => {
     expect(fitNote(`${'x'.repeat(279)}\x1b[31myz`)).toBe(`${'x'.repeat(279)}\x1b[31my`);
     expect(fitNote(`${'x'.repeat(278)}\x1b[31mabc`)).toBe(`${'x'.repeat(278)}\x1b[31mab`);
   });
 });
 
-describe('review 11 LOW-1, GM r20 note 1: a full note refuses a keystroke; it never drops its end', () => {
+describe('a full note refuses a keystroke; it never drops its end', () => {
   const full = `${'a'.repeat(279)}Z`;
   const NOTE_CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
 
@@ -170,7 +170,7 @@ describe('review 11 LOW-1, GM r20 note 1: a full note refuses a keystroke; it ne
   });
 });
 
-describe('GM r19 answer 2: a running leave past the limit plays out, with a dev warning', () => {
+describe('a running leave past the limit plays out, with a dev warning', () => {
   const withLeave = (endTime: number) => {
     const element = document.createElement('div');
     document.body.appendChild(element);

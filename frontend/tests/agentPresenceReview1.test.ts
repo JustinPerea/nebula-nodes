@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentPresenceEvent, ExecutionEvent } from '../src/lib/wsClient';
 
 /**
- * PR #233 review 1, B2: the backend drops a board's cursors when the board is
+ * PR #233: the backend drops a board's cursors when the board is
  * deleted (and moves those on a removed image to the board), and tells the
  * open tabs; a tab holds a cursor until told, so without that the old cursor
  * stayed drawn for the 120 s prune beside a new session that took its number.

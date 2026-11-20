@@ -2,17 +2,17 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Fix round 4 of PR #200 (review 4 and GM's round 5 answers), the component
+ * PR #200 (the PR review and design's answers), the component
  * side:
- * - LOW-1 (GM round 5 answer 2): kept notes show the newest two, with
+ * - Design: kept notes show the newest two, with
  *   "Show 7 more" (the real count) opening the whole list, each note keeping
  *   its own Copy note and ×.
- * - GM round 5 answer 5 (and review 4 N-3): a kept notice shows the note's
+ * - Design: a kept notice shows the note's
  *   line breaks, blank-line runs collapsed; Copy note copies it whole.
- * - N-5: a kept note names its project as it is called now.
- * - N-6: a failed send's error goes once the person leaves its project.
- * - LOW-2: a mask stroke under way ends the moment the lock starts.
- * LOW-3 and LOW-4 are the ratchet's (agentPresenceFollowups.ratchet).
+ * - A kept note names its project as it is called now.
+ * - A failed send's error goes once the person leaves its project.
+ * - A mask stroke under way ends the moment the lock starts.
+ * - Two more findings are the ratchet's (agentPresenceFollowups.ratchet).
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
@@ -59,7 +59,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('LOW-1: kept notes show the newest two, with "Show 7 more" for the rest', () => {
+describe('kept notes show the newest two, with "Show 7 more" for the rest', () => {
   const nine = Array.from({ length: 9 }, (_, i) => note(`p${i}`, `Project ${i}`, `Note ${i}`));
 
   it('nine kept: the newest two, the control with the real count, sentence case, no period', () => {
@@ -122,7 +122,7 @@ describe('LOW-1: kept notes show the newest two, with "Show 7 more" for the rest
   });
 });
 
-describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clamped to 2 lines', () => {
+describe('a kept notice keeps the note\'s line breaks, clamped to 2 lines', () => {
   it('shows the breaks, blank-line runs collapsed; Copy note copies the note whole', () => {
     on('alpha', 'Alpha');
     const text = 'first line\n\n\n   \nsecond line\nthird line';
@@ -130,8 +130,8 @@ describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clam
     const { container } = render(<PinComposer />);
     const quote = container.querySelector('.canvas-pin-toast__note')!;
     expect(quote.textContent).toBe('first line\nsecond line\nthird line');
-    // The tooltip is the whole note, stripped like every display (fix round 10, GM r16 answer 3): a line of only spaces is empty.
-    // The whole note: spaces inside kept as typed (GM r19 answer 1, PR #200 fix round 12).
+    // The tooltip is the whole note, stripped like every display (design): a line of only spaces is empty.
+    // The whole note: spaces inside kept as typed (design, PR #200).
     expect(quote).toHaveAttribute('title', 'first line\n\n\n   \nsecond line\nthird line');
     const write = vi.fn(async () => {});
     Object.assign(navigator, { clipboard: { writeText: write } });
@@ -141,7 +141,7 @@ describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clam
 
   it('keptNoteDisplay collapses runs of blank lines and spaces-only lines, and trims', () => {
     expect(keptNoteDisplay('a' + '\n'.repeat(278) + 'b')).toBe('a\nb');
-    // GM r19 answer 1 (fix round 12): whitespace at the ends goes, the first line's indent too; inside, a
+    // Design: whitespace at the ends goes, the first line's indent too; inside, a
     // line's spaces stay, and a run of blank or spaces-only lines still folds in the display.
     expect(keptNoteDisplay('\n\n a \n \t \nb\n\n')).toBe('a \nb');
     expect(keptNoteDisplay('one line')).toBe('one line');
@@ -157,8 +157,8 @@ describe('GM round 5 answer 5: a kept notice keeps the note\'s line breaks, clam
   });
 });
 
-describe('N-5 and N-6: a kept note\'s project name, a failed send\'s error', () => {
-  it('N-5: a project renamed after its note was kept is named as it is now', () => {
+describe('a kept note\'s project name, a failed send\'s error', () => {
+  it('a project renamed after its note was kept is named as it is now', () => {
     on('gamma', 'Third canvas');
     useProjectStore.setState({ projects: [{ id: 'alpha', name: 'Alpha (renamed)' }] } as never);
     useCanvasPinsStore.setState({ kept: [note('alpha', 'Alpha', 'A note')] } as never);
@@ -166,7 +166,7 @@ describe('N-5 and N-6: a kept note\'s project name, a failed send\'s error', () 
     expect(screen.getByRole('status').textContent).toContain('Your note for “Alpha (renamed)” wasn’t sent');
   });
 
-  it('N-5: a deleted project keeps the name it had', () => {
+  it('a deleted project keeps the name it had', () => {
     on('gamma', 'Third canvas');
     useProjectStore.setState({ projects: [] } as never);
     useCanvasPinsStore.setState({ kept: [note('alpha', 'Alpha', 'A note')] } as never);
@@ -174,7 +174,7 @@ describe('N-5 and N-6: a kept note\'s project name, a failed send\'s error', () 
     expect(screen.getByRole('status').textContent).toContain('Your note for “Alpha” wasn’t sent');
   });
 
-  it('N-6: leaving the project a send failed on clears its error; it never comes back on return', () => {
+  it('leaving the project a send failed on clears its error; it never comes back on return', () => {
     on('alpha', 'Alpha');
     useCanvasPinsStore.setState({ error: "Couldn't save the note. Nebula didn't respond.", errorProject: 'alpha' } as never);
     const view = render(<PinComposer />);
@@ -187,7 +187,7 @@ describe('N-5 and N-6: a kept note\'s project name, a failed send\'s error', () 
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('N-6: an error of another project is left alone by a switch that never was on it', () => {
+  it('an error of another project is left alone by a switch that never was on it', () => {
     on('beta', 'Second canvas');
     useCanvasPinsStore.setState({ error: 'x', errorProject: 'alpha' } as never);
     const view = render(<PinComposer />);
@@ -197,7 +197,7 @@ describe('N-5 and N-6: a kept note\'s project name, a failed send\'s error', () 
   });
 });
 
-describe('LOW-2: a mask stroke under way ends the moment the lock starts', () => {
+describe('a mask stroke under way ends the moment the lock starts', () => {
   // jsdom loads no image and draws nothing: the painter's image loads at once
   // and every 2D call is recorded.
   let strokes: string[] = [];

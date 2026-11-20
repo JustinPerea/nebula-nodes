@@ -22,7 +22,7 @@ import {
 import type { AgentCursorAction } from '../src/lib/agentPresenceActions';
 
 /**
- * The cursor's expression state machine (GM - Design's cursor spec §2, Phase
+ * The cursor's expression state machine (design's cursor spec §2, Phase
  * 2): held states, gestures, the 0.4 s minimum hold, a new action replacing
  * the current one at once, and type's caret.
  */

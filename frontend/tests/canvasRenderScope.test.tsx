@@ -75,7 +75,7 @@ function counting(Component: ComponentType<NodeProps>): ComponentType<NodeProps>
   return isMemo ? memo(Counted) : Counted;
 }
 // Each counted card inside its boundary, as CANVAS_NODE_TYPES draws it
-// (PR #198 review 3, L4): the count stays the card's own.
+// PR #198: the count stays the card's own.
 // The less common cards load on demand in the canvas (lib/deferredChunks.ts);
 // the counter wraps the card's own component, so it is named here directly (so
 // is the Model card, which the canvas wraps in withCardSwap, components/nodes/withCardSwap.tsx).
@@ -249,7 +249,7 @@ describe('a card re-renders only when something it draws changes', () => {
     expect(rendered()).toEqual(['batch', 'image']);
     renders.clear();
     act(() => useGraphStore.getState().onNodesChange([{ type: 'select', id: 'dyn', selected: true }]));
-    // GM PR #205 r12: one selected node is the Inspector's node, so "batch"
+    // Design, PR #205: one selected node is the Inspector's node, so "batch"
     // (the Inspector's until now) loses its ring too.
     expect(rendered()).toEqual(['batch', 'dyn']);
   });

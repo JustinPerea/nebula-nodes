@@ -5,9 +5,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
-// Review 6, M1 (GM - Design's answer: "rows scroll with everything else
+// Design's answer: "rows scroll with everything else
 // pinned: yes. The scroll area must be reachable by keyboard, and initial
-// focus stays on Cancel."), and L-b's line for placeholders that left the run.
+// focus stays on Cancel."; and the line for placeholders that left the run.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 
@@ -36,7 +36,7 @@ function rowsOverflow(overflows: boolean) {
 
 afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 
-describe('review 6, M1: many rows scroll inside the dialog', () => {
+describe('many rows scroll inside the dialog', () => {
   it('a list that overflows is in the Tab order, and focus still starts on Cancel', () => {
     render(<PlaceholderRunDialog model={model(30)} onDone={() => {}} />);
     const list = rowsOverflow(true);
@@ -74,7 +74,7 @@ describe('review 6, M1: many rows scroll inside the dialog', () => {
   });
 });
 
-describe('review 6, L-b: the line for placeholders that left the run', () => {
+describe('the line for placeholders that left the run', () => {
   it('shows under the intro, before the changed line and the rows', () => {
     render(<PlaceholderRunDialog changed model={model(1, { heading: "Run with Codex's changes?",
       intro: 'Codex finished setting up this node.', leftLine: '1 node Codex was setting up is no longer in this run.' })} onDone={() => {}} />);

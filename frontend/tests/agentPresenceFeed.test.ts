@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentPresenceEvent, ExecutionEvent } from '../src/lib/wsClient';
 
 /**
- * PR #211 round 4: the socket feed in the startup entry and the presence
- * store in the cursor chunk (review 3, N3), the subscription that hands the
- * replay to the store (LOW-2), the replay's age clamp (LOW-3, F05) and a
- * demoted tab (LOW-1, GM - Design r9 item 6).
+ * PR #211: the socket feed in the startup entry and the presence
+ * store in the cursor chunk, the subscription that hands the
+ * replay to the store, the replay's age clamp and a
+ * demoted tab (design).
  */
 const socket = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../src/lib/wsClient', () => ({
@@ -40,7 +40,7 @@ async function load() {
   return { feed, store: store.useAgentPresenceStore };
 }
 
-describe('the replay reaches the store through the socket subscription (LOW-2)', () => {
+describe('the replay reaches the store through the socket subscription', () => {
   it('an agentPresenceReplay on the socket replaces the tab\'s cursors with the replayed ones', async () => {
     const { store } = await load();
     emit(presence());
@@ -63,7 +63,7 @@ describe('the replay reaches the store through the socket subscription (LOW-2)',
   });
 });
 
-describe('the replay\'s age is clamped (LOW-3, F05)', () => {
+describe('the replay\'s age is clamped', () => {
   it('a negative age reads as now, and one past the expiry as the expiry', async () => {
     const { store } = await load();
     const { AGENT_CURSOR_EXPIRE_MS } = await import('../src/store/agentPresenceStore');
@@ -77,7 +77,7 @@ describe('the replay\'s age is clamped (LOW-3, F05)', () => {
   });
 });
 
-describe('the feed holds presence until the cursor chunk loads (N3)', () => {
+describe('the feed holds presence until the cursor chunk loads', () => {
   it('events heard before the store loads are applied in order, with the time they were heard', async () => {
     const now = vi.spyOn(Date, 'now');
     now.mockReturnValue(50_000);
@@ -111,7 +111,7 @@ describe('the feed holds presence until the cursor chunk loads (N3)', () => {
     expect(Object.keys(store.getState().agents)).toEqual(['claude#cccccccccccc']);
   });
 
-  it('the cap never pushes the held replay out: the replay, then the latest events after it (review 4, NIT-3)', async () => {
+  it('the cap never pushes the held replay out: the replay, then the latest events after it', async () => {
     const feed = await import('../src/store/agentPresenceFeed');
     emit({ type: 'agentPresenceReplay', cursors: [
       { ...presence({ agent: { ...CLAUDE, id: 'quiet', name: 'Quiet' } }), ...session('c', 1), replay: true, secondsAgo: 0 },
@@ -127,7 +127,7 @@ describe('the feed holds presence until the cursor chunk loads (N3)', () => {
     expect(store.getState().agents['claude#aaaaaaaaaaaa'].say).toBe(String(feed.AGENT_PRESENCE_FEED_MAX + 4));
   });
 
-  it('holds graph clears and replacements only, not every graph sync (review 4, NIT-2)', async () => {
+  it('holds graph clears and replacements only, not every graph sync', async () => {
     const feed = await import('../src/store/agentPresenceFeed');
     emit({ type: 'graphSync', nodes: [], edges: [] });
     emit({ type: 'graphSync', nodes: [], edges: [], graphReplaced: true });
@@ -136,7 +136,7 @@ describe('the feed holds presence until the cursor chunk loads (N3)', () => {
   });
 });
 
-describe('a demoted tab (GM - Design, PR #211 r9 item 6; review 3, LOW-1)', () => {
+describe('a demoted tab (PR #211)', () => {
   it('its numbered cursors leave, and agent-form events then draw one unnumbered cursor per agent', async () => {
     const { store } = await load();
     emit({ type: 'agentPresenceReplay', cursors: [
@@ -165,7 +165,7 @@ describe('a demoted tab (GM - Design, PR #211 r9 item 6; review 3, LOW-1)', () =
   });
 });
 
-// #211 follow-up (GM r23 item 2): the backend's new arrivals for cursors a
+// #211 follow-up (design): the backend's new arrivals for cursors a
 // node move carried reach the store, before and after it loads, without a
 // new event: no seq, no say, only the place in the column.
 describe('the carried cursors\' new arrivals (agentPresenceArrival)', () => {

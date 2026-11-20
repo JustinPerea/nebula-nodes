@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The agent's mark below 60% zoom (Q125 item 3; GM - Design, 2026-10-25:
+ * The agent's mark below 60% zoom (design, 2026-10-25:
  * "Low zoom: never hide it. Below 60% zoom, collapse to the dot alone at a
  * fixed screen size, so you can still find agents from the overview. The
  * name and status come back on hover."). The other agents' "+N" chip stays
@@ -56,7 +56,7 @@ describe('the mark below 60% zoom', () => {
   });
 });
 
-describe('the pill at every zoom (GM - Design, 2026-10-25)', () => {
+describe('the pill at every zoom (2026-10-25)', () => {
   const body = (selector: string) => rules.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join('\n');
 
   it('counter-scales the row and the others\' list at every zoom, not only below 60%', () => {
@@ -73,7 +73,7 @@ describe('the pill at every zoom (GM - Design, 2026-10-25)', () => {
   });
 });
 
-// Review 3, finding 8: the node's keyboard focus shows the pill's whole text
+// The node's keyboard focus shows the pill's whole text
 // (AgentNodeMarkLayer sets data-focused), so a sighted keyboard user can read
 // a truncated status without a tab stop on every pill.
 describe("the pill while its node has keyboard focus", () => {
@@ -91,7 +91,7 @@ describe("the pill while its node has keyboard focus", () => {
   });
 });
 
-// GM - Design, round 5 (2026-10-25), item 2: "Past 480 px, WRAP onto more
+// Design (2026-10-25): "Past 480 px, WRAP onto more
 // lines instead of truncating (keyboard users have no other way to read the rest)."
 describe('the focused pill past 480 px', () => {
   const body = (selector: string) => rules.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join('\n');

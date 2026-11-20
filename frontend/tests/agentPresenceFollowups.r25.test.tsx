@@ -1,4 +1,4 @@
-// PR #200 fix round 16, GM r25: notices stay above any dialog's backdrop.
+// PR #200, design: notices stay above any dialog's backdrop.
 // 1. A click on a notice or its × never reaches the backdrop: the dialog and
 //    what was typed stay.
 // 2. The open dialog's focus trap has the notice stack as a second region:
@@ -45,10 +45,10 @@ afterEach(() => {
   document.querySelectorAll(NOTICE_REGION).forEach((region) => region.remove());
 });
 
-describe('GM r25 2: the notices are the dialog\'s second focus region', () => {
+describe('the notices are the dialog\'s second focus region', () => {
   it('Tab: field -> Cancel -> Send note -> each notice\'s × -> back to the field; Shift+Tab reverses it', () => {
     // Notices that arrive while it is open (one already showing goes under
-    // its scrim, inert: GM r25 (4) of PR #199, noticesUnderModal.fix18).
+    // its scrim, inert: design, PR #199, noticesUnderModal.fix18).
     openPrompt();
     const { closes } = notices(2);
     const [cancel, send] = [screen.getByRole('button', { name: 'Cancel' }), screen.getByRole('button', { name: 'Send note' })];
@@ -92,7 +92,7 @@ describe('GM r25 2: the notices are the dialog\'s second focus region', () => {
   });
 });
 
-describe('GM r25 1: a click on a notice never reaches the dialog', () => {
+describe('a click on a notice never reaches the dialog', () => {
   it('the dialog stays open with the typed note after a click on a notice and its ×', () => {
     const onDone = openPrompt();
     const { region, closes } = notices(1);
@@ -118,7 +118,7 @@ describe('GM r25 1: a click on a notice never reaches the dialog', () => {
   });
 });
 
-describe('GM r25 3: focus after × with a dialog open', () => {
+describe('focus after × with a dialog open', () => {
   it('the next notice\'s ×, then (none left) the dialog\'s field, never the page heading', () => {
     const heading = document.createElement('h2');
     heading.id = 'recent-projects-title';

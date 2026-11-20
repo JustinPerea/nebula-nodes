@@ -1,16 +1,16 @@
 /**
- * Fix round 11 of PR #199 (review 11; GM r14 and r15).
- * - HIGH-1 and GM r15: a restore while the person types keeps the
- *   canvas where they are, with GM r12, 1's line and [Save as a project] in
+ * PR #199 (design).
+ * - Design: a restore while the person types keeps the
+ *   canvas where they are, with design's line and [Save as a project] in
  *   the canvas notice region. Nothing typed is reverted or sent; typing goes
  *   on and joins the kept edits; the button files everything typed up to the
  *   click, opens that project and shows the saved toast.
  * - The tab learns of the restore from the backend's graphSync, and from
  *   `projectsChanged{catalogRestored}` when that sync is late or lost.
- * - GM r14, 3: an agent's write that closed the project the tab showed: its
+ * - Design: an agent's write that closed the project the tab showed: its
  *   line on Projects home, or kept in the tab with the edits not saved.
- * - LOW-2: a restore (or a reconnect) lets the person's next edit say
- *   `personInput` again. GM r15: the person's log row says "kept".
+ * - A restore (or a reconnect) lets the person's next edit say
+ *   `personInput` again. Design: the person's log row says "kept".
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
@@ -155,7 +155,7 @@ afterEach(async () => {
   setProjectContext(null);
 });
 
-describe('review 11, HIGH-1 and GM r15: a restore while the person types', () => {
+describe('a restore while the person types', () => {
   it('keeps the canvas where the person is, with the line, and puts nothing typed back', async () => {
     expect(getProjectContext()?.id).toBe('alpha');
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -209,7 +209,7 @@ describe('review 11, HIGH-1 and GM r15: a restore while the person types', () =>
     graphWrites.sent = [];
     let pulses = 0;
     const stop = subscribeKeptPulse(() => { pulses += 1; });
-    // GM r19 (5) and review 13 kept-scratch LOW-2: an added node and a
+    // Design: an added node and a
     // rename are the kept tab's own now (nothing sent).
     const before = useGraphStore.getState().nodes.length;
     const added = await useGraphStore.getState().addNode('text-input', { x: 0, y: 0 });
@@ -218,7 +218,7 @@ describe('review 11, HIGH-1 and GM r15: a restore while the person types', () =>
     useGraphStore.getState().renameNode('n1', 'New name');
     expect(useGraphStore.getState().nodes[0].data.label).toBe('New name');
     expect(pulses).toBe(0);
-    // GM r21 (3): a wire is the kept tab's own too, by the server's rules:
+    // Design: a wire is the kept tab's own too, by the server's rules:
     // a text input has no input, so this one is refused and never drawn
     // (keptCanvas.fix16.store has the rest). Nothing is sent either way.
     const edges = useGraphStore.getState().edges.length;
@@ -336,7 +336,7 @@ describe('review 11, HIGH-1 and GM r15: a restore while the person types', () =>
   });
 });
 
-describe("GM r14, 3: an agent's write closed the project this tab showed", () => {
+describe("an agent's write closed the project this tab showed", () => {
   const closes = (action: string, agent: string | null) => sync('rev-closed', { activeProjectId: null,
     personsCanvasSaved: { id: `s-${action}`, projectId: 'alpha', name: 'Glass campaign', action, agent, copy: null } });
 
@@ -369,7 +369,7 @@ describe("GM r14, 3: an agent's write closed the project this tab showed", () =>
   });
 });
 
-describe("review 11, LOW-2: a restore lets the person's next edit say `personInput` again", () => {
+describe("a restore lets the person's next edit say `personInput` again", () => {
   const edit = () => { useGraphStore.getState().beginUndoStep(); useGraphStore.getState().endUndoStep(); };
 
   it('a new restore id on the same revision, and a reconnect', () => {
@@ -388,7 +388,7 @@ describe("review 11, LOW-2: a restore lets the person's next edit say `personInp
   });
 });
 
-describe('GM r15: the person\'s log row when the canvas already was a project', () => {
+describe('the person\'s log row when the canvas already was a project', () => {
   it.each([
     ['changed', true, 'Codex made its changes on a copy of “My film”. “My film” is kept as it was.'],
     ['cleared', false, 'Codex cleared the canvas. “My film” is kept as its own project.'],

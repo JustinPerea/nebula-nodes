@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getCinemaUploadIssue, otherShotsUploadLine, uploadReasonRole, useCinemaUploadStore, type CinemaReferenceUpload } from '../src/store/cinemaUploadStore';
 
-// GM PR #205 r14 item 3: the Cinema panel's lock reason for failed reference
+// Design, PR #205: the Cinema panel's lock reason for failed reference
 // uploads takes the lock form and names them by the shared name-list rule.
 const failed = (name: string, extra: Partial<CinemaReferenceUpload> = {}): CinemaReferenceUpload =>
   ({ id: `u-${name}`, attempt: 'a', nodeId: 'scene', name, status: 'error', error: 'Upload failed.', canRetry: true, ...extra });
@@ -29,7 +29,7 @@ describe('the panel\'s lock reason names the uploads to try again or remove', ()
   });
 });
 
-describe('GM PR #205 r14 item 4: a stopped upload\'s reason is neutral', () => {
+describe('design, PR #205: a stopped upload\'s reason is neutral', () => {
   afterEach(() => { useCinemaUploadStore.getState().clear(); });
   it('a canvas import stops an upload on its way: a status, not an alert; a failure stays an alert', () => {
     useCinemaUploadStore.getState().setUploads(() => [failed('ref.png', { status: 'uploading' }), failed('bad.png')]);
@@ -52,7 +52,7 @@ describe('GM PR #205 r14 item 4: a stopped upload\'s reason is neutral', () => {
   });
 });
 
-describe('GM PR #205 r15 item 3: Generate all\'s lock reason names the other shots holding it', () => {
+describe('design, PR #205: Generate all\'s lock reason names the other shots holding it', () => {
   afterEach(() => { useCinemaUploadStore.getState().clear(); });
   const shots = ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) => ({ id }));
   const on = (shotId: string, status: 'uploading' | 'error' = 'uploading') => failed(`${shotId}-${status}.png`, { shotId, status });
@@ -74,7 +74,7 @@ describe('GM PR #205 r15 item 3: Generate all\'s lock reason names the other sho
   });
 });
 
-describe('GM PR #205 r15 item 2: a stopped upload after a reload reads as the other reloaded rows', () => {
+describe('design, PR #205: a stopped upload after a reload reads as the other reloaded rows', () => {
   it('"Upload was interrupted. Remove it, then attach the image again.", an alert like them, no Try again', async () => {
     const { createCinemaUploadStore } = await import('../src/store/cinemaUploadStore');
     const kept = new Map<string, string>();

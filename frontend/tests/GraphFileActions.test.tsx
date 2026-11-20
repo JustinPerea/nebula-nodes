@@ -140,9 +140,9 @@ describe('workspace-independent graph file actions', () => {
     }
   });
 
-  // Review 4 of PR #205, NIT-1: the save's own catch (a module or bundling
+  // PR #205: the save's own catch (a module or bundling
   // throw that never reached graphFile's own notice) says the canvas heading.
-  it('hands Save the newest Undo step, so its shape line offers an Undo that works (GM PR #205 r13 item 1)', async () => {
+  it('hands Save the newest Undo step, so its shape line offers an Undo that works (design, PR #205)', async () => {
     render(<GraphFileActions />);
     const agentStep = { kind: 'foreign', source: 'agent', agentName: 'Claude', before: { nodes: {}, edges: {} },
       after: { nodes: {}, edges: {} }, at: 0 };
@@ -206,7 +206,7 @@ describe('workspace-independent graph file actions', () => {
     expect(useGraphStore.getState().runHistory).toBe(initialGraph.runHistory);
   });
 
-  // GM PR #205 r10 item 3: a reopen is one more way the shown node goes; a
+  // Design, PR #205: a reopen is one more way the shown node goes; a
   // pinned Inspector stays pinned, with its empty state.
   it('a Load keeps a pinned Inspector pinned, with no node in it', async () => {
     useUIStore.setState({ viewMode: 'canvas', selectedNodeId: 'existing' });
@@ -221,7 +221,7 @@ describe('workspace-independent graph file actions', () => {
   });
 
   it('preserves graph and workspace on picker cancellation or backend rejection', async () => {
-    // Error copy round 3f (GM): a canvas notice, never a window.alert.
+    // Error copy (design): a canvas notice, never a window.alert.
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
     const notice = () => useGraphStore.getState().undoNotice;
     useUIStore.setState({ viewMode: 'create' });
@@ -231,9 +231,9 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture import rejected' }), { status: 400 }));
     await act(async () => { requestGraphLoad(); });
-    // error-copy round 2 (GM): "Nebula couldn’t load the canvas." then the
+    // error-copy (design): "Nebula couldn’t load the canvas." then the
     // reason. A refusal with no code reads as a damaged file, never the
-    // backend's words (review 8 of PR #205, limits LOW-4).
+    // backend's words (PR #205, limits).
     expect(notice()).toMatchObject({ text: 'Nebula couldn’t load the canvas because this file is damaged or isn’t a Nebula canvas.', tone: 'error', offer: null });
     // A code with no line, the same.
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'graph.json is too large', code: 'graph_something_new' }), { status: 413 }));
@@ -243,7 +243,7 @@ describe('workspace-independent graph file actions', () => {
     mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Cannot load a graph while a run is active.' }), { status: 409 }));
     await act(async () => { requestGraphLoad(); });
     expect(notice()?.text).toBe('Nebula couldn’t load the canvas. Cannot load a graph while a run is active.');
-    // GM PR #205 r16 item 3: the import's own checks read GM's line by code, never the backend's words.
+    // Design, PR #205: the import's own checks read design's line by code, never the backend's words.
     for (const [code, line] of [['unknown_definition', 'This file uses a node this version of Nebula doesn’t have.'],
       ['graph_unknown_port', 'This file uses a node this version of Nebula doesn’t have.'],
       ['graph_cycle', 'This file is damaged or isn’t a Nebula canvas.']]) {
@@ -272,7 +272,7 @@ describe('workspace-independent graph file actions', () => {
     expect(alert).not.toHaveBeenCalled();
   });
 
-  it('tells the project store which file it opened, so an over-limit file pauses saving with its name (Q118)', async () => {
+  it('tells the project store which file it opened, so an over-limit file pauses saving with its name', async () => {
     const noteLoadedGraph = vi.fn();
     const before = useProjectStore.getState();
     useProjectStore.setState({ noteLoadedGraph } as never);
@@ -298,8 +298,8 @@ describe('workspace-independent graph file actions', () => {
     }
   });
 
-  describe('a file over the save limit opens as a new project (Q120)', () => {
-    // Q120 (Justin, option a): "Files over the limit open as a new project
+  describe('a file over the save limit opens as a new project', () => {
+    // Justin: "Files over the limit open as a new project
     // named after the file. The open project is left as it was. Files under
     // the limit still replace the canvas, as today." The backend's save
     // check decides: the import into the open project asks to be refused.
@@ -342,7 +342,7 @@ describe('workspace-independent graph file actions', () => {
       expect(createProject.mock.calls[0][0]).toBe('Big campaign');
       expect(order).toEqual(['create with existing, 1 imports']);
       expect(useGraphStore.getState().nodes[0].id).toBe('n8');
-      // The line says it opened as a new project (GM, Q120 batch).
+      // The line says it opened as a new project (design batch).
       expect(useProjectStore.getState().noteLoadedGraph).toHaveBeenCalledWith('Big campaign.nebula', true);
       expect(notices).toEqual([]);
     });
@@ -430,7 +430,7 @@ describe('workspace-independent graph file actions', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  describe("round 19 (GM): Load graph waits for the saves on their way", () => {
+  describe("Load graph waits for the saves on their way", () => {
     const calls = () => mocks.apiFetch.mock.calls.map(([path, init]) => `${String((init as RequestInit | undefined)?.method ?? 'GET')} ${String(path)}`);
     const lines = () => [useGraphStore.getState().undoNotice?.text, useGraphStore.getState().messageNotice?.text].filter(Boolean);
     async function withProject(run: () => Promise<void>): Promise<void> {
@@ -463,7 +463,7 @@ describe('workspace-independent graph file actions', () => {
       });
     });
 
-    it("a save refused meanwhile doesn't hold the import; the new canvas says GM's import line", async () => {
+    it("a save refused meanwhile doesn't hold the import; the new canvas says design's import line", async () => {
       await withProject(async () => {
         render(<GraphFileActions />);
         mocks.apiFetch.mockImplementation(async (path: string) => (path === '/api/graph/import'
@@ -488,9 +488,9 @@ describe('workspace-independent graph file actions', () => {
     expect(mocks.loadFromFile).not.toHaveBeenCalled();
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     fireEvent.keyDown(document, { key: 'k', metaKey: true });
-    // GM PR #205 r2 item 3: the palette's items say "canvas". Review 2
-    // (lines LOW-1): locked options are aria-disabled, so the arrows reach
-    // them; GM r3 item 2: each says its wait's line (an import's, the
+    // Design, PR #205: the palette's items say "canvas".
+    // Locked options are aria-disabled, so the arrows reach
+    // them; design: each says its wait's line (an import's, the
     // preparation's, as the run's).
     const wait = owner === 'execution' ? 'when the run finishes' : owner === 'import' ? 'when the import finishes'
       : 'when Nebula finishes preparing the run';

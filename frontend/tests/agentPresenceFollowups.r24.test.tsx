@@ -1,7 +1,7 @@
-// PR #200 fix round 15, GM r24: the person-gate banner and the note dialog.
+// PR #200, design: the person-gate banner and the note dialog.
 // - With the banner showing, a send the gate refused says only "Your note
 //   wasn’t added." (the banner carries the fix); with no banner, the full
-//   Q116a line.
+//   person-only line.
 // - While the banner shows (up as the dialog opens, or arriving while it is
 //   open), Send note is disabled in the shared style with the reason "You can
 //   send notes when this tab is connected as you."
@@ -39,7 +39,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-describe('GM r24: the toast beside the person-gate banner', () => {
+describe('the toast beside the person-gate banner', () => {
   it('a gate found on send: the banner says the fix, the toast only "Your note wasn’t added.", once', async () => {
     // As apiFetch does: the 403's code raises the banner, then the request fails.
     api.createPin.mockImplementation(async () => { session.reportPersonRequired(); throw gate(); });
@@ -59,7 +59,7 @@ describe('GM r24: the toast beside the person-gate banner', () => {
     expect(live).toHaveLength(1);
   });
 
-  it('with no banner showing (dismissed), the toast is the full Q116a line; Send note stays held (GM r27 item 2)', async () => {
+  it('with no banner showing (dismissed), the toast is the full person-only line; Send note stays held', async () => {
     api.createPin.mockImplementation(async () => { session.reportPersonRequired(); throw gate(); });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<><PersonRequiredBanner /><PinComposer /></>);
@@ -86,7 +86,7 @@ describe('GM r24: the toast beside the person-gate banner', () => {
   });
 });
 
-describe('GM r24: Send note waits while the banner shows', () => {
+describe('Send note waits while the banner shows', () => {
   it('banner up as the dialog opens: disabled with the lock reason, Enter sends nothing, no toast; Cancel live', async () => {
     render(<><PersonRequiredBanner /><PinComposer /></>);
     act(() => session.reportPersonRequired());
@@ -100,7 +100,7 @@ describe('GM r24: Send note waits while the banner shows', () => {
     expect(toastText()).toBeNull();
     expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeDisabled();
     // Connected: Send note is live again once the server promotes this tab
-    // (GM r29 item 3, fix round 19); a link taken in alone isn't enough.
+    // (design); a link taken in alone isn't enough.
     act(() => { window.dispatchEvent(new CustomEvent('nebula:person-connected')); });
     expect(blocked(send())).toBe(true);
     act(() => session.notePersonPromoted());
@@ -108,7 +108,7 @@ describe('GM r24: Send note waits while the banner shows', () => {
   });
 
   it('banner arriving while the dialog is open disables it then', () => {
-    // A note in the field (GM r30 item 3: an empty one can't be sent anyway).
+    // A note in the field (design: an empty one can't be sent anyway).
     useCanvasPinsStore.setState({ drafts: { '': 'make it warmer' } });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<><PersonRequiredBanner /><PinComposer /></>);
@@ -120,7 +120,7 @@ describe('GM r24: Send note waits while the banner shows', () => {
   });
 });
 
-describe('GM r24: ’ at the source', () => {
+describe('’ at the source', () => {
   it('every person-gate line takes ’, never a straight quote', () => {
     for (const line of [PERSON_REQUIRED_COPY, PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_DEV_COPY,
       session.personRequiredMessage('debug-port'), session.personRequiredMessage('dev-renderer'),
@@ -131,7 +131,7 @@ describe('GM r24: ’ at the source', () => {
   });
 });
 
-describe('GM r24: the banner is neutral', () => {
+describe('the banner is neutral', () => {
   it('draws in the shared neutral notice colours, never orange-red, and no skin overrides it', () => {
     const app = readFileSync(join(__dirname, '../src/App.css'), 'utf8');
     const rule = /\n\.person-required \{([^}]*)\}/.exec(app)?.[1] ?? '';

@@ -8,16 +8,16 @@ import pricingCases from '../../backend/tests/fixtures/pricing_cases.json';
 import type { ModelNodeDefinition } from '../src/types';
 
 /**
- * Fix round 2 of PR #200 (review 2 and GM's 2026-10-28 answers), the
+ * PR #200 (the PR review and design's 2026-10-28 answers), the
  * component side:
- * - L-1: an Enter that ends an IME composition (Safari's keyCode 229, or
+ * - An Enter that ends an IME composition (Safari's keyCode 229, or
  *   isComposing) never sends the note; one shared helper (lib/imeComposing).
- * - L-4: Cinema's selected film-look chip and selected variation use the
+ * - Cinema's selected film-look chip and selected variation use the
  *   shared selected style (the category colour), never the accent; disabled,
  *   they and the checked Settings switch take the shared disabled look.
- * - L-5: the provider switcher's rows, the mask painter's Save and Run
+ * - The provider switcher's rows, the mask painter's Save and Run
  *   History's Forget take the canvas lock.
- * - L-6: EditNode's Open editor opens the existing trim editor read-only
+ * - EditNode's Open editor opens the existing trim editor read-only
  *   while following or offline (finding the node, writing nothing).
  * - Nits: the bar's cut name stays whole graphemes and isolates its
  *   direction (<bdi>); the canvas pill grows to the left while it follows, so
@@ -86,9 +86,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ── L-1: Safari's IME Enter ────────────────────────────────────────────────
+// ── Safari's IME Enter ────────────────────────────────────────────────
 
-describe('L-1: an Enter that ends an IME composition never sends the note', () => {
+describe('an Enter that ends an IME composition never sends the note', () => {
   const dialog = () => {
     const done = vi.fn();
     render(<PromptDialog request={{ label: 'Note for agents', initial: 'line one', resolve: () => {} }} onDone={done} multiline confirmLabel="Send note" />);
@@ -128,18 +128,18 @@ describe('L-1: an Enter that ends an IME composition never sends the note', () =
   });
 });
 
-// ── L-2: the note's lines ───────────────────────────────────────────────────
+// ── The note's lines ───────────────────────────────────────────────────
 
-describe('L-2: the pin card shows the lines the person wrote', () => {
+describe('the pin card shows the lines the person wrote', () => {
   it('its text keeps line breaks (white-space: pre-line)', () => {
     const rule = cssRules(read('styles/canvasPins.css')).find(({ selector }) => selector === '.canvas-pin__text');
     expect(rule?.body).toMatch(/white-space:\s*pre-line/);
   });
 });
 
-// ── L-4: Cinema's selection, and the checked switch ─────────────────────────
+// ── Cinema's selection, and the checked switch ─────────────────────────
 
-describe('L-4: the selected chip and variation use the shared selected style; disabled, the shared grey', () => {
+describe('the selected chip and variation use the shared selected style; disabled, the shared grey', () => {
   const cinema = cssRules(read('styles/cinema-studio.css'));
   const shared = read('styles/disabled-buttons.css');
 
@@ -156,13 +156,13 @@ describe('L-4: the selected chip and variation use the shared selected style; di
     expect(read('components/cinema-studio/CinemaStudioView.tsx')).toMatch(/className="cinema-studio-view"[^>]*style=\{\{[^}]*--node-category-color/);
   });
 
-  // Fix round 3 (review 3 M-3): the variation, an image-only button, left the
+  // The variation, an image-only button, left the
   // unfilled rule for its own (its thumbnail dims; agentPresenceFollowups.r3).
   it('disabled: the chip is in the shared unfilled rule, the variation in the image rule; a locked switch turns the grey fill, on or off', () => {
     const unfilled = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\),/.exec(shared)?.[1] ?? '';
     expect(unfilled).toMatch(/\.cinema-shared-controls__chip\b/);
     expect(shared).toMatch(/:is\(\.cinema-shot-panel__variation\):is\(:disabled, \[aria-disabled='true'\]\) img/);
-    // GM, PR #198 r39 item 1: no rule names the on state (`:checked`); the
+    // Design, PR #198: no rule names the on state (`:checked`); the
     // locked switch's own rule covers it.
     expect(cssRules(shared).filter(({ selector }) => /\.settings-switch:checked/.test(selector))).toEqual([]);
     const switches = cssRules(shared).filter(({ selector }) => /\.settings-switch:is\(:disabled/.test(selector) && !/::before/.test(selector));
@@ -171,9 +171,9 @@ describe('L-4: the selected chip and variation use the shared selected style; di
   });
 });
 
-// ── L-5: the provider rows, the mask painter's Save, Forget ─────────────────
+// ── The provider rows, the mask painter's Save, Forget ─────────────────
 
-describe('L-5: controls the store gate refused silently now take the lock', () => {
+describe('controls the store gate refused silently now take the lock', () => {
   const fixture = pricingCases as unknown as { definitions: Record<string, ModelNodeDefinition>; pricing: PricingTable };
   const TABLE = fixture.definitions.table;
   beforeEach(() => {
@@ -186,7 +186,7 @@ describe('L-5: controls the store gate refused silently now take the lock', () =
     usePricingStore.setState({ table: null, loading: false });
   });
 
-  it('the provider switcher\'s rows: disabled, marked and GM\'s tooltip while following; a press picks nothing', () => {
+  it('the provider switcher\'s rows: disabled, marked and design\'s tooltip while following; a press picks nothing', () => {
     const onPick = vi.fn();
     render(<ProviderSwitcher definition={TABLE} params={{}} variant="inspector" onPick={onPick} />);
     const rows = screen.getAllByRole('menuitemradio');
@@ -232,9 +232,9 @@ describe('L-5: controls the store gate refused silently now take the lock', () =
   });
 });
 
-// ── N-7: Run history's Rerun and Retry say why ──────────────────────────────
+// ── Run history's Rerun and Retry say why ──────────────────────────────
 
-describe('review N-7: Run history\'s disabled Rerun and Retry give the reason', () => {
+describe('Run history\'s disabled Rerun and Retry give the reason', () => {
   const record = (id: string, status: RunRecord['status']): RunRecord => ({ id, status, trigger: 'graph', startedAt: Date.now(),
     snapshot: { nodes: [{ id: 'n1', definitionId: 'text-input', params: {}, outputs: {} }], edges: [] } });
   beforeEach(() => {
@@ -242,7 +242,7 @@ describe('review N-7: Run history\'s disabled Rerun and Retry give the reason', 
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
   });
 
-  it('following: GM\'s tooltip', () => {
+  it('following: design\'s tooltip', () => {
     render(<RunHistoryPanel />);
     follow();
     for (const name of ['Run failed nodes again, from the Full canvas run', 'Rerun Full canvas']) {
@@ -252,8 +252,8 @@ describe('review N-7: Run history\'s disabled Rerun and Retry give the reason', 
     }
   });
 
-  // Fix round 3 (review 3 LOW-1, GM r4 answer 2): each says its own verb.
-  it('offline: the reconnect tooltip with its verb; the panel itself stays open and live (review 2 check 2)', () => {
+  // Design: each says its own verb.
+  it('offline: the reconnect tooltip with its verb; the panel itself stays open and live', () => {
     render(<RunHistoryPanel />);
     offline();
     for (const [name, line] of [['Run failed nodes again, from the Full canvas run', 'You can run its failed nodes again when Nebula reconnects.'],
@@ -266,9 +266,9 @@ describe('review N-7: Run history\'s disabled Rerun and Retry give the reason', 
   });
 });
 
-// ── L-6: EditNode's Open editor ─────────────────────────────────────────────
+// ── EditNode's Open editor ─────────────────────────────────────────────
 
-describe('L-6: EditNode\'s Open editor opens the existing trim editor read-only while following or offline', () => {
+describe('EditNode\'s Open editor opens the existing trim editor read-only while following or offline', () => {
   const props = { id: 'e1', data: { definitionId: 'video-edit', params: { clips: [] } }, selected: true } as never;
   beforeEach(() => {
     useGraphStore.setState({
@@ -305,14 +305,14 @@ describe('L-6: EditNode\'s Open editor opens the existing trim editor read-only 
 
 // ── Nits: the agent bar ─────────────────────────────────────────────────────
 
-describe('review N-1, N-2, N-3: the agent bar', () => {
+describe('the agent bar', () => {
   beforeEach(() => {
     useProjectStore.setState({ screen: 'workspace', saveStatus: 'saved', busy: false,
       activeProject: { id: 'followups', name: 'Followups', createdAt: '', updatedAt: '', lastOpenedAt: null,
         nodeCount: 2, edgeCount: 0, thumbnail: null } } as never);
   });
 
-  it('N-2: a cut name ends on a whole grapheme (Intl.Segmenter), never a dangling joiner', () => {
+  it('a cut name ends on a whole grapheme (Intl.Segmenter), never a dangling joiner', () => {
     const name = `${'x'.repeat(21)}👩🏽‍🎨👩🏽‍🎨👩🏽‍🎨🙂`;
     const shown = openingName(name);
     expect(shown.endsWith('…')).toBe(true);
@@ -323,7 +323,7 @@ describe('review N-1, N-2, N-3: the agent bar', () => {
     expect(openingName(whole)).toBe(whole);
   });
 
-  it('N-1: the name isolates its own direction, with "…" inside it (RTL names cut at their logical end)', () => {
+  it('the name isolates its own direction, with "…" inside it (RTL names cut at their logical end)', () => {
     const { container } = render(<ProjectWorkspaceControls />);
     act(() => setFollowingSwitch({ projectName: 'מסע ארוך מאוד אל מעבר להרים הרחוקים', agent: 'Codex' }));
     const name = container.querySelector('.project-workspace-controls__opening-name') as HTMLElement;
@@ -331,7 +331,7 @@ describe('review N-1, N-2, N-3: the agent bar', () => {
     expect(name.textContent?.endsWith('…')).toBe(true);
   });
 
-  it('N-3: the canvas pill grows to the left while it follows, so the tabs after it stay put', () => {
+  it('the canvas pill grows to the left while it follows, so the tabs after it stay put', () => {
     const wrap = document.createElement('div');
     wrap.className = 'canvas-tabs-wrap';
     document.body.append(wrap);

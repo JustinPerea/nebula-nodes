@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// GM r46 on #222 (fix/file-param-upload-edits round 2):
+// Design on #222 (fix/file-param-upload-edits):
 // - the file row reads "Uploading “name”…" while an upload is on its way,
 //   the control still live;
 // - an upload dropped for a project switch or a graph replace says so under
@@ -223,7 +223,7 @@ describe('ordinary edits never drop an upload: the graph generation moves only o
   });
 });
 
-describe('a file with no preview (GM r46 Q2)', () => {
+describe('a file with no preview', () => {
   it('shows "No preview" under the name and draws no frame', () => {
     const { container } = show([styleRef('n1', { filePath: '/elsewhere/harbour.png' })]);
     expect(row(container).textContent).toBe('harbour.png');

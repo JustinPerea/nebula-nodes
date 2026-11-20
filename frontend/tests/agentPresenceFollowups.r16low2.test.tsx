@@ -1,4 +1,4 @@
-// Review 14 LOW-2 and GM's addition (PR #200 fix round 16): the node the note
+// Design's addition (PR #200): the node the note
 // dialog is for comes back (Undo, or any other path) while the dialog is open.
 // Send note is live again with no reason, the "That node was removed, so the
 // note wasn’t added." toast leaves with its normal exit (its line is no longer
@@ -62,7 +62,7 @@ const leavesWithItsExit = () => {
   expect(toast()).toBeNull();
 };
 
-describe('review 14 LOW-2: the removed node comes back while the dialog is open', () => {
+describe('the removed node comes back while the dialog is open', () => {
   it('the canvas lost it, then Undo: Send note live, no reason; the toast leaves; focus stays in the field', async () => {
     useGraphStore.setState({ nodes: [NODE] });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
@@ -106,7 +106,7 @@ describe('review 14 LOW-2: the removed node comes back while the dialog is open'
 
   it('another line is not taken away: only the "removed" line leaves', async () => {
     useGraphStore.setState({ nodes: [NODE] });
-    // A note in the field (GM r30 item 3: an empty one can't be sent anyway).
+    // A note in the field (design: an empty one can't be sent anyway).
     useCanvasPinsStore.setState({ drafts: { '': 'warmer' } });
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     render(<PinComposer />);
@@ -118,7 +118,7 @@ describe('review 14 LOW-2: the removed node comes back while the dialog is open'
   });
 });
 
-describe('review 14 NIT-3: the hidden announce region keeps no stale words', () => {
+describe('the hidden announce region keeps no stale words', () => {
   const announced = () => document.querySelector('.prompt-dialog__announce')?.textContent ?? '';
   it('empties after it speaks, and at once when the note is back above 30 left', async () => {
     const { PromptDialog } = await import('../src/components/PromptDialog');

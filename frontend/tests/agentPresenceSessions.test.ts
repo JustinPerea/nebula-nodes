@@ -1,5 +1,5 @@
 /**
- * One cursor per agent session (GM - Design's cursor spec, §4): the presence
+ * One cursor per agent session (design's cursor spec, §4): the presence
  * store keys cursors by the opaque session key the backend gives the
  * person's tabs, caps one agent at 8, and reads any action it doesn't know
  * as a move. With no session nothing changes: the agent's one cursor, keyed
@@ -132,7 +132,7 @@ describe('sessions', () => {
     // A cursor with no session (the agents' form, which a tab reads before
     // its hello) has no number at all: the tab works none out for it, so a
     // session given 1 never takes its place. The replay on connect does
-    // (below). GM - Design, PR #211 r3.
+    // (below). Design, PR #211.
     useAgentPresenceStore.getState().clear();
     apply(event(), 2_000);
     apply(event({ session: { key: key(5), ordinal: 1 } }), 2_001);
@@ -144,7 +144,7 @@ describe('sessions', () => {
     expect(Object.keys(useAgentPresenceStore.getState().agents).sort()).toEqual(['claude', 'codex#' + key(6), `claude#${key(5)}`].sort());
   });
 
-  it('a cursor that comes with a new number drops the one that held it, so no two read the same name (review 2, LOW-2)', () => {
+  it('a cursor that comes with a new number drops the one that held it, so no two read the same name', () => {
     apply(event({ session: { key: key(1), ordinal: 1 } }), 1_000);
     apply(event({ session: { key: key(2), ordinal: 2 } }), 1_001);
     apply(event({ session: { key: key(2), ordinal: 1 } }), 1_002);
@@ -166,7 +166,7 @@ describe('sessions', () => {
   });
 });
 
-describe('the replay a person tab gets on connect (GM - Design, PR #211 r3)', () => {
+describe('the replay a person tab gets on connect (PR #211)', () => {
   const replay = (cursors: unknown[], now: number) =>
     useAgentPresenceStore.getState().replay(cursors as never, now);
   const live = (n: number, extra: Record<string, unknown> = {}) =>

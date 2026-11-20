@@ -52,7 +52,7 @@ import { AGENT_CURSOR_REST_HOLD_MAX_MS } from '../src/lib/agentCursorPlanner';
 import { useAgentPresenceStore } from '../src/store/agentPresenceStore';
 import { AGENT_CURSOR_HOVER_SLOP_PX, AGENT_CURSOR_PILL, cursorClearancePx, cursorShape, cursorsMeet, inkFor, labelWidths, sessionFill, stackStepPx } from '../src/lib/agentCursorLook';
 
-/** The column step below a name, and below a name and a say (GM - Design, PR #211 r14). */
+/** The column step below a name, and below a name and a say (design, PR #211). */
 const S = stackStepPx(false);
 const SS = stackStepPx(true);
 import { readFileSync } from 'node:fs';
@@ -65,7 +65,7 @@ import { useAgentQuestionsStore, type QuestionSetEntry } from '../src/store/agen
 import { AGENT_CURSOR_TYPE } from '../src/lib/agentCursorTuning';
 
 /**
- * GM - Design's agent cursor spec, phase 1 in the layer: each action draws
+ * Design's agent cursor spec, phase 1 in the layer: each action draws
  * today's nearest visual until phase 2, one cursor per session with its own
  * name and fill, and the name hidden while the cursor moves.
  */
@@ -76,7 +76,7 @@ let frameIds: number[] = [];
 let nextFrameId = 0;
 let clock = 0;
 /** Run each frame's callbacks last asked first: a browser's rAF order between
- *  cursors varies (review 4, drag LOW-1), so the column must not lean on it. */
+ *  cursors varies, so the column must not lean on it. */
 let reverseFrames = false;
 /** Run animation frames 1/60 s apart until none is asked for (or the cap). */
 const flush = (max = 400) => act(() => {
@@ -95,7 +95,7 @@ const tickFrames = (count: number) => flush(count);
  * say's wait cap and the name's moment) following the test's own frames. Without it a loaded
  * machine spends real time between `send` and the first frame, so the event reads as stale and
  * snaps (no gesture plays), or a say's wait caps early and the column meets: the two tests that
- * failed only under load (PR #233 r136).
+ * failed only under load (PR #233).
  */
 const pinClocks = () => {
   vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000);
@@ -217,7 +217,7 @@ describe('each action draws its own look (Phase 2, spec §2)', () => {
     expect(document.querySelector('.agent-cursor__dashed')).not.toBeNull();
     const mark = document.querySelector(`.agent-cursor__mark--${action}`)!;
     expect(mark).not.toBeNull();
-    // wait carries the pin's glyph, propose a check in its ghost card (GM r56 item C).
+    // wait carries the pin's glyph, propose a check in its ghost card (design).
     expect(mark.querySelector('svg')).not.toBeNull();
     expect(mark.querySelector('svg')!.classList.contains(action === 'wait' ? 'lucide-sticky-note' : 'lucide-check')).toBe(true);
   });
@@ -395,7 +395,7 @@ const at = (el: HTMLElement) => {
   return m ? { x: +m[1], y: +m[2] } : { x: NaN, y: NaN };
 };
 
-describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
+describe('arrival is the tip at the target (PR #211)', () => {
   it.each(['click', 'run', 'error'])('%s ripples only once the tip is within 2 px, never in mid-air', (action) => {
     render(<AgentCursorLayer />);
     // From a resting cursor on n1 to n2, 500 px away.
@@ -437,7 +437,7 @@ describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
   });
 });
 
-describe('two cursors on one spot keep their places (review 1, F2)', () => {
+describe('two cursors on one spot keep their places', () => {
   it('the first to arrive keeps the spot when the other acts again', () => {
     render(<AgentCursorLayer />);
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 } }));
@@ -459,7 +459,7 @@ describe('two cursors on one spot keep their places (review 1, F2)', () => {
   });
 });
 
-describe('a cursor that shifts a little on its spot keeps its place in the stack (review 1, F2)', () => {
+describe('a cursor that shifts a little on its spot keeps its place in the stack', () => {
   it('stays first: it lands where it aimed, and the later cursor steps aside', () => {
     render(<AgentCursorLayer />);
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, target: { x: 300, y: 300 } }));
@@ -471,13 +471,13 @@ describe('a cursor that shifts a little on its spot keeps its place in the stack
     flush();
     // a came first: it is never pushed off its own target. b's target is
     // still within 16 px of a's target, so b stays in a's column, straight
-    // below it (GM - Design, PR #211 r13 item 3).
+    // below it (design, PR #211).
     expect(where().aaaaaaaaaaaa).toBe('translate(304px, 300px) scale(1)');
     expect(where().bbbbbbbbbbbb).toBe(`translate(304px, ${300 + S}px) scale(1)`);
   });
 });
 
-describe('with two or more cursors the name holds its slot (GM - Design, PR #211 r2)', () => {
+describe('with two or more cursors the name holds its slot (PR #211)', () => {
   it('shows the name in flight, so the say pill never jumps', () => {
     render(<AgentCursorLayer />);
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 1 } }));
@@ -494,7 +494,7 @@ describe('with two or more cursors the name holds its slot (GM - Design, PR #211
   });
 });
 
-describe('a tab that hears an event while hidden snaps (GM - Design, PR #211 r2)', () => {
+describe('a tab that hears an event while hidden snaps (PR #211)', () => {
   it('lands on the latest target with no flight and no ripple; an old say line is not shown', () => {
     render(<AgentCursorLayer />);
     send(event());
@@ -519,12 +519,12 @@ describe('a tab that hears an event while hidden snaps (GM - Design, PR #211 r2)
     expect(cursors()[0].style.transform).toBe('translate(1000px, 344px) scale(1)');
     flush();
     expect(cursors()[0].querySelector('.agent-cursor__say')?.textContent).toBe('Still here');
-    // Its say doesn't wait on a snap: nothing below it is moving (review 6, item 3).
+    // Its say doesn't wait on a snap: nothing below it is moving.
     expect(cursors()[0].dataset.sayWait).toBeUndefined();
   });
 });
 
-describe('the replay a person tab gets on connect (GM - Design, PR #211 r3)', () => {
+describe('the replay a person tab gets on connect (PR #211)', () => {
   const replay = (cursors: unknown[]) => act(() => { useAgentPresenceStore.getState().replay(cursors as never); });
   const live = (ordinal: number, extra: Partial<AgentPresenceEvent> = {}) => ({
     ...event({ session: { key: String(ordinal).repeat(12), ordinal }, ...extra }), replay: true, secondsAgo: 0,
@@ -572,7 +572,7 @@ describe('the replay a person tab gets on connect (GM - Design, PR #211 r3)', ()
   });
 });
 
-describe('no layout read per frame or per pointermove (review 1, L1 and F7)', () => {
+describe('no layout read per frame or per pointermove', () => {
   const rectFor = (el: Element): DOMRect => {
     if (el === pane.dom) return new DOMRect(0, 0, 1440, 900);
     const cursor = el.closest<HTMLElement>('.agent-cursor');
@@ -612,7 +612,7 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
     expect(reads.count).toBe(afterLanding);
   });
 
-  it('a leaving cursor takes no hover: a pointer over it reads nothing and changes nothing (review 5, F12)', () => {
+  it('a leaving cursor takes no hover: a pointer over it reads nothing and changes nothing', () => {
     render(<AgentCursorLayer />);
     send(event({ session: { key: 'aaaaaaaaaaaa', ordinal: 2 } }));
     flush();
@@ -663,7 +663,7 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
     notifyStore();
   };
 
-  it('re-tests hover after following its node under a still pointer (review 2, L1)', () => {
+  it('re-tests hover after following its node under a still pointer', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
     try {
       render(<AgentCursorLayer />);
@@ -687,7 +687,7 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
     }
   });
 
-  it('hit-tests a resting cursor where it followed its node to, not where its boxes were read (review 2, L1)', () => {
+  it('hit-tests a resting cursor where it followed its node to, not where its boxes were read', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
     try {
       render(<AgentCursorLayer />);
@@ -712,7 +712,7 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
     }
   });
 
-  it('drops the cached pane and boxes on a viewport change, a pane resize and a window resize, and only then (review 2, L4)', () => {
+  it('drops the cached pane and boxes on a viewport change, a pane resize and a window resize, and only then', () => {
     const observers: (() => void)[] = [];
     vi.stubGlobal('ResizeObserver', class {
       constructor(callback: () => void) { observers.push(callback); }
@@ -739,12 +739,12 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
     expect(rereads(() => {})).toBe(false);
   });
 
-  // Review 5, NIT-1 (M13): a cursor's boxes go stale by how far its tip
+  // A cursor's boxes go stale by how far its tip
   // moved on screen, not in canvas units. Zoomed in to 2, its node moved 0.8
   // canvas units (1.6 px on screen, past HOVER_STALE_PX): it reads its boxes
   // again on coming to rest. Zoomed out to 0.25, 3 canvas units (0.75 px):
   // it doesn't.
-  it.each([[2, 0.8, true], [0.25, 3, false]] as const)('at zoom %s a rest %s canvas units on re-reads its boxes: %s (review 5, NIT-1, M13)', (zoom, dx, again) => {
+  it.each([[2, 0.8, true], [0.25, 3, false]] as const)('at zoom %s a rest %s canvas units on re-reads its boxes: %s', (zoom, dx, again) => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
     try {
       pane.transform = [0, 0, zoom];
@@ -785,7 +785,7 @@ describe('no layout read per frame or per pointermove (review 1, L1 and F7)', ()
   });
 });
 
-describe('ratchets (review 1, L2 and F5)', () => {
+describe('ratchets', () => {
   it('the lean turns the arrow only, never the pills', () => {
     render(<AgentCursorLayer />);
     send(event());
@@ -856,7 +856,7 @@ describe('ratchets (review 1, L2 and F5)', () => {
 });
 
 
-describe('a tab hidden mid-flight lands with no ring and no wire (GM - Design, PR #211 r5; review 2, M1)', () => {
+describe('a tab hidden mid-flight lands with no ring and no wire (PR #211)', () => {
   const setVisibility = (state: 'hidden' | 'visible') => act(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -931,7 +931,7 @@ describe('a tab hidden mid-flight lands with no ring and no wire (GM - Design, P
   });
 });
 
-describe('the stale-event threshold is the move\'s own duration (review 2, L4)', () => {
+describe('the stale-event threshold is the move\'s own duration', () => {
   it('an event just older than its flight snaps; one just younger flies', () => {
     render(<AgentCursorLayer />);
     send(event());
@@ -946,7 +946,7 @@ describe('the stale-event threshold is the move\'s own duration (review 2, L4)',
   });
 });
 
-describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
+describe('a target that keeps moving (PR #211)', () => {
   const moveNode = (id: string, dx: number, dy: number) => {
     const next = new Map(lookupRef.current) as Map<string, { internals: { positionAbsolute: { x: number; y: number } } }>;
     const node = next.get(id)!;
@@ -991,7 +991,7 @@ describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
     expect(at(cursors()[0])).toEqual({ x: 500, y: 344 });
   });
 
-  it('a click on the spot it already rests on ripples on the next frame (review 2, N3)', () => {
+  it('a click on the spot it already rests on ripples on the next frame', () => {
     render(<AgentCursorLayer />);
     send(event());
     flush();
@@ -1001,7 +1001,7 @@ describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
   });
 });
 
-describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () => {
+describe('de-stacking goes by physical arrival (PR #211)', () => {
   it('cursors that leave take their places with them: a cursor alone on a spot is never pushed aside (live, after a restart\'s empty replay)', () => {
     render(<AgentCursorLayer />);
     const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 } };
@@ -1083,7 +1083,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     expect(where().aaaaaaaaaaaa).toEqual({ x: 320, y: 300 });
   });
 
-  it('a node dragged slowly under a landed cursor: the carried one is drawn after it at once, and the backend\'s arrival moves nothing (review 2, L2; r47 Q1)', () => {
+  it('a node dragged slowly under a landed cursor: the carried one is drawn after it at once, and the backend\'s arrival moves nothing', () => {
     render(<AgentCursorLayer />);
     const A = { session: { key: 'aaaaaaaaaaaa', ordinal: 1 }, since: 1000 };
     const B = { session: { key: 'bbbbbbbbbbbb', ordinal: 2 }, since: 2000 };
@@ -1104,10 +1104,10 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
     flush();
     const spots = () => Object.fromEntries(cursors().map((el) => [el.dataset.session, at(el)]));
     // A's target chain changed: the tab previews the arrival the backend
-    // will count, so B keeps the spot and A is drawn under it (r47 Q1).
+    // will count, so B keeps the spot and A is drawn under it.
     // (On the way, while A's arrow meets B's label but their targets are
     // still over 16 apart, the column joins in this tab only, A first: an
-    // overlap join is no arrival, r24 Q2.)
+    // overlap join is no arrival.)
     expect(spots().bbbbbbbbbbbb).toEqual({ x: 800, y: 344 });
     expect(spots().aaaaaaaaaaaa).toEqual({ x: 800, y: 344 + S });
     // The backend's arrival agrees: nothing moves.
@@ -1118,7 +1118,7 @@ describe('de-stacking goes by physical arrival (GM - Design, PR #211 r5)', () =>
   });
 });
 
-describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3 and 5)', () => {
+describe('a dragged node carries its cursors (PR #211)', () => {
   type Entry = { internals: { positionAbsolute: { x: number; y: number } } };
   /** The node moves; `dragging` is React Flow's flag for the person's own drag. */
   const moveNode = (id: string, dx: number, dy: number, dragging = false) => {
@@ -1177,7 +1177,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
     send(event({ ...second, target: { nodeId: 'n1' } }));
     flush();
     // The first speaks again where it is: it now paints, and runs its frame,
-    // last. Its say pill shows, so the second steps past it (r13 item 2).
+    // last. Its say pill shows, so the second steps past it.
     send(event({ ...first, target: { nodeId: 'n1' }, action: 'look', say: 'Still here' }));
     flush();
     expect(cursors().map((el) => el.dataset.session)).toEqual(['aaaaaaaaaaaa', 'bbbbbbbbbbbb']);
@@ -1275,7 +1275,7 @@ describe('a dragged node carries its cursors (GM - Design, PR #211 r9 items 2, 3
   });
 });
 
-describe('the name pill edge on the cursor (GM - Design, PR #211 r9 item 4)', () => {
+describe('the name pill edge on the cursor (PR #211)', () => {
   it('marks a black agent\'s pill for the edge, and Claude\'s not', () => {
     render(<AgentCursorLayer />);
     send(event({ agent: { id: 'ink', name: 'Ink', color: '#000000', verified: false } }));
@@ -1286,7 +1286,7 @@ describe('the name pill edge on the cursor (GM - Design, PR #211 r9 item 4)', ()
   });
 });
 
-describe('a view whose effects reconnect keeps its place (round 4: StrictMode in dev, live)', () => {
+describe('a view whose effects reconnect keeps its place (StrictMode in dev, live)', () => {
   it('under StrictMode, a cursor that speaks again (and so paints last) keeps its stamp: no swap', async () => {
     const { StrictMode } = await import('react');
     render(<StrictMode><AgentCursorLayer /></StrictMode>);
@@ -1307,7 +1307,7 @@ describe('a view whose effects reconnect keeps its place (round 4: StrictMode in
   });
 });
 
-describe('the presence exit, for every removal (GM - Design, PR #211 review 4)', () => {
+describe('the presence exit, for every removal (PR #211)', () => {
   const session = (key: string, ordinal: number) => ({ session: { key: key.repeat(12), ordinal } });
   const opacity = (el: HTMLElement) => Number(el.style.opacity);
   const demote = () => act(() => { useAgentPresenceStore.getState().demote(); });
@@ -1465,7 +1465,7 @@ describe('the presence exit, for every removal (GM - Design, PR #211 review 4)',
   });
 });
 
-describe('a cursor at rest is drawn on whole device pixels, off its own layer (GM - Design, PR #211 r10 item 1)', () => {
+describe('a cursor at rest is drawn on whole device pixels, off its own layer (PR #211)', () => {
   // The pane at the page's origin (jsdom's boxes are all 0).
   beforeEach(() => { pane.dom = document.createElement('div'); });
   it('will-change only while it flies; at rest the screen position is a whole pixel', () => {
@@ -1515,7 +1515,7 @@ describe('a cursor at rest is drawn on whole device pixels, off its own layer (G
   });
 });
 
-describe('any person move of a node carries resting cursors at 0 px (GM - Design, PR #211 review 4, item 2)', () => {
+describe('any person move of a node carries resting cursors at 0 px (PR #211)', () => {
   type Entry = { position?: { x: number; y: number }; dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
   const nodes = () => lookupRef.current as Map<string, Entry>;
   const spotOf = (id: string) => {
@@ -1571,7 +1571,7 @@ describe('any person move of a node carries resting cursors at 0 px (GM - Design
   });
 });
 
-describe('the pill step (GM - Design, PR #211 r10 item 3, r12 and r13)', () => {
+describe('the pill step (PR #211)', () => {
   type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
   const pills = () => cursors().map((el) => {
     const tip = at(el);
@@ -1612,7 +1612,7 @@ describe('the pill step (GM - Design, PR #211 r10 item 3, r12 and r13)', () => {
   });
 });
 
-describe('a cursor carried beside one that is not on its node keeps its order (review 4, N1)', () => {
+describe('a cursor carried beside one that is not on its node keeps its order', () => {
   type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
   it('B rides n1 with C, a later cursor on a flow point beside it: a small drag swaps nothing', () => {
     render(<AgentCursorLayer />);
@@ -1630,7 +1630,7 @@ describe('a cursor carried beside one that is not on its node keeps its order (r
       lookupRef.current = next as never;
       notifyStore();
       tickFrames(1);
-      // C stays second, below B: its target is in B's column (r13 item 3).
+      // C stays second, below B: its target is in B's column.
       expect(where().cccccccccccc.y).toBe(344 + S);
       expect(where().bbbbbbbbbbbb.y).toBe(344);
     }
@@ -1639,7 +1639,7 @@ describe('a cursor carried beside one that is not on its node keeps its order (r
   });
 });
 
-describe('round 4c: the column, the says, the exit and the record (PR #211 review 5, GM r12 and r13)', () => {
+describe('the column, the says, the exit and the record (PR #211, design)', () => {
   const session = (key: string, ordinal: number) => ({ session: { key: key.repeat(12), ordinal } });
   const where = () => Object.fromEntries(cursors().map((el) => [el.dataset.session!.slice(0, 1), at(el)]));
   const opacity = (el: HTMLElement) => Number(el.style.opacity);
@@ -1704,7 +1704,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
     expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S } });
   });
 
-  it.each([2, 3])('%i peers leaving together: every pill keeps its layout, only the tip opacity falls (review 5, M1)', (count) => {
+  it.each([2, 3])('%i peers leaving together: every pill keeps its layout, only the tip opacity falls', (count) => {
     render(<AgentCursorLayer />);
     for (const [i, key] of ['a', 'b', 'c'].slice(0, count).entries()) {
       send(event({ ...session(key, i + 1), target: { nodeId: 'n1' }, say: i === 1 ? 'Checking the prompt' : '' }));
@@ -1723,9 +1723,9 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
         expect(el.dataset.label).toBe(before[j].label);
         expect(at(el)).toEqual(before[j].at);
         expect(el.querySelector('.agent-cursor__say')?.className).toBe(before[j].say);
-        // The name shows all the way: nothing took it over (review 5, F9).
+        // The name shows all the way: nothing took it over.
         expect(el.dataset.taken).toBeUndefined();
-        expect(el.getAttribute('role')).toBeNull(); // F10: no status role while leaving
+        expect(el.getAttribute('role')).toBeNull(); // no status role while leaving
         expect(opacity(el)).toBeLessThan(1);
       }
       frames += 1;
@@ -1754,7 +1754,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
     }
   });
 
-  it('a leaving drag cursor drops its wire on its first exit frame (review 5, F11)', () => {
+  it('a leaving drag cursor drops its wire on its first exit frame', () => {
     render(<AgentCursorLayer />);
     send(event({ ...session('a', 1), action: 'drag', from: { nodeId: 'n1' }, target: { nodeId: 'n2' } }));
     const wire = document.querySelector<SVGPathElement>('.agent-cursor__wire')!;
@@ -1765,7 +1765,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
     expect(wire.style.opacity).toBe('0');
   });
 
-  it('a takeover hides the leaving pill for its whole exit, even when the new holder leaves first (review 5, LOW-3)', () => {
+  it('a takeover hides the leaving pill for its whole exit, even when the new holder leaves first', () => {
     render(<AgentCursorLayer />);
     send(event({ ...session('a', 2), target: { x: 100, y: 100 } }));
     flush();
@@ -1784,7 +1784,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
     expect(cursors()).toHaveLength(0);
   });
 
-  it('an idle cursor whose say has ended, back mid-exit, comes back neither idle nor with its say spent (review 5, nextSeq)', () => {
+  it('an idle cursor whose say has ended, back mid-exit, comes back neither idle nor with its say spent (nextSeq)', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -1806,7 +1806,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
     }
   });
 
-  describe('drawn on whole device pixels at rest, whatever moved it (review 5, the draw-time snap)', () => {
+  describe('drawn on whole device pixels at rest, whatever moved it (the draw-time snap)', () => {
     beforeEach(() => { pane.dom = document.createElement('div'); });
     const onWholePixels = (el: HTMLElement) => {
       const tip = at(el);
@@ -1852,7 +1852,7 @@ describe('round 4c: the column, the says, the exit and the record (PR #211 revie
   });
 });
 
-describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait their turn, zoom rides (GM r14 and r15, review 6)', () => {
+describe('the owned step, no foreign overlap, nothing jumps, says wait their turn, zoom rides', () => {
   type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
   const session = (key: string, ordinal: number) => ({ session: { key: key.repeat(12), ordinal } });
   const byKey = (k: string) => cursors().find((el) => el.dataset.session === k.repeat(12))!;
@@ -1929,7 +1929,7 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     for (let f = 1; f <= 18; f += 1) {
       pane.transform = [0, 0, from + ((to - from) * f) / 18];
       notifyStore();
-      // Carried in the zoom's own frame, not the next one (live, round 4d).
+      // Carried in the zoom's own frame, not the next one (live).
       for (const d of steps()) expect(d).toBeCloseTo(S, 6);
       tickFrames(1);
       for (const d of steps()) expect(d).toBeCloseTo(S, 6);
@@ -1937,14 +1937,14 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     }
   });
 
-  it('a chain that splits: every cursor that must move glides there on the land spring, together, nothing jumps (review 6, item 2)', () => {
+  it('a chain that splits: every cursor that must move glides there on the land spring, together, nothing jumps', () => {
     render(<AgentCursorLayer />);
     // a, b, c and d each 15 px below the last: one column by targets.
     for (const [i, key] of ['a', 'b', 'c', 'd'].entries()) {
       send(event({ ...session(key, i + 1), target: { x: 300, y: 300 + 15 * i } }));
       flush();
     }
-    // Four in one column: d folds into c's count cursor (GM r17 item 1).
+    // Four in one column: d folds into c's count cursor (design).
     expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S }, c: { x: 300, y: 300 + 2 * S }, d: { x: 300, y: 300 + 2 * S } });
     expect(byKey('c').dataset.count).toBe('2');
     expect(byKey('d').dataset.collapsed).toBe('true');
@@ -1970,7 +1970,7 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
     }
   });
 
-  it('a say on the top cursor: the cursors below glide first, the say fades in once the room is clear, and never over an arrow (review 6, item 3)', () => {
+  it('a say on the top cursor: the cursors below glide first, the say fades in once the room is clear, and never over an arrow', () => {
     render(<AgentCursorLayer />);
     column();
     send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
@@ -2075,7 +2075,7 @@ describe('round 4d: the owned step, no foreign overlap, nothing jumps, says wait
 });
 
 
-describe('round 4e: the head leads its column, says find room or wait for the log, columns cap at 3, zoom and fonts (review 7, GM r17)', () => {
+describe('the head leads its column, says find room or wait for the log, columns cap at 3, zoom and fonts', () => {
   type Entry = { dragging?: boolean; internals: { positionAbsolute: { x: number; y: number } } };
   const session = (key: string, ordinal: number) => ({ session: { key: key.repeat(12), ordinal } });
   const byKey = (k: string) => cursors().find((el) => el.dataset.session === k.repeat(12))!;
@@ -2110,7 +2110,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   };
 
-  // Review 7, MEDIUM-1 (P1): the head nudges its own target within its
+  // The head nudges its own target within its
   // stamp radius. The members follow its drawn tip, never under the step.
   it.each([[0, -10], [12, 0], [0, 10], [-12, -8]])('the head moves (%s, %s) by its own event: the column glides with it, never under the step, nothing meets', (dx, dy) => {
     render(<AgentCursorLayer />);
@@ -2136,7 +2136,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       a: { x: 300 + dx, y: 300 + dy }, b: { x: 300 + dx, y: 300 + dy + S }, c: { x: 300 + dx, y: 300 + dy + 2 * S },
     });
     // A glide over many frames, at about the head's own pace and
-    // eb3d2477's glide (1.2 to 1.6 px a frame at most; review 7 saw 10 to
+    // eb3d2477's glide (1.2 to 1.6 px a frame at most; a reviewer saw 10 to
     // 14.4 px jumps).
     expect(moving).toBeGreaterThan(8);
     expect(maxJump).toBeLessThan(1.7);
@@ -2158,7 +2158,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 7, MEDIUM-2 (P3, P5; they pin F24): a flyer landing under the
+  // A flyer landing under the
   // speaking cursor holds its say.
   it('a say on the head while the cursor below acts in the same moment: the say waits for it, never painted over its arrow', () => {
     render(<AgentCursorLayer />);
@@ -2206,7 +2206,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(painted(byKey('b'))).toBe(true);
   });
 
-  // GM r17 item 2: another column in the way on the right.
+  // Design: another column in the way on the right.
   const blocker = (key: string, ordinal: number, x: number, y: number, extra: Partial<AgentPresenceEvent> = {}) => {
     send(event({ ...session(key, ordinal), target: { x, y }, ...extra }));
     flush();
@@ -2267,7 +2267,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('another cursor\'s say pill counts as in the way (review 7, LOW-2 M4)', () => {
+  it('another cursor\'s say pill counts as in the way', () => {
     render(<AgentCursorLayer />);
     blocker('a', 1, 300, 300);
     // e, below and to the left, says first: its say pill runs 1 px under
@@ -2283,7 +2283,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(anyMeet()).toBe(false);
   });
 
-  it('another cursor\'s pills count at their measured widths, not a default (review 7, LOW-2 M5)', () => {
+  it('another cursor\'s pills count at their measured widths, not a default', () => {
     render(<AgentCursorLayer />);
     blocker('a', 1, 300, 300);
     blocker('e', 1, 150, 326, { agent: { id: 'e', name: 'A very long agent name for the pill', color: '#5B9DFF', verified: true } });
@@ -2293,7 +2293,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(anyMeet()).toBe(false);
   });
 
-  it('a say waits for a cursor still flying to a spot under it, however far away it is (r17 item 3)', () => {
+  it('a say waits for a cursor still flying to a spot under it, however far away it is', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b']);
     send(event({ ...session('c', 3), target: { x: 2400, y: 1400 } }));
@@ -2312,7 +2312,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(where()).toEqual({ a: { x: 500, y: 344 }, b: { x: 500, y: 344 + SS }, c: { x: 500, y: 344 + SS + S } });
   });
 
-  it('a zoom mid-glide keeps the glide where it is on screen: the step it has so far, in that very frame (review 7, MEDIUM-3)', () => {
+  it('a zoom mid-glide keeps the glide where it is on screen: the step it has so far, in that very frame', () => {
     render(<AgentCursorLayer />);
     column();
     send(event({ ...session('a', 1), target: { nodeId: 'n1' }, say: 'Checking the prompt' }));
@@ -2329,7 +2329,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r17 item 1: a column draws at most 3.
+  // Design: a column draws at most 3.
   describe('the count cursor', () => {
     const rectFor = (el: Element): DOMRect => {
       if (el === pane.dom) return new DOMRect(0, 0, 1440, 900);
@@ -2352,7 +2352,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     const pointer = (x: number, y: number) => act(() => { window.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y })); });
     const list = (el: HTMLElement) => [...el.querySelectorAll('.agent-cursor__list-name')].map((n) => n.textContent);
 
-    it('a count cursor that is typing has no say pill, so the caret sits on the cursor (final review)', () => {
+    it('a count cursor that is typing has no say pill, so the caret sits on the cursor', () => {
       render(<AgentCursorLayer />);
       for (const [i, key] of ['a', 'b', 'c', 'd'].entries()) {
         send(event({ ...session(key, i + 1), action: 'type', say: 'Writing' }));
@@ -2427,7 +2427,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     });
   });
 
-  // Review 7, MEDIUM-3: a zoom one frame after a say, while the column glides.
+  // A zoom one frame after a say, while the column glides.
   const zoomRuns: [string, (f: number) => [number, number, number][]][] = [
     // setViewport over 300 ms: one smooth step a frame.
     ['setViewport 1 → 0.5', (f) => (f >= 1 && f <= 18 ? [[0, 0, 1 - (0.5 * f) / 18]] : [])],
@@ -2474,7 +2474,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   it.each(zoomRuns)('%s, starting one frame after a say: the steps stay in screen px while the column glides, nothing meets', (_name, zoomAt) => {
     zoomGlide(zoomAt);
   });
-  // #219 r3h: the same, with performance.now() as a browser has it, a little
+  // #219: the same, with performance.now() as a browser has it, a little
   // past the last frame's timestamp and later on each read. A zoom's carry
   // read the clock once per cursor, so the member above stepped at t and
   // this one at t + a few µs: hold() took the one above for one still to
@@ -2491,7 +2491,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 7, MEDIUM-4: a pill measured before its font loaded.
+  // A pill measured before its font loaded.
   it('fonts that finish loading measure the pills again: a cursor whose arrow the wider name now reaches joins its column', () => {
     let loaded = false;
     class StubCanvas {
@@ -2533,10 +2533,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   });
 
 
-  // GM r18 item 3: the layout counts only what is drawn. A say in the Agent
+  // Design: the layout counts only what is drawn. A say in the Agent
   // log keeps no room under its cursor; when it comes back, the cursors
-  // below glide first and then it fades in (the review 6 order).
-  it('a say in the Agent log reserves no room; coming back, the column glides first, then the say fades in, nothing jumps (r18 item 3)', () => {
+  // below glide first and then it fades in (the earlier order).
+  it('a say in the Agent log reserves no room; coming back, the column glides first, then the say fades in, nothing jumps', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -2587,9 +2587,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r18 item 1: a folded member's say is in the Agent log only. Once it
+  // Design: a folded member's say is in the Agent log only. Once it
   // unfolds, a say still current shows by the normal order.
-  it('a folded member\'s say shows only in the Agent log; unfolded while still current, it shows by the normal order (r18 item 1)', () => {
+  it('a folded member\'s say shows only in the Agent log; unfolded while still current, it shows by the normal order', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b', 'c', 'd']);
     const before = where();
@@ -2623,9 +2623,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   });
 
 
-  // GM r19 item 2: hold still. A say that another column blocks waits with
+  // Design: hold still. A say that another column blocks waits with
   // nothing moving; it goes to the log with every position unchanged.
-  it('a say blocked by another column holds with nothing moving, and goes to the log leaving every position unchanged (r19 item 2)', () => {
+  it('a say blocked by another column holds with nothing moving, and goes to the log leaving every position unchanged', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -2647,7 +2647,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('once the blocker goes, the column glides and then the say fades in; the cap counts only the hold, not the glide (r19 item 2)', () => {
+  it('once the blocker goes, the column glides and then the say fades in; the cap counts only the hold, not the glide', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -2693,9 +2693,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   });
 
 
-  // GM r19: the Agent log names each say by the cursor's own label, the
+  // Design: the Agent log names each say by the cursor's own label, the
   // string its pill shows, from one helper.
-  it('the Agent log names each line as its cursor\'s pill does ("Claude · 3"), for every cursor in a column (r19)', () => {
+  it('the Agent log names each line as its cursor\'s pill does ("Claude · 3"), for every cursor in a column', () => {
     render(<AgentCursorLayer />);
     const sent = (['a', 'b', 'c', 'd'] as const).map((k, i) => {
       const e = event({ ...session(k, i + 1), target: { nodeId: 'n1' }, say: `Step ${k}` });
@@ -2719,9 +2719,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(agentActionEntry(event({ say: 'x', session: { key: 'not-hex', ordinal: 3 } as never }))!.agent!.name).toBe('Claude');
   });
 
-  // GM r19 check: the full cursors are the column's earliest arrivals,
+  // Design check: the full cursors are the column's earliest arrivals,
   // whatever numbers their sessions carry.
-  it('the two full cursors are the earliest arrivals, whatever their numbers; the latest fold (r19 check)', () => {
+  it('the two full cursors are the earliest arrivals, whatever their numbers; the latest fold', () => {
     render(<AgentCursorLayer />);
     // Arrival order a (·6), b (·3), c (·5), d (·4): numbers out of order.
     for (const [k, ordinal] of [['a', 6], ['b', 3], ['c', 5], ['d', 4]] as const) {
@@ -2737,7 +2737,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   });
 
 
-  it('a say whose room is taken again mid-glide holds again: it never shows over the blocker, gives its room back, and goes to the log (r19 item 2)', () => {
+  it('a say whose room is taken again mid-glide holds again: it never shows over the blocker, gives its room back, and goes to the log', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -2780,9 +2780,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   });
 
 
-  // Review 8 / GM r21: a merge lays the joined column out in arrival
+  // Design: a merge lays the joined column out in arrival
   // order; a cursor that changes slot glides there, nothing jumps.
-  it('P3 live: in the merge the later cursor aimed higher stays on top, the earlier one on its own target, the count glides under it, nothing jumps (r21, r24 Q1)', () => {
+  it('in the merge the later cursor aimed higher stays on top, the earlier one on its own target, the count glides under it, nothing jumps', () => {
     render(<AgentCursorLayer />);
     blocker('a', 1, 300, 386);
     blocker('b', 2, 300, 300);
@@ -2817,9 +2817,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(path.filter((w) => w.c.y > 300 + S + 1 && w.c.y < 386 + S - 1).length).toBeGreaterThan(8);
   });
 
-  // GM r21 Q2: "earliest" is the backend's arrival order, so a reload (a
+  // Design: "earliest" is the backend's arrival order, so a reload (a
   // replay, oldest last event first) draws the same two in full.
-  it('after a reload the same two cursors are drawn in full: the backend\'s arrival order, not who spoke last (r21)', () => {
+  it('after a reload the same two cursors are drawn in full: the backend\'s arrival order, not who spoke last', () => {
     const arrive = (k: string, o: number, since: number, extra: Partial<AgentPresenceEvent> = {}) =>
       event({ ...session(k, o), target: { nodeId: 'n1' }, since, ...extra });
     const first = render(<AgentCursorLayer />);
@@ -2849,10 +2849,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(painted(byKey('a'))).toBe(true);
   });
 
-  // Review 8, MEDIUM-2: the count cursor's own member leaves. It exits as
+  // The count cursor's own member leaves. It exits as
   // the count ("3 more", grey), and the new count waits unseen until it is
   // gone: never more than three shown.
-  it('five in a column, the count cursor\'s member leaves: it exits as "3 more", the full cursors stay at full opacity, the new count waits, at most 3 shown on every frame (review 8, GM r22)', () => {
+  it('five in a column, the count cursor\'s member leaves: it exits as "3 more", the full cursors stay at full opacity, the new count waits, at most 3 shown on every frame', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b', 'c', 'd', 'e']);
     const c = byKey('c');
@@ -2869,7 +2869,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       const shown = cursors().filter((el) => Number(el.style.opacity) > 0.05);
       expect(shown.length).toBeLessThanOrEqual(3);
       // Only the count's member leaves: the full cursors stay at full
-      // opacity on every frame of its exit (GM r22, 3a).
+      // opacity on every frame of its exit (design).
       expect(Number(byKey('a').style.opacity)).toBe(1);
       expect(Number(byKey('b').style.opacity)).toBe(1);
       const leaving = cursors().find((el) => el.dataset.session === 'c'.repeat(12));
@@ -2891,10 +2891,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(cursors().find((el) => el.dataset.session === 'c'.repeat(12))).toBeUndefined();
   });
 
-  // Review 8, LOW-2 V2 (r18): the count cursor never draws a say of its own.
-  // Review 8, V32: a cursor flying through the say's room makes the say
+  // The count cursor never draws a say of its own.
+  // A cursor flying through the say's room makes the say
   // wait for it (it passes), not move aside as for a column at rest there.
-  it('a flyer in the say\'s room makes it wait through its arrow and its name pill, then it shows on its own side; never moved left for a flyer (review 8 V32, GM r22)', () => {
+  it('a flyer in the say\'s room makes it wait through its arrow and its name pill, then it shows on its own side; never moved left for a flyer', () => {
     render(<AgentCursorLayer />);
     blocker('a', 1, 300, 300);
     blocker('e', 2, 400, 318);
@@ -2904,7 +2904,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     tickFrames(1);
     const a = byKey('a');
     expect(a.dataset.sayWait).toBe('true');
-    // The flyer's whole drawn block counts, arrow and name pill (GM r22):
+    // The flyer's whole drawn block counts, arrow and name pill (design):
     // the say waits while the pill passes too, so no frame draws a say
     // over it, and then shows on its own side.
     let waited = 0;
@@ -2919,12 +2919,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(painted(a)).toBe(true);
   });
 
-  // Review 8, V5 and V6: another column on the right, and the cursor
+  // Another column on the right, and the cursor
   // below still a say step short (it waits on both sides). The say never
   // shows on the left until the one below has glided clear; capped at
   // once (reduced motion), it takes the left, never the right over the
   // other column.
-  it('right side taken, the cursor below still gliding: the left say waits for the glide (review 8 V5)', () => {
+  it('right side taken, the cursor below still gliding: the left say waits for the glide', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b'], { x: 300, y: 300 });
     blocker('e', 3, 400, 318);
@@ -2944,7 +2944,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(shownAt).toBeGreaterThan(4);
   });
 
-  it('right side taken, capped at once (reduced motion): the say takes the left, never the right over the other column (review 8 V6)', () => {
+  it('right side taken, capped at once (reduced motion): the say takes the left, never the right over the other column', () => {
     reduceMotion(true);
     render(<AgentCursorLayer />);
     column(['a', 'b'], { x: 300, y: 300 });
@@ -2959,9 +2959,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(anyMeet()).toBe(false);
   });
 
-  // Review 8, V9: blocked again after a wait began, the say holds afresh:
+  // Blocked again after a wait began, the say holds afresh:
   // its 600 ms cap counts from the new hold, not from the first wait.
-  it('a say blocked again after its wait began holds a full 600 ms before the log (review 8 V9)', () => {
+  it('a say blocked again after its wait began holds a full 600 ms before the log', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -2991,10 +2991,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Live r4i: after a reload the graph measures its nodes after the replay.
+  // Live: after a reload the graph measures its nodes after the replay.
   // A cursor on a node moves from the node's corner into its header then;
   // that is no carry, so it keeps the backend's arrival and heads the column.
-  it('a node measured after the replay keeps its cursor\'s backend arrival: no carry, it heads the column (live r4i)', () => {
+  it('a node measured after the replay keeps its cursor\'s backend arrival: no carry, it heads the column (live)', () => {
     const unmeasured = new Map(lookupRef.current) as Map<string, Entry & { measured?: unknown }>;
     const n1 = unmeasured.get('n1')!;
     unmeasured.set('n1', { ...n1, measured: undefined });
@@ -3011,10 +3011,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(where()).toEqual({ d: { x: 500, y: 344 }, a: { x: 500, y: 344 + S }, b: { x: 500, y: 344 + 2 * S } });
   });
 
-  // #211 follow-up (review 9, LOW-3; GM r23 item 2): the backend's new
+  // #211 follow-up (design): the backend's new
   // arrival for a cursor a node move carried (agentPresenceArrival) moves
   // it in the column, in every tab alike, with a glide.
-  it('a new backend arrival with no event moves the cursor to its place in the column, gliding (r23 item 2, the rank-change branch)', () => {
+  it('a new backend arrival with no event moves the cursor to its place in the column, gliding (the rank-change branch)', () => {
     render(<AgentCursorLayer />);
     for (const [k, o] of [['a', 1], ['b', 2], ['c', 3]] as const) {
       send(event({ ...session(k, o), target: { x: 300, y: 300 }, since: 1000 * o }));
@@ -3058,7 +3058,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   };
 
-  // GM r47 Q1: while a node is dragged, the tab previews a carry the
+  // Design: while a node is dragged, the tab previews a carry the
   // backend will count (the target chain changes): the carried cursor is
   // drawn last in the column it passes. Display only; the backend's arrival
   // governs at the drop.
@@ -3096,7 +3096,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     useAgentPresenceStore.getState().arrive([{ agentId: 'claude', key: k.repeat(12), ordinal, since }]);
   });
 
-  it('a drag into a column draws the carry last while it passes, and nothing moves at the drop when the backend agrees (r47 Q1)', () => {
+  it('a drag into a column draws the carry last while it passes, and nothing moves at the drop when the backend agrees', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3120,7 +3120,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('a drag back out of the column puts the carried cursor back in its old slot (r47 Q1)', () => {
+  it('a drag back out of the column puts the carried cursor back in its old slot', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3141,7 +3141,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('a backend that disagrees at the drop wins: the carried cursor glides back to its place on the layout spring (r47 Q1)', () => {
+  it('a backend that disagrees at the drop wins: the carried cursor glides back to its place on the layout spring', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3164,7 +3164,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('two cursors on one dragged node keep their order between themselves in the preview and after (rule 101, r47 Q1)', () => {
+  it('two cursors on one dragged node keep their order between themselves in the preview and after', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3190,10 +3190,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r52 Q1, as r62 rules it: on the way in, a's arrow meets d's label
+  // Design, as later ruled: on the way in, a's arrow meets d's label
   // while their targets are still over 16 apart (a's target 304 to 327,
   // d's 344): the column joins by overlap alone. During the drag the carry
-  // takes the slot the r24 insert gives it as the newest arrival there too,
+  // takes the slot the insert gives it as the newest arrival there too,
   // the same rule as in chain range, so its slot only ever moves one way.
   const dragFrames = (id: string, path: { x: number; y: number }[], each: () => void) => {
     const node = lookupRef.current.get(id) as Entry;
@@ -3217,12 +3217,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     lookupRef.current = new Map(lookup).set('n2', { ...n2, ...extra, internals: { ...n2.internals, positionAbsolute: p } } as never) as never;
   };
 
-  // Review 2's trace (pr219r2-repro.txt): d aimed at 344, e at 384 (more
-  // than 16 below), a carried straight down through both. Before r62, a went
+  // A reviewer's trace (pr219r2-repro.txt): d aimed at 344, e at 384 (more
+  // than 16 below), a carried straight down through both. Before that ruling, a went
   // to the bottom in the band (430.7), up past e in d's chain (397.3), and
   // down again past it (439.2). Now the band and chain range give one slot:
   // a's slot only moves down the column, at any zoom.
-  it.each([1, 0.5, 2])('a straight drag through the band and two chains at zoom %s: the carry\'s slot moves one way only, with no flip (r62)', (z) => {
+  it.each([1, 0.5, 2])('a straight drag through the band and two chains at zoom %s: the carry\'s slot moves one way only, with no flip', (z) => {
     fakeTimers();
     try {
       pane.transform = [0, 0, z];
@@ -3250,7 +3250,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       settle(800);
       expect(slotOf('a', ['d', 'e'])).toBe(2);
       if (z !== 1) return;
-      // At zoom 1, review 2's geometry: the head of the column in the band,
+      // At zoom 1, the reviewer's geometry: the head of the column in the band,
       // the middle slot in d's chain (e aims over 16 below a), the bottom in
       // e's: one way.
       expect(slots).toEqual([0, 1, 2]);
@@ -3266,7 +3266,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r65: the head-to-bottom move, in the d/e-at-344 case. a heads the
+  // Design: the head-to-bottom move, in the d/e-at-344 case. a heads the
   // column in the band (327), then joins d's chain one unit on (328) and
   // goes to the bottom, past both members, as they close up under nothing.
   // One glide on the layout spring for all three: they start on the same
@@ -3281,7 +3281,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     dragFrames('n2', [{ x: 400, y: 284 }], () => {}); // 328: in d's chain
     return before;
   };
-  it('the head-to-bottom move is one glide for the carry and both members: same first frame, same pace, same last frame (r65)', () => {
+  it('the head-to-bottom move is one glide for the carry and both members: same first frame, same pace, same last frame', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3315,7 +3315,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('under reduced motion the head-to-bottom move is instant: one frame, all three (r65)', () => {
+  it('under reduced motion the head-to-bottom move is instant: one frame, all three', () => {
     fakeTimers();
     try {
       reduceMotion(true);
@@ -3328,13 +3328,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r66, bound 1: the rest gate changes only when cursors count as at
+  // Design, bound 1: the rest gate changes only when cursors count as at
   // rest. A held cursor keeps drawing its spring position (it isn't snapped
   // or frozen), and what shows when it comes to rest doesn't wait for the
   // column: a still pointer over d's slot hovers d on d's own rest, not when
-  // the column lands. (Audit: hover is the one visible thing keyed to rest;
-  // see the round 3e notes.)
-  it('a cursor held by the column draws its spring position, and a still pointer hovers it on its own rest, not the column\'s (r66)', () => {
+  // the column lands. (Audit: hover is the one visible thing keyed to rest.)
+  it('a cursor held by the column draws its spring position, and a still pointer hovers it on its own rest, not the column\'s', () => {
     fakeTimers();
     pane.dom = document.createElement('div');
     document.body.appendChild(pane.dom);
@@ -3384,13 +3383,13 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r66, bound 2: the hold is capped. A drag that keeps retargeting the
+  // Design, bound 2: the hold is capped. A drag that keeps retargeting the
   // carry keeps its glide from settling (its spot is the column's bottom,
   // while its node, the spring's carrier, keeps moving), which would hold d
   // and e off their rest for as long as the person drags. For 2 s of wobble
   // inside d's chain, no member waits more than AGENT_CURSOR_REST_HOLD_MAX_MS
   // past its own rest: it lands on its own.
-  it('a 2 s wobble drag that keeps the carry gliding holds no member past the 300 ms cap (r66)', () => {
+  it('a 2 s wobble drag that keeps the carry gliding holds no member past the 300 ms cap', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3420,7 +3419,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
         }
         prev = w;
       });
-      expect(AGENT_CURSOR_REST_HOLD_MAX_MS).toBe(300); // GM r66
+      expect(AGENT_CURSOR_REST_HOLD_MAX_MS).toBe(300); // design's ceiling
       for (const k of ['d', 'e'] as const) {
         expect(worst[k], k).toBeLessThanOrEqual(capFrames);
         // The cap is what ended the hold: it ran close to the full 300 ms.
@@ -3432,12 +3431,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 3's probe (GM r75.1 and r75.2), kept as a test: r65's
+  // A reviewer's probe, kept as a test: the
   // head-to-bottom move, then k plain frames, then the hand crosses back
   // one unit (a's target 328 -> 327: the head again). Every k from 0 to 49
-  // crosses on some frame of the glide: k = 0 to 2 are r75.2's wobble back
-  // mid-glide (the column floor's push), the gate frame (about k = 30) and
-  // the frames the 300 ms cap fires on are r75.1's. No frame moves any
+  // crosses on some frame of the glide: k = 0 to 2 are the wobble back
+  // mid-glide (the column floor's push); the gate frame (about k = 30) and
+  // the frames the 300 ms cap fires on are the other crossings. No frame moves any
   // cursor more than its spring step: the largest one-frame step the land
   // spring takes in the clean head-to-bottom glide, for a (101 px) and for d
   // and e (25 px), with 2% for a glide that reverses (a back from past its
@@ -3466,12 +3465,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       vi.useRealTimers();
     }
   };
-  // GM r65: wobbling across the 16 boundary follows the hand, with no
+  // Design: wobbling across the 16 boundary follows the hand, with no
   // hysteresis. a's target goes back and forth over 328 (16 from d), with
   // steps that stay on one side in between. Each crossing is exactly one
   // move (one unbroken run of frames for the members); a step that crosses
   // nothing moves no member; and once a move settles, nothing moves.
-  it('a wobble across the 16 boundary: each crossing is one move, nothing moves between crossings, no hysteresis (r65), and a wobble back 1 to 3 frames on moves nothing past its spring step (r75.2)', () => {
+  it('a wobble across the 16 boundary: each crossing is one move, nothing moves between crossings, no hysteresis, and a wobble back 1 to 3 frames on moves nothing past its spring step', () => {
     const spring = springSteps();
     fakeTimers();
     try {
@@ -3505,7 +3504,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
         aT = next;
       }
       // The hand back across the boundary 1, 2 and 3 frames after a
-      // crossing, both ways (GM r75.2): no frame moves a cursor more than
+      // crossing, both ways: no frame moves a cursor more than
       // its spring step, and each pair ends where the hand is.
       for (const back of [1, 2, 3]) {
         for (const [there, home] of [[328, 327], [327, 328]]) {
@@ -3534,10 +3533,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // And with each frame's callbacks in reverse order (review 4, drag LOW-1:
-  // a member stepping before the one above read a stale floor; at k = 0, d
+  // And with each frame's callbacks in reverse order (a member stepping before the one above read a stale floor; at k = 0, d
   // and e moved 8.59 px in one frame).
-  it.each(Array.from({ length: 50 }, (_, k) => k).flatMap((k) => [[k, false], [k, true]] as const))('the hand crosses back %s frames into the head-to-bottom glide: no frame moves a cursor more than its spring step (r75.1, r75.2; frame order reversed: %s)', (k, reversed) => {
+  it.each(Array.from({ length: 50 }, (_, k) => k).flatMap((k) => [[k, false], [k, true]] as const))('the hand crosses back %s frames into the head-to-bottom glide: no frame moves a cursor more than its spring step (frame order reversed: %s)', (k, reversed) => {
     const bound = springSteps();
     // The clean glide's steps: a's is 101 px of spring, d's and e's 25.
     expect(bound.a).toBeGreaterThan(8);
@@ -3565,11 +3563,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 4, drag LOW-1 (PROBE2): in r65's head-to-bottom glide d and e
+  // In the head-to-bottom glide d and e
   // close up in lockstep, a step apart, and pass no one: only the carry is
   // marked crossing, whichever cursor's frame runs first. A floor read from
   // the member above before it stepped marked e crossing on every frame.
-  it.each([false, true])('the head-to-bottom glide marks only the carry crossing, in either frame order (review 4, drag LOW-1; reversed: %s)', (reversed) => {
+  it.each([false, true])('the head-to-bottom glide marks only the carry crossing, in either frame order (reversed: %s)', (reversed) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3593,12 +3591,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r85 NIT: two members crossing at once keep their column's order
+  // Design: two members crossing at once keep their column's order
   // between themselves, the upper on top, whatever the DOM's order. In
   // [a, d, e], d and e both marked crossing: e comes after d in the DOM (it
   // would draw on top by DOM order), but d's depth is 1 and e's 2, so d's
   // z-index (10 - depth, agentCursor.css) is over e's. Unmarked, no depth.
-  it('two crossing members draw in column order, the upper on top, not in DOM order (r85 NIT)', () => {
+  it('two crossing members draw in column order, the upper on top, not in DOM order', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3615,7 +3613,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
       expect(byKey('d').style.getPropertyValue('--agent-cursor-crossing-depth')).toBe('1');
       expect(byKey('e').style.getPropertyValue('--agent-cursor-crossing-depth')).toBe('2');
       expect(z('d')).toBeGreaterThan(z('e'));
-      // A crossing orders its whole column (r106: one band, over every
+      // A crossing orders its whole column (one band, over every
       // unmarked cursor): the head a, above both, draws over them too.
       expect(byKey('a').dataset.columnOrder).toBe('true');
       expect(zOf(byKey('a'))).toBeGreaterThan(zOf(byKey('d')));
@@ -3630,12 +3628,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 4, layout LOW-1 (PROBE1): a crossing mark ends with the glide
+  // A crossing mark ends with the glide
   // however it ends. A stall or a hidden tab lands everything on a caught-up
   // frame, and a stale or replayed event snaps a cursor to its spot: neither
   // went through hold, which cleared the mark only on a frame of its own, so
   // d stayed drawn under every live cursor at rest.
-  it.each(['stall', 'replay'] as const)('a crossing mark goes when the glide ends on a %s, not only on its own landing (review 4, layout LOW-1)', (how) => {
+  it.each(['stall', 'replay'] as const)('a crossing mark goes when the glide ends on a %s, not only on its own landing', (how) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3665,12 +3663,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r75.2: mid-glide, a member may sit less than a step under the one
+  // Design: mid-glide, a member may sit less than a step under the one
   // above; the one above draws on top. d and e glide back under a with no
   // floor push, and every frame one of them is less than a step under the
   // member above (or passed by it), it is marked as crossing, which draws
   // it under every live cursor (agentCursor.css). Landed, the mark is gone.
-  it.each([0, 1, 2].flatMap((k) => [[k, false], [k, true]] as const))('the hand back %s frames into the head-to-bottom glide: a member less than a step under the one above draws under it (r75.2; frame order reversed: %s)', (k, reversed) => {
+  it.each([0, 1, 2].flatMap((k) => [[k, false], [k, true]] as const))('the hand back %s frames into the head-to-bottom glide: a member less than a step under the one above draws under it (frame order reversed: %s)', (k, reversed) => {
     fakeTimers();
     reverseFrames = reversed;
     try {
@@ -3697,13 +3695,13 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // The cap's frame (r75.1): r66's wobble inside d's chain keeps the carry
+  // The cap's frame: the wobble inside d's chain keeps the carry
   // gliding, so d and e are held until the 300 ms cap lands them on their
   // own. The hand crosses back to the head on frame n of the wobble, for
   // every n from 20 to 60: the frames the cap fires on are among them. No
   // frame moves d or e more than their spring step, and a no more than its
   // own plus the unit a frame the hand moves its node.
-  it.each(Array.from({ length: 41 }, (_, i) => 20 + i))('the hand crosses back on frame %s of a wobble held by the cap: no frame moves a cursor more than its spring step (r75.1)', (n) => {
+  it.each(Array.from({ length: 41 }, (_, i) => 20 + i))('the hand crosses back on frame %s of a wobble held by the cap: no frame moves a cursor more than its spring step', (n) => {
     const bound = springSteps();
     fakeTimers();
     try {
@@ -3732,12 +3730,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Round 3b's band test, updated to r62: it encoded the literal bottom slot
+  // The earlier band test, updated to the later ruling: it encoded the literal bottom slot
   // in the band (d and e never moved). As the newest arrival, a carry from
   // above aims more than 16 over d and e, so the insert puts it at the head
-  // in the band, and at the bottom once it is within 16 of them (r24 insert,
+  // in the band, and at the bottom once it is within 16 of them (the insert,
   // as the backend does at the drop). One way: it never comes back up.
-  it('a drag through the overlap band into a column: the carry heads it in the band, then goes to the bottom in chain range, never back (r62, was r52 Q1)', () => {
+  it('a drag through the overlap band into a column: the carry heads it in the band, then goes to the bottom in chain range, never back', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3776,16 +3774,16 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Round 3b's band drop test, updated to r62: the band slot is now the
+  // The earlier band drop test, updated to the later ruling: the band slot is now the
   // newest arrival's, which for a carry aimed more than 16 over every member
   // is the head, its arrival-order slot too. So the drop moves nothing.
-  it('a drop inside the overlap band: the backend\'s arrival order is the slot it already has, so nothing moves (r62, was r52 Q1)', () => {
+  it('a drop inside the overlap band: the backend\'s arrival order is the slot it already has, so nothing moves', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
       intoColumn();
       // a's target at 314: 30 above d's, so its chain is unchanged, and the
-      // backend sends no arrival for the drop (r24).
+      // backend sends no arrival for the drop.
       dragHeld('n2', { x: 400, y: 270 });
       settle(800);
       const order = { a: { x: 500, y: 314 }, d: { x: 500, y: 314 + S }, e: { x: 500, y: 314 + 2 * S } };
@@ -3797,12 +3795,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // r52 Q1's one accepted motion, still there under r62: a's chain holds f
+  // The one accepted motion, still there under the later ruling: a's chain holds f
   // (both aimed at 290 to 300) and doesn't change, but the drag pushes f
   // onto d, so d joins the column. As the newest arrival, a goes under f;
   // at the drop the backend counts no arrival, and a's own (the earliest)
   // puts it back at the head, with one glide at once, not after the hold.
-  it('a drop inside the band where the arrival order differs: one glide at the drop to the backend\'s order (r52 Q1, r62)', () => {
+  it('a drop inside the band where the arrival order differs: one glide at the drop to the backend\'s order', () => {
     fakeTimers();
     try {
       n2At({ x: 400, y: 246 }); // a's target (500, 290)
@@ -3834,12 +3832,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r65 (round 3c's join check, approved): a carry can't make the join
+  // Design's earlier join check, approved: a carry can't make the join
   // it previews. a and f share a chain (aimed at 290 and 300); a 4 px drag
   // pushes f to 4 px short of a step above d. As the newest arrival a would
   // go under f and push f onto d, a join made by the preview itself. Read at
   // a's own arrival there is no join, so nothing swaps, mid-drag or at the drop.
-  it('a 4 px drag of a chained pair makes no join of its own: nothing swaps (r65)', () => {
+  it('a 4 px drag of a chained pair makes no join of its own: nothing swaps', () => {
     fakeTimers();
     try {
       n2At({ x: 400, y: 246 }); // a's target (500, 290)
@@ -3867,9 +3865,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Rule 101 in the band (review 2, LOW-2 F4): two carries on one dragged
+  // Rule 101 in the band: two carries on one dragged
   // node that join a column by overlap keep their order between themselves.
-  it('two carries on one node through the overlap band keep their order between themselves, and nothing moves at the drop (rule 101, r62)', () => {
+  it('two carries on one node through the overlap band keep their order between themselves, and nothing moves at the drop', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -3891,11 +3889,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 2, LOW-1 (r62 units): the chain is canvas units, and so is the
+  // The chain is canvas units, and so is the
   // insert's 16. At zoom 2, a at 332 is 12 from d (in d's chain) but 24
   // screen px above it; at zoom 0.5, a at 358 is 26 above e but 13 screen
   // px. Either way a sits between d and e, as the backend will order it.
-  it.each([[2, 332], [0.5, 358]])('at zoom %s a carry held at %s, in d\'s chain, goes in after d and before e: the insert compares in canvas units like the chain (r62)', (z, aT) => {
+  it.each([[2, 332], [0.5, 358]])('at zoom %s a carry held at %s, in d\'s chain, goes in after d and before e: the insert compares in canvas units like the chain', (z, aT) => {
     fakeTimers();
     try {
       pane.transform = [0, 0, z];
@@ -3919,15 +3917,15 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 2, MEDIUM (r62), as r75.3 rules it: a cursor on a port is drawn
+  // As design rules it later: a cursor on a port is drawn
   // on the port, and counts as its node's header point for the chain, on
   // both sides. a is carried to 2 px above c's drawn point: their drawn
   // targets join one column, but a's chain (c at n1's header, 107 away)
   // doesn't change, so the backend sends no arrival. The band is measured
   // in chain space too: a is nowhere near c's header, so it joins c's
   // column in plain arrival order (a first), mid-drag as at the drop.
-  // Nothing moves at the drop (review 3, drag MEDIUM-1: it swapped there).
-  it('a carry onto a port cursor\'s drawn point: no chain preview and no band slot (the port counts at its node\'s header), so nothing moves at the drop (r62, r75.3)', () => {
+  // Nothing moves at the drop (it swapped there).
+  it('a carry onto a port cursor\'s drawn point: no chain preview and no band slot (the port counts at its node\'s header), so nothing moves at the drop', () => {
     fakeTimers();
     try {
       const n1 = lookup.get('n1') as unknown as Entry & { internals: { handleBounds: unknown } };
@@ -3950,27 +3948,27 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r75.3, the shared traces (backend/tests/fixtures/cursor_chains.json,
+  // Design, the shared traces (backend/tests/fixtures/cursor_chains.json,
   // also run by test_agent_cursor_followups.py through carry_nodes): a,
   // arrived first, carried by n2 frame by frame along the path, then held
   // there and dropped; h, a port cursor on n1, arrived second. Onto h's
   // drawn tip from any side, a's chain never changes (h counts at its
   // node's header) and the band is measured in chain space, so a joins h's
   // column in plain arrival order: its slot is the one the drop gives,
-  // mid-drag as after it. Onto h's node header, r65's head-then-bottom path
+  // mid-drag as after it. Onto h's node header, the head-then-bottom path
   // holds, and the backend's arrival at the drop moves nothing. (h is c
   // here: session keys are hex.)
   type Box = { x: number; y: number; width: number; height: number };
   type Trace = { name: string; zoom: number; h: { node: Box; handle: string; port: Box }; carry: { width: number; height: number };
     path: [number, number][]; arrivalFrom: number | null; slots: number[] };
   const traces = (JSON.parse(readFileSync(resolve(__dirname, '../../backend/tests/fixtures/cursor_chains.json'), 'utf8')) as { traces: Trace[] }).traces;
-  it('the shared fixture holds the r75.3 traces at zoom 0.5, 1 and 2, and r85\'s at 0.25 and 0.1 and on a left input near the header', () => {
+  it('the shared fixture holds the traces at zoom 0.5, 1 and 2, and at 0.25 and 0.1 and on a left input near the header', () => {
     expect(new Set(traces.map((t) => t.zoom))).toEqual(new Set([0.1, 0.25, 0.5, 1, 2]));
     expect(traces.filter((t) => t.h.port.x < 0 && t.h.port.y === 62).map((t) => t.zoom).sort()).toEqual([0.25, 0.25, 0.25, 0.5, 0.5, 0.5, 1, 1, 1]);
     expect(traces.filter((t) => t.arrivalFrom === null).length).toBeGreaterThanOrEqual(9);
     expect(traces.filter((t) => t.arrivalFrom !== null).length).toBeGreaterThanOrEqual(3);
   });
-  it.each(traces.map((t) => [t.name, t] as const))('%s (r75.3)', (_name, t) => {
+  it.each(traces.map((t) => [t.name, t] as const))('%s', (_name, t) => {
     fakeTimers();
     try {
       pane.transform = [0, 0, t.zoom];
@@ -4015,42 +4013,42 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 4, MEDIUM-1 (GM r85 rule b), the reviewers' probes kept as
+  // Design rule b, with the reviewers' probes kept as
   // tests: a carried onto a port cursor's drawn tip, at zooms and port
   // spots the shared traces don't all cover. The band's chain-space join is
   // the zoom-1 join in canvas units at every zoom, so a carry on the tip
   // never reaches h's node header there however far out the view is. Its
   // slot in h's column never goes to the bottom mid-drag (from below, the
-  // r24 insert puts h first until a is within 16 of it, r80), the held
+  // insert puts h first until a is within 16 of it), the held
   // frames move nothing, and nothing moves at the drop.
   type Probe = { zoom: number; from: 'above' | 'left' | 'below' | 'diagonal'; node: Box; port: Box; side: 'source' | 'target'; end: [number, number]; far?: number; slots?: number[] };
   const fixtureH = { node: { x: 400, y: 300, width: 280, height: 180 }, port: { x: 225, y: 150, width: 16, height: 16 } };
   const probes: [string, Probe][] = [
-    // PROBE3 (layout lens): the fixture's port, 2 units off its tip (633, 458).
+    // The fixture's port, 2 units off its tip (633, 458).
     ...([[0.25, 'above'], [0.1, 'above'], [0.25, 'left'], [0.1, 'left'], [0.25, 'below'], [0.1, 'below'], [4, 'above'], [4, 'below'], [3, 'left']] as const)
       .map(([zoom, from]): [string, Probe] => [`PROBE3: the fixture's port at zoom ${zoom} from ${from}`, { zoom, from, ...fixtureH, side: 'source',
         end: from === 'below' ? [533, 416] : from === 'left' ? [531, 414] : [533, 412] }]),
-    // PROBE4 (layout lens): an output port near the header row, tip (680, 358), header (540, 344).
+    // An output port near the header row, tip (680, 358), header (540, 344).
     // From the left, a's target (y 358) passes 14 under the header on its
     // way: in h's chain there, a real arrival had it dropped, so the bottom
-    // slot then and back to the head past it (the r65 path both ways).
+    // slot then and back to the head past it (the head-to-bottom path both ways).
     ...([[1, 'above'], [0.75, 'above'], [0.5, 'above'], [0.5, 'left'], [0.5, 'below'], [1, 'left'], [0.75, 'below']] as const)
       .map(([zoom, from]): [string, Probe] => [`PROBE4: an output port near the header at zoom ${zoom} from ${from}`, { zoom, from,
         node: fixtureH.node, port: { x: 272, y: 50, width: 16, height: 16 }, side: 'source',
         end: from === 'below' ? [580, 316] : from === 'left' ? [578, 314] : [580, 312], slots: from === 'left' ? [0, 1, 0] : undefined }]),
-    // PROBE5 (layout lens): a left input at y 62, tip (400, 370).
+    // A left input at y 62, tip (400, 370).
     ...([[0.5, 'above'], [0.5, 'below'], [0.6, 'above'], [0.4, 'above'], [1, 'above']] as const)
       .map(([zoom, from]): [string, Probe] => [`PROBE5: a left input at y 62 at zoom ${zoom} from ${from}`, { zoom, from,
         node: fixtureH.node, port: { x: -8, y: 62, width: 16, height: 16 }, side: 'source',
         end: from === 'below' ? [300, 330] : [300, 322] }]),
-    // PROBE5 (drag-live lens): combine-text's left input, from the upper left
+    // Combine-text's left input, from the upper left
     // on the live drag's diagonal; and the fixture's port from above at 0.25-0.45.
     ...[0.5, 0.6, 0.75, 1].map((zoom): [string, Probe] => [`PROBE5 live: a left input from the upper left at zoom ${zoom}`, { zoom, from: 'diagonal',
       node: { x: 400, y: 300, width: 200, height: 180 }, port: { x: -18, y: 80.39, width: 10, height: 10 }, side: 'target', end: [287, 341.39] }]),
     ...[0.25, 0.35, 0.45].map((zoom): [string, Probe] => [`PROBE5 live: the fixture's port from above at zoom ${zoom}`, { zoom, from: 'above', ...fixtureH, side: 'source',
       end: [533, 412], far: 318 }]),
   ];
-  it.each(probes)('%s: no band slot on the tip, nothing moves while held or at the drop (review 4, MEDIUM-1; r85)', (_name, p) => {
+  it.each(probes)('%s: no band slot on the tip, nothing moves while held or at the drop', (_name, p) => {
     fakeTimers();
     try {
       pane.transform = [0, 0, p.zoom];
@@ -4092,7 +4090,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r75.3: the band slot needs a new member of the column the carry is
+  // Design: the band slot needs a new member of the column the carry is
   // drawn in. a and f share a chain (aimed at 290 and 300), f a step under
   // a. n1's header point, where c (on a port low on n1's left, drawn at
   // (400, 451)) counts, is at (500, 380). a carried 20 down to 310 takes f
@@ -4100,7 +4098,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // c joins a's column there, new. But c is drawn far off, so a's drawn
   // column is still just f's, no chain changed, and its order stays plain
   // arrival order (a first). Nothing swaps, mid-drag or at the drop.
-  it('a carry whose chain-space column takes in a cursor drawn elsewhere keeps its drawn column\'s arrival order (r75.3)', () => {
+  it('a carry whose chain-space column takes in a cursor drawn elsewhere keeps its drawn column\'s arrival order', () => {
     fakeTimers();
     try {
       n2At({ x: 400, y: 246 }); // a's target (500, 290)
@@ -4128,7 +4126,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 4, layout LOW-2 B3: the column before the carry is read in chain
+  // The column before the carry is read in chain
   // space too. a rides n2 and aims at (555, 344), 15 right of n1's header
   // point (540, 344), where c counts (its port is drawn at (454, 344)): c is
   // in a's chain-space column before the carry and after it, so no band
@@ -4136,7 +4134,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // column, in plain arrival order (a first), and nothing moves at the drop.
   // Read before the carry in drawn space, c would count as new, and a would
   // take the newest-arrival slot under it mid-drag.
-  it('a member already in the carry\'s chain-space column before the carry gives it no band slot (review 4, B3)', () => {
+  it('a member already in the carry\'s chain-space column before the carry gives it no band slot', () => {
     fakeTimers();
     try {
       n2At({ x: 455, y: 300 }); // a's target (555, 344)
@@ -4162,17 +4160,17 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r85 rule b, both sides of the band read: before the carry too, the
+  // Design rule b, both sides of the band read: before the carry too, the
   // chain-space column is the zoom-1 join, whatever the view's zoom. At
   // zoom 0.25 a starts 110 canvas units above c (and 30 left): drawn, their
   // labels already meet, so they share a column in plain arrival order (a
   // first), but they are not in band range in canvas units. Carried down to
   // 10 above c (still over 16 away: no chain), a comes into band range, c
-  // is a new member there, and a takes the newest-arrival slot (r62), under
+  // is a new member there, and a takes the newest-arrival slot, under
   // c. At the drop the backend counts no arrival, so a glides back to the
-  // head once, r52's one accepted motion. Read before the carry at the
+  // head once, the one accepted motion. Read before the carry at the
   // view's zoom, c would already count as in range and a would never move.
-  it('at zoom 0.25 the band range before the carry is the zoom-1 join too: a carry coming into it takes the band slot (r85 rule b)', () => {
+  it('at zoom 0.25 the band range before the carry is the zoom-1 join too: a carry coming into it takes the band slot', () => {
     fakeTimers();
     try {
       pane.transform = [0, 0, 0.25];
@@ -4210,11 +4208,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     return fiber!.memoizedProps!.field as { heldSince: Map<string, number>; draggedNodes: Set<string> };
   };
 
-  // Review 3, layout LOW-1 R4: a member whose loop stopped (its node
+  // A member whose loop stopped (its node
   // deleted mid-glide) doesn't hold the column's rest. a, gliding to the
   // bottom, loses n2 three frames in: d and e land on their own rest, not
   // held to the 300 ms cap by a cursor that will never step again.
-  it('a member whose node goes mid-glide holds no one: the others land on their own rest (review 3, R4)', () => {
+  it('a member whose node goes mid-glide holds no one: the others land on their own rest', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4242,7 +4240,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
         expect(landed[k], k).toBeGreaterThanOrEqual(0);
         // Within a frame of its own rest (the cap would be 18 frames on).
         expect(landed[k] - Math.max(ownRest[k], 0), k).toBeLessThanOrEqual(2);
-        // Nor does it keep its column in glide order (GM r95): it glides no more.
+        // Nor does it keep its column in glide order (design): it glides no more.
         expect(byKey(k).dataset.columnOrder, k).toBeUndefined();
       }
     } finally {
@@ -4250,7 +4248,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 3, layout LOW-1 C3/C4: a node widened under a port cursor on its
+  // A node widened under a port cursor on its
   // left side leaves the port (its drawn point) where it was, but moves its
   // header point, where the chain counts it. That alone must reach the
   // layout. n1, 60 wide, has c on its left input port, drawn at (400, 340),
@@ -4259,7 +4257,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // c's header at (550, 340): a's chain is empty again, as it was before the
   // carry, and nothing in the band, so a heads c's column in plain arrival
   // order, and the drop moves nothing.
-  it('a node resized under a port cursor moves its chain point only, and the carry beside it follows that (review 3, C3 and C4)', () => {
+  it('a node resized under a port cursor moves its chain point only, and the carry beside it follows that', () => {
     fakeTimers();
     try {
       const n1 = { id: 'n1', measured: { width: 60, height: 80 },
@@ -4288,11 +4286,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 3, layout LOW-1 N2: a node deleted mid-drag ends its drag on the
+  // A node deleted mid-drag ends its drag on the
   // frame its cursor sees it gone, and the wait for the backend starts
   // there: the settle is set on that frame, not left to a timer set for an
   // earlier carry.
-  it('a node deleted mid-drag starts the preview\'s wait on that frame (review 3, N2)', () => {
+  it('a node deleted mid-drag starts the preview\'s wait on that frame', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4311,9 +4309,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 3, layout NIT-1: a landing the column held reads the hover boxes
+  // A landing the column held reads the hover boxes
   // once, on the cursor's own rest, not again when the column lands.
-  it('a held landing reads its hover boxes on one frame only (review 3, NIT-1)', () => {
+  it('a held landing reads its hover boxes on one frame only', () => {
     fakeTimers();
     pane.dom = document.createElement('div');
     document.body.appendChild(pane.dom);
@@ -4349,9 +4347,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 3, drag NIT-1: a cursor that lands holds nothing: its hold's
+  // A cursor that lands holds nothing: its hold's
   // start goes with the landing, not on its next glide.
-  it('the column lands and no cursor keeps a hold (review 3, drag NIT-1)', () => {
+  it('the column lands and no cursor keeps a hold', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4364,9 +4362,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 3, layout NIT-2: every cursor on a dragged node forgotten mid-drag
+  // Every cursor on a dragged node forgotten mid-drag
   // ends that node's drag: no cursor will report it again.
-  it('a dragged node whose cursors are all forgotten mid-drag is no longer held (review 3, NIT-2)', () => {
+  it('a dragged node whose cursors are all forgotten mid-drag is no longer held', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4387,7 +4385,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 4, layout LOW-2 F2: one of two cursors on a dragged node
+  // One of two cursors on a dragged node
   // forgotten keeps the node's drag: the other still rides it, and its drop
   // is a drop. a and b ride n2 into d's chain and are previewed under d; the
   // hand holds still past the preview's hold, then b leaves, and its view
@@ -4395,7 +4393,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // backend's arrival there, so a keeps its slot until the arrival comes;
   // were n2's drag dropped with b, the drop would go unseen and a would
   // glide back at once, then again to the bottom on the arrival.
-  it('a dragged node keeps its drag while another cursor still rides it when one is forgotten (review 4, F2)', () => {
+  it('a dragged node keeps its drag while another cursor still rides it when one is forgotten', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4431,9 +4429,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 2, LOW-2 F6: an event of the carried cursor's own, at the same
+  // An event of the carried cursor's own, at the same
   // spot, ends the preview at once: the backend's arrival for it stands.
-  it('the carried cursor\'s own event during the hold ends the preview at once (review 2, F6)', () => {
+  it('the carried cursor\'s own event during the hold ends the preview at once', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4461,10 +4459,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     return () => spy.mock.calls.filter(([fn]) => String(fn).includes('settleCarries')).length;
   };
 
-  // Review 2, LOW-2 F7: a carried cursor forgotten mid-drag takes its
+  // A carried cursor forgotten mid-drag takes its
   // preview with it: nothing is left to settle, so no cursor is woken for
   // it when the hold runs out.
-  it('a carried cursor that goes mid-drag leaves no preview to settle (review 2, F7)', () => {
+  it('a carried cursor that goes mid-drag leaves no preview to settle', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4487,10 +4485,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 2, NIT-1: a node deleted mid-drag ends that drag (no drop will
+  // A node deleted mid-drag ends that drag (no drop will
   // come), so its preview ends after the hold and its timer stops; and no
   // timer outlives the layer.
-  it('a node deleted mid-drag ends its drag: the preview\'s timer stops after the hold (review 2, NIT-1)', () => {
+  it('a node deleted mid-drag ends its drag: the preview\'s timer stops after the hold', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4511,7 +4509,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('no carry timer outlives the layer (review 2, NIT-1)', () => {
+  it('no carry timer outlives the layer', () => {
     fakeTimers();
     try {
       const view = render(<AgentCursorLayer />);
@@ -4527,9 +4525,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 2, LOW-2 F11: the backend's word that an arrival is its own, at
+  // The backend's word that an arrival is its own, at
   // the same number, changes the tie-break to the key, in every tab alike.
-  it('an arrival that becomes the backend\'s own at the same number re-sorts a tie by key (review 2, F11)', () => {
+  it('an arrival that becomes the backend\'s own at the same number re-sorts a tie by key', () => {
     render(<AgentCursorLayer />);
     send(event({ ...session('b', 2), target: { x: 300, y: 300 } }));
     flush();
@@ -4543,7 +4541,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(where()).toEqual({ a: { x: 300, y: 300 }, b: { x: 300, y: 300 + S } });
   });
 
-  it('a carry with no backend arrival is no arrival: the cursor keeps its place (r24 Q2)', () => {
+  it('a carry with no backend arrival is no arrival: the cursor keeps its place', () => {
     render(<AgentCursorLayer />);
     // e on n1 arrived first; a came later to a point just clear under it.
     send(event({ ...session('e', 3), target: { nodeId: 'n1' }, since: 500 }));
@@ -4560,7 +4558,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(where()).toEqual({ e: { x: 500, y: 356 }, a: { x: 500, y: 356 + S } });
   });
 
-  // Review 9, LOW-2: equal arrivals tie-break by the cursor's key, the same
+  // Equal arrivals tie-break by the cursor's key, the same
   // in every tab, never by which landed first here.
   it('two cursors with the same backend arrival stack by key in every tab, whichever lands first', () => {
     const order = () => Object.entries(where()).sort((p, q) => p[1].y - q[1].y).map(([k]) => k);
@@ -4581,9 +4579,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(one).toEqual(['a', 'b']);
   });
 
-  // Review 9, NIT-2: the head and the count's member leave together; the
+  // The head and the count's member leave together; the
   // new count still waits for the old one's exit (keyed by its group).
-  it('the head and the count cursor\'s member leave in one moment: never more than 3 shown (review 9 NIT-2)', () => {
+  it('the head and the count cursor\'s member leave in one moment: never more than 3 shown', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b', 'c', 'd', 'e', 'f']);
     expect(byKey('c').dataset.count).toBe('4');
@@ -4606,10 +4604,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(byKey('e').dataset.count).toBe('2');
   });
 
-  // Review 9, LOW-6: a say capped while a cursor keeps moving through its
+  // A say capped while a cursor keeps moving through its
   // room shows where nothing is drawn, moving cursors included: never on
   // top of it.
-  it('a say capped while another cursor keeps moving through its room shows on the free side, never over it (review 9 LOW-6)', () => {
+  it('a say capped while another cursor keeps moving through its room shows on the free side, never over it', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4641,7 +4639,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  it('a say capped with a still cursor on its left and one that never stops on its right goes to the log, never back to waiting (#219 review 1, NIT-1)', () => {
+  it('a say capped with a still cursor on its left and one that never stops on its right goes to the log, never back to waiting (#219)', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4675,15 +4673,15 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // #219 review 5, MEDIUM-1 (R5PROBE_B, kept): a cursor at rest, no frame
+  // #219: a cursor at rest, no frame
   // for a while (every cursor rested), then an event woke it and a zoom came
   // before its first frame. The zoom's carry stepped it at the field's
   // frameTime, from the last frame anyone drew, and left its clock there:
   // its first frame saw a gap past the stall threshold and landed it with
   // no flight and no ring (2 s idle), or jumped its flight's first frame
   // 187 px (100 ms idle). The control has no zoom. performance.now() as a
-  // browser has it, a little past the frame (the r3h tests' mock).
-  it.each([[true, 2000], [false, 2000], [true, 100]] as const)('an event after an idle spell, a zoom before its first frame (%s, idle %s ms): it flies there and the click rings (review 5, MEDIUM-1)', (zoomFirst, idle) => {
+  // browser has it, a little past the frame (as the other tests mock it).
+  it.each([[true, 2000], [false, 2000], [true, 100]] as const)('an event after an idle spell, a zoom before its first frame (%s, idle %s ms): it flies there and the click rings', (zoomFirst, idle) => {
     let reads = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => clock + 4 + (reads += 0.001));
     try {
@@ -4715,11 +4713,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 5, NIT-2 and M18: a carry's time before any frame has run is one
+  // A carry's time before any frame has run is one
   // value for the whole carry, and never past the next frame's timestamp, as
   // a clock read can be. (No cursor has a motion before a frame, so no carry
   // steps one then: the value is pinned here, on the field.)
-  it('a carry before any frame steps at a time no later than the next frame, the same for every cursor (review 5, NIT-2)', () => {
+  it('a carry before any frame steps at a time no later than the next frame, the same for every cursor', () => {
     let reads = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => clock + 40 + (reads += 0.001));
     try {
@@ -4738,13 +4736,13 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 5, NIT-2: a frame stamped behind the field's frameTime (a time a
+  // A frame stamped behind the field's frameTime (a time a
   // carry stepped at that ran ahead of it, or a clock that went back) is
   // still that frame: frameTime follows it, so hold() still tells a member
   // above that is still to step from one that has (the floor read from it
-  // marked e crossing on every frame of the head-to-bottom glide, review 4),
+  // marked e crossing on every frame of the head-to-bottom glide),
   // and no step runs backwards on a negative dt. In either frame order.
-  it.each((['ahead', 'back'] as const).flatMap((how) => [2, 6, 10, 14].flatMap((at) => [[how, at, false], [how, at, true]] as const)))('a frame stamped behind frameTime (%s, %s frames into the glide) is still its own frame: the head-to-bottom glide keeps its step and marks only the carry (review 5, NIT-2; reversed: %s)', (how, k0, reversed) => {
+  it.each((['ahead', 'back'] as const).flatMap((how) => [2, 6, 10, 14].flatMap((at) => [[how, at, false], [how, at, true]] as const)))('a frame stamped behind frameTime (%s, %s frames into the glide) is still its own frame: the head-to-bottom glide keeps its step and marks only the carry (reversed: %s)', (how, k0, reversed) => {
     const bound = springSteps();
     fakeTimers();
     try {
@@ -4777,10 +4775,10 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // And the case the stale-floor guard is for (review 4, drag LOW-1): the
+  // And the case the stale-floor guard is for: the
   // hand back to the head k frames into the glide, each frame's callbacks in
   // reverse order, with frames stamped behind frameTime from there on.
-  it.each([0, 1, 2, 3].flatMap((k) => [[k, 'ahead'], [k, 'back']] as const))('the hand crosses back %s frames into the glide, frames stamped behind frameTime (%s): no frame moves a cursor more than its spring step (review 5, NIT-2)', (k, how) => {
+  it.each([0, 1, 2, 3].flatMap((k) => [[k, 'ahead'], [k, 'back']] as const))('the hand crosses back %s frames into the glide, frames stamped behind frameTime (%s): no frame moves a cursor more than its spring step', (k, how) => {
     const bound = springSteps();
     fakeTimers();
     reverseFrames = true;
@@ -4807,14 +4805,14 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 5, LOW-1 and LOW-2 (R5PROBE_A, kept): r65's head-to-bottom move,
+  // The head-to-bottom move,
   // then the hand straight back to the head with each frame's callbacks in
-  // reverse order: d is marked crossing at rest (r89). Then 1 s with no
+  // reverse order: d is marked crossing at rest. Then 1 s with no
   // frames (a stall, a hidden tab), or a replay of a's event meanwhile:
   // a lands on its caught-up frame, or snaps to its spot, and neither went
   // through holdBelow, so d kept its mark (and its order z-index) at
   // rest with no frame of its own to end it.
-  it.each(['stall', 'replay'] as const)('a member marked crossing at rest loses its mark when the one above lands on a %s (review 5, LOW-1 and LOW-2)', (how) => {
+  it.each(['stall', 'replay'] as const)('a member marked crossing at rest loses its mark when the one above lands on a %s', (how) => {
     fakeTimers();
     reverseFrames = true;
     try {
@@ -4849,7 +4847,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r95 (review 5, drag-live LOW-1): the carry dragged back out of the
+  // Design: the carry dragged back out of the
   // band goes from the bottom slot to the head, past e and then d. Only the
   // member right under a cursor was ever judged crossing, so e, later in the
   // DOM than a, drew over a for a frame or two as a passed it. While a glide
@@ -4869,7 +4867,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     const [a, b] = [paintRank(up), paintRank(down)];
     return a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
   };
-  it.each([false, true])('the carry going from the bottom slot back to the head draws over both members it passes, then the column\'s order is back (GM r95; reversed: %s)', (reversed) => {
+  it.each([false, true])('the carry going from the bottom slot back to the head draws over both members it passes, then the column\'s order is back (reversed: %s)', (reversed) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -4911,11 +4909,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r95's other half: column order is for a column while it glides
+  // Design's other half: column order is for a column while it glides
   // only. A cursor flying and landing alone, a column at rest, and a flight
   // on its arc into a column draw in plain order (a flight passes over by
   // design).
-  it('column order holds only while a member of a column of two or more glides (GM r95)', () => {
+  it('column order holds only while a member of a column of two or more glides', () => {
     fakeTimers();
     try {
       const view = render(<AgentCursorLayer />);
@@ -4950,8 +4948,8 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // ===== #219 round 3j (review 6, GM r103) =====
-  /** The z-index a cursor draws at in the layer (agentCursor.css, r106):
+  // ===== #219 (design) =====
+  /** The z-index a cursor draws at in the layer (agentCursor.css):
    *  aloft, 11 + its rank; crossing or in column order, 10 - its depth;
    *  else 1. Every wire is at WIRE_Z. */
   const WIRE_Z = 0;
@@ -4963,13 +4961,13 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   const pairAgent = { id: 'pair', name: 'Pair', color: '#FF9F43', verified: true };
   type Motions = { motions: Map<string, { landing: unknown; plan: unknown }>; placers: Map<string, () => void>; aloft: Map<string, unknown> };
 
-  // GM r103 (review 6, LOW-1): g flies into the column d, e while d's say
+  // Design: g flies into the column d, e while d's say
   // makes e glide (on its first frame, or 6 or 12 frames in). While g flies,
   // and after it lands while anything in the column still moves, it draws
   // over every member, every other cursor and every wire; on the first
   // frame the column is at rest it takes the column's order, and never
   // before. Either frame order.
-  it.each([[0, false], [0, true], [6, false], [6, true], [12, false], [30, true]] as const)('a flight draws over the column for its whole flight and takes column order on the first frame of rest (GM r103; say at %s, reversed: %s)', (sayAt, reversed) => {
+  it.each([[0, false], [0, true], [6, false], [6, true], [12, false], [30, true]] as const)('a flight draws over the column for its whole flight and takes column order on the first frame of rest (say at %s, reversed: %s)', (sayAt, reversed) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5013,9 +5011,9 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r103 item 3: two flights that overlap, the later-started one on top,
+  // Design: two flights that overlap, the later-started one on top,
   // whatever their DOM order.
-  it.each([false, true])('of two overlapping flights the later-started one draws on top (GM r103; reversed: %s)', (reversed) => {
+  it.each([false, true])('of two overlapping flights the later-started one draws on top (reversed: %s)', (reversed) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5048,7 +5046,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
 
   // And a new event mid-flight starts a new flight: h, flying second, goes
   // under f once f's agent sends it somewhere new.
-  it('a new event mid-flight puts that flight on top of one started before it (GM r103)', () => {
+  it('a new event mid-flight puts that flight on top of one started before it', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5076,14 +5074,14 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 6, LOW-3 (R6P_FLIGHT, kept): g's backend arrival is older than
+  // A reviewer's probe, kept: g's backend arrival is older than
   // d's and e's (two agents sent to one node a moment apart, the far one
   // landing second), so on landing it re-sorts to the head (since 100) or
   // the middle (1500). The members it now sits above wake and glide to
   // their new slots on the layout spring: no frame moves any cursor further
   // than a one-step glide's largest frame. Before, they stayed on their old
   // slots until g reached its own, then jumped 42 px in one frame.
-  it.each([[100, false], [100, true], [1500, false], [1500, true]] as const)('a flight landing as an older arrival re-sorts the column with a glide, never a jump (review 6, LOW-3; since %s, reversed: %s)', (since, reversed) => {
+  it.each([[100, false], [100, true], [1500, false], [1500, true]] as const)('a flight landing as an older arrival re-sorts the column with a glide, never a jump (since %s, reversed: %s)', (since, reversed) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5120,11 +5118,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 6, LOW-2 (R6P_MULTIZOOM, kept): n zoom updates between an
+  // A reviewer's probe, kept: n zoom updates between an
   // agent's event and its cursor's first frame (wheel or pinch input not
   // aligned to rAF). Each carry steps no time, so the first frame shows
   // one frame's step of the flight, never n frames at once.
-  it.each([1, 3, 6])('%s zoom updates before a woken cursor\'s first frame move it by the zoom alone (review 6, LOW-2)', (n) => {
+  it.each([1, 3, 6])('%s zoom updates before a woken cursor\'s first frame move it by the zoom alone', (n) => {
     let reads = 0;
     vi.spyOn(performance, 'now').mockImplementation(() => clock + 4 + (reads += 0.001));
     try {
@@ -5159,11 +5157,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 6, NIT-1 (R6P_GONE, kept): a's node is deleted k frames into
-  // r65's head-to-bottom glide. Its loop stops where it is; no crossing
+  // A reviewer's probe, kept: a's node is deleted k frames into
+  // the head-to-bottom glide. Its loop stops where it is; no crossing
   // mark, column order or place on top outlives it, on any cursor, and no
   // frame is left pending. Either frame order.
-  it.each([1, 2, 4, 6, 9, 12, 16].flatMap((k) => [[k, false], [k, true]] as const))('a cursor whose node is deleted %s frames into a glide keeps no crossing or column order (review 6, NIT-1; reversed: %s)', (k, reversed) => {
+  it.each([1, 2, 4, 6, 9, 12, 16].flatMap((k) => [[k, false], [k, true]] as const))('a cursor whose node is deleted %s frames into a glide keeps no crossing or column order (reversed: %s)', (k, reversed) => {
     fakeTimers();
     reverseFrames = reversed;
     try {
@@ -5188,7 +5186,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   });
 
   // And a flight whose node goes mid-air: it stops there, off the top.
-  it('a cursor whose node is deleted mid-flight comes down from on top (review 6, NIT-1)', () => {
+  it('a cursor whose node is deleted mid-flight comes down from on top', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5217,11 +5215,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // HIGH-1's other half: the order is read at the store's zoom. d rests and
+  // The other half: the order is read at the store's zoom. d rests and
   // e lands 120 canvas units under it: one column at zoom 0.25 (30 screen
   // px apart), two at 1. At 0.25, while e glides, d draws in column order;
   // at 1 it never does.
-  it.each([[0.25, true], [1, false]] as const)('the column order is read at the store\'s zoom (%s: a column: %s) (review 6, drag-live HIGH-1)', (z2, column) => {
+  it.each([[0.25, true], [1, false]] as const)('the column order is read at the store\'s zoom (%s: a column: %s)', (z2, column) => {
     fakeTimers();
     try {
       pane.transform = [0, 0, z2];
@@ -5239,12 +5237,12 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // GM r106 ratchet: no cursor's z ever goes under the wire layer, and an
+  // Design ratchet: no cursor's z ever goes under the wire layer, and an
   // ordered column never drops under another column's resting cursor,
-  // sampled on every frame of r65's head-to-bottom glide and the carry back
+  // sampled on every frame of the head-to-bottom glide and the carry back
   // to the head, with a cursor of another column (h) resting nearby and a
   // flight (f) crossing the canvas. Either frame order.
-  it.each([false, true])('no cursor draws under the wires, and a gliding column never under another column\'s cursor, through a full glide (GM r106; reversed: %s)', (reversed) => {
+  it.each([false, true])('no cursor draws under the wires, and a gliding column never under another column\'s cursor, through a full glide (reversed: %s)', (reversed) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5276,14 +5274,14 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // Review 6, drag-live HIGH-1 (R6PROBE_P, kept): d rests, e flies in to
+  // d rests, e flies in to
   // rest under it, and k frames in the zoom goes to z2 and back. Each view
   // read the column order at its own zoom, set at its own tick: one view
   // ordered the column and repainted the other, which un-ordered it at its
   // older zoom and repainted the first, without end (RangeError). The order
   // is worked out once, at the store's zoom: no throw, and every cursor's
   // marks agree with the one field state.
-  it.each([[60, 0.25], [80, 0.25], [120, 0.25], [80, 0.5], [120, 0.4], [200, 0.2]] as const)('two views holding different zooms agree on one column order and never recurse (review 6, drag-live HIGH-1; gap %s, zoom %s)', (gap, z2) => {
+  it.each([[60, 0.25], [80, 0.25], [120, 0.25], [80, 0.5], [120, 0.4], [200, 0.2]] as const)('two views holding different zooms agree on one column order and never recurse (gap %s, zoom %s)', (gap, z2) => {
     for (const k of [2, 6, 10, 14, 18, 22, 26, 30]) {
       cleanup();
       useAgentPresenceStore.getState().clear();
@@ -5324,11 +5322,11 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     }
   });
 
-  // HIGH-1's ratchet, on the source: apply() and the marks it paints reach
+  // The ratchet, on the source: apply() and the marks it paints reach
   // no CursorField method that calls a view back (placers or markers), save
   // syncOrder, which repaints through markers only (they read the field's
   // state) and returns at once when re-entered.
-  it('no field method that calls views back can be reached again from apply (review 6, drag-live HIGH-1)', () => {
+  it('no field method that calls views back can be reached again from apply', () => {
     const src = readFileSync(resolve(__dirname, '../src/components/agent-cursor/AgentCursorField.tsx'), 'utf8');
     const cls = src.slice(src.indexOf('class CursorField {'), src.indexOf('\n}\n', src.indexOf('class CursorField {')));
     const methods = [...cls.matchAll(/\n {2}(?:private |readonly )?([a-zA-Z]+)\([^)]*\)(?::[^{\n]+)? \{\n([\s\S]*?)\n {2}\}\n/g)].map((m) => ({ name: m[1], body: m[2] }));
@@ -5360,7 +5358,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(sync).toMatch(/if \(this\.syncing\) return;/);
   });
 
-  it('the count cursor never draws its own say; its member\'s say is in the log only (r18, review 8 V2)', () => {
+  it('the count cursor never draws its own say; its member\'s say is in the log only', () => {
     render(<AgentCursorLayer />);
     column(['a', 'b', 'c', 'd']);
     const said = event({ ...session('c', 3), target: { nodeId: 'n1' }, say: 'Counting along' });
@@ -5372,17 +5370,16 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
     expect(agentActionEntry(said)!.message).toBe('Counting along');
   });
 
-  // ===== #219 round 3k (review 7) =====
+  // ===== #219 =====
   type Order = Motions & { ordered: Set<string>; stalled: Set<string> };
   const keyIn = (field: Order, c: string) => [...field.motions.keys()].find((k) => k.endsWith(c.repeat(12)))!;
   const marked = () => cursors().filter((el) => el.dataset.aloft || el.dataset.columnOrder || el.dataset.crossing);
 
-  // GM r103: a flight takes its column's order only once it has landed AND
-  // the column's glide is at rest. A wobble drag (r66) keeps a's carry
+  // Design: a flight takes its column's order only once it has landed AND
+  // the column's glide is at rest. A wobble drag keeps a's carry
   // gliding past e's own rest, which the 300 ms cap gives it: e lands on its
-  // own while its column still glides, and stays aloft all that time
-  // (review 7, layout LOW-1). Either frame order.
-  it.each([false, true])('a flight that lands by the 300 ms cap while its column still glides stays aloft (GM r103; reversed: %s)', (reversed) => {
+  // own while its column still glides, and stays aloft all that time. Either frame order.
+  it.each([false, true])('a flight that lands by the 300 ms cap while its column still glides stays aloft (reversed: %s)', (reversed) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5424,8 +5421,8 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // The order's depth is read at the store's zoom, as the order is: at 0.25,
   // d and e (120 units apart) are one column (two at zoom 1). d's say makes
   // e glide, and e draws one step under d's band, not level with it, where
-  // the DOM's order would decide (r85; review 7, layout LOW-2).
-  it('the order depth is read at the store\'s zoom (review 7, layout LOW-2)', () => {
+  // the DOM's order would decide.
+  it('the order depth is read at the store\'s zoom', () => {
     fakeTimers();
     try {
       pane.transform = [0, 0, 0.25];
@@ -5455,8 +5452,8 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // A stalled cursor never ticks, so its landing never clears: its node
   // going after the arc's hand-off (plan done, landing glide running) must
   // still bring it down from on top, not leave it over every cursor and
-  // wire until the node comes back (review 7, layout NIT-1).
-  it('a cursor whose node goes mid landing glide comes down from on top (review 7, layout NIT-1)', () => {
+  // wire until the node comes back.
+  it('a cursor whose node goes mid landing glide comes down from on top', () => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5490,8 +5487,8 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   // column and its node goes 2 to 14 frames into its landing: its one
   // repaint at the stall must not count it as gliding, since no view
   // applies again once the others rest and nothing would take the column
-  // order off (review 7, drag-live LOW-2).
-  it.each([2, 6, 10, 14])('a stalled glider never keeps its column ordered at rest (review 7, drag-live LOW-2; node goes %s frames into the landing)', (k) => {
+  // order off.
+  it.each([2, 6, 10, 14])('a stalled glider never keeps its column ordered at rest (node goes %s frames into the landing)', (k) => {
     fakeTimers();
     try {
       render(<AgentCursorLayer />);
@@ -5529,7 +5526,7 @@ describe('round 4e: the head leads its column, says find room or wait for the lo
   });
 });
 
-describe('default say lines and their hold, in the layer (GM r54)', () => {
+describe('default say lines and their hold, in the layer', () => {
   const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   const sayText = () => document.querySelector('.agent-cursor__say')?.textContent ?? null;
   const leavingSay = () => document.querySelector('.agent-cursor__say--leaving') !== null;
@@ -5709,11 +5706,11 @@ describe('default say lines and their hold, in the layer (GM r54)', () => {
 
 
 /**
- * GM r56 (2026-11-03): think's breath raised (A), the mark slot right of the
+ * Design (2026-11-03): think's breath raised (A), the mark slot right of the
  * arrow (C), the dashed halo grown from the tip (D) and the say pills' quotes
  * read from the DOM (E).
  */
-describe('GM r56: think, mark slot, dashed halo, quotes', () => {
+describe('think, mark slot, dashed halo, quotes', () => {
   const layerVar = (name: string) => (document.querySelector('.agent-cursor-layer') as HTMLElement).style.getPropertyValue(name);
   const cssText = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
   const STROKE_HALF = 1.4 / 2;
@@ -5742,7 +5739,7 @@ describe('GM r56: think, mark slot, dashed halo, quotes', () => {
   const outlineToBox = (pts: { x: number; y: number }[], box: { left: number; top: number; right: number; bottom: number }) =>
     Math.min(...pts.map((p, i) => segToBox(p, pts[(i + 1) % pts.length], box)));
 
-  it('A (r58): think breathes between a trough (3 px blur, scale 1, 20%) and a peak (5 px, 1.25, 60%) on a 2.2 s loop', () => {
+  it('think breathes between a trough (3 px blur, scale 1, 20%) and a peak (5 px, 1.25, 60%) on a 2.2 s loop', () => {
     render(<AgentCursorLayer />);
     send(event({ action: 'think' }));
     flush();
@@ -5761,7 +5758,7 @@ describe('GM r56: think, mark slot, dashed halo, quotes', () => {
     expect(frames).toMatch(/to \{\s*transform: scale\(var\(--agent-cursor-breath-scale\)\);\s*opacity: var\(--agent-cursor-breath-peak-opacity\);\s*filter: blur\(var\(--agent-cursor-breath-peak-blur\)\);\s*\}/);
   });
 
-  it('A (r58): the breath is think\'s halo alone: the scale grows about the arrow\'s centre and no other halo path blurs in CSS', () => {
+  it('the breath is think\'s halo alone: the scale grows about the arrow\'s centre and no other halo path blurs in CSS', () => {
     // The halo scales about its fill box's centre: the arrow's middle, not the tip.
     expect(cssText).toMatch(/\.agent-cursor__halo \{[^}]*transform-box: fill-box;\s*transform-origin: center;/);
     // Only think's halo rule and the keyframes (and the reduced still) use a CSS blur.
@@ -5843,7 +5840,7 @@ describe('GM r56: think, mark slot, dashed halo, quotes', () => {
  * PR #224's final review: propose and wait end when the person settles what
  * they wait on, and type never shows nothing.
  */
-describe('propose and wait end when the person acts (final review, MEDIUM)', () => {
+describe('propose and wait end when the person acts (PR #224)', () => {
   const sayText = () => document.querySelector('.agent-cursor__say')?.textContent ?? null;
   const expr = () => cursors()[0].dataset.expr;
   const proposal = (id: string, agentId = 'claude', expiresAt = Date.now() + 60_000) => ({
@@ -5885,7 +5882,7 @@ describe('propose and wait end when the person acts (final review, MEDIUM)', () 
     expect(sayText()).toBe('Waiting for your OK');
   });
 
-  // GM - Design, PR #212 round 2, item 8: while the node's header says "Waiting for
+  // Design, PR #212: while the node's header says "Waiting for
   // your OK" (a run the daily total holds), the cursor's default line would repeat it.
   const heldRun = (id: string, nodeIds: string[], extra: Record<string, unknown> = {}) => {
     const entry = proposal(id);
@@ -5903,7 +5900,7 @@ describe('propose and wait end when the person acts (final review, MEDIUM)', () 
     expect(document.querySelector('.agent-cursor__mark')).not.toBeNull();
   });
 
-  // GM - Design, PR #212 round 3, item 2: while the node's header shows the wait, the
+  // Design, PR #212: while the node's header shows the wait, the
   // cursor is DRAWN at the header's left end, its tip over the node's icon, so the mark and
   // the pill never cover the label on the right; what it counts as for its target chain stays
   // the header's middle (the same split as a port's).
@@ -6104,7 +6101,7 @@ describe('propose and wait end when the person acts (final review, MEDIUM)', () 
   });
 });
 
-describe('type always shows something (final review, LOW)', () => {
+describe('type always shows something (PR #224)', () => {
   const tipCaret = () => document.querySelector('.agent-cursor__tip-caret');
   const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   const card = () => {
@@ -6161,7 +6158,7 @@ describe('type always shows something (final review, LOW)', () => {
   });
 });
 
-describe('only the field’s text is a keystroke (final review, LOW)', () => {
+describe('only the field’s text is a keystroke (PR #224)', () => {
   const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] });
   const withData = (data: object) => {
     const next = new Map(lookup as Map<string, object>);

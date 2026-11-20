@@ -4,7 +4,7 @@ import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import type { PlaceholderRunConfirm, PlaceholderRunRow } from '../src/lib/placeholderRunConfirm';
 import { resolvedStyle } from './helpers/cssCascade';
 
-// GM - Design, round 12 (bug r11-topaz-rows): rows broke in the middle of a
+// Design (the topaz-rows bug): rows broke in the middle of a
 // segment ("Grain model:" / "gaussian", "on your Krea" / "plan"). Each
 // segment stays on one line, “Name” included, and a row wraps only between
 // segments, at the " · ", with the current indent for its second line. Every

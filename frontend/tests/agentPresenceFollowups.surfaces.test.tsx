@@ -6,12 +6,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Follow-ups to PR #195 (review 23, L-4 and the out-of-scope chat item): the
- * controls review 23 found outside the canvas lock, locked.
+ * Follow-ups to PR #195: the controls its review found outside
+ * the canvas lock, locked, and the out-of-scope chat item.
  * - EditorView's keys (B, ⌘K, Delete/Backspace, M, I, O) edit the edit node:
  *   refused while following an agent's switch (and offline), as the
  *   transport's buttons are. The Remotion editor's Delete and ⌘D the same.
- * - The chat's "Apply to @n2" takes the lock (disabled, marked, GM's
+ * - The chat's "Apply to @n2" takes the lock (disabled, marked, design's
  *   tooltip), and `/clear` is refused whole while following, as offline.
  * - Apply goes once the canvas its node id was read on is replaced (a clear,
  *   a load, a switch): that id may name another node now.
@@ -186,7 +186,7 @@ describe('the chat: Apply and /clear follow the canvas lock', () => {
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('a warmer sky at dusk');
   });
 
-  it('following: Apply is disabled and marked, with GM\'s tooltip, and writes nothing', async () => {
+  it('following: Apply is disabled and marked, with design\'s tooltip, and writes nothing', async () => {
     const apply = await enhanceReply();
     follow();
     expect(apply).toBeDisabled();
@@ -196,7 +196,7 @@ describe('the chat: Apply and /clear follow the canvas lock', () => {
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('a sky');
   });
 
-  // Fix round 1 (GM answer 4): never remove an action without saying why.
+  // Design: never remove an action without saying why.
   // Apply stays, disabled in the standard grey, and its tooltip says what
   // happened to the canvas it was written for.
   it('an agent opened another project: Apply stays, disabled, and says who opened what', async () => {
@@ -225,7 +225,7 @@ describe('the chat: Apply and /clear follow the canvas lock', () => {
     expect(apply).toHaveAttribute('title', 'The canvas was cleared after this was written.');
   });
 
-  // Fix round 2 of PR #200 (review 2 N-6): offline, Apply says when it works
+  // PR #200: offline, Apply says when it works
   // again (offlineDisabledReason), not its "Paste this into …" tooltip.
   it('offline: Apply is disabled with the reconnect tooltip', async () => {
     const { noteBackendConnection, resetBackendConnectionForTests } = await import('../src/lib/backendConnection');
@@ -240,7 +240,7 @@ describe('the chat: Apply and /clear follow the canvas lock', () => {
     }
   });
 
-  // GM 2026-10-28 answer 2: enabled, normal ink with its outline; disabled, the shared grey.
+  // Design 2026-10-28: enabled, normal ink with its outline; disabled, the shared grey.
   it('enabled Apply reads in the normal ink with its outline, clearly apart from the grey', () => {
     const css = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
     const rule = /body\.app-slava-restraint \.chat__codeblock-apply \{([^}]*)\}/.exec(css)?.[1] ?? '';

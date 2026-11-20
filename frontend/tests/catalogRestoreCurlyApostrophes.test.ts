@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 /**
- * GM r16 on PR #199, 5: the person-facing copy of the catalog restore, the
+ * Design on PR #199: the person-facing copy of the catalog restore, the
  * kept canvas and its locks uses the curly ’ throughout. This ratchet fails
  * any string literal or template text (never a comment) in those files with
  * a straight apostrophe between two letters ("isn't", "Nebula's").
@@ -48,7 +48,7 @@ function straightApostrophes(fileName: string, text: string, only?: string[]): s
   return found;
 }
 
-describe('GM r16, 5: curly apostrophes in the restore and kept-canvas copy', () => {
+describe('curly apostrophes in the restore and kept-canvas copy', () => {
   for (const { file, only } of COPY) {
     it(`${file}${only ? ` (${only.join(', ')})` : ''} has no straight apostrophe between letters`, () => {
       const text = readFileSync(path.join(SRC, file), 'utf8');

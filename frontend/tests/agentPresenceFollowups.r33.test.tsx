@@ -1,9 +1,9 @@
-// PR #200 fix round 22: review 18 and GM r33.
-// - LOW-1: the heading's name and its "…" sit in a <bdi>, the curly quotes
+// PR #200: review findings and design's copy nits.
+// - The heading's name and its "…" sit in a <bdi>, the curly quotes
 //   outside it: “<bdi>name…</bdi>”, so a Hebrew or Arabic name ends in its "…".
-// - NIT-3: the heading fits again on resize and once fonts load; Send note's
+// - The heading fits again on resize and once fonts load; Send note's
 //   reasons keep their order (node gone, then the gate, then an empty field).
-// - NIT-R21-3 and GM r33's copy nits: the cut keys on a space (the last one
+// - Design's copy nits: the cut keys on a space (the last one
 //   within 8 graphemes) and on a cut that already ends a word; the
 //   punctuation a cut ends on goes before the "…"; never a bare "…".
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-describe('review 18 LOW-1, GM r33: the name in a <bdi>, the curly quotes outside it', () => {
+describe('the name in a <bdi>, the curly quotes outside it', () => {
   it.each([
     ['Hebrew', 'מגדלור בשעת ערב עם אור חם על הסלעים ליד הים'],
     ['Arabic', 'منارة عند الغسق مع ضوء دافئ فوق الصخور قرب البحر'],
@@ -86,7 +86,7 @@ describe('review 18 LOW-1, GM r33: the name in a <bdi>, the curly quotes outside
   });
 });
 
-describe('review 18 NIT-3: the heading fits again on resize and on font load', () => {
+describe('the heading fits again on resize and on font load', () => {
   const title = 'A lighthouse prompt with warm light on the rocks at dusk';
 
   it('a resize refits it, wider and narrower', () => {
@@ -132,7 +132,7 @@ describe('review 18 NIT-3: the heading fits again on resize and on font load', (
   });
 });
 
-describe('review 18 NIT-3: Send note\'s reasons in order', () => {
+describe('Send note\'s reasons in order', () => {
   it('node gone beats the gate, the gate beats an empty field, and an empty field shows last', () => {
     useGraphStore.setState({ nodes: [node('n1', 'Text Input')] } as never);
     act(() => useCanvasPinsStore.getState().compose({ nodeId: 'n1' }));
@@ -152,7 +152,7 @@ describe('review 18 NIT-3: Send note\'s reasons in order', () => {
   });
 });
 
-describe('review 18 NIT-2: the cut is by grapheme, literally', () => {
+describe('the cut is by grapheme, literally', () => {
   it('a ZWJ family, a flag, a skin tone and a combining mark are each one grapheme, and a cut keeps them whole', () => {
     expect(graphemesOf('👨‍👩‍👧‍👦a🇯🇵👍🏽é̂')).toEqual(['👨‍👩‍👧‍👦', 'a', '🇯🇵', '👍🏽', 'é̂']);
     expect(noteHeading('👨‍👩‍👧‍👦a🇯🇵👍🏽é̂ and more', 1)).toBe('Note for agents on “👨‍👩‍👧‍👦…”');
@@ -161,7 +161,7 @@ describe('review 18 NIT-2: the cut is by grapheme, literally', () => {
   });
 });
 
-describe('the cut keys on a space; GM r33 copy nits', () => {
+describe('the cut keys on a space; design copy nits', () => {
   it('a space before a word that starts with punctuation, or one joined by a hyphen, is where it steps back', () => {
     const paren = 'A lighthouse (warm light) at dusk';
     expect(fits(paren, room(paren, 'A lighthouse (wa'))).toBe(heading('A lighthouse'));

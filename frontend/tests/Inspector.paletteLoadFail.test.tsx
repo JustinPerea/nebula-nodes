@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// GM r20 on #208: when Extract can't run at all (its own code chunk didn't
+// Design on #208: when Extract can't run at all (its own code chunk didn't
 // load), one neutral line in the because form, with Try again; never a toast
 // and never "Couldn't find colors in" a file it never read. (A worker that
 // can't load is the client's: the page does it, and nothing shows;
@@ -63,14 +63,14 @@ const line = (container: HTMLElement) => container.querySelector('.inspector__pa
 const status = (container: HTMLElement) => container.querySelector('.inspector__palette-status')?.textContent;
 const tryAgain = (container: HTMLElement) => [...container.querySelectorAll('button')].find((b) => b.textContent === TRY_AGAIN) as HTMLButtonElement | undefined;
 
-describe("Extract when its own code can't load (GM r20 on #208)", () => {
+describe("Extract when its own code can't load (design on #208)", () => {
   it('shows the because line with Try again, no toast, the swatches kept', async () => {
     const { container } = show();
     await pick(container);
     await waitFor(() => expect(line(container)).not.toBeNull());
     expect(line(container)!.textContent).toBe(LINE);
     expect(TRY_AGAIN).toBe('Try again');
-    // GM r23: the line shown with Try again ends in "Try again." (the shared assert).
+    // Design: the line shown with Try again ends in "Try again." (the shared assert).
     expect(expectEveryTryAgainLine(container, (button) => button.closest('.inspector__palette')
       ?.querySelector('.inspector__palette-cant-run')?.textContent)).toEqual([LINE]);
     expect(status(container)).toBe(LINE);
@@ -79,7 +79,7 @@ describe("Extract when its own code can't load (GM r20 on #208)", () => {
     expect(useGraphStore.getState().nodes[0].data.params.palette).toEqual(['#aaaaaa']);
   });
 
-  it("takes the line's slot: the line, then one row with Add, and Try again where Extract is (GM r22 Q6)", async () => {
+  it("takes the line's slot: the line, then one row with Add, and Try again where Extract is", async () => {
     const { container } = show();
     await pick(container);
     await waitFor(() => expect(line(container)).not.toBeNull());
@@ -94,7 +94,7 @@ describe("Extract when its own code can't load (GM r20 on #208)", () => {
     expect(stack.querySelector('.inspector__palette-pending')).toBeNull();
   });
 
-  it('scrolls the slot into view by the least amount, once, a jump under reduced motion (GM r22 Q6)', async () => {
+  it('scrolls the slot into view by the least amount, once, a jump under reduced motion', async () => {
     const scroller = document.createElement('div');
     scroller.style.overflowY = 'auto';
     document.body.append(scroller);
@@ -127,7 +127,7 @@ describe("Extract when its own code can't load (GM r20 on #208)", () => {
   });
 
   // Last: the chunk loads in it.
-  it('keeps Try again mounted and focused across a second failure, held 400 ms, and re-announces; Try again extracts the same file (GM r22 Q4)', async () => {
+  it('keeps Try again mounted and focused across a second failure, held 400 ms, and re-announces; Try again extracts the same file', async () => {
     const { container } = show();
     await pick(container);
     await waitFor(() => expect(line(container)).not.toBeNull());

@@ -70,7 +70,7 @@ describe('computeLayout', () => {
   });
 
   it('stacks a column by each node\'s measured height', () => {
-    // Image cards size to their image: 236, 497 and 300 px tall in the GM session.
+    // Image cards size to their image: 236, 497 and 300 px tall in the design session.
     const pos = computeLayout(
       [{ id: 'a', width: 280, height: 236 }, { id: 'b', width: 280, height: 497 }, { id: 'c', width: 280, height: 300 }],
       [],

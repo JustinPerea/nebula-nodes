@@ -159,7 +159,7 @@ describe('stacking along an edge', () => {
   });
 });
 
-describe('chips stand clear of the canvas\'s own chrome (GM: a chip stands clear of chrome)', () => {
+describe('chips stand clear of the canvas\'s own chrome', () => {
   const clear = (a: Box, b: Box) => a.left >= right(b) + chromeGapPx - 1e-6 || right(a) <= b.left - chromeGapPx + 1e-6
     || a.top >= bottom(b) + chromeGapPx - 1e-6 || bottom(a) <= b.top - chromeGapPx + 1e-6;
   const topBar: Box = { left: 300, top: 24, width: 400, height: 40 };
@@ -293,7 +293,7 @@ describe('the chip width reckoned from the name', () => {
   });
 });
 
-describe('the 6 px gap between stacked chips (GM r136, ruling 5)', () => {
+describe('the 6 px gap between stacked chips', () => {
   // A chip stands at the point where the line from the pane's middle to its cursor crosses the edge; the
   // stack moves it only when that would put it closer than gapPx to the chip before it. So chips whose own
   // crossing points are further apart than a chip and a gap keep them (the shot's 23 px), and ones that are

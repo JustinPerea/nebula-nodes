@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { chainPoint, HEADER_ICON_X, nodeHeaderPoint, resolveAnchor, restPoints, waitRestPoint } from '../src/lib/agentCursorMotion';
 
 /**
- * GM - Design, PR #212 round 3, item 2: while a node's header shows the wait,
+ * Design, PR #212: while a node's header shows the wait,
  * the cursor is drawn at the header's left end (tip over the icon); the point
  * it counts as for its target chain stays the header's middle, which is what
  * the backend counts (agent_presence._header_point, the same split as a port's).

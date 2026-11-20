@@ -268,7 +268,7 @@ describe('a removed view is gone (lib/agentSurfaceGone.ts)', () => {
   });
 });
 
-describe('the default lines (GM - Design), word for word', () => {
+describe('the default lines, word for word', () => {
   it('Characters', () => {
     expect(CS_SAY_EXAMPLES.filter((e) => e.when.includes('character') || e.when.includes('view')).map(({ action, line }) => `${action}: ${line}`)).toEqual([
       'look: Looking at “Mara”',

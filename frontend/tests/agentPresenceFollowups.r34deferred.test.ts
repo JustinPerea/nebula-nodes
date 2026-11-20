@@ -1,4 +1,4 @@
-// PR #200 fix round 23, review 19 LOW-1 (GM r34: approved): a held run
+// PR #200 (design: approved): a held run
 // dismissed while the person gate holds is released on the promote even
 // after a reload in between. The ids are kept in this tab's sessionStorage
 // (a tab without storage keeps them in memory, as before); only a promote
@@ -39,7 +39,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); window.sessionStorage.clear(); });
 
-describe('review 19 LOW-1: a held Dismiss survives a reload', () => {
+describe('a held Dismiss survives a reload', () => {
   it('dismiss while held, reload, promote: exactly one release; a second promote sends none', async () => {
     const first = await load();
     first.session.reportPersonRequired();

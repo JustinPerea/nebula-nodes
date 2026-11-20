@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getCinemaUploadIssue, otherShotsUploadLine, uploadOffersTryAgain, useCinemaUploadStore, type CinemaReferenceUpload } from '../src/store/cinemaUploadStore';
 import { bundleRefusalLine } from '../src/lib/graphFile';
 
-// GM PR #205 r17: the panel's lock line comes from what each row offers (the
+// Design, PR #205: the panel's lock line comes from what each row offers (the
 // test its Try again button reads), so it never promises "try again" for a
 // row that can only be removed.
 const row = (name: string, canRetry: boolean, extra: Partial<CinemaReferenceUpload> = {}): CinemaReferenceUpload =>
@@ -10,7 +10,7 @@ const row = (name: string, canRetry: boolean, extra: Partial<CinemaReferenceUplo
 
 afterEach(() => { useCinemaUploadStore.getState().clear(); });
 
-describe('GM PR #205 r17: the shot panel\'s line, by what each row offers', () => {
+describe('the shot panel\'s line, by what each row offers (design, PR #205)', () => {
   it.each([
     ['remove-only, one file', [row('ref.png', false)], 'You can generate after you remove “ref.png”.'],
     ['remove-only, two files (shot 12)', [row('ref.png', false), row('lost.png', false)],
@@ -46,7 +46,7 @@ describe('GM PR #205 r17: the shot panel\'s line, by what each row offers', () =
   });
 });
 
-describe('GM PR #205 r17: Generate all\'s line for other shots, by what their rows offer', () => {
+describe('Generate all\'s line for other shots, by what their rows offer (design, PR #205)', () => {
   const shots = ['s1', 's2', 's3', 's4'].map((id) => ({ id }));
   it.each([
     ['remove-only', [row('x.png', false, { shotId: 's2' })], 'You can generate all after you remove the uploads in “Shot 2”.'],
@@ -61,7 +61,7 @@ describe('GM PR #205 r17: Generate all\'s line for other shots, by what their ro
   });
 });
 
-describe('GM PR #205 r17 item 3: a size refusal with no size names the limit', () => {
+describe('a size refusal with no size names the limit (design, PR #205)', () => {
   it.each([
     [{ code: 'bundle_upload_too_large', limitBytes: 528 * 1024 * 1024 }, 'This file is larger than 528 MB, the most Nebula opens.'],
     [{ code: 'bundle_member_too_large', limitBytes: 256 * 1024 * 1024 }, 'One of its files is larger than 256 MB, the most Nebula opens.'],

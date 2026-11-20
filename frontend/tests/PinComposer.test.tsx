@@ -8,14 +8,14 @@ beforeAll(regionNoticesReady);
 
 const api = vi.hoisted(() => ({ createPin: vi.fn(), fetchPins: vi.fn(), deletePin: vi.fn() }));
 
-// Fix round 4 of PR #200: PinComposer reads project names (projectStore, which
+// PR #200: PinComposer reads project names (projectStore, which
 // loads graphStore and connects), and the kept notices' own helpers.
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: () => {}, subscribe: () => () => {}, send: () => {}, disconnect: () => {} } }));
 vi.mock('../src/lib/canvasPins', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/lib/canvasPins')>(), ...api, MAX_PIN_TEXT: 280 }));
 
 const { PinComposer } = await import('../src/components/canvas/PinComposer');
 // The app draws its notices in the notice region, which stays usable beside
-// an open dialog (ModalPortal isolates everything else, GM PR #203 r13).
+// an open dialog (ModalPortal isolates everything else, design, PR #203).
 const { NoticeRegion } = await import('../src/components/NoticeRegion');
 const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
@@ -43,13 +43,13 @@ describe('PinComposer', () => {
     api.createPin.mockResolvedValue(pin('warmer'));
     render(<><NoticeRegion /><PinComposer /></>);
     const input = screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement;
-    // Fix round 11 (GM r12 answer 3): only what shows counts, so no native
-    // maxLength (it counts escape codes). GM r20 note 1: a change past 280
+    // Design: only what shows counts, so no native
+    // maxLength (it counts escape codes). A change past 280
     // shown characters is refused whole, never cut to fit.
     expect(input.maxLength).toBe(-1);
     fireEvent.change(input, { target: { value: 'x'.repeat(290) } });
     expect(input.value).toBe('');
-    // Refused, the counter shows at once, whatever is left (GM r20 addendum).
+    // Refused, the counter shows at once, whatever is left (design addendum).
     expect(screen.getByText('280 left')).toBeTruthy();
     fireEvent.change(input, { target: { value: 'x'.repeat(280) } });
     expect(input.value).toBe('x'.repeat(280));
@@ -60,14 +60,14 @@ describe('PinComposer', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
-    // Round 23 (M-1): and the project it was composed on (none open here).
+    // Called with the project it was composed on (none open here).
     expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' }, null);
     expect(useCanvasPinsStore.getState().composer).toBeNull();
     expect(useCanvasPinsStore.getState().pins.map((p) => p.id)).toEqual(['pin_a']);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('sends nothing on empty text (GM r30 item 3: Send note is held, the dialog stays), and Cancel closes it', async () => {
+  it('sends nothing on empty text (Send note is held, the dialog stays), and Cancel closes it', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     const { unmount } = render(<><NoticeRegion /><PinComposer /></>);
     fireEvent.change(screen.getByRole('textbox', { name: 'Note for agents' }), { target: { value: '   ' } });
@@ -85,9 +85,9 @@ describe('PinComposer', () => {
     expect(api.createPin).not.toHaveBeenCalled();
   });
 
-  it('shows a dismissable neutral line when the backend refuses the pin, and keeps the dialog open with the note (GM r20 Q1)', async () => {
+  it('shows a dismissable neutral line when the backend refuses the pin, and keeps the dialog open with the note', async () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
-    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // A refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
     api.createPin.mockRejectedValue(new RequestFailedError("Couldn't save the note.", 403, { reason: 'This action only works from the Nebula canvas.' }));
     render(<><NoticeRegion /><PinComposer /></>);
@@ -95,7 +95,7 @@ describe('PinComposer', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send note' }));
     });
-    // A person-gate 403: GM r22 Q1's line, no "try again".
+    // A person-gate 403: design's line, no "try again".
     expect(screen.getByRole('status').textContent).toBe('Notes can only be added from the Nebula canvas.×');
     expect((screen.getByRole('textbox', { name: 'Note for agents' }) as HTMLTextAreaElement).value).toBe('redo this one');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));

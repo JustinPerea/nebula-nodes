@@ -70,13 +70,13 @@ describe('canvas pins store', () => {
   });
 
   it('puts a pin back when the delete fails', async () => {
-    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
+    // A refusal arrives as the API's typed error (apiRequest), not a plain Error,
     // whose own text no surface shows any more.
     api.deletePin.mockRejectedValue(new RequestFailedError("Couldn't delete the note.", 403, { reason: 'Only the person can do this from the Nebula canvas.' }));
     useCanvasPinsStore.setState({ pins: [pin('pin_a')] });
     await useCanvasPinsStore.getState().remove('pin_a');
     expect(useCanvasPinsStore.getState().pins.map((p) => p.id)).toEqual(['pin_a']);
-    // GM r20 Q1: one neutral line, whatever the answer said.
+    // Design: one neutral line, whatever the answer said.
     expect(useCanvasPinsStore.getState().error).toBe('Nebula couldn’t delete this note. Try again in a moment.');
   });
 
@@ -84,7 +84,7 @@ describe('canvas pins store', () => {
     api.createPin.mockResolvedValue(pin('pin_new', { text: 'warmer' }));
     useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
     expect(await useCanvasPinsStore.getState().submit('  warmer ')).toBe(true);
-    // Round 23 (M-1): and the project it was composed on (none open here).
+    // And the project it was composed on (none open here).
     expect(api.createPin).toHaveBeenCalledWith('warmer', { nodeId: 'n4' }, null);
     const state = useCanvasPinsStore.getState();
     expect(state.composer).toBeNull();

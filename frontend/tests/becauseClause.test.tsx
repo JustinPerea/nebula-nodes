@@ -1,5 +1,5 @@
 /**
- * Failure lines in the because form (design, error-copy round 5): "Nebula couldn’t ‹do X› because ‹reason›."
+ * Failure lines in the because form (design, error-copy): "Nebula couldn’t ‹do X› because ‹reason›."
  * One table of reasons (REASON_CLAUSES) and one test line per row, so changing a row's words is a one-line edit
  * here and in lib/errorCopy. Also: the status rows, the sentence rule, the apostrophe limits, the headings
  * failedWhat can't read (each one deliberate), the colour exceptions and FailureLines rendering one line.

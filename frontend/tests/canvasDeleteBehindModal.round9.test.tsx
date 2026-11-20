@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ReactFlowProvider, type Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Review 8, M-1: React Flow's own Delete and Backspace listen on the document
+// React Flow's own Delete and Backspace listen on the document
 // and never asked whether a modal dialog is open, so with focus on the
 // placeholder dialog's Cancel (or on the page) a selected node behind it was
 // deleted. The real canvas (Canvas.tsx with React Flow) must leave the graph

@@ -33,8 +33,8 @@ function record(id: string, status: RunRecord['status'], targetNodeId?: string):
   };
 }
 
-/** Runs of the open project: a record of one is this project's (review 20
- * of PR #199, LOW-2), so its row is named by its node. */
+/** Runs of the open project: a record of one is this project's (PR #199),
+ * so its row is named by its node. */
 const ownRuns = (...ids: string[]) => ids.map((id) => record(id, 'complete'));
 
 describe('RunHistoryPanel replay actions', () => {
@@ -55,7 +55,7 @@ describe('RunHistoryPanel replay actions', () => {
   });
 
   // The key-lock tests run on a keyed route: Idol made keyed for the test
-  // (tests/helpers/keyedSpace.ts); Idol is keyless from PR #203 round 7.
+  // (tests/helpers/keyedSpace.ts); Idol is keyless from PR #203.
   keyIdolInEachTest();
 
   it('routes complete and failed records to the correct exact-replay actions', () => {
@@ -78,7 +78,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
   });
 
-  it("locks Rerun and Retry while the replay would run a keyed route without its key, focusable (GM, PR #203 r8 item 3)", () => {
+  it("locks Rerun and Retry while the replay would run a keyed route without its key, focusable (PR #203)", () => {
     const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
     const idol = (run: RunRecord): RunRecord => ({ ...run, snapshot: {
       nodes: [{ id: 'img', definitionId: 'image-input', params: { filePath: '/x.png' }, outputs: {} },
@@ -119,7 +119,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(rerunHistoryRecord).toHaveBeenCalledWith('complete-run');
   });
 
-  it('relocks Rerun when the token is removed after it showed unlocked (review r5 LOW-2)', () => {
+  it('relocks Rerun when the token is removed after it showed unlocked', () => {
     const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
     const run: RunRecord = { ...record('complete-run', 'complete'), snapshot: {
       nodes: [{ id: 'idol', definitionId: 'speridlabs-idol', params: {}, outputs: {} }], edges: [] } };
@@ -133,7 +133,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(rerun).toHaveAccessibleDescription(LINE);
   });
 
-  // GM, PR #203 r11 item 3: a reason only the person can fix comes first,
+  // Design, PR #203: a reason only the person can fix comes first,
   // or the person waits out the run only to be refused. While a run goes,
   // the missing key still leads; offline and following too.
   it('the missing key leads a run going, following and offline; once the key is added the run\'s line is the reason', () => {
@@ -175,7 +175,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(screen.getByRole('button', { name: 'Rerun Full canvas' })).toBeDisabled();
   });
 
-  // GM r37 (PR #198 round 25): a lock reason says what unlocks it, by the
+  // Design (PR #198): a lock reason says what unlocks it, by the
   // control's own verb: "You can rerun it when the run finishes.", never
   // "Wait for the active run to finish."
   it('while a run goes, each replay says what unlocks it, by its own verb', () => {
@@ -331,9 +331,9 @@ describe('RunHistoryPanel replay actions', () => {
     const safeguards = screen.getByRole('region', {
       name: 'World Labs recovery safeguards',
     });
-    // Error copy round 3c (GM): "World Labs run" where it said "paid start".
+    // Error copy (design): "World Labs run" where it said "paid start".
     expect(safeguards).toHaveTextContent('These IDs prevent an accidental second World Labs run.');
-    // GM, round 14 of PR #114: rows are named by node, "Operation ID" /
+    // Design, PR #114: rows are named by node, "Operation ID" /
     // "World ID", the ID in mono. Neither node is on the canvas or was seen.
     expect(safeguards).toHaveTextContent('A removed World Labs node · Operation ID operation-accepted');
     expect(safeguards).toHaveTextContent('A removed World Labs node · World ID world-complete');
@@ -342,7 +342,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(screen.getByTitle('A removed World Labs node · World ID world-complete')).toBeInTheDocument();
   });
 
-  it('"Forget ID" asks in the app\'s own dialog first; Cancel forgets nothing (GM, round 13 of PR #114)', () => {
+  it('"Forget ID" asks in the app\'s own dialog first; Cancel forgets nothing (design, PR #114)', () => {
     const confirm = vi.spyOn(window, 'confirm');
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({
@@ -360,7 +360,7 @@ describe('RunHistoryPanel replay actions', () => {
     });
 
     render(<RunHistoryPanel />);
-    // GM, round 14: the button's name says which ID it forgets; the row
+    // Design: the button's name says which ID it forgets; the row
     // ("“Harbor world” · Operation ID operation-saved") stays its description.
     const row = screen.getByRole('button', { name: 'Forget the recovery ID for “Harbor world”' });
     expect(row.textContent).toBe('Forget ID');
@@ -370,9 +370,9 @@ describe('RunHistoryPanel replay actions', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “Harbor world”?' });
     expect(dialog).toHaveAccessibleDescription(
       'Only do this after you’ve checked the run in Marble. Without the ID, Nebula can’t stop you from paying for the same run twice.');
-    // On the page body, through ModalPortal (the round 21 merge with #195).
+    // On the page body, through ModalPortal (the merge with #195).
     expect(dialog.closest('.modal-portal')?.parentElement).toBe(document.body);
-    // GM, round 14: Cancel on the left, the action on the right, in the
+    // Design: Cancel on the left, the action on the right, in the
     // destructive style (the trash's red text, never orange primary).
     expect(within(dialog).getAllByRole('button').map((button) => button.textContent)).toEqual(['Cancel', 'Forget ID']);
     expect(within(dialog).getByRole('button', { name: 'Forget ID' })).toHaveClass('prompt-dialog__destructive');
@@ -395,7 +395,7 @@ describe('RunHistoryPanel replay actions', () => {
     });
     render(<RunHistoryPanel />);
     fireEvent.click(screen.getByRole('button', { name: 'Forget the recovery ID for a removed World Labs node' }));
-    // Not on the canvas and never seen with a label (GM, round 14).
+    // Not on the canvas and never seen with a label (design).
     const dialog = screen.getByRole('alertdialog', { name: 'Forget the recovery ID for a removed World Labs node?' });
     const [cancel, forgetButton] = within(dialog).getAllByRole('button');
     fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true });
@@ -469,8 +469,8 @@ describe('RunHistoryPanel replay actions', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /^Forget the recovery ID for / })[0]);
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 
-    // Error copy round 3b: an error that isn't a request's never shows its
-    // own message; it says GM's general line under the button's heading.
+    // Error copy: an error that isn't a request's never shows its
+    // own message; it says design's general line under the button's heading.
     await waitFor(() => expect(alert).toHaveBeenCalledWith(
       'Nebula couldn’t forget the recovery safeguard because the server didn’t accept it. Try again, or reload if it keeps happening.',
     ));
@@ -478,7 +478,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(screen.getByRole('button', { name: 'Forget the recovery ID for a removed World Labs node' })).toBeEnabled();
   });
 
-  it('a node that left the canvas goes by its last label (GM, round 14)', () => {
+  it('a node that left the canvas goes by its last label', () => {
     const world = { id: 'world-node', type: 'model-node', position: { x: 0, y: 0 },
       data: { label: 'Harbor world', definitionId: 'worldlabs-environment', params: {}, state: 'idle', outputs: {} } };
     useGraphStore.setState({ nodes: [world] as never });
@@ -491,7 +491,6 @@ describe('RunHistoryPanel replay actions', () => {
     expect(screen.getByRole('alertdialog', { name: 'Forget the recovery ID for “Harbor world”, no longer on the canvas?' })).toBeTruthy();
   });
 
-  // Review 13, L5 (live L8, probes U2/U3).
   it('the dialog owns Escape however focus got there (a backdrop click), and Run history stays open', () => {
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({ providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node',
@@ -544,7 +543,7 @@ describe('RunHistoryPanel replay actions', () => {
     vi.useRealTimers();
   });
 
-  it('offline, the dialog\'s Forget ID is disabled and Cancel still closes it (round 15)', () => {
+  it('offline, the dialog\'s Forget ID is disabled and Cancel still closes it', () => {
     const onCancel = vi.fn();
     const onConfirm = vi.fn();
     noteBackendConnection('offline');

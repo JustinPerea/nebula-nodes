@@ -24,7 +24,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 
 /**
- * GM - Design, round 18, item 1 (verbatim): "Unnamed node: the default title
+ * Design (verbatim): "Unnamed node: the default title
  * drops the route. "Grok Imagine 2.0" in all three places: card title "Grok
  * Imagine 2.0"; changed line "“Grok Imagine 2.0” changed while this was
  * open."; row "“Grok Imagine 2.0” · via xAI · $0.06". When the name already
@@ -123,7 +123,7 @@ describe('card title (NodeLabel)', () => {
 });
 
 describe('a node added after the change is saved with the stripped title and reads as unnamed', () => {
-  // Round 21 (the #114 merge): addNode keeps no local copy (a failure adds
+  // After the #114 merge: addNode keeps no local copy (a failure adds
   // nothing) and sends no label, so the backend's own title names the node,
   // and its sync brings it in unnamed.
   it('addNode: no local fallback, and no label of its own', async () => {

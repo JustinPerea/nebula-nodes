@@ -9,17 +9,17 @@ import type { RunRecord } from '../src/lib/runHistory';
 import { frames } from './helpers/frames';
 
 /**
- * Round 22 of PR #199 (review 20 RV LOW-2; GM r34 A1 and its addendum, A4):
+ * PR #199 (design's rulings):
  * Run history names each World Labs record by whose it is.
  * - this project's record, or one a canvas node holds the ID of: as before,
  *   the node's card title (and the removed forms);
  * - the record Nebula's open-hold verdict names: "“World” from “Alpha”",
  *   or "“World” from another project" with no project name;
- * - any other: its type when the record knows it (round 23, GM r36 item 1),
+ * - any other: its type when the record knows it (design),
  *   else "A World Labs node from another project" (an operation ID alone).
  * The Forget ID button's name and its confirm's heading say the same. While
  * Run history is open, the held reopen's Forget ID line is the first line
- * of the safeguards section (GM r34 A4).
+ * of the safeguards section (design).
  *
  * LR1: Delta's n1 is a Text Input the person renamed "Delta brief"; Alpha's
  * n1 (a Text Input) has the record op-alpha-probe.
@@ -141,7 +141,7 @@ describe('this project’s records are named as before', () => {
   });
 });
 
-describe('GM r34 A4: the held reopen’s Forget ID line tops the safeguards while Run history is open', () => {
+describe('the held reopen’s Forget ID line tops the safeguards while Run history is open', () => {
   it('the same words, first in the section, in its own polite status region', () => {
     setup();
     useProjectStore.setState({ heldReopenLine: { id: 'delta', line: REOPEN_LINE, place: 'runHistory' } });

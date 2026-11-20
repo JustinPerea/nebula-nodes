@@ -15,7 +15,7 @@ import {
 import { agentActionEntry } from '../src/store/agentLogStore';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 
-// GM - Design, PR #211 r20: an Agent log line's dot and name take the
+// Design, PR #211: an Agent log line's dot and name take the
 // cursor's own shade; the name text reads at least 4.5:1 on the log's
 // surface, stepping to the nearest passing tone of the same hue if needed.
 
@@ -57,13 +57,13 @@ const event = (color: string, ordinal: number): AgentPresenceEvent => ({
   session: { key: 'abcdef012345', ordinal },
 } as AgentPresenceEvent);
 
-describe('the Agent log in each cursor\'s own shade (r20)', () => {
+describe('the Agent log in each cursor\'s own shade', () => {
   it('the log surface is Restraint\'s glass over the canvas, as the stylesheet draws it', () => {
     expect(AGENT_LOG_SURFACE).toBe(restraintSurface);
     expect(agentColours.length).toBeGreaterThanOrEqual(8);
   });
 
-  // Review 8, NIT-1: Chrome stores the glass alpha in 8 bits (0.66 → 168)
+  // Chrome stores the glass alpha in 8 bits (0.66 → 168)
   // and paints #0e0e10; the exact alpha would round to #0f0f10.
   it('the surface is what Chrome paints: 8-bit alpha, #0e0e10', () => {
     expect(AGENT_LOG_SURFACE).toBe('#0e0e10');
@@ -72,7 +72,7 @@ describe('the Agent log in each cursor\'s own shade (r20)', () => {
     expect(compositeOver({ rgb: [10, 20, 30], alpha: 1 }, [200, 200, 200])).toBe('#0a141e');
   });
 
-  // Review 8, NIT-2 and the shared fallback: a colour that is not #rrggbb
+  // and the shared fallback: a colour that is not #rrggbb
   // never reaches the page as itself.
   it('an invalid colour gives the shared fallback, in the log and on the cursor alike', () => {
     for (const bad of ['red', '#abc', '#12345g', '', 'url(x)']) {

@@ -63,7 +63,7 @@ vi.mock('../src/components/canvas/PinComposer', () => ({ PinComposer: () => null
 vi.mock('../src/components/canvas/ProposalLayer', () => ({ ProposalLayer: () => null }));
 vi.mock('../src/components/canvas/ProposalBar', () => ({ ProposalBar: () => null }));
 vi.mock('../src/components/ContextMenu', () => ({ ContextMenu: () => null }));
-// The Delete key reads the canvas's pins (round 3g); in the app the selection
+// The Delete key reads the canvas's pins; in the app the selection
 // toolbar loads this store too. Mocked like the toolbar, so its socket handler
 // doesn't fetch pins on this test's graph replacements.
 vi.mock('../src/store/canvasPinsStore', () => ({ useCanvasPinsStore: { getState: () => ({ pins: [] }) } }));
@@ -309,7 +309,7 @@ describe('Canvas workspace continuity', () => {
   });
 });
 
-// Round 16 (review 15, L1): selecting while offline is local view state;
+// Selecting while offline is local view state;
 // nothing is sent (and nothing pulses), and the selection in hand goes out
 // once Nebula answers again, so agents see what the person selected.
 describe('the selection report across an offline spell', () => {

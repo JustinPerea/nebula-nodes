@@ -1,12 +1,12 @@
-// PR #200 fix round 18: GM r27 and review 15.
-// - GM r27 item 1: Escape on a focused notice closes that notice only (as its
+// PR #200: notice keys (design) and a review's findings.
+// - Design: Escape on a focused notice closes that notice only (as its
 //   ×), focus follows the × rule, and the dialog stays; Escape from inside a
 //   dialog still closes it. One shared rule (lib/modalFocus noticeKeys,
 //   installed by NoticeRegion), checked in all six modals.
-// - Review 15 LOW-A: in onboarding and the result comparison, a notice's keys
+// - In onboarding and the result comparison, a notice's keys
 //   are its own: Enter and Space aren't taken (no preventDefault, focus stays
 //   for the button's own activation), and a real Shift-then-Tab leaves it.
-// - Review 15 LOW-B / GM r27 item 3: a notice replaced under focus (Undo's
+// - Design: a notice replaced under focus (Undo's
 //   remount) sends focus to the open dialog's field; Redo stays reachable by Tab.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -37,7 +37,7 @@ const initialUI = useUIStore.getState();
  * leaving as a real one does (focus moved first, then gone). */
 function notices(count: number) {
   // The canvas notice's slot: the first slot is the proposal bar's, which a
-  // dialog's Tab order skips (it sits under the scrim, GM r7 of PR #203).
+  // dialog's Tab order skips (it sits under the scrim, design, PR #203).
   const slot = document.querySelector('[data-notice-slot="notice"]')!;
   return Array.from({ length: count }, (_, index) => {
     const notice = document.createElement('div');
@@ -93,7 +93,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('GM r27 item 1: Escape on a notice closes that notice only, in every modal', () => {
+describe('Escape on a notice closes that notice only, in every modal', () => {
   it.each(MODALS)('$label', ({ open, dialog, parentCloses }) => {
     open();
     expect(dialog()).not.toBeNull();
@@ -121,7 +121,7 @@ describe('GM r27 item 1: Escape on a notice closes that notice only, in every mo
   });
 });
 
-describe('review 15 LOW-A: a notice\'s keys are its own inside onboarding and the comparison', () => {
+describe('a notice\'s keys are its own inside onboarding and the comparison', () => {
   it.each(MODALS.filter((m) => m.label === 'onboarding' || m.label === 'result comparison'))('$label', ({ open, dialog }) => {
     open();
     const [a] = notices(1);
@@ -142,7 +142,7 @@ describe('review 15 LOW-A: a notice\'s keys are its own inside onboarding and th
   });
 });
 
-describe('review 15 LOW-B / GM r27 item 3: a notice replaced under focus', () => {
+describe('a notice replaced under focus', () => {
   it('Undo replaced by "Restored" (a new element): focus goes to the note field; Redo is a Tab stop', async () => {
     MODALS[0].open();
     const field = screen.getByRole('textbox', { name: 'Note for agents' });

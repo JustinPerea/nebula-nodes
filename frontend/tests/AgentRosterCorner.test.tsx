@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /**
- * The Agents panel (Q125 item 2) at the top of the Updates corner: one line
+ * The Agents panel at the top of the Updates corner: one line
  * collapsed ("Needs you" and "Working" with count badges), the two groups
- * open, live from the roster read and the socket. GM - Design's copy,
+ * open, live from the roster read and the socket. Design's copy,
  * 2026-10-25, verbatim.
  */
 
@@ -141,7 +141,7 @@ describe('the Agents panel', () => {
     expect(toggle.textContent).toContain('Needs you');
     const badges = toggle.querySelectorAll('.agent-notes-needs-badge, .agent-roster__badge');
     expect([...badges].map((b) => b.textContent)).toEqual(['1', '1']);
-    // GM: the Needs-you badge is the filled pill (the chip's too), never an agent's colour.
+    // Design: the Needs-you badge is the filled pill (the chip's too), never an agent's colour.
     expect(badges[0].classList.contains('agent-notes-needs-badge')).toBe(true);
     expect(badges[1].classList.contains('agent-notes-needs-badge')).toBe(false);
     expect(toggle.closest('section')?.getAttribute('style') ?? '').not.toMatch(/attention/);
@@ -174,7 +174,7 @@ describe('the Agents panel', () => {
     const row = within(list).getByRole('button', { name: 'Claude Code, unverified, 1 question. Open questions' });
     expect(row.getAttribute('title')).toBe('Open questions');
     expect(within(row).getByText('1 question')).toBeTruthy();
-    // After a restart there is no status and no cursor: GM's line.
+    // After a restart there is no status and no cursor: design's line.
     expect(within(row).getByText('Waiting for your answer.')).toBeTruthy();
     const dot = row.querySelector('.agent-notes-dot');
     expect(dot?.classList.contains('agent-notes-dot--unverified')).toBe(true);
@@ -274,7 +274,7 @@ describe('the Agents panel', () => {
   });
 });
 
-// GM - Design's review of PR #193, item 3: "A waiting question blocks an
+// Design's review of PR #193: "A waiting question blocks an
 // agent, so 'Updates 0' mustn't hide it."
 describe('the closed Updates chip marks agents that need the person', () => {
   const chip = () => screen.getByRole('button', { name: /^Updates/ });

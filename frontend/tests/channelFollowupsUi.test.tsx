@@ -7,16 +7,16 @@ import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 import type { NodeData } from '../src/types';
 
 /**
- * The follow-up to PR #114, GM's r18 rulings and review 17 L3:
+ * The follow-up to PR #114, with design's rulings:
  * - G4: Stop's icon gets a 16px slot like Run's; the dots stay 14px, centred.
  * - The video editor offline: the banner sits right under the editor header;
  *   Trim, Speed, Cut and Vol get the disabled style; Render preview's disabled
  *   state is neutral, like Export's; Play, scrub and the timecode stay usable.
  * - Home: a card's rename, cover and delete icons, disabled offline, get the
  *   disabled style.
- * - The price chip's prefixes get GM's tooltips.
+ * - The price chip's prefixes get design's tooltips.
  * - Commons: the accents line says "changed"; a draft carried over a
- *   reconnect must be for the same image in the same batch (L3).
+ *   reconnect must be for the same image in the same batch.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), disconnect: vi.fn(),
@@ -99,7 +99,7 @@ describe('the video editor offline', () => {
     data: { definitionId: 'video-edit', label: 'Edit', params: { clips: [clip], sourceFps: 30 }, state: 'idle', outputs: {} } } as unknown as Node<NodeData>;
 
   it('the banner is a row under the editor header, not at the canvas\'s place', () => {
-    // GM, PR #198 r2: the editor is a studio like the others; its
+    // Design, PR #198: the editor is a studio like the others; its
     // WorkspaceHeader brings the banner's row (StudioOfflineRow), and the
     // floating banner shows nothing there.
     noteBackendConnection('offline');
@@ -179,29 +179,29 @@ describe('Home: a card\'s icons disabled offline get the disabled style', () => 
   });
 });
 
-describe('the price chip\'s tooltips (GM)', () => {
+describe('the price chip\'s tooltips', () => {
   const summary = (cost: Partial<NonNullable<RunScopeSummary['cost']>>): RunScopeSummary => ({ total: 1, paid: ['GPT Image 2.5'],
     cost: { low: 0.067, high: 0.067, lines: [{ name: 'GPT Image 2.5', low: 0.067, high: 0.067, runs: [1, 1] }],
       unpriced: [], plan: [], plus: [], awaitingInput: [], ...cost } });
 
   // Every cost tooltip is a sentence shape that leads with the paid nodes,
-  // no bare "Estimated cost" heading (GM, PR #203 r16 item 3, r17 item 3).
+  // no bare "Estimated cost" heading (design, PR #203).
   it('"~$X": the paid nodes, then "Estimated cost $X."', () => {
     expect(runChipLabel(summary({}))).toBe('~$0.07');
     expect(runChipTitle(summary({}))).toBe('“GPT Image 2.5” calls a paid provider. Estimated cost $0.07.');
   });
 
-  it('"$X + unpriced": the priced part leads (GM, PR #198 r6 and r7 item 3)', () => {
+  it('"$X + unpriced": the priced part leads (PR #198)', () => {
     expect(runChipLabel(summary({ unpriced: ['Kling'] }))).toBe('$0.07 + unpriced');
     expect(runChipTitle(summary({ unpriced: ['Kling'] })))
       .toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs about $0.07.\n“Kling” has no listed price.');
     expect(runChipTitle(summary({ plus: ['input images'] }))).toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs about $0.07.');
-    // A range with a "+" is in the range form (GM, PR #198 r2 ask 2).
+    // A range with a "+" is in the range form (design, PR #198).
     expect(runChipTitle(summary({ low: 0.05, high: 0.43, unpriced: ['Kling'] })))
       .toBe('“GPT Image 2.5” calls a paid provider. The priced part of this run costs between $0.05 and $0.43.\n“Kling” has no listed price.');
   });
 
-  it('a plain range says "Between" (PR #198 r2 ask 2); "N paid" names its paid nodes (GM, PR #203 r17 item 3)', () => {
+  it('a plain range says "Between" (PR #198); "N paid" names its paid nodes (PR #203)', () => {
     expect(runChipTitle(summary({ low: 0.05, high: 0.43 }))).toBe('“GPT Image 2.5” calls a paid provider. Between $0.05 and $0.43.');
     expect(runChipTitle({ total: 1, paid: ['X'] })).toBe('“X” calls a paid provider.');
   });
@@ -213,7 +213,7 @@ describe('the price chip\'s tooltips (GM)', () => {
   });
 });
 
-describe('Commons label drafts (GM line; review 17 L3)', () => {
+describe('Commons label drafts (design line)', () => {
   const batch = (revision: number, { locked = true, image = 'image-a', manifest = 'manifest-1' } = {}): EvaluationBatch => ({
     revision, state: 'open', denominator: 150, tuning_count: 30, manifest_hash: manifest, sealed: null, seal_hash: null,
     closed: null, close_hash: null, fields: { type_style: ['none'] }, axes: ['quiet_loud'], roles: ['accent'],
@@ -249,7 +249,7 @@ describe('Commons label drafts (GM line; review 17 L3)', () => {
 
   it('another image at the same position (same unlabeled state): the draft is dropped, with the line', async () => {
     await draftThenReconnectTo(batch(5, { image: 'image-b' }));
-    // GM, PR #198 r1 item 4: its own line (tests/pr198Fix1Ui.test.tsx).
+    // Design, PR #198: its own line (tests/pr198Fix1Ui.test.tsx).
     expect(await screen.findByText(IMAGE_REPLACED_ELSEWHERE)).toHaveAttribute('role', 'status');
     expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).not.toBe('0.00');
   });

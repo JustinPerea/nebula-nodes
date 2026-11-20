@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * GM r56 item B (2026-11-03): the canvas cursor layer sits under the
+ * Design (2026-11-03): the canvas cursor layer sits under the
  * floating chrome (the Agent log, the toolbars, the Inspector, the Updates
  * corner, the tabs, the rail and launchers, the panels). A cursor under a
  * panel is hidden until Phase 3's edge chips.

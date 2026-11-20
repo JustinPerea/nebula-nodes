@@ -1,6 +1,6 @@
 /**
- * The trash says "moodboard" in every person line, counted or not (GM, copy
- * sweep item 21), and a moodboard's home line says "This moodboard is …".
+ * The trash says "moodboard" in every person line, counted or not (design, copy
+ * sweep), and a moodboard's home line says "This moodboard is …".
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';

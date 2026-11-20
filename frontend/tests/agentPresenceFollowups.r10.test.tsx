@@ -1,12 +1,12 @@
 /**
- * Fix round 10 of PR #200 (review 9, GM r16):
- * - LOW-2 / GM r16 answer 2: after × focus lands on the next notice's ×, never
+ * PR #200 (design):
+ * - Design: after × focus lands on the next notice's ×, never
  *   on a primary or destructive action, so a second Enter can only dismiss. A
  *   notice with no × takes focus itself; an empty stack goes to the surface's
  *   start of page content ("Recent projects" on Projects).
- * - LOW-3: the leave fallback never cuts an exit short when the animation
+ * - The leave fallback never cuts an exit short when the animation
  *   started late (a blocked main thread): it waits out what is left.
- * - MEDIUM-1 / GM r16 answer 3: the canvas display is an output path. The note
+ * - Design: the canvas display is an output path. The note
  *   and the reply show stripped, whatever the store kept as typed (the
  *   backend's half: backend/tests/test_pin_text_as_typed.py).
  */
@@ -66,7 +66,7 @@ afterEach(() => {
 /** Enter on a focused button activates it, as a browser does. */
 const enter = () => act(() => { (document.activeElement as HTMLElement | null)?.click(); });
 
-describe('GM r16 answer 2 (review 9 LOW-2): focus after × lands on the next notice\'s ×', () => {
+describe('focus after × lands on the next notice\'s ×', () => {
   type Kind = 'run' | 'undo' | 'bare' | 'delete';
   const fired: string[] = [];
   function Notice({ slot, kind, label, open, onDismiss }: { slot: string; kind: Kind; label: string; open: boolean; onDismiss: () => void }) {
@@ -152,7 +152,7 @@ describe('GM r16 answer 2 (review 9 LOW-2): focus after × lands on the next not
   });
 });
 
-describe('review 9 LOW-3: the fallback waits out a leave that started late', () => {
+describe('the fallback waits out a leave that started late', () => {
   function Probe({ value }: { value: string | null }) {
     const leave = useLeave(value);
     return leave.shown ? <div data-testid="item" {...leave.props}>{leave.shown}</div> : null;
@@ -184,7 +184,7 @@ describe('review 9 LOW-3: the fallback waits out a leave that started late', () 
     expect(screen.queryByTestId('item')).toBeNull();
   });
 
-  it('GM r12 answer 5: a paused (stalled) leave waits up to the limit, then finishes with the reduced-motion fade from where it stands, never a hard cut', () => {
+  it('a paused (stalled) leave waits up to the limit, then finishes with the reduced-motion fade from where it stands, never a hard cut', () => {
     vi.useFakeTimers();
     running = true;
     const fades: Array<EventTarget & { keyframes: Keyframe[]; options: KeyframeAnimationOptions }> = [];
@@ -201,7 +201,7 @@ describe('review 9 LOW-3: the fallback waits out a leave that started late', () 
       const animation = item.getAnimations()[0] as unknown as Stub;
       animation.playState = 'paused';
       animation.currentTime = 108;
-      // Round 10 cut it at the first timer (review 10 NIT-1: 569 ms at opacity 1).
+      // An earlier version cut it at the first timer (569 ms at opacity 1).
       act(() => { vi.advanceTimersByTime(STALL_LIMIT_MS - 50); });
       expect(screen.getByTestId('item')).toHaveAttribute('data-leaving', 'surface');
       expect(fades).toHaveLength(0);
@@ -220,7 +220,7 @@ describe('review 9 LOW-3: the fallback waits out a leave that started late', () 
     }
   });
 
-  it('GM r12 answer 5: an endless leave also fades at the limit, and the fade has its own bound', () => {
+  it('an endless leave also fades at the limit, and the fade has its own bound', () => {
     vi.useFakeTimers();
     running = true;
     const realAnimate = HTMLElement.prototype.animate;
@@ -239,7 +239,7 @@ describe('review 9 LOW-3: the fallback waits out a leave that started late', () 
     }
   });
 
-  it('GM r12 answer 5: with the tab hidden, the exit finishes at once (at the start, or the moment it hides)', async () => {
+  it('with the tab hidden, the exit finishes at once (at the start, or the moment it hides)', async () => {
     const visibility = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
     let state: DocumentVisibilityState = 'hidden';
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
@@ -272,7 +272,7 @@ describe('review 9 LOW-3: the fallback waits out a leave that started late', () 
   });
 });
 
-describe('GM r16 answer 3: the canvas shows a note and a reply stripped, whatever the store kept', () => {
+describe('the canvas shows a note and a reply stripped, whatever the store kept', () => {
   // A seeded generator: the same 3,000 cases every run (the backend's fuzz, ported).
   const KNOWN = ['\x1b[31m', '\x1b[0m', '\x1b]0;t\x07', '\x1b]8;;http://e\x1b\\', '\x1bPq#0\x1b\\', '\x1b_Gf=1\x1b\\', '\x1b^pm\x1b\\',
     '\x1bXsos\x1b\\', '\x9b31m', '\x9d0;t\x9c', '\x90q\x9c', '\x9f a\x9c', '\x9e b\x9c', '\x98 c\x9c', '\x1b', '\x1b]', '\x1bP', '\x9d',
@@ -306,8 +306,8 @@ describe('GM r16 answer 3: the canvas shows a note and a reply stripped, whateve
     expect(leaks.slice(0, 3)).toEqual([]);
   });
 
-  it('it matches the backend\'s shown form on the forms review 9 tried', () => {
-    // Spaces inside stay (GM r19 answer 1, fix round 12), as the backend now shows them.
+  it('it matches the backend\'s shown form on the forms a later review tried', () => {
+    // Spaces inside stay (design), as the backend now shows them.
     expect(pinDisplayText('say \x1bPlease\tkeep  \nline two \x1b]0;t\x07end \x85x\u202e   ')).toBe('say \nline two end \nx');
     expect(pinDisplayText('done \x1b[1mbold\x1b[0m\x9b2J and \x07bell\nnext', { multiline: false })).toBe('done bold and bell next');
     expect(pinDisplayText('  indented\n\n\n\nnext', { fold: false })).toBe('indented\n\n\n\nnext');

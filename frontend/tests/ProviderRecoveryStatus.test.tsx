@@ -53,8 +53,8 @@ describe('ProviderRecoveryStatus', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {
-      // GM, round 13 of PR #114: the label and its accessible name; round
-      // 14: a node not on the canvas (never seen with a label) is named so.
+      // Design, PR #114: the label and its accessible name;
+      // a node not on the canvas (never seen with a label) is named so.
       name: 'I’ve checked Marble. Unlock a removed World Labs node.',
     }));
     await waitFor(() => expect(acknowledge).toHaveBeenCalledWith(
@@ -77,7 +77,7 @@ describe('ProviderRecoveryStatus', () => {
 
     render(<ProviderRecoveryStatus />);
     expect(screen.getByRole('alert')).toHaveTextContent(
-      // Error copy round 3e (GM): no "could not", and the reason in words.
+      // Error copy (design): no "could not", and the reason in words.
       'Nebula couldn’t save the hold, so keep Nebula running until this run finishes.',
     );
   });
@@ -100,7 +100,7 @@ describe('ProviderRecoveryStatus', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss recovery warning' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', {
-      // No node to name: GM's round 14 line.
+      // No node to name: design's line.
       name: "I’ve checked Marble. Unlock this World Labs run.",
     }));
 
@@ -110,7 +110,7 @@ describe('ProviderRecoveryStatus', () => {
 
 });
 
-describe("the status bar's button (GM, round 13 of PR #114)", () => {
+describe("the status bar's button (design, PR #114)", () => {
   it('shows "I’ve checked Marble" and names the held node by its card title', () => {
     useGraphStore.setState({
       nodes: [{ id: 'world-1', type: 'model-node', position: { x: 0, y: 0 },

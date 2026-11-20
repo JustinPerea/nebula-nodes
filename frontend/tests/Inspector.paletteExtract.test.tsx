@@ -4,7 +4,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 // The palette's "Extract from reference" (fix/drop-followups, 2026-10-24,
-// GM - Design): it reads the picked file itself (nothing is uploaded), and
+// Design): it reads the picked file itself (nothing is uploaded), and
 // an image that gives no colours says why when Nebula knows ("Couldn't find colors in “{filename}”." over the reason), with
 // the heading alone when it doesn't.
 
@@ -14,7 +14,7 @@ vi.mock('../src/lib/backend', async (original) => ({
 }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 const palette = vi.hoisted(() => ({ extract: vi.fn(), keys: [] as string[] }));
-// Round 8b: the Inspector extracts through the worker client (a later
+// The Inspector extracts through the worker client (a later
 // Extract for the same control wins; the earlier resolves null).
 vi.mock('../src/lib/paletteWorkerClient', async (original) => ({
   ...await original<typeof import('../src/lib/paletteWorkerClient')>(),
@@ -65,7 +65,7 @@ beforeEach(() => {
   api.fetch.mockReset();
   palette.extract.mockReset();
   palette.keys.length = 0;
-  // Round 8e: Extract's state is the module's (one per project, graph and
+  // Extract's state is the module's (one per project, graph and
   // node), so each test starts with none.
   resetPaletteExtractsForTests();
   resetPaletteFocusForTests();
@@ -125,7 +125,7 @@ describe("the palette's Extract from reference", () => {
   });
 });
 
-describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
+describe('while Extract works (design on #208)', () => {
   const pending = (container: HTMLElement) => container.querySelector('.inspector__palette-pending');
   const hexInputs = (container: HTMLElement) => [...container.querySelectorAll<HTMLInputElement>('.inspector__palette-hex')];
   const hexes = (container: HTMLElement) => hexInputs(container).map((e) => e.value);
@@ -149,7 +149,7 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
       expect(input.getAttribute('aria-disabled')).toBeNull();
     }
   };
-  /** GM r22 Q3: read-only with focus kept: aria-disabled (not disabled),
+  /** Design: read-only with focus kept: aria-disabled (not disabled),
    *  described by the line; the hex fields read-only. */
   const held = (container: HTMLElement) => {
     const line = pending(container)!;
@@ -161,7 +161,7 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     for (const input of hexInputs(container)) expect(input.readOnly).toBe(true);
   };
 
-  it('pins GM\'s numbers: the line after 300 ms, then for at least 400 ms', () => {
+  it('pins design\'s numbers: the line after 300 ms, then for at least 400 ms', () => {
     expect(PALETTE_PENDING_DELAY_MS).toBe(300);
     expect(PALETTE_LINE_MIN_MS).toBe(400);
   });
@@ -170,7 +170,7 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     const land = later();
     const { container } = show(['#aaaaaa', '#bbbbbb']);
     await extractFrom(container, png());
-    // GM r18 2: Add and Extract don't grey for a quick extract.
+    // Design: Add and Extract don't grey for a quick extract.
     untouched(container);
     await wait(150);
     untouched(container);
@@ -178,8 +178,8 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     expect(pending(container)?.textContent).toBe('Extracting colors…');
     expect(container.querySelector('.inspector__palette-actions')).toBeNull();
     expect(hexes(container)).toEqual(['#aaaaaa', '#bbbbbb']);
-    // GM r17: the old swatches' ×, hex and colour fields are read-only
-    // (GM r22 Q3: aria-disabled, so a focused one keeps focus).
+    // Design: the old swatches' ×, hex and colour fields are read-only
+    // (design: aria-disabled, so a focused one keeps focus).
     held(container);
     await land({ ok: true, colors: ['#112233', '#445566', '#778899'] });
     await wait(PALETTE_LINE_MIN_MS);
@@ -187,7 +187,7 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     untouched(container);
   });
 
-  it('keeps every chip at its full colour while the swatches are read-only (GM r20)', async () => {
+  it('keeps every chip at its full colour while the swatches are read-only', async () => {
     later();
     const { container } = show(['#ff285a', '#3759c7']);
     await extractFrom(container, png());
@@ -199,7 +199,7 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     expect(chips.map((c) => getComputedStyle(c).opacity)).not.toContain('0.45');
   });
 
-  it('keeps Strength and Method live under the line (GM r18 1)', async () => {
+  it('keeps Strength and Method live under the line', async () => {
     later();
     const { container } = show(['#aaaaaa']);
     await extractFrom(container, png());
@@ -282,14 +282,14 @@ describe('while Extract works (GM r16, r17 and r18 on #208)', () => {
     await land({ ok: true, colors: ['#112233'] });
     expect(swatches()).toEqual(['#aaaaaa']);
     unmount();
-    // Round 8e: the extract isn't the Inspector's, so it lands when its
+    // The extract isn't the Inspector's, so it lands when its
     // hold is up, closed or not.
     await wait(PALETTE_LINE_MIN_MS);
     expect(swatches()).toEqual(['#112233']);
   });
 });
 
-describe('the status region (GM r18 4 on #208)', () => {
+describe('the status region (design, on #208)', () => {
   const status = (container: HTMLElement) => container.querySelector('.inspector__palette-status');
   const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
 
@@ -326,7 +326,7 @@ describe('the status region (GM r18 4 on #208)', () => {
   });
 });
 
-describe('an edit made while Extract works stays (review 7 M1)', () => {
+describe('an edit made while Extract works stays', () => {
   const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
   const params = () => useGraphStore.getState().nodes[0].data.params;
   const setStrength = (container: HTMLElement, value: string) => {
@@ -360,7 +360,7 @@ describe('an edit made while Extract works stays (review 7 M1)', () => {
   });
 });
 
-describe("Extract's state belongs to one node (review 7 L1)", () => {
+describe("Extract's state belongs to one node", () => {
   const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
 
   it("asks the client by node and param, and shows one node's extract on that node only", async () => {

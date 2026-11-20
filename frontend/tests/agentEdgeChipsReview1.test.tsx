@@ -17,7 +17,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 import { CanvasEdgeChips } from '../src/components/canvas/CanvasEdgeChips';
 
 /**
- * PR #233 review 1, C2 to C5, C7 and C8: the chip layer's recheck timer, focus
+ * PR #233: the chip layer's recheck timer, focus
  * when a pressed chip goes, a zero direction, a pane too small for a chip, a
  * person's pan during the press spring, and chrome that holds a whole edge.
  */
@@ -31,7 +31,7 @@ const finite = (box: Box) => Object.values(box).every(Number.isFinite);
 const inView = (box: Box, view: Box) => box.left >= view.left && box.top >= view.top
   && box.left + box.width <= view.left + view.width && box.top + box.height <= view.top + view.height;
 
-describe('C4: a tip exactly at the pane\'s middle, under a panel', () => {
+describe('a tip exactly at the pane\'s middle, under a panel', () => {
   const panel = { id: 'inspector0', box: { left: 400, top: 250, width: 200, height: 200 } };
 
   it('gives a finite chip at a deterministic spot, never NaN', () => {
@@ -50,7 +50,7 @@ describe('C4: a tip exactly at the pane\'s middle, under a panel', () => {
   });
 });
 
-describe('C5: a pane too small to hold a chip', () => {
+describe('a pane too small to hold a chip', () => {
   it('draws no chip outside the viewport; the agent is counted if a count fits', () => {
     const narrow: Box = { left: 300, top: 0, width: 60, height: 700 }; // two docks leave 60 px
     const plan = planChips({ view: narrow, cursors: [cur({ x: 2000, y: 350 })], sizes: SIZES });
@@ -83,7 +83,7 @@ describe('C5: a pane too small to hold a chip', () => {
   });
 });
 
-describe('C8: chrome that blocks every spot on an edge', () => {
+describe('chrome that blocks every spot on an edge', () => {
   it('a chip that cannot stay on its edge slides inward past the chrome; every agent is a chip or in a count', () => {
     // A bar the whole length of the right edge, as wide as it is deep: no chip fits on it.
     const chrome: Box[] = [{ left: 800, top: 0, width: 200, height: 700 }];
@@ -145,7 +145,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); pane.remove(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
-describe('C2: the recheck runs only while there is a canvas cursor', () => {
+describe('the recheck runs only while there is a canvas cursor', () => {
   it('with no agents the timer never runs: no DOM queries over several periods', () => {
     vi.useFakeTimers();
     const query = vi.spyOn(document, 'querySelectorAll');
@@ -171,7 +171,7 @@ describe('C2: the recheck runs only while there is a canvas cursor', () => {
   });
 });
 
-describe('C3: focus when a pressed chip goes', () => {
+describe('focus when a pressed chip goes', () => {
   it('moves to the canvas when the focused chip unmounts (its cursor came into view)', () => {
     const canvas = document.createElement('div');
     canvas.className = 'canvas-wrapper';
@@ -211,7 +211,7 @@ describe('C3: focus when a pressed chip goes', () => {
   });
 });
 
-describe('C7: a person\'s pan or zoom during the press spring', () => {
+describe('a person\'s pan or zoom during the press spring', () => {
   const store = (transform: number[] | undefined, setViewport: (viewport: unknown) => void) => ({
     getState: () => ({ transform, panZoom: { setViewport } }),
   });

@@ -4,11 +4,11 @@ import { PlaceholderRunDialog } from '../src/components/PlaceholderRunDialog';
 import { askPlaceholderRun } from '../src/components/askPlaceholderRun';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
-// GM - Design, round 6 (2026-10-26): a paid node that isn't a placeholder
-// gets a muted row with no agent dot (item 3), and "This run changed since
-// you last reviewed it." shows for in-place updates too (note 2). Review 5:
-// the change is announced to screen readers (L7), and Run hands back the
-// words it was showing when it was clicked (L6).
+// Design (2026-10-26): a paid node that isn't a placeholder
+// gets a muted row with no agent dot, and "This run changed since
+// you last reviewed it." shows for in-place updates too.
+// The change is announced to screen readers, and Run hands back the
+// words it was showing when it was clicked.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const CHANGED = 'This run changed since you last reviewed it.';
@@ -31,7 +31,7 @@ const model = (price: string, total: string, heading = 'Run 1 node Codex is stil
 beforeEach(() => { vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); document.body.innerHTML = ''; });
 
-describe('GM round 6, item 3: the muted row', () => {
+describe('the muted row', () => {
   it('has no agent dot and reads as the others do, above the free line', () => {
     render(<PlaceholderRunDialog model={model('$0.03', '$0.10')} onDone={() => {}} />);
     const rows = [...document.querySelectorAll('.placeholder-run__row')];
@@ -44,9 +44,9 @@ describe('GM round 6, item 3: the muted row', () => {
   });
 });
 
-// GM round 17 (1) replaced note 2's line with the nodes that moved, named
+// Design replaced that line with the nodes that moved, named
 // (PlaceholderRunDialog.round17); these keep what still holds of it.
-describe('GM round 6, note 2, as round 17 rules it: in-place updates', () => {
+describe('the in-place update line as later revised by design', () => {
   it('a price that moves names its node, and the line stays', () => {
     const { rerender } = render(<PlaceholderRunDialog model={model('price not listed', '$0.07')} onDone={() => {}} />);
     expect(changedLine()).toBeNull();
@@ -57,7 +57,7 @@ describe('GM round 6, note 2, as round 17 rules it: in-place updates', () => {
     expect(screen.queryByText(CHANGED)).toBeNull();
   });
 
-  it('a new heading alone holds Run, with no changed line (no node moved; H1: no placeholder left)', () => {
+  it('a new heading alone holds Run, with no changed line (no node moved; no placeholder left)', () => {
     const answers: boolean[] = [];
     const { rerender } = render(<PlaceholderRunDialog model={model('$0.03', '$0.10')} onDone={(ok) => answers.push(ok)} />);
     rerender(<PlaceholderRunDialog model={model('$0.03', '$0.10', "Run with Codex's changes?")} onDone={(ok) => answers.push(ok)} />);
@@ -66,7 +66,7 @@ describe('GM round 6, note 2, as round 17 rules it: in-place updates', () => {
     expect(answers).toEqual([]); // held for 500 ms
   });
 
-  it('review 5, L7: each in-place change is announced through a polite live region', () => {
+  it('each in-place change is announced through a polite live region', () => {
     const { rerender } = render(<PlaceholderRunDialog model={model('price not listed', '$0.07')} onDone={() => {}} />);
     const live = document.querySelector('[aria-live="polite"]')!;
     expect(live).not.toBeNull();
@@ -80,7 +80,7 @@ describe('GM round 6, note 2, as round 17 rules it: in-place updates', () => {
   });
 });
 
-describe('review 5, L6: Run hands back the words on screen when it was clicked', () => {
+describe('Run hands back the words on screen when it was clicked', () => {
   it('askPlaceholderRun resolves with the model the dialog showed, or null for Cancel', async () => {
     let push: ((next: PlaceholderRunConfirm) => void) | undefined;
     let answer: Promise<PlaceholderRunConfirm | null> | undefined;

@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { isModalDialogOpen, keyBlockedByModal } from '../src/lib/canvasShortcutScope';
 
-// Review 9, nits a and b: a modal inside a hidden, inert or display:none
+// A modal inside a hidden, inert or display:none
 // ancestor doesn't count, and the one on top is the last one opened.
 
 afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('nit a: a modal that is not shown does not count', () => {
+describe('a modal that is not shown does not count', () => {
   it.each([
     ['hidden', (el: HTMLElement) => el.setAttribute('hidden', '')],
     ['inert', (el: HTMLElement) => el.setAttribute('inert', '')],
@@ -24,7 +24,7 @@ describe('nit a: a modal that is not shown does not count', () => {
   });
 });
 
-describe('nit b: the modal on top is the last one opened, wherever it sits on the page', () => {
+describe('the modal on top is the last one opened, wherever it sits on the page', () => {
   it('reads the layer, not the page order', () => {
     document.body.innerHTML = `
       <div data-modal-layer="7"><div id="top" role="dialog" aria-modal="true"><button id="topButton"></button></div></div>

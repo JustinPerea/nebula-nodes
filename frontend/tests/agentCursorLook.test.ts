@@ -44,7 +44,7 @@ import {
 } from '../src/lib/agentCursorLook';
 import { chainPoint, nodeHeaderPoint, resolveAnchor } from '../src/lib/agentCursorMotion';
 
-/** GM - Design's agent cursor spec, §1 (the name's ink) and §4 (names, say, several agents). */
+/** Design's agent cursor spec, §1 (the name's ink) and §4 (names, say, several agents). */
 
 // The runners' colours and the palette unverified agents hash into (backend services/agent_presence.py).
 const CLAUDE = '#E8825A';
@@ -53,7 +53,7 @@ const PALETTE = ['#3FC1A5', '#F2C14E', '#FF6B9A', '#7AD3FF', '#C3E86B', '#FF9F43
 const BUILT_IN = [CLAUDE, CODEX, ...PALETTE];
 
 /**
- * GM r24's property for every final column of a layout (#219 Q1), from the
+ * Design's property for every final column of a layout (#219), from the
  * drawn spots alone:
  * - the column's id is its earliest arrival, and every member is drawn at
  *   its x;
@@ -62,19 +62,18 @@ const BUILT_IN = [CLAUDE, CODEX, ...PALETTE];
  *   every later arrival, and the rest fold into it;
  * - the full cursors go down the column in the stable-insert order
  *   (insertOrder), the top one on its own target, each next exactly at
- *   max(the one above + its real step, its own target) (review 1, LOW-3:
- *   "at its target" and "a step under it" differ);
+ *   max(the one above + its real step, its own target) (not the same as "at its target": "a step under it" differs);
  * - so none is above its own target or more than 2 steps + 32 px below it
- *   (32 canvas units: 32 * zoom screen px, r62), measured from the real tips
+ *   (32 canvas units: 32 * zoom screen px), measured from the real tips
  *   and steps;
  * - the count sits exactly one step under the last full cursor.
  * Returns the worst offset below a target (screen px) for the fuzz stats.
  */
 type Listed = { key: string; target: { x: number; y: number }; since: number; say?: boolean; nameW?: number };
 
-/** The column order GM r24 sets: each, in arrival order, goes in just
+/** The column order design sets: each, in arrival order, goes in just
  *  before the first placed member aimed more than 16 canvas units below it
- *  (canvas units at any zoom, like the target chain: r62). */
+ *  (canvas units at any zoom, like the target chain). */
 function insertOrder(members: readonly Listed[]): Listed[] {
   const order: Listed[] = [];
   for (const m of members) {
@@ -118,7 +117,7 @@ function expectColumnsCapped(list: readonly Listed[], laid: Map<string, StackSpo
       expect(Math.abs(tip - expected)).toBeLessThanOrEqual(1e-6);
       expect(tip).toBeGreaterThanOrEqual(own - 1e-6);
       const below = tip - own;
-      // The insert's 16 is canvas units: 16 * zoom screen px (r62).
+      // The insert's 16 is canvas units: 16 * zoom screen px.
       expect(below).toBeLessThanOrEqual(stepsAbove + 2 * AGENT_CURSOR_STACK.radiusPx * zoom + 1e-6);
       fuzzStats.cursors += 1;
       if (below < 1e-6) fuzzStats.atTarget += 1;
@@ -143,7 +142,7 @@ function expectColumnsCapped(list: readonly Listed[], laid: Map<string, StackSpo
 }
 
 /**
- * Review 9, LOW-4: no column is bigger than its joins make it. A cursor is
+ * No column is bigger than its joins make it. A cursor is
  * drawn somewhere from its own target down to where it ends up (a column
  * growing down pushes it one slot at a time), so its reach is the box its
  * arrow and name own over that sweep. Two cursors are linked when their
@@ -267,7 +266,7 @@ describe('sessions of one agent', () => {
     expect(sessionFill('not a colour', { ordinal: 2 })).toBe('not a colour');
   });
 
-  it('pins the offsets and the band (GM - Design, PR #211 r2)', () => {
+  it('pins the offsets and the band (PR #211)', () => {
     expect(AGENT_CURSOR_SESSION_LIGHTNESS).toEqual([0, -0.1, 0.1, -0.2, 0.2]);
     expect(AGENT_CURSOR_SESSION_BAND).toEqual({ max: 0.92, min: 0.35, minGap: 0.05, clampGap: 0.07 });
   });
@@ -278,12 +277,12 @@ describe('sessions of one agent', () => {
     const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(6));
     // Light: +0.10 passes 0.92 and clamps to it (exactly 0.07 from 0.85);
     // +0.20 finds 0.92 taken, so the last steps on by 0.10 inside the band
-    // (GM - Design, PR #211 r7 and r8).
+    // (design, PR #211).
     expect(five(0.85)).toEqual([0.85, 0.75, 0.92, 0.65, 0.55]);
     // Dark: −0.10 falls under 0.35, which is only 0.05 from 0.40, so the
-    // clamp is refused (it needs 0.07) and the sessions step up (r8).
+    // clamp is refused (it needs 0.07) and the sessions step up.
     expect(five(0.4)).toEqual([0.4, 0.5, 0.6, 0.7, 0.8]);
-    // Pure white is pulled to 0.92 before stepping (GM - Design, PR #211 r3), never #ffffff.
+    // Pure white is pulled to 0.92 before stepping (design, PR #211), never #ffffff.
     expect(five(1)).toEqual([0.92, 0.82, 0.72, 0.62, 0.52]);
     for (const L of [0.36, 0.5, 0.6, 0.85, 0.91]) {
       expect(sessionLightness(L, 6)).toBe(sessionLightness(L, 1));
@@ -316,9 +315,9 @@ describe('sessions of one agent', () => {
     expect(sessionFill(CLAUDE, { ordinal: 2 })).not.toBe(CLAUDE);
   });
 
-  it('holds session 1 in the band too: black starts visible at L 0.35, white at 0.92 (GM - Design, PR #211 r3)', () => {
+  it('holds session 1 in the band too: black starts visible at L 0.35, white at 0.92 (PR #211)', () => {
     const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(6));
-    // The three lists GM confirmed: black steps up from the band's floor.
+    // The three lists design confirmed: black steps up from the band's floor.
     expect(five(0)).toEqual([0.35, 0.45, 0.55, 0.65, 0.75]);
     expect(five(0.85)).toEqual([0.85, 0.75, 0.92, 0.65, 0.55]);
     expect(five(1)).toEqual([0.92, 0.82, 0.72, 0.62, 0.52]);
@@ -336,11 +335,11 @@ describe('sessions of one agent', () => {
     expect(sessionFill(CLAUDE, { ordinal: 1 })).toBe(CLAUDE);
   });
 
-  it('clamps a step past the band to its edge when the edge has 0.07 of room, on both sides (GM - Design, PR #211 r7 and r8)', () => {
+  it('clamps a step past the band to its edge when the edge has 0.07 of room, on both sides (PR #211)', () => {
     const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(4));
     // The pink external colour (#FF6B9A, L 0.7226): +0.20 is 0.9226, past
     // 0.92 by 0.0026. Clamped it sits at 0.92 (0.097 from · 3's 0.8226) and
-    // stays the lightest; before round 3b it went darkest (0.4226).
+    // stays the lightest; before it went darkest (0.4226).
     const pink = hexToOklch('#FF6B9A')!.l;
     expect(pink).toBeCloseTo(0.7226, 4);
     expect(five(pink)).toEqual([0.7226, 0.6226, 0.8226, 0.5226, 0.92]);
@@ -362,7 +361,7 @@ describe('sessions of one agent', () => {
     expect([1, 2, 3, 4, 5].map((ordinal) => sessionFill(CLAUDE, { ordinal }))).toEqual(['#E8825A', '#c6633b', '#ffa887', '#a4451b', '#ffd8c9']);
   });
 
-  it('takes a clamp at exactly 0.07 of room and refuses it just under (GM - Design, PR #211 r8)', () => {
+  it('takes a clamp at exactly 0.07 of room and refuses it just under (PR #211)', () => {
     const five = (L: number) => [1, 2, 3, 4, 5].map((n) => +sessionLightness(L, n).toFixed(4));
     // Top edge: from 0.85, +0.10 clamps to 0.92, exactly 0.07 above the base.
     expect(five(0.85)).toEqual([0.85, 0.75, 0.92, 0.65, 0.55]);
@@ -381,7 +380,7 @@ describe('sessions of one agent', () => {
     expect(five(0.751)).toEqual([0.751, 0.651, 0.851, 0.551, 0.451]);
   });
 
-  it('for every base L from 0 to 1, sessions 1-5 stay in 0.35-0.92 and at least 0.05 apart (review 2)', () => {
+  it('for every base L from 0 to 1, sessions 1-5 stay in 0.35-0.92 and at least 0.05 apart', () => {
     for (let i = 0; i <= 1000; i += 1) {
       const base = i / 1000;
       const Ls = [1, 2, 3, 4, 5].map((n) => sessionLightness(base, n));
@@ -418,7 +417,7 @@ describe('the name rule', () => {
   it('a lone cursor hides its name while it moves, whatever else holds', () => {
     expect(nameVisible({ moving: true, peers: 1, hovered: true, sinceFirstSightMs: 0 })).toBe(false);
   });
-  it('with two or more cursors the name holds its slot while moving (GM - Design, PR #211 r2)', () => {
+  it('with two or more cursors the name holds its slot while moving (PR #211)', () => {
     expect(nameVisible({ moving: true, peers: 2, hovered: false, sinceFirstSightMs: 10_000 })).toBe(true);
     expect(nameVisible({ moving: true, peers: 5, hovered: false, sinceFirstSightMs: 10_000 })).toBe(true);
   });
@@ -528,25 +527,25 @@ function paintedGap(i: P, sayI: boolean, j: P, sayJ: boolean, arrows = false): n
   return least;
 }
 /** Is j's arrow beside or over i's label, inside what i owns: from i's
- *  arrow top to 4 px under its label block, across arrow and pills (GM -
- *  Design, PR #211 r14)? Measured from the CSS numbers, not the module. */
+ *  arrow top to 4 px under its label block, across arrow and pills (design,
+ *  PR #211)? Measured from the CSS numbers, not the module. */
 function ownsArrowOf(i: P, sayI: boolean, j: P): boolean {
   const unit = { l: i.x + 0.8, r: i.x + 15 + Math.max(NAME_W + 1, sayI ? SAY_W : 0), t: i.y + 0.8, b: i.y + (sayI ? 61 : 38) + 4 };
   const arrow = { l: j.x + 0.8, r: j.x + 15.4, t: j.y + 0.8, b: j.y + 20.8 };
   return arrow.l < unit.r && arrow.r > unit.l && arrow.t < unit.b && arrow.b > unit.t;
 }
 
-describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => {
+describe('no stacking (PR #211)', () => {
   const S = stackStepPx(false);
   const SS = stackStepPx(true);
   /** A cursor as the layer passes it, with the widths the helpers above draw. */
   const entry = (key: string, x: number, y: number, since: number, say = false) =>
     ({ key, target: { x, y }, since, say, nameW: NAME_W, sayW: SAY_W });
 
-  it("steps the later tip 4 px under the earlier label block's bottom: 42 below a name, 65 below a name and a say (r14)", () => {
+  it("steps the later tip 4 px under the earlier label block's bottom: 42 below a name, 65 below a name and a say", () => {
     // From the CSS numbers: the arrow's painted top is 1.5 - 0.7; the name
     // pill ends at 17 + 20, plus its 1 px ring; a say pill 4 px under it ends
-    // at 61. GM's "about 39 and about 65" measured the tip without the
+    // at 61. Design's "about 39 and about 65" measured the tip without the
     // stroke and the name without its ring.
     expect(S).toBe(Math.ceil(17 + 20 + 1 + 4 - 0.8));
     expect(SS).toBe(Math.ceil(17 + 20 + 4 + 20 + 4 - 0.8));
@@ -596,7 +595,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(at([true, false, false])).toEqual([{ x: 0, y: 0 }, { x: 0, y: SS }, { x: 0, y: SS + S }]);
   });
 
-  it('never lands on an earlier tip: one aimed up-left of it joins its column (review 1, F1)', () => {
+  it('never lands on an earlier tip: one aimed up-left of it joins its column', () => {
     const spots = deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'b', target: { x: -10, y: -10 }, since: 2 },
@@ -605,7 +604,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(spots.get('b')).toEqual({ x: 0, y: S });
   });
 
-  it('joining is transitive on targets: a chain of near targets is one column, ordered by arrival (review 5, M2)', () => {
+  it('joining is transitive on targets: a chain of near targets is one column, ordered by arrival', () => {
     const spots = deStack([
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
       { key: 'c', target: { x: 10, y: 10 }, since: 2 },
@@ -613,13 +612,13 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
       // 16 px from c's target, not a's: it joins through c.
       { key: 'd', target: { x: 26, y: 10 }, since: 4 },
     ], 1);
-    // The fourth folds into the third slot's count cursor (GM r17 item 1).
+    // The fourth folds into the third slot's count cursor (design).
     expect([...spots.entries()]).toEqual([
       ['a', { x: 0, y: 0 }], ['c', { x: 0, y: S }], ['b', { x: 0, y: 2 * S }], ['d', { x: 0, y: 2 * S }],
     ]);
   });
 
-  it('joining on targets reaches as far as the chain does, past where any label could meet (GM r14: targets)', () => {
+  it('joining on targets reaches as far as the chain does, past where any label could meet (targets)', () => {
     // Each 16 px above the last: d's own spot is clear of everyone, but its
     // target is within 16 px of c's, so it is in the column.
     const spots = deStackLayout([entry('a', 0, 0, 1), entry('b', 0, -16, 2), entry('c', 0, -32, 3), entry('d', 0, -48, 4)], 1);
@@ -627,7 +626,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(spots.get('d')!.collapsedInto).toBe('c');
   });
 
-  it('orders by when each came to its spot, not by its last event (review 1, F2)', () => {
+  it('orders by when each came to its spot, not by its last event', () => {
     const spots = deStack([
       { key: 'b', target: { x: 0, y: 0 }, since: 2 },
       { key: 'a', target: { x: 0, y: 0 }, since: 1 },
@@ -669,7 +668,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     }
   });
 
-  it('near targets 9 to 16 px apart, 2 and 3 cursors, says on and off: no painted overlap (review 5, M2)', () => {
+  it('near targets 9 to 16 px apart, 2 and 3 cursors, says on and off: no painted overlap', () => {
     const aims: P[] = [];
     for (let dx = -16; dx <= 16; dx += 2) {
       for (let dy = -16; dy <= 16; dy += 2) {
@@ -687,7 +686,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
         ], 1);
         const [a, b, c] = ['a', 'b', 'c'].map((k) => spots.get(k)!);
         // b may sit under c now: c goes in above a member aimed more than
-        // 16 px below it (r24 Q1). The column is one, at a's x.
+        // 16 px below it. The column is one, at a's x.
         expect(b.x).toBe(0);
         expect(c.x).toBe(0);
         expect(paintedGap(a, sayA, b, false, true)).toBeGreaterThanOrEqual(2 - 0.02);
@@ -697,7 +696,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     }
   }, 30_000);
 
-  // Review 6, HIGH-2: the cases it found painting over each other at rest.
+  // The cases it found painting over each other at rest.
   it('(0, 19): a target 19 px straight below, past the radius, still joins: its arrow would sit by the label above', () => {
     const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 19, 2)], 1);
     expect(spots.get('b')).toEqual({ x: 0, y: S });
@@ -710,36 +709,36 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: S }, { x: 0, y: 2 * S }]);
   });
 
-  it('(0, 60, 0, 0): a column growing down into an earlier cursor takes it in; it stays on its own target and the next steps on under it (r23)', () => {
+  it('(0, 60, 0, 0): a column growing down into an earlier cursor takes it in; it stays on its own target and the next steps on under it', () => {
     const spots = deStack([entry('a', 0, 0, 1), entry('b', 0, 60, 2), entry('c', 0, 0, 3), entry('d', 0, 0, 4)], 1);
     // b is past a's label (60 > 42), so it rests on its target; c would land
     // at 42, over b's arrow, so b's column joins a's. The joined column is
-    // laid out in arrival order (GM r21), never above a member's own target
-    // (r23 item 1): a, then b at its own target 60 (its slot, 42, is above
+    // laid out in arrival order (design), never above a member's own target:
+    // a, then b at its own target 60 (its slot, 42, is above
     // it: a gap), then c a step under b, the count, with d folded into it.
     expect([...spots.values()]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 60 }, { x: 0, y: 60 + S }, { x: 0, y: 60 + S }]);
   });
 
-  // Review 8, MEDIUM-1: joins first, then each final column in arrival
-  // order, the count in the last slot (GM r21).
-  it.each([86, 88, 90, 95, 100])('P1: two columns of two (the second at %s px) merge when a fifth comes: arrival order, the count last', (by) => {
+  // Joins first, then each final column in arrival
+  // order, the count in the last slot (design).
+  it.each([86, 88, 90, 95, 100])('two columns of two (the second at %s px) merge when a fifth comes: arrival order, the count last', (by) => {
     const list = [entry('A1', 0, 0, 1), entry('A2', 0, 0, 2), entry('B1', 0, by, 3), entry('B2', 0, by, 4), entry('C', 0, 0, 5)];
     const laid = deStackLayout(list, 1);
     expectColumnsCapped(list, laid);
     expect(laid.get('A1')!.at).toEqual({ x: 0, y: 0 });
     expect(laid.get('A2')!.at).toEqual({ x: 0, y: S });
     // The count: exactly one step under the last full cursor, no gap, even
-    // when its own target is lower (r24 Q1).
+    // when its own target is lower.
     expect(laid.get('B1')!.at).toEqual({ x: 0, y: 2 * S });
     expect(laid.get('B1')!.group).toEqual(['B1', 'B2', 'C']);
     expect(laid.get('B2')!.collapsedInto).toBe('B1');
     expect(laid.get('C')!.collapsedInto).toBe('B1');
   });
 
-  // Review 8, L8 and L9: a folded member is drawn as its slot, so its spot
+  // A folded member is drawn as its slot, so its spot
   // has the slot's members above it; and its spot changes (sig) whenever
   // its slot does, so the layer re-aims it at its new count cursor.
-  it('a folded member has its slot\'s members above it, and a new slot gives it a new spot (L8, L9)', () => {
+  it('a folded member has its slot\'s members above it, and a new slot gives it a new spot', () => {
     const five = ['a', 'b', 'c', 'd', 'e'].map((k, i) => entry(k, 0, 0, i + 1));
     const laid = deStackLayout(five, 1);
     expect(laid.get('c')!.group).toEqual(['c', 'd', 'e']);
@@ -757,7 +756,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(after.get('e')!.sig).not.toBe(laid.get('e')!.sig);
   });
 
-  it('P3: an earlier cursor whose column is joined stays full and on its target; a later one aimed higher goes in above it (r24 Q1)', () => {
+  it('an earlier cursor whose column is joined stays full and on its target; a later one aimed higher goes in above it', () => {
     const list = [entry('B1', 0, 86, 1), entry('A1', 0, 0, 2), entry('A2', 0, 0, 3), entry('C', 0, 0, 4)];
     const laid = deStackLayout(list, 1);
     expectColumnsCapped(list, laid);
@@ -776,7 +775,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(two.get('A1')!.column).toBe('A1');
   });
 
-  it('property (review 8\'s fuzz): 1,500 sets of 4 to 8 in a narrow strip at zooms 0.25 to 3, merging often: every column capped, the count last, full only for the two earliest', () => {
+  it('property (a reviewer\'s fuzz): 1,500 sets of 4 to 8 in a narrow strip at zooms 0.25 to 3, merging often: every column capped, the count last, full only for the two earliest', () => {
     const rand = seeded(8811);
     let merged = 0;
     let counted = 0;
@@ -812,9 +811,9 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(counted).toBeGreaterThan(300);
   }, 120_000);
 
-  // Review 9, MEDIUM-1 and GM r23 item 1: review 9's own fuzz (20,000 sets
+  // Design: a later reviewer's fuzz (20,000 sets
   // found 4,184 drawn cursors above their targets, the worst by 157 px).
-  it('property (review 9\'s fuzz): 20,000 sets of 2 to 8, says on 30%: no drawn cursor above its own target, none more than its steps plus gaps below it, every column justified', () => {
+  it('property (a later reviewer\'s fuzz): 20,000 sets of 2 to 8, says on 30%: no drawn cursor above its own target, none more than its steps plus gaps below it, every column justified', () => {
     const rand = seeded(9911);
     let gapped = 0;
     let joined = 0;
@@ -839,11 +838,11 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(gapped).toBeGreaterThan(1_000);
   }, 120_000);
 
-  // #219 review 1, MEDIUM-1, and GM r24 Q1: the fuzz that found full
-  // cursors drawn up to 318.8 px below their targets (seed 424242, review 9's
-  // distribution). The stable insert bounds every one by 2 steps + 32 px.
-  // CURSOR_FUZZ_STATS=1 prints the worst offsets for GM.
-  it('property (review 1\'s fuzz, seed 424242): 20,000 sets, every full cursor within 2 steps + 32 px of its target, the count right under the last', () => {
+  // #219 and design: the fuzz that found full
+  // cursors drawn up to 318.8 px below their targets (seed 424242, the later
+  // reviewer's distribution). The stable insert bounds every one by 2 steps + 32 px.
+  // CURSOR_FUZZ_STATS=1 prints the worst offsets for design.
+  it('property (the first reviewer\'s fuzz, seed 424242): 20,000 sets, every full cursor within 2 steps + 32 px of its target, the count right under the last', () => {
     const rand = seeded(424242);
     Object.assign(fuzzStats, { cursors: 0, worstBelowPx: 0, worstBoundUsedPx: 0, atTarget: 0, counts: 0 });
     let inserted = 0;
@@ -865,12 +864,12 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
         bound: `steps above + ${2 * AGENT_CURSOR_STACK.radiusPx}`, steps: [stackStepPx(false), stackStepPx(true)] })}\n`);
     }
     // Columns where a later arrival aimed higher went in above: the case
-    // review 1 found, now inside the bound.
+    // the first reviewer found, now inside the bound.
     expect(inserted).toBeGreaterThan(1_000);
     expect(fuzzStats.worstBoundUsedPx).toBeLessThanOrEqual(2 * AGENT_CURSOR_STACK.radiusPx + 1e-6);
   }, 120_000);
 
-  it('review 1\'s mirror: e at 100 first, then f, g and h at 0: f goes in above e on its own target, e stays on its own, the count under e (r24 Q1)', () => {
+  it('the first reviewer\'s mirror: e at 100 first, then f, g and h at 0: f goes in above e on its own target, e stays on its own, the count under e', () => {
     const list = [entry('e', 0, 100, 1), entry('f', 0, 0, 2), entry('g', 0, 0, 3), entry('h', 0, 0, 4)];
     const laid = deStackLayout(list, 1);
     expectColumnsCapped(list, laid, 1);
@@ -879,7 +878,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     ]);
   });
 
-  it('cursors aimed within 16 px of each other keep arrival order: a fuzzed target never reorders them (r24 Q1)', () => {
+  it('cursors aimed within 16 px of each other keep arrival order: a fuzzed target never reorders them', () => {
     const list = [entry('a', 0, 10, 1), entry('b', 0, 0, 2), entry('c', 0, -6, 3)];
     const laid = deStackLayout(list, 1);
     expectColumnsCapped(list, laid, 1);
@@ -892,11 +891,11 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(above.get('a')!.at.y).toBe(Math.max(17, S));
   });
 
-  // Review 9, NIT-1, checked: the first pass's meeting at a newcomer's own
+  // Checked: the first pass's meeting at a newcomer's own
   // target is a rule of its own, not redundant. c's arrow at its target
   // sits under a's label; c is also within 16 px of b. Without the check c
   // joins only b, is pushed a step under it, and a's label is never seen.
-  it('a newcomer whose arrow at its own target meets a cursor joins its column, even when it also joins another (review 9 NIT-1)', () => {
+  it('a newcomer whose arrow at its own target meets a cursor joins its column, even when it also joins another', () => {
     const list = [entry('a', 38, 114, 1), entry('b', 57, 157, 2), entry('c', 50, 155, 3)];
     const laid = deStackLayout(list, 1);
     expectColumnsCapped(list, laid, 1);
@@ -905,7 +904,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     ]);
   });
 
-  it('the backend\'s target chain links at the join radius\'s number, in canvas units at zoom 1 (r24 Q2)', () => {
+  it('the backend\'s target chain links at the join radius\'s number, in canvas units at zoom 1', () => {
     // The tab joins columns at radiusPx screen px at any zoom; the backend's
     // chain (canvas units, zoom 1) only decides arrival. Same number, so at
     // zoom 1 they agree.
@@ -913,14 +912,14 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(Number(backend.match(/^ARRIVAL_RADIUS = ([\d.]+)$/m)![1])).toBe(AGENT_CURSOR_STACK.radiusPx);
   });
 
-  it('review 9\'s minimal example: b stays on its node at 120 when d\'s arrival joins the columns (r23 item 1)', () => {
+  it('the later reviewer\'s minimal example: b stays on its node at 120 when d\'s arrival joins the columns', () => {
     const list = [entry('a', 0, 0, 1), entry('b', 0, 120, 2), entry('c', 0, 0, 3), entry('d', 0, 0, 4)];
     const laid = deStackLayout(list, 1);
     expectColumnsCapped(list, laid, 1);
     expect(laid.get('b')!.at).toEqual({ x: 0, y: 120 });
   });
 
-  it('ex4 (review 8\'s fuzz): the head of a joined stack is never the count cursor', () => {
+  it('ex4 (a reviewer\'s fuzz): the head of a joined stack is never the count cursor', () => {
     const rows = [['a', 8, 93.6], ['b', 0, 205.7], ['c', 0, 194.2], ['d', 4, 211.3], ['e', 4, 97.1], ['f', 4, 129.6]] as const;
     const list = rows.map(([k, x, y], i) => entry(k, x, y, i + 1));
     const laid = deStackLayout(list, 1);
@@ -941,7 +940,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     const two = deStackLayout([entry('a', 0, 0, 1), entry('c', 30, 0, 3)], 1);
     // 30 px from a's target, but its arrow would sit on a's name pill.
     expect(two.get('c')!.at).toEqual({ x: 0, y: S });
-    // A changed layout, which the layer glides (review 6, item 2).
+    // A changed layout, which the layer glides.
     expect(two.get('c')!.sig).not.toBe(three.get('c')!.sig);
   });
 
@@ -975,7 +974,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
       const laid = deStackLayout(list, zoom);
       // Folded cursors aren't drawn: their count cursor is.
       const drawn = list.filter((e) => !laid.get(e.key)!.collapsedInto);
-      // Grouped by the layout's real column (review 8: `above[0]` split a
+      // Grouped by the layout's real column (`above[0]` split a
       // merged column in two).
       const head = (key: string) => laid.get(key)!.column!;
       const screen = drawn.map((e) => ({ key: e.key, at: { x: laid.get(e.key)!.at.x * zoom, y: laid.get(e.key)!.at.y * zoom }, say: Boolean(e.say) }));
@@ -983,7 +982,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
         for (let j = i + 1; j < screen.length; j += 1) {
           const [p, q] = [screen[i], screen[j]];
           // In one column every say counts; across columns a say pill
-          // never moves anyone (r17 item 2): the layer moves it aside or
+          // never moves anyone: the layer moves it aside or
           // holds it, so arrows and names only.
           const own = head(p.key) === head(q.key);
           if (own) columnPairs += 1;
@@ -1001,7 +1000,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(columnPairs).toBeGreaterThan(100);
   }, 60_000);
 
-  it.each([0.25, 0.5, 1, 2, 3])('a column of 4 to 8 at zoom %s draws 3: two in full, then one count cursor for the rest, never more than 2 steps down (GM r17 item 1)', (zoom) => {
+  it.each([0.25, 0.5, 1, 2, 3])('a column of 4 to 8 at zoom %s draws 3: two in full, then one count cursor for the rest, never more than 2 steps down', (zoom) => {
     for (let n = 4; n <= 8; n += 1) {
       for (const says of [false, true]) {
         const keys = Array.from({ length: n }, (_, i) => String.fromCharCode(97 + i));
@@ -1036,7 +1035,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(three.get('d')!.collapsedInto).toBeUndefined();
   });
 
-  it('a say pill never makes a join or moves another column: only a target within 16 px or an arrow by a name pill does (GM r17 item 2)', () => {
+  it('a say pill never makes a join or moves another column: only a target within 16 px or an arrow by a name pill does', () => {
     // b's arrow under a's say pill, clear of a's name: it stays on its target.
     const spots = deStack([entry('a', 0, 0, 1, true), entry('b', 60, 46, 2)], 1);
     expect(spots.get('b')).toEqual({ x: 60, y: 46 });
@@ -1076,7 +1075,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(labelWidths('x', undefined).sayW).toBe(0);
   });
 
-  it('measures with the canvas where there is one: its font, 0.01em letter-spacing on top, padding and 2 px on the wide side (review 7, LOW-2 M2/M3)', () => {
+  it('measures with the canvas where there is one: its font, 0.01em letter-spacing on top, padding and 2 px on the wide side', () => {
     const fonts: string[] = [];
     class StubCanvas {
       getContext() {
@@ -1109,16 +1108,16 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(labelWidths('abcd', '').nameW).toBe(4 * 7 + 16);
   });
 
-  it('a leaving cursor whose name a live one shows hides its pill at once (PR #211 review 4), and none is promoted from CSS', () => {
+  it('a leaving cursor whose name a live one shows hides its pill at once (PR #211), and none is promoted from CSS', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
     const rule = css.match(/^\.agent-cursor\[data-taken='true'\] \.agent-cursor__label \{([^}]*)\}/m);
     expect(rule?.[1]).toMatch(/visibility: hidden;/);
     expect(rule?.[1]).not.toMatch(/transition/);
-    // will-change comes from the layer, only while a cursor flies (r10 item 1).
+    // will-change comes from the layer, only while a cursor flies.
     expect(css).not.toMatch(/will-change\s*:/);
   });
 
-  it('a leaving cursor\'s pills run no curve of their own: no transition, and a say fade stops where it is (review 5, M1)', () => {
+  it('a leaving cursor\'s pills run no curve of their own: no transition, and a say fade stops where it is', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
     const still = css.match(/^\.agent-cursor\[data-leaving='true'\] \.agent-cursor__label,\n\.agent-cursor\[data-leaving='true'\] \.agent-cursor__name \{([^}]*)\}/m);
     expect(still?.[1]).toMatch(/transition: none;/);
@@ -1139,7 +1138,7 @@ describe('no stacking (GM - Design, PR #211 r12, r13 and r14; review 6)', () => 
     expect(label).toMatch(new RegExp(`gap: ${AGENT_CURSOR_PILL.gap}px;`));
     const say = css.match(/^\.agent-cursor__say \{([^}]*)\}/m)![1];
     expect(Number(say.match(/line-height: (\d+)px/)![1]) + 2 * Number(say.match(/padding: (\d+)px/)![1])).toBe(AGENT_CURSOR_PILL.height);
-    // GM, PR #203 r39 item 5: the say pill wraps to two lines, so its radius is half one line's height
+    // Design, PR #203: the say pill wraps to two lines, so its radius is half one line's height
     // (the tag's pill for one line, the same corners for two), not a round end.
     expect(say).toMatch(/border-radius: 10px;/);
     // The arrow's stroke, and the ring on an edge fill.
@@ -1187,7 +1186,7 @@ describe('the name pill edge (design)', () => {
   });
 });
 
-describe('the target chain (GM - Design, #219 r24 Q2, r47 Q1)', () => {
+describe('the target chain (#219)', () => {
   it('runs the shared fixture the backend runs too, with the same chains, each target through chainPoint', () => {
     type Box = { x: number; y: number; width: number; height: number };
     type T = { x: number; y: number } | { node: Box; handle?: string; port?: Box };
@@ -1224,7 +1223,7 @@ describe('the target chain (GM - Design, #219 r24 Q2, r47 Q1)', () => {
       expect(chains, c.name).toEqual(c.chains);
       if (c.zoom !== undefined) {
         // The column insert compares in the chain's canvas units at this
-        // zoom (r62): laid out in key order as arrival, two cursors of one
+        // zoom: laid out in key order as arrival, two cursors of one
         // column keep arrival order when they share a chain, and the later
         // goes above when it aims more than 16 canvas units higher.
         const keys = Object.keys(c.targets).sort();

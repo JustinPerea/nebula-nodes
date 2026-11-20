@@ -1,4 +1,4 @@
-// PR #200 fix round 11 (review 10, GM r12 answer 3): only what shows counts
+// PR #200 (design): only what shows counts
 // against a note's 280, in characters as a person sees them, the same rule as
 // the backend's services/canvas_pins.text_length (its test,
 // backend/tests/test_pin_text_as_typed.py, has the same cases), so the dialog's
@@ -17,7 +17,7 @@ const { useCanvasPinsStore } = await import('../src/store/canvasPinsStore');
 
 const FLAG = '\u{1F1EB}\u{1F1F7}';
 
-describe('GM r12 answer 3: the note counts what shows', () => {
+describe('the note counts what shows', () => {
   // The backend's LENGTH_CASES, case for case.
   const CASES: Array<[string, number]> = [
     ['abc', 3],
@@ -57,7 +57,7 @@ describe('the store sends and keeps a note by what shows, never cut by code unit
     useCanvasPinsStore.setState({ pins: [], composer: null, composerCanvas: null, error: null, draft: '', drafts: {}, kept: [] });
   });
 
-  it('a note of 280 flags (560 code units) is sent whole; round 10 sent 140 of them', async () => {
+  it('a note of 280 flags (560 code units) is sent whole (an earlier version sent only 140 of them)', async () => {
     const text = FLAG.repeat(MAX_PIN_TEXT);
     api.createPin.mockImplementation(async (sent: string) => ({ id: 'pin_f', text: sent, anchor: { nodeId: 'n1' }, position: null,
       status: 'open', createdAt: '2026-10-28T00:00:00+00:00', detached: false, reply: null } satisfies Pin));

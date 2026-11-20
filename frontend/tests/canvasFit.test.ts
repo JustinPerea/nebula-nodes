@@ -67,7 +67,7 @@ describe('computeCanvasFitPadding', () => {
   it('keeps fitted nodes above an open proposal bar', () => {
     // The live check: at 1440x900 the bar sat 636-822 px and Fit view left a node under it.
     addChrome('toolbar', { left: 300, right: 700, top: window.innerHeight - 64, bottom: window.innerHeight - 16, width: 400, height: 48 });
-    // Round 2: the bar is in the notice region's one stack, on top (GM - Design, 2026-10-23).
+    // The bar is in the notice region's one stack, on top (design, 2026-10-23).
     addChrome('notice-region__stack', { left: 400, right: 1020, top: window.innerHeight - 264, bottom: window.innerHeight - 78, width: 620, height: 186 });
     expect(computeCanvasFitPadding().bottom).toBe('288px');
   });

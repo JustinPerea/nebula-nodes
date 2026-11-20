@@ -1,8 +1,8 @@
 /**
- * The Agents panel's rows (Q125 item 2), derived from what the stores already
+ * The Agents panel's rows, derived from what the stores already
  * hold: status lines (the roster store), cursors (agentPresenceStore and the
- * roster read), open question sets and proposals (their own stores). GM -
- * Design's copy, 2026-10-25, verbatim.
+ * roster read), open question sets and proposals (their own stores). Design's
+ * copy, 2026-10-25, verbatim.
  */
 import { describe, expect, it } from 'vitest';
 import { needsYouCount } from '../src/components/agent-notes/agentNeedsYou';
@@ -62,7 +62,7 @@ function asset(agent = CLAUDE, overrides: Partial<AssetProposalView> = {}): Asse
     update: { id: 'u_a', projectId: 'p1' }, ...overrides } as unknown as AssetProposalView;
 }
 
-describe("GM's count line and time", () => {
+describe("design's count line and time", () => {
   it('counts questions and proposals', () => {
     expect(countLine({ questions: 1, proposals: 0 })).toBe('1 question');
     expect(countLine({ questions: 2, proposals: 0 })).toBe('2 questions');
@@ -115,7 +115,7 @@ describe('the rows', () => {
     expect(rows).toEqual([]);
   });
 
-  it("a Working row shows its status, flies to the status node, and says GM's tooltip and name", () => {
+  it("a Working row shows its status, flies to the status node, and says design's tooltip and name", () => {
     const [row] = buildRosterRows(input({ statuses: [status(CODEX)], cursors: [cursor(CODEX, { nodeId: 'n7' })] }));
     expect(row.line).toBe('Rendering three hero crops');
     expect(row.statusText).toBe('Rendering three hero crops');
@@ -159,7 +159,7 @@ describe('the rows', () => {
     expect(buildRosterRows(input({ cursors: [cursor(CODEX, { at: NOW - 121_000 })] }))).toEqual([]);
   });
 
-  it("Needs you rows: GM's tooltips, oldest first for Open next, and the count line in the name", () => {
+  it("Needs you rows: design's tooltips, oldest first for Open next, and the count line in the name", () => {
     const [both] = buildRosterRows(input({ questions: [questions(CLAUDE)], canvasProposals: [proposal(CLAUDE)] }));
     expect(both.tooltip).toBe('Open next');
     expect(both.next).toEqual({ kind: 'questions', setId: 'qs_1', createdAt: NOW - 90_000 });
@@ -178,7 +178,7 @@ describe('the rows', () => {
       createdAt: NOW - 30_000 });
   });
 
-  it("after a restart, no status: GM's waiting lines (the answer line when it has both)", () => {
+  it("after a restart, no status: design's waiting lines (the answer line when it has both)", () => {
     const [answer] = buildRosterRows(input({ questions: [questions(CLAUDE)], canvasProposals: [proposal(CLAUDE)] }));
     expect(answer.line).toBe('Waiting for your answer.');
     const [ok] = buildRosterRows(input({ canvasProposals: [proposal(CLAUDE)] }));
@@ -235,8 +235,8 @@ describe('the rows', () => {
   });
 });
 
-// GM - Design's review of PR #193.
-describe("GM's review: Needs-you lines, the action's own time, the chip's count", () => {
+// Design's review of PR #193.
+describe("design's review: Needs-you lines, the action's own time, the chip's count", () => {
   it('a Needs-you row never shows a pointer action, live cursor or not: its status, else the waiting line', () => {
     const looked = cursor(CLAUDE, { at: NOW - 2_000, did: { verb: 'Looked at', nodeId: 'n4', label: 'Hero shots' } });
     const [answer] = buildRosterRows(input({ questions: [questions(CLAUDE)], cursors: [looked] }));
@@ -287,7 +287,7 @@ describe("GM's review: Needs-you lines, the action's own time, the chip's count"
   });
 });
 
-describe('PR #204 round 4: a held ask locks its row only in a held tab', () => {
+describe('PR #204: a held ask locks its row only in a held tab', () => {
   const ask = { agent: CODEX, kind: 'proposal' as const, id: 'pa_9', target: 'project' as const, targetId: 'p1',
     createdAt: NOW - 60_000, count: 1 };
   it('held: the row is locked with its reason; connected: the same row opens', () => {

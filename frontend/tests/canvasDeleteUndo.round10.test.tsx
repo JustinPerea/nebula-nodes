@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { ReactFlowProvider, type Edge, type Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Review 9, L-4 (live LF): one Delete became two undo steps. The canvas's
+// One Delete became two undo steps (seen live). The canvas's
 // Delete went through React Flow's deleteElements, which removes the wires
 // (onEdgesChange, one step) and then the nodes (onNodesChange, another), so
 // the first Cmd+Z put the node back without its wire. One delete is one undo

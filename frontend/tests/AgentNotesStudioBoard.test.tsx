@@ -3,11 +3,11 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import type { AgentNote, AgentNotesSurface } from '../src/lib/agentNotes';
 
 /**
- * A board's own Updates in Moodboard Studio (Justin's Q113 c, 2026-10-21):
+ * A board's own Updates in Moodboard Studio (Justin, 2026-10-21):
  * "Two sections in one list: "This board" first, then the project. One chip
  * with one count (both added), opening it reads both, and an empty board
  * section is hidden." Board Updates show only in the Studio on that board;
- * every other screen keeps the open project's list alone (Q107 a).
+ * every other screen keeps the open project's list alone.
  */
 
 const flow = vi.hoisted(() => ({
@@ -29,7 +29,7 @@ const api = vi.hoisted(() => ({
   dismissAgentNote: vi.fn(),
 }));
 
-// The Agents panel's roster read (Q125 item 2): nobody around in these tests.
+// The Agents panel's roster read: nobody around in these tests.
 vi.mock('../src/lib/agentRoster', () => ({ fetchAgentRoster: async () => ({ projectId: null, agents: [], rev: 0 }) }));
 vi.mock('@xyflow/react', () => ({
   useStore: (selector: (state: typeof flow.state) => unknown) => selector(flow.state),
@@ -150,7 +150,7 @@ afterEach(() => {
   useBoardCanvasStore.setState(initialBoards, true);
 });
 
-describe('Moodboard Studio shows the open board\'s Updates beside the project\'s (Q113 c)', () => {
+describe('Moodboard Studio shows the open board\'s Updates beside the project\'s', () => {
   it('two sections in one list: "This board" first, then the project, each saying where it is kept', async () => {
     lists.boards.b1 = [boardNote('an_b1')];
     inStudio();
@@ -165,7 +165,7 @@ describe('Moodboard Studio shows the open board\'s Updates beside the project\'s
     expect(within(sections[0]).getByText('board an_b1 about #2')).toBeTruthy();
     expect(within(sections[1]).getByText('update an_p1')).toBeTruthy();
     // The header keeps the count of both and the read state.
-    // GM, #204 r3 item 1: once the server has read them.
+    // Design, #204: once the server has read them.
     await vi.waitFor(() => expect(dialog.querySelector(".agent-notes-panel__count")!.textContent).toBe("2 · all read"));
   });
 

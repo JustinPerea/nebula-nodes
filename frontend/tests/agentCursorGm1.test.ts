@@ -8,7 +8,7 @@ import { shownAction, useAgentPresenceStore } from '../src/store/agentPresenceSt
 import type { AgentCursorAnchor, AgentPresenceEvent } from '../src/lib/wsClient';
 
 /**
- * PR #243, GM - Design round 1: where a Character's cursor rests (the cover
+ * PR #243, design: where a Character's cursor rests (the cover
  * thumbnail, the canvas node's header), a park that would cover another control
  * goes inside its host, and a type or a click at a Character is drawn as a look.
  */
@@ -44,7 +44,7 @@ afterEach(() => { document.body.innerHTML = ''; });
 
 const character = (itemId: string, part?: string): AgentCursorAnchor => ({ surface: 'character', itemId, ...(part ? { part } : {}) });
 
-describe('ruling 1: a Character rests on its cover thumbnail', () => {
+describe('a Character rests on its cover thumbnail', () => {
   const PANEL: Box = { left: 60, top: 60, width: 520, height: 700 };
   const THUMB: Box = { left: 76, top: 76, width: 96, height: 96 };
   const NAME: Box = { left: 190, top: 76, width: 300, height: 40 };
@@ -101,7 +101,7 @@ describe('ruling 1: a Character rests on its cover thumbnail', () => {
   });
 });
 
-describe('ruling 4: a park that would cover another control goes inside its host', () => {
+describe('a park that would cover another control goes inside its host', () => {
   const tabs = (gap: number) => {
     const list = put('div', { role: 'tablist' }, VIEW);
     const moodboards = put('button', { role: 'tab', 'data-agent-launcher': 'moodboard' }, { left: 20, top: 80, width: 90, height: 30 }, list);
@@ -189,7 +189,7 @@ describe('ruling 4: a park that would cover another control goes inside its host
   });
 });
 
-describe('ruling 2: a launcher that is a canvas node rests where the canvas rests', () => {
+describe('a launcher that is a canvas node rests where the canvas rests', () => {
   function space(launcherRest?: (launcher: Element) => { x: number; y: number } | null) {
     return screenSpace({
       resolver: resolver(), measure: env.measure, pane: () => document.body, canvasMounted: () => true,
@@ -222,7 +222,7 @@ describe('ruling 2: a launcher that is a canvas node rests where the canvas rest
   });
 });
 
-describe('ruling 2: the rest on a launcher node is the card\'s own title row, measured', () => {
+describe('the rest on a launcher node is the card\'s own title row, measured', () => {
   const rect = (left: number, top: number, width: number, height: number) => () => new DOMRect(left, top, width, height);
   /** A canvas at zoom `zoom` with node n7 at flow (600, 300), drawn at client (100, 50). */
   function canvas(titleClass: string, zoom = 1, icon = false) {
@@ -272,7 +272,7 @@ describe('ruling 2: the rest on a launcher node is the card\'s own title row, me
   });
 });
 
-describe('ruling 3: a type or a click at a Character is a look', () => {
+describe('a type or a click at a Character is a look', () => {
   const event = (overrides: Partial<AgentPresenceEvent>): AgentPresenceEvent => ({
     type: 'agentPresence', agent: { id: 'claude', name: 'Claude', color: '#E8825A', verified: true },
     target: { surface: 'character', itemId: 'c1' }, anchorNames: { character: 'Mara' }, action: 'type', say: '', at: 0, ...overrides,

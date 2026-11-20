@@ -31,7 +31,7 @@ vi.mock('../src/lib/backend', () => ({ apiFetch: net.apiFetch }));
 vi.mock('../src/store/graphStore', () => {
   const useGraphStore = (selector: (state: typeof graph.state) => unknown) => selector(graph.state);
   useGraphStore.getState = () => graph.state;
-  // DeferredRunNotice reads its nodes' names live (GM r40 item 3).
+  // DeferredRunNotice reads its nodes' names live (design).
   const nodeCardTitle = (node: { data?: { label?: string } } | undefined) => node?.data?.label ?? '';
   return { useGraphStore, nodeCardTitle, watchGraphSyncs: () => ({ seen: new Set<string>(), stop: () => {} }) };
 });
@@ -70,7 +70,7 @@ beforeEach(() => {
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
     net.apiFetch, flow.fitBounds, flow.getInternalNode, graph.state.notify]) fn.mockReset();
   // As the real store: once adopted, the run's nodes are on the canvas (the
-  // accept's run is sent only while they are: review 11, L-5).
+  // accept's run is sent only while they are).
   graph.state.adoptAcceptedProposal.mockImplementation((result: { runNodeIds?: string[] }) => {
     const ids = new Set(graph.state.nodes.map((node) => node.id));
     graph.state.nodes = [...graph.state.nodes, ...(result.runNodeIds ?? []).filter((id) => !ids.has(id)).map((id) => ({ id }))];
@@ -85,7 +85,7 @@ afterEach(() => {
 
 describe('ProposalBar', () => {
   // The lock tests below run on a keyed route: Idol made keyed for the test
-  // (tests/helpers/keyedSpace.ts). Idol itself is keyless from PR #203 round 7.
+  // (tests/helpers/keyedSpace.ts). Idol itself is keyless from PR #203.
   keyIdolInEachTest();
 
   it('renders nothing without proposals', () => {
@@ -93,7 +93,7 @@ describe('ProposalBar', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  // GM - Design, 2026-10-23: "Proposal-bar notices and every 3g canvas notice"
+  // Design, 2026-10-23: "Proposal-bar notices and every canvas notice"
   // go to the app-level notice region (tests/noticeRegion.test.tsx), so the
   // bar's panel holds only the bar.
   it('leaves its notices to the app\'s notice region', () => {
@@ -110,7 +110,7 @@ describe('ProposalBar', () => {
     }
   });
 
-  // GM - Design, 2026-11-01 (the card redesign): one header line (the name
+  // Design, 2026-11-01 (the card redesign): one header line (the name
   // truncates, its full form in `title`), the note, the backend's plan line,
   // then a footer; the countdown moved up to the header.
   it('shows who, the note, the plan line and the countdown in the header', () => {
@@ -135,7 +135,7 @@ describe('ProposalBar', () => {
       providers: ['google'], nodes: [], note: '',
       estimate: { currency: 'usd', low: 0.067, high: 0.067, open: false, unpriced: [], plan: [], plus: [] } } }));
     render(<ProposalBar />);
-    // Only on the price segment (GM - Design, PR #216 r1), with the words as
+    // Only on the price segment (design, PR #216), with the words as
     // text for screen readers, since a title shows only on hover.
     const line = document.querySelector('.proposal-bar__plan')!;
     expect(line.hasAttribute('title')).toBe(false);
@@ -155,7 +155,7 @@ describe('ProposalBar', () => {
     expect(document.querySelector('.proposal-bar__sr-only')).toBeNull();
   });
 
-  // GM - Design, PR #216 r3: the region places the stack; the card marks
+  // Design, PR #216: the region places the stack; the card marks
   // itself as the one item that shrinks, and its body as what gives way.
   it('marks itself as the stack item that shrinks, its body between a fixed header and footer', () => {
     open(proposal('p_a'));
@@ -287,7 +287,7 @@ describe('ProposalBar', () => {
     expect(screen.getByText(/^You can run .+ when the current run finishes\.$/)).toBeTruthy();
   });
 
-  it('locks the held "Run" while its nodes need the token, focusable, and runDeferred refuses too (GM r8 item 3)', async () => {
+  it('locks the held "Run" while its nodes need the token, focusable, and runDeferred refuses too', async () => {
     const LINE = 'You can run Idol after you add your Hugging Face token in Settings.';
     const before = graph.state.nodes;
     graph.state.nodes = [{ id: 'n9', data: { label: 'Idol', definitionId: 'speridlabs-idol', params: {} } } as never];
@@ -350,9 +350,9 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('alert').textContent).toBe('Only the canvas can accept this. Reload the page.');
   });
 
-  // GM PR #205 r16 item 2: the too-complex refusal sits in the bar's line
+  // Design, PR #205: the too-complex refusal sits in the bar's line
   // spot, neutral (a status, not an alert), and Accept stays live.
-  it('an Accept the canvas couldn\'t save: GM\'s line, neutral, and Accept stays live', async () => {
+  it('an Accept the canvas couldn\'t save: design\'s line, neutral, and Accept stays live', async () => {
     open(proposal('p_a'));
     net.apiFetch.mockResolvedValueOnce(respond(409, { detail: 'refused', code: 'proposal_too_complex', agent: 'Codex',
       limit: { kind: 'depth', max: 64 } }));
@@ -367,7 +367,7 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeEnabled();
   });
 
-  // Review 8 of PR #205, limits MEDIUM-1: past the project's size limit, the
+  // PR #205, limits: past the project's size limit, the
   // same spot and style, with the size line (by the answer's limit.kind).
   it('an Accept that would make the canvas too large to save: the size line, neutral, and Accept stays live', async () => {
     open(proposal('p_a'));
@@ -384,7 +384,7 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('button', { name: 'Accept and run 1 paid' })).toBeEnabled();
   });
 
-  it("shows the proposal its Update's Review asked for, and paging moves on from it (Q112 a)", () => {
+  it("shows the proposal its Update's Review asked for, and paging moves on from it", () => {
     open(proposal('p_a', { createdAt: 1 }));
     open(proposal('p_b', { createdAt: 2, note: 'Make the cold take' }), 'key-b');
     render(<ProposalBar />);
@@ -461,7 +461,7 @@ describe('ProposalBar', () => {
     // A real disclosure: its label never changes; aria-expanded and the
     // chevron carry the state, and it names the panel it controls.
     expect(row.getAttribute('aria-expanded')).toBe('false');
-    // One unit, the operation (GM - Design, PR #216 r2): the new node, the
+    // One unit, the operation (design, PR #216): the new node, the
     // changed node and the wire, never their field lines.
     expect(row.textContent).toBe('What “Accept” saves3 changes');
     const panel = document.getElementById(row.getAttribute('aria-controls')!)!;
@@ -525,7 +525,7 @@ describe('ProposalBar', () => {
     expect(screen.queryByRole('list', { name: 'Can’t run here' })).toBeNull();
   });
 
-  it('locks Accept with GM\'s line while its run needs a Hugging Face token (PR #203 r6 item 1)', () => {
+  it('locks Accept with design\'s line while its run needs a Hugging Face token (PR #203)', () => {
     const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
     const idol = proposal('p_a', {
       nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
@@ -557,7 +557,7 @@ describe('ProposalBar', () => {
     expect(ready).not.toHaveAttribute('title', LINE);
   });
 
-  it('the bar\'s "can\'t run here" line for a keyed route is the Accept line, and goes once the token is added (PR #203 rounds 6 and 7)', () => {
+  it('the bar\'s "can\'t run here" line for a keyed route is the Accept line, and goes once the token is added', () => {
     // The row as the backend sends it: Idol's route line is `missing` too
     // (node_readiness.instance_missing), not find_nodes' "needs HF_TOKEN".
     const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
@@ -571,7 +571,7 @@ describe('ProposalBar', () => {
     open(idol);
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
-    // GM r11 item 5: inside the bar the control is Accept, so the line is
+    // Design: inside the bar the control is Accept, so the line is
     // the Accept line, said once, never the node's Run line.
     const list = screen.getByRole('list', { name: 'Can’t run here' });
     expect(list).toHaveTextContent('You can accept this after you add your Hugging Face token in Settings.');
@@ -582,7 +582,7 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('button', { name: /^Accept/ })).not.toHaveAttribute('aria-disabled');
   });
 
-  it('a kept canvas hides the Accept key row and Accept says the kept line; the row returns with the canvas (GM, #203 follow-up r240)', () => {
+  it('a kept canvas hides the Accept key row and Accept says the kept line; the row returns with the canvas (#203 follow-up)', () => {
     const KEY_LINE = 'You can accept this after you add your Hugging Face token in Settings.';
     const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
     const idol = proposal('p_a', {
@@ -619,7 +619,7 @@ describe('ProposalBar', () => {
     expect(screen.getByRole('button', { name: /^Accept/ })).toHaveAttribute('title', KEY_LINE);
   });
 
-  it('the returned Accept key row is not remounted when the node it stands for changes, so its entrance plays once (review of #241, LOW-1)', () => {
+  it('the returned Accept key row is not remounted when the node it stands for changes, so its entrance plays once (review of #241)', () => {
     const ROW = 'You can run Idol after you add your Hugging Face token in Settings.';
     const withRows = (refs: string[]) => {
       const idol = proposal('p_a', {
@@ -642,7 +642,7 @@ describe('ProposalBar', () => {
     expect(view.container.querySelector('.proposal-bar__not-ready')).toBe(row);
   });
 
-  it('locks Accept once the token is removed, for a proposal made while it was set (review r4 LOW-1)', () => {
+  it('locks Accept once the token is removed, for a proposal made while it was set', () => {
     const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
     // Made while the token was set: the backend listed nothing that can't run.
     const idol = proposal('p_a', {
@@ -683,7 +683,7 @@ describe('ProposalBar', () => {
     }
   });
 
-  it("every way to accept refuses in the store with GM's line and sends nothing (review r4 LOW-2)", async () => {
+  it("every way to accept refuses in the store with design's line and sends nothing", async () => {
     const LINE = 'You can accept this after you add your Hugging Face token in Settings.';
     const idol = proposal('p_a', {
       nodes: [{ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol' }],
@@ -722,13 +722,13 @@ describe('ProposalBar', () => {
     expect(list.textContent).not.toContain('more');
   });
 
-  // GM, PR #203 r24: the shared rule names up to 3 and counts from 4, so 4
+  // Design, PR #203: the shared rule names up to 3 and counts from 4, so 4
   // is never "3 and 1 more": one line, and every node in the details.
   it.each([4, 5])('counts %i nodes in one line and lists every one in the details', (count) => {
     const list = notReadyOf(count);
     expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([`⚠${count} nodes can’t run here yet.`]);
     // The details hold the list and what Accept writes under one toggle,
-    // whose name never changes (GM - Design, 2026-11-01: the chevron and
+    // whose name never changes (design, 2026-11-01: the chevron and
     // aria-expanded carry the state).
     const toggle = screen.getByRole('button', { name: /^What “Accept” saves/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -739,7 +739,7 @@ describe('ProposalBar', () => {
     for (const ref of ['+a', '+b', '+c', '+d', '+e'].slice(0, count)) expect(details.textContent).toContain(`(${ref})`);
   });
 
-  // GM, PR #203 r27 item 7: same-named nodes with the same reason say one
+  // Design, PR #203: same-named nodes with the same reason say one
   // line in the person's list, the count in front of the single line's
   // sentence; another node keeps its own line.
   const KREA_LINE = '“Krea 2” needs your Krea plan. Sign in to Krea in Settings.';
@@ -780,7 +780,7 @@ describe('ProposalBar', () => {
     ]);
   });
 
-  // GM - Design, 2026-11-01 (main) with GM, PR #203 r24: four not-ready nodes
+  // Design, 2026-11-01 (main) with design, PR #203: four not-ready nodes
   // are one count line in the bar and every node's line in the details; the
   // toggle's name never changes and focus stays on it.
   it('four not-ready nodes: one count line, the list in the details, focus kept on the toggle', () => {
@@ -795,7 +795,7 @@ describe('ProposalBar', () => {
     const list = screen.getByRole('list', { name: "Can’t run here" });
     expect(list.querySelectorAll('li')).toHaveLength(1);
     expect(list.textContent).toContain('4 nodes can’t run here yet.');
-    // The ⚠ line is kept in view with the plan line (GM r6).
+    // The ⚠ line is kept in view with the plan line (design).
     expect(list.querySelector('li')!.hasAttribute('data-notice-keep')).toBe(true);
     const toggle = screen.getByRole('button', { name: /^What “Accept” saves/ });
     toggle.focus();
@@ -849,7 +849,7 @@ describe('ProposalBar', () => {
   });
 });
 
-// Round 15 of PR #114 (review 14, M2): offline, Accept and Reject are
+// PR #114: offline, Accept and Reject are
 // disabled with the offline mark, and the store refuses them before sending.
 describe('ProposalBar while Nebula is offline', () => {
   it('Accept and Reject are disabled and send nothing', async () => {
@@ -875,7 +875,7 @@ describe('ProposalBar while Nebula is offline', () => {
   });
 });
 
-// GM, PR #203 r11 item 3, and the round 6 review's LOW-1: Accept goes through
+// Design, PR #203: Accept goes through
 // withKeyLock like every Run surface, so a missing key comes first, ahead of
 // offline, and a key-locked Accept carries no offline mark.
 describe('ProposalBar Accept: the missing key leads the canvas lock (keyed route)', () => {
@@ -933,7 +933,7 @@ describe('ProposalBar Accept: the missing key leads the canvas lock (keyed route
   });
 });
 
-describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () => {
+describe('ProposalBar with Idol, keyless (PR #203)', () => {
   const idolNode = () => ({ ...proposal('p_a').nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol',
     cost: { kind: 'mayCost', provider: 'speridlabs', label: 'may cost · Hugging Face' } }) as never;
 
@@ -968,7 +968,7 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     return view;
   };
 
-  it('mixed: GM r14 items 2 and 3, verbatim: two lines, no provider tag, and the Accept chip\'s sentences', () => {
+  it('mixed: design\'s words, verbatim: two lines, no provider tag, and the Accept chip\'s sentences', () => {
     graph.state.nodes = [{ id: 'n4', data: { definitionId: 'nano-banana', label: 'Hero still', params: {} } }] as never;
     open(mixed());
     useUIStore.setState({ settingsCache: { apiKeys: { HF_TOKEN: 'set' }, loaded: true } });
@@ -979,14 +979,14 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     graph.state.nodes = [];
   });
 
-  it('re-reads Idol from the keys set now, both ways (GM r15 item 2; review 7, NIT-5)', () => {
+  it('re-reads Idol from the keys set now, both ways', () => {
     // Proposed with the token; the person removed it since.
     open(mixed());
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true } });
     render(<ProposalBar />);
     expect(screen.getByRole('button', { name: 'Accept and run 2 paid' })).toBeTruthy();
-    // The chip still has its cost tooltip, by the Run chip's formatter (GM,
-    // PR #203 r17 item 4); n4 isn't on this canvas, so it goes by its id.
+    // The chip still has its cost tooltip, by the Run chip's formatter (design,
+    // PR #203); n4 isn't on this canvas, so it goes by its id.
     expect(document.querySelector('.proposal-bar__count')).toHaveAttribute('title',
       '“Nano Banana” and “n4” call paid providers. Estimated cost $0.13.');
     // And added again: "may cost" comes back without a new proposal.

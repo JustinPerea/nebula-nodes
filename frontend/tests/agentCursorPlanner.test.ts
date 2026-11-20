@@ -28,8 +28,8 @@ import {
 import type { Point } from '../src/lib/agentCursorMotion';
 
 /**
- * GM - Design's agent cursor spec, §3, against the numbers GM measured in the
- * prototype (reviews.justinperea.com/nebula/agent-cursor/). GM's settle and
+ * Design's agent cursor spec, §3, against the numbers design measured in the
+ * prototype (reviews.justinperea.com/nebula/agent-cursor/). Design's settle and
  * follow-through were measured on a 120 Hz display; the planner steps at a
  * fixed 120 Hz, so it lands the same at any frame rate.
  */
@@ -157,8 +157,8 @@ describe('the cursor arc pin: a 300 px move from rest (replaces the straight-lin
   });
 });
 
-describe("GM's measured landings", () => {
-  // GM: settle 465 / 721 / 823 ms, follow-through 0.2 / 0.6 / 1.3 px, lean
+describe("design's measured landings", () => {
+  // Design: settle 465 / 721 / 823 ms, follow-through 0.2 / 0.6 / 1.3 px, lean
   // about 6° / 12° / 14°. Tolerance: ±25 ms, ±0.2 px, ±1°.
   const cases = [
     { d: 100, settle: 465, over: 0.2, lean: 6 },
@@ -189,7 +189,7 @@ describe("GM's measured landings", () => {
   });
 });
 
-describe('the lean rest snap (GM - Design, PR #211 r1)', () => {
+describe('the lean rest snap (PR #211)', () => {
   it('pins the threshold: under 0.1° and turning under 3°/s', () => {
     expect(AGENT_CURSOR_LEAN_REST).toEqual({ deg: 0.1, degPerSecond: 3 });
   });
@@ -201,7 +201,7 @@ describe('the lean rest snap (GM - Design, PR #211 r1)', () => {
     const flight = fly(to);
     expect(flight.settleMs).not.toBeNull();
     expect(flight.restMs).not.toBeNull();
-    // Round 1 kept the loop running to 933-1033 ms for the last 0.05° of lean.
+    // The first version kept the loop running to 933-1033 ms for the last 0.05° of lean.
     expect(flight.restMs!).toBeLessThanOrEqual(900 + 1000 / 60 / 2);
     expect(flight.restMs! - flight.settleMs!).toBeLessThanOrEqual(1000 / 60 + 0.5);
     expect(flight.finalLean).toBe(0);
@@ -247,7 +247,7 @@ describe('the lean rest snap (GM - Design, PR #211 r1)', () => {
   });
 });
 
-describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
+describe('arrival is the tip at the target (PR #211)', () => {
   it.each([100, 400, 900, 1500])('%s px: arrives once, within 2 px of the target, after the hand-off', (d) => {
     const to = { x: d, y: 0 };
     const m = createMotion({ x: 0, y: 0 }, 1);
@@ -281,7 +281,7 @@ describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
     expect(arrivals).toBe(1);
   });
 
-  it('a frame gap past 0.25 s lands the tip unseen, with no arrival (GM - Design, PR #211 r5: no ring)', () => {
+  it('a frame gap past 0.25 s lands the tip unseen, with no arrival (PR #211: no ring)', () => {
     expect(AGENT_CURSOR_STALE_GAP_SECONDS).toBe(0.25);
     for (const gap of [0.26, 1.5, 5]) {
       const m = createMotion({ x: 0, y: 0 }, 1);
@@ -344,15 +344,15 @@ describe('arrival is the tip at the target (GM - Design, PR #211 r2)', () => {
   });
 });
 
-describe('long chords keep follow-through to 2 px (GM - Design, PR #211 r2)', () => {
+describe('long chords keep follow-through to 2 px (PR #211)', () => {
   it.each([2000, 3000, 6000])('%s px runs at most 2 px past its target', (d) => {
     const flight = fly({ x: d, y: 0 });
     expect(AGENT_CURSOR_MAX_FOLLOW_THROUGH_PX).toBe(2);
     expect(flight.overshootPx).toBeLessThanOrEqual(2 + 1e-9);
     expect(flight.motion.pos).toEqual({ x: d, y: 0 });
   });
-  it('accepted as measured (GM - Design, PR #211 r3): a 5K diagonal (2,940 px) rests by 1,050 ms, and no later change may make it slower', () => {
-    // GM: 2560 × 1440 CSS px is about 2,940 px corner to corner, the
+  it('accepted as measured (PR #211): a 5K diagonal (2,940 px) rests by 1,050 ms, and no later change may make it slower', () => {
+    // Design: 2560 × 1440 CSS px is about 2,940 px corner to corner, the
     // realistic worst case on one screen; about a second is within the calm
     // timing rule. No new spring constants.
     for (const to of [{ x: 2940, y: 0 }, { x: 2560, y: 1440 }]) {
@@ -370,7 +370,7 @@ describe('long chords keep follow-through to 2 px (GM - Design, PR #211 r2)', ()
   });
 });
 
-describe('screen px at any zoom (review 2, L4)', () => {
+describe('screen px at any zoom', () => {
   it.each([0.25, 3])('a 3,000 screen-px chord at zoom %s still runs at most 2 screen px past', (zoom) => {
     const flight = fly({ x: 3000 / zoom, y: 0 }, { zoom });
     expect(flight.overshootPx).toBeLessThanOrEqual(2 + 1e-9);
@@ -397,7 +397,7 @@ describe('screen px at any zoom (review 2, L4)', () => {
   });
 });
 
-describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
+describe('a target that keeps moving (PR #211)', () => {
   const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
   it('fires at first arrival on the target where it is now, then rides along on it at 0 px until the next event', () => {
     const m = createMotion({ x: 0, y: 0 }, 1);
@@ -415,8 +415,8 @@ describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
         firedOffset = Math.hypot(m.pos.x - target.x, m.pos.y - target.y);
       }
       if (firedAt !== null && i / 60 > firedAt + 0.5) {
-        // Settled onto the target and riding it kinematically, at 0 px (round 4,
-        // N1: an arrival never leaves a 1-2 px offset), not left behind.
+        // Settled onto the target and riding it kinematically, at 0 px (an
+        // arrival never leaves a 1-2 px offset), not left behind.
         expect(m.attached).toEqual({ x: 0, y: 0 });
         expect(m.pos).toEqual(target);
       }
@@ -457,11 +457,11 @@ describe('a target that keeps moving (GM - Design, PR #211 r5)', () => {
   });
 });
 
-describe('three or more flights (GM - Design, PR #211 r5): the side with the most room against every flight', () => {
+describe('three or more flights (PR #211): the side with the most room against every flight', () => {
   const opts = { zoom: 1, pointer: null };
   const interiorRoom = (plan: { from: Point; control: Point; to: Point }, others: { from: Point; control: Point; to: Point }[]) =>
     Math.min(...others.map((o) => arcGapPx(plan, o, 1, [0.2, 0.8])));
-  it('review 2\'s three flights: C never shares B\'s flipped arc', () => {
+  it('three flights: C never shares B\'s flipped arc', () => {
     const a = createMotion({ x: 0, y: 0 }, 1);
     planMove(a, { x: 800, y: 0 }, opts);
     for (let i = 0; i < 3; i += 1) stepMotion(a, { x: 800, y: 0 }, 1 / 60, { ...opts, reduced: false, opacityTarget: 1 });
@@ -515,7 +515,7 @@ describe('three or more flights (GM - Design, PR #211 r5): the side with the mos
   });
 });
 
-describe('crossing flights bow apart (GM - Design, PR #211 r2)', () => {
+describe('crossing flights bow apart (PR #211)', () => {
   const opts = { zoom: 1, pointer: null };
   it('a later flight that would cross another still flying bows the other way', () => {
     expect(AGENT_CURSOR_CROSS_PX).toBe(24);
@@ -650,7 +650,7 @@ describe('re-planning mid-flight', () => {
   it('follows a target that moves after it has landed', () => {
     const m = createMotion({ x: 0, y: 0 }, 1);
     expect(step(m, { x: 0, y: 0 }).atRest).toBe(true);
-    // Carried with it, kinematically (round 4): no spring, so on it at once.
+    // Carried with it, kinematically: no spring, so on it at once.
     step(m, { x: 10, y: 0 });
     expect(m.landing).toBeNull();
     expect(m.pos).toEqual({ x: 10, y: 0 });
@@ -723,7 +723,7 @@ describe('reduced motion', () => {
   });
 });
 
-describe('riding a dragged node stops dead with it (GM - Design, PR #211 r9 item 2; review 3, M1 and N1)', () => {
+describe('riding a dragged node stops dead with it (PR #211)', () => {
   const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
   const rest = (at: Point) => {
     const m = createMotion(at, 1);
@@ -834,7 +834,7 @@ describe('riding a dragged node stops dead with it (GM - Design, PR #211 r9 item
     }
   });
 
-  it('after a drag a resting cursor sits exactly on its spot, with no new offset (N1)', () => {
+  it('after a drag a resting cursor sits exactly on its spot, with no new offset', () => {
     const m = rest({ x: 110, y: 44 });
     for (let k = 0; k < 4; k += 1) {
       const back = k % 2 === 1;
@@ -881,7 +881,7 @@ describe('riding a dragged node stops dead with it (GM - Design, PR #211 r9 item
   });
 });
 
-describe('a step aside is no jump (the pill step, GM - Design, PR #211 r10 item 3)', () => {
+describe('a step aside is no jump (the pill step, design, PR #211)', () => {
   it('a resting tip whose spot moves a step (10, 24) on a still node lands there on the land spring, never a flight', () => {
     const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
     const node = { x: 500, y: 344 };
@@ -897,7 +897,7 @@ describe('a step aside is no jump (the pill step, GM - Design, PR #211 r10 item 
   });
 });
 
-describe('the presence exit (GM - Design, PR #211 review 4)', () => {
+describe('the presence exit (PR #211)', () => {
   it('stops where it is and fades to 0 on the opacity spring over more than one frame', () => {
     const m = createMotion({ x: 0, y: 0 }, 1);
     planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });
@@ -930,7 +930,7 @@ describe('the presence exit (GM - Design, PR #211 review 4)', () => {
   });
 });
 
-describe('a fling holds the action no later than the drag\'s end (GM - Design, PR #211 r9 item 5)', () => {
+describe('a fling holds the action no later than the drag\'s end (PR #211)', () => {
   const opts = { zoom: 1, reduced: false, opacityTarget: 1 };
 
   it('fires at the tip within the drag-end time after a 30 px-a-frame drag stops, once', () => {
@@ -968,7 +968,7 @@ describe('a fling holds the action no later than the drag\'s end (GM - Design, P
     }
   });
 
-  it.each([60, 120])('input every other frame at %i Hz (review 4, L2): the person\'s drag latches the hold, so it fires by the drag\'s end', (hz) => {
+  it.each([60, 120])('input every other frame at %i Hz: the person\'s drag latches the hold, so it fires by the drag\'s end', (hz) => {
     const dt = 1 / hz;
     const m = createMotion({ x: 0, y: 0 }, 1);
     planMove(m, { x: 400, y: 0 }, { zoom: 1, pointer: null });

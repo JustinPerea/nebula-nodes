@@ -4,23 +4,23 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Fix round 5 of PR #200 (review 5 and GM's r6/r7 answers), the component
+ * PR #200 (the PR review and design's answers), the component
  * and style side:
- * - LOW-1: the open kept list is sized to whole notes and snaps to their
+ * - The open kept list is sized to whole notes and snaps to their
  *   tops, so no note is ever cut at its top edge; a toast enters inside its
  *   own slot (a scale, never a slide up through the list), the same for
  *   every toast in the notice region.
- * - LOW-2: the swatch × offline says "You can remove swatches when Nebula
+ * - The swatch × offline says "You can remove swatches when Nebula
  *   reconnects."; the Inspector palette × takes the lock (its tooltip gives
  *   the follow reason while following).
- * - N-1: × moves focus to the next note, the previous one if it was the
+ * - × moves focus to the next note, the previous one if it was the
  *   last, and back to where focus came from once none is left.
- * - N-2: Send note offline says "You can send notes when Nebula reconnects."
- * - N-4: every Delete hovers red (#ff887d, then #ff9a91), never orange.
- * - N-5: a timeline drop refused while locked goes back where it was (the
+ * - Send note offline says "You can send notes when Nebula reconnects."
+ * - Every Delete hovers red (#ff887d, then #ff9a91), never orange.
+ * - A timeline drop refused while locked goes back where it was (the
  *   timeline had written the drop into its rows in place).
- * LOW-3 is the ratchet's (agentPresenceFollowups.ratchet); LOW-4 and N-3
- * are the backend's (test_agent_presence_followups.py).
+ * One finding is the ratchet's (agentPresenceFollowups.ratchet); two are the
+ * backend's (test_agent_presence_followups.py).
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
@@ -83,7 +83,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('LOW-1: the open kept list never cuts a note at its top', () => {
+describe('the open kept list never cuts a note at its top', () => {
   // jsdom lays nothing out: each row is 50px tall, one under the other.
   const ROW = 50;
   let restore: Array<() => void> = [];
@@ -127,7 +127,7 @@ describe('LOW-1: the open kept list never cuts a note at its top', () => {
     expect(row).toMatch(/flex:\s*none/);
   });
 
-  it('every notice-region toast enters inside its own slot: a scale, never a slide (GM r7: the same motion app-wide)', () => {
+  it('every notice-region toast enters inside its own slot: a scale, never a slide (the same motion app-wide)', () => {
     const entrances: Array<[string, string]> = [
       ['components/projects/ProjectSwitchToast.css', 'project-switch-toast-in'],
       ['styles/asset-trash.css', 'asset-trash-toast-in'],
@@ -144,7 +144,7 @@ describe('LOW-1: the open kept list never cuts a note at its top', () => {
   });
 });
 
-describe('N-1: × in the kept notes moves focus, never to <body>', () => {
+describe('× in the kept notes moves focus, never to <body>', () => {
   it('to the next note, the previous one when it was the last, then back to where focus came from', () => {
     const opener = document.createElement('button');
     opener.textContent = 'Canvas';
@@ -183,7 +183,7 @@ describe('N-1: × in the kept notes moves focus, never to <body>', () => {
   });
 });
 
-describe('N-2: Send note offline gives its reason', () => {
+describe('Send note offline gives its reason', () => {
   it('"You can send notes when Nebula reconnects."', () => {
     useCanvasPinsStore.setState({ composer: { position: { x: 0, y: 0 } }, draft: 'warmer' } as never);
     render(<PinComposer />);
@@ -194,7 +194,7 @@ describe('N-2: Send note offline gives its reason', () => {
   });
 });
 
-describe('LOW-2: a swatch × gives its own reason, offline and following', () => {
+describe('a swatch × gives its own reason, offline and following', () => {
   const palette = { swatches: ['#ff0000', '#00ff00'], strength: 0.5, method: 'lab-transfer' } as never;
   const remove = () => screen.getByRole('button', { name: 'Remove palette swatch 1' });
 
@@ -230,19 +230,19 @@ describe('LOW-2: a swatch × gives its own reason, offline and following', () =>
     expect(button()).toBeDisabled();
     expect(button()).toHaveAttribute('title', 'You can remove swatches when Nebula reconnects.');
     // The shared grey covers it (styles/disabled-buttons.css, the ghost list).
-    // PR #198 round 25 (GM r37 option c): the lists' state passes over a
+    // PR #198 (design): the lists' state passes over a
     // notice button's first 150 ms held (useHeldLook's data-held-pending).
     const ghost = /:is\(([^)]*)\):is\(:disabled, \[aria-disabled='true'\]:not\(\[data-held-pending\]\)\),/.exec(css('styles/disabled-buttons.css'))?.[1] ?? '';
     expect(ghost.split(',').map((item) => item.trim())).toContain('.inspector__palette-remove');
   });
 
-  it('the swatch × keeps its dark bubble locked; only the × goes grey (GM r7 answer 1)', () => {
+  it('the swatch × keeps its dark bubble locked; only the × goes grey', () => {
     const rule = /\.cinema-shared-controls__swatch-remove:is\(:disabled, ?\[aria-disabled='true'\]\)[^{]*\{([^}]*)\}/.exec(css('styles/disabled-buttons.css'))?.[1] ?? '';
     expect(rule).toMatch(/background:\s*rgba\(0, ?0, ?0, ?0?\.7\)/);
   });
 });
 
-describe('N-4: every Delete hovers red, never orange', () => {
+describe('every Delete hovers red, never orange', () => {
   const RED = /--sr-danger-ink\b/;
   const hovers: Array<[string, RegExp]> = [
     ['styles/slava-restraint.css', /\.context-menu__item--danger:hover[^{]*\{([^}]*)\}/],
@@ -251,7 +251,7 @@ describe('N-4: every Delete hovers red, never orange', () => {
     ['styles/remotion-editor.css', /\.remotion-properties-panel__keyframe-delete:hover[^{]*\{([^}]*)\}/],
     ['styles/canvasPins.css', /\.canvas-pin__delete:focus-visible[^{]*\{([^}]*)\}/],
   ];
-  // GM r12 (fix round 8): a shot's × left this list. Taking a shot out is an
+  // Design: a shot's × left this list. Taking a shot out is an
   // edit the canvas Undo puts back, so it hovers neutral (the test below).
   it('the context menu, the Inspector, project home, a keyframe\'s and a pin\'s Delete: #ff887d on hover, no accent, no --sr-danger orange', () => {
     for (const [file, pattern] of hovers) {
@@ -270,7 +270,7 @@ describe('N-4: every Delete hovers red, never orange', () => {
     expect(tokens).toMatch(/--sr-danger-ink:\s*var\(--sr-danger\)/);
     expect(tokens).toMatch(/--sr-danger-ink-hover:\s*var\(--sr-danger-hover\)/);
   });
-  it('GM r12: a shot\'s × and the Inspector palette × hover neutral, never red or the accent', () => {
+  it('a shot\'s × and the Inspector palette × hover neutral, never red or the accent', () => {
     for (const [file, pattern] of [
       ['styles/cinema-studio.css', /\.cinema-shots-rail__remove:hover[^{]*\{([^}]*)\}/],
       ['styles/slava-restraint.css', /\.inspector__palette-remove:hover[^{]*\{([^}]*)\}/],
@@ -282,7 +282,7 @@ describe('N-4: every Delete hovers red, never orange', () => {
   });
 });
 
-describe('N-5: a timeline drop refused while locked goes back where it was', () => {
+describe('a timeline drop refused while locked goes back where it was', () => {
   type Row = { id: string; actions: Array<{ id: string; start: number; end: number }> };
   const manifest = { timeline: [{ id: 't1', componentType: 'TextNode', time: { startFrame: 30, durationInFrames: 60 } }] } as never;
   const rows = () => timeline.props?.editorData as Row[];

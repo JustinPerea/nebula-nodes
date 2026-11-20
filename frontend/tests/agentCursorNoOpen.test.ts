@@ -3,8 +3,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 
 /**
- * "Nebula never opens or scrolls for the person" (design section 5; GM -
- * Design: the never-opens-or-scrolls ratchet). The cursor chunk that draws on
+ * "Nebula never opens or scrolls for the person" (design section 5, the
+ * never-opens-or-scrolls ratchet). The cursor chunk that draws on
  * surfaces beside the canvas only reads rects: no scroll, no pan, no zoom, no
  * opening of a dock or an editor. This scans its source so it can't slip back.
  * The one allowed exception (slice 9) is the edge chip's press handler,

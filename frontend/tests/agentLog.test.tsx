@@ -87,7 +87,7 @@ describe('agent log store', () => {
     const entries = useAgentLogStore.getState().entries;
     expect(entries).toHaveLength(1);
     expect(entries[0].agent?.color).toBe('#E8825A');
-    // Its cursor takes the same shared fallback (review 8, M9).
+    // Its cursor takes the same shared fallback.
     expect(useAgentPresenceStore.getState().agents['ext:claude-code'].color).toBe(AGENT_FALLBACK_COLOR);
     expect(AGENT_FALLBACK_COLOR).toBe('#E8825A');
   });
@@ -145,10 +145,10 @@ describe('AgentLog panel', () => {
     expect(screen.queryByText(/Running graph/)).toBeNull();
   });
 
-  // Review 8: the readable name tone reaches the page. The row carries it
+  // The readable name tone reaches the page. The row carries it
   // as --agent-log-name-color, and Restraint's name rule paints with it
   // (the dot keeps the cursor's own shade, --agent-log-source-color).
-  it('paints the name in its readable tone, the dot in the cursor\'s shade (r20, review 8)', () => {
+  it('paints the name in its readable tone, the dot in the cursor\'s shade', () => {
     emit(action('Checking the prompt', { agent: { id: 'navy', name: 'Navy', color: '#1A1A5E', verified: true } }));
     showLog();
     openLog();
@@ -162,7 +162,7 @@ describe('AgentLog panel', () => {
     expect(rule).toMatch(/(^|;|\s)color:\s*var\(--agent-log-name-color,/);
   });
 
-  it('shows with the chat closed too (Q38: no chat-open gate)', () => {
+  it('shows with the chat closed too (no chat-open gate)', () => {
     emit(action('Added Moodboard', { at: Date.UTC(2026, 9, 20, 14, 7, 0) }));
     showLog(false);
     const { container } = render(<AgentLog />);

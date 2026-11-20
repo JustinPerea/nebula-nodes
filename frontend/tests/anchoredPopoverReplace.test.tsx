@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useAnchoredPopover } from '../src/components/asset-move/anchoredPopover';
 
 /**
- * Review of commons-leave round 2: a failure landing in an open leave popover
+ * Review of commons-leave: a failure landing in an open leave popover
  * makes it taller and wider, so it is placed again for that opening (its
  * `revision`), not left where its old size put it (the gap to the Updates
  * list shrank from 6 to 2 px at 1280).

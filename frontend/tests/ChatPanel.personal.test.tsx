@@ -108,7 +108,7 @@ describe('Personal agents in the chat panel', () => {
     expect(document.querySelector('.chat-panel__meta')?.textContent).toBe('Fake Agent');
   });
 
-  it('PR #204 round 14 (GM r23 answer 6): a demoted tab lists no personal agents and says why under the heading', async () => {
+  it('PR #204: a demoted tab lists no personal agents and says why under the heading', async () => {
     await connected();
     act(() => reportPersonRequired());
     try {
@@ -266,7 +266,7 @@ describe('A personal agent that offers models', () => {
 });
 
 describe('Settings > Personal agents', () => {
-  // GM, PR #205 r1 answer 6: the switch saving its own change shows the new
+  // Design, PR #205: the switch saving its own change shows the new
   // position at once, keeps the enabled look for 150 ms, then the locked look
   // with the thumb where it was put, until the save and the reload answer.
   it('a switch saving its own change: the new position at once, held, then locked after 150 ms', async () => {
@@ -412,7 +412,7 @@ describe('Settings > Personal agents: Gemini and Antigravity', () => {
   });
 });
 
-// Review 13, L-7, with GM - Design's round-14 lines (item 2, verbatim): the
+// With design's lines, verbatim: the
 // chat's system line after /clear says what happened to the canvas, and stays
 // after the notice is gone.
 describe('Chat /clear: the system line says what happened to the canvas', () => {
@@ -432,7 +432,7 @@ describe('Chat /clear: the system line says what happened to the canvas', () => 
     expect(screen.queryByText(/with an empty canvas/)).toBeNull();
   });
 
-  it('a server error: it may have cleared (the round 21 merge: #114\'s line)', async () => {
+  it('a server error: it may have cleared (the merge: #114\'s line)', async () => {
     await connected();
     apiMocks.apiFetch.mockResolvedValue(new Response('{}', { status: 500 }));
     await sendText('/clear');

@@ -4,21 +4,21 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Fix round 7 of PR #200 (review 7, GM r10 and r11), the component and
+ * PR #200 (design), the component and
  * style side:
- * - GM r11 answer 2 (LOW-1): the leave mirrors the enter for every surface,
+ * - Design: the leave mirrors the enter for every surface,
  *   toasts included. lib/noticeLeave.ts is the one place an item leaves: it
  *   stays mounted, inert and marked data-leaving="surface" or "row" until
  *   its -out animation ends; noticeRegion.css draws each leave (surfaces
  *   scale out on a faster, critically damped spring, rows collapse, reduced
  *   motion fades). Focus moves at the start. The open list re-sizes after a
  *   collapse ends.
- * - GM r11 answer 1 (LOW-2): in the open list a newly kept note fades in
+ * - Design: in the open list a newly kept note fades in
  *   place, and the list is re-placed in the same layout pass.
- * - GM r11 answer 3 (LOW-3 and N-4): the destructive colours (the ratchet
+ * - Design: the destructive colours (the ratchet
  *   holds the rule; these pin the three named controls).
- * - N-2: the Inspector's pickers refuse in their own onChange.
- * N-1 is the ratchet's; N-3 is the backend's (test_agent_presence_followups).
+ * - The Inspector's pickers refuse in their own onChange.
+ * The ratchet covers the colour rule for every control; the backend's test_agent_presence_followups covers the server side.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn(), send: vi.fn() } }));
@@ -141,11 +141,11 @@ describe('the one place an item leaves (lib/noticeLeave)', () => {
     expect(screen.queryByTestId('toast')).toBeNull();
   });
 
-  it('every notice-region surface leaves through it, toasts included (GM r11 answer 2)', () => {
+  it('every notice-region surface leaves through it, toasts included', () => {
     const users: Array<[string, RegExp]> = [
-      // GM r8 (1), #204 round 7: it steps out (through the same leave) while a specific line says it.
-      // PR #204 round 14 (GM r23 3): offline comes first, so the notice also leaves while offline.
-      // PR #204 round 17 (GM r27 2): and its entrance waits for a because line on its way.
+      // Design, #204: it steps out (through the same leave) while a specific line says it.
+      // PR #204 (design): offline comes first, so the notice also leaves while offline.
+      // PR #204 (design): and its entrance waits for a because line on its way.
       ['components/PersonRequiredBanner.tsx', /useLeave\(specific \|\| offline \|\| waiting \? null : message\)/],
       ['components/canvas/ProposalBar.tsx', /useLeave\(live \?\? null\)/],
       ['components/canvas/ProposalBar.tsx', /useLeave\([^)]*errors\[[^\n]*'row'\)/],
@@ -189,7 +189,7 @@ describe('the one place an item leaves (lib/noticeLeave)', () => {
   });
 });
 
-describe('GM r10 and r11: a kept note collapses, the stack scales out, focus moves at the start', () => {
+describe('a kept note collapses, the stack scales out, focus moves at the start', () => {
   const row = (container: HTMLElement, project: string) => container.querySelector<HTMLElement>(`.canvas-pin-toast--kept[data-project="${project}"]`);
 
   it('× on the older of two: it collapses in place as a row, inert, while focus is already on the next note\'s ×', () => {
@@ -317,7 +317,7 @@ describe('the leave CSS (noticeRegion.css)', () => {
   });
 });
 
-describe('LOW-3 and N-4: the three named destructive controls take the Delete red', () => {
+describe('the three named destructive controls take the Delete red', () => {
   it('"Clear canvas…", Commons "Delete and purge" and a result card\'s Delete hover #ff887d (pressed #ff9a91)', () => {
     const hovers: Array<[string, RegExp]> = [
       ['styles/canvas-toolbar.css', /\.toolbar__action--danger:hover:not\(:disabled\) \{([^}]*)\}/],
@@ -334,7 +334,7 @@ describe('LOW-3 and N-4: the three named destructive controls take the Delete re
   });
 });
 
-describe('N-2: a locked picker uploads nothing from its own onChange', () => {
+describe('a locked picker uploads nothing from its own onChange', () => {
   const select = (definitionId: string, params: Record<string, unknown>) => {
     useGraphStore.setState({ nodes: [{ id: 'n1', type: 'model', position: { x: 0, y: 0 },
       data: { label: 'Node', definitionId, params, state: 'idle', outputs: {} } }], edges: [], undoNotice: null } as never);
@@ -366,7 +366,7 @@ describe('N-2: a locked picker uploads nothing from its own onChange', () => {
     // Unlocked, the same pick goes through.
     act(() => setFollowingSwitch(null));
     pick(screen.getByText('Extract').closest('label')!.querySelector('input')!);
-    // Round 8b: the extraction loads on first use (a dynamic import).
+    // The extraction loads on first use (a dynamic import).
     await waitFor(() => expect(calls.extract).toBe(1));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(calls.extract).toBe(1);

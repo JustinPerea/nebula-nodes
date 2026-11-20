@@ -178,7 +178,7 @@ describe('a cursor flies to a Studio tile (PR #233 slice 5)', () => {
   });
 });
 
-describe('a cursor with no spot, and one whose target goes (GM r6)', () => {
+describe('a cursor with no spot, and one whose target goes', () => {
   it('is not drawn while nothing resolves, and not at 0,0', () => {
     renderLayer();
     send(event());
@@ -230,7 +230,7 @@ describe('a cursor with no spot, and one whose target goes (GM r6)', () => {
     expect(cursors()[0].dataset.placed).toBe('true');
   });
 
-  it('GM 4: an image its own agent removed holds the spot, though the board\'s row is right there', async () => {
+  it('an image its own agent removed holds the spot, though the board\'s row is right there', async () => {
     const tile = put('anchor', 'moodboard:b1/i1', TILE);
     put('launcher', 'moodboard:b1', { left: 900, top: 100, width: 200, height: 40 });
     useBoardCanvasStore.setState({ studioBoard: { boardId: 'b1', boardKey: 'k', imageIds: ['i1', 'i2'] } });
@@ -378,7 +378,7 @@ describe('several agents in one panel (design section 4 holds)', () => {
   });
 });
 
-describe('type always shows a caret on the screen layer (GM, 2026-11-05)', () => {
+describe('type always shows a caret on the screen layer (2026-11-05)', () => {
   // The Studio has no field caret in this PR: type shows one on the say pill's end while it
   // shows, and beside the tip otherwise, as the shared field does for any non-node target.
   const sayCaret = () => document.querySelector('.agent-cursor__say .agent-cursor__say-caret');
@@ -426,7 +426,7 @@ describe('type always shows a caret on the screen layer (GM, 2026-11-05)', () =>
   });
 });
 
-describe('item outlines: type solid, propose dashed, nested 2 px for two agents, +N from three (GM 3)', () => {
+describe('item outlines: type solid, propose dashed, nested 2 px for two agents, +N from three', () => {
   const settle = () => flush();
 
   it('draws a solid ring on the item once a typing cursor has landed, and none while it flies', () => {
@@ -500,7 +500,7 @@ describe('item outlines: type solid, propose dashed, nested 2 px for two agents,
     expect(rings()).toHaveLength(2);
     const outer = rings().find((ring) => ring.dataset.ring === '1')!;
     expect(outer.querySelector('.agent-item-outline__more')?.textContent).toBe('+1');
-    // A count belongs to no agent: no agent colour or ink on it (GM r136, ruling 3).
+    // A count belongs to no agent: no agent colour or ink on it (design).
     const pill = outer.querySelector<HTMLElement>('.agent-item-outline__more')!;
     expect(pill.style.color).toBe('');
     expect(pill.style.getPropertyValue('--agent-color')).toBe('');

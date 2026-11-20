@@ -145,7 +145,7 @@ describe('ProposalLayer', () => {
       .toBe('Nano Banana runs on fal here, which needs FAL_KEY in Settings > Providers');
   });
 
-  it('an Idol ghost reads "may cost · Hugging Face" with a token and "free · Hugging Face" without, as the keys are now (GM, PR #203 r15 item 1)', () => {
+  it('an Idol ghost reads "may cost · Hugging Face" with a token and "free · Hugging Face" without, as the keys are now (PR #203)', () => {
     const idol = proposal();
     idol.nodes[0] = { ...idol.nodes[0], ref: '+idol', definitionId: 'speridlabs-idol', name: 'Idol', params: {},
       cost: { kind: 'free', provider: 'speridlabs', label: 'free · Hugging Face' } };

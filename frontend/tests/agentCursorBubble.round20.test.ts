@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * GM - Design, round 20 (A), verbatim: "Give it a solid dark neutral pill,
+ * Design, verbatim: "Give it a solid dark neutral pill,
  * the same height and radius as the "Codex" name tag, just under the tag.
  * The pill and text fade together. It must stay readable over any title at
  * any zoom."
@@ -21,14 +21,14 @@ describe("the cursor bubble's pill", () => {
     const height = Number.parseFloat(value(tag, 'line-height') ?? '') + 2 * Number.parseFloat(value(tag, 'padding') ?? '');
     expect(value(pill, 'border-radius')).toBe(`${height / 2}px`);
   });
-  it('GM, PR #203 r39 item 5: it wraps to two lines at its max width before any ellipsis', () => {
+  it('PR #203: it wraps to two lines at its max width before any ellipsis', () => {
     expect(value(pill, 'white-space')).toBe('normal');
     expect(value(pill, '-webkit-line-clamp')).toBe('2');
     expect(value(pill, 'line-clamp')).toBe('2');
     expect(value(pill, 'display')).toBe('-webkit-box');
     expect(value(pill, '-webkit-box-orient')).toBe('vertical');
     expect(value(pill, 'max-width')).toBe('260px');
-    // Its own width up to that, never the cursor's narrow box (found live, round 20).
+    // Its own width up to that, never the cursor's narrow box (found live).
     expect(value(pill, 'width')).toBe('max-content');
   });
   it('a solid dark neutral background: no transparency, no agent colour', () => {
