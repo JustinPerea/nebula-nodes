@@ -1,3 +1,4 @@
+// region-notices-ratchet: off, this App is the standalone extraction page's, not the app's notice region
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'

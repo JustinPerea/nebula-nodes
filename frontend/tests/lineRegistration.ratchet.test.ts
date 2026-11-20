@@ -226,6 +226,7 @@ const HOLDERS: Record<string, Shows[] | { none: string }> = {
 
 /** Text children that read a failure-named value but can never hold a not-connected line. */
 const EXEMPT: Record<string, string> = {
+  'extraction/App.tsx: notice': 'standalone extraction page (its own entry and server, not mounted in the app): its notice is a local line about a folder or a read, with no app line registration or presence to register with',
   'components/projects/ProjectHome.tsx: notice.text': 'the catalog restore notice\'s own status line (PR #199): what Nebula did, never a refusal of a request, so it can\'t be a not-connected line',
   'components/moodboard-studio/MoodboardStudioView.tsx: notices': 'a block of elements, each line in it a FailureLines',
   'components/projects/ProjectWorkspaceControls.tsx: failedLine': 'the failed-save description for the header\'s Try again: the header renders nothing for a failed save while Nebula is offline (status === \'error\' && offline), so the line never shows while not connected',

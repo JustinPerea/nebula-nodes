@@ -31,7 +31,15 @@ const unreadKey = (form: UnreadableRouteForm) => `${form.file} ${form.handler ??
  * `@app.get(backend_address.PROOF_PATH)` is read now (PROOF_PATH is a string constant in
  * services/backend_address.py) and is ungated, so it is in neither list.
  */
-const DECLARED: Record<string, string> = {};
+const DECLARED: Record<string, string> = {
+  'extraction/server.py server.folder_records @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.add_record @app.post on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.get_record @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.get_rendering @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.add_corrections @app.post on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.read_record @app.post on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+  'extraction/server.py server.page @app.get on app, not an app or router it can read': 'standalone extraction page, with its own server (its own app and token); not the app backend, so no person gate or presence routes',
+};
 
 describe('round 7: the real backend', () => {
   it('the gated route set is exactly the snapshot', { timeout: 60_000 }, () => {

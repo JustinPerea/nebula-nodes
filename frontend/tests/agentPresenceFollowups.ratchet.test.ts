@@ -2258,6 +2258,8 @@ function filledButtons(): Array<{ file: string; className: string }> {
  * its own fails below until it is in the shared rule (or, with a reason, here).
  */
 const SWEEP_LATER = new Set([
+  // The standalone extraction page's own button (its own entry; it does not load the app's shared sheet).
+  'extraction/extraction.css: ex-button',
   'App.css: provider-recovery-status button',
   'components/agent-notes/agentNotes.css: agent-notes-btn',
   'styles/asset-move.css: asset-move__item',
