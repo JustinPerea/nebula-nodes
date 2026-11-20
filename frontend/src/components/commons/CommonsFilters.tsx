@@ -1,5 +1,5 @@
 import { useCommonsDraft } from './commonsDraftsContext';
-import { AXES, AXIS_LABELS, MEDIA_LABELS, ROLES, ROLE_LABELS, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
+import { AXES, AXIS_LABELS, axisValue, MEDIA_LABELS, ROLES, ROLE_LABELS, type Axis, type Collection, type FilterState } from '../../lib/commonsTypes';
 
 interface Props {
   filters: FilterState;
@@ -20,7 +20,7 @@ function AxisRange({ axis, range, onChange }: {
     <div className={`commons-axis${range ? ' commons-axis--set' : ''}`}>
       <div className="commons-axis__head">
         <span>{lowLabel}</span>
-        <span className="commons-axis__value">{range ? `${lo.toFixed(2)} … ${hi.toFixed(2)}` : 'any'}</span>
+        <span className="commons-axis__value">{range ? `${axisValue(lo)} … ${axisValue(hi)}` : 'any'}</span>
         <span>{highLabel}</span>
       </div>
       <div className="commons-axis__inputs">

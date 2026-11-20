@@ -50,10 +50,10 @@ it('preserves unsaved labels when a stale revision is rejected', async () => {
   render(<CommonsEvaluation />);
   await screen.findByText('Set neutral');
   fireEvent.click(screen.getByText('Set neutral'));
-  expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0');
+  expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
   fireEvent.click(screen.getByText('Save labels'));
   await screen.findByRole('alert');
-  expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0');
+  expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
   // Round 18n (GM r44 1, r45 Q1): unsaved labels lock the toggle in place, its own line right under it.
   const toggle = screen.getByText('Review batch · 0 / 15') as HTMLButtonElement;
   act(() => toggle.focus());

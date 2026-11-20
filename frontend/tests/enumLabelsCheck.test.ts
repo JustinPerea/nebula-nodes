@@ -36,6 +36,17 @@ const bad: Array<[string, string]> = [
   ['a badge showing a stored value', 'const a = <span className={`commons-badge commons-badge--${s.state}`}>{s.state}</span>;'],
   ['a badge showing a property access', `const a = <span className="commons-badge">{s.source_kind}</span>;`],
   ['a badge showing a cast value', `const a = <span className="commons-badge">{r.status as string}</span>;`],
+  ['a badge with an element access through a dynamic key then a property', `const a = <span className="commons-badge">{row[field].value}</span>;`],
+  ['a badge with an indexed array then a property', `const a = <span className="commons-badge">{s.tags[0].name}</span>;`],
+  ['a badge with a property of a non-label call', `const a = <span className="commons-badge">{get(s).state}</span>;`],
+  ['a badge with a method call on a stored access', `const a = <span className="commons-badge">{s.state.toLowerCase()}</span>;`],
+  ['a badge with a dynamic element access', `const a = <span className="commons-badge">{row[field]}</span>;`],
+  ['a badge with a template whose head is lower case', 'const a = <span className="commons-badge">{`inbox ${n}`}</span>;'],
+  ['a badge with a stored value on the left of ??', `const a = <span className="commons-badge">{s.state ?? 'Unknown'}</span>;`],
+  ['a badge with a stored value on the right of ||', `const a = <span className="commons-badge">{label || s.state}</span>;`],
+  ['a badge with a lower-case literal on the right of ??', `const a = <span className="commons-badge">{label ?? 'unknown'}</span>;`],
+  ['a badge with a stored value after &&', `const a = <span className="commons-badge">{ok && s.state}</span>;`],
+  ['a badge with lower-case text leading inside a child element', `const a = <span className="commons-badge"><b>hi</b></span>;`],
 ];
 const fine: Array<[string, string]> = [
   ['an option labelled through a map', `const a = <option key={role} value={role}>{ROLE_LABELS[role]}</option>;`],
@@ -69,6 +80,12 @@ const fine: Array<[string, string]> = [
   ['a child element with a call', `const a = <span className="commons-badge"><b>{label(s.state)}</b></span>;`],
   ['a property of a map lookup', `const a = <span className="commons-badge">{MAP[s.state]!.label}</span>;`],
   ['a map lookup by an identifier key', `const a = <span className="commons-badge">{LABELS[s.state]}</span>;`],
+  ['a property of a label-map lookup with a non-null assertion', `const a = <span className="commons-badge">{SIGHTING_STATE[s.state]!.label}</span>;`],
+  ['a property of a badge call', `const a = <span className="commons-badge">{analysisBadge(x).label}</span>;`],
+  ['a property of a label call', `const a = <span className="commons-badge">{enumValueLabel(f, v).length}</span>;`],
+  ['a label call with ?? and a capitalised fallback', `const a = <span className="commons-badge">{enumValueLabel(f, v) ?? 'Unknown'}</span>;`],
+  ['a count after &&', `const a = <span className="commons-badge">{ok && count}</span>;`],
+  ['a template with a capitalised head', 'const a = <span className="commons-badge">{`Inbox ${n}`}</span>;'],
   ['lower-case text on an element that is no badge', `const a = <span className="commons-meta">inbox</span>;`],
 ];
 

@@ -289,3 +289,22 @@ it('shows a palette role as a word, with the raw value on the option', async () 
   ]);
   expect(select.value).toBe('accent');
 });
+
+it('renders a field that has no tag with an empty value instead of throwing', async () => {
+  const value = batch(); value.fields = { type_style: ['none', 'serif'], layout: ['grid', 'n_a'] };
+  api.get.mockResolvedValue(value);
+  render(<CommonsReview />);
+  await screen.findByText('An agent proposal');
+  const label = screen.getByText('Layout').closest('label')!;
+  expect(label.querySelector('strong')!.textContent).toBe('');
+  expect(screen.getAllByText('Type style')[0].closest('label')!.querySelector('strong')!.textContent).toBe('None');
+});
+
+it('writes a negative axis value with a true minus', async () => {
+  const value = batch(); value.items[0].proposal!.labels.axes.quiet_loud = -0.4;
+  api.get.mockResolvedValue(value);
+  render(<CommonsReview />);
+  await screen.findByText('An agent proposal');
+  expect(screen.getAllByText('−0.40').length).toBeGreaterThan(0);
+  expect(screen.queryByText('-0.40')).toBeNull();
+});

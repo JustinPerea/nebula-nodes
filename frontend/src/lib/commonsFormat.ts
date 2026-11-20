@@ -1,5 +1,5 @@
 import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
-import type { AnalysisState, Collection } from './commonsTypes';
+import { capitalised, type AnalysisState, type Collection } from './commonsTypes';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
   held: 'Held', queued: 'Queued', analyzing: 'Analyzing', analysis_failed: 'Failed', ready: 'Ready',
@@ -9,9 +9,10 @@ export const STATE_LABELS: Record<AnalysisState, string> = {
  *  failure that isn't an error (too transparent: nothing broke) wears the
  *  neutral, muted badge and says "Not analyzed", never a red "failed"
  *  (GM r6 on #208, item 2). */
-export function analysisBadge(state: AnalysisState, kind?: string | null): { label: string; modifier: string } {
+export function analysisBadge(state: AnalysisState | null | undefined, kind?: string | null): { label: string; modifier: string } {
   if (state === 'analysis_failed' && analysisFailureIsNeutral(kind)) return { label: 'Not analyzed', modifier: 'not-analyzed' };
-  return { label: STATE_LABELS[state], modifier: state };
+  if (!state) return { label: '', modifier: '' };
+  return { label: Object.hasOwn(STATE_LABELS, state) ? STATE_LABELS[state] : capitalised(state.replaceAll('_', ' ')), modifier: state };
 }
 
 /**
@@ -19,7 +20,8 @@ export function analysisBadge(state: AnalysisState, kind?: string | null): { lab
  * line (a comment's author); mid-sentence ("Added by you") pass `{ midSentence: true }`
  * (design). Other names read the same either way.
  */
-export function actorLabel(actor: string, opts: { midSentence?: boolean } = {}): string {
+export function actorLabel(actor: string | null | undefined, opts: { midSentence?: boolean } = {}): string {
+  if (!actor) return '';
   if (actor === 'human:justin') return opts.midSentence ? 'you' : 'You';
   if (actor.startsWith('human:')) return actor.slice(6);
   if (actor === 'import:moodboard') return 'moodboard note';

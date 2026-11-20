@@ -262,7 +262,7 @@ describe('Commons label drafts (GM line; review 17 L3)', () => {
   it('the same image in the same batch: the draft survives', async () => {
     await draftThenReconnectTo(batch(5));
     await waitFor(() => expect(screen.getByText('Save labels')).toBeEnabled());
-    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0');
+    expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('0.00');
     expect(screen.queryByText(LABELS_CHANGED_ELSEWHERE)).toBeNull();
   });
 });
