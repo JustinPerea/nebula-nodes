@@ -12,9 +12,10 @@ body.app-slava-restraint .moodboard-node {
 }
 
 body.app-slava-restraint .moodboard-node--selected {
-  border-color: #f59e0b;
+  border-color: var(--sr-accent);
 }
 
+/* palette-exempt: the moodboard category colour tints its title and hover (design) */
 body.app-slava-restraint .moodboard-node__title {
   color: #f59e0b;
   font-size: 11px;
@@ -80,6 +81,7 @@ body.app-slava-restraint .moodboard-node__open {
   cursor: pointer;
 }
 
+/* palette-exempt: the moodboard category colour tints its title and hover (design) */
 body.app-slava-restraint .moodboard-node__open:hover {
   border-color: #f59e0b;
   color: #f59e0b;

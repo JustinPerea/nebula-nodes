@@ -31,6 +31,7 @@ function renderItem(item: TrackItem) {
           style={{
             display: 'grid',
             placeItems: 'center',
+            // palette-exempt: video content colour, not a status
             color: '#ff5500',
             fontFamily: 'system-ui',
           }}

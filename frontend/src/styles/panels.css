@@ -456,7 +456,7 @@ body:not(.app-slava-restraint) .panel__item:hover {
 .panel__item:active { cursor: grabbing; }
 
 body:not(.app-slava-restraint) .panel__item:focus-visible {
-  outline: 2px solid var(--sr-accent, #ff6b3d);
+  outline: 2px solid var(--sr-accent);
   outline-offset: -2px;
 }
 

@@ -55,7 +55,7 @@
   cursor: pointer;
 }
 .asset-move__item:hover:not([aria-disabled="true"]) {
-  background: var(--sr-accent-soft, rgba(255, 90, 31, 0.12));
+  background: var(--sr-accent-soft);
 }
 /* Keyboard focus: the neutral ring inside the menu's edge, not the orange
  * hover wash (orange means the agent and the primary action). */

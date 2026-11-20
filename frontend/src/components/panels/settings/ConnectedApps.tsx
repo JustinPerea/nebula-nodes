@@ -20,6 +20,7 @@ import { LineBox } from '../../LineBox';
 
 const APP_LIMIT_CHOICES = [1, 2, 5, 10, 25, 50] as const;
 /** Cursor colors on offer. Bright enough to read on the dark canvas; null keeps the one derived from the app's id. */
+// palette-exempt: per-agent identity swatches, not statuses
 const AGENT_COLORS = ['#3FC1A5', '#7AD3FF', '#B392F0', '#FF6B9A', '#FF9F43', '#F2C14E', '#C3E86B'] as const;
 /** Shown until the backend's list arrives, and kept in step with services/agent_connect.CLIENTS. */
 const FALLBACK_CLIENTS: AgentClientOption[] = [

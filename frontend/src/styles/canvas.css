@@ -186,12 +186,12 @@ body.app-slava-restraint .react-flow__minimap {
 }
 
 .selection-toolbar__button--primary {
-  background: var(--sr-accent, #ff5a1f);
+  background: var(--sr-accent);
   color: #fff;
 }
 
 .selection-toolbar__button--primary:hover:not(:disabled) {
-  background: var(--sr-accent-hover, #ff7040);
+  background: var(--sr-accent-hover);
 }
 
 /* GM, round 16 of PR #114: a disabled Run is neutral; orange only ever

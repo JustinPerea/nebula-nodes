@@ -411,8 +411,8 @@ body.app-slava-restraint .param-pills__note-dismiss { color: var(--sr-ink-meta);
   height: 6px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: var(--sr-success, #6ee7b7);
-  box-shadow: 0 0 6px rgba(110, 231, 183, 0.45);
+  background: var(--sr-success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--sr-success) 45%, transparent);
 }
 
 /* A switcher button's description (aria-describedby): read, never shown.

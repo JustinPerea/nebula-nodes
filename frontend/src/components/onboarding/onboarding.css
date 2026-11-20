@@ -78,14 +78,14 @@
 }
 
 .onboarding__cta--primary {
-  background: var(--sr-accent, #ff5a1f);
+  background: var(--sr-accent);
   border-color: transparent;
   color: var(--sr-on-accent, #0a0a0b);
   font-weight: 600;
 }
 
 .onboarding__cta--primary:hover {
-  background: var(--sr-accent-hover, #ff6b34);
+  background: var(--sr-accent-hover);
 }
 
 .onboarding__cta--small {
@@ -136,7 +136,7 @@
   position: absolute;
   border-radius: 10px;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.62);
-  outline: 2px solid var(--sr-accent, #ff5a1f);
+  outline: 2px solid var(--sr-accent);
   pointer-events: none;
 }
 

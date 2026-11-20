@@ -125,7 +125,9 @@
 .run-history__paper-snapshot audio { width: 100%; }
 .run-history__paper-snapshot code { font-size: 9px; overflow-wrap: anywhere; user-select: text; }
 body.app-slava-restraint .run-history__paper-stale { color: var(--sr-ink, #1a1a1a); }
-body.app-slava-restraint .run-history__paper-snapshot a { color: var(--sr-accent, #5d70cc); }
+/* Design: a link is light ink with an underline, and full ink on hover. */
+body.app-slava-restraint .run-history__paper-snapshot a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
+body.app-slava-restraint .run-history__paper-snapshot a:hover { color: var(--sr-ink); }
 body:not(.app-slava-restraint) .run-history__paper-stale { color: #e8c99e; }
 body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; }
 
@@ -198,10 +200,10 @@ body:not(.app-slava-restraint) .run-history__paper-snapshot a { color: #a5b4fc; 
   animation: run-history-pulse 1.2s ease-in-out infinite;
 }
 .run-history__dot--complete {
-  background: var(--sr-success, #34d399);
+  background: var(--sr-success);
 }
 .run-history__dot--failed {
-  background: var(--sr-error, #f5c518);
+  background: var(--sr-error);
 }
 .run-history__dot--cancelled {
   background: var(--sr-ink-meta, rgba(150, 150, 150, 0.6));
@@ -226,7 +228,7 @@ body.app-slava-restraint .run-history__status-note {
   color: var(--sr-error);
 }
 body.app-slava-restraint .run-history__status--running { color: var(--sr-ink-light, rgba(0, 0, 0, 0.55)); }
-body.app-slava-restraint .run-history__status--complete { color: var(--sr-success, #34d399); }
+body.app-slava-restraint .run-history__status--complete { color: var(--sr-success); }
 body.app-slava-restraint .run-history__status--failed { color: var(--sr-error); }
 body.app-slava-restraint .run-history__status--cancelled { color: var(--sr-ink-meta, rgba(0, 0, 0, 0.45)); }
 body.app-slava-restraint .run-history__empty {
@@ -329,7 +331,8 @@ body:not(.app-slava-restraint) .run-history__action:disabled {
   margin-top: 8px;
 }
 
-.run-history__batch-result a { color: var(--accent, #b9a8ff); }
+.run-history__batch-result a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
+.run-history__batch-result a:hover { color: var(--sr-ink); }
 
 .run-history__batch-result pre {
   max-height: 140px;

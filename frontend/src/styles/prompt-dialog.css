@@ -87,7 +87,7 @@
 .prompt-dialog__field input:focus-visible,
 .prompt-dialog__field textarea:focus-visible,
 .prompt-dialog__actions button:focus-visible {
-  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset, 2px);
 }
 

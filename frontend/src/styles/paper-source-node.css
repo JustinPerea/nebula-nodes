@@ -46,7 +46,7 @@ body.app-slava-restraint .paper-source-node {
   background: var(--sr-glass, rgba(22, 22, 24, 0.66));
   border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
 }
-body.app-slava-restraint .paper-source-node--selected { border-color: var(--sr-accent, #ff5a1f); }
+body.app-slava-restraint .paper-source-node--selected { border-color: var(--sr-accent); }
 body.app-slava-restraint .paper-source-node__status,
 body.app-slava-restraint .paper-source-node__note,
 body.app-slava-restraint .paper-source-node__preview figcaption { color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4)); }
@@ -66,7 +66,9 @@ body.app-slava-restraint .paper-source-node__preview img {
   background-size: 16px 16px;
 }
 body.app-slava-restraint .paper-source-node__history a,
-body.app-slava-restraint .paper-source-node__note a { color: var(--sr-accent, #5d70cc); }
+body.app-slava-restraint .paper-source-node__note a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
+body.app-slava-restraint .paper-source-node__history a:hover,
+body.app-slava-restraint .paper-source-node__note a:hover { color: var(--sr-ink); }
 body.app-slava-restraint .paper-source-node__output { border-top: 1px solid var(--sr-edge, #ddd); }
 body.app-slava-restraint .paper-source-node__handle { background: #66bb6a; }
 body:not(.app-slava-restraint) .paper-source-node { color: #ddd; background: #222; border: 1px solid #444; }

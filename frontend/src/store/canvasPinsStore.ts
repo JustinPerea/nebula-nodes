@@ -116,6 +116,7 @@ function sanitize(raw: unknown): Pin | null {
           agent: {
             id: typeof agent.id === 'string' ? agent.id : agent.name,
             name: agent.name,
+            // palette-exempt: per-agent identity colour fallback, not a status
             color: typeof agent.color === 'string' && SAFE_COLOR.test(agent.color) ? agent.color : '#E8825A',
             verified: agent.verified === true,
           },

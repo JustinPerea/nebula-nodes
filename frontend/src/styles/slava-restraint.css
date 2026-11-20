@@ -87,8 +87,16 @@ body.app-slava-restraint {
   --sr-error: var(--sr-warning);
   --sr-error-soft: var(--sr-warning-soft);
   --sr-error-border: var(--sr-warning-border);
+  /* Design: an opaque error surface, for a pill that floats over content
+     (the offline line); --sr-error-soft is translucent. The strong one is
+     the brief flash when an edit is tried offline. */
+  --sr-error-surface: color-mix(in srgb, var(--sr-error) 8%, var(--sr-canvas-elevated));
+  --sr-error-surface-strong: color-mix(in srgb, var(--sr-error) 22%, var(--sr-canvas-elevated));
   --sr-success: rgba(110, 231, 183, 0.90);
   --sr-success-soft: rgba(110, 231, 183, 0.12);
+  --sr-success-border: rgba(110, 231, 183, 0.30);
+  /* Ink on a solid success fill (a done badge): dark, the same as on the accent. */
+  --sr-on-success: #0A0A0B;
   --sr-pending: var(--sr-ink-light);
   --sr-pending-soft: rgba(255, 255, 255, 0.06);
   --sr-disabled-opacity: 0.48;
@@ -4677,7 +4685,7 @@ body.app-slava-restraint .final-export__start {
 }
 
 body.app-slava-restraint .final-export__error {
-  color: var(--line-warning, #ff7a68);
+  color: var(--line-warning, var(--sr-error));
   overflow-wrap: anywhere;
 }
 
@@ -4791,13 +4799,13 @@ body.app-slava-restraint .editor-tl__clip {
 body.app-slava-restraint .editor-tl__clip--edited {
   border-color: var(--sr-accent-border);
   background:
-    linear-gradient(135deg, rgba(255, 90, 31, 0.26), rgba(255, 90, 31, 0.14));
+    linear-gradient(135deg, color-mix(in srgb, var(--sr-accent) 26%, transparent), color-mix(in srgb, var(--sr-accent) 14%, transparent));
 }
 
 body.app-slava-restraint .editor-tl__clip--selected {
   outline: 1px solid var(--sr-accent);
   outline-offset: 1px;
-  box-shadow: 0 0 12px rgba(255, 90, 31, 0.18);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--sr-accent) 18%, transparent);
 }
 
 body.app-slava-restraint .editor-tl__clip-handle {
@@ -4826,7 +4834,7 @@ body.app-slava-restraint .editor-tl__clip-vol {
 
 body.app-slava-restraint .editor-tl__playhead {
   background: var(--sr-accent);
-  box-shadow: 0 0 8px rgba(255, 90, 31, 0.58);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--sr-accent) 58%, transparent);
 }
 
 @media (max-width: 820px) {
@@ -4910,9 +4918,9 @@ body.app-slava-restraint .edit-node__speed-badge {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: var(--sr-accent-soft);
-  border: 1px solid var(--sr-accent-border);
-  color: var(--sr-accent);
+  background: var(--sr-surface-control);
+  border: 1px solid var(--sr-edge-strong);
+  color: var(--sr-ink-meta);
   font-family: var(--sr-mono, monospace);
   font-size: 8px;
   padding: 1px 5px;

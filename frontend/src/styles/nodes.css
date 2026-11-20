@@ -24,17 +24,8 @@ body:not(.app-slava-restraint) .model-node--selected {
 
 .model-node--idle { }
 body:not(.app-slava-restraint) .model-node--queued { border-color: #555; }
-body:not(.app-slava-restraint) .model-node--executing {
-  border-color: #2196F3;
-  animation: pulse-border 2s ease-in-out infinite;
-}
 .model-node--complete { }
 body:not(.app-slava-restraint) .model-node--error { border-color: #F44336; }
-
-@keyframes pulse-border {
-  0%, 100% { border-color: #2196F3; }
-  50% { border-color: #1565C0; }
-}
 
 .model-node__header {
   display: flex;
@@ -372,9 +363,9 @@ body:not(.app-slava-restraint) .before-after__handle {
   background: #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
-body.app-slava-restraint .before-after__divider { background: var(--sr-accent, #ff5a1f); }
+body.app-slava-restraint .before-after__divider { background: var(--sr-accent); }
 body.app-slava-restraint .before-after__handle {
-  background: var(--sr-accent, #ff5a1f);
+  background: var(--sr-accent);
   box-shadow: 0 0 0 2px var(--sr-canvas, #f4f1ea);
 }
 
@@ -806,7 +797,7 @@ body:not(.app-slava-restraint) .mesh-modal__download-error {
 }
 
 body.app-slava-restraint .mesh-modal__download-error {
-  color: var(--line-warning, #9b2c23);
+  color: var(--line-warning, var(--sr-error));
 }
 
 body:not(.app-slava-restraint) .mesh-modal__download {
@@ -843,7 +834,7 @@ body:not(.app-slava-restraint) .mesh-modal__download:hover {
 .model-node__source-stale { display: grid; gap: 5px; padding: 10px; font-size: 10px; line-height: 1.4; }
 .model-node__source-stale button { padding: 5px 7px; width: fit-content; border-radius: 4px; font: inherit; cursor: pointer; }
 .model-node__source-stale button:disabled { opacity: 0.45; cursor: default; }
-body.app-slava-restraint .model-node__source-stale { color: var(--sr-ink, #1a1a1a); background: color-mix(in srgb, var(--sr-warning, #f5c518) 10%, transparent); }
+body.app-slava-restraint .model-node__source-stale { color: var(--sr-ink, #1a1a1a); background: color-mix(in srgb, var(--sr-warning) 10%, transparent); }
 body.app-slava-restraint .model-node__source-stale button { color: var(--sr-ink, rgba(255, 255, 255, 0.92)); border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12)); background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78)); }
 body:not(.app-slava-restraint) .model-node__source-stale { color: #e8c99e; background: #2a2116; }
 body:not(.app-slava-restraint) .model-node__source-stale button { color: inherit; border: 1px solid #765a35; background: #342819; }

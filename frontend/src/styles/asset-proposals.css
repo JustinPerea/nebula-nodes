@@ -195,7 +195,7 @@
 
 .asset-proposal__error {
   margin: 0;
-  color: var(--sr-error, #f5c518);
+  color: var(--sr-error);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
