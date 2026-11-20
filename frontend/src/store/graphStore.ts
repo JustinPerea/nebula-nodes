@@ -133,7 +133,7 @@ import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
 import { getKreaConnection, nodeKeyStatus, normalizeKreaMode, withNewKreaMode } from '../lib/kreaConnection';
-import { allParamDefinitions, canvasTitle, envKeyNames, nodeTitle } from '../lib/directRoute';
+import { allParamDefinitions, canvasTitle, envKeyNames, isDefaultTitle, nodeTitle } from '../lib/directRoute';
 import { universalSettingLabel } from '../lib/universalSettingLabel';
 import { keepRenderingShots, normalizeCinemaScene, renderingRemovalLine, renderingShots, runLockedLine, runLockedWiresLine, sceneDeleteBlockTitle, scenesDeleteBlockTitle,
   sceneDeleteRefusedLine, scenesKeptLine, settledParams, shotRemovalBlock, type RenderingShots } from '../lib/cinemaScene';
@@ -191,6 +191,14 @@ function paramsForBackend(definitionId: string, params: Record<string, unknown>)
   return { ...params, clips: clips.map((c) => ({ ...c, speed: clipSpeed(c) })) };
 }
 
+/** The name the person gave a node, kept in its run snapshot so history still reads
+ * the name it ran under after a rename or delete. A default title is not stored. */
+function runSnapshotLabel(node: Node<NodeData>): { label?: string } {
+  const label = node.data.label;
+  if (typeof label !== 'string' || !label.trim()) return {};
+  return isDefaultTitle(NODE_DEFINITIONS[node.data.definitionId], label) ? {} : { label };
+}
+
 /** Capture the exact JSON graph sent to execution. Keeping this at the network
  * boundary means history replays include derived video-edit speed values and
  * never read mutable canvas params later. */
@@ -199,6 +207,7 @@ function captureRunSnapshot(nodes: Node<NodeData>[], edges: Edge[]): RunGraphSna
     nodes: nodes.map((node) => ({
       id: node.id,
       definitionId: node.data.definitionId,
+      ...runSnapshotLabel(node),
       params: paramsForBackend(
         node.data.definitionId,
         node.data.params as Record<string, unknown>,

@@ -1,6 +1,8 @@
 import { backendAssetUrlSync } from '../../lib/backend';
 import { sanitizeVariantScopes, type RunRecord } from '../../lib/runHistory';
 import { openOutputLabel } from '../../lib/openOutputLabel';
+import { runNodeTitle } from '../../lib/runNodeTitle';
+import { useGraphStore } from '../../store/graphStore';
 
 function mediaUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -16,6 +18,7 @@ function mediaUrl(value: unknown): string | null {
 
 /** Every successful iterator item remains accessible, even in a failed run. */
 export function BatchRunInspection({ record }: { record: RunRecord }) {
+  const liveNodes = useGraphStore((state) => state.nodes);
   const batches = Object.entries(record.batchOutputs ?? {}).filter(([, batch]) => batch.length > 0);
   if (!batches.length) return null;
   const count = batches.reduce((total, [, batch]) => total + batch.length, 0);
@@ -26,20 +29,21 @@ export function BatchRunInspection({ record }: { record: RunRecord }) {
         const variants = sanitizeVariantScopes(record.batchVariants?.[nodeId], batch.length);
         return batch.map((outputs, index) => {
           const scope = variants?.[index];
-          const label = scope?.label || `Result ${index + 1}`;
+          const label = `${runNodeTitle(record.snapshot, liveNodes, nodeId)} · ${scope?.label || `Result ${index + 1}`}`;
           const lineage = scope?.lineage
             .map((item) => `${item.source_label}: ${item.item_label}`).join(' → ');
           return (
             <div className="run-history__batch-result" key={`${nodeId}:${index}`}>
-              <span>{nodeId} · {label}</span>
+              <span>{label}</span>
               {lineage && <span>{lineage}</span>}
               {Object.entries(outputs).map(([portId, output]) => {
                 if (output.type === 'Text' && typeof output.value === 'string') {
-                  return <pre key={portId}>{output.value}</pre>;
+                  return <p className="run-history__batch-text" key={portId}>{output.value}</p>;
                 }
-                const url = ['Image', 'Video', 'Audio', 'SVG', 'Mesh'].includes(output.type)
+                const url = ['Image', 'Video', 'Audio', 'SVG', 'Mesh', 'Mask', 'DepthMap'].includes(output.type)
                   ? mediaUrl(output.value) : null;
-                return url ? <a key={portId} href={url} target="_blank" rel="noopener noreferrer">
+                return url ? <a key={portId} href={url} target="_blank" rel="noopener noreferrer"
+                  aria-label={`${openOutputLabel(output.type, portId)}, ${label}`}>
                   {openOutputLabel(output.type, portId)}
                 </a> : null;
               })}

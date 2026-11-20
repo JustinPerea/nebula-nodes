@@ -335,12 +335,16 @@ body:not(.app-slava-restraint) .run-history__action:disabled {
 .run-history__batch-result a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
 .run-history__batch-result a:hover { color: var(--sr-ink); }
 
-.run-history__batch-result pre {
+/* design: the caption is model output, prose, so it draws in the body face, not mono. */
+.run-history__batch-result .run-history__batch-text {
   max-height: 140px;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0;
+  font-family: var(--sr-ui);
+  font-size: inherit;
+  line-height: inherit;
 }
 
 /* GM r13: Clear run history wipes the whole list, so red on hover. */

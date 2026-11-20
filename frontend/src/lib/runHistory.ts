@@ -41,6 +41,8 @@ export interface ActiveRun {
 export interface RunSnapshotNode {
   id: string;
   definitionId: string;
+  /** The name the person gave the node when it ran. Absent when it ran under its default title. */
+  label?: string;
   params: Record<string, unknown>;
   outputs: Record<string, unknown>;
 }
