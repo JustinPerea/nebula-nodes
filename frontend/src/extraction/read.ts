@@ -7,6 +7,23 @@ export const ROLES = [
 
 export const WEIGHTS = ['light', 'regular', 'medium', 'bold'] as const
 
+/** What a person reads for each region role and weight, typed over the lists so a new value without a label fails tsc. */
+export const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
+  header: 'Header', navigation: 'Navigation', hero: 'Hero', heading: 'Heading', text_block: 'Text block', image: 'Image',
+  button: 'Button', control: 'Control', card: 'Card', list: 'List', logo: 'Logo', illustration: 'Illustration',
+  footer: 'Footer', background: 'Background', other: 'Other',
+}
+export const WEIGHT_LABELS: Record<(typeof WEIGHTS)[number], string> = {
+  light: 'Light', regular: 'Regular', medium: 'Medium', bold: 'Bold',
+}
+
+/** A stored value's label from one of the maps above; a value the page doesn't know reads as sentence-case words. */
+export function valueLabel(labels: Record<string, string>, value: string): string {
+  if (Object.prototype.hasOwnProperty.call(labels, value)) return labels[value]
+  const plain = words(value)
+  return plain.charAt(0).toUpperCase() + plain.slice(1)
+}
+
 export const FAKE_MODEL = 'fake-reader'
 
 /** "text_block" as a person reads it. */

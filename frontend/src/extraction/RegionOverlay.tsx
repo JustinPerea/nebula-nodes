@@ -1,4 +1,4 @@
-import { boxPosition, drawOrder, words } from './read'
+import { boxPosition, drawOrder, ROLE_LABELS, valueLabel } from './read'
 import type { Region } from './types'
 
 /**
@@ -29,7 +29,7 @@ export function RegionOverlay({ regions, hovered, selected, onHover, onSelect }:
             onMouseLeave={() => onHover(null)}
             onClick={() => onSelect(id)}
           >
-            {showRole ? <span className="ex-box-role">{words(region.role)}</span> : null}
+            {showRole ? <span className="ex-box-role">{valueLabel(ROLE_LABELS, region.role)}</span> : null}
           </div>
         )
       })}

@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { createApi, TOKEN_HEADER } from './api'
 import { CONFIRM_LINE, ReadSection } from './ReadSection'
 import { MeasuredLines } from './RecordView'
 import { RegionOverlay } from './RegionOverlay'
 import { ReadingSection, RegionsSection, ShowsSection, SpacingSection, TextSection } from './Sections'
-import { axisFill } from './read'
+import { axisFill, ROLE_LABELS, valueLabel } from './read'
+import { badgeWords, suffixWords } from './sources'
 import { applied, readRecord } from './testRecord'
 import type { Correction } from './types'
 
@@ -35,17 +36,17 @@ describe('RegionOverlay', () => {
 
   it('shows a role label only on a hovered, focused or selected box', () => {
     const { unmount } = overlay(null, null)
-    expect(screen.queryByText('button')).toBeNull()
-    expect(screen.queryByText('header')).toBeNull()
+    expect(screen.queryByText('Button')).toBeNull()
+    expect(screen.queryByText('Header')).toBeNull()
     unmount()
     const hovered = overlay('r2', null)
-    expect(within(box('r2')).getByText('button')).toBeTruthy()
-    expect(screen.queryByText('header')).toBeNull()
+    expect(within(box('r2')).getByText('Button')).toBeTruthy()
+    expect(screen.queryByText('Header')).toBeNull()
     hovered.unmount()
     overlay(null, 'r1')
-    expect(within(box('r1')).getByText('header')).toBeTruthy()
+    expect(within(box('r1')).getByText('Header')).toBeTruthy()
     expect(box('r1').className).toContain('ex-box-selected')
-    expect(screen.queryByText('button')).toBeNull()
+    expect(screen.queryByText('Button')).toBeNull()
   })
 
   it('reports hovering and a click to select', () => {
@@ -163,7 +164,55 @@ describe('sections', () => {
     expect(screen.getByLabelText('estimated 14 pixels').textContent).toBe('≈ 14 px')
     expect(screen.getByLabelText('estimated 96 pixels').textContent).toBe('≈ 96 px')
     expect(screen.getByLabelText('estimated 40 pixels').textContent).toBe('≈ 40 px')
-    expect(screen.getByText(/338 px between the boxes/)).toBeTruthy()
+    expect(screen.getByText('· measured 338 px')).toBeTruthy()
+  })
+
+  it('prints one number for a gap when the estimate and the measured gap agree', () => {
+    const record = readRecord()
+    record.structure.measured.region_gaps = [{ between: ['r1', 'r2'], axis: 'y', px: 40, origin: 'code' }]
+    render(<SpacingSection {...props(record)} />)
+    const row = screen.getByTestId('gap-row')
+    expect(within(row).getByLabelText('40 pixels, estimated and measured').textContent).toBe('40 px')
+    expect(row.textContent).not.toContain('measured 40')
+    expect(row.textContent).not.toContain('≈')
+  })
+
+  it('reads the stored words through the app labels', () => {
+    render(<ReadingSection {...props()} />)
+    for (const label of ['Geometric sans', 'Asymmetric', 'UI', 'Airy']) expect(screen.getByText(label)).toBeTruthy()
+    for (const end of ['Quiet', 'Loud']) expect(screen.getAllByText(end).length).toBeGreaterThan(0)
+    expect(screen.queryByText('ui')).toBeNull()
+  })
+
+  it('labels the role and weight choices, never the stored words', () => {
+    render(
+      <>
+        <RegionsSection {...props()} />
+        <TextSection {...props()} />
+      </>,
+    )
+    const roles = within(screen.getByLabelText('Role of r1')).getAllByRole('option').map((o) => o.textContent)
+    expect(roles).toContain('Header')
+    expect(roles).toContain('Text block')
+    expect(roles.every((name) => /^[A-Z]/.test(name ?? ''))).toBe(true)
+    const weights = within(screen.getByLabelText('Weight of t1')).getAllByRole('option').map((o) => o.textContent)
+    expect(weights).toEqual(['Light', 'Regular', 'Medium', 'Bold'])
+    expect(valueLabel(ROLE_LABELS, 'a_new_role')).toBe('A new role')
+  })
+
+  it('wraps a region label and a statement in a field that grows', () => {
+    render(
+      <>
+        <RegionsSection {...props()} />
+        <ShowsSection {...props()} />
+      </>,
+    )
+    for (const name of ['Label of r1', 'Statement s1']) {
+      const field = screen.getByLabelText(name)
+      expect(field.tagName).toBe('TEXTAREA')
+      expect(field.getAttribute('rows')).toBe('1')
+      expect(field.hasAttribute('title')).toBe(false)
+    }
   })
 
   it('puts one origin on each section label and none on uncorrected rows', () => {
@@ -198,6 +247,16 @@ describe('sections', () => {
     const rows = screen.getAllByTestId('region-row')
     expect(rows[0].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('you')
     expect(rows[1].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('agent')
+    // The badge and the section suffix read one map: sentence case on a badge, lower case after
+    // the dot unless the source is a name.
+    expect(badgeWords('fake reader')).toBe('Fake reader')
+    expect(suffixWords('fake reader')).toBe('fake reader')
+    expect(suffixWords('code')).toBe('code')
+    expect(suffixWords('Claude')).toBe('Claude')
+    // A source tag is a sentence-case badge with one neutral look.
+    const badge = rows[1].querySelector('[data-origin]')!
+    expect(badge.textContent).toBe('Agent')
+    expect(badge.className).toBe('ex-origin')
     expect((screen.getByLabelText('Role of r1') as HTMLSelectElement).value).toBe('navigation')
   })
 
@@ -210,14 +269,42 @@ describe('sections', () => {
     expect(rows[1].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('you')
   })
 
-  it('wraps the words field to two lines and carries the full text in its title', () => {
+  it('shows the whole of a long words field in a field that wraps and grows', () => {
     const record = readRecord()
     record.structure.read!.text.t1.content = 'A long line of words that will not fit on one line of the side panel'
     render(<TextSection {...props(record)} />)
     const field = screen.getByLabelText('Words of t1') as HTMLTextAreaElement
     expect(field.tagName).toBe('TEXTAREA')
-    expect(field.rows).toBe(2)
-    expect(field.title).toBe(record.structure.read!.text.t1.content)
+    expect(field.rows).toBe(1)
+    expect(field.value).toBe(record.structure.read!.text.t1.content)
+  })
+
+  it('fits a growing field again when its width changes, border included', () => {
+    const watchers: Array<() => void> = []
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { watchers.push(callback) }
+      observe() {}
+      disconnect() {}
+    })
+    // The words need 40px at the first width and 60px once the field narrows; the border adds 2px.
+    let width = 200
+    const spies = [
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width),
+      vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(() => (width === 200 ? 40 : 60)),
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => 26),
+      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => 24),
+    ]
+    try {
+      render(<RegionsSection {...props()} />)
+      const field = screen.getByLabelText('Label of r1') as HTMLTextAreaElement
+      expect(field.style.height).toBe('42px')
+      width = 150
+      act(() => watchers.forEach((run) => run()))
+      expect(field.style.height).toBe('62px')
+    } finally {
+      spies.forEach((spy) => spy.mockRestore())
+      vi.unstubAllGlobals()
+    }
   })
 
   it('selects a region from its id button or its row, and not from a click in a field', () => {

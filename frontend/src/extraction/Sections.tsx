@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { AXIS_LABELS, enumValueLabel, type EnumField } from '../lib/commonsTypes'
 import { RowOrigin, SectionLabel } from './Origin'
-import { axisFill, inOrder, isPaletteId, modelTag, originAt, ROLES, showOrigin, usableRegions, usableRuns, WEIGHTS, words } from './read'
+import { axisFill, inOrder, isPaletteId, modelTag, originAt, ROLE_LABELS, ROLES, showOrigin, usableRegions, usableRuns, valueLabel, WEIGHT_LABELS, WEIGHTS, words } from './read'
 import type { CodeGap, ExtractionRecord, Region, Show, TextRun } from './types'
 
 export type Correct = (path: string, value: unknown) => void
@@ -22,11 +23,34 @@ function EditableText({ value, label, onCommit, multiline = false }: {
   value: string
   label: string
   onCommit: (next: string) => void
-  /** A two-line field that carries the full text in its title, for words that wrap. */
+  /** A field that wraps its words and grows to fit them, for text longer than a row. */
   multiline?: boolean
 }) {
   // null: not being edited, so the field shows the saved value (which changes when a correction lands).
   const [draft, setDraft] = useState<string | null>(null)
+  const area = useRef<HTMLTextAreaElement>(null)
+  const shown = draft ?? value
+  // Grow to the words: reset, then take the height the text needs plus the border (the box is
+  // border-box). Fit again when the field's width changes, as when a row's origin tag appears
+  // after a correction, or the last line would be cut off.
+  useLayoutEffect(() => {
+    const field = area.current
+    if (!field) return undefined
+    const fit = () => {
+      field.style.height = 'auto'
+      field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`
+    }
+    fit()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    let width = field.clientWidth
+    const watch = new ResizeObserver(() => {
+      if (field.clientWidth === width) return
+      width = field.clientWidth
+      fit()
+    })
+    watch.observe(field)
+    return () => watch.disconnect()
+  }, [shown])
   const commit = () => {
     const next = (draft ?? value).trim()
     if (next && next !== value) onCommit(next)
@@ -44,9 +68,9 @@ function EditableText({ value, label, onCommit, multiline = false }: {
   return multiline ? (
     <textarea
       {...shared}
+      ref={area}
       className="ex-input ex-input-small ex-textarea"
-      rows={2}
-      title={draft ?? value}
+      rows={1}
       onChange={(event) => setDraft(event.target.value)}
     />
   ) : (
@@ -54,9 +78,10 @@ function EditableText({ value, label, onCommit, multiline = false }: {
   )
 }
 
-function Choose({ value, options, label, onPick }: {
+function Choose({ value, options, labels, label, onPick }: {
   value: string
   options: readonly string[]
+  labels: Record<string, string>
   label: string
   onPick: (next: string) => void
 }) {
@@ -65,7 +90,7 @@ function Choose({ value, options, label, onPick }: {
     <select className="ex-select" value={value} aria-label={label} onChange={(event) => onPick(event.target.value)}>
       {all.map((option) => (
         <option key={option} value={option}>
-          {words(option)}
+          {valueLabel(labels, option)}
         </option>
       ))}
     </select>
@@ -101,8 +126,8 @@ export function RegionsSection({ record, view, hovered, selected, onHover, onSel
               <button type="button" className="ex-id ex-id-button" aria-pressed={selected === id} aria-label={`Select ${id}`}>
                 {id}
               </button>
-              <Choose value={region.role} options={ROLES} label={`Role of ${id}`} onPick={(role) => onCorrect(`${path}.role`, role)} />
-              <EditableText value={region.label} label={`Label of ${id}`} onCommit={(label) => onCorrect(`${path}.label`, label)} />
+              <Choose value={region.role} options={ROLES} labels={ROLE_LABELS} label={`Role of ${id}`} onPick={(role) => onCorrect(`${path}.role`, role)} />
+              <EditableText multiline value={region.label} label={`Label of ${id}`} onCommit={(label) => onCorrect(`${path}.label`, label)} />
               <RowOrigin tag={originAt(record.corrections, path, base)} base={base} />
               {swatch ? <span className="ex-swatch ex-swatch-small" title="Most common color in this box, measured by code" style={{ backgroundColor: swatch }} /> : null}
             </li>
@@ -133,7 +158,7 @@ export function TextSection({ record, view, onCorrect }: Props) {
               <span className="ex-id">{id}</span>
               <EditableText multiline value={run.content} label={`Words of ${id}`} onCommit={(content) => onCorrect(`${path}.content`, content)} />
               <span className="ex-approx" data-testid="text-size" role="img" aria-label={`estimated ${run.size_px.value} pixels`}>≈ {run.size_px.value} px</span>
-              <Choose value={run.weight} options={WEIGHTS} label={`Weight of ${id}`} onPick={(weight) => onCorrect(`${path}.weight`, weight)} />
+              <Choose value={run.weight} options={WEIGHTS} labels={WEIGHT_LABELS} label={`Weight of ${id}`} onPick={(weight) => onCorrect(`${path}.weight`, weight)} />
               <RowOrigin tag={originAt(record.corrections, path, base)} base={base} />
             </li>
           )
@@ -166,9 +191,15 @@ export function SpacingSection({ record, view }: Props) {
           return (
             <li key={`${gap.between.join('-')}-${gap.axis}`} className="ex-row-item2 ex-pop" data-testid="gap-row">
               <span className="ex-grow">{gap.between[0]} to {gap.between[1]}, {gap.axis === 'x' ? 'across' : 'down'}</span>
-              <span className="ex-approx" role="img" aria-label={`estimated ${gap.px} pixels`}>≈ {gap.px} px</span>
+              {measured && measured.px === gap.px ? (
+                <span className="ex-approx" role="img" aria-label={`${gap.px} pixels, estimated and measured`}>{gap.px} px</span>
+              ) : (
+                <span className="ex-approx" role="img" aria-label={`estimated ${gap.px} pixels`}>≈ {gap.px} px</span>
+              )}
+              {measured && measured.px !== gap.px ? (
+                <span className="ex-quiet" title="Measured by code between the model’s boxes">· measured {measured.px} px</span>
+              ) : null}
               <RowOrigin tag={origin} base={base} />
-              {measured ? <span className="ex-quiet" title="Measured by code from the model’s boxes">{measured.px} px between the boxes</span> : null}
             </li>
           )
         })}
@@ -177,24 +208,16 @@ export function SpacingSection({ record, view }: Props) {
   )
 }
 
-const AXIS_LABELS: Record<string, [string, string]> = {
-  quiet_loud: ['quiet', 'loud'],
-  warm_cold: ['warm', 'cold'],
-  geometric_humanist: ['geometric', 'humanist'],
-  dense_airy: ['dense', 'airy'],
-  polished_raw: ['polished', 'raw'],
-}
-
 export function ReadingSection({ record, view }: Props) {
   const one = view.structure.read?.reader_1
   const base = modelTag(record.structure.read?.model)
   if (!one) return null
   const tag = originAt(record.corrections, 'structure.read.reader_1', base)
-  const line = (name: string, value: string) => (
+  const line = (name: string, field: EnumField, value: string) => (
     <div className="ex-line">
       <dt>{name}</dt>
       <dd>
-        <span className="ex-value">{words(value)}</span>
+        <span className="ex-value">{enumValueLabel(field, value)}</span>
         <RowOrigin tag={tag} base={base} />
       </dd>
     </div>
@@ -204,14 +227,14 @@ export function ReadingSection({ record, view }: Props) {
       <SectionLabel title="Reading" tag={base} />
       <p className="ex-summary">{one.summary.value}</p>
       <dl>
-        {line('Type style', one.type_style.value)}
-        {line('Layout', one.layout.value)}
-        {line('Medium', one.medium.value)}
-        {line('Spacing', one.spacing_density.value)}
+        {line('Type style', 'type_style', one.type_style.value)}
+        {line('Layout', 'layout', one.layout.value)}
+        {line('Medium', 'medium', one.medium.value)}
+        {line('Spacing', 'spacing_density', one.spacing_density.value)}
       </dl>
       <ul className="ex-axes">
         {Object.entries(one.axes).map(([name, axis]) => {
-          const [low, high] = AXIS_LABELS[name] ?? [name, name]
+          const [low, high] = (AXIS_LABELS as Record<string, [string, string]>)[name] ?? [words(name), words(name)]
           return (
             <li key={name} title={axis.why}>
               <span className="ex-axis-end">{low}</span>
@@ -243,7 +266,7 @@ export function ShowsSection({ record, view, onHover, onCorrect }: Props) {
         {shows.map(([id, show]: [string, Show]) => (
           <li key={id} className="ex-show ex-pop" data-testid="show-row">
             <div className="ex-show-line">
-              <EditableText value={show.statement} label={`Statement ${id}`} onCommit={(next) => onCorrect(`shows.${id}.statement`, next)} />
+              <EditableText multiline value={show.statement} label={`Statement ${id}`} onCommit={(next) => onCorrect(`shows.${id}.statement`, next)} />
               <RowOrigin tag={showOrigin(record, id, show.origin)} base={base} />
             </div>
             <ul className="ex-chips">

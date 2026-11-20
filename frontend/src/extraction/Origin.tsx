@@ -1,4 +1,5 @@
 import type { OriginTag } from './read'
+import { badgeWords, suffixWords } from './sources'
 
 const TITLES: Record<OriginTag, string> = {
   code: 'Set by code',
@@ -9,10 +10,9 @@ const TITLES: Record<OriginTag, string> = {
 }
 
 export function Origin({ tag }: { tag: OriginTag }) {
-  const tone = tag === 'you' ? ' ex-origin-you' : tag === 'agent' ? ' ex-origin-agent' : ''
   return (
-    <span className={`ex-origin${tone}`} title={TITLES[tag]} data-origin={tag}>
-      {tag}
+    <span className="ex-origin" title={TITLES[tag]} data-origin={tag}>
+      {badgeWords(tag)}
     </span>
   )
 }
@@ -28,7 +28,7 @@ export function SectionLabel({ title, tag }: { title: string; tag: OriginTag }) 
     <h2 className="ex-label">
       {title}{' '}
       <span className="ex-label-origin" data-section-origin={tag} title={TITLES[tag]}>
-        · {tag}
+        · {suffixWords(tag)}
       </span>
     </h2>
   )
