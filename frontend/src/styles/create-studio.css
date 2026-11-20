@@ -67,7 +67,7 @@ body.app-slava-restraint .create-view__stage {
   padding: 18px 24px;
 }
 body.app-slava-restraint .create-view__hero { text-align: center; max-width: 460px; }
-body.app-slava-restraint .create-view__hero-title { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; }
+body.app-slava-restraint .create-view__hero-title { color: var(--sr-ink); font-size: 30px; font-weight: 600; letter-spacing: -0.01em; }
 body.app-slava-restraint .create-view__hero-sub { margin-top: 10px; color: var(--sr-ink-light); font-size: 14px; line-height: 1.5; }
 body.app-slava-restraint .create-view__result {
   max-width: min(80vw, 900px);
@@ -318,7 +318,7 @@ body.app-slava-restraint .model-picker__group-label {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   padding: 8px 8px 4px;
 }
 body.app-slava-restraint .model-picker__row {

@@ -109,8 +109,6 @@ export const PINNED_SELECTORS = {
     ".moodboard-clash--conflict",
     ".moodboard-color__flag",
     ".moodboard-inline__error",
-    ".moodboard-palette__empty--error",
-    ".moodboard-palette__scope-tab--active",
     ".moodboard-rail__empty--error",
     ".moodboard-rail__scope-tab--active",
     ".moodboard-tile__cover",

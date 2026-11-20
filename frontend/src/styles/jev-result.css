@@ -262,7 +262,7 @@ body.app-slava-restraint .jev-result__bar-track {
 }
 
 body.app-slava-restraint .jev-result__more {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
 }
 
@@ -558,7 +558,7 @@ body.app-slava-restraint .jev-result__footer {
 body.app-slava-restraint .jev-result__footer .jev-result__figure { color: var(--sr-ink-light); }
 
 body.app-slava-restraint .jev-result__model {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   white-space: nowrap;
@@ -685,6 +685,7 @@ body.app-slava-restraint .model-node__jev-field-label {
   color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-micro);
+  font-weight: 500;
 }
 
 body.app-slava-restraint .model-node__jev-field-note {
@@ -730,7 +731,7 @@ body.app-slava-restraint .model-node__jev-field .model-node__jev-input:focus-vis
 }
 
 body.app-slava-restraint .model-node__jev-field .model-node__jev-input::placeholder {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 /* With the field above it, the result opens closer to the card's top. */
