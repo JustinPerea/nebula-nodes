@@ -1107,7 +1107,7 @@ def undo_board(api: NebulaAPI, ref: str, undo: Any, *, fallback: dict[str, Any] 
     (POST /api/moodboards/{id}/edits) that puts back what the change
     changed, image settings, cards, images it took off and the board's own
     fields alike, in one write. A part someone changed since the change is
-    left as they set it, and said so: "Direction changed after that
+    left as they set it, and said so: "The direction changed after that
     step, so Nebula left it as it is.", "Nebula couldn’t undo the change to image 2 because image 2’s weight changed after that.".
 
     Returns (board, the URLs the undo took off the board, `previous` for

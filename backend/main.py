@@ -20036,7 +20036,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
                      cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
-                     ran=_undo_ran_since(record))
+                     ran=_undo_ran_since(record), name_of=_node_label)
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:

@@ -67,7 +67,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stri
 
 // The server's words for a field it left as is (services/moodboard_edits FIELD_LABELS).
 const LABELS: Record<string, string> = {
-  name: 'The name', notes: "The board's notes", mode: 'Mode', strength: 'Strength', direction: 'Direction',
+  name: 'The name', notes: "The board's notes", mode: 'The mode', strength: 'The strength', direction: 'The direction',
   avoid: 'The Avoid list', pinnedColors: 'The pinned colours', clashMode: 'The clash mode',
   colorChoices: 'The colour choices', sendNotes: '“Moodboard notes to generators”', briefOverride: 'The hand-written brief',
 };

@@ -624,8 +624,9 @@ export function costTitle({ paid, estimate, reasons, mayCost, sourcedZero }: Cos
 export const SOURCED_ZERO_TITLE = 'This costs nothing to run.';
 
 /** "“Idol” may use your Hugging Face credits": the may-cost sentence, last in the chip's tooltip, one per account
- * (design: one verb, "may", as the proposal's plan line says it; the node's name in curly quotes; no full stop).
- * Several accounts are separate sentences, the last without its full stop. */
+ * (design: one verb, "may", as the proposal's plan line says it; the node's name in curly quotes). One account is a
+ * label with no full stop; two or more are sentences, each with its stop: "“Idol” may use your Hugging Face
+ * credits. “Hero shot” may use your Krea plan." (whatever the code builds for that account). */
 export function mayCostSentence(mayCost: RunScopeSummary['mayCost']): string | null {
   if (!mayCost?.length) return null;
   const byAccount = new Map<string, string[]>();
@@ -634,7 +635,8 @@ export function mayCostSentence(mayCost: RunScopeSummary['mayCost']): string | n
     if (!names.includes(name)) names.push(name);
     byAccount.set(account, names);
   }
-  return [...byAccount].map(([account, names]) => `${nodeNameList(names)} may use your ${account} credits`).join('. ');
+  const lines = [...byAccount].map(([account, names]) => `${nodeNameList(names)} may use your ${account} credits`);
+  return lines.length === 1 ? lines[0] : lines.map((line) => `${line}.`).join(' ');
 }
 
 type ReasonGroup = { id: string; line: (names: string, several: boolean) => string; names: string[] };

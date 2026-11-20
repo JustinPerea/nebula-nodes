@@ -989,19 +989,25 @@ def plan_groups(view: Mapping[str, Any]) -> list[str]:
 
 
 def _may_cost_clauses(rows: list[Mapping[str, Any]], *, named: bool) -> str:
-    """"may use your Hugging Face credits", or named when other classes run
-    beside it, or for several accounts: "Idol may use your Hugging Face
-    credits" (GM, PR #203 r14 item 2). Frontend mayCostSentence's twin for the
-    plan line."""
+    """The may-cost segments of the plan line, a row of " · " segments with no
+    final stop (design): "may use your Hugging Face credits" when the first
+    segment already names the node (Idol alone), else the name quoted leads it
+    ("“Idol” may use your Hugging Face credits", "“A” and “B” may use ..."), as
+    it must beside other classes or when several accounts are named. From more
+    than PLAN_NAMES nodes a count ("4 nodes may use ..."). Frontend
+    mayCostSentence's twin for the plan line."""
     by_account: dict[str, list[str]] = {}
     for row in rows:
         names = by_account.setdefault(str(row.get("account") or ""), [])
-        name = str(row.get("name") or "")
+        name = _plan_name(row.get("name"))
         if name and name not in names:
             names.append(name)
     clauses = []
     for account, names in by_account.items():
-        who = f"{_and_list(names)} " if names and (named or len(by_account) > 1) else ""
+        if names and (named or len(by_account) > 1):
+            who = f"{_plural(len(names), 'node')} " if len(names) > PLAN_NAMES else f"{_and_list([f'“{n}”' for n in names])} "
+        else:
+            who = ""
         clauses.append(f"{who}may use your {account} credits")
     return " · ".join(clauses)
 

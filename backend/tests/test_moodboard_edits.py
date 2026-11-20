@@ -1081,7 +1081,7 @@ def test_undoing_a_set_skips_a_field_changed_since_and_says_so(app, client, root
     _studio_put(client, {"direction": "studio dawn"})
     board, removed, redo, skipped = _undo(app, previous)
     assert board["direction"] == "studio dawn" and removed == []
-    assert skipped == ["Direction changed after that step, so Nebula left it as it is."]
+    assert skipped == ["The direction changed after that step, so Nebula left it as it is."]
     assert redo == {}  # it put nothing back, so there is nothing to redo
     # The same through update_board(**previous), as an older caller replays it.
     restored, _removed, _previous = boards.update_board(app.api, BOARD_ID, **previous)
@@ -1137,7 +1137,7 @@ def test_mcp_and_cli_restore_say_what_changed_since(app, client, root, capsys):
     _studio_put(client, {"direction": "studio dawn"})
     restored = mcp_server.moodboard_update(BOARD_ID, **updated["previous"])
     assert restored["direction"] == "studio dawn" and restored["notes"] == "editorial warmth"
-    assert restored["skipped"] == ["Direction changed after that step, so Nebula left it as it is."]
+    assert restored["skipped"] == ["The direction changed after that step, so Nebula left it as it is."]
     # The tool takes `previous` as its arguments, `undo` included.
     again = mcp_server.moodboard_update(BOARD_ID, mode="world")
     asyncio.run(mcp_server.mcp.call_tool("moodboard_update", {"board": BOARD_ID, **again["previous"]}))

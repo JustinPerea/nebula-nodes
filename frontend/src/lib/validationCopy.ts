@@ -53,8 +53,11 @@ function reading(errors: Pick<ExecutionValidationError, 'message' | 'person' | '
 export const SHOT_NOT_STARTED_LINE = 'Nebula couldn’t start the shot. Check the scene’s inputs and API keys, then generate it again.';
 /** A shot in a run where another node has the fix to make (design). OTHER_NODE_LINE stays for the canvas's own nodes. */
 export const SHOT_OTHER_NODE_LINE = 'Nebula couldn’t start the shot because another node in this run needs a fix first.';
-/** The shot's World Labs environment has not run on the canvas yet (design). */
+/** The shot's World Labs environment has not run on the canvas yet: the person's line, which the panel shows (design). */
 export const SHOT_WORLD_LABS_FIRST_LINE = 'Nebula couldn’t generate the shot because its World Labs environment hasn’t run yet. Run it on the canvas, then generate the shot.';
+/** The same refusal as agents read it in `output.error` (design): they can't run the paid World Labs node, so the line
+ * sends them to the person, never to "Run it on the canvas" themselves. */
+export const SHOT_WORLD_LABS_FIRST_TEXT = 'The shot needs its World Labs environment, which hasn’t run yet. Ask the person to run it on the canvas, or propose the run.';
 /** A shot that failed with nothing more said: the text agents read in `output.error`, and the line the panel shows (design). */
 export const SHOT_FAILED_TEXT = 'Shot generation failed.';
 export const SHOT_FAILED_LINE = 'Nebula couldn’t generate the shot. Generate it again.';

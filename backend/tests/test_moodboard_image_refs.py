@@ -513,7 +513,7 @@ async def test_a_board_whose_steering_images_are_all_outside_says_so_not_set_asi
 
 def test_undoing_an_outside_images_removal_names_the_image(client, root):
     """Contract 07 §1.19: the skip reads "Image 1 is an image link from outside
-    Nebula, left as is", the number the image had, not "An image"."""
+    Nebula, so Nebula left it as it is.", the number the image had, not "An image"."""
     local, _ = _image()
     _old_board(root, local=local)
     removed = client.post("/api/moodboards/oldboard0001/edits",
@@ -523,7 +523,7 @@ def test_undoing_an_outside_images_removal_names_the_image(client, root):
                          headers=PERSON)
 
     skipped = undone.json()["applied"][0]["skipped"]
-    assert [item["message"] for item in skipped] == ["Image 1 is an image link from outside Nebula, left as is"]
+    assert [item["message"] for item in skipped] == ["Image 1 links to an image outside Nebula, so Nebula left it as it is."]
     assert skipped[0]["number"] == 1
 
 

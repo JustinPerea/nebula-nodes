@@ -324,6 +324,16 @@ describe('a drag on the board', () => {
     expect(screen.queryByText(/left it as it is/)).toBeNull();
   });
 
+  it('a step whose look and field changed since names both, the look by the board’s name for it', async () => {
+    await openStudio({ view: 'board' });
+    act(() => board.props!.onMove([{ placement: 'c-i2', x: 900, y: 0 }]));
+    await waitFor(() => expect(server.edits).toHaveLength(1));
+    server.board = { ...server.board, frames: [{ id: 'f1', name: 'Dusk', kind: 'look', x: 0, y: 0, w: 10, h: 10 }] } as Moodboard;
+    server.skip = [{ part: 'frame', frame: 'f1', reason: 'changed since' }, { part: 'fields', field: 'direction', reason: 'changed since' }];
+    press('z', { metaKey: true });
+    expect(await screen.findByText('Undid “Moved image 2” except the direction and “Dusk”, which changed after that.')).toBeTruthy();
+  });
+
   it('each step goes as its own batch, so one undo undoes only its own step', async () => {
     await openStudio({ view: 'board' });
     select('c-i1');

@@ -406,7 +406,7 @@ def test_nebula_undo_lists_what_it_left_as_is(api):
     assert apply_cmd.run_undo(api.client, _undo_args(applied["undo"]["token"]), out=out) == 0
     lines = out.getvalue().splitlines()
     assert lines[0] == "Undone: removed 1."
-    assert lines[1] == "  Left as is: n1's value changed since, left as is"
+    assert lines[1] == "  Left as is: “Text Input” changed after that step, so Nebula left it as it is."
     assert api.graph.nodes[keep]["params"]["value"] == "the person's"
 
 
@@ -496,8 +496,8 @@ def test_nebula_undo_lists_each_part_once_when_nothing_went_back(api):
     assert lines[0].startswith("Nothing went back")
     assert "Left as is" not in lines[0]
     assert sorted(lines[1:]) == sorted([f"  Left as is: {added} ran since (run by the person), so it stays",
-                                        f"  Left as is: {keep}'s value changed since, left as is"])
-    assert text.count("ran since (run by the person)") == 1 and text.count("value changed since") == 1
+                                        "  Left as is: “Text Input” changed after that step, so Nebula left it as it is."])
+    assert text.count("ran since (run by the person)") == 1 and text.count("changed after that step") == 1
 
 
 def test_nebula_undo_of_a_steps_plan_goes_newest_first_and_stops_at_a_refusal(api, capsys):

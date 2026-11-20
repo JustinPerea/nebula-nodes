@@ -55,6 +55,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from services import pending_nodes
 from services.canvas_events import MOVE_THRESHOLD_PX, actor_record
+from services.node_names import quoted
 
 UNDO_TTL_SECONDS = 3600
 MAX_EDITS = 100
@@ -319,6 +320,7 @@ def plan_undo(
     cannot_remove: Callable[[str, dict[str, Any]], str | None],
     refused_change: Callable[[str, str, dict[str, Any], dict[str, Any]], str | None],
     ran: Mapping[str, list[dict[str, Any]]] | None = None,
+    name_of: Callable[[str], str] | None = None,
 ) -> UndoPlan:
     """The restore that undoes ``inverse`` on the canvas as it is now.
 
@@ -336,10 +338,20 @@ def plan_undo(
     ``ranBy`` and the parts it ``left``. Wires out of it follow the usual
     rules.
 
+    ``name_of`` gives a node's name as the canvas shows it (main._node_label: its
+    label, else its card type's display name); the kept lines quote it (design:
+    "“Brief” changed after that step, so Nebula left it as it is."), never the
+    node id. Without it the node's own label, else its definition id.
+
     ``cannot_remove`` says why a node can't be deleted now (paid state), and
     ``refused_change`` why a param change isn't the agent's to make (who
     bills a run, notes to generators); both None when it is fine."""
     skipped: list[dict[str, Any]] = []
+
+    def kept_line(node_id: str) -> str:
+        name = name_of(node_id) if name_of else str(nodes[node_id].get("label") or nodes[node_id].get("definitionId") or "")
+        return f"{quoted(name)} changed after that step, so Nebula left it as it is."
+
     current_wires = {wire_key(edge) for edge in edges}
     edit_wires = {tuple(wire) for wire in inverse["addedWires"]}
     ran = {node_id: list(actors) for node_id, actors in (ran or {}).items() if actors and node_id in nodes}
@@ -441,7 +453,7 @@ def plan_undo(
             back = {}
         if stale:
             skipped.append({"nodeId": node_id, "part": "params", "keys": stale, "reason": "changed since",
-                            "message": f"{node_id}'s {', '.join(stale)} changed since, left as is"})
+                            "message": kept_line(node_id)})
         if held:
             names = [key for key, _reason in held]
             skipped.append({"nodeId": node_id, "part": "params", "keys": names, "reason": "the person's to change",
@@ -463,7 +475,7 @@ def plan_undo(
             continue
         if label != rename["after"]:
             skipped.append({"nodeId": node_id, "part": "name", "reason": "changed since",
-                            "message": f"{node_id}'s name changed since, left as is"})
+                            "message": kept_line(node_id)})
             continue
         item(node_id)["label"] = rename["before"] or ""
 

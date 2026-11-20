@@ -105,22 +105,80 @@ export function keptUndoLine(label: string, skipped: readonly SkippedSlice[]): s
 
 /**
  * The toast for an undo (or redo) that put some parts back and kept others, in one line (design): "Undid “Moved
- * image 5” except image 5, which changed after that.", "... except images 3 and 5, which changed after that."
- * (three: "images 2, 3 and 5"), and from four on a count: "... except 4 images that changed after that.". Only for
- * kept slices that are an image or a card with a number and the reason "changed since"; any other mix (a field, a
- * look, an image without a number, one of its settings, another reason) is null, and the toast keeps "Undid" with
- * the server's line under it. Keyed on `part`, `reason` and `number`, never on the server's sentence.
+ * image 5” except image 5, which changed after that.", "... except image 5, which was removed after that.",
+ * "images 3 and 5, which were removed after that.", and from four images on a count ("... except 4 images that changed after
+ * that."). What can be kept: a field ("the direction"), a look ("“Dusk”", named by `lookName` from the board), an
+ * image or one of its settings ("image 5’s note and weight"), an image removed after the step, and an image with no
+ * number ("1 image"). Fields come first, then looks, then images, as "a, b and c" with no serial comma; the
+ * verb is "changed", "was/were removed", or "changed or were removed" when both kinds are kept. Any other mix (a
+ * reason other than "changed since" / "removed since", a switch only the person turns on, a colour choice made since,
+ * a card that can't go back there, a file that isn't Nebula's own, a look whose name isn't known) is null, and the
+ * toast keeps "Undid" with the server's line under it. Keyed on `part`, `reason`, `field`, `number` and `settings`,
+ * never on the server's sentence.
  */
-export function partialUndoLine(direction: 'undo' | 'redo', label: string, skipped: readonly SkippedSlice[]): string | null {
+export function partialUndoLine(
+  direction: 'undo' | 'redo',
+  label: string,
+  skipped: readonly SkippedSlice[],
+  lookName?: (frameId: string) => string | undefined,
+): string | null {
   if (skipped.length === 0) return null;
-  const numbers: number[] = [];
+  const fields: string[] = [];
+  const looks: string[] = [];
+  const changed = new Set<number>();
+  const removed = new Set<number>();
+  const settings = new Map<number, string[]>();
+  let unnumberedChanged = 0;
+  let unnumberedRemoved = 0;
   for (const slice of skipped) {
-    if (slice.reason !== 'changed since' || (slice.part !== 'image' && slice.part !== 'card')) return null;
-    if (typeof slice.number !== 'number' || slice.settings !== undefined) return null;
-    if (!numbers.includes(slice.number)) numbers.push(slice.number);
+    if (slice.part === 'fields') {
+      const noun = typeof slice.field === 'string' ? FIELD_IN_SENTENCE[slice.field] : undefined;
+      if (!noun || slice.reason !== 'changed since') return null;
+      if (!fields.includes(noun)) fields.push(noun);
+      continue;
+    }
+    if (slice.part === 'frame') {
+      const name = typeof (slice as { frame?: unknown }).frame === 'string' ? lookName?.((slice as { frame: string }).frame) : undefined;
+      if (!name || slice.reason !== 'changed since') return null;
+      const quoted = inQuotes(name);
+      if (!looks.includes(quoted)) looks.push(quoted);
+      continue;
+    }
+    if (slice.part !== 'image' && slice.part !== 'card' && slice.part !== 'settings') return null;
+    if (slice.reason !== 'changed since' && slice.reason !== 'removed since') return null;
+    const isRemoved = slice.reason === 'removed since';
+    const words = !isRemoved && slice.part === 'settings' && Array.isArray(slice.settings) ? slice.settings.map((key) => SETTING_WORDS[String(key)]) : null;
+    if (words && !words.every(Boolean)) return null;
+    if (!isRemoved && slice.settings !== undefined && !words) return null;
+    if (typeof slice.number !== 'number') {
+      if (isRemoved) unnumberedRemoved += 1; else unnumberedChanged += 1;
+    } else if (isRemoved) removed.add(slice.number);
+    else if (words?.length) {
+      const had = settings.get(slice.number) ?? [];
+      settings.set(slice.number, [...had, ...words.filter((word) => !had.includes(word))]);
+    } else changed.add(slice.number);
   }
-  numbers.sort((a, b) => a - b);
+  // An image removed wins over any change kept for it; a plain change over its settings.
+  for (const n of removed) { changed.delete(n); settings.delete(n); }
+  for (const n of changed) settings.delete(n);
+  const unnumbered = unnumberedChanged + unnumberedRemoved;
+  const imageTotal = changed.size + removed.size + settings.size + unnumbered;
+  const named = unnumbered === 0 && imageTotal < 4;
+  const nums = (set: ReadonlySet<number>) => [...set].sort((a, b) => a - b);
+  const imageParts: string[] = [];
+  if (named) {
+    const plain = nums(new Set([...changed, ...removed]));
+    if (plain.length) imageParts.push(imageNumbers(plain));
+    for (const n of [...settings.keys()].sort((a, b) => a - b)) imageParts.push(`image ${n}’s ${joined(settings.get(n) ?? [])}`);
+  } else if (imageTotal) imageParts.push(`${imageTotal} ${imageTotal === 1 ? 'image' : 'images'}`);
+  const subjects = fields.length + looks.length + (named ? changed.size + removed.size + settings.size : imageTotal);
+  const hasRemoved = removed.size + unnumberedRemoved > 0;
+  const hasChanged = fields.length + looks.length + changed.size + settings.size + unnumberedChanged > 0;
+  if (subjects === 0) return null;
+  const verb = hasRemoved && hasChanged ? 'changed or were removed' : hasRemoved ? (subjects === 1 ? 'was removed' : 'were removed') : 'changed';
   const done = undoneLine(direction, label);
-  if (numbers.length >= 4) return `${done} except ${numbers.length} images that changed after that.`;
-  return `${done} except ${imageNumbers(numbers)}, which changed after that.`;
+  const list = [...fields, ...looks, ...imageParts];
+  // Four or more images alone are a count with "that"; beside a field or a look the count joins the one comma form.
+  if (!named && imageTotal >= 4 && list.length === 1) return `${done} except ${list[0]} that ${verb} after that.`;
+  return `${done} except ${joined(list)}, which ${verb} after that.`;
 }

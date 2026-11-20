@@ -114,20 +114,90 @@ describe('the toast for an undo that put some parts back and kept others (design
     expect(partialUndoLine('redo', 'Moved image 5', [image(5)])).toBe('Redid “Moved image 5” except image 5, which changed after that.');
   });
 
+  const field = (name: string, extra: Record<string, unknown> = {}) => ({ part: 'fields', field: name, reason: 'changed since', ...extra });
+  const look = (id: string) => ({ part: 'frame', frame: id, reason: 'changed since' });
+  const names: Record<string, string> = { f1: 'Dusk', f2: 'Noon' };
+  const lookName = (id: string) => names[id];
+  const removedImage = (number: number) => image(number, { reason: 'removed since' });
+
+  it('names a field by its noun', () => {
+    expect(partialUndoLine('undo', 'Changed the strength', [field('direction')]))
+      .toBe('Undid “Changed the strength” except the direction, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [field('mode'), field('strength')]))
+      .toBe('Undid “x” except the mode and the strength, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [field('sendNotes')]))
+      .toBe('Undid “x” except “Moodboard notes to generators”, which changed after that.');
+  });
+
+  it('names a look by its quoted name', () => {
+    expect(partialUndoLine('undo', 'Moved 2 looks', [look('f1')], lookName)).toBe('Undid “Moved 2 looks” except “Dusk”, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [look('f1'), look('f2')], lookName)).toBe('Undid “x” except “Dusk” and “Noon”, which changed after that.');
+  });
+
+  it('names one of an image’s settings, and several of one image', () => {
+    const settings = (number: number, keys: string[]) => ({ part: 'settings', reason: 'changed since', number, settings: keys });
+    expect(partialUndoLine('undo', 'x', [settings(5, ['notes'])])).toBe('Undid “x” except image 5’s note, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [settings(5, ['notes', 'weight'])])).toBe('Undid “x” except image 5’s note and weight, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [settings(5, ['notes']), settings(5, ['weight'])])).toBe('Undid “x” except image 5’s note and weight, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [settings(5, ['privateNote']), settings(6, ['weight'])]))
+      .toBe('Undid “x” except image 5’s private note and image 6’s weight, which changed after that.');
+  });
+
+  it('names an image removed after the step', () => {
+    expect(partialUndoLine('undo', 'x', [removedImage(5)])).toBe('Undid “x” except image 5, which was removed after that.');
+    expect(partialUndoLine('undo', 'x', [removedImage(5), removedImage(3)])).toBe('Undid “x” except images 3 and 5, which were removed after that.');
+    expect(partialUndoLine('undo', 'x', [removedImage(5), removedImage(3), removedImage(4)])).toBe('Undid “x” except images 3, 4 and 5, which were removed after that.');
+    expect(partialUndoLine('undo', 'x', [1, 2, 3, 4].map(removedImage))).toBe('Undid “x” except 4 images that were removed after that.');
+  });
+
+  it('counts an image with no number', () => {
+    expect(partialUndoLine('undo', 'x', [{ part: 'image', reason: 'changed since' }])).toBe('Undid “x” except 1 image, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [{ part: 'image', reason: 'changed since' }, { part: 'image', reason: 'removed since' }]))
+      .toBe('Undid “x” except 2 images, which changed or were removed after that.');
+    expect(partialUndoLine('undo', 'x', [{ part: 'image', reason: 'removed since' }])).toBe('Undid “x” except 1 image, which was removed after that.');
+  });
+
+  it('puts the field first, then looks, then images', () => {
+    expect(partialUndoLine('undo', 'x', [image(5), image(3), field('direction')]))
+      .toBe('Undid “x” except the direction and images 3 and 5, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [image(5), look('f1'), field('direction'), field('mode')], lookName))
+      .toBe('Undid “x” except the direction, the mode, “Dusk” and image 5, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [1, 2, 3, 4].map((n) => image(n)).concat(field('direction') as never)))
+      .toBe('Undid “x” except the direction and 4 images, which changed after that.');
+  });
+
+  it('says changed or were removed when both are kept', () => {
+    expect(partialUndoLine('undo', 'x', [image(3), removedImage(5)])).toBe('Undid “x” except images 3 and 5, which changed or were removed after that.');
+    expect(partialUndoLine('undo', 'x', [1, 2, 3].map((n) => image(n)).concat(removedImage(4))))
+      .toBe('Undid “x” except 4 images that changed or were removed after that.');
+    expect(partialUndoLine('undo', 'x', [field('direction'), removedImage(5)])).toBe('Undid “x” except the direction and image 5, which changed or were removed after that.');
+  });
+
+  it('counts an image once, and a removal beats a change', () => {
+    expect(partialUndoLine('undo', 'x', [image(5), removedImage(5)])).toBe('Undid “x” except image 5, which was removed after that.');
+  });
+
   it('keeps the old toast (null) for any other mix', () => {
     expect(partialUndoLine('undo', 'x', [])).toBeNull();
-    // a field
-    expect(partialUndoLine('undo', 'x', [{ part: 'fields', field: 'direction', reason: 'changed since' }])).toBeNull();
-    // a look
-    expect(partialUndoLine('undo', 'x', [{ part: 'frame', reason: 'changed since' }])).toBeNull();
-    // an image without a number
-    expect(partialUndoLine('undo', 'x', [{ part: 'image', reason: 'changed since' }])).toBeNull();
-    // a different reason
-    expect(partialUndoLine('undo', 'x', [image(5, { reason: 'removed since' })])).toBeNull();
-    expect(partialUndoLine('undo', 'x', [image(5), image(6, { reason: 'removed since' })])).toBeNull();
-    // images and fields together
-    expect(partialUndoLine('undo', 'x', [image(5), { part: 'fields', field: 'direction', reason: 'changed since' }])).toBeNull();
-    // an image's settings
-    expect(partialUndoLine('undo', 'x', [{ part: 'settings', reason: 'changed since', number: 5, settings: ['notes'] }])).toBeNull();
+    // a field the table doesn't know, or kept for another reason
+    expect(partialUndoLine('undo', 'x', [{ part: 'fields', reason: 'changed since' }])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [field('direction', { reason: 'is the person’s to change' })])).toBeNull();
+    // a switch only the person turns on, a colour choice made since, a card that can't go back there
+    expect(partialUndoLine('undo', 'x', [field('sendNotes', { reason: 'is the person’s to turn on' })])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [field('pinnedColors', { reason: 'would undo a colour choice made since' })])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [field('pinnedColors', { reason: 'can’t go back' })])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [image(5, { part: 'cards', reason: 'can’t go back there' })])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [image(5), image(6, { reason: 'can’t go back there' })])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [image(5), image(6, { reason: 'isn’t one of Nebula’s own files' })])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [image(5, { reason: 'is an image link from outside Nebula' })])).toBeNull();
+    // a look with no known name, or a part this doesn't know
+    expect(partialUndoLine('undo', 'x', [look('f9')], lookName)).toBeNull();
+    expect(partialUndoLine('undo', 'x', [look('f1')])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [{ part: 'frame', reason: 'changed since' }], lookName)).toBeNull();
+    expect(partialUndoLine('undo', 'x', [{ part: 'other', reason: 'changed since', number: 1 }])).toBeNull();
+    // a setting this doesn't know
+    expect(partialUndoLine('undo', 'x', [{ part: 'settings', reason: 'changed since', number: 5, settings: ['colour'] }])).toBeNull();
+    // one unsayable slice spoils the whole mix
+    expect(partialUndoLine('undo', 'x', [image(5), field('direction', { reason: 'something else' })])).toBeNull();
   });
 });

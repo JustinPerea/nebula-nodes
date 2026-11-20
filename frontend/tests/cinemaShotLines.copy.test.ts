@@ -88,7 +88,7 @@ describe('the Cinema shot failed lines', () => {
     expect(output()!.error).not.toMatch(/because Try again/);
   });
 
-  it('row 8: a shot whose World Labs environment has not run says so', async () => {
+  it('row 8: a shot whose World Labs environment has not run says so, once for the person and once for agents', async () => {
     useGraphStore.setState({
       nodes: [{ id: 'wl', type: 'model-node', position: { x: 0, y: 0 },
         data: { definitionId: 'worldlabs-environment', label: 'World', params: {}, state: 'idle', outputs: {} } }, cinemaNode()] as never,
@@ -97,7 +97,10 @@ describe('the Cinema shot failed lines', () => {
     await useGraphStore.getState().executeShot('cine', 's1');
     expect(shot).not.toHaveBeenCalled();
     const said = 'Nebula couldn’t generate the shot because its World Labs environment hasn’t run yet. Run it on the canvas, then generate the shot.';
-    expect(output()).toMatchObject({ status: 'error', error: said });
+    // Agents read output.error (they can't run the paid node, so it sends them to the person); the panel shows the person's line.
+    const agents = 'The shot needs its World Labs environment, which hasn’t run yet. Ask the person to run it on the canvas, or propose the run.';
+    expect(output()).toMatchObject({ status: 'error', error: agents, errorPerson: said });
+    expect(output()!.error).not.toBe(said);
     expect(panelLine()).toBe(said);
   });
 

@@ -2048,7 +2048,7 @@ export function MoodboardStudioView() {
       const keptSlices = edited.applied.flatMap((entry) => (Array.isArray(entry.skipped) ? entry.skipped : []));
       const kept = direction === 'undo' && !next.length ? keptUndoLine(step.label, keptSlices) : null;
       // Some parts back and some kept because their images changed after the step (design): one line, no second one.
-      const partial = !kept && next.length ? partialUndoLine(direction, step.label, keptSlices) : null;
+      const partial = !kept && next.length ? partialUndoLine(direction, step.label, keptSlices, (frameId) => edited.board.frames?.find((frame) => frame.id === frameId)?.name) : null;
       const redo = direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined;
       const line = kept ? { text: kept }
         : partial ? { text: partial, action: redo }

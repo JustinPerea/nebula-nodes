@@ -111,7 +111,7 @@ import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFi
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
 import { bringBackFailedText, cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
-import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_FAILED_LINE, SHOT_FAILED_TEXT, SHOT_NOT_STARTED_LINE, SHOT_OTHER_NODE_LINE, SHOT_WORLD_LABS_FIRST_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
+import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_FAILED_LINE, SHOT_FAILED_TEXT, SHOT_NOT_STARTED_LINE, SHOT_OTHER_NODE_LINE, SHOT_WORLD_LABS_FIRST_LINE, SHOT_WORLD_LABS_FIRST_TEXT, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, stableJson, editArrivedText, foldArrange, forgetClearedPlaceholders,
   foreignSource, isForeignEdit, isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, paramChange, renameOwnedNode, restoreRequest,
@@ -14305,7 +14305,8 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       applySceneToNode(set, nodeId, patchShot(scene, {
         ...withoutShotError(shot.output),
         status: 'error',
-        error: SHOT_WORLD_LABS_FIRST_LINE,
+        error: SHOT_WORLD_LABS_FIRST_TEXT,
+        errorPerson: SHOT_WORLD_LABS_FIRST_LINE,
       }));
       return;
     }

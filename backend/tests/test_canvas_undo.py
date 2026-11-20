@@ -281,7 +281,22 @@ def test_a_node_the_person_changed_since_is_skipped_and_reported(api):
     assert set(skipped) == {(prompt, "params"), (image, "position")}
     assert skipped[(prompt, "params")]["keys"] == ["value"]
     assert skipped[(prompt, "params")]["reason"] == "changed since"
-    assert "changed since" in skipped[(prompt, "params")]["message"]
+    # The node's name, quoted (here its card type's name, it has no label), never its id.
+    assert skipped[(prompt, "params")]["message"] == "“Text Input” changed after that step, so Nebula left it as it is."
+
+
+def test_a_kept_line_quotes_the_nodes_own_name_and_never_its_id(api):
+    prompt, image = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    token = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}],
+                         "rename": {image: "Hero"}})["undo"]["token"]
+    assert api.client.put(f"/api/graph/node/{prompt}", headers=PERSON, json={"params": {"value": "a castle"}}).status_code == 200
+    api.graph.set_label(image, "Hero shot")
+    result = _undone(api, token)
+    lines = {item["nodeId"]: item["message"] for item in result["skipped"]}
+    assert lines[prompt] == "“Brief” changed after that step, so Nebula left it as it is."
+    assert lines[image] == "“Hero shot” changed after that step, so Nebula left it as it is."
+    assert all(prompt not in line and image not in line for line in lines.values())
 
 
 def test_only_the_changed_param_stays_when_the_person_changed_another(api):

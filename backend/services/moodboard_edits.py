@@ -101,8 +101,8 @@ FIELD_KEYS = ("name", "notes", "mode", "strength", "direction", "avoid", "pinned
 # What the board's mode, strength and notes are to the whole-board analysis.
 STEERING_FIELDS = ("mode", "strength", "notes")
 FIELD_LABELS = {
-    "name": "The name", "notes": "The moodboard\u2019s notes", "mode": "Mode", "strength": "Strength",
-    "direction": "Direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
+    "name": "The name", "notes": "The moodboard\u2019s notes", "mode": "The mode", "strength": "The strength",
+    "direction": "The direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
     "clashMode": "The clash mode", "colorChoices": "The colour choices",
     "sendNotes": "“Moodboard notes to generators”", "coverImageId": "The cover",
     "briefOverride": "The hand-written brief",
@@ -968,6 +968,10 @@ class _Batch:
             report["message"] = f"Nebula couldn’t undo the change to {subject} because {subject} isn’t one of Nebula’s own files."
         elif reason == "changed since":
             report["message"] = kept_clause(label if item.get("image") is not None else in_quotes(label))
+        elif reason == "removed since":
+            report["message"] = f"{label if item.get('image') is not None else in_quotes(label)} was removed after that step, so Nebula left it as it is."
+        elif reason == "is an image link from outside Nebula":
+            report["message"] = f"{label} links to an image outside Nebula, so Nebula left it as it is."
         else:
             report["message"] = f"{label} {reason}, left as is"
         return report

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import {
-  cinemaSceneBase, describeRunScope, mayCostSentence, runChipLabel, runChipTitle, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
+  cinemaSceneBase, costTitle, describeRunScope, mayCostSentence, runChipLabel, runChipTitle, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
   summarizeRunScope,
 } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
@@ -601,7 +601,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
   });
 });
 
-describe('the may-cost sentence (design: one verb, "may", the name in curly quotes, no full stop)', () => {
+describe('the may-cost sentence (design: one verb, "may", the name in curly quotes; a label with one account, sentences with two)', () => {
   it('names one node, several, and a count from four', () => {
     expect(mayCostSentence([{ name: 'Idol', account: 'Hugging Face' }])).toBe('“Idol” may use your Hugging Face credits');
     expect(mayCostSentence([{ name: 'Idol', account: 'Hugging Face' }, { name: 'Idol', account: 'Hugging Face' }]))
@@ -612,10 +612,19 @@ describe('the may-cost sentence (design: one verb, "may", the name in curly quot
       .toBe('4 nodes may use your Hugging Face credits');
   });
 
-  it('says each account in its own sentence, the last without its full stop, and nothing for none', () => {
+  it('says each of two or more accounts in its own sentence with its stop, and nothing for none', () => {
     expect(mayCostSentence([{ name: 'Idol', account: 'Hugging Face' }, { name: 'Synthetic', account: 'Replicate' }]))
-      .toBe('“Idol” may use your Hugging Face credits. “Synthetic” may use your Replicate credits');
+      .toBe('“Idol” may use your Hugging Face credits. “Synthetic” may use your Replicate credits.');
     expect(mayCostSentence([])).toBeNull();
     expect(mayCostSentence(undefined)).toBeNull();
+  });
+
+  it('in a chip title: one account ends the title as a label, two end it as two sentences', () => {
+    const one = [{ name: 'Idol', account: 'Hugging Face' }];
+    const two = [...one, { name: 'Hero shot', account: 'Krea' }];
+    expect(costTitle({ paid: ['Writer'], estimate: null, reasons: [], mayCost: one }))
+      .toBe('“Writer” calls a paid provider. “Idol” may use your Hugging Face credits');
+    expect(costTitle({ paid: ['Writer'], estimate: null, reasons: [], mayCost: two }))
+      .toBe('“Writer” calls a paid provider. “Idol” may use your Hugging Face credits. “Hero shot” may use your Krea credits.');
   });
 });
