@@ -22,9 +22,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // arithmetic (a decimal point, "decimal places", digits) and a question id after "quarter" or
 // "fiscal" is skipped. Existing matches are frozen in internal-ids-baseline.json; a file's count
 // may fall, never rise, and a file missing from the baseline may have none. A moved or split file
-// keeps its allowance: `--move <old> <new>` carries it over. When origin/main is reachable, the
-// baseline may not hold an entry above main's, nor more allowance on new paths than was freed by
-// removed or lowered ones.
+// keeps its allowance: `--move <old> <new>` carries it over (repeat the pair to split one gone file
+// into several in a single call; the baseline is written only when the check then passes, and
+// `--move` cannot be combined with `--write-baseline`). When origin/main and a merge base with it
+// are reachable, an entry counts as a raise only when it is above both the merge-base value and
+// main's value (so a branch that is merely behind main passes), and the allowance on paths that
+// neither had may not exceed what the branch freed against the merge base by removing or lowering
+// paths.
 //
 // What counts as a comment:
 //   TS, TSX, JS, MJS, CJS: // to end of line, and /* ... */ blocks.
@@ -40,7 +44,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // This file and its test hold the patterns and fixtures, so both are skipped by name (SELF_SKIP).
 // A text scanner, not a parser. Known limits: a regex literal that holds an unbalanced quote can
 // confuse it, and so can JSX text that holds // or /* or an apostrophe (it reads them as a
-// comment or a string until the line or file ends).
+// comment or a string until the line or file ends). A `.each` title is followed only in the
+// call-style form it.each([...])('title'); a tagged-template table, or a ")" inside a string in the
+// table, is not followed.
 
 export const SCAN_DIRS = ['frontend/src', 'frontend/scripts', 'frontend/tests', 'backend', 'scripts'];
 export const SCAN_EXT = new Set(['ts', 'tsx', 'js', 'mjs', 'cjs', 'css', 'py', 'sh']);
@@ -71,13 +77,18 @@ const ROUND_ARITH_AFTER = /^(?:\.\d|\s+(?:decimal|places?|digits?|dp|sig)\b)/i;
 const Q_RE = /\bQ\d{1,3}\b/g;
 const Q_FISCAL_BEFORE = /\b(?:quarters?|fiscal)\b/i;
 const REVIEW_RE = /\breview\s+\d{1,3}\b/gi;
+// "review N" counts only when what follows reads as an id: punctuation, the end of the line or
+// comment, a severity id, a token like M1, "round", rN, or "of PR #N" / "on #N". "review 3 items" is prose.
+const REVIEW_AFTER = /^(?:[ \t]*(?:\r?\n|\*\/|$)|[ \t]*(?:[,;:)\]\/]|\.(?!\d))|\s+(?:(?:LOW|MED|MEDIUM|HIGH|NIT)-\d|[A-Z]-\d|[A-Z]\d+\b|[Rr]ound\b|r\d|(?:of|on)\s+(?:PR\b|#\d)))/;
 const SEVERITY_RE = /\b(?:LOW|MED|MEDIUM|HIGH|NIT)-\d{1,2}\b/g;
 // A one-letter severity (H-1, N-2) reads as arithmetic on its own ("the last N-1 frames"), so it
 // counts only right after a review id or another severity id.
 const LETTER_SEVERITY_RE = /\b[HLMN]-\d{1,2}\b/g;
 const LETTER_SEVERITY_BEFORE = /(?:\breview\s+\d{1,3}|\b(?:LOW|MED|MEDIUM|HIGH|NIT|[HLMN])-\d{1,2})[,;/\s]*$/i;
 const REGEX_KEYWORDS = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'case', 'do', 'else', 'void', 'delete', 'throw', 'yield', 'await', 'new']);
-const REGEX_PRECEDERS = '(,=:[!&|?{};+-*%<>~^';
+// `<` and `>` are not here: `/` after `<` is a JSX closing tag. A `>` counts only as the end of `=>`;
+// a doubled `+` or `-` is postfix, so the `/` after it divides.
+const REGEX_PRECEDERS = '(,=:[!&|?{};+-*%~^';
 const CALLEE_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|todo|concurrent|fails|sequential))?$/;
 const EACH_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|concurrent|fails|sequential))?\.each\s*$/;
 
@@ -115,6 +126,8 @@ function jsSpans(text, isScript) {
   let i = 0;
   let prevSig = '';
   let prevWord = '';
+  let prevWordDot = false; // the last word followed a "." (a property, not a keyword)
+  let prevAdj = ''; // the character right before prevSig
   while (i < n) {
     const c = text[i];
     const d = text[i + 1];
@@ -147,7 +160,12 @@ function jsSpans(text, isScript) {
       prevSig = c;
       continue;
     }
-    const regexOk = prevSig === '' || REGEX_PRECEDERS.includes(prevSig) || (prevSig === 'a' && REGEX_KEYWORDS.has(prevWord));
+    const doubled = (prevSig === '+' || prevSig === '-') && prevAdj === prevSig;
+    const regexOk =
+      prevSig === '' ||
+      (REGEX_PRECEDERS.includes(prevSig) && !doubled && !(prevSig === '}' && d === '>')) || // `{x} />` closes a JSX tag
+      (prevSig === '>' && prevAdj === '=') ||
+      (prevSig === 'a' && !prevWordDot && REGEX_KEYWORDS.has(prevWord));
     if (isScript && c === '/' && regexOk) {
       // regex literal: skip to the closing slash on the same line
       let j = i + 1;
@@ -169,11 +187,15 @@ function jsSpans(text, isScript) {
       let j = i + 1;
       while (j < n && /[\w$]/.test(text[j])) j++;
       prevWord = text.slice(i, j);
+      prevWordDot = prevSig === '.';
       prevSig = 'a';
       i = j;
       continue;
     }
-    if (!/\s/.test(c)) prevSig = c;
+    if (!/\s/.test(c)) {
+      prevSig = c;
+      prevAdj = i > 0 ? text[i - 1] : '';
+    }
     i++;
   }
   return spans;
@@ -307,9 +329,10 @@ export function scanSource(path, text) {
       if (Q_FISCAL_BEFORE.test(before)) continue;
       push(s.start + m.index, 'question', m[0]);
     }
-    for (const re of [REVIEW_RE, SEVERITY_RE]) {
-      for (const m of body.matchAll(re)) push(s.start + m.index, 'review', m[0]);
+    for (const m of body.matchAll(REVIEW_RE)) {
+      if (REVIEW_AFTER.test(body.slice(m.index + m[0].length))) push(s.start + m.index, 'review', m[0]);
     }
+    for (const m of body.matchAll(SEVERITY_RE)) push(s.start + m.index, 'review', m[0]);
     for (const m of body.matchAll(LETTER_SEVERITY_RE)) {
       const before = body.slice(Math.max(0, m.index - 24), m.index);
       if (LETTER_SEVERITY_BEFORE.test(before)) push(s.start + m.index, 'review', m[0]);
@@ -403,7 +426,7 @@ export function compareToBaseline(counts, matches, baseline) {
   const hints = {};
   for (const file of newPaths) {
     const source = Object.keys(freed)
-      .filter((f) => freed[f] >= counts[file])
+      .filter((f) => !(f in counts) && freed[f] >= counts[file])
       .sort((a, b) => freed[b] - freed[a])[0];
     if (source) {
       freed[source] -= counts[file];
@@ -433,8 +456,8 @@ export function lowerBaseline(counts, baseline) {
 
 /**
  * Move an allowance from one path to another (a rename or a split). The new path gets what the
- * old one held, capped at the new file's real count; the old entry keeps only what it still
- * needs (nothing, for a rename). Throws when the old path is not in the baseline.
+ * old one held, capped at the new file's real count; the old entry keeps what it still needs, or
+ * the whole unspent remainder when the old file is gone (nothing, for a rename). Throws when the old path is not in the baseline.
  */
 export function moveAllowance(baseline, counts, oldPath, newPath) {
   if (!(oldPath in baseline)) throw new Error(`${oldPath} is not in the baseline`);
@@ -442,26 +465,39 @@ export function moveAllowance(baseline, counts, oldPath, newPath) {
   const room = Math.max(0, (counts[newPath] ?? 0) - (baseline[newPath] ?? 0));
   const moved = Math.min(baseline[oldPath], room);
   if (moved + (baseline[newPath] ?? 0) > 0) next[newPath] = (baseline[newPath] ?? 0) + moved;
-  const remainder = Math.min(baseline[oldPath] - moved, counts[oldPath] ?? 0);
+  // A gone old path keeps what is left so the next --move can spend it; a later --write-baseline
+  // drops the unused part. A file still present keeps only what it still needs.
+  const remainder = oldPath in counts ? Math.min(baseline[oldPath] - moved, counts[oldPath]) : baseline[oldPath] - moved;
   if (remainder > 0) next[oldPath] = remainder;
   else delete next[oldPath];
   return next;
 }
 
 /**
- * Compare the baseline with the one on main. Fails on an entry above main's, and when the
- * allowance on new paths is more than main's removed or lowered paths gave up (so a move passes
- * and a raise does not). Returns a list of messages, empty when fine.
+ * Compare the baseline with main's and with the merge base's. An entry is a raise only when it is
+ * above both (a missing path counts as 0), so a branch that is merely behind main passes. Paths
+ * that neither had may hold no more allowance than the branch freed against the merge base, so a
+ * move passes and a raise does not. Without a merge-base baseline, main's stands in for it.
+ * Returns a list of messages, empty when fine.
  */
-export function compareWithMain(baseline, mainBaseline) {
+export function compareWithMain(baseline, mainBaseline, baseBaseline = mainBaseline) {
   const problems = [];
   let added = 0;
   let freed = 0;
   for (const [file, allowed] of Object.entries(baseline)) {
-    if (!(file in mainBaseline)) added += allowed;
-    else if (allowed > mainBaseline[file]) problems.push(`${file}: baseline ${allowed} is above main's ${mainBaseline[file]}`);
+    const inMain = file in mainBaseline;
+    const inBase = file in baseBaseline;
+    if (!inMain && !inBase) {
+      added += allowed;
+      continue;
+    }
+    const ceiling = Math.max(mainBaseline[file] ?? 0, baseBaseline[file] ?? 0);
+    if (allowed > ceiling) {
+      const note = inMain ? `main's ${mainBaseline[file]}` : `the merge base's ${baseBaseline[file]}`;
+      problems.push(`${file}: baseline ${allowed} is above ${note}`);
+    }
   }
-  for (const [file, was] of Object.entries(mainBaseline)) {
+  for (const [file, was] of Object.entries(baseBaseline)) {
     if (!(file in baseline)) freed += was;
     else if (baseline[file] < was) freed += was - baseline[file];
   }
@@ -469,12 +505,20 @@ export function compareWithMain(baseline, mainBaseline) {
   return problems;
 }
 
-/** main's baseline, or null when origin/main or its baseline is missing (shallow CI, first run). */
-export function readMainBaseline(root) {
+/**
+ * main's baseline and the merge base's, as {main, base}; null when origin/main, a merge base or
+ * either file is missing (shallow CI, first run).
+ */
+export function readMainBaselines(root) {
   try {
     const opts = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 };
     execFileSync('git', ['rev-parse', '--verify', '--quiet', 'origin/main'], opts);
-    return JSON.parse(execFileSync('git', ['show', `origin/main:${BASELINE_REL}`], opts));
+    const mergeBase = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], opts).trim();
+    if (!mergeBase) return null;
+    return {
+      main: JSON.parse(execFileSync('git', ['show', `origin/main:${BASELINE_REL}`], opts)),
+      base: JSON.parse(execFileSync('git', ['show', `${mergeBase}:${BASELINE_REL}`], opts)),
+    };
   } catch {
     return null;
   }
@@ -490,7 +534,12 @@ export function main(argv) {
   const root = rootArg >= 0 ? resolve(argv[rootArg + 1]) : resolve(here, '..', '..');
   const baselinePath = join(root, BASELINE_REL);
   const write = argv.includes('--write-baseline');
-  const moveAt = argv.indexOf('--move');
+  const moves = [];
+  for (let k = 0; k < argv.length; k++) if (argv[k] === '--move') moves.push([argv[k + 1], argv[k + 2]]);
+  if (write && moves.length > 0) {
+    console.error('internal-ids: --write-baseline and --move cannot be combined. Run --move first (it writes the baseline once the check passes), then --write-baseline to lock in falls.');
+    return 1;
+  }
   const { counts, matches, totals } = scanTree(root);
   const haveBaseline = existsSync(baselinePath);
 
@@ -512,9 +561,9 @@ export function main(argv) {
     return 0;
   }
 
-  let baseline = haveBaseline ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {};
-  if (moveAt >= 0) {
-    const [oldPath, newPath] = [argv[moveAt + 1], argv[moveAt + 2]];
+  const stored = haveBaseline ? JSON.parse(readFileSync(baselinePath, 'utf8')) : {};
+  let baseline = stored;
+  for (const [oldPath, newPath] of moves) {
     if (!oldPath || !newPath) {
       console.error('internal-ids: --move needs an old path and a new path (repo-relative).');
       return 1;
@@ -525,12 +574,12 @@ export function main(argv) {
       console.error(`internal-ids: ${e.message}.`);
       return 1;
     }
-    writeFileSync(baselinePath, `${JSON.stringify(sortedObject(baseline), null, 2)}\n`);
-    console.log(`internal-ids: moved the allowance of ${oldPath} to ${newPath}.`);
   }
 
   const { failures, notes } = compareToBaseline(counts, matches, baseline);
+  let code = 0;
   if (failures.length > 0) {
+    code = 1;
     console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids; in code, use a neutral name).');
     for (const f of failures) {
       console.error(`\n  ${f.file}: ${f.count} match(es), baseline allows ${f.allowed}`);
@@ -538,17 +587,28 @@ export function main(argv) {
       if (f.more > 0) console.error(`    ... and ${f.more} more`);
       if (f.hint) console.error(`  hint: ${f.hint}`);
     }
-    return 1;
-  }
-  const mainBaseline = readMainBaseline(root);
-  if (mainBaseline) {
-    const problems = compareWithMain(baseline, mainBaseline);
-    if (problems.length > 0) {
-      console.error('internal-ids: the baseline raises allowance against origin/main. Lower counts or move an entry with --move; do not raise one.');
-      for (const p of problems) console.error(`  ${p}`);
-      return 1;
+  } else {
+    const found = readMainBaselines(root);
+    if (found) {
+      const problems = compareWithMain(baseline, found.main, found.base);
+      if (problems.length > 0) {
+        code = 1;
+        console.error('internal-ids: the baseline raises allowance against origin/main. Lower counts or move an entry with --move; do not raise one.');
+        for (const p of problems) console.error(`  ${p}`);
+      }
     }
   }
+  if (moves.length > 0) {
+    const text = `${JSON.stringify(sortedObject(baseline), null, 2)}\n`;
+    if (code === 0) {
+      writeFileSync(baselinePath, text);
+      console.log(`internal-ids: moved ${moves.map(([o, n]) => `${o} -> ${n}`).join(', ')}.`);
+    } else {
+      const changed = Object.keys({ ...stored, ...baseline }).filter((f) => stored[f] !== baseline[f]);
+      console.error(`internal-ids: the check fails after the move, so the baseline was not written. It would have changed: ${changed.map((f) => `${f} ${stored[f] ?? 'absent'} -> ${baseline[f] ?? 'removed'}`).join('; ') || 'nothing'}. Chain every pair in one call (--move a b --move a c) or fix the failures first.`);
+    }
+  }
+  if (code !== 0) return code;
   if (notes.length > 0) {
     console.log(`internal-ids: ${notes.length} file(s) fell below their baseline (run \`npm run check:internal-ids -- --write-baseline\` from frontend/ to lock it in).`);
   }

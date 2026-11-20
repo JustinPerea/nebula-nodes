@@ -179,6 +179,37 @@ describe('check-internal-ids: what counts', () => {
     expect(count('a.ts', "const b = x < /\\/\\//; // GM")).toBe(1);
   });
 
+  it('still sees a comment after a JSX closing tag, a postfix operator or a keyword-named property', () => {
+    expect(count('a.tsx', 'const e = <div>a</div>; // Q901')).toBe(1);
+    expect(count('a.tsx', 'return <div>{x}</div>; // Q901')).toBe(1);
+    expect(count('a.tsx', '</div> // Q901')).toBe(1);
+    expect(count('a.tsx', '</b> {/* round 901 */}')).toBe(1);
+    expect(count('a.tsx', '<Foo a={1} /> // Q901')).toBe(1);
+    expect(count('a.ts', 'x++ / 2; // Q901')).toBe(1);
+    expect(count('a.ts', 'x-- / 2; // Q901')).toBe(1);
+    expect(count('a.ts', 'const q = obj.in / 2; // Q901')).toBe(1);
+    expect(count('a.ts', 'return /a\\/*b/.test(s);\nconst t = "Q901";')).toBe(0);
+    expect(count('a.ts', 'const g = x + /\\*\\//; const t = "Q901";')).toBe(0);
+    expect(count('a.ts', 'const f = (s) => /\\*\\//.test(s); const t = "Q901";')).toBe(0);
+  });
+
+  it('counts "review N" only when what follows reads as an id', () => {
+    expect(count('a.ts', '// review 3 items')).toBe(0);
+    expect(count('a.ts', '// code review 2 passes')).toBe(0);
+    expect(count('a.ts', '// we review 5 files')).toBe(0);
+    expect(count('a.ts', '// Review 17, H-1')).toBe(2);
+    expect(count('a.ts', '// Review 3 LOW-3')).toBe(2);
+    expect(count('a.ts', '// (review 9, LOW-2)')).toBe(2);
+    expect(count('a.ts', '// review 901')).toBe(1);
+    expect(count('a.ts', '/* review 901 */')).toBe(1);
+    expect(count('a.ts', '// review 901 M1')).toBe(1);
+    expect(count('a.ts', '// review 901 round 2')).toBe(2);
+    expect(count('a.ts', '// review 901: the gap')).toBe(1);
+    expect(count('a.ts', '// review 901 of PR #9001')).toBe(1);
+    expect(count('a.ts', '// review 901 on #9001')).toBe(1);
+    expect(count('a.ts', '// review 3 of the files')).toBe(0);
+  });
+
   it('treats shell # as a comment only at line start or after whitespace or ; | & (', () => {
     expect(count('a.sh', 'n=${#arr[@]} round 901 Q901\n')).toBe(0);
     expect(count('a.sh', 'echo $# round 901\n')).toBe(0);
@@ -249,9 +280,36 @@ describe('check-internal-ids: baseline', () => {
 
   it('moveAllowance moves, caps at the new count, keeps a split remainder and refuses unknown paths', () => {
     expect(moveAllowance({ 'a.ts': 2 }, { 'b.ts': 2 }, 'a.ts', 'b.ts')).toEqual({ 'b.ts': 2 });
-    expect(moveAllowance({ 'a.ts': 5 }, { 'b.ts': 2 }, 'a.ts', 'b.ts')).toEqual({ 'b.ts': 2 });
+    expect(moveAllowance({ 'a.ts': 5 }, { 'b.ts': 2 }, 'a.ts', 'b.ts')).toEqual({ 'a.ts': 3, 'b.ts': 2 });
     expect(moveAllowance({ 'a.ts': 5 }, { 'a.ts': 3, 'b.ts': 2 }, 'a.ts', 'b.ts')).toEqual({ 'a.ts': 3, 'b.ts': 2 });
     expect(() => moveAllowance({ 'a.ts': 2 }, {}, 'x.ts', 'b.ts')).toThrow(/not in the baseline/);
+  });
+
+  it('moveAllowance splits one gone file into two new files across two moves', () => {
+    const counts = { 'b.ts': 2, 'c.ts': 3 };
+    const first = moveAllowance({ 'a.ts': 5 }, counts, 'a.ts', 'b.ts');
+    expect(first).toEqual({ 'a.ts': 3, 'b.ts': 2 });
+    const second = moveAllowance(first, counts, 'a.ts', 'c.ts');
+    expect(second).toEqual({ 'b.ts': 2, 'c.ts': 3 });
+    expect(compareToBaseline(counts, {}, second).failures).toEqual([]);
+  });
+
+  it('the move hint names only sources that are gone from the tree', () => {
+    const counts = { 'new.ts': 2 };
+    const present = compareToBaseline(counts, { 'new.ts': [] }, { 'x.ts': 10 });
+    expect(present.failures[0].hint).toContain('move of x.ts');
+    const kept = compareToBaseline({ ...counts, 'x.ts': 1 }, { 'new.ts': [] }, { 'x.ts': 10 });
+    expect(kept.failures[0].hint).toBeUndefined();
+  });
+
+  it('compareWithMain with a merge base: behind main passes, a real raise fails, a move passes', () => {
+    const base = { 'a.ts': 3, 'z.ts': 1 };
+    const main = { 'a.ts': 1 };
+    expect(compareWithMain(base, main, base)).toEqual([]);
+    expect(compareWithMain({ 'a.ts': 4, 'z.ts': 1 }, main, base)).toHaveLength(1);
+    expect(compareWithMain({ ...base, 'y.ts': 1 }, main, base)).toHaveLength(1);
+    // a move: z.ts gone, y.ts takes its allowance
+    expect(compareWithMain({ 'a.ts': 3, 'y.ts': 1 }, main, base)).toEqual([]);
   });
 
   it('compareWithMain fails a raised entry and a net raise on new paths, and lets a move pass', () => {
@@ -377,5 +435,54 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     const r = run();
     expect(r.code).toBe(1);
     expect(r.out).toContain("above main's 2");
+  });
+
+  const gitIn = (cwd: string, ...a: string[]) =>
+    execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t.test', ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+
+  it('a branch that is behind main and never touched the baseline passes; a real raise fails', () => {
+    write('frontend/src/z.ts', '// GM z\n');
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 2, 'frontend/src/z.ts': 1 }));
+    gitIn(root, 'init', '-q', '-b', 'main');
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'base');
+    gitIn(root, 'checkout', '-qb', 'feat');
+    // main lowers a.ts and deletes z.ts
+    gitIn(root, 'checkout', '-q', 'main');
+    write('frontend/src/a.ts', '// GM one\n');
+    rmSync(join(root, 'frontend/src/z.ts'));
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 1 }));
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'main lowers');
+    gitIn(root, 'update-ref', 'refs/remotes/origin/main', 'main');
+    gitIn(root, 'checkout', '-q', 'feat');
+    expect(run().code).toBe(0);
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 3, 'frontend/src/z.ts': 1 }));
+    write('frontend/src/a.ts', '// GM one\n// GM two\n// GM three\n');
+    const r = run();
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('baseline 3 is above');
+  });
+
+  it('--write-baseline with --move is refused', () => {
+    const r = run('--write-baseline', '--move', 'frontend/src/a.ts', 'frontend/src/b.ts');
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('cannot be combined');
+    expect(baseline()).toEqual({ 'frontend/src/a.ts': 2 });
+  });
+
+  it('--move writes only when the check then passes, and one call can split a gone file', () => {
+    write('frontend/src/a.ts', '// GM 1\n// GM 2\n// GM 3\n// GM 4\n// GM 5\n');
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 5 }));
+    rmSync(join(root, 'frontend/src/a.ts'));
+    write('frontend/src/b.ts', '// GM 1\n// GM 2\n');
+    write('frontend/src/c.ts', '// GM 1\n// GM 2\n// GM 3\n');
+    const half = run('--move', 'frontend/src/a.ts', 'frontend/src/b.ts');
+    expect(half.code).toBe(1);
+    expect(half.out).toContain('baseline was not written');
+    expect(baseline()).toEqual({ 'frontend/src/a.ts': 5 });
+    const both = run('--move', 'frontend/src/a.ts', 'frontend/src/b.ts', '--move', 'frontend/src/a.ts', 'frontend/src/c.ts');
+    expect(both.code).toBe(0);
+    expect(baseline()).toEqual({ 'frontend/src/b.ts': 2, 'frontend/src/c.ts': 3 });
   });
 });
