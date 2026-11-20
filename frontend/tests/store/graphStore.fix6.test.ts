@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 6 (GM's pr198 r8 and pr200 r2 rulings), the store side:
- * - Canvas order for every name list (GM, #200 r2 item 3): both multi-delete
+ * PR #198 fix (design rulings, with #200), the store side:
+ * - Canvas order for every name list (design, #200): both multi-delete
  *   lines name their nodes in the order the canvas holds them, not the order
  *   they were removed in.
- * - (superseded by fix round 7, GM r9 decision 2: a clash asks) CHANGED_ELSEWHERE (GM r8): "Couldn’t save your changes to “X”.
+ * - (superseded by a later design decision: a clash asks) CHANGED_ELSEWHERE (design): "Couldn’t save your changes to “X”.
  *   It was changed in another window first, so your changes are kept on
  *   screen but not saved." The edits stay on screen, marked "Not saved", and
  *   nothing sends them by itself; the person's next edit saves the scene as
  *   they see it.
- * - SWITCHED_UNNAMED (GM r8): "…The canvas switched to another project first."
+ * - SWITCHED_UNNAMED (design): "…The canvas switched to another project first."
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
@@ -148,7 +148,7 @@ async function ownRun(nodes: unknown[]) {
   expect(useGraphStore.getState().isExecuting).toBe(true);
 }
 
-describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () => {
+describe('Design (#200): the multi-delete lines read in canvas order', () => {
   it('a plain multi-delete: the canvas\'s order, whatever order they went in', async () => {
     useGraphStore.setState({ nodes: [textNode('n5', 'A'), textNode('n6', 'B'), textNode('n7', 'C')] } as never);
     fetchMock.mockImplementation(async () => json({ removal: null }));
@@ -181,7 +181,7 @@ describe('GM (#200 r2 item 3): the multi-delete lines read in canvas order', () 
   });
 });
 
-describe('GM r9 decision 2: a clash with another tab waits for the person', () => {
+describe('Design decision 2: a clash with another tab waits for the person', () => {
   const LINE = '“Opening” was changed in another tab while you were editing it.';
 
   it('kept edits, then another tab changes the same shot: mine stay on screen, saves send theirs for it, Keep mine saves mine', async () => {
@@ -193,7 +193,7 @@ describe('GM r9 decision 2: a clash with another tab waits for the person', () =
     await sleep(60);
     expect(unsaved()).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.");
     h.answerLater(() => json({ ok: true }));
-    // The person's other tab (review 11, L-1: "another window" only then).
+    // The person's other tab ("another window" only then).
     syncs({ ...backendGraph({ id: 's1', prompt: 'from another tab' }),
       edit: { id: 'ed_window', actor: { kind: 'person', name: 'You' }, tab: 'tab-other' } });
     await sleep(60);
@@ -219,7 +219,7 @@ describe('GM r9 decision 2: a clash with another tab waits for the person', () =
     await sleep(20);
     h.release();
     await sleep(120);
-    // PR #198 fix round 12 (GM r20 answer 3): no line of the scene's own;
+    // PR #198 fix (design): no line of the scene's own;
     // the switch's handling says it.
     expect(said).toEqual([]);
   });

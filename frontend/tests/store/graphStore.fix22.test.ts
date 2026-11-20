@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 fix round 22 (GM r32), on graphStore.fix21stops' keyed backend:
+ * PR #198 fix (design), on graphStore.fix21stops' keyed backend:
  * - Answer 1: the run-lock line is not a failure, merged with the shared name
  *   list: "Your changes to “Opening” are kept. Nebula will save them when the
  *   run finishes."
@@ -216,7 +216,7 @@ function watchStopLines() {
 const tries = () => useGraphStore.getState().sceneTries;
 async function deleteAndWait(id: string) {
   useGraphStore.getState().deleteNode(id);
-  // The store's hold, not only the notice text (PR #221 review 2 LOW-3).
+  // The store's hold, not only the notice text (PR #221).
   await deleteLanded(useGraphStore);
   await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
   await sleep(20);
@@ -230,8 +230,8 @@ const refuseWith = (h: ReturnType<typeof backend>, id: string, refusal: { status
   for (let i = 0; i < times; i += 1) h.scenes.get(id)!.refuse.push(clone(refusal));
 };
 
-describe('GM r32 answers 1 and 3: the run-lock line, a state line that is not a failure', () => {
-  it('one scene: GM’s line in the state slot, no toast, no [Try again], not stopped; it clears when the run ends', async () => {
+describe('the run-lock line, a state line that is not a failure', () => {
+  it('one scene: design’s line in the state slot, no toast, no [Try again], not stopped; it clears when the run ends', async () => {
     const h = backend({ n1: 'Opening' });
     refuseWith(h, 'n1', PAID, 3);
     const lines = watchStopLines();
@@ -277,8 +277,8 @@ describe('GM r32 answers 1 and 3: the run-lock line, a state line that is not a 
   });
 });
 
-describe('GM r32 answers 2 and 3: the "other" line, a stop line with [Try again]', () => {
-  it('a 422: GM’s line as it stood, in the state slot with [Try again]; no toast; stopped, nothing more sent', async () => {
+describe('the "other" line, a stop line with [Try again]', () => {
+  it('a 422: design’s line as it stood, in the state slot with [Try again]; no toast; stopped, nothing more sent', async () => {
     const h = backend({ n1: 'Opening' });
     refuseWith(h, 'n1', OTHER_422);
     typeIn('n1', 's1', 'mine');

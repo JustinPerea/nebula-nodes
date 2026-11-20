@@ -1,11 +1,11 @@
 /**
- * Q118 (Justin, 2026-10-23, option a, verbatim): "Let Load graph open bigger
+ * (Justin, 2026-10-23, verbatim): "Let Load graph open bigger
  * .nebula files (up to the 512 MiB it already allows for a bundle) as a new
  * project. A project over 16 MiB still can’t be saved, so the canvas says
- * so, and you remove what you don't need until it saves. GM writes that
+ * so, and you remove what you don't need until it saves. Design writes that
  * state's lines."
  *
- * The project store's "saving paused" state. GM - Design's lines, verbatim:
+ * The project store's "saving paused" state. The design lines, verbatim:
  * the notice on entering, "Saving paused. This project is {size} MB, over
  * the 16 MB limit." with "See what's large"; after Load graph, "Opened
  * {filename}. It’s {size} MB, over the save limit." with the same
@@ -182,12 +182,12 @@ describe('entering the paused state', () => {
     expect(projects.saveProject).not.toHaveBeenCalled();
   });
 
-  it("a file over the limit opened as a new project (Q120): GM's line says so", async () => {
+  it("a file over the limit opened as a new project: design's line says so", async () => {
     editCanvas(BIG);
     (state().noteLoadedGraph as (fileName: string, asNewProject?: boolean) => void)('Big campaign.nebula', true);
     expect(state().saveStatus).toBe('paused');
     // The header shows the name (from the file) and the size, so the line
-    // doesn't repeat them and fits on one line beside its button (GM).
+    // doesn't repeat them and fits on one line beside its button (design).
     expect(state().sizeNotice?.text).toBe("Opened as a new project. It’s over the save limit.");
   });
 
@@ -273,7 +273,7 @@ describe('a save that fails while resuming (review)', () => {
     expect(projects.saveProject).toHaveBeenCalledTimes(1);
   });
 
-  it("Save failed's Retry on a project over the limit again goes back to paused by itself, sending nothing (GM, #182)", async () => {
+  it("Save failed's Retry on a project over the limit again goes back to paused by itself, sending nothing (design, #182)", async () => {
     editCanvas(BIG);
     await useProjectStore.getState().flush();
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError(
@@ -309,7 +309,7 @@ describe('nothing is lost without asking', () => {
     expect(projects.saveProject).not.toHaveBeenCalled();
     expect(projects.recoverProject).not.toHaveBeenCalled();
     // The backend's switch kept its live canvas (the nodes, wires and
-    // settings) in the project it left: the confirm says so (review). GM,
+    // settings) in the project it left: the confirm says so. Design,
     // 2026-10-24: the screen names the agent and the project it opens.
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, keptIn: 'Glass campaign',
       agentOpening: { agent: 'Claude', projectName: 'beta' } });
@@ -350,14 +350,14 @@ describe('nothing is lost without asking', () => {
     expect(state().activeProject?.id).toBe('beta');
   });
 
-  it("a download past the browser's string cap says it's too big to download (GM batch, 2026-10-25)", async () => {
+  it("a download past the browser's string cap says it's too big to download (design batch, 2026-10-25)", async () => {
     editCanvas(BIG);
     await useProjectStore.getState().flush();
     await useProjectStore.getState().open('beta');
     vi.mocked(saveEditsToFile).mockRejectedValueOnce(new BrowserStringLimitError());
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await state().downloadUnsavedEdits!();
-    // Not the disk line: GM's "Couldn’t download your edits. It’s too big to download in a browser."
+    // Not the disk line: Design's "Couldn’t download your edits. It’s too big to download in a browser."
     expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE, downloadTooBig: true, keptIn: 'Glass campaign' });
     expect(projects.openProject).not.toHaveBeenCalled();
   });
@@ -398,10 +398,10 @@ describe("#178's recovery copy and the open project's own save", () => {
   });
 });
 
-/** Q120 (Justin, 2026-10-23, option a, verbatim): "Files over the limit open
+/** (Justin, 2026-10-23, verbatim): "Files over the limit open
  * as a new project named after the file. The open project is left as it was.
  * Files under the limit still replace the canvas, as today." */
-describe('a file over the limit opens as a new project (Q120)', () => {
+describe('a file over the limit opens as a new project', () => {
   const created = (): SavedProject => ({ ...project('gamma'), name: 'Big campaign',
     snapshot: { nodes: [], edges: [], runHistory: [], viewport: null, createSessionId: null } });
   const createdActivation = () => ({ project: created(), workspaceRevision: 'rev-c', paramsVersion: GRAPH_PARAMS_VERSION });

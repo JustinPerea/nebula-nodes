@@ -16,7 +16,7 @@ import * as api from '../src/lib/api';
 import type { PlaceholderRunConfirm } from '../src/lib/placeholderRunConfirm';
 
 /**
- * Review 17 (m2stale), decision: "the re-ask takes its label and its price
+ * Decision: "the re-ask takes its label and its price
  * from the same route resolution, after the same bounded settings wait the
  * first ask uses." Nebula refuses a run at its own keys (the 409 estimate);
  * the tab named each row by the keys it read at load. Before the re-ask the
@@ -104,7 +104,7 @@ describe('m2stale: the 409 re-ask names and prices each row on one route', () =>
     expect(sends.map((send) => send.outcome)).toEqual(['409', 'started']);
   });
 
-  it('review 18, L-D: a key read that lands after the limit is ignored, so no route moves under the open dialog', async () => {
+  it('a key read that lands after the limit is ignored, so no route moves under the open dialog', async () => {
     const { rows, sends, asks } = await run(KREA, XAI, { settingsLateMs: 4300, askOpenMs: 800, maxAsks: 3 });
     expect(rows[1]).toBe('Grok Imagine 2.0|$0.06');
     // No "changed while this was open" re-ask for a read that came too late.
@@ -114,7 +114,7 @@ describe('m2stale: the 409 re-ask names and prices each row on one route', () =>
   }, 15_000);
 
   it('keys that can’t be read: the re-ask keeps Nebula’s numbers, so the yes it sends passes', async () => {
-    // Review 18, L-D (GM, round 19: "drop only the route"): with the keys
+    // Design ("drop only the route"): with the keys
     // unreadable the row names the model alone, never a route the tab last
     // knew; the price is still Nebula's (tests/routeNames.round19.test.ts
     // pins the row builder's side).

@@ -1,14 +1,14 @@
 /**
- * PR #204 round 8: the backend scan for routes behind the person gate (tests/personGateRoutes.py),
- * after review 6 (LOW-5, NIT-2).
+ * PR #204: the backend scan for routes behind the person gate (tests/personGateRoutes.py),
+ * covering the forms below.
  *
- * 1. LOW-5: the refusal code "person_required" written as a value is a gate form (the chat
+ * 1. The refusal code "person_required" written as a value is a gate form (the chat
  *    socket's refusals, so `WS /ws/chat` is listed), and a gate read out of a container by
  *    subscript (`CHECKS["p"](...)`) is listed as unreadable, never skipped.
- * 2. NIT-2: `except PersonGateError` (or an isinstance) isn't a gate; building or raising one is.
+ * 2. `except PersonGateError` (or an isinstance) isn't a gate; building or raising one is.
  *    A sub-app mounted with mount() is listed as unreadable, and so is each route on it.
- * 3. Each gate name is a gate by name alone, also when its definition can't be read (review 6
- *    S2: `_person_only_refusal` was only ever found through its body).
+ * 3. Each gate name is a gate by name alone, also when its definition can't be read:
+ *    `_person_only_refusal` was only ever found through its body.
  */
 import { describe, expect, it } from 'vitest';
 import { type UnreadableRouteForm, gatedRoutes, unreadableRouteForms } from './personGatedCallers';
@@ -31,7 +31,7 @@ const SUBSCRIPT = 'main.py @app.post whose handler reads a gate by subscript POS
 
 /** `routes`: "METHOD path handler"; `unreadable`: "file form method path". */
 const PROBES: Record<string, Probe> = {
-  // ---- LOW-5: the "person_required" refusal code ----
+  // ---- the "person_required" refusal code ----
   'JSONResponse({"code": "person_required"}, 403)': probe({
     'main.py': `${HEAD}from fastapi.responses import JSONResponse\n${POST}def probe(request):\n    return JSONResponse({"code": "person_required"}, status_code=403)\n` },
   ['POST /api/probe main.probe']),
@@ -50,7 +50,7 @@ const PROBES: Record<string, Probe> = {
   []),
   'the code in services/person_gate.py itself isn\'t a route': probe({ 'main.py': `${HEAD}from services.person_gate import PERSON_REQUIRED as _\n` }, []),
 
-  // ---- LOW-5: a gate read by subscript ----
+  // ---- a gate read by subscript ----
   'CHECKS["p"](...), a module-level dict': probe({
     'main.py': `${HEAD}${PG}CHECKS = {"p": require_person}\n${POST}def probe(request):\n    CHECKS["p"](request.headers)\n` },
   [], [SUBSCRIPT]),
@@ -71,7 +71,7 @@ const PROBES: Record<string, Probe> = {
     'main.py': `${HEAD}import os\nHANDLERS = {"cwd": os.getcwd}\n${POST}def probe(request):\n    return HANDLERS["cwd"]()\n` },
   []),
 
-  // ---- NIT-2: PersonGateError built or raised, not caught ----
+  // ---- PersonGateError built or raised, not caught ----
   'raise PersonGateError(...)': probe({ 'main.py': `${HEAD}${ERR}${POST}def probe(request):\n    raise PersonGateError(403, "x")\n` }, ['POST /api/probe main.probe']),
   'raise PersonGateError (the class, bare)': probe({ 'main.py': `${HEAD}${ERR}${POST}def probe(request):\n    raise PersonGateError\n` }, ['POST /api/probe main.probe']),
   'return PersonGateError(...) (built, as _person_only_refusal does)': probe({
@@ -84,14 +84,14 @@ const PROBES: Record<string, Probe> = {
   'PERSON_REQUIRED written': probe({
     'main.py': `${HEAD}from services.person_gate import PERSON_REQUIRED\nfrom services.refusals import Refusal\n${POST}def probe(request):\n    return Refusal(403, "x", PERSON_REQUIRED)\n` },
   ['POST /api/probe main.probe']),
-  'except PersonGateError without a gate (review 6 B1) isn\'t a gate': probe({
+  'except PersonGateError without a gate isn\'t a gate': probe({
     'main.py': `${HEAD}${ERR}${POST}def probe(request):\n    try:\n        pass\n    except PersonGateError as exc:\n        exc.detail = "x"\n        raise\n` },
   []),
   'except (HTTPException, PersonGateError) and isinstance() aren\'t gates': probe({
     'main.py': `${HEAD}from fastapi import HTTPException\n${ERR}${POST}def probe(request):\n    try:\n        return {}\n    except (HTTPException, PersonGateError) as exc:\n        if isinstance(exc, PersonGateError):\n            return {"x": 1}\n        return {}\n` },
   []),
 
-  // ---- NIT-2: mount() ----
+  // ---- mount() ----
   'a sub-app mounted with mount()': probe({
     'main.py': `${HEAD}${PG}sub = FastAPI()\n@sub.post("/probe")\n${BODY}app.mount("/api/sub", sub)\n` },
   [], ['main.py @sub.post on an app or router mounted with mount() POST /probe', 'main.py an app or router mounted with mount() - -']),
@@ -104,14 +104,14 @@ const PROBES: Record<string, Probe> = {
   []),
 };
 
-// ---- S2: each gate name counts by name, also when its definition can't be read ----
+// ---- each gate name counts by name, also when its definition can't be read ----
 for (const name of ['require_person', '_person_only_refusal', 'stop_refusal', 'person_only']) {
   PROBES[`${name} from a module it can't read`] = probe({
     'main.py': `${HEAD}from nebula_ext.gates import ${name}\n${POST}def probe(request):\n    raise ${name}(request)\n` },
   ['POST /api/probe main.probe']);
 }
 
-describe('round 8: the refusal code, subscripts, PersonGateError and mount()', () => {
+describe('the refusal code, subscripts, PersonGateError and mount()', () => {
   for (const [form, { files, routes, unreadable }] of Object.entries(PROBES)) {
     it(form, { timeout: 30_000 }, () => {
       expect(gatedRoutes(files).map((route) => `${route.method} ${route.path} ${route.handler}`).sort()).toEqual(routes);
@@ -120,8 +120,8 @@ describe('round 8: the refusal code, subscripts, PersonGateError and mount()', (
   }
 });
 
-describe('round 8: the real backend', () => {
-  it('WS /ws/chat is gated: its refusals send the "person_required" code (LOW-5)', { timeout: 60_000 }, () => {
+describe('the real backend', () => {
+  it('WS /ws/chat is gated: its refusals send the "person_required" code', { timeout: 60_000 }, () => {
     expect(gatedRoutes().map((route) => `${route.method} ${route.path} ${route.handler}`)).toContain('WS /ws/chat main.chat_websocket');
   });
 });

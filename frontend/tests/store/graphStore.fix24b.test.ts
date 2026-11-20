@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 GM r36 Q1, on graphStore.fix20's keyed backend: the timed retries'
+ * PR #198 (design), on graphStore.fix20's keyed backend: the timed retries'
  * line ("Nebula couldn’t save your changes to “Opening”. They’re kept, and
  * Nebula is trying again.") is a state, not an event. It sits in the state
  * slot, in the scene's stop line's place while the retries run: no ×, no
@@ -223,7 +223,7 @@ function watch() {
   return { seen, toasts, off };
 }
 
-describe('GM r36 Q1: the retrying line is a state, in the state slot', () => {
+describe('the retrying line is a state, in the state slot', () => {
   it('a server error: the retrying line in the state slot, no [Try again], no toast; it clears in one update when the retry saves', async () => {
     const h = backend({ n1: 'Opening' });
     useGraphStore.setState({ notify: realNotify } as never);

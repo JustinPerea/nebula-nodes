@@ -1,16 +1,16 @@
 /**
- * Round 19 of PR #195 (review 18 G-1 and H-B; GM - Design's follow-up of
+ * PR #195 (design's follow-up of
  * 2026-10-27, verbatim):
  * - The person's switch or import waits for the saves on their way (15 s at
  *   most). While it waits, the project bar shows "Saving…"; once they land
  *   it goes through with no line. One that fails or times out doesn't hold
- *   it: the new canvas says GM's line, in place of the out-of-date line.
+ *   it: the new canvas says design's line, in place of the out-of-date line.
  *   Drained writes keep their admission: they never land in the new project.
  * - An agent's switch (Nebula already switched): graph writes stop at once,
  *   and the handoff save into the project left carries every value the person
- *   typed that hadn't landed (the coordinator: "rather than saving only when
+ *   typed that hadn't landed (a ruling: "rather than saving only when
  *   the snapshot differs from lastSaved"). An undo still on its way is
- *   dropped, not folded in. GM's line shows only when that handoff fails:
+ *   dropped, not folded in. The design line shows only when that handoff fails:
  *   "…It was still saving when <agent> switched projects." ("an agent" when
  *   it isn't known).
  */
@@ -181,7 +181,7 @@ describe("the person's switch waits for the saves on their way", () => {
     expect(lines()).toEqual([]);
   });
 
-  it('a save refused meanwhile doesn\'t hold the switch; the new canvas says GM\'s line', async () => {
+  it('a save refused meanwhile doesn\'t hold the switch; the new canvas says design\'s line', async () => {
     graphWrites.answer = async () => answer(500, { detail: 'Nope.' });
     type('Typed');
     await useProjectStore.getState().open('beta');
@@ -226,7 +226,7 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     expect(lines()).toEqual([]);
   });
 
-  it('N2: a Delete pressed while the tab follows is never sent', async () => {
+  it('a Delete pressed while the tab follows is never sent', async () => {
     let listed: (value: ProjectList) => void = () => {};
     agentOpens();
     vi.mocked(projects.listProjects).mockImplementation(() => new Promise((resolve) => { listed = resolve; }));
@@ -240,8 +240,8 @@ describe("an agent's switch: the handoff carries what the person typed", () => {
     expect(graphWrites.sent.filter((write) => write.method === 'DELETE')).toEqual([]);
   });
 
-  // Round 20 (GM follow-up 2): one line, naming the copy.
-  it('the handoff fails: GM\'s line names the setting, the node, the project and the agent', async () => {
+  // Design follow-up 2: one line, naming the copy.
+  it('the handoff fails: design\'s line names the setting, the node, the project and the agent', async () => {
     type('Typed');
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError('Nope.', 500, { heading: 'x' } as never));
     vi.mocked(projects.recoverProject).mockResolvedValue(project('recovered'));

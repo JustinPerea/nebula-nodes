@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 7 (review 6; GM r9 and its answers):
- * - H1: a canvas replacement hands a scene's kept edits to #195's cut-off
+ * PR #198 fix (design):
+ * - a canvas replacement hands a scene's kept edits to #195's cut-off
  *   report, then lets them go: an agent's clear names them ("…while you were
  *   editing “Scene” for “Opening”…"), a sync with no edit that brought
  *   another canvas names them (and keeps the copy), and no kept save, retry
  *   or edit ever PUTs the old scene onto the new canvas's node. A reconnect
  *   to the same canvas cuts nothing off: the edits go again.
- * - H2 (GM r9 decision 2, option b): another change is rebased in, field by
+ * - design: another change is rebased in, field by
  *   field, and saved without asking when nothing overlaps; on a clash the
  *   person chooses, and until then saves send the other side's value for it.
- * - M1: `canvas_replaced` says no line of its own.
- * - L2-L5: retries stop, no late line after Undo, no line twice, the
+ * - `canvas_replaced` says no line of its own.
+ * - retries stop, no late line after Undo, no line twice, the
  *   person's own switch.
  */
 
@@ -33,7 +33,7 @@ const store = await import('../../src/store/graphStore');
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => store.resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
-// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+// Design: the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -106,7 +106,7 @@ const typeIn = (shotId: string, prompt: string, id = 'n1') => useGraphStore.getS
 const boom = () => json({ detail: 'boom' }, 500);
 const ok = () => json({ ok: true });
 
-describe('H1: a canvas replacement takes a scene\'s kept edits with it, and names them', () => {
+describe('a canvas replacement takes a scene\'s kept edits with it, and names them', () => {
   it('1d-rev: an unanswered removal, then a sync with no edit that brings another canvas: nothing PUT onto its n1, the edits named', async () => {
     const h = backend([async () => { throw new TypeError('Failed to fetch'); }, ok]);
     useGraphStore.getState().removeShot('n1', 's2');
@@ -171,14 +171,14 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
     useGraphStore.getState().setCanvasProjectName(() => null);
   });
 
-  it('GM r9 answer 1: a reconnect to the same canvas cuts nothing off; the kept edits go again and save', async () => {
+  it('a reconnect to the same canvas cuts nothing off; the kept edits go again and save', async () => {
     store.setSceneRetryDelaysForTests([20]);
     const h = backend([boom]);
     typeIn('s1', 'typed before the gap');
     await sleep(400);
     const before = h.puts.length;
-    expect(before).toBe(9); // the first try and 8 timed retries (L2), then it waits
-    // GM r11 answer 3: stopped; the line says the next change sends them.
+    expect(before).toBe(9); // the first try and 8 timed retries, then it waits
+    // Design: stopped; the line says the next change sends them.
     expect(unsaved()).toBe("Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.");
     h.answer([ok]);
     noteBackendConnection('offline');
@@ -191,7 +191,7 @@ describe('H1: a canvas replacement takes a scene\'s kept edits with it, and name
   });
 });
 
-describe('H2 (GM r9 decision 2): another change is merged in, never overwritten', () => {
+describe('another change is merged in, never overwritten (design)', () => {
   it('5a: another tab edits a different shot: shown, merged and saved without asking', async () => {
     const h = backend([boom]);
     typeIn('s1', 'mine');
@@ -221,7 +221,7 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
     typeIn('s2', 'person edits s2');
     await sleep(80);
     expect(h.puts.at(-1)).toEqual(['s1:mine', 's2:person edits s2', 's3:agent shot']);
-    // GM r36 Q1: the retries' line is a state (the state slot), never a toast.
+    // Design: the retries' line is a state (the state slot), never a toast.
     expect(said).toEqual([]);
   });
 
@@ -232,7 +232,7 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
     expect(brief()).toEqual(['s1:a', "s2:agent's s2"]);
   });
 
-  it('a clash with Codex: mine on screen, GM\'s line, saves send Codex\'s value for it, shots added elsewhere stay; Use Codex\'s takes it', async () => {
+  it('a clash with Codex: mine on screen, design\'s line, saves send Codex\'s value for it, shots added elsewhere stay; Use Codex\'s takes it', async () => {
     const h = backend([boom]);
     typeIn('s1', 'mine');
     await sleep(60);
@@ -295,7 +295,7 @@ describe('H2 (GM r9 decision 2): another change is merged in, never overwritten'
   });
 });
 
-describe('M1: canvas_replaced says no line of its own', () => {
+describe('canvas_replaced says no line of its own', () => {
   const replaced = (kind: 'agent' | 'person') => json({ detail: 'This canvas is out of date. Open the current project before editing or running it.',
     code: 'canvas_replaced', project: { id: 'A', name: 'Active' },
     switchedBy: kind === 'agent' ? { kind: 'agent', name: 'Codex' } : { kind: 'person', name: 'You' } }, 409);
@@ -323,24 +323,24 @@ describe('M1: canvas_replaced says no line of its own', () => {
   });
 });
 
-describe('L2-L5', () => {
-  it('L2: a server error that goes on stops after 8 timed retries, "Unsaved" and the line stay', async () => {
+describe('retries stop, no late line after Undo, no line twice, the person\'s own switch', () => {
+  it('a server error that goes on stops after 8 timed retries, "Unsaved" and the line stay', async () => {
     store.setSceneRetryDelaysForTests([10]);
     const h = backend([boom]);
     typeIn('s1', 'x');
     await sleep(500);
     expect(h.puts).toHaveLength(9);
-    // GM r36 Q1: the retries' line was a state, so nothing was ever toasted.
+    // Design: the retries' line was a state, so nothing was ever toasted.
     expect(said).toEqual([]);
-    // GM r11 answer 3: the stopped line, with [Try again] on its toast.
+    // Design: the stopped line, with [Try again] on its toast.
     const stopped = "Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula will try again with your next change.";
     expect(unsaved()).toBe(stopped);
-    // GM r28 item 2 (round 19): the line is a state, in its own slot.
+    // Design: the line is a state, in its own slot.
     expect(stopLineOf('n1')).toBe(stopped);
     expect(useGraphStore.getState().undoNotice).toBeNull();
   });
 
-  it('L3: Undo while the removal is out, then its 409: no late line, no mark', async () => {
+  it('Undo while the removal is out, then its 409: no late line, no mark', async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const rendering = async () => { await gate; return json({ detail: "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.",
@@ -357,7 +357,7 @@ describe('L2-L5', () => {
     expect(unsaved()).toBeNull();
   });
 
-  it('L4: a rendering 409 whose resend is refused the same way says it once', async () => {
+  it('a rendering 409 whose resend is refused the same way says it once', async () => {
     const rendering = () => json({ detail: "Couldn’t remove “Shot 2”. It’s still running. Stop the run first.",
       code: 'rendering_shots', rendering: { shotIds: ['s2'], shots: [2], stoppable: true } }, 409);
     backend([rendering]);
@@ -366,12 +366,12 @@ describe('L2-L5', () => {
     expect(said).toEqual(["Couldn’t remove “Shot 2”. It’s still running. Stop the run first."]);
   });
 
-  it('L5: the person\'s own switch in another tab', async () => {
+  it('the person\'s own switch in another tab', async () => {
     backend([() => json({ detail: 'This canvas is out of date.', code: 'workspace_moved', project: { id: 'B', name: 'B' },
       switchedBy: { kind: 'person', name: 'You' } }, 409)]);
     typeIn('s1', 'typed');
     await sleep(80);
-    // PR #198 fix round 12 (GM r20 answer 3): the switch's own handling says
+    // PR #198 fix (design): the switch's own handling says
     // it (projectStore's outdated-workspace banner); the scene says nothing.
     expect(said).toEqual([]);
   });

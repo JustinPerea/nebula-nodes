@@ -1,6 +1,6 @@
 /**
- * Round 22 of PR #195 (review 21, L-a and L-b), against the fake Nebula of
- * round 17. Nebula restarted without canvas-revisions.json, so its canvas
+ * PR #195, against the fake Nebula (helpers/undoFakeBackend).
+ * Nebula restarted without canvas-revisions.json, so its canvas
  * revisions start again from a boot-unique base and every sync says
  * `canvasRevisionRestored: false` for that run.
  * - L-a: typing sent before the socket's first sync is refused as out of
@@ -74,7 +74,7 @@ const refuseCanvas = (canvas: string) => {
 const BASE = '1793000000000';
 let clock = Date.now();
 
-describe('review 21: a restart that lost the canvas revisions', () => {
+describe('a restart that lost the canvas revisions', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;

@@ -1,20 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 4 (review 4; GM's r4 and r5 rulings):
+ * PR #198 fix (design rulings):
  * - H1-new: a scene write the backend refuses (a shot removal while a run
  *   this tab doesn't own renders it) drops the pending authoring, puts the
  *   backend's scene back, reads the backend's own line, and no later edit
- *   sends the removal again: the shot and its paid image stay (review 4, R3).
- * - M1: the run lock is never silent. During the tab's own run (a real
+ *   sends the removal again: the shot and its paid image stay.
+ * - the run lock is never silent. During the tab's own run (a real
  *   executeShot: isExecuting is true) the Delete key, the menu, deleteSelected
- *   and Undo/Redo say why: GM's scene and shot lines when that is the
- *   reason, else "… You can delete it when the run finishes." (GM r5 item 2, r39 item 2).
- * - M1: another window's run: one line, the backend's named one, never the
- *   generic "Couldn’t delete the node." in front (GM r5 item 3); a
- *   multi-select keeps "Deleted 2 nodes." with Undo and GM's kept line.
- * - M2: a shot run's upstream scene is held on the canvas too.
- * - GM r4 items 2 and 3: four or more kept scenes are counted; the several-
+ *   and Undo/Redo say why: design's scene and shot lines when that is the
+ *   reason, else "… You can delete it when the run finishes." (design).
+ * - another window's run: one line, the backend's named one, never the
+ *   generic "Couldn’t delete the node." in front (design); a
+ *   multi-select keeps "Deleted 2 nodes." with Undo and design's kept line.
+ * - a shot run's upstream scene is held on the canvas too.
+ * - Design: four or more kept scenes are counted; the several-
  *   scene tooltips.
  */
 
@@ -33,7 +33,7 @@ vi.spyOn(console, 'error').mockImplementation(() => {});
 const { useGraphStore, sceneDeleteDisabledTitle, sceneStopLines, resetDeletedSceneEditsForTests } = await import('../../src/store/graphStore');
 // A deleted scene's kept edits never reach the next test's node with the same id.
 afterEach(() => resetDeletedSceneEditsForTests());
-// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+// Design: the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -89,7 +89,7 @@ function backendGraph(s2: Shot = { id: 's2', prompt: 'b' }) {
   };
 }
 
-describe('H1-new: a shot removal another tab\'s run refuses (review 4, R3)', () => {
+describe('a shot removal another tab\'s run refuses', () => {
   function setUp(status = 409, detail = REMOVE_LINE) {
     const graph = backendGraph();
     useGraphStore.setState({ nodes: graph.nodes, edges: graph.edges } as never);
@@ -100,7 +100,7 @@ describe('H1-new: a shot removal another tab\'s run refuses (review 4, R3)', () 
         const body = JSON.parse(String(init.body));
         const shots = body.params.scene.shots.map((shot: Shot) => shot.id);
         puts.push(shots);
-        // Round 5: the backend's 409 names the rendering shot (rendering.shotIds),
+        // The backend's 409 names the rendering shot (rendering.shotIds),
         // so only a write that removes it is refused.
         if (refuse && status === 409) return shots.includes('s2') ? json({ ok: true })
           : json({ detail, code: 'rendering_shots', rendering: { shotIds: ['s2'], shots: [2], stoppable: true } }, 409);
@@ -136,7 +136,7 @@ describe('H1-new: a shot removal another tab\'s run refuses (review 4, R3)', () 
     useGraphStore.getState().updateScene('n1', (current) => ({ ...current,
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'a2' } : shot)) }));
     await sleep(120);
-    // Round 5 (GM r6 item 1): the rest of the save goes again at once without
+    // Design: the rest of the save goes again at once without
     // the removal; the next edit keeps Shot 2 too.
     expect(puts).toEqual([['s1'], ['s1', 's2'], ['s1', 's2']]);
     expect(shotsOf().map((shot) => shot.id)).toEqual(['s1', 's2']);
@@ -155,19 +155,19 @@ describe('H1-new: a shot removal another tab\'s run refuses (review 4, R3)', () 
     expect(puts.at(-1)).toEqual(['s1', 's2']);
   });
 
-  it('a 413: the edits stay on screen, marked unsaved, with GM\'s line (round 5, GM r6 item 1)', async () => {
+  it('a 413: the edits stay on screen, marked unsaved, with design\'s line', async () => {
     setUp(413, 'Too large.');
     useGraphStore.getState().updateScene('n1', (current) => ({ ...current,
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'very long' } : shot)) }));
     await sleep(120);
     expect(shotsOf()[0].prompt).toBe('very long');
-    // GM r22 Q3: the one 413 line, with [Try again]; GM r28: in the state slot.
+    // Design: the one 413 line, with [Try again]; design: in the state slot.
     expect(stopLineOf('n1')).toBe('“Opening” is too big to save. Remove something from it, then try again.');
     expect(said).toEqual([]);
   });
 });
 
-// -- M1: the tab's own run (a real executeShot) --------------------------------------------
+// -- the tab's own run (a real executeShot) --------------------------------------------
 
 /** n4 "Opening" (s1, s2) with s2 rendering in this tab's own shot run,
  * started through executeShot as the app does; n5-n7 text nodes. */
@@ -191,8 +191,8 @@ async function ownShotRun(extraShot = false) {
 const select = (...which: string[]) => useGraphStore.setState((state) => ({
   nodes: state.nodes.map((node) => ({ ...node, selected: which.includes(node.id) })) }) as never);
 
-describe('M1: during the tab\'s own run, every delete and undo path says why', () => {
-  it('the scene, by the menu, the Delete key or deleteSelected: GM\'s scene line', async () => {
+describe('during the tab\'s own run, every delete and undo path says why', () => {
+  it('the scene, by the menu, the Delete key or deleteSelected: design\'s scene line', async () => {
     await ownShotRun();
     const line = "Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.";
     useGraphStore.getState().deleteNode('n4');
@@ -229,7 +229,7 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(notice()).toBe("You can delete 4 nodes when the run finishes.");
     useGraphStore.setState({ undoNotice: null } as never);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
-    // GM r6: several nodes are named.
+    // Design: several nodes are named.
     expect(notice()).toBe("You can delete “Brief” and “Note” when the run finishes.");
     await sleep(20);
     expect(sent('DELETE')).toHaveLength(0);
@@ -237,7 +237,7 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(said).toEqual([]);
   });
 
-  it('Undo of the step that added the rendering shot: GM\'s undo line, nothing sent', async () => {
+  it('Undo of the step that added the rendering shot: design\'s undo line, nothing sent', async () => {
     const added = await ownShotRun(true);
     useGraphStore.getState().undo();
     await sleep(20);
@@ -278,7 +278,7 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     expect(notice()).toBeNull();
   });
 
-  it('the line is the lock line alone (GM PR #205 r1 answer 2)', () => {
+  it('the line is the lock line alone (design, PR #205)', () => {
     expect(runLockedLine('delete', 1, '“X”')).toBe("You can delete “X” when the run finishes.");
     expect(runLockedLine('delete', 1)).toBe("You can delete the node when the run finishes.");
     expect(runLockedLine('delete', 3)).toBe("You can delete 3 nodes when the run finishes.");
@@ -287,11 +287,11 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
   });
 });
 
-// -- M1: another window's run ---------------------------------------------------------------
+// -- another window's run ---------------------------------------------------------------
 
 const SCENE_LINE = "Nebula couldn’t delete “Opening” because “Shot 2” is still running. Stop the run first.";
 
-describe('M1: a run this tab doesn\'t own: the backend\'s named line, once', () => {
+describe('a run this tab doesn\'t own: the backend\'s named line, once', () => {
   function otherWindowRun() {
     useGraphStore.setState({ nodes: [cinema('n4', [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }], 'Opening'),
       textNode('n5', 'Brief'), textNode('n6', 'Note')] } as never);
@@ -312,13 +312,13 @@ describe('M1: a run this tab doesn\'t own: the backend\'s named line, once', () 
     expect(ids()).toContain('n4');
   });
 
-  it('a multi-select: "Deleted 2 nodes." with Undo, then GM\'s kept line', async () => {
+  it('a multi-select: "Deleted 2 nodes." with Undo, then design\'s kept line', async () => {
     otherWindowRun();
     useGraphStore.getState().onNodesChange(['n4', 'n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
     await sleep(80);
     expect(ids()).toEqual(['n4']);
     const shown = useGraphStore.getState().undoNotice;
-    // GM r6: the deleted nodes are named.
+    // Design: the deleted nodes are named.
     expect(shown?.text).toBe("Deleted “Brief” and “Note”. “Opening” wasn’t deleted because “Shot 2” is still running.");
     expect(shown?.offer).toBe('undo');
     expect(said).toEqual([]);
@@ -333,9 +333,9 @@ describe('M1: a run this tab doesn\'t own: the backend\'s named line, once', () 
   });
 });
 
-// -- M2 on the canvas: a shot run's upstream scene ---------------------------------------
+// -- a shot run's upstream scene on the canvas ---------------------------------------
 
-describe('M2: a shot run holds its upstream scene on the canvas too', () => {
+describe('a shot run holds its upstream scene on the canvas too', () => {
   it('the upstream scene\'s shots can\'t be removed and its Delete is disabled', async () => {
     useGraphStore.setState({
       nodes: [cinema('n1', [{ id: 'u1', prompt: 'u' }, { id: 'u2', prompt: 'v' }], 'Upstream'),
@@ -358,18 +358,18 @@ describe('M2: a shot run holds its upstream scene on the canvas too', () => {
   });
 });
 
-// -- GM r4 items 2 and 3 ------------------------------------------------------------------
+// -- several scenes -----------------------------------------------------------------
 
-describe('GM r4: several scenes', () => {
+describe('several scenes', () => {
   const kept = (count: number) => Array.from({ length: count }, (_, index) => ({
     scene: `Scene ${index + 1}`, shots: { numbers: [1], stoppable: true } }));
 
-  it('item 2: two or three are named; four or more are counted', () => {
+  it('two or three are named; four or more are counted', () => {
     expect(scenesKeptLine(kept(2))).toBe("“Scene 1” and “Scene 2” weren’t deleted because their shots are still running.");
     expect(scenesKeptLine(kept(4))).toBe("4 scenes weren’t deleted because their shots are still running.");
   });
 
-  it('item 3: the tooltip over several rendering scenes', () => {
+  it('the tooltip over several rendering scenes', () => {
     const scenes = [cinema('n1', [{ id: 's1', prompt: 'a', output: { status: 'running' } }], 'A'),
       cinema('n2', [{ id: 's1', prompt: 'a', output: { status: 'running' } }], 'B')];
     expect(sceneDeleteDisabledTitle({ nodes: scenes, activeRuns: [] } as never, ['n1', 'n2']))

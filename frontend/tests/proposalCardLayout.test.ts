@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { formatChipEstimate } from '../src/lib/pricing';
 
 /**
- * GM - Design, 2026-11-01 (the canvas proposal card redesign, brand dogfood
- * item 24). The card was a row: the text column beside three unshrinkable
+ * Design, 2026-11-01 (the canvas proposal card redesign, brand dogfood).
+ * The card was a row: the text column beside three unshrinkable
  * buttons, so a ~385 px card left the text 75-100 px. It is one column now,
  * and "at any card width W from 320 to 600, the note's box is
  * exactly W - 34 px wide". jsdom lays nothing out, so this reads the rules that make
- * that true (the live check measures it in a browser, docs/notes).
+ * that true (the live check measures it in a browser).
  */
 
 const CSS = readFileSync(join(__dirname, '../src/styles/canvasProposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -51,7 +51,7 @@ describe('the proposal card is one column', () => {
     expect(note['max-width']).toBeUndefined();
     const area = rule('.proposal-bar__note-area');
     // 8 px under the header as before: the body's own 4 (its top edge clear
-    // of the header, GM r10) and the note's 4.
+    // of the header, per design) and the note's 4.
     expect(px(area['margin-top']) + px(rule('.proposal-bar__scroll')['margin-top'])).toBe(8);
     for (let width = 320; width <= 600; width += 10) {
       const noteWidth = width - 2 * border - 2 * horizontal;

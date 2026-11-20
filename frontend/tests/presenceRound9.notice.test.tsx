@@ -1,8 +1,8 @@
 /**
- * PR #204 round 9, review 7 MEDIUM-1: the one-notice rule reads registrations, not the page's
+ * PR #204: the one-notice rule reads registrations, not the page's
  * text. A line registers through <LineText> (FailureLines and CommonsErrorLine render through
  * it), and counts only while an IntersectionObserver (root: the window) says it is in view and
- * nothing it can't see hides it. Review 7: a because line scrolled out of Settings' scroll box
+ * nothing it can't see hides it. A because line scrolled out of Settings' scroll box
  * still sent the notice away, and an agent's note quoting the general words did too.
  */
 import { StrictMode, useEffect, useState } from 'react';
@@ -66,7 +66,7 @@ function Settings() {
 beforeEach(() => { session.resetPersonSessionForTests(); lines.resetLinesForTests(); FakeObserver.all = []; });
 afterEach(() => { cleanup(); session.notePersonPromoted(); lines.resetLinesForTests(); });
 
-describe('review 7 MEDIUM-1: a line counts only while it is in view', () => {
+describe('a line counts only while it is in view', () => {
   it('watches with the window as root, any part in view counting', async () => {
     render(<Settings />);
     act(() => handle.show(because));
@@ -102,7 +102,7 @@ describe('review 7 MEDIUM-1: a line counts only while it is in view', () => {
     const box = document.querySelector<HTMLElement>('.settings-scroll')!;
     act(() => FakeObserver.report(box, true));
     await waitFor(() => expect(banner()).toBeNull());
-    // Only `inert` changes (review 7 LOW-4, N7): no class, no style, no text.
+    // Only `inert` changes: no class, no style, no text.
     await quiet();
     act(() => { box.setAttribute('inert', ''); });
     await waitFor(() => expect(banner()).not.toBeNull());
@@ -111,7 +111,7 @@ describe('review 7 MEDIUM-1: a line counts only while it is in view', () => {
     await waitFor(() => expect(banner()).toBeNull());
   });
 
-  it('the round 8 case: Settings in the hidden, inert group the Commons leaves mounted', async () => {
+  it('Settings in the hidden, inert group the Commons leaves mounted', async () => {
     function App() {
       const [commons, setCommons] = useState(false);
       useEffect(() => { handleCommons.set = setCommons; }, []);
@@ -157,7 +157,7 @@ describe('review 7 MEDIUM-1: a line counts only while it is in view', () => {
   });
 });
 
-describe('review 7 NIT-2 and NIT-3: what registers, not what the page says', () => {
+describe('what registers, not what the page says', () => {
   it('an agent\'s note quoting the general words exactly leaves the notice showing', async () => {
     render(<>
       <PersonRequiredBanner />
@@ -182,7 +182,7 @@ describe('review 7 NIT-2 and NIT-3: what registers, not what the page says', () 
     expect([...lines.registeredLines().values()].map((line) => line.kind)).toEqual(['fix']);
   });
 
-  it('a Commons line: neutral (the shared because style, GM r14 (4)) and a status when it is the because form, red and an alert otherwise', async () => {
+  it('a Commons line: neutral (the shared because style, design) and a status when it is the because form, red and an alert otherwise', async () => {
     const commons = copy.commonsNotConnectedCopy('Couldn’t load the references.', false);
     expect(commons).toBe('Nebula couldn’t load the references because this tab isn’t connected as you. Open the link Nebula printed when it started.');
     render(<>

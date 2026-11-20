@@ -1,20 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 5 (review 5; GM's r6 and r7 rulings), the store side:
- * - H1: a refused shot removal leaves the undo and redo stacks consistent.
+ * PR #198 fix (design rulings), the store side:
+ * - a refused shot removal leaves the undo and redo stacks consistent.
  *   Every step pushed while the refused write was out takes the shot back
  *   into its snapshot, so no Undo or Redo ever sends a scene without it
- *   (review 5 P1, P7; the live repro).
- * - M1 / GM r6 item 1: a partial revert. A 409 that names its rendering shots
+ *   (the live repro).
+ * - design: a partial revert. A 409 that names its rendering shots
  *   (`rendering.shotIds`) puts back only those, and the rest of the save goes
  *   again at once: the typing saves, the removal never goes out again.
- * - GM r7 item 1: every whole-save refusal keeps the edits on screen, marked
+ * - Design: every whole-save refusal keeps the edits on screen, marked
  *   unsaved, with the line for what clears it.
- * - L1: a removal with no answer is reconciled like a refusal on reconnect,
+ * - a removal with no answer is reconciled like a refusal on reconnect,
  *   unless the backend shows it applied.
- * - L2: a failed re-read never leaves the restored shot without its wire.
- * - GM r6 naming rule on both multi-delete lines; N1, a wire-only Delete in a run.
+ * - a failed re-read never leaves the restored shot without its wire.
+ * - Design naming rule on both multi-delete lines; a wire-only Delete in a run.
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
@@ -34,7 +34,7 @@ const store = await import('../../src/store/graphStore');
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => store.resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
-// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+// Design: the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const setSceneRetryDelaysForTests = (delays: number[]) => (store as { setSceneRetryDelaysForTests?: (d: number[]) => void }).setSceneRetryDelaysForTests?.(delays);
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
@@ -146,10 +146,10 @@ function harness(options: { first?: () => Response; later?: () => Response; expo
 const typeIn = (shotId: string, prompt: string) => useGraphStore.getState().updateScene('n1', (current) => ({ ...current,
   shots: current.shots.map((shot) => (shot.id === shotId ? { ...shot, prompt } : shot)) }));
 
-// -- H1 + M1: a refused removal while the person kept working ------------------------------
+// -- a refused removal while the person kept working ------------------------------
 
-describe('H1: the undo stack after a refused removal (review 5)', () => {
-  it('P1: typing in the scene while the removal was out; Undo and Redo after the run never drop Shot 2', async () => {
+describe('the undo stack after a refused removal', () => {
+  it('typing in the scene while the removal was out; Undo and Redo after the run never drop Shot 2', async () => {
     const h = harness();
     useGraphStore.getState().removeShot('n1', 's2');
     await sleep(30);
@@ -187,7 +187,7 @@ describe('H1: the undo stack after a refused removal (review 5)', () => {
     for (const restore of h.restores) expect(restore.map((s) => s.split(':')[0])).toContain('s2');
   });
 
-  it('P7: an edit to another node on top; Undo, Undo and Redo never drop Shot 2', async () => {
+  it('an edit to another node on top; Undo, Undo and Redo never drop Shot 2', async () => {
     const h = harness();
     useGraphStore.getState().removeShot('n1', 's2');
     await sleep(20);
@@ -234,8 +234,8 @@ describe('H1: the undo stack after a refused removal (review 5)', () => {
   });
 });
 
-describe('M1 / GM r6 item 1: the partial revert', () => {
-  it('P2: typing then a removal in one PUT: only Shot 2 comes back, the typing saves', async () => {
+describe('the partial revert (design)', () => {
+  it('typing then a removal in one PUT: only Shot 2 comes back, the typing saves', async () => {
     const h = harness();
     const n1 = nodeOf('n1')!;
     const scene = n1.data.params.scene as { shots: Shot[] };
@@ -268,14 +268,14 @@ describe('M1 / GM r6 item 1: the partial revert', () => {
   });
 });
 
-// -- GM r7 item 1: whole-save refusals ------------------------------------------------------
+// -- design: whole-save refusals ------------------------------------------------------
 
-// GM r22 Q3 (2026-10-28): one line per status, a save that wasn't stopped too.
+// Design (2026-10-28): one line per status, a save that wasn't stopped too.
 const TOO_BIG_LINE = '“Opening” is too big to save. Remove something from it, then try again.';
 const CANT_LINE = 'Nebula can’t save your changes to “Opening”.';
 
-describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked unsaved', () => {
-  it('413: the edits stay, GM\'s line once, and they save once a later save fits', async () => {
+describe('a refusal that can\'t be pinned keeps the edits, marked unsaved', () => {
+  it('413: the edits stay, design\'s line once, and they save once a later save fits', async () => {
     const h = harness({ first: () => json({ detail: 'graph payload contains too many values' }, 413),
       later: () => json({ detail: 'graph payload contains too many values' }, 413) });
     typeIn('s1', 'x'.repeat(50));
@@ -285,7 +285,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(150);
     expect(brief()).toEqual([`s1:${'x'.repeat(50)}`, 's2:second field']);
-    // GM r22 Q3: the one 413 line, with [Try again]; no promise of a retry.
+    // Design: the one 413 line, with [Try again]; no promise of a retry.
     expect(stopLineOf('n1')).toBe(TOO_BIG_LINE);
     expect(said).toEqual([]);
     expect(unsaved()).toBe(TOO_BIG_LINE);
@@ -304,7 +304,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     h.release();
     await sleep(60);
     expect(brief()).toEqual(['s1:during the run', 's2:b']);
-    // GM r32 answers 1 and 3: not a failure, and a state line (no toast).
+    // Design: not a failure, and a state line (no toast).
     expect(said).toEqual([]);
     expect(stopLineOf('n1')).toBe("Your changes to “Opening” are kept. Nebula will save them when the run finishes.");
     expect(unsaved()).toBe("Your changes to “Opening” are kept. Nebula will save them when the run finishes.");
@@ -338,9 +338,9 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(unsaved()).toBeNull();
   });
 
-  it('a server error: kept, "Nebula is trying again." (GM r29 Q1), and it does', async () => {
+  it('a server error: kept, "Nebula is trying again." (design), and it does', async () => {
     const h = harness({ first: () => json({ detail: 'boom' }, 500), later: () => json({ ok: true }) });
-    // GM r36 Q1: a state, in the state slot, not a toast. Every change of
+    // Design: a state, in the state slot, not a toast. Every change of
     // the scene's line is recorded, so the check doesn't race the 30 ms retry.
     const lines: (string | null)[] = [];
     const stopWatch = useGraphStore.subscribe(() => {
@@ -367,14 +367,14 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(150);
-    // PR #198 fix round 12 (GM r20 answer 3): who deleted it isn't known
+    // PR #198 fix (design): who deleted it isn't known
     // here (no deletedBy), so the line says nothing of who.
     expect(said).toEqual(["“Opening” was deleted, so your changes to it can’t be saved."]);
     expect(brief()[0]).toBe('s1:gone');
     expect(h.puts).toHaveLength(1);
   });
 
-  it('the workspace moved: no line of the scene’s own, the edits held for the switch (GM r20 answer 3)', async () => {
+  it('the workspace moved: no line of the scene’s own, the edits held for the switch (design)', async () => {
     const moved = (switchedBy: unknown) => () => json({ detail: 'This canvas is out of date. Open the current project before editing or running it.',
       code: 'workspace_moved', project: { id: 'B', name: 'Moodboards' }, switchedBy }, 409);
     let h = harness({ first: moved({ kind: 'agent', name: 'Codex' }) });
@@ -382,7 +382,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    // PR #198 fix round 12 (GM r20 answer 3): the switch's own handling
+    // PR #198 fix (design): the switch's own handling
     // says it once (projectStore); the scene says nothing and sends nothing more.
     expect(said).toEqual([]);
     expect(h.puts).toHaveLength(1);
@@ -403,7 +403,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     await sleep(20);
     h.release();
     await sleep(120);
-    // GM r22 Q3: the one 400 line, with [Try again]; the status in the Agent log.
+    // Design: the one 400 line, with [Try again]; the status in the Agent log.
     expect(stopLineOf('n1')).toBe(CANT_LINE);
     expect(said).toEqual([]);
     expect(logged.some((line) => line.includes('params.scene nested too deeply') && line.includes('n1') && line.includes('HTTP 400'))).toBe(true);
@@ -421,7 +421,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(said).toEqual([]);
   });
 
-  it('any other refusal: kept, marked unsaved, the backend\'s line (GM r32: its stop line, with [Try again])', async () => {
+  it('any other refusal: kept, marked unsaved, the backend\'s line (design: its stop line, with [Try again])', async () => {
     const h = harness({ first: () => json({ detail: "Couldn’t save “Opening”. It's locked." }, 409) });
     typeIn('s1', 'locked');
     await sleep(20);
@@ -433,7 +433,7 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
     expect(unsaved()).toBe("Couldn’t save “Opening”. It's locked.");
   });
 
-  it('the copy is in constants for GM', () => {
+  it('the copy is in constants for design', () => {
     expect(copy.sceneTooBigToSaveLine('Opening')).toBe(TOO_BIG_LINE);
     expect(copy.sceneCantSaveLine('Opening')).toBe(CANT_LINE);
     expect(copy.sceneRunLockLine(['Opening'])).toBe("Your changes to “Opening” are kept. Nebula will save them when the run finishes.");
@@ -460,9 +460,9 @@ describe('GM r7 item 1: a refusal that can\'t be pinned keeps the edits, marked 
   });
 });
 
-// -- L1: no answer ----------------------------------------------------------------------------
+// -- no answer ----------------------------------------------------------------------------
 
-describe('L1: a removal with no answer', () => {
+describe('a removal with no answer', () => {
   function offlineBackend() {
     syncs(backendGraph());
     const puts: string[][] = [];
@@ -520,9 +520,9 @@ describe('L1: a removal with no answer', () => {
   });
 });
 
-// -- L2: the re-read fails ----------------------------------------------------------------------
+// -- the re-read fails ----------------------------------------------------------------------
 
-describe('L2: the re-read after a refusal fails', () => {
+describe('the re-read after a refusal fails', () => {
   it('the wire comes back from the canvas\'s own record', async () => {
     const h = harness({ exportGraph: () => { throw new Error('unused'); } });
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -540,7 +540,7 @@ describe('L2: the re-read after a refusal fails', () => {
   });
 });
 
-// -- GM r6 naming rule ---------------------------------------------------------------------------
+// -- design naming rule ---------------------------------------------------------------------------
 
 async function ownRun(nodes: unknown[]) {
   store.clearCinemaScenePersistence();
@@ -552,7 +552,7 @@ async function ownRun(nodes: unknown[]) {
   expect(useGraphStore.getState().isExecuting).toBe(true);
 }
 
-describe('GM r6: the naming rule on both multi-delete lines', () => {
+describe('the naming rule on both multi-delete lines', () => {
   it('own run: names up to 3, groups same titles, counts from 4', async () => {
     await ownRun([textNode('n5', 'Brief'), textNode('n6', 'Note'), textNode('n7', 'Text'), textNode('n8', 'Text')]);
     useGraphStore.getState().onNodesChange(['n5', 'n6'].map((id) => ({ id, type: 'remove' as const })));
@@ -597,7 +597,7 @@ describe('GM r6: the naming rule on both multi-delete lines', () => {
   });
 });
 
-describe('N1: a wire-only Delete during the tab\'s run says why', () => {
+describe('a wire-only Delete during the tab\'s run says why', () => {
   it('"You can delete the connection when the run finishes."', async () => {
     await ownRun([textNode('n5', 'Brief')]);
     useGraphStore.setState({ edges: [{ id: 'e9', source: 'n4', sourceHandle: 'shot_s1', target: 'n5', targetHandle: 'text', selected: true }],
@@ -608,8 +608,8 @@ describe('N1: a wire-only Delete during the tab\'s run says why', () => {
   });
 });
 
-// PR #221 review 1 MEDIUM-1: a save answered 404 keeps the scene's unsaved
-// edits for a delete undone (GM r20 answer 3), with no delete in sight. Every
+// PR #221: a save answered 404 keeps the scene's unsaved
+// edits for a delete undone (design), with no delete in sight. Every
 // test here reuses n1 on one canvas, so without the afterEach reset the next
 // test's fresh n1 took A's typing back and PUT it (["s1:gone","s2:b"]).
 // A runs before B (shuffle off); B fails with the reset removed.

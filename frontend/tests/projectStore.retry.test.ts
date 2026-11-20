@@ -1,11 +1,11 @@
 /**
- * Error copy round 3b (GM - Design): Projects' "Try again" redoes the
- * failed action, never a different one. GM, round 3: "make Retry redo the
+ * Error copy (design): Projects' "Try again" redoes the
+ * failed action, never a different one. Design: "make Retry redo the
  * failed action, never a different one. If that's more than a small change,
  * hide Retry for those failures instead. A Retry that does something else is
  * a defect." The store keeps what failed (`errorRetry`), and
  * projectRetryOffer says what the screen offers: 'redo' (Try again redoes the
- * failure, so the reason is GM's short line), 'reload' (Try again reloads the
+ * failure, so the reason is design's short line), 'reload' (Try again reloads the
  * saved projects, as the line says, with the full reason) or 'none' (no Try
  * again; the full reason).
  */
@@ -56,7 +56,7 @@ async function exhaustFirstLoadTries(): Promise<void> {
 }
 const unavailable = (heading: string) => new projects.ProjectRequestError("Nebula didn't respond. Try again.", 503, { heading });
 const refused = (heading: string, reason: string, status = 409) => new projects.ProjectRequestError(reason, status, { heading });
-// The backend's refusal of an open over an unconfirmed World Labs run (GM, round 13 of PR #114).
+// The backend's refusal of an open over an unconfirmed World Labs run (design, PR #114).
 const WORLD_LABS_OPEN = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
 // A heading as the one line's action ("Couldn't open the project." -> "Nebula couldn’t open the project"), then its because clause.
 const nebula = (heading: string) => heading.replace(/^Couldn't /, 'Nebula couldn’t ').replace(/\.$/, '');
@@ -67,7 +67,7 @@ function listing(overrides: Partial<projects.ProjectList> = {}): projects.Projec
   return { projects: [summary('alpha'), summary('beta')], trash: [], activeProjectId: 'alpha',
     workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION, ...overrides };
 }
-// Before round 3b Projects offered Try again (with the short line) beside
+// Before this change Projects offered Try again (with the short line) beside
 // every failure; that is what an older store without the offer reads as.
 const offer = () => typeof projectStore.projectRetryOffer === 'function'
   ? projectStore.projectRetryOffer(useProjectStore.getState()) : 'redo';
@@ -150,7 +150,7 @@ describe('Projects: Try again redoes the failed action', () => {
   it('a create whose reply was lost: Try again reloads the saved projects, as its line says, and never creates twice', async () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(unavailable("Couldn't create the project."));
     await useProjectStore.getState().createProject('Fresh');
-    // Round 3c (GM): "Couldn't confirm…" with the same object, then the mapped reason line.
+    // Design: "Couldn't confirm…" with the same object, then the mapped reason line.
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t confirm the project change because the server didn’t respond. “Try again” checks your saved projects and won’t make the change twice.");
     expect(offer()).toBe('reload');
     await useProjectStore.getState().retry();
@@ -306,14 +306,14 @@ describe('Projects: Try again redoes the failed action', () => {
   });
 });
 
-// Round 3b review: a refusal for good at startup still leaves a way out, and a
-// World Labs hold on the canvas is refused in the browser with GM's line and
+// A refusal for good at startup still leaves a way out, and a
+// World Labs hold on the canvas is refused in the browser with design's line and
 // no Try again (redoing it fails the same local check until the person unlocks).
 describe('Projects: review fixes', () => {
   const ambiguity = { runId: 'run-wl', nodeId: 'n-wl', kind: 'worldlabs-environment' as const,
     message: 'held', durable: true };
   const holdLine = (heading: string) => `${nebula(heading)} ${WORLD_LABS_OPEN_CLAUSE}`;
-  it("the Projects screen's own check says GM's round 13 line, word for word", () => {
+  it("the Projects screen's own check says design's line, word for word", () => {
     expect(holdLine("Couldn't open the project.")).toBe(
       "Nebula couldn’t open the project because a World Labs run needs your check first. Use the notice at the top of the screen.");
   });
@@ -332,7 +332,7 @@ describe('Projects: review fixes', () => {
     expect(useProjectStore.getState()).toMatchObject({ error: null, initialized: true });
   });
 
-  it('opening another project while a node holds an unconfirmed World Labs start: GM\'s line, no Try again, no request', async () => {
+  it('opening another project while a node holds an unconfirmed World Labs start: design\'s line, no Try again, no request', async () => {
     useGraphStore.setState({ providerStartAmbiguities: [ambiguity] });
     await useProjectStore.getState().open('beta');
     expect(useProjectStore.getState()).toMatchObject({ error: holdLine("Couldn't open the project."), errorRetry: null });
@@ -350,7 +350,7 @@ describe('Projects: review fixes', () => {
     expect(projects.createProject).not.toHaveBeenCalled();
   });
 
-  it('deleting the open project while a node holds World Labs state: GM\'s line, no Try again, no request', async () => {
+  it('deleting the open project while a node holds World Labs state: design\'s line, no Try again, no request', async () => {
     useGraphStore.setState({ providerStartAmbiguities: [ambiguity] });
     await useProjectStore.getState().remove('alpha');
     expect(useProjectStore.getState()).toMatchObject({ error: holdLine("Couldn't delete the project."), errorRetry: null });
@@ -361,7 +361,7 @@ describe('Projects: review fixes', () => {
   it('a run that is only going keeps the busy line with Try again (it can succeed once the run ends)', async () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().open('beta');
-    // Round 3c (GM): "A run is still going. Let it finish or stop it, then try again."
+    // Design: "A run is still going. Let it finish or stop it, then try again."
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t open the project because a run is still going. Let it finish or stop it.");
     expect(offer()).toBe('redo');
     useGraphStore.setState({ isExecuting: false });
@@ -370,11 +370,11 @@ describe('Projects: review fixes', () => {
   });
 });
 
-// Error copy round 3c (GM - Design), the Projects screen's older lines:
+// Error copy (design), the Projects screen's older lines:
 // ""Could not confirm…" → "Couldn't confirm…" with the same object, then the
 // mapped reason line." and ""Finish or stop the current run…" → "A run is
 // still going. Let it finish or stop it, then try again."" Every variant.
-describe('round 3c: the older Projects lines', () => {
+describe('the older Projects lines', () => {
 
   it('a lost create reply with no connection: the connection line after the heading', async () => {
     vi.mocked(projects.createProject).mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch'),
@@ -423,10 +423,10 @@ describe('round 3c: the older Projects lines', () => {
 });
 
 
-describe('round 3c-2: the startup load never shows an error\'s own message', () => {
+describe('the startup load never shows an error\'s own message', () => {
   beforeEach(() => { useProjectStore.setState(initial, true); resetProjectStoreForTests(); });
 
-  it('a plain Error reads the heading and GM\'s general line', async () => {
+  it('a plain Error reads the heading and design\'s general line', async () => {
     vi.mocked(projects.getProject).mockRejectedValueOnce(new Error('internal: snapshot.nodes is not iterable'));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
@@ -449,7 +449,7 @@ describe('round 3c-2: the startup load never shows an error\'s own message', () 
   });
 });
 
-describe("round 3e: every Projects action reads a plain Error through GM's mapping", () => {
+describe("every Projects action reads a plain Error through design's mapping", () => {
   const GENERAL = "Try again, or reload if it keeps happening.";
   const RAW = 'internal: snapshot.nodes is not iterable at /Users/someone/state.json';
 
@@ -520,7 +520,7 @@ describe("round 3e: every Projects action reads a plain Error through GM's mappi
   });
 });
 
-// Round 15 of PR #114: offline is read-only, and an autosave is held, not
+// PR #114: offline is read-only, and an autosave is held, not
 // failed. Nothing is sent, the header keeps "Unsaved changes" (no "Save
 // failed · Retry", no toast), and the save goes by itself once Nebula answers.
 describe('Projects: an autosave while offline', () => {

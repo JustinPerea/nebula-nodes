@@ -1,10 +1,10 @@
 /**
- * PR #204 round 7, GM r8 (4): the header's left group doesn't change width when nothing visible
+ * PR #204 (design): the header's left group doesn't change width when nothing visible
  * changed. "Saved" folds away 2.6 s after a save (its 41 px, gap included). A header mounted
  * long after the save replayed that fold, so the group was 41 px wider for 2.6 s and then
- * narrowed. Round 8 (review 6 LOW-2): what mounts a new header is a screen change (Canvas to
+ * narrowed. What mounts a new header is a screen change (Canvas to
  * Creator Studio); a demote and a promote re-render it in place. These tests pin the fold
- * resuming on a remount, and (round 8) that a demote and a promote change nothing in the group.
+ * resuming on a remount, and that a demote and a promote change nothing in the group.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); notePersonPromoted(); });
 
-describe('GM r8 (4): "Saved" keeps its place in its fold across a remount (a screen change)', () => {
+describe('"Saved" keeps its place in its fold across a remount (a screen change)', () => {
   it('the delay that puts the fold where it was: none at the save, the time since after it, none once unsettled', () => {
     expect(settleDelay(true, 1_000)).toBeUndefined();
     expect(settleDelay(true, 4_200)).toBe('-3200ms');
@@ -65,7 +65,7 @@ describe('GM r8 (4): "Saved" keeps its place in its fold across a remount (a scr
   });
 });
 
-describe('round 8, review 6 LOW-1: a re-render during the fold leaves it running', () => {
+describe('a re-render during the fold leaves it running', () => {
   it('the delay is taken once per settle, not on every render', () => {
     vi.useFakeTimers({ now: 10_000 });
     const view = render(<ProjectWorkspaceControls />);
@@ -86,7 +86,7 @@ describe('round 8, review 6 LOW-1: a re-render during the fold leaves it running
   });
 });
 
-describe('round 8, review 6 LOW-2: a demote and a promote change nothing in the group', () => {
+describe('a demote and a promote change nothing in the group', () => {
   it('the same elements, the same markup and nothing hidden taking room, before, during and after', () => {
     vi.useFakeTimers({ now: 10_000 });
     render(<ProjectWorkspaceControls />);

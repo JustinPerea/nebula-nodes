@@ -1,12 +1,12 @@
 /**
- * The paths Idol staged in PR #203 that GM kept because they are shared
- * (r14, "Staged code": keep them "if they live in the shared formatter and
+ * The paths Idol staged in PR #203 that design kept because they are shared
+ * (design, "Staged code": keep them "if they live in the shared formatter and
  * lock helper. Other nodes will reach them, a keyed provider through Accept,
  * for example"): the sourced-$0 chip and its tooltip (runScope runChipLabel /
  * runChipTitle, canvasProposals proposalEstimateLabel), and the key lock
  * lines (runKeyLock: the Run line, withKeyLock, Accept's line through
  * proposalAcceptLock, and a Run history replay's: historyRunKeyLock through
- * canKeyLock, review 8 of PR #203, copy NIT-1). Each is exercised here on a synthetic keyed route
+ * canKeyLock, PR #203). Each is exercised here on a synthetic keyed route
  * that is not Idol, so a later Idol-only shortcut can't pass them.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -51,12 +51,12 @@ afterEach(() => {
 });
 
 describe('the sourced $0 lives in the shared formatter', () => {
-  it('a keyed route priced at a sourced $0 is free with no chip, its tooltip only that (GM, PR #203 r18 item 1)', () => {
+  it('a keyed route priced at a sourced $0 is free with no chip, its tooltip only that (design, PR #203)', () => {
     const summary = summarizeRunScope([node()], [], { kind: 'graph' }, { pricing, apiKeys: { [KEY]: 'set' } });
     expect(summary.paid).toEqual([]);
     expect(summary.free).toEqual(['Synthetic']);
     expect(summary.cost?.sourcedZero).toBe(true);
-    // No chip, as any free run (GM, PR #203 r20 item 1); the tooltip stays.
+    // No chip, as any free run (design, PR #203); the tooltip stays.
     expect(runChipLabel(summary)).toBeNull();
     expect(runChipTitle(summary)).toBe(SOURCED_ZERO_TITLE);
     expect(SOURCED_ZERO_TITLE).toBe('This costs nothing to run.');
@@ -71,7 +71,7 @@ describe('the sourced $0 lives in the shared formatter', () => {
 
 /** A key-billing route on Replicate (not a Space, not Hugging Face): the
  * class, its account and its label come from directRoute, never from a
- * hard-coded name (review 9 of PR #203, cost LOW-3: mutants C11 and C12). */
+ * hard-coded name (PR #203). */
 function billing(): ModelNodeDefinition {
   const base = synthetic();
   return { ...base, routes: [{ id: 'syn', provider: 'replicate', handler: 'replicate-model', maker: true, keys: [],
@@ -128,7 +128,7 @@ describe('the key lock lines live in the shared lock helper', () => {
     expect(proposalAcceptLock(view, undefined, { nodes: [], edges: [] }, settings({ [KEY]: 'set' }))).toBeNull();
   });
 
-  it('a Run history replay of the route is locked with its line until the key is set (copy NIT-1, M21)', () => {
+  it('a Run history replay of the route is locked with its line until the key is set', () => {
     expect(canKeyLock(ID)).toBe(true);
     const record = (targetNodeId?: string): RunRecord => ({
       id: 'r1', status: 'complete', trigger: targetNodeId ? 'node' : 'graph', startedAt: 1, targetNodeId,
@@ -137,7 +137,7 @@ describe('the key lock lines live in the shared lock helper', () => {
     for (const replay of [record(), record('s1')]) {
       expect(historyRunKeyLock(replay, [], settings({}))).toBe(LINE);
       expect(historyRunKeyLock(replay, [], settings({ [KEY]: 'set' }))).toBeNull();
-      // An invisible-only key is no key (review 8, LOW-1).
+      // An invisible-only key is no key.
       expect(historyRunKeyLock(replay, [], settings({ [KEY]: '\u200b' }))).toBe(LINE);
     }
   });

@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 fix round 17 (review 15, GM r26), on round 12's keyed backend in
+ * PR #198 fix (design), on graphStore.fix12's keyed backend in
  * small (graphStore.fix16's harness):
- * - LOW-1 (GM r26 answer 1): Codex ends a clash itself (it writes the
+ * - design: Codex ends a clash itself (it writes the
  *   person's own value) while a 400 or 413 waits behind it: the same as the
  *   person's answer. The card matching Nebula's scene clears the stop and
  *   the mark; otherwise the stop line is said once, with [Try again].
- * - GM r26 answer 2: while a clash is asked again, the prompt is the only
+ * - Design: while a clash is asked again, the prompt is the only
  *   line for that scene; the lines that gave way don't come back, and no
  *   stale [Undo] can delete the scene behind the open question.
- * - GM r26 answer 3: while a scene is stopped, its stop line keeps its slot;
+ * - Design: while a scene is stopped, its stop line keeps its slot;
  *   Codex's edits about that scene alone go only to the Agent log. Codex
  *   deleting it or starting a new clash says that instead; edits about
  *   anything else show, with the stop line beside them.
@@ -19,7 +19,7 @@ import { deleteLanded } from '../helpers/deleteLanded';
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -244,7 +244,7 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// Design: the stop line with [Try again] is in the state
 // slot now; the event slots never carry it.
 const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
 const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
@@ -324,7 +324,7 @@ async function stoppedByServer(h: ReturnType<typeof backend>) {
   expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
 }
 
-describe('review 15 LOW-1 (GM r26 answer 1): Codex ends the clash itself while a 400 or 413 waits behind it', () => {
+describe('Codex ends the clash itself while a 400 or 413 waits behind it', () => {
   it.each([[400, CANT], [413, TOO_BIG]])('%i, another edit left: the stop line is said once with [Try again]; nothing is sent', async (status, line) => {
     const h = backend(S3);
     const lines = watchSlots();
@@ -337,7 +337,7 @@ describe('review 15 LOW-1 (GM r26 answer 1): Codex ends the clash itself while a
     lines.off();
     expect(clashes16()).toEqual({});
     expect(stopped()).toEqual({ n1: true });
-    // GM r28 item 2 (round 19): in the state slot, never an event slot.
+    // Design: in the state slot, never an event slot.
     expect(retryToasts().map((notice) => notice.text)).toEqual([line]);
     expect(slots().map((notice) => notice.text)).not.toContain(line);
     expect(lines.lines.filter((text) => text === line)).toEqual([line]);
@@ -373,7 +373,7 @@ describe('review 15 LOW-1 (GM r26 answer 1): Codex ends the clash itself while a
   });
 });
 
-describe('GM r26 answer 2: the asked-again prompt is the only line for the scene', () => {
+describe('the asked-again prompt is the only line for the scene', () => {
   it('the Agent log’s undo brings it back: "Codex undid its edit." with [Undo] gives way, doesn’t come back after the answer; Cmd+Z still undoes it', async () => {
     const h = backend(S3);
     await clashOnS1(h);
@@ -437,7 +437,7 @@ describe('GM r26 answer 2: the asked-again prompt is the only line for the scene
   });
 });
 
-describe('GM r26 answer 3: the stop line keeps its slot; Codex’s edits about that scene go to the Agent log', () => {
+describe('the stop line keeps its slot; Codex’s edits about that scene go to the Agent log', () => {
   it('Codex’s edit about the stopped scene alone: no toast; the stop line stays with [Try again]; Cmd+Z can still undo it', async () => {
     const h = backend(S3);
     await stoppedByServer(h);
@@ -448,7 +448,7 @@ describe('GM r26 answer 3: the stop line keeps its slot; Codex’s edits about t
     lines.off();
     expect(lines.lines.filter((text) => text === 'Codex changed the canvas.')).toEqual([]);
     expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
-    // GM r28 item 2 (round 19): the state slot holds it; the event slot is free.
+    // Design: the state slot holds it; the event slot is free.
     expect(toast()).toBeNull();
     const top = useGraphStore.getState().undoStack.at(-1) as { kind?: string; agentName?: string };
     expect(top.kind).toBe('foreign');
@@ -488,7 +488,7 @@ describe('GM r26 answer 3: the stop line keeps its slot; Codex’s edits about t
     expect(lines.lines.filter((text) => text === 'Codex changed the canvas.')).toEqual([]);
   });
 
-  // GM r28 item 2 (round 19): the stop line stays in the state slot, above the event slot.
+  // Design: the stop line stays in the state slot, above the event slot.
   it('Codex’s edit about another node: its toast shows as usual, the stop line stays in the state slot above it with [Try again]', async () => {
     const h = backend(S3);
     await stoppedByServer(h);

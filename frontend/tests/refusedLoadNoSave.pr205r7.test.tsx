@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 
-// GM PR #205 r11 (the limit-load shot read "Saving…"): a refused load changes
+// PR #205 (design; the limit-load shot read "Saving…"): a refused load changes
 // nothing, so nothing saves. Nothing in the tab starts a save for it, and a
 // save racing the refusal can't write over the open project. The real Load
 // path (GraphFileActions → lib/graphFile loadFromFile), the real project
@@ -133,7 +133,7 @@ function expectNothingSaved(before: string) {
   expect(useProjectStore.getState()).toMatchObject({ saveStatus: 'saved', dirty: false });
 }
 
-describe('a refused load starts no save (GM PR #205 r11)', () => {
+describe('a refused load starts no save (design, PR #205)', () => {
   it('a plain file too complex to open', async () => {
     const { before } = await refusedLoad(plainFile(graphText('['.repeat(80) + ']'.repeat(80))));
     expect(said).toEqual([`${LOAD.slice(0, -1)} because this file is too complex to open.`]);

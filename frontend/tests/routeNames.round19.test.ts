@@ -9,14 +9,14 @@ import { describeRunScope, runCostConfirmMessage, runNodeName, summarizeRunScope
 import { placeholderRunConfirm, rowSegments, type PlaceholderRunOptions } from '../src/lib/placeholderRunConfirm';
 
 /**
- * Review 18, L-A, and GM - Design, round 19 (verbatim): a named Krea row
+ * And design (verbatim): a named Krea row
  * must read "“Alt still” · Grok Imagine 2.0 via Krea · price not listed";
  * xAI already reads "“Alt still” · Grok Imagine 2.0 via xAI · $0.06". The
  * cost notes, the costly-run confirm's "No list price for …" and the run
  * summary name an unnamed node on Krea "Grok Imagine 2.0 via Krea", never
  * "Grok Imagine 2.0 (Krea)". Only for nodes whose route depends on keys.
  *
- * Review 18, L-D (GM, verbatim): when the keys can't be read (the re-ask's
+ * (design, verbatim): when the keys can't be read (the re-ask's
  * key read timed out or failed, so the route is unknown), the dialog row
  * drops only the route, never naming a possibly old one. Unnamed: "“Grok
  * Imagine 2.0” · $0.06". Named: "“Alt still” · Grok Imagine 2.0 · $0.06".
@@ -44,14 +44,14 @@ function row(label: string, apiKeys: Record<string, string>, options: Placeholde
   return rowSegments(placeholderRunConfirm(nodes, edges, 'n2', summary, options)!.rows.find((r) => r.nodeId === 'n2')!);
 }
 
-describe('L-A: a node on the gateway is named "via" the gateway when its route depends on keys', () => {
+describe('a node on the gateway is named "via" the gateway when its route depends on keys', () => {
   it('nameOnRoute on Krea, or with no route, reads "Grok Imagine 2.0 via Krea"', () => {
     expect(routeDependsOnKeys(NODE_DEFINITIONS[GROK])).toBe(true);
     expect(nameOnRoute(NODE_DEFINITIONS[GROK], 'krea')).toBe('Grok Imagine 2.0 via Krea');
     expect(nameOnRoute(NODE_DEFINITIONS[GROK], null)).toBe('Grok Imagine 2.0 via Krea');
     expect(nameOnRoute(NODE_DEFINITIONS[GROK], 'xai')).toBe('Grok Imagine 2.0 via xAI');
   });
-  it('a definition whose route does not depend on keys keeps the round-15 behaviour', () => {
+  it('a definition whose route does not depend on keys is named as it was before routes read keys', () => {
     const fixed = Object.values(NODE_DEFINITIONS).find((definition) => / \(Krea\)$/.test(definition.displayName)
       && !routeDependsOnKeys(definition))!;
     expect(fixed).toBeDefined();
@@ -86,7 +86,7 @@ describe('L-A: a node on the gateway is named "via" the gateway when its route d
   });
 });
 
-describe('L-D: keys that cannot be read drop only the route from the row', () => {
+describe('keys that cannot be read drop only the route from the row', () => {
   it('unnamed: “Grok Imagine 2.0” · $0.06 (the price stays Nebula\'s)', () => {
     expect(row('Grok Imagine 2.0', XAI, { routeUnknown: true })).toEqual(['“Grok Imagine 2.0”', '$0.06']);
     expect(row('Grok Imagine 2.0 (Krea)', XAI, { routeUnknown: true })).toEqual(['“Grok Imagine 2.0”', '$0.06']);

@@ -1,5 +1,5 @@
 /**
- * PR #204 round 9, GM r13 (2), verbatim: "The band reserves the tallest single notice (three
+ * PR #204 (design), verbatim: "The band reserves the tallest single notice (three
  * lines). ... While a capped popover is open, show only the newest notice in the band. The
  * others wait and appear when it's dismissed or the popover closes."
  *
@@ -36,7 +36,7 @@ const flush = () => act(async () => { await Promise.resolve(); });
 beforeEach(() => waiting.resetNoticeWaitingForTests());
 afterEach(() => { cleanup(); waiting.resetNoticeWaitingForTests(); vi.useRealTimers(); });
 
-describe('GM r13 (2): one notice in the band while a capped popover is open', () => {
+describe('one notice in the band while a capped popover is open', () => {
   it('only the newest shows; the others wait, and appear when it goes or the popover closes', async () => {
     render(<><NoticeRegion screen="home" /><Toast slot="pin" text="Older" /><Toast slot="board" text="Newer" /></>);
     act(() => handles.pin(true));
@@ -93,7 +93,7 @@ describe('GM r13 (2): one notice in the band while a capped popover is open', ()
   });
 });
 
-describe('GM r13 (2): a waiting notice is never lost', () => {
+describe('a waiting notice is never lost', () => {
   it('its hold doesn\'t run while it waits, and a full hold starts when it shows again', async () => {
     vi.useFakeTimers();
     const dismissed = vi.fn();
@@ -151,12 +151,12 @@ const NOT_CAPPED: Record<string, string> = {
   'hooks/useNoticeClearance.ts': 'holds it for every modal that reads the clearance (useCappedPopover in the hook)',
   'lib/presetLibraryPlacement.ts': 'Styles\' placement; PresetLibrary holds it',
   'components/editor/VideoPreview.tsx': 'the editor\'s docked preview, always on screen: it sizes the video above the band, not a popover',
-  'components/panels/NodeInspectorPopover.tsx': 'the docked Inspector, open whenever a node is selected (GM\'s floating panels, which a rare second line may overlap at its edge); asked of GM',
+  'components/panels/NodeInspectorPopover.tsx': 'the docked Inspector, open whenever a node is selected (design\'s floating panels, which a rare second line may overlap at its edge)',
   'components/moodboard-studio/OutsideChip.tsx': 'the board\'s edge chip (#210), a button that sits above the band while a tile is out of view: not a popover, no content a notice can cover',
-  'components/projects/ProjectSizePanel.tsx': 'a floating panel the person keeps open while removing things; asked of GM with the Inspector',
+  'components/projects/ProjectSizePanel.tsx': 'a floating panel the person keeps open while removing things (decided with the Inspector)',
 };
 
-describe('GM r13 (2): every capped popover holds the band to one notice', () => {
+describe('every capped popover holds the band to one notice', () => {
   it('each file that stops at the band (floatingBottomLimit, the clearance, Styles\' placement) holds it while open', () => {
     const missing: string[] = [];
     for (const path of sources()) {

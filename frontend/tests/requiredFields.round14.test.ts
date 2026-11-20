@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fieldCases from '../../backend/tests/fixtures/required_field_cases.json';
 
 /**
- * Review 13, M-1 and L-6, with GM - Design's round-14 lines (item 1,
- * verbatim). Round 13 refused a Krea node whose required field was empty
+ * With the design lines (
+ * verbatim). An earlier version refused a Krea node whose required field was empty
  * reading only its definition, so three Krea copies that run on their
  * maker's own API with the person's key (GPT Image 2.5 Flare and Sunburst
  * with an OpenAI key, Grok Imagine 2.0 with an xAI key) were refused though
@@ -13,7 +13,7 @@ import fieldCases from '../../backend/tests/fixtures/required_field_cases.json';
  * BytePlus: width and height). With no usable route the key line comes first
  * (the backend's), so no field is named. The backend reads the same cases
  * (backend/tests/fixtures/required_field_cases.json).
- * GM, round 14, item 1: "Set" for typed values (width, height, a name),
+ * Design: "Set" for typed values (width, height, a name),
  * "Choose" for pickers.
  */
 
@@ -52,7 +52,7 @@ describe('the route decides which field is refused (one case list with the backe
   });
 });
 
-describe("GM - Design, round 14, item 1: the lines, verbatim", () => {
+describe("the lines, verbatim (design)", () => {
   const krea = { apiKeys: KREA, edges: [] };
   it('"Set" for a typed value', () => {
     expect(modelNotChosenText([node('n1', 'Clean plate', TOPAZ) as never], undefined, krea))
@@ -80,7 +80,7 @@ describe("GM - Design, round 14, item 1: the lines, verbatim", () => {
   });
 });
 
-describe('every run path follows the route (M-1, L-6)', () => {
+describe('every run path follows the route', () => {
   const initialCache = useUIStore.getState().settingsCache;
   const initialThreshold = useUIStore.getState().runCostConfirmUsd;
   const notice = () => useGraphStore.getState().undoNotice?.text ?? useGraphStore.getState().messageNotice?.text ?? null;
@@ -156,7 +156,7 @@ describe('every run path follows the route (M-1, L-6)', () => {
     expect(notice()).toBe('Nothing ran. Set a width for “Hero” first.');
   });
 
-  it.each(paths)('%s: Krea 2 Medium with no Krea token: no field line, the backend names the key (L-6)', async (_name, run) => {
+  it.each(paths)('%s: Krea 2 Medium with no Krea token: no field line, the backend names the key', async (_name, run) => {
     keys({});
     setCanvas(KREA2);
     await run();

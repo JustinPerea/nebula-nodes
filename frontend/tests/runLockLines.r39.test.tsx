@@ -6,7 +6,7 @@ import type { Node, NodeProps } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * GM, PR #198 r39 item 2 and r40 item 3 (the lock-lines follow-up):
+ * Design, PR #198 (the lock-lines follow-up):
  * - Every control this tab's run holds says what unlocks it, by its own verb:
  *   "You can … when the run finishes." (lib/runLock's table; canvasLock has
  *   no default line any more, so a new lock names its own).
@@ -58,7 +58,7 @@ const textNode = (id: string, label: string, selected = true) => ({ id, type: 'm
 const titleOf = (name: RegExp) => screen.getAllByRole('button')
   .find((b) => name.test(b.getAttribute('aria-label') ?? b.textContent ?? ''))?.getAttribute('title');
 
-describe('GM r39 item 2: each run-locked control says its own verb', () => {
+describe('each run-locked control says its own verb', () => {
   it('the helper and the table: "You can <verb> when the run finishes."', () => {
     expect(runFinishesLine(RUN_LOCK_VERBS.duplicateIt)).toBe('You can duplicate it when the run finishes.');
     expect(runFinishesLine(RUN_LOCK_VERBS.generateShot)).toBe('You can generate this shot when the run finishes.');
@@ -129,7 +129,7 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
       .toHaveAttribute('title', 'You can clear the run history when the run finishes.');
   });
 
-  it('Cinema\'s Generate all: "You can generate the shots when the run finishes." (GM PR #205 r1 answer 3)', () => {
+  it('Cinema\'s Generate all: "You can generate the shots when the run finishes." (design, PR #205)', () => {
     useGraphStore.setState({ isExecuting: true, nodes: [{ id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
       data: { label: 'Opening', definitionId: 'cinema-scene', state: 'idle', outputs: {},
         params: { scene: { version: 1, base: { model: 'seedream-4-5' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a' }] } } } }] as never });
@@ -150,7 +150,7 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
     expect(next).toHaveAttribute('title', 'You can run it when the run finishes.');
   });
 
-  it('the run-lock refusals are the lock line alone (GM PR #205 r1 answer 2)', () => {
+  it('the run-lock refusals are the lock line alone (design, PR #205)', () => {
     expect(runLockedLine('delete', 1, '“Brief”')).toBe('You can delete “Brief” when the run finishes.');
     expect(runLockedLine('delete', 2, undefined, ['A', 'B'])).toBe('You can delete “A” and “B” when the run finishes.');
     expect(runLockedLine('undo')).toBe('You can undo when the run finishes.');
@@ -159,7 +159,7 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
     expect(runLockedWiresLine(2)).toBe('You can delete the 2 connections when the run finishes.');
   });
 
-  // GM PR #205 r4 item 3: adding a connected node is no longer run-locked
+  // Design (PR #205): adding a connected node is no longer run-locked
   // (lockLines.pr205r3 sends it during a run).
 
   it('no person UI says the old line, and every run lock names its own line', () => {
@@ -197,7 +197,7 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
   });
 });
 
-describe('GM r40 item 3: the deferred run notice is a state line, read live', () => {
+describe('the deferred run notice is a state line, read live', () => {
   const hold = (nodeIds: string[]) => useCanvasProposalsStore.setState({ deferredRun: { agentName: 'Codex', nodeIds } } as never);
   const runButton = () => screen.getByRole('button', { name: /Run/ });
   const summary = () => document.querySelector('.proposal-bar__summary')?.textContent;
@@ -211,7 +211,7 @@ describe('GM r40 item 3: the deferred run notice is a state line, read live', ()
     expect(deferredRunLine(['', ' '], false)).toBe('You can run it now.');
   });
 
-  it('while a run goes: the line, [Run] disabled and described by it (no tooltip, GM PR #205 r1), [Dismiss] enabled; then it swaps in place', () => {
+  it('while a run goes: the line, [Run] disabled and described by it (no tooltip, design, PR #205), [Dismiss] enabled; then it swaps in place', () => {
     useGraphStore.setState({ nodes: [textNode('n3', 'Brief', false)], edges: [], isExecuting: true });
     hold(['n3']);
     render(<DeferredRunNotice />);

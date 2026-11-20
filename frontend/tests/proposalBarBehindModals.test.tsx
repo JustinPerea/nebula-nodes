@@ -1,9 +1,9 @@
-// PR #203 round 6: review r5 MEDIUM-1 and GM r10 item 2. Under a modal that
+// PR #203 (design): Under a modal that
 // hides the page (the onboarding tour, the result comparison: both
 // ModalPortal modals that make what sits behind them inert), the proposal
 // bar is behind the modal like the canvas: inert and aria-hidden, focus put
 // on it goes back to the modal, and its keys do nothing. The notices around
-// it stay usable (GM r25). When the modal closes the bar's attributes are
+// it stay usable (design). When the modal closes the bar's attributes are
 // back as they were (a leaving proposal's own `inert` kept), and focus goes
 // back to whatever opened the modal, never to the bar.
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -109,14 +109,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe.each(MODALS)('the proposal bar behind the $label (review r5 MEDIUM-1)', ({ open, close, home }) => {
+describe.each(MODALS)('the proposal bar behind the $label', ({ open, close, home }) => {
   it('the bar is under an inert, aria-hidden ancestor; the notices stay usable', () => {
     const { slot, accept, undo } = bar();
     open();
     expect(home()).not.toBeNull();
     expect(accept.closest('[inert]')).toBe(slot);
     expect(accept.closest('[aria-hidden="true"]')).toBe(slot);
-    // A notice already shown goes under the scrim (GM r25 (4) on PR #199: holdNoticesUnderModal), and is back on close.
+    // A notice already shown goes under the scrim (design, PR #199: holdNoticesUnderModal), and is back on close.
     expect(undo.closest('[inert]')).toBe(undo.closest('[role="status"]'));
     close();
     expect(undo.closest('[inert], [aria-hidden="true"]')).toBeNull();
@@ -163,7 +163,7 @@ describe.each(MODALS)('the proposal bar behind the $label (review r5 MEDIUM-1)',
   });
 });
 
-describe('the shared helpers (review r5 MEDIUM-1)', () => {
+describe('the shared helpers', () => {
   it('inNoticeAboveDialogs: a notice yes, the proposal bar no, the page no', async () => {
     const { inNoticeAboveDialogs } = await import('../src/lib/modalFocus');
     const { accept, undo } = bar();

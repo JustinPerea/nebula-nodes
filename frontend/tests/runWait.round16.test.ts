@@ -3,21 +3,21 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * Review 15, round 16.
- * M-B (probe MB1): a run waiting for what its refusal reads (the settings,
+ * A run waiting for its inputs, and the re-ask after a route change.
+ * - A run waiting for what its refusal reads (the settings,
  *   the Krea plan's sign-in: at most 4 s) counts as starting. A second Run
  *   while one waits does nothing, as a click during a run does today, on
  *   every entry: a node's Run, the canvas Run, Run selected, Creator's
  *   cluster, an accepted proposal's run, a Cinema shot. The Run controls
  *   show it as their disabled state (`runStarting`).
- * L-3 (MB5): the Krea plan's sign-in still "connecting" is not known yet:
+ * - The Krea plan's sign-in still "connecting" is not known yet:
  *   the run waits for it within the same 4 s.
- * L-4: a 409 re-ask that asks again after a route change prices at the
+ * - A 409 re-ask that asks again after a route change prices at the
  *   409 answer's own estimate, so the confirmation it sends passes.
- *   Review 16, M2 (round 17): only the rows whose route did not move; a
+ * - Only the rows whose route did not move; a
  *   moved row is priced at the canvas's numbers for its new route (the
  *   409's estimate was for the old one).
- * GM - Design round 16 (a): the re-ask after a route change says which
+ * - Design: the re-ask after a route change says which
  *   nodes changed, and Run ignores clicks for its first 500 ms.
  */
 
@@ -60,7 +60,7 @@ const wireStyle = () => useGraphStore.setState((s) => ({ edges: [...s.edges,
   { id: 'e2', source: 'n3', target: 'n2', sourceHandle: 'image', targetHandle: 'style_images' }] }) as never);
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 
-describe('round 16: a run waiting for its inputs counts as starting', () => {
+describe('a run waiting for its inputs counts as starting', () => {
   let started: ReturnType<typeof vi.fn>;
   const initialCache = useUIStore.getState().settingsCache;
   const initialThreshold = useUIStore.getState().runCostConfirmUsd;
@@ -91,7 +91,7 @@ describe('round 16: a run waiting for its inputs counts as starting', () => {
     vi.restoreAllMocks();
   });
 
-  it('MB1: Run clicked twice during the wait, the dialog left open: one dialog, one send', async () => {
+  it('Run clicked twice during the wait, the dialog left open: one dialog, one send', async () => {
     setCanvas(node('n2', 'Hero', KREA2, {}, { pending: codex }));
     const open: Array<() => void> = [];
     askMock.mockImplementation((model: unknown) => new Promise((resolve) => { open.push(() => resolve(model)); }));
@@ -144,7 +144,7 @@ describe('round 16: a run waiting for its inputs counts as starting', () => {
     expect(started).toHaveBeenCalledTimes(1);
   });
 
-  it('MB3: the canvas Run twice during the wait: one confirm, one send', async () => {
+  it('the canvas Run twice during the wait: one confirm, one send', async () => {
     setCanvas(node('n2', 'Hero', KREA2));
     const first = useGraphStore.getState().executeGraph();
     await tick(300);
@@ -185,7 +185,7 @@ describe('round 16: a run waiting for its inputs counts as starting', () => {
   });
 });
 
-describe('L-3: the Krea sign-in still connecting is waited for', () => {
+describe('the Krea sign-in still connecting is waited for', () => {
   const initialCache = useUIStore.getState().settingsCache;
   let started: ReturnType<typeof vi.fn>;
   beforeEach(() => {
@@ -208,7 +208,7 @@ describe('L-3: the Krea sign-in still connecting is waited for', () => {
     vi.restoreAllMocks();
   });
 
-  it('MB5: connecting, then connected within the wait: the refusal shows with no dialog', async () => {
+  it('connecting, then connected within the wait: the refusal shows with no dialog', async () => {
     let reads = 0;
     apiFetchMock.mockReset().mockImplementation(async (path: string) => {
       if (path === '/api/krea/connection') { reads += 1; return json({ status: reads < 2 ? 'connecting' : 'connected' }); }
@@ -224,7 +224,7 @@ describe('L-3: the Krea sign-in still connecting is waited for', () => {
     expect(notice()).toBe('Nothing ran. Choose an aspect ratio for “Hero” first.');
   });
 
-  it('MB5 bound: still connecting after 4 s: asked as before (the backend refuses), never stuck', async () => {
+  it('still connecting after 4 s: asked as before (the backend refuses), never stuck', async () => {
     apiFetchMock.mockReset().mockImplementation(async (path: string) => {
       if (path === '/api/krea/connection') return json({ status: 'connecting' });
       throw new TypeError('Offline fixture');
@@ -238,7 +238,7 @@ describe('L-3: the Krea sign-in still connecting is waited for', () => {
   });
 });
 
-describe("L-4, M2 and GM (a): a 409 re-ask after a route change prices each row on its own route and says what changed", () => {
+describe("a 409 re-ask after a route change prices each row on its own route and says what changed (design)", () => {
   const initialCache = useUIStore.getState().settingsCache;
   let sends: Array<{ placeholders?: string[]; cost?: number }>;
   beforeEach(() => {
@@ -258,7 +258,7 @@ describe("L-4, M2 and GM (a): a 409 re-ask after a route change prices each row 
     vi.restoreAllMocks();
   });
 
-  it('M2: xAI to Krea while it is open: the moved row is priced on Krea (no list price), not at the 409\'s xAI price', async () => {
+  it('xAI to Krea while it is open: the moved row is priced on Krea (no list price), not at the 409\'s xAI price', async () => {
     setCanvas(node('n2', 'Alt still', GROK, { aspect_ratio: '1:1', resolution: '1K' }, { pending: codex }));
     const message = 'Nothing ran. This run costs more than you confirmed.';
     vi.spyOn(api, 'executeNode').mockImplementation((async (...args: unknown[]) => {
@@ -280,7 +280,7 @@ describe("L-4, M2 and GM (a): a 409 re-ask after a route change prices each row 
     await useGraphStore.getState().executeNode('n2');
     expect(askMock).toHaveBeenCalledTimes(3);
     const third = askMock.mock.calls[2][0] as PlaceholderRunConfirm;
-    // Review 16, M2: "$0.07" here was the 409's price for the xAI route.
+    // "$0.07" here was the 409's price for the xAI route.
     expect(third.rows.find((row) => row.nodeId === 'n2')?.model).toContain('Grok Imagine 2.0 via Krea');
     expect(third.rows.find((row) => row.nodeId === 'n2')?.price).toBe('price not listed');
     // Nothing in it has a list price: the yes confirms $0, as any unpriced run's does.
@@ -290,7 +290,7 @@ describe("L-4, M2 and GM (a): a 409 re-ask after a route change prices each row 
     expect(sends[1].cost).toBe(0);
   });
 
-  it('M2, the other way: the 409 re-ask on Krea, an xAI key added meanwhile: asked again via xAI at xAI\'s price', async () => {
+  it('the 409 re-ask on Krea, an xAI key added meanwhile: asked again via xAI at xAI\'s price', async () => {
     useUIStore.setState({ settingsCache: { apiKeys: { KREA_API_TOKEN: 'k' }, loaded: true } } as never);
     setCanvas(node('n2', 'Alt still', GROK, { aspect_ratio: '1:1', resolution: '1K' }, { pending: codex }));
     const message = 'Nothing ran. This run costs more than you confirmed.';
@@ -319,7 +319,7 @@ describe("L-4, M2 and GM (a): a 409 re-ask after a route change prices each row 
     expect(sends[1].cost).toBe(0.06);
   });
 
-  it('M2: a row whose route did not move keeps the 409\'s price', async () => {
+  it('a row whose route did not move keeps the 409\'s price', async () => {
     setCanvas(node('n2', 'Alt still', GROK, { aspect_ratio: '1:1', resolution: '1K' }, { pending: codex }));
     const message = 'Nothing ran. This run costs more than you confirmed.';
     vi.spyOn(api, 'executeNode').mockImplementation((async (...args: unknown[]) => {

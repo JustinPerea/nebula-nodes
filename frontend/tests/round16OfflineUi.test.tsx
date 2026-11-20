@@ -7,11 +7,11 @@ import type { RunRecord } from '../src/lib/runHistory';
 import { withFocusFixup } from './helpers/focusFixup';
 
 /**
- * Round 16 of PR #114, offline read-only (review 15 and GM's round-16
- * rulings): what only stops or reduces work stays usable offline (M1), and
+ * PR #114, offline read-only (design's
+ * rulings): what only stops or reduces work stays usable offline, and
  * the controls that still wrote or showed an error line offline are disabled
- * with the offline mark and stay silent (L3, L4, L5); a rename draft gets its
- * focus back on reconnect, or is dropped with GM's line when an agent renamed
+ * with the offline mark and stay silent; a rename draft gets its
+ * focus back on reconnect, or is dropped with design's line when an agent renamed
  * the node meanwhile (nit).
  */
 
@@ -54,7 +54,7 @@ import { useUIStore } from '../src/store/uiStore';
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 
-// Round 18o (review 18 logic LOW-1): Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
 const fixup = withFocusFixup();
 beforeEach(() => {
   cleanup();
@@ -73,7 +73,7 @@ function running(id: string): RunRecord {
     snapshot: { nodes: [{ id: 'n1', definitionId: 'text-input', params: {}, outputs: {} }], edges: [] } };
 }
 
-describe('M1: Stop works while offline (a false offline must never trap a spending run)', () => {
+describe('Stop works while offline (a false offline must never trap a spending run)', () => {
   it('the toolbar\'s Stop stays enabled, unmarked, and calls Stop', () => {
     const cancelExecution = vi.fn(async () => undefined);
     useGraphStore.setState({ isExecuting: true, isCancelling: false, cancelExecution, nodes: [], edges: [] });
@@ -101,7 +101,7 @@ describe('M1: Stop works while offline (a false offline must never trap a spendi
     expect(cancelExecution).toHaveBeenCalledOnce();
   });
 
-  it('with nothing running, the header Stop says why it is disabled (GM tooltip rule)', () => {
+  it('with nothing running, the header Stop says why it is disabled (design tooltip rule)', () => {
     useGraphStore.setState({ runHistory: [], isExecuting: false, isCancelling: false });
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
     render(<RunHistoryPanel />);
@@ -111,18 +111,18 @@ describe('M1: Stop works while offline (a false offline must never trap a spendi
   });
 });
 
-describe('the toolbar\'s disabled Run is neutral (GM, round 16)', () => {
+describe('the toolbar\'s disabled Run is neutral (design)', () => {
   it('the selection toolbar\'s primary button has a neutral disabled style, not orange', () => {
     const css = readFileSync(join(__dirname, '../src/styles/canvas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-    // GM round 22 (A): neutral is the toolbar's own disabled look, with no
-    // fill (the grey fill of round 16 read as hovered), hover included.
+    // Design: neutral is the toolbar's own disabled look, with no
+    // fill (the grey fill of an earlier version read as hovered), hover included.
     const rule = /\.selection-toolbar__button--primary:disabled\s*,\s*\.selection-toolbar__button--primary:disabled:hover\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toContain('background: transparent');
     expect(rule).not.toMatch(/accent/);
   });
 });
 
-describe('L5: a chat permission while offline', () => {
+describe('a chat permission while offline', () => {
   const part: PermissionRequestPart = { kind: 'permission', requestId: 'p1', title: 'Edit the canvas', toolKind: 'edit',
     input: null, canAllow: true, timeoutSeconds: 60, receivedAt: Date.now(), status: 'pending' };
 
@@ -153,13 +153,13 @@ describe('L5: a chat permission while offline', () => {
   });
 });
 
-describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
+describe('a rename draft after reconnect (design follow-up)', () => {
   it('gets its focus back when nobody renamed the node meanwhile', () => {
     render(<NodeLabel nodeId="n1" label="Text Input" displayName="Text Input" />);
     fireEvent.doubleClick(screen.getByText('Text Input'));
     fireEvent.change(screen.getByRole('textbox', { name: 'Node name' }), { target: { value: 'Brief draft' } });
     act(() => noteBackendConnection('offline'));
-    // Round 18o (review 18 logic LOW-1): the field is disabled offline, and the focus fixup blurs it
+    // The field is disabled offline, and the focus fixup blurs it
     // as Chrome does (tests/helpers/focusFixup), with no hand move.
     act(() => fixup.current().flush());
     expect(screen.getByRole('textbox', { name: 'Node name' })).not.toHaveFocus();
@@ -170,7 +170,7 @@ describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
     expect(input).toHaveFocus();
   });
 
-  it('is dropped, with GM\'s line and no refocus, when the node was renamed while offline (no source: no actor, round 17)', () => {
+  it('is dropped, with design\'s line and no refocus, when the node was renamed while offline (no source: no actor)', () => {
     const renameNode = vi.fn();
     const notify = vi.fn();
     useGraphStore.setState({ renameNode, notify });
@@ -191,12 +191,12 @@ describe('a rename draft after reconnect (review 15 nit, GM follow-up)', () => {
   it.each([
     ['Codex', 'Codex renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
     [null, 'An agent renamed this node “Hero shot” while Nebula was offline, so your rename to “Brief draft” wasn’t saved.'],
-  ])('GM\'s exact line (agent %s)', (agent, line) => {
+  ])('the exact design line (agent %s)', (agent, line) => {
     expect(droppedRenameLine({ kind: 'agent', name: agent }, 'Hero shot', 'Brief draft')).toBe(line);
   });
 });
 
-describe('L4: the Commons is read-only offline', () => {
+describe('the Commons is read-only offline', () => {
   const status: CommonsStatus = {
     worker: { state: 'stopped', running: false, budget_used: 0, budget: null },
     meter: { calls: 0, cap: 20, remaining: 20, resets_at: '2026-10-28T00:00:00Z' },

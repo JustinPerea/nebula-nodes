@@ -1,12 +1,12 @@
 /**
- * PR #199 fix round 23, GM r35: the selection toolbar never covers the
+ * PR #199 fix (design): the selection toolbar never covers the
  * selection. The placement rule, in order (lib/bottomBar placeSelectionToolbar):
  * 1. its own place below the top stack, when the selection is below it
  *    (with the gap) or beside or above it;
  * 2. else flipped below the selection, when it fits above the bottom bar,
  *    and below the offline banner too;
  * 3. else pinned in its own place: the only case that covers the selection.
- * The camera never moves. Each case with the stacks GM's shots had (the
+ * The camera never moves. Each case with the stacks the live shots had (the
  * World Labs notice alone, the notice and its reopen line, and the offline
  * banner as well) and three selections (a node near the top, one
  * mid-canvas, a tall selection that fills the view).
@@ -49,7 +49,7 @@ const place = (stack: { home: number; stackBottom: number }, selection: ScreenBo
 const covers = (top: number, selection: ScreenBox) => TOOLBAR.left < selection.right && TOOLBAR.right > selection.left
   && top < selection.bottom && top + H > selection.top;
 
-describe('GM r35: the toolbar never covers the selection', () => {
+describe('the toolbar never covers the selection', () => {
   for (const [stackName, stack] of Object.entries(STACKS)) {
     describe(stackName, () => {
       it('a node mid-canvas: case 1, between the stack and the selection', () => {

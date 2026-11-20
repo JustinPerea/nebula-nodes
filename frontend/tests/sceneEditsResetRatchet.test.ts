@@ -1,16 +1,16 @@
 // fix/ci-flakes-rename-fix16: a Cinema scene deleted while the person's edits
-// to it weren't saved keeps those edits (graphStore deletedSceneEdits, GM r20
-// answer 3) for when the node comes back on the same canvas. Tests reuse ids
+// to it weren't saved keeps those edits (graphStore deletedSceneEdits, design)
+// for when the node comes back on the same canvas. Tests reuse ids
 // (n1) on one canvas, so the next test's n1 took them back as a delete undone
 // and saved them: in CI that save took graphStore.fix16's queued 400. The
 // edits are kept by three routes: the person's delete, a sync that takes the
-// card off, and a save answered 404 (PR #221 review 1 MEDIUM-1: fix5's 404
-// test leaked that way with no delete in the file). So the rule is
+// card off, and a save answered 404 (PR #221: a test that got a 404
+// leaked that way with no delete in the file). So the rule is
 // structural, not about deletes: every test file that uses Cinema scenes with
 // the graph store resets the store's per-node state after each test with
 // resetDeletedSceneEditsForTests (idempotent and cheap).
 //
-// The check, read from each test file's syntax tree (review 1 LOW-2, NIT-1),
+// The check, read from each test file's syntax tree,
 // so comments and strings never count as code:
 // - A file counts when it has the string 'cinema-scene' in code and takes
 //   the graph store (any non-type import, export, `import(…)`,
@@ -60,7 +60,7 @@ function readFile(source: string, fileName?: string) {
   /**
    * Whether a scope's own statements register the reset after each test. An
    * afterEach registered inside a beforeAll or beforeEach doesn't count:
-   * vitest (4.1.11) never runs it (PR #221 review 2 NIT-4 took it for a
+   * vitest (4.1.11) never runs it (PR #221 took it for a
    * false fail; a probe test with `beforeAll(() => { afterEach(…) })` saw
    * the hook run 0 times), so naming it is right.
    */
@@ -106,15 +106,15 @@ const TEST = "it('saves', async () => { useGraphStore.getState().updateNodeData(
 describe('the ratchet reads the forms (mutation cases: each must be caught)', () => {
   const caught: Array<[string, string]> = [
     ['no reset at all', `${STATIC}${SCENE}${TEST}`],
-    // Review 1 MEDIUM-1: a 404 keeps the edits with no delete in the file.
+    // A 404 keeps the edits with no delete in the file.
     ['a save answered 404, no delete in the file', `${NAMESPACE}${SCENE}it('404', async () => { fetchMock.mockResolvedValue(json({ detail: "That node isn't on the canvas anymore." }, 404)); });\n`],
-    // Review 1 LOW-2: a comment or a string is not a hook.
+    // A comment or a string is not a hook.
     ['the reset only in a line comment', `${STATIC}${SCENE}// afterEach(() => resetDeletedSceneEditsForTests());\n${TEST}`],
     ['the reset only in a block comment', `${STATIC}${SCENE}/* afterEach(() => resetDeletedSceneEditsForTests()); */\n${TEST}`],
     ['the reset only in a string', `${STATIC}${SCENE}const why = 'afterEach(() => resetDeletedSceneEditsForTests())';\n${TEST}`],
     ['the reset in beforeAll (once, not after each)', `${STATIC}${SCENE}beforeAll(() => resetDeletedSceneEditsForTests());\n${TEST}`],
     ['the reset in afterAll', `${STATIC}${SCENE}afterAll(resetDeletedSceneEditsForTests);\n${TEST}`],
-    // Review 2 NIT-4: vitest never runs an afterEach registered from a beforeAll.
+    // Vitest never runs an afterEach registered from a beforeAll.
     ['afterEach registered inside beforeAll', `${STATIC}${SCENE}beforeAll(() => { afterEach(resetDeletedSceneEditsForTests); });\n${TEST}`],
     ['the reset only inside a test', `${STATIC}${SCENE}it('x', () => { resetDeletedSceneEditsForTests(); });\n${TEST}`],
     ['the reset named but never called', `${STATIC}${SCENE}afterEach(() => { void resetDeletedSceneEditsForTests; });\n${TEST}`],
@@ -139,7 +139,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
   const passes: Array<[string, string]> = [
     ['afterEach(() => resetDeletedSceneEditsForTests())', `${STATIC}${SCENE}afterEach(() => resetDeletedSceneEditsForTests());\n${TEST}`],
     ['afterEach(() => store.resetDeletedSceneEditsForTests())', `${NAMESPACE}${SCENE}afterEach(() => store.resetDeletedSceneEditsForTests());\n${TEST}`],
-    // Review 1 NIT-1: the forms that false-failed.
+    // The forms that false-failed.
     ['afterEach(resetDeletedSceneEditsForTests)', `${STATIC}${SCENE}afterEach(resetDeletedSceneEditsForTests);\n${TEST}`],
     ['afterEach(store.resetDeletedSceneEditsForTests)', `${NAMESPACE}${SCENE}afterEach(store.resetDeletedSceneEditsForTests);\n${TEST}`],
     ['the reset after another call in one afterEach block', `${NAMESPACE}${SCENE}afterEach(() => { store.setSceneQuietRetryForTests(null); store.resetDeletedSceneEditsForTests(); });\n${TEST}`],

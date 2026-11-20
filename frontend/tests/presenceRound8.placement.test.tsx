@@ -1,4 +1,4 @@
-// PR #204 round 8, review 6 MEDIUM-3 (GM r11 answer 3: "capped like Styles"): Creator Studio's
+// PR #204 (design: "capped like Styles"): Creator Studio's
 // model picker, a centred modal, stopped over the notice band, so a notice landed on its list.
 // It is now centred in the space above the band (the line Styles and every floating panel stop
 // at), and so are the Lightbox and the comparison.
@@ -42,7 +42,7 @@ describe('the line a modal stops at', () => {
   });
 });
 
-describe('review 6 MEDIUM-3: the model picker', () => {
+describe('the model picker', () => {
   it('its overlay carries the clearance, and follows a taller composer', async () => {
     const bar = part('data-bottom-bar', box(780, 884, 380, 1060));
     part('data-notice-band', box(718, 772, 16, 1424));
@@ -62,7 +62,7 @@ describe('review 6 MEDIUM-3: the model picker', () => {
   });
 });
 
-describe('review 6 MEDIUM-3: the Lightbox and the comparison, checked the same way', () => {
+describe('the Lightbox and the comparison, checked the same way', () => {
   it('the Lightbox carries the clearance; its media and counter stop above it', () => {
     part('data-bottom-bar', box(780, 884, 380, 1060));
     part('data-notice-band', box(718, 772, 16, 1424));

@@ -7,7 +7,7 @@ import { LOG_COLLAPSE_VAR } from '../src/lib/noticeStackPlace';
 import { useUIStore } from '../src/store/uiStore';
 
 /**
- * GM - Design, PR #216 r7, step 4: at short heights, past its body's floor,
+ * Design, PR #216, step 4: at short heights, past its body's floor,
  * the log collapses to its header for the proposal card, and reopens when
  * the card leaves, unless the person collapsed it: a collapse the person
  * makes is never undone, and their reopening over the card's collapse holds
@@ -67,7 +67,7 @@ describe('the card\'s hold on the log (uiStore)', () => {
     expect(ui()).toMatchObject({ agentLogOpen: false, agentLogCardHold: 'none' });
   });
 
-  it('the person\'s reopening over the card\'s fold holds while the card stays, though the card stops and starts wanting the room (review 3 LOW-3)', () => {
+  it('the person\'s reopening over the card\'s fold holds while the card stays, though the card stops and starts wanting the room', () => {
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true, agentLogCardHold: 'none' } as never);
     ui().holdAgentLogForCard(true, true);
     ui().setAgentLogOpen(true);
@@ -169,7 +169,7 @@ describe('the log, rendered, under the card\'s hold', () => {
   });
 });
 
-describe('a top-pinned floating log, collapsed for the card and back (round 3f)', () => {
+describe('a top-pinned floating log, collapsed for the card and back', () => {
   // Its box as layouts.css draws it from the root's values: the person's
   // top, moved down by natural - shown (collapsed: natural - its header).
   // With them cleared, as a re-run of AgentLog's effect does first, the box
@@ -208,10 +208,10 @@ describe('a top-pinned floating log, collapsed for the card and back (round 3f)'
   });
 });
 
-describe('the give, in CSS (GM r7-r8)', () => {
+describe('the give, in CSS (design)', () => {
   const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-  it('a floating log gives way as the docked one, on the spring, down to its floor (one registered length, GM r8)', () => {
+  it('a floating log gives way as the docked one, on the spring, down to its floor (one registered length, design)', () => {
     expect(css).toMatch(/@property --agent-log-give \{\s*syntax: '<length>';\s*inherits: false;\s*initial-value: 0px;\s*\}/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-docked\],\s*\.agent-log\.agent-log--open\[data-floating\] \{\s*--agent-log-give: var\(--agent-log-squeeze, 0px\);\s*--agent-log-shown-h: clamp\(var\(--agent-h-closed\), calc\(var\(--agent-log-natural-h, 80vh\) - var\(--agent-log-give\)\), var\(--agent-log-natural-h, 80vh\)\);[^}]*max-height: max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* 10000000\)\);[^}]*transition: --agent-log-give 420ms var\(--agent-log-spring\);/);
     expect(css).toMatch(/\.agent-log\.agent-log--open\[data-floating\] \.agent-log__body \{\s*flex: 0 1 auto;\s*min-height: 0;/);
@@ -232,14 +232,14 @@ describe('the give, in CSS (GM r7-r8)', () => {
 });
 
 /**
- * GM - Design, PR #216 r8 5: "the anchored edge stays exactly fixed through
+ * Design, PR #216: "the anchored edge stays exactly fixed through
  * the spring; the overshoot happens only at the free top edge." The give is
  * one registered length on the spring; the height and a top-pinned log's
  * move both come from it, so its bottom edge is the same on every frame.
  * This reads the spring and the formulas from layouts.css and walks the
  * transition frame by frame, both ways, through the overshoot.
  */
-describe('the anchored edge, every frame of the spring (GM r8 5)', () => {
+describe('the anchored edge, every frame of the spring (design)', () => {
   const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8');
   const stops = css.match(/--agent-log-spring: linear\(([^)]*)\)/)![1].split(',').map(Number);
   const ease = (t: number) => {

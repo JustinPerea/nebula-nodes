@@ -1,9 +1,9 @@
 /**
- * PR #199 round 25: the project store's flows are one lazy chunk
+ * PR #199: the project store's flows are one lazy chunk
  * (store/projectFlows, loaded by store/projectFlowsLoader). The store's methods
  * are stubs that run the chunk's function: at once when it is in, after it
  * loads when it isn't (every cold call waits on the one load, in order); a
- * chunk that can't load answers with GM r24's line and a Try again that loads
+ * chunk that can't load answers with design's line and a Try again that loads
  * it and redoes the press. tests/setup.ts primes the chunk, so these tests
  * unprime it.
  */
@@ -68,14 +68,14 @@ describe('the flows chunk, warm and cold', () => {
     expect(flowsNow()).toBe(flows);
   });
 
-  it('a chunk that fails to load answers the press with GM’s line and a Try again, which loads it again and redoes the press', async () => {
+  it('a chunk that fails to load answers the press with design’s line and a Try again, which loads it again and redoes the press', async () => {
     setProjectFlowsImportForTests(() => Promise.reject(new Error('Failed to fetch dynamically imported module')));
     useProjectStore.setState({ projects: [summary('alpha')] });
     await useProjectStore.getState().pinCover('alpha', null);
     const state = useProjectStore.getState();
     expect(state.error).toBe('Nebula couldn’t open the project because part of the app didn’t load. If it keeps happening, reload the page.');
     expect(state.error).toBe(PART_LOAD_LINE);
-    // GM r24 (c): "Try again" is the button's word, not the sentence's.
+    // Design: "Try again" is the button's word, not the sentence's.
     expect(PART_LOAD_LINE).not.toMatch(/try again/i);
     expect(state.screen).toBe('home');
     expect(projectRetryOffer(state)).toBe('partLoad');

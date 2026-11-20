@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 20 (GM r29), on graphStore.fix19's keyed backend:
+ * PR #198 fix (design), on graphStore.fix19's keyed backend:
  * - Call 3, save first: Undo brings a scene deleted while stopped back with
  *   its "Unsaved" mark and sends one save at once. Saved: no stop line ever
  *   shows. Failed (400, 413 or a server error): stopped again, its line
@@ -227,7 +227,7 @@ function watchStopLines() {
   return { seen, off };
 }
 
-describe('GM r29 call 3: Undo of a stopped scene’s delete saves first', () => {
+describe('Design call 3: Undo of a stopped scene’s delete saves first', () => {
   it.each<Cause>(['server', 400, 413])('stopped by %s, saving works again: one save at once, it lands; no stop line in any store update', async (cause) => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', cause);
@@ -283,7 +283,7 @@ describe('GM r29 call 3: Undo of a stopped scene’s delete saves first', () => 
   });
 });
 
-describe('GM r29 call 2: one [Try again] at a time', () => {
+describe('Design call 2: one [Try again] at a time', () => {
   it('while a try is on its way the line stays, its [Try again] marked as trying; a second press sends nothing', async () => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene' });
     await stopBy(h, 'n1', 'server');
@@ -316,7 +316,7 @@ describe('GM r29 call 2: one [Try again] at a time', () => {
   });
 });
 
-describe('GM r29 call 7: reading order with a row tolerance', () => {
+describe('Design call 7: reading order with a row tolerance', () => {
   it('nearly level (a few px apart, within a quarter of a card): left to right', async () => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene' }, undefined, { n1: { x: 0, y: 12 }, n2: { x: 400, y: 0 } });
     await stopBy(h, 'n1', 400);
@@ -341,12 +341,12 @@ describe('GM r29 call 7: reading order with a row tolerance', () => {
   });
 });
 
-// Review 18 NIT-1, with GM r29 Q1's retrying line: when the save stops, the
+// With design's retrying line: when the save stops, the
 // retry line it said ("…Nebula is trying again.") leaves the event slots, so
 // it never sits under the stop line that contradicts it.
-// GM r36 Q1: the retrying line is a state, in the state slot (never a
+// Design: the retrying line is a state, in the state slot (never a
 // toast); the stop line takes its place in the same store update.
-describe('review 18 NIT-1: the retrying line goes when the save stops', () => {
+describe('the retrying line goes when the save stops', () => {
   const RETRYING = 'Nebula couldn’t save your changes to “Opening”. They’re kept, and Nebula is trying again.';
   const events = () => [toast()?.text ?? null, messageSlot()?.text ?? null];
   /** Each store update's state lines, in order (repeats collapsed). */

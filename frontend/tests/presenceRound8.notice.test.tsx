@@ -1,10 +1,10 @@
 /**
- * PR #204 round 8, GM r11: the general notice steps out only beside a line that carries the fix
+ * PR #204 (design): the general notice steps out only beside a line that carries the fix
  * itself. A "because" line (or the general words) names the fix, so the notice steps out; a lock
- * line, or a line ending "The notice below says why.", doesn't, so the notice stays. Review 6:
- * a line counts only while it is rendered (MEDIUM-1: the Commons keeps Settings in a hidden,
- * inert group), the dev setups' lines keep the notice (MEDIUM-2), the held proposal card's line
- * is a lock line (LOW-3), and the swap is announced once (NIT-3).
+ * line, or a line ending "The notice below says why.", doesn't, so the notice stays. Also:
+ * a line counts only while it is rendered (the Commons keeps Settings in a hidden,
+ * inert group), the dev setups' lines keep the notice, the held proposal card's line
+ * is a lock line, and the swap is announced once.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
@@ -42,7 +42,7 @@ const because = copy.notConnectedBecause('load your agents', false);
 beforeEach(() => { session.resetPersonSessionForTests(); resetLinesForTests(); });
 afterEach(() => { cleanup(); session.notePersonPromoted(); vi.restoreAllMocks(); });
 
-describe('GM r11: the three kinds of line', () => {
+describe('the three kinds of line', () => {
   it('a because line and the general words carry the fix', () => {
     expect(notConnectedKind(because)).toBe('fix');
     expect(notConnectedKind(copy.notConnectedBecause('save the style', true, 'packaged'))).toBe('fix');
@@ -73,7 +73,7 @@ describe('GM r11: the three kinds of line', () => {
   });
 });
 
-describe('GM r11: the notice beside each kind', () => {
+describe('the notice beside each kind', () => {
   it('a because line: the notice steps out, and comes back when it goes', async () => {
     render(<Screen />);
     act(() => session.reportPersonRequired());
@@ -83,7 +83,7 @@ describe('GM r11: the notice beside each kind', () => {
     await waitFor(() => expect(banner()).not.toBeNull());
   });
 
-  it('MEDIUM-2: a dev setup\'s line ("The notice below says why.") keeps the notice', async () => {
+  it('a dev setup\'s line ("The notice below says why.") keeps the notice', async () => {
     render(<Screen />);
     act(() => session.reportPersonRequired());
     act(() => handle.show(copy.notConnectedBecause('load your agents', true, 'dev-renderer')));
@@ -93,7 +93,7 @@ describe('GM r11: the notice beside each kind', () => {
     expect(banner()).not.toBeNull();
   });
 
-  it('LOW-3: the held proposal card\'s line is a lock line, so both show', async () => {
+  it('the held proposal card\'s line is a lock line, so both show', async () => {
     render(<Screen />);
     act(() => session.reportPersonRequired());
     act(() => handle.show(heldProposalLine()));
@@ -103,7 +103,7 @@ describe('GM r11: the notice beside each kind', () => {
   });
 });
 
-describe('review 6 MEDIUM-1: only a rendered line counts', () => {
+describe('only a rendered line counts', () => {
   it('the Commons: Settings\' because line in the hidden, inert group leaves the notice showing', async () => {
     render(<Screen />);
     act(() => session.reportPersonRequired());
@@ -204,7 +204,7 @@ describe('review 6 MEDIUM-1: only a rendered line counts', () => {
   });
 });
 
-describe('review 6 NIT-3: the swap is announced once, politely', () => {
+describe('the swap is announced once, politely', () => {
   it('the notice\'s words, then the line that took its place, then the words again', async () => {
     render(<Screen />);
     expect(announced()).toBe('');

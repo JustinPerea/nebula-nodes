@@ -1,5 +1,5 @@
 /**
- * Round 18 of PR #199 (review 16 kept-ui LOW-3; GM r25, 5): the tab's side
+ * PR #199 (design): the tab's side
  * of the recovered-copy names. The reload line names the project a
  * recovered copy was made from, never the copy's own "Recovered …" name, and
  * the tab's fallback name never stacks a second "Recovered" or number.
@@ -94,7 +94,7 @@ afterEach(async () => {
 describe('lib/recoveredNames', () => {
   it('never a second “Recovered”: a recovered copy’s copy adds Nebula’s “copy”', () => {
     expect(recoveredCopyFallbackName('Delta')).toBe('Recovered Delta');
-    // GM r29, 2 (round 20): no number read in the name; Nebula's own " copy" next.
+    // Design: no number read in the name; Nebula's own " copy" next.
     expect(recoveredCopyFallbackName('Recovered Delta', ['Recovered Delta'])).toBe('Recovered Delta copy');
     expect(recoveredCopyFallbackName('Recovered Delta 2', ['Recovered Delta 2'])).toBe('Recovered Delta 2 copy');
     // A source the list no longer has (a kept canvas after a restore) is free, as in Nebula's rule.
@@ -102,7 +102,7 @@ describe('lib/recoveredNames', () => {
   });
 });
 
-describe('review 16 kept-ui LOW-3: the reload line names the source project', () => {
+describe('the reload line names the source project', () => {
   it('no project active, the copy named “Recovered alpha”: the line says “alpha”', async () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('recovered'), name: 'Recovered alpha' });
     editCanvas();
@@ -121,7 +121,7 @@ describe('review 16 kept-ui LOW-3: the reload line names the source project', ()
       'Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “alpha”.'));
   });
 
-  it('a source no longer listed and not in the answer: the line names the copy, never a source read from its name (GM r29, 2)', async () => {
+  it('a source no longer listed and not in the answer: the line names the copy, never a source read from its name (design)', async () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('recovered'), name: 'Recovered alpha' });
     editCanvas();
     useProjectStore.setState({ activeProject: null, projects: [] });

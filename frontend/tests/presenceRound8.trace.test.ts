@@ -1,15 +1,15 @@
 /**
- * PR #204 round 8: every reviewer probe of the frontend trace, pinned to its exact outcome (review
- * 6 gates NIT-1): which function the line is said to drop at, and how many paths are listed as
+ * PR #204: every probe found in review of the frontend trace, pinned to its exact outcome:
+ * which function the line is said to drop at, and how many paths are listed as
  * untraced. A probe that only asked "drops somewhere, or untraced" passed by the fail-closed rule
- * alone, so round 7's fixes (a destructured action, a two-hop store alias, a const prefix, a
+ * alone, so the earlier fixes (a destructured action, a two-hop store alias, a const prefix, a
  * placeholder first segment, a bracketed action) weren't pinned. With the exact outcome, each of
  * those fixes taken out changes it.
- * - Review 6 held LOW-5 and gates LOW-4: a marker's words in a string, a template, a block
- *   comment or a JSX comment aren't a marker (Q1-Q3, Q11, R8, R9); a path made by a helper call
- *   is the transport's (Q6); JSX text isn't a comment (J1).
- * - Documented limits (round 6 P6), kept so a change to them is seen: a marker that ends the try's
- *   or the branch's last line, or an unrelated call's line inside the branch, counts (Q12, R11, R12).
+ * - a marker's words in a string, a template, a block
+ *   comment or a JSX comment aren't a marker (the string, template and block-comment probes); a path made by a helper call
+ *   is the transport's; JSX text isn't a comment.
+ * - Documented limits, kept so a change to them is seen: a marker that ends the try's
+ *   or the branch's last line, or an unrelated call's line inside the branch, counts (the trailing-marker, R11 and R12 probes).
  */
 import { describe, expect, it } from 'vitest';
 import { callersOf, untracedApiText, withSources } from './personGatedCallers';
@@ -57,7 +57,7 @@ const EXPECTED: Record<string, { found: Record<string, string>; untraced: number
   R12_marker_in_unrelated_call_in_branch: { found: {'components/C.tsx#go': 'keeps'}, untraced: 0 },
 };
 
-describe('round 8: each reviewer probe\'s exact outcome', () => {
+describe('each probe\'s exact outcome', () => {
   const worlds = { ...PROBES, ...GATES_PROBES, ...RESPONSE_PROBES, ...ROUND8_PROBES };
   it('every probe is pinned', () => {
     expect(Object.keys(worlds).sort()).toEqual(Object.keys(EXPECTED).sort());

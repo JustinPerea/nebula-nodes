@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * GM (#198 r8, and #199 r8 for the saved toast): "Toasts wrap to 3 lines and
+ * Design (#198, and #199 for the saved toast): "Toasts wrap to 3 lines and
  * never cut a sentence", app-wide. PR #198's no-cut sweep, here too, so the
  * rule holds wherever toasts live on this branch.
  */
@@ -26,7 +26,7 @@ describe('no toast cuts a sentence', () => {
     expect(rules.some((rule) => /project-home__toast-text/.test(rule.selector))).toBe(true);
   });
 
-  // GM r76 on main's notice region (merged into PR #199 at round 24): the one
+  // Design on main's notice region (merged into PR #199): the one
   // place a notice's text is cut with "…" is an Undo notice kept to one line
   // where its full height would leave the proposal card short of Accept and
   // Reject (lib/noticeStackPlace.ts `clip`); its full text stays in its

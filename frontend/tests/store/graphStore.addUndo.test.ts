@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
- * Round 14 of PR #114 (review 13, M1 + M3, and Q2): every add's undo step
+ * PR #114: every add's undo step
  * owns exactly the ids that add created. Its Undo removes those ids and
  * nothing else; Redo puts them back. A sync that brings the backend's nodes
  * into an empty tab, a sync that lands later, or a second add racing the
  * first never widens a step, so Undo never sends an id the step didn't add
- * (the agent's n1 was deleted by the person's Undo in review 13's Q1 and Q5).
+ * (the agent's n1 was deleted by the person's Undo).
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
@@ -72,7 +72,7 @@ beforeEach(() => {
     backendFreshStartPending: false, undoNotice: null, isImportingGraph: false, clipboard: null } as never);
 });
 
-describe('two quick dynamic drops on an empty tab whose backend has the agent\'s n1 (review 13, Q1)', () => {
+describe('two quick dynamic drops on an empty tab whose backend has the agent\'s n1', () => {
   it('each Undo removes only its own node; n1 is never sent', async () => {
     const exported = deferred<Response>();
     let nextId = 2;
@@ -104,7 +104,7 @@ describe('two quick dynamic drops on an empty tab whose backend has the agent\'s
   });
 });
 
-describe('a dynamic add while an earlier sync failed (review 13, Q2)', () => {
+describe('a dynamic add while an earlier sync failed', () => {
   it('Undo removes only the new card, not the n1 the export brought in', async () => {
     const local = { id: 'local-uuid-1', type: 'model-node', position: { x: 0, y: 0 },
       data: { label: 'Text Input', definitionId: 'text-input', params: {}, state: 'idle', outputs: {} } };
@@ -120,7 +120,7 @@ describe('a dynamic add while an earlier sync failed (review 13, Q2)', () => {
   });
 });
 
-describe('a file drop on an empty tab whose backend has the agent\'s n1 (review 13, Q5)', () => {
+describe('a file drop on an empty tab whose backend has the agent\'s n1', () => {
   it('Undo removes only the dropped file\'s node', async () => {
     fetchMock.mockResolvedValueOnce(json({ id: 'up1', nodeId: 'n2' }));
     await addDroppedFiles([new File(['hello'], 'notes.txt', { type: 'text/plain' })], { x: 0, y: 0 });

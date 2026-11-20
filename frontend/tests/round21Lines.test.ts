@@ -7,17 +7,17 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * Round 21 of PR #195: review 20's L-8 and GM's round 21 lines, verbatim.
- * - L-8: a cut-off save names its node by id, so two nodes with the same
+ * PR #195: the design lines, verbatim.
+ * - a cut-off save names its node by id, so two nodes with the same
  *   title count as two.
- * - GM (LOCKED): the failed handoff's line, with non-breaking spaces inside
+ * - Design (LOCKED): the failed handoff's line, with non-breaking spaces inside
  *   the quoted project names.
- * - GM (LOCKED): a delete answered with a 500.
- * - GM derived: the run lines while following, and G1's Create line.
+ * - Design (LOCKED): a delete answered with a 500.
+ * - Design derived: the run lines while following, and the Create line.
  */
 const NBSP = ' ';
 
-describe('L-8: cut-off saves count by node id', () => {
+describe('cut-off saves count by node id', () => {
   const twin = (nodeId: string): CutOffSave => ({ nodeId, node: 'Text Input', setting: 'Text' });
 
   it('two nodes with the same title and setting are two changes', () => {
@@ -33,7 +33,7 @@ describe('L-8: cut-off saves count by node id', () => {
   });
 });
 
-describe('GM (LOCKED): the failed handoff line keeps quoted project names whole', () => {
+describe('Design (LOCKED): the failed handoff line keeps quoted project names whole', () => {
   it('non-breaking spaces inside the quoted names only', () => {
     expect(handoffFailedLine([{ nodeId: 'n1', node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered 2)'))
@@ -48,7 +48,7 @@ describe('GM (LOCKED): the failed handoff line keeps quoted project names whole'
   });
 });
 
-describe('GM (LOCKED): a delete answered with a 500', () => {
+describe('Design (LOCKED): a delete answered with a 500', () => {
   it('one node', () => {
     expect(deleteServerErrorLine(['Hero prompt'])).toBe(
       "Nebula couldn’t delete “Hero prompt” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula.");
@@ -63,7 +63,7 @@ describe('GM (LOCKED): a delete answered with a 500', () => {
   });
 });
 
-describe('GM derived: runs and Create while following', () => {
+describe('Design derived: runs and Create while following', () => {
   it('a whole-canvas run, one node, several nodes, an unknown agent', () => {
     expect(runWhileFollowingLine(null, 'Codex', 'Second canvas')).toBe("Nebula couldn’t run the canvas because Codex is opening “Second canvas”.");
     expect(runWhileFollowingLine('Hero', 'Codex', 'Second canvas')).toBe("Nebula couldn’t run “Hero” because Codex is opening “Second canvas”.");
@@ -71,7 +71,7 @@ describe('GM derived: runs and Create while following', () => {
     expect(runWhileFollowingLine(null, null, 'Second canvas', 2)).toBe("Nebula couldn’t run 2 nodes because an agent is opening “Second canvas”.");
   });
 
-  it('G1: Create says it in its own error style, never "Nebula is opening another project." bare', () => {
+  it('Create says it in its own error style, never "Nebula is opening another project." bare', () => {
     expect(createWhileFollowingLine({ agent: 'Codex', projectName: 'Second canvas' }))
       .toBe("Nebula couldn’t start the generation because Codex is opening “Second canvas”.");
     expect(createWhileFollowingLine({ agent: null, projectName: 'Second canvas' }))
@@ -79,14 +79,14 @@ describe('GM derived: runs and Create while following', () => {
     expect(createWhileFollowingLine(null)).toBe("Nebula couldn’t start the generation because another project is opening.");
   });
 
-  it("G1: Create's own error style shows that same line (the store rejects with a FailureNotice under Create's heading)", () => {
+  it("Create's own error style shows that same line (the store rejects with a FailureNotice under Create's heading)", () => {
     const following = { agent: 'Codex', projectName: 'Second canvas' };
     const refusal = new FailureNotice(CREATE_WHILE_FOLLOWING_HEADING, followingReason(following));
     expect(failureMessage(refusal, CREATE_WHILE_FOLLOWING_HEADING)).toBe(createWhileFollowingLine(following));
   });
 });
 
-describe('GM round 21: the cursor pill\'s hairline', () => {
+describe('the cursor pill\'s hairline', () => {
   it('1px, white at about 12%, inset so the pill keeps its height', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/agentCursor.css'), 'utf8');
     const rule = /\.agent-cursor__say\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';

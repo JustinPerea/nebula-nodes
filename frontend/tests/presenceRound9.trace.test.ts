@@ -1,13 +1,13 @@
 /**
- * PR #204 round 9: review 7's trace probes, each pinned to its exact outcome.
- * - LOW-2: a path made by a helper (or written) and wrapped in await, `as`, `satisfies`, `!`,
+ * PR #204: the trace probes, each pinned to its exact outcome.
+ * - a path made by a helper (or written) and wrapped in await, `as`, `satisfies`, `!`,
  *   `<T>`, a template, a method call or a URL wrapper (String, backendUrl, joinBackendPath) is
  *   still the transport's: its `!res.ok` branch is read, not the catch (H1-H14, L1-L5, K1).
  *   Where the wrapped path is held somewhere the trace can't read, it is listed as untraced and
  *   no catch decides it (U1-U7).
- * - LOW-3: the destructure follow in callersOf (D1), a marker above the branch's statement (O3),
+ * - the destructure follow in callersOf (D1), a marker above the branch's statement (O3),
  *   a marker's words in the middle of a comment (O2), and a marker on its own line in a catch (O4).
- * - NIT-2: the chat socket's refusal is read from the syntax tree (S1-S9).
+ * - the chat socket's refusal is read from the syntax tree (S1-S9).
  */
 import { describe, expect, it } from 'vitest';
 import { callersOf, socketRefusalGaps, untracedApiText, withSources } from './personGatedCallers';
@@ -47,7 +47,7 @@ const EXPECTED: Record<string, { found: Record<string, string>; untraced: number
   O4_marker_on_its_own_line_in_the_catch: { found: { [GO]: 'keeps' }, untraced: 0 },
 };
 
-describe('round 9: review 7\'s trace probes, exact outcomes', () => {
+describe('the trace probes, exact outcomes', () => {
   it('every probe is pinned', () => {
     expect(Object.keys(ROUND9_PROBES).sort()).toEqual(Object.keys(EXPECTED).sort());
     expect(new Set(Object.values(ROUND9_PROBES).map((files) => JSON.stringify(files))).size).toBe(Object.keys(ROUND9_PROBES).length);
@@ -62,7 +62,7 @@ describe('round 9: review 7\'s trace probes, exact outcomes', () => {
   }
 });
 
-describe('round 9: the chat socket\'s refusal, read from the syntax tree (NIT-2)', () => {
+describe('the chat socket\'s refusal, read from the syntax tree', () => {
   it('each probe is its own source', () => {
     expect(new Set(Object.values(SOCKET_PROBES).map((probe) => probe.source)).size).toBe(Object.keys(SOCKET_PROBES).length);
   });

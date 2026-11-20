@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 round 25 (review 23 LOW-1, GM r38): Codex's change to the field
+ * PR #198 (design): Codex's change to the field
  * the person's save carried arrives while that save is out, and the save
  * fails (500, 400, 413 or "other"). The clash is asked as soon as the failed
  * answer comes back, with the same prompt, in the scene's stop line's
@@ -240,7 +240,7 @@ function watchClashes(id: string) {
 const CODEX_S1 = [{ id: 's1', prompt: 'codex s1' }, { id: 's2', prompt: 'b' }];
 const CODEX_S2 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'codex s2' }];
 
-describe('GM r38 (review 23 LOW-1): a save that fails asks the clash at once when Codex changed the same field meanwhile', () => {
+describe('a save that fails asks the clash at once when Codex changed the same field meanwhile', () => {
   const causes: [string, (h: ReturnType<typeof backend>) => void][] = [
     ['500', (h) => h.fail('n1', 1000)],
     ['400', (h) => h.refuse('n1', 400)],
@@ -357,7 +357,7 @@ describe('GM r38 (review 23 LOW-1): a save that fails asks the clash at once whe
     release();
     await vi.waitFor(() => expect(stopLineOf('n1')?.text).toBe(RETRYING('“Opening”')), { timeout: 1000, interval: 2 });
     expect(clashOf('n1')).toBeNull();
-    // As before round 25: the failed answer doesn't take Codex's other field
+    // As before: the failed answer doesn't take Codex's other field
     // in by itself (the card keeps what it showed, nothing more is sent);
     // the next save's key check brings it in.
     expect([shotOf('n1', 's1'), shotOf('n1', 's2'), h.putsOf('n1').length]).toEqual(['mine', 'b', 1]);
@@ -380,7 +380,7 @@ const changedBy = (n: number) => ({ status: 409, body: { detail: 'changed', code
   scene: sceneOf(codexShots(n)), sceneKey: JSON.stringify(codexShots(n).map((s) => [s.id, s.prompt])), sceneRev: (codexRev += 1),
   changedBy: { kind: 'agent', name: 'Codex' } } });
 
-describe('review 23 NIT-1: the retrying line’s paths the mutants found untested', () => {
+describe('the retrying line’s paths the mutants found untested', () => {
   it('a reconnect resends a server stop: the retrying line takes the stop’s place in one update, then clears when it saves', async () => {
     const h = backend({ n1: 'Opening' });
     store.setSceneRetryDelaysForTests([5]);
@@ -457,7 +457,7 @@ describe('review 23 NIT-1: the retrying line’s paths the mutants found unteste
     typeIn('n7', 's1', 'mine');
     await vi.waitFor(() => expect(stopLines()).toEqual([RETRYING('“Opening”')]), { timeout: 3000, interval: 5 });
     useGraphStore.getState().deleteNode('n7');
-    // The delete lands first (as review 23's R2a: Undo after it, not racing its request).
+    // The delete lands first (Undo after it, not racing its request).
     await deleteLanded(useGraphStore);
     expect(h.scenes.get('n7')!.deleted).toBe(true);
     await sleep(100);

@@ -1,9 +1,9 @@
 /**
- * PR #204 round 7, a refused start's restore:
- * - Review 5 NIT-5: the refusal marks and puts back the scope its start queued, not one read
+ * PR #204, a refused start's restore:
+ * - the refusal marks and puts back the scope its start queued, not one read
  *   again when the refusal comes; a start Nebula took leaves no kept state behind; a node with no
- *   kept state (past the cap) goes back idle, never 'queued' (mutant R3).
- * - Review 5 LOW-3: a refused shot goes back to the output it last settled with.
+ *   kept state (past the cap) goes back idle, never 'queued'.
+ * - a refused shot goes back to the output it last settled with.
  * Harness from presenceRound6.run.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -43,7 +43,7 @@ const text = (id: string, state = 'idle', extra: Record<string, unknown> = {}) =
 const fresh = (nodes: unknown[]) => useGraphStore.setState({ nodes: nodes as never, edges: [], runHistory: [], isExecuting: false,
   isCancelling: false, providerRecoveryWarning: null, uncertainWorldLabsRunId: null, providerRecoveries: [], providerStartAmbiguities: [] });
 
-describe('review 5 NIT-5: a refused start restores the scope it queued', () => {
+describe('a refused start restores the scope it queued', () => {
   beforeEach(() => {
     resetPersonSessionForTests();
     useGraphStore.getState().resetExecution();
@@ -99,7 +99,7 @@ describe('review 5 NIT-5: a refused start restores the scope it queued', () => {
     expect(beforeQueuedSizeForTests()).toBe(0);
   });
 
-  // Gates NIT-3 (round 7): a cluster start (Creator Studio's) queues with no resetExecution first.
+  // A cluster start (Creator Studio's) queues with no resetExecution first.
   it('a cluster start Nebula took leaves none either', async () => {
     fresh([text('n1', 'complete'), text('n2')]);
     vi.spyOn(api, 'executeGraph').mockResolvedValueOnce({ status: 'started' } as never);
@@ -107,7 +107,7 @@ describe('review 5 NIT-5: a refused start restores the scope it queued', () => {
     expect(beforeQueuedSizeForTests()).toBe(0);
   });
 
-  it('mutant R3: a node past the cap, with no kept state, goes back idle on the promote, never queued', async () => {
+  it('a node past the cap, with no kept state, goes back idle on the promote, never queued', async () => {
     fresh(Array.from({ length: 501 }, (_, i) => text(`t${i}`)));
     let refuse!: (error: unknown) => void;
     vi.spyOn(api, 'executeGraph').mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject; }));
@@ -123,7 +123,7 @@ describe('review 5 NIT-5: a refused start restores the scope it queued', () => {
   });
 });
 
-describe('review 5 LOW-3: a refused shot goes back to the output it last settled with', () => {
+describe('a refused shot goes back to the output it last settled with', () => {
   const failedBefore = { status: 'error', error: 'The model said no.', errorPerson: 'The model said no.', seed: 7 };
   const sceneNode = (output: Record<string, unknown>) => ({ id: 'cine', type: 'cinema-scene', position: { x: 0, y: 0 },
     data: { definitionId: 'cinema-scene', label: 'Scene', state: 'idle', outputs: {},
@@ -150,7 +150,7 @@ describe('review 5 LOW-3: a refused shot goes back to the output it last settled
   });
 });
 
-describe('PR #204 round 9, GM r13 (1): Generate\'s nodes added, their start refused for this tab', () => {
+describe('Generate\'s nodes added, their start refused for this tab (PR #204)', () => {
   const GM_R13 = 'Nebula added the nodes to the canvas but couldn’t start the generation because this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.';
   const origin = { genId: 'g1', prompt: 'a lighthouse', ts: 1, sessionId: 's', modelNodeIds: ['n2'], allNodeIds: ['n1', 'n2'] };
   beforeEach(() => {
@@ -162,7 +162,7 @@ describe('PR #204 round 9, GM r13 (1): Generate\'s nodes added, their start refu
   });
   afterEach(() => { notePersonPromoted(); vi.restoreAllMocks(); });
 
-  it('the result cards say GM\'s line, whole, with no "try again"; the promote puts them back', async () => {
+  it('the result cards say design\'s line, whole, with no "try again"; the promote puts them back', async () => {
     fresh([text('n1'), text('n2')]);
     useGraphStore.setState({ createLaunchingIds: ['g1'], createCancelledLaunchIds: [] } as never);
     vi.spyOn(api, 'executeGraph').mockRejectedValueOnce(gateStart("Couldn't start the run."));

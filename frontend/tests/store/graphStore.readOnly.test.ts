@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
- * Round 14 of PR #114 (GM: "Blocking it is. Edits are blocked while offline,
+ * PR #114 (design: "Blocking it is. Edits are blocked while offline,
  * not queued."). One gate every edit goes through: while Nebula is offline,
  * every edit entry point changes nothing, sends nothing and shows no toast;
- * the banner pulses instead. Review 13 found two that still sent
- * (add-and-connect, M2; a file drop, L6), and round 13's edits made offline
+ * the banner pulses instead. A review found two that still sent
+ * (add-and-connect; a file drop), and the edits made offline
  * were reverted by the reconnect's sync with no word.
  */
 
@@ -131,9 +131,9 @@ describe('while Nebula is offline, every edit entry point is blocked', () => {
   });
 });
 
-// Review 13, M2's second half: an add-and-connect whose answer was lost was
+// Second half: an add-and-connect whose answer was lost was
 // left "uncertain", and every later add-and-connect was refused until a
-// reload. Review 14, nit 3: a reconnect to the same backend process doesn't
+// reload. A reconnect to the same backend process doesn't
 // release it (the create may still commit); a restarted backend (a new
 // bootId on the socket's first sync) does, when its graph lacks the pair.
 describe('an unresolved add-and-connect is released only by a restarted backend', () => {
@@ -173,9 +173,9 @@ describe('an unresolved add-and-connect is released only by a restarted backend'
       [expect.stringContaining('/api/graph/node-and-connect')]);
   });
 
-  // Round 16 (review 15, M4): the bootId is noted at the connection level
+  // The bootId is noted at the connection level
   // from every hello, health answer and sync, so a new one proves a restart
-  // whichever message brings it (round 15 waited for socketReconnected, and
+  // whichever message brings it (an earlier version waited for socketReconnected, and
   // this case sent a new bootId on the old socket, which can't happen). The
   // old socket's sync carries the same process's bootId: no release.
   it('a sync before the reconnect (the old socket, same bootId) does not release it', async () => {

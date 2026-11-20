@@ -2,12 +2,12 @@ import '@testing-library/jest-dom';
 import * as restoreCopy from '../src/components/projects/catalogRestoreCopy';
 import { primeRestoreCopyForTests } from '../src/components/projects/restoreCopyLoader';
 
-// Review 13 of PR #199 (LOW-1): the restore copy loads lazily in the app;
+// PR #199: the restore copy loads lazily in the app;
 // tests read it at once, as if loaded (restoreCopyLoader's own test unprimes it).
 primeRestoreCopyForTests(restoreCopy);
 import { stopWatchingBareLines, takeBareLines, watchBareLines } from './helpers/bareLines';
 
-// PR #199 round 25: the project store's flows (store/projectFlows) load lazily
+// PR #199: the project store's flows (store/projectFlows) load lazily
 // in the app; tests read them at once, as if loaded. The loader says how
 // (only a file whose graph holds the store has one); a test that resets
 // modules calls it again after its re-import. No top-level await: the flows
@@ -133,7 +133,7 @@ globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
   });
 }
 
-// PR #204 round 10 (review 8 LOW-1): a runtime ratchet for the one-notice rule
+// PR #204: a runtime ratchet for the one-notice rule
 // (tests/helpers/bareLines.ts): after each test, a "connected as you" line the page showed outside
 // a registered element fails it, naming the line.
 if (typeof document !== 'undefined' && typeof MutationObserver === 'function') {
@@ -145,7 +145,7 @@ if (typeof document !== 'undefined' && typeof MutationObserver === 'function') {
       + '(render it through <LineText>, components/LineText.tsx; review 8 LOW-1):\n'
       + found.map((text) => `  ${text}`).join('\n'));
   });
-  // Round 18h (review 16 NIT-2): disconnected before jsdom's teardown, so no change after it runs
+  // Disconnected before jsdom's teardown, so no change after it runs
   // the walk on a document that is gone.
   afterAll(() => stopWatchingBareLines());
 }

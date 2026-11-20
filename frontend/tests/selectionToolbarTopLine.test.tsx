@@ -6,7 +6,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * GM - Design, 2026-10-23: "Floating panels stop below the workspace header
+ * Design, 2026-10-23: "Floating panels stop below the workspace header
  * and the selection toolbar, whichever is lower, plus the same 8 px gap."
  *
  * The toolbar enters with `selection-toolbar-in` (translateY(-6px) scale(0.98)
@@ -98,7 +98,7 @@ describe('the selection toolbar\'s top line', () => {
     expect(floatingTopLimit(16)).toBe(148);
   });
 
-  // GM - Design, 2026-10-23 (round 3, answer 5): "The Inspector jumping on
+  // Design, 2026-10-23: "The Inspector jumping on
   // deselect: hold it. A panel shouldn't move unless someone moves it. While
   // it's open, use the lower of the two top lines (the toolbar's) whether or
   // not the toolbar is showing." With nothing selected the Panel is empty,

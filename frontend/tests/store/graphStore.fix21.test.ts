@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 21 (GM r30), on graphStore.fix17's keyed backend: a
+ * PR #198 fix (design), on graphStore.fix17's keyed backend: a
  * clash answer being sent works as a [Try again] does. The prompt stays,
  * `sending`, while the answer's save is on its way, so its buttons can be
  * held; a second press sends nothing. When that save is answered the prompt
@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -240,7 +240,7 @@ function watch() {
   return { seen, off };
 }
 
-describe('GM r30: a clash answer being sent', () => {
+describe('a clash answer being sent', () => {
   it.each<'mine' | 'theirs'>(['mine', 'theirs'])('%s, saving works: the prompt stays sending while the save is out, a second press sends nothing, then it goes', async (keep) => {
     const h = backend(S3);
     // s3 unsaved too, so Use Codex’s still has something to send.

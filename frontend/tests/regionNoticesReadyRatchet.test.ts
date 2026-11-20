@@ -5,15 +5,15 @@
 // store change made next in act() never reaches the line. pr198Fix23Ui "a
 // rename during a try" read "Opening" after the rename on a busy CI runner
 // (run 41584394316, attempt 1); with React's scheduler stalled 20 ms it fails
-// every time, and so did pr198Fix20Ui and pr198Fix21Ui (PR #221 review 1).
+// every time, and so did pr198Fix20Ui and pr198Fix21Ui (PR #221).
 //
-// The check, read from each test file's syntax tree (PR #221 review 1 LOW-2,
-// NIT-1, NIT-2), so comments and strings never count as code:
+// The check, read from each test file's syntax tree (PR #221),
+// so comments and strings never count as code:
 // - A file mounts the region when it renders, in JSX or createElement, a
 //   component that mounts it: NoticeRegion itself, or App (the one app
 //   component that renders <NoticeRegion>; the last case below fails if
 //   another starts to). It counts only when the file takes that component's
-//   module, so a local fixture called App doesn't. PR #221 review 2 LOW-2:
+//   module, so a local fixture called App doesn't. PR #221:
 //   the tag is matched by the name the file binds the export to (an alias,
 //   a default import, a destructure from `await import`), by the export's
 //   own name, or as a property of a namespace binding of the module
@@ -27,7 +27,7 @@
 //   `beforeAll(regionNoticesReady)`, a callback that awaits
 //   `regionNoticesReady()` or `DeferredRegionNotices.preload()`, or one
 //   that returns `regionNoticesReady()` (an expression body, or a block's
-//   `return`, review 2 NIT-4). A bare regionNoticesReady counts only as the
+//   `return`). A bare regionNoticesReady counts only as the
 //   helper's own import, never shadowed. A returned
 //   `DeferredRegionNotices.preload()`, awaited or not, is the component, and
 //   vitest calls a returned function as teardown; it doesn't count.
@@ -71,7 +71,7 @@ const BASE_TOKENS: readonly (string | RegExp)[] = ['NoticeRegion', /['"`][^'"`\n
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * The names a module exports that are a mount (review 2 LOW-2, re-exports):
+ * The names a module exports that are a mount (and re-exports):
  * `export { NoticeRegion as Region } from '…'`, `export * from '…'`, or a
  * mount imported and exported again (`export { Main }`, `export default Main`).
  */
@@ -127,7 +127,7 @@ const tokensFor = (mounts: readonly Mount[]) => [...BASE_TOKENS, ...mounts.flatM
 
 function readFile(source: string, fileName?: string, mounts: readonly Mount[] = MOUNTS) {
   const file = parse(source, fileName);
-  // Review 2 LOW-2: a mount is matched by the name the file binds it to (an
+  // A mount is matched by the name the file binds it to (an
   // alias, a default import, a destructure from `await import`), by the
   // export's own name, or as `<N.NoticeRegion/>` / `<M.default/>` on a
   // namespace binding of the module.
@@ -182,7 +182,7 @@ function readFile(source: string, fileName?: string, mounts: readonly Mount[] = 
     if (!hook) return false;
     if (isHelper(unwrap(hook))) return true;
     if (!isFunctionLike(hook)) return false;
-    // Review 2 NIT-4: a block body that returns the helper's promise is fine too.
+    // A block body that returns the helper's promise is fine too.
     if (ts.isBlock(hook.body)) return awaitsLoad(hook.body);
     return returnsHelper(hook.body);
   });
@@ -205,7 +205,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
   const caught: Array<[string, string]> = [
     ['a render with no preload', `${IMPORT_REGION}${RENDER}`],
     ['the helper imported but never called', `${IMPORT_REGION}${IMPORT_HELPER}${RENDER}`],
-    // Review 1 LOW-2: a comment is not a hook.
+    // A comment is not a hook.
     ['the hook only in a line comment', `${IMPORT_REGION}${IMPORT_HELPER}// beforeAll(regionNoticesReady);\n${RENDER}`],
     ['the hook only in a block comment', `${IMPORT_REGION}${IMPORT_HELPER}/* beforeAll(regionNoticesReady); */\n${RENDER}`],
     ['the hook only in a string', `${IMPORT_REGION}${IMPORT_HELPER}const why = 'beforeAll(regionNoticesReady)';\n${RENDER}`],
@@ -216,14 +216,14 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
     ['the helper awaited only in a test', `${IMPORT_REGION}${IMPORT_HELPER}it('y', async () => { await regionNoticesReady(); });\n${RENDER}`],
     ['a local regionNoticesReady', `${IMPORT_REGION}const regionNoticesReady = async () => {};\nbeforeAll(regionNoticesReady);\n${RENDER}`],
     ['a createElement render', `${IMPORT_REGION}it('x', () => { render(createElement(NoticeRegion, { screen: 'canvas' })); });`],
-    // Review 1 NIT-2: <App/> mounts the region.
+    // <App/> mounts the region.
     ['an <App/> render with no preload', `${IMPORT_APP}it('x', () => { render(<App />); });`],
     ['an <App></App> render', `${IMPORT_APP}it('x', () => { render(<App></App>); });`],
     ['a partial mock of NoticeRegion is still the real region', `vi.mock('../src/components/NoticeRegion', async (importOriginal) => ({ ...await importOriginal() }));\n${IMPORT_REGION}${RENDER}`],
     ['an opt-out with no reason', `// region-notices-ratchet: off\n${IMPORT_REGION}${RENDER}`],
     ['an opt-out only in a string', `${IMPORT_REGION}const s = '// region-notices-ratchet: off, only a string here';\n${RENDER}`],
     ['a unicode escape in the tag', `${IMPORT_REGION}it('x', () => { render(<Notice\\u0052egion screen="canvas" />); });`],
-    // Review 2 LOW-2: the mount by the name the file binds it to.
+    // The mount by the name the file binds it to.
     ['a renamed named import', "import { NoticeRegion as Region } from '../src/components/NoticeRegion';\nit('x', () => { render(<Region />); });"],
     ['a default import of App under another name', "import Main from '../src/App';\nit('x', () => { render(<Main />); });"],
     ['<M.default/> from `await import`', "it('x', async () => { const M = await import('../src/App'); render(<M.default />); });"],
@@ -233,7 +233,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
     ['a template-literal App import', "it('x', async () => { const M = await import(`../src/App`); render(<M.default />); });"],
     ['createElement on a namespace', "import * as N from '../src/components/NoticeRegion';\nit('x', () => { render(createElement(N.NoticeRegion, {})); });"],
     ['vi.importActual of App', "it('x', async () => { const M = await vi.importActual('../src/App'); render(<M.default />); });"],
-    // Review 2 NIT-4's other side: a returned preload is still the component.
+    // The other side: a returned preload is still the component.
     ['the preload returned from a block body', `${IMPORT_REGION}${IMPORT_CHUNKS}beforeAll(async () => { return await DeferredRegionNotices.preload(); });\n${RENDER}`],
   ];
   it.each(caught)('%s', (_, source) => {
@@ -247,7 +247,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
 
   const passes: Array<[string, string]> = [
     ['beforeAll(regionNoticesReady)', `${IMPORT_REGION}${IMPORT_HELPER}beforeAll(regionNoticesReady);\n${RENDER}`],
-    // Review 1 NIT-1: a timeout argument is fine.
+    // A timeout argument is fine.
     ['beforeAll(regionNoticesReady, 10_000)', `${IMPORT_REGION}${IMPORT_HELPER}beforeAll(regionNoticesReady, 10_000);\n${RENDER}`],
     ['beforeEach(regionNoticesReady)', `${IMPORT_REGION}${IMPORT_HELPER}beforeEach(regionNoticesReady);\n${RENDER}`],
     ['an awaited preload in a block', `${IMPORT_REGION}${IMPORT_CHUNKS}beforeAll(async () => { await DeferredRegionNotices.preload(); });\n${RENDER}`],
@@ -260,7 +260,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
     ['a full mock of NoticeRegion', `vi.mock('../src/components/NoticeRegion', () => ({ NoticeRegion: () => null }));\n${IMPORT_REGION}${RENDER}`],
     ['an opt-out with a reason', `// region-notices-ratchet: off, tests the region before its chunk on purpose\n${IMPORT_REGION}${RENDER}`],
     ['the render only in a comment', `${IMPORT_REGION}// render(<NoticeRegion screen="canvas" />);\n`],
-    // Review 2 NIT-4: a block body that returns the helper's promise.
+    // A block body that returns the helper's promise.
     ['the helper returned from a block body', `${IMPORT_REGION}${IMPORT_HELPER}beforeAll(() => { return regionNoticesReady(); });\n${RENDER}`],
     ['the helper awaited and returned from a block body', `${IMPORT_REGION}${IMPORT_HELPER}beforeAll(async () => { return await regionNoticesReady(); });\n${RENDER}`],
     ['an aliased mount with the helper', `import { NoticeRegion as Region } from '../src/components/NoticeRegion';\n${IMPORT_HELPER}beforeAll(regionNoticesReady);\nit('x', () => { render(<Region />); });`],
@@ -271,7 +271,7 @@ describe('the ratchet reads the forms (mutation cases: each must be caught)', ()
   });
 });
 
-describe('a test helper that re-exports a mount is a mount too (review 2 LOW-2)', () => {
+describe('a test helper that re-exports a mount is a mount too', () => {
   const HELPERS = [
     { path: '/t/tests/helpers/regionHarness.tsx', source: "export { NoticeRegion as Region } from '../../src/components/NoticeRegion';\n" },
     { path: '/t/tests/helpers/appHarness.tsx', source: "import App from '../../src/App';\nexport default App;\n" },

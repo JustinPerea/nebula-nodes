@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Round 16 of PR #114, review 15's store findings and GM's r16 lines:
- * - M1 (probe X1): Stop is sent while offline; a Stop that fails then says
- *   GM's line once and the intent is kept.
- * - M2 (probe X2): a 404 on the status check sends Stop before the run is
+ * PR #114's store behaviour and the design lines:
+ * - Stop is sent while offline; a Stop that fails then says
+ *   design's line once and the intent is kept.
+ * - a 404 on the status check sends Stop before the run is
  *   freed, and the run is settled only once that Stop is answered.
- * - L2 (probe X4): a param push refused offline is an edit in flight: GM's
+ * - a param push refused offline is an edit in flight: design's
  *   failed-save line and the revert.
- * - M5 (probe X5): Undo of an accepted proposal leaves what an agent changed
- *   since, and says so in GM's words.
- * - M4 (probe X6): the boot id is noted with no project open.
- * - The 507 run line (GM, locked).
+ * - Undo of an accepted proposal leaves what an agent changed
+ *   since, and says so in design's words.
+ * - the boot id is noted with no project open.
+ * - The 507 run line (design, locked).
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
@@ -82,7 +82,7 @@ function runningBackend() {
   });
 }
 
-describe('M1 (probe X1): Stop while offline, a run going', () => {
+describe('Stop while offline, a run going', () => {
   it('the DELETE is sent at once (a false offline: the backend answers), with no pulse', async () => {
     runningBackend();
     await useGraphStore.getState().executeNode('n1');
@@ -95,7 +95,7 @@ describe('M1 (probe X1): Stop while offline, a run going', () => {
     expect(notices).toEqual([]);
   });
 
-  it('a Stop that fails while offline says GM\'s line once and keeps the intent', async () => {
+  it('a Stop that fails while offline says design\'s line once and keeps the intent', async () => {
     runningBackend();
     await useGraphStore.getState().executeNode('n1');
     fetchMock.mockImplementation(async () => { throw new TypeError('Failed to fetch'); });
@@ -122,7 +122,7 @@ describe('M1 (probe X1): Stop while offline, a run going', () => {
   });
 });
 
-describe('M2 (probe X2): a 404 on the status check after a lost start answer', () => {
+describe('a 404 on the status check after a lost start answer', () => {
   it('sends Stop before the run is freed; the tombstone answer ends it', async () => {
     const order: string[] = [];
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -175,8 +175,8 @@ describe('M2 (probe X2): a 404 on the status check after a lost start answer', (
   });
 });
 
-describe('L2 (probe X4): a param push refused just after the offline flip', () => {
-  it('reads GM\'s failed-save line and reverts, never lost without a word', async () => {
+describe('a param push refused just after the offline flip', () => {
+  it('reads design\'s failed-save line and reverts, never lost without a word', async () => {
     useGraphStore.getState().updateNodeData('n1', { params: { value: 'typed' } });
     noteBackendConnection('offline');
     await sleep(400);
@@ -186,13 +186,13 @@ describe('L2 (probe X4): a param push refused just after the offline flip', () =
   });
 });
 
-describe('M5 (probe X5): Undo of an accepted proposal an agent changed since', () => {
+describe('Undo of an accepted proposal an agent changed since', () => {
   const openProposal = (id: string) => useCanvasProposalsStore.getState().open({ id, status: 'open',
     agent: { id: 'a', name: 'Codex', color: '#fff', verified: false }, note: 'x', createdAt: Date.now(),
     expiresAt: Date.now() + 600000, nodes: [], edges: [], params: [], run: [] } as never, 'key', {});
   const agentEdit = { actor: { kind: 'agent', name: 'Claude Code', id: 'cc' } };
 
-  it('the agent\'s value stays on the canvas and on the backend; nothing is undone, in GM\'s words', async () => {
+  it('the agent\'s value stays on the canvas and on the backend; nothing is undone, in design\'s words', async () => {
     openProposal('p5');
     fetchMock.mockImplementation(async (url: string) => {
       if (String(url).includes('/accept')) {
@@ -264,11 +264,11 @@ describe('M5 (probe X5): Undo of an accepted proposal an agent changed since', (
     await sleep(30);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n1', 'n2']);
     expect(useGraphStore.getState().undoNotice?.text)
-      // Round 17 (GM): a node the Accept added and the agent changed is kept whole.
+      // Design: a node the Accept added and the agent changed is kept whole.
       .toBe('Undid the proposal except “Kept”. Claude Code changed it after you accepted.');
   });
 
-  it('GM\'s forms, exactly', () => {
+  it('the design forms, exactly', () => {
     expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except “Prompt” for “Hero”. Codex changed it after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['Prompt', 'Seed'] }], { kind: 'agent', name: 'Codex' }, false))
@@ -278,7 +278,7 @@ describe('M5 (probe X5): Undo of an accepted proposal an agent changed since', (
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B', 'C', 'D'] }], { kind: 'agent', name: 'Codex' }, false))
       .toBe('Undid the proposal except 4 settings Codex changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], { kind: 'agent', name: 'Codex' }, false))
-      // GM pr198 r1: settings across nodes are counted, from 2.
+      // Design: settings across nodes are counted, from 2.
       .toBe('Undid the proposal except 2 settings Codex changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], { kind: 'agent', name: null }, false))
       .toBe('Undid the proposal except 2 settings an agent changed after you accepted.');
@@ -295,7 +295,7 @@ describe('M5 (probe X5): Undo of an accepted proposal an agent changed since', (
   });
 });
 
-describe('M4 (probe X6): the boot id is learned with no project open', () => {
+describe('the boot id is learned with no project open', () => {
   it('a restarted backend releases the held create', async () => {
     const banana = { id: 'n3', type: 'model-node', position: { x: 0, y: 300 },
       data: { label: 'Nano Banana', definitionId: 'nano-banana', params: {}, state: 'idle', outputs: {} } };
@@ -335,12 +335,12 @@ describe('M4 (probe X6): the boot id is learned with no project open', () => {
   });
 });
 
-describe('the 507 run line (GM, locked)', () => {
+describe('the 507 run line (design, locked)', () => {
   it('names the node and says why', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST' && String(url).includes('/api/execute-node')) {
-        // The agents' words; the person reads GM's line for a run-safety
-        // store's 507 (round 17: the answer's code says which store).
+        // The agents' words; the person reads design's line for a run-safety
+        // store's 507 (the answer's code says which store).
         return json({ detail: 'Nebula cannot verify durable pre-admission Stop state; no provider request was sent',
           code: 'run_safeguards' }, 507);
       }
@@ -354,7 +354,7 @@ describe('the 507 run line (GM, locked)', () => {
   });
 });
 
-describe('held-delete reason lines (GM, round 16)', () => {
+describe('held-delete reason lines (design)', () => {
   it('the node being deleted holds the ID: "It", and the button in curly quotes', async () => {
     const { heldDeleteText } = await import('../../src/lib/worldLabsWaiting');
     expect(heldDeleteText(1, false, 1, '“Lighthouse world”')).toBe(
@@ -370,7 +370,7 @@ describe('held-delete reason lines (GM, round 16)', () => {
   });
 });
 
-describe('L7 (pre-existing): a freshly loaded project shows its missing-key warning at once', () => {
+describe('a freshly loaded project shows its missing-key warning at once', () => {
   it('loadProjectGraph computes keyStatus from the credential cache', async () => {
     const { useUIStore } = await import('../../src/store/uiStore');
     useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true, kreaConnectionMode: 'api-token' } } as never);
@@ -416,7 +416,7 @@ describe('nit: a reconnect while the mouse is still down keeps a put-back drag e
   });
 });
 
-describe('L3: Cinema "Send to motion" offline', () => {
+describe('Cinema "Send to motion" offline', () => {
   it('sends nothing and shows no error line; the shot keeps what it showed', async () => {
     const { sendCinemaShotToMotion } = await import('../../src/lib/cinemaMotion');
     const { useCinemaMotionStore } = await import('../../src/store/cinemaMotionStore');
@@ -435,7 +435,7 @@ describe('L3: Cinema "Send to motion" offline', () => {
   });
 });
 
-describe('L3: a Settings field saved while offline says nothing and keeps its draft', () => {
+describe('a Settings field saved while offline says nothing and keeps its draft', () => {
   it('saveField refused by the offline gate sets no error line', async () => {
     const { saveField, resetSettingsWrites } = await import('../../src/lib/settingsWrites');
     const { useSettingsDraftStore } = await import('../../src/store/settingsDraftStore');

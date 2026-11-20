@@ -1,8 +1,8 @@
 /**
- * PR #204 round 6, the stores:
- * - GM r6 (2): the project save's not-connected line is the "because" form, and its retry on the
- *   promote goes only to the project it was refused for (review 4 NIT-1, survivor M9).
- * - Review 4 LOW-4: a refused run's nodes go back to the state they last settled in (idle,
+ * PR #204, the stores:
+ * - Design: the project save's not-connected line is the "because" form, and its retry on the
+ *   promote goes only to the project it was refused for.
+ * - a refused run's nodes go back to the state they last settled in (idle,
  *   complete, error, skipped), never 'queued' or 'executing'; the kept states are taken.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -71,7 +71,7 @@ function editCanvas(value: string): void {
 const gate = () => new projects.ProjectRequestError('Only the person can do this.', 403,
   { heading: "Couldn't save the project.", detail: 'Only the person can do this.', code: PERSON_REQUIRED_CODE });
 
-describe('GM r6 (2) and survivor M9: the project save\'s line and its retry', () => {
+describe('the project save\'s line and its retry', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     resetPersonSessionForTests();
@@ -124,7 +124,7 @@ describe('GM r6 (2) and survivor M9: the project save\'s line and its retry', ()
   });
 });
 
-describe('review 4 LOW-4: a refused run restores the state the node last settled in', () => {
+describe('a refused run restores the state the node last settled in', () => {
   const node = (state: string, extra: Record<string, unknown> = {}) => ({
     id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
     data: { label: 'Krea 2', definitionId: 'krea-2-generate', params: { _kreaAuth: 'mcp' }, state,

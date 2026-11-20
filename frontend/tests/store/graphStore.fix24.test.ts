@@ -2,20 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 fix round 24, on graphStore.fix22b's keyed backend:
- * - Review 22 LOW-1 (GM r35): a one try with no answer past the bound, the
+ * PR #198 fix, on graphStore.fix22b's keyed backend:
+ * - Design: a one try with no answer past the bound, the
  *   save after a run too, goes back to the stop it came out of, with that
  *   stop's own line and rule: 400 and 413 wait, an "other" stop's quiet try
  *   stays as it was, a server stop gets its quiet try.
- * - Review 22 LOW-2: a stop put back with its scene (asked again, or Undo's
+ * - a stop put back with its scene (asked again, or Undo's
  *   save first) keeps its reason and its spent quiet try.
- * - Review 22 LOW-3: the "Unsaved" mark reads the name live while timed
+ * - the "Unsaved" mark reads the name live while timed
  *   retries go.
- * - Review 22 NIT-1: a stopped scene's quiet try that a run holds: the stop
+ * - a stopped scene's quiet try that a run holds: the stop
  *   line gives way to the run's in one update.
- * - GM r35 Q1 (review 22 NIT-2): a stop of another kind starts without the
+ * - Design: a stop of another kind starts without the
  *   "other" stop's spent quiet try.
- * - Review 22 NIT-5: the resets of the spent quiet try, one by one.
+ * - the resets of the spent quiet try, one by one.
  */
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
@@ -216,7 +216,7 @@ async function stopBy(h: ReturnType<typeof backend>, id: string, cause: Cause, p
 }
 
 
-// GM r32 answer 1: the run's line is not a failure.
+// Design: the run's line is not a failure.
 const RUN_LINE = 'Your changes to “Opening” are kept. Nebula will save them when the run finishes.';
 /** The next PUT to `id` only waits for `release()`; the others go. */
 function holdNextPut(id: string) {
@@ -308,7 +308,7 @@ async function codexSends(h: ReturnType<typeof backend>, prompt: string) {
   return putCalls('n1') - p0;
 }
 
-describe('review 22 LOW-1: a one try with no answer goes back to the stop it came out of', () => {
+describe('a one try with no answer goes back to the stop it came out of', () => {
   it.each<Kind>([400, 413, 'other', 'server'])('stopped by %s; [Try again] held by a run; the save after it hangs: back with its own line, under its own rule', async (kind) => {
     store.setSceneTryTimeoutForTests(120);
     const h = backend({ n1: 'Opening' });
@@ -331,7 +331,7 @@ describe('review 22 LOW-1: a one try with no answer goes back to the stop it cam
     answer(0, 'fail');
     await sleep(100);
     expect(stopLines()).toEqual([LINE[kind]('Opening')]);
-    // GM r34 Q2, r35: 400 and 413 wait for the person; the person pressed
+    // Design: 400 and 413 wait for the person; the person pressed
     // [Try again], so an "other" stop has its one quiet try; a server stop
     // gets one on each change.
     expect(await codexSends(h, 'codex s2')).toBe(kind === 400 || kind === 413 ? 0 : 1);
@@ -361,7 +361,7 @@ describe('review 22 LOW-1: a one try with no answer goes back to the stop it cam
   });
 });
 
-describe('review 22 LOW-2: a stop put back with its scene keeps its reason and its quiet try', () => {
+describe('a stop put back with its scene keeps its reason and its quiet try', () => {
   it.each<[string, { status: number; body: Record<string, unknown> }, string[]]>([
     ['Nebula’s own reason (merged with another scene’s)', OTHER_422, [OTHER('“Opening” and “Ref scene”')]],
     ['a reason the backend wrote', SHOT2, [SHOT2_LINE('Opening'), SHOT2_LINE('Ref scene')]],
@@ -421,7 +421,7 @@ describe('review 22 LOW-2: a stop put back with its scene keeps its reason and i
   });
 });
 
-describe('review 22 LOW-3: the mark reads the name live while timed retries go', () => {
+describe('the mark reads the name live while timed retries go', () => {
   it('a rename during the retries: the mark says the new name at once, never the old one after it', async () => {
     const h = backend({ n1: 'Opening' });
     store.setSceneRetryDelaysForTests([60_000]);
@@ -459,7 +459,7 @@ describe('review 22 LOW-3: the mark reads the name live while timed retries go',
   });
 });
 
-describe('review 22 NIT-1: a stopped scene’s quiet try that a run holds', () => {
+describe('a stopped scene’s quiet try that a run holds', () => {
   it('the stop line gives way to the run’s in one update', async () => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 'server');
@@ -475,7 +475,7 @@ describe('review 22 NIT-1: a stopped scene’s quiet try that a run holds', () =
   });
 });
 
-describe('GM r35 Q1: a stop of another kind starts without the spent quiet try', () => {
+describe('a stop of another kind starts without the spent quiet try', () => {
   it('other, its quiet try, a 500 (the server line), a change sends a quiet try, refused 400: it waits', async () => {
     const h = backend({ n1: 'Opening' });
     await stopN1(h, 'other');
@@ -491,7 +491,7 @@ describe('GM r35 Q1: a stop of another kind starts without the spent quiet try',
   });
 });
 
-describe('review 22 NIT-5: each reset of the spent quiet try', () => {
+describe('each reset of the spent quiet try', () => {
   /** An "other" stop whose one quiet try was spent (refused the same way). */
   async function spent(h: ReturnType<typeof backend>) {
     await stopN1(h, 'other');
@@ -524,7 +524,7 @@ describe('review 22 NIT-5: each reset of the spent quiet try', () => {
   });
 });
 
-describe('review 22 LOW-2: a stop line is never empty', () => {
+describe('a stop line is never empty', () => {
   it('an "other" stop with no line kept says Nebula’s own', () => {
     const nodes = [{ id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
       data: { label: 'Opening', definitionId: 'cinema-scene', params: {}, state: 'idle', outputs: {} } }];

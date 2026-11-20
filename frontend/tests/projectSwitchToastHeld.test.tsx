@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * An agent's open_project while the Commons holds unsaved labels opens the
  * project behind the Commons (#163); the person stays to save or discard.
  * The toast that says who switched it must not time out meanwhile
- * (commons-leave, GM - Design): no timer while they're still in the Commons
+ * (commons-leave, design): no timer while they're still in the Commons
  * after the held switch, then its usual 15 s once they reach the canvas.
  */
 

@@ -1,8 +1,8 @@
 /**
- * PR #204 round 7, GM r8 (1): one notice, not two. While a specific line on screen already says
+ * PR #204 (design): one notice, not two. While a specific line on screen already says
  * this tab isn't connected as the person (a "because" line, a card's own line), the general
  * notice steps out, and comes back when that line goes. Beside the locked question form, whose
- * line only locks its controls (PR #204 round 11: a lock line, never a tooltip), it stays. One derived state (the registered lines, round 9) drives it.
+ * line only locks its controls (PR #204: a lock line, never a tooltip), it stays. One derived state (the registered lines) drives it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
@@ -33,7 +33,7 @@ function Screen({ lockLine }: { lockLine?: string }) {
 beforeEach(() => { session.resetPersonSessionForTests(); resetLinesForTests(); });
 afterEach(() => { cleanup(); session.notePersonPromoted(); });
 
-describe('GM r8 (1): one notice, not two', () => {
+describe('one notice, not two', () => {
   it('a because line on screen: the general notice steps out; the line gone: it comes back', async () => {
     render(<Screen />);
     act(() => session.reportPersonRequired());
@@ -81,7 +81,7 @@ describe('GM r8 (1): one notice, not two', () => {
     const shown = document.createElement('p');
     shown.textContent = notConnectedBecause('save the style', false);
     root.appendChild(shown);
-    // On the page but not registered: it doesn't count (review 7 NIT-2).
+    // On the page but not registered: it doesn't count.
     expect(currentFixLine()).toBeNull();
     const stop = registerLine(shown, shown.textContent);
     expect(currentFixLine()?.text).toBe(shown.textContent);

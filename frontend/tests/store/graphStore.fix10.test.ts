@@ -1,22 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 10 (review 9; GM r14, r15), against round 9's keyed
+ * PR #198 fix (design), against graphStore.fix9's keyed
  * backend in small (graphStore.fix9.test.ts's harness):
- * - M-2: a save another writer refuses 20 times in a row stops, never
- *   silently: "Unsaved" with GM's stopped line and [Try again]; the next
+ * - a save another writer refuses 20 times in a row stops, never
+ *   silently: "Unsaved" with design's stopped line and [Try again]; the next
  *   change or [Try again] sends it.
- * - L-1: the revisions the tab has seen belong to one backend process; a
+ * - the revisions the tab has seen belong to one backend process; a
  *   restart (a new bootId) forgets them, so a clock that went back can't
  *   freeze the card.
- * - M-3 (GM r14: the bar follows the card): a scene's unsaved edits count
+ * - design: a scene's unsaved edits count
  *   as unsaved for the page: hasUnsavedSceneEdits, and closing the tab asks.
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), setViewing: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -33,7 +33,7 @@ const store = await import('../../src/store/graphStore');
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => store.resetDeletedSceneEditsForTests());
 const { useGraphStore } = store;
-// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+// Design: the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -176,14 +176,14 @@ const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) =
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
 
-// GM r18 answer 2 (fix round 11): a stop by another writer's refusals names
-// that writer; round 10 showed the server-failure line here.
+// Design: a stop by another writer's refusals names
+// that writer; an earlier version showed the server-failure line here.
 const STOPPED = 'Codex kept changing “Opening”, so your changes aren’t saved yet. Nebula will try again when Codex stops.';
-// GM r28 item 2 (round 19): the stop line, with [Try again], is a state in its own slot.
+// Design: the stop line, with [Try again], is a state in its own slot.
 const offersRetry = () => stopLineOf('n1') === STOPPED;
 
-describe('M-2: a save another writer keeps refusing stops, never silently', () => {
-  /** Codex commits during each of the tab's saves (the reviewer's R4: no
+describe('a save another writer keeps refusing stops, never silently', () => {
+  /** Codex commits during each of the tab's saves (no
    * clock tricks), so every save is refused as changed. */
   function busyAgent(times = 1000) {
     const h = backend(S3);
@@ -192,7 +192,7 @@ describe('M-2: a save another writer keeps refusing stops, never silently', () =
     return { h, quiet: () => { k = times + 1; h.onPut(async () => {}); } };
   }
 
-  it('R4: 21 refusals in a row, then "Unsaved" with GM’s stopped line and [Try again]; nothing more is sent', async () => {
+  it('21 refusals in a row, then "Unsaved" with design’s stopped line and [Try again]; nothing more is sent', async () => {
     const { h } = busyAgent();
     typeIn('s1', 'p1');
     await sleep(400);
@@ -251,7 +251,7 @@ describe('M-2: a save another writer keeps refusing stops, never silently', () =
     expect(unsaved()).toBe(STOPPED);
     expect(useGraphStore.getState().stoppedScenes).toEqual({ n1: true });
     useGraphStore.getState().retrySceneSave('n1');
-    // Review 10, N-2: wait for the save, not a fixed time (it flaked under load).
+    // Wait for the save, not a fixed time (it flaked under load).
     await vi.waitFor(() => expect(unsaved()).toBeNull(), { timeout: 3000, interval: 5 });
     expect(h.backendBrief()).toEqual(['s1:p1', 's2:late3', 's3:c']);
   });
@@ -267,8 +267,8 @@ describe('M-2: a save another writer keeps refusing stops, never silently', () =
   });
 });
 
-describe('L-1: a restart forgets the revisions the tab has seen', () => {
-  it('R2: a new bootId with a clock that went back: the card takes the new process’s scene, then its edits, and saves', async () => {
+describe('a restart forgets the revisions the tab has seen', () => {
+  it('a new bootId with a clock that went back: the card takes the new process’s scene, then its edits, and saves', async () => {
     revisionCounter = 5_000_000;
     const h = backend(S3);
     h.emit({ bootId: 'boot-1' });
@@ -311,7 +311,7 @@ describe('L-1: a restart forgets the revisions the tab has seen', () => {
     expect(nodeOf('n1')?.data.outputs).toEqual({ shot_s1: { type: 'Image', value: 'http://x/a.png' } });
   });
 
-  it('the same process: a sync below what the tab has is still dropped (H-1 holds)', async () => {
+  it('the same process: a sync below what the tab has is still dropped', async () => {
     revisionCounter = 7_000_000;
     const h = backend(S3);
     h.emit({ bootId: 'boot-1' });
@@ -325,7 +325,7 @@ describe('L-1: a restart forgets the revisions the tab has seen', () => {
   });
 });
 
-describe('M-3: a scene card’s unsaved edits count for the page', () => {
+describe('a scene card’s unsaved edits count for the page', () => {
   it('closing the tab asks while a scene is stopped, and not once it saved', async () => {
     const { subscribeProjectAutosave } = await import('../../src/store/projectStore');
     const unsubscribe = subscribeProjectAutosave();

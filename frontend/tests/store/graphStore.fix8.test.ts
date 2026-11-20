@@ -1,19 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 8 (review 7; GM r10 and r11), against a small keyed
+ * PR #198 fix (design), against a small keyed
  * backend that does what main.py does: every Cinema scene has a sceneKey (in
  * each sync and each save's answer), a save that sends an ifSceneKey Nebula
  * no longer has is refused with 409 scene_changed and the scene it has now,
  * and a save's own echo is broadcast before its answer.
- * - H2: Codex's edit while the person types is never lost (E1, E2, R7-A).
- * - H1: an order clash works both ways, and a later sync still merges.
- * - M1 (GM r10): no retry and no retry line while a clash waits; after
+ * - Codex's edit while the person types is never lost.
+ * - an order clash works both ways, and a later sync still merges.
+ * - design: no retry and no retry line while a clash waits; after
  *   Keep mine, a failure says the normal line.
- * - M2 (GM r11 answer 4): Keep mine brings a removed shot back with its
+ * - design: Keep mine brings a removed shot back with its
  *   connection, or says which one couldn't come back.
- * - GM r10 answer 3: each clash its own line.
- * - L1-L3: the prompt names the change it clashes with; retries stop until
+ * - Design: each clash its own line.
+ * - the prompt names the change it clashes with; retries stop until
  *   the next change ([Try again]); a reconnect sends at once.
  */
 
@@ -155,8 +155,8 @@ const reorder = (ids: string[]) => useGraphStore.getState().updateScene('n1', (c
   shots: ids.map((id) => current.shots.find((shot) => shot.id === id)!) }));
 const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) => (s.id === id ? { ...s, prompt } : s));
 
-describe('H2: Codex edits a scene while the person types in it, and nothing is lost', () => {
-  it('E1: Codex commits after our save and its sync lands before our answer: shown, and our next key keeps it', async () => {
+describe('Codex edits a scene while the person types in it, and nothing is lost', () => {
+  it('Codex commits after our save and its sync lands before our answer: shown, and our next key keeps it', async () => {
     const h = backend();
     h.onPut(async (n) => {
       if (n !== 1) return;
@@ -173,7 +173,7 @@ describe('H2: Codex edits a scene while the person types in it, and nothing is l
     expect(clash()).toBeNull();
   });
 
-  it('E2: continuous typing, Codex edits s2 once mid-typing: every key saves and Codex\'s change stays', async () => {
+  it('continuous typing, Codex edits s2 once mid-typing: every key saves and Codex\'s change stays', async () => {
     const h = backend();
     h.onPut(async (n) => { if (n === 3) h.other((shots) => setPrompt(shots, 's2', "codex's s2")); });
     const word = 'hello world';
@@ -184,14 +184,14 @@ describe('H2: Codex edits a scene while the person types in it, and nothing is l
     await sleep(150);
     expect(h.backendBrief()).toEqual(['s1:hello world', "s2:codex's s2"]);
     expect(brief()).toEqual(['s1:hello world', "s2:codex's s2"]);
-    // The refused save said nothing and asked nothing (GM r11 H2 notes).
+    // The refused save said nothing and asked nothing (design notes).
     expect(h.puts.some((put) => put.status === 409)).toBe(true);
     expect(said).toEqual([]);
     expect(clash()).toBeNull();
     expect(unsaved()).toBeNull();
   });
 
-  it('R7-A: Codex commits between our dispatch and our commit: scene_changed, merged silently, sent again', async () => {
+  it('Codex commits between our dispatch and our commit: scene_changed, merged silently, sent again', async () => {
     const h = backend();
     h.onPut(async (n) => { if (n === 1) h.other((shots) => setPrompt(shots, 's2', "codex's s2")); });
     typeIn('s1', 'a quiet street at dusk');
@@ -242,7 +242,7 @@ describe('H2: Codex edits a scene while the person types in it, and nothing is l
   });
 });
 
-describe('H1: an order clash works, and never breaks a sync', () => {
+describe('an order clash works, and never breaks a sync', () => {
   const three = [{ id: 's1', prompt: 'one' }, { id: 's2', prompt: 'two' }, { id: 's3', prompt: 'three' }];
   async function orderClash() {
     const h = backend(three, { nodes: [editNode('n2', 'Edit A'), editNode('n3', 'Temp')] });
@@ -254,14 +254,14 @@ describe('H1: an order clash works, and never breaks a sync', () => {
     return h;
   }
 
-  it('ORD1: both reorder: GM r10\'s reorder line, the card keeps mine', async () => {
+  it('both reorder: design\'s reorder line, the card keeps mine', async () => {
     await orderClash();
     expect(clash()?.line).toBe('Codex reordered the shots in “Opening” while you were editing them.');
     expect(shotsOf().map((s) => s.id)).toEqual(['s2', 's1', 's3']);
     expect(shotsOf().every((s) => s && typeof s.id === 'string')).toBe(true);
   });
 
-  it('ORD1, Use Codex\'s: their order, saved, the mark goes', async () => {
+  it('Use Codex\'s: their order, saved, the mark goes', async () => {
     const h = await orderClash();
     useGraphStore.getState().resolveSceneClash('n1', 'theirs');
     await sleep(60);
@@ -271,7 +271,7 @@ describe('H1: an order clash works, and never breaks a sync', () => {
     expect(clash()).toBeNull();
   });
 
-  it('ORD1, Keep mine: my order, saved over theirs', async () => {
+  it('Keep mine: my order, saved over theirs', async () => {
     const h = await orderClash();
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(60);
@@ -279,7 +279,7 @@ describe('H1: an order clash works, and never breaks a sync', () => {
     expect(unsaved()).toBeNull();
   });
 
-  it('ORD1, a later sync while the clash waits: merged, and other nodes in it still arrive', async () => {
+  it('a later sync while the clash waits: merged, and other nodes in it still arrive', async () => {
     const h = await orderClash();
     h.state.nodes = [editNode('n2', 'Edit A renamed'), editNode('n3', 'Temp')];
     h.other((shots) => setPrompt(shots, 's3', "codex's three"));
@@ -293,9 +293,9 @@ describe('H1: an order clash works, and never breaks a sync', () => {
   });
 });
 
-describe('M1 (GM r10): while a clash waits, nothing retries and no retry line shows', () => {
-  // GM r36 Q1: the retries' line is a state (the state slot), not a toast.
-  it('C1: a 500 kept, then a clash: no PUT and no line while waiting; the retry line gives way to the prompt', async () => {
+describe('while a clash waits, nothing retries and no retry line shows (design)', () => {
+  // Design: the retries' line is a state (the state slot), not a toast.
+  it('a 500 kept, then a clash: no PUT and no line while waiting; the retry line gives way to the prompt', async () => {
     const h = backend();
     h.failNext(100);
     typeIn('s1', 'mine');
@@ -325,7 +325,7 @@ describe('M1 (GM r10): while a clash waits, nothing retries and no retry line sh
     h.failNext(1);
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(15);
-    // GM r36 Q1: in the state slot, not a toast.
+    // Design: in the state slot, not a toast.
     expect(said).toEqual([]);
     expect(stopLineOf('n1')).toBe(RETRYING);
     await sleep(80);
@@ -335,7 +335,7 @@ describe('M1 (GM r10): while a clash waits, nothing retries and no retry line sh
   });
 });
 
-describe('M2 (GM r11 answer 4): Keep mine on a shot Codex removed', () => {
+describe('Keep mine on a shot Codex removed (design)', () => {
   async function removedClash(edges: Wire[] = [wire('s2', 'n2')]) {
     const h = backend(undefined, { edges });
     h.failNext(1);
@@ -353,7 +353,7 @@ describe('M2 (GM r11 answer 4): Keep mine on a shot Codex removed', () => {
     expect(wiresNow()).toContain('n1:shot_s2->n2:mask');
   });
 
-  it('K1: Keep mine brings the shot and its connection back, on the card and on the backend, silently', async () => {
+  it('Keep mine brings the shot and its connection back, on the card and on the backend, silently', async () => {
     const h = await removedClash();
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
     await sleep(80);
@@ -364,7 +364,7 @@ describe('M2 (GM r11 answer 4): Keep mine on a shot Codex removed', () => {
     expect(said).toEqual([]);
   });
 
-  it('K2: Use Codex\'s: the shot and its wire go', async () => {
+  it('Use Codex\'s: the shot and its wire go', async () => {
     const h = await removedClash();
     useGraphStore.getState().resolveSceneClash('n1', 'theirs');
     await sleep(80);
@@ -373,7 +373,7 @@ describe('M2 (GM r11 answer 4): Keep mine on a shot Codex removed', () => {
     expect(wiresNow()).toEqual([]);
   });
 
-  it('K3: the input now holds Codex\'s own connection: kept, and the line says so', async () => {
+  it('the input now holds Codex\'s own connection: kept, and the line says so', async () => {
     const h = backend(undefined, { edges: [wire('s2', 'n2')] });
     h.failNext(1);
     typeIn('s2', 'mine');
@@ -388,7 +388,7 @@ describe('M2 (GM r11 answer 4): Keep mine on a shot Codex removed', () => {
     expect(said).toEqual(['“Shot 2” is back without its connection to “Edit A”.']);
   });
 
-  it('K4: the other end is gone: the shot comes back without it, and the line says so', async () => {
+  it('the other end is gone: the shot comes back without it, and the line says so', async () => {
     const h = backend(undefined, { edges: [wire('s2', 'n2')] });
     h.failNext(1);
     typeIn('s2', 'mine');
@@ -415,7 +415,7 @@ describe('the lines and the lows', () => {
     expect(clash()).toMatchObject({ line: '“Shot 2” was removed in another tab while you were editing it.', agent: null });
   });
 
-  it('L1: the prompt names the change it clashes with, not the latest changer', async () => {
+  it('the prompt names the change it clashes with, not the latest changer', async () => {
     const h = backend([{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }]);
     h.failNext(100);
     typeIn('s1', 'mine');
@@ -428,7 +428,7 @@ describe('the lines and the lows', () => {
     expect(clash()).toMatchObject({ line: '“Opening” was changed in another tab while you were editing it.', agent: null });
   });
 
-  it('L2: after 8 retries a sync sends nothing; the next change does; [Try again] does', async () => {
+  it('after 8 retries a sync sends nothing; the next change does; [Try again] does', async () => {
     store.setSceneRetryDelaysForTests([5]);
     const h = backend();
     h.failNext(1000);
@@ -448,7 +448,7 @@ describe('the lines and the lows', () => {
     expect(unsaved()).toBeNull();
   });
 
-  it('L3: a reconnect sends a kept save at once, its waiting timer cancelled', async () => {
+  it('a reconnect sends a kept save at once, its waiting timer cancelled', async () => {
     store.setSceneRetryDelaysForTests([15_000]);
     const h = backend();
     h.failNext(1);

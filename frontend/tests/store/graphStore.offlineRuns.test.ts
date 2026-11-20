@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
- * Round 15 of PR #114 (review 14, M1 and M2). Runs are the paid path, so a
+ * PR #114. Runs are the paid path, so a
  * run is an edit while Nebula is offline: every run entry is refused before
  * anything is marked (no "Queued", no Stop, no request). So are the other
  * writes the store makes outside the canvas edits (Create's cluster, the
@@ -143,7 +143,7 @@ describe('a start whose answer was lost, for a run the backend does not know', (
   it('ends (not stuck on Stop) when the status check answers 404', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST' && String(url).endsWith('/api/execute')) throw new TypeError('Failed to fetch');
-      // Round 16 (review 15, M2): the 404 is fenced with a Stop first; the
+      // The 404 is fenced with a Stop first; the
       // backend tombstones an unknown run id and says it hadn't started.
       if (init?.method === 'DELETE' && String(url).includes('/api/executions/')) {
         return json({ runId: String(url).split('/').pop(), status: 'cancelled', pendingAdmission: true });

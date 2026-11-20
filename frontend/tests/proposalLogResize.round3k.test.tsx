@@ -6,7 +6,7 @@ import { AgentLog } from '../src/components/panels/AgentLog';
 import { useUIStore } from '../src/store/uiStore';
 
 /**
- * PR #216 review 3, MEDIUM-1 and MEDIUM-2 (GM r57: fix as proposed): a log
+ * PR #216 (design: fix as proposed): a log
  * the person resized with its native corner (an inline height) is its
  * header's height when collapsed, for the card's fold and for the person's
  * own collapse; and open, with no give in force, the person can resize it
@@ -149,11 +149,11 @@ describe('the cascade model reads layouts.css as the browser does', () => {
   });
 });
 
-describe('review 3 MEDIUM-1: a resized log collapses to its header', () => {
+describe('a resized log collapses to its header', () => {
   const mount = () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: VIEW_H });
-    // A floating log, mid-window, 600 wide (review 3's repro, p5 given-*).
+    // A floating log, mid-window, 600 wide (a reproduction).
     window.localStorage.setItem('nebula:agentLog:pos', JSON.stringify({ left: 212, top: 300, anchorX: 'left', anchorY: 'top' }));
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect(212, 812, 300, 600));
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true, agentLogCardHold: 'none' } as never);
@@ -193,7 +193,7 @@ describe('review 3 MEDIUM-1: a resized log collapses to its header', () => {
   });
 });
 
-describe('review 3 MEDIUM-2: the person can resize the log taller', () => {
+describe('the person can resize the log taller', () => {
   const log = (attrs: Record<string, string>) => {
     const el = document.createElement('div');
     el.className = 'agent-log agent-log--open';

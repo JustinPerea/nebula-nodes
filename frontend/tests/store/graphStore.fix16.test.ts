@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 fix round 16 (review 14, GM r25), on round 12's keyed backend in
+ * PR #198 fix (design), on graphStore.fix12's keyed backend in
  * small (graphStore.fix14's harness):
- * - LOW-1 (GM r25 answer 1): every way a scene comes back asks a waiting
+ * - design: every way a scene comes back asks a waiting
  *   clash again while the values still differ: the delete toast's Undo, the
  *   person's Redo then Undo again, the person's own delete undone, and
  *   another window's restore. No way back counts as an answer, and the
  *   person's own removal says nothing.
- * - LOW-2 (GM r25 answer 2): a save refused 400 or 413 while a clash waits
+ * - design: a save refused 400 or 413 while a clash waits
  *   leaves the clash prompt the only line, and nothing for the scene goes
  *   until the person answers. Then it is stopped for good with its line and
  *   [Try again], unless the answer left nothing unsaved (the edge case:
@@ -18,7 +18,7 @@ import { deleteLanded } from '../helpers/deleteLanded';
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -232,7 +232,7 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// Design: the stop line with [Try again] is in the state
 // slot now; the event slots never carry it.
 const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
 const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
@@ -289,7 +289,7 @@ async function clashOnS1(h: ReturnType<typeof backend>) {
 }
 const clashes16 = () => useGraphStore.getState().sceneClashes as Record<string, { line: string; focus?: true }>;
 
-describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again', () => {
+describe('every way back asks the clash again', () => {
   it('Undo, then Redo, then Undo again: asked again each time; Codex’s value stays Nebula’s until the person answers', async () => {
     const h = backend(S3);
     const restores = withRestore(h);
@@ -344,7 +344,7 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
     expect(briefOf()[0]).toBe('s1:mine');
   });
 
-  // PR #221 review 1 NIT-3: tests that wait on "Deleted the node." before
+  // PR #221: tests that wait on "Deleted the node." before
   // pressing Undo (fix18, fix19, fix20 and others) rely on the delete's hold
   // ending in the same synchronous call that shows the notice
   // (applyDeleteAnswers sets it, then the finally clears deletesInFlight and
@@ -429,7 +429,7 @@ describe('review 14 LOW-1 (GM r25 answer 1): every way back asks the clash again
   });
 });
 
-describe('review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 while a clash waits', () => {
+describe('refused 400 or 413 while a clash waits', () => {
   /** A clash on s1, s3 unsaved too, and the save that goes refused `status`. */
   async function refusedDuringClash(h: ReturnType<typeof backend>, status: number) {
     await clashOnS1(h);
@@ -441,7 +441,7 @@ describe('review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 while a clash wa
     await sleep(40);
   }
 
-  it.each([[400, CANT], [413, TOO_BIG]])('%i: the clash prompt is the only line; nothing goes on Codex’s writes or the person’s edits; Keep mine leaves it stopped for good with GM’s line and [Try again]', async (status, line) => {
+  it.each([[400, CANT], [413, TOO_BIG]])('%i: the clash prompt is the only line; nothing goes on Codex’s writes or the person’s edits; Keep mine leaves it stopped for good with design’s line and [Try again]', async (status, line) => {
     const h = backend(S3);
     const lines = watchSlots();
     await refusedDuringClash(h, status);
@@ -490,8 +490,8 @@ describe('review 14 LOW-2 (GM r25 answer 2): refused 400 or 413 while a clash wa
     const h = backend(S3);
     const lines = watchSlots();
     await refusedDuringClash(h, 400);
-    // Review 15: pins round 16's own path, not only the outcome. Behind the
-    // clash the 400 stops the save, so typing s3 back sends nothing (round 14
+    // Pins this test's own path, not only the outcome. Behind the
+    // clash the 400 stops the save, so typing s3 back sends nothing (an earlier version
     // sent it), and the answer itself ends the stop: no save goes after it.
     const puts = h.puts.length;
     typeIn('s3', 'c');
@@ -526,7 +526,7 @@ describe('a deleted scene’s kept edits stay in their own test', { shuffle: fal
     await vi.waitFor(() => expect(h.puts.some((put) => put.shots.includes('s2:left by A'))).toBe(true), { timeout: 3000, interval: 5 });
     h.remove({ kind: 'agent', name: 'Codex' }, AGENT);
     await vi.waitFor(() => expect(gone()).toBe(true), { timeout: 3000, interval: 5 });
-    // Kept for when n1 comes back on this canvas (GM r20 answer 3).
+    // Kept for when n1 comes back on this canvas (design).
     expect(said.concat(slots().map((notice) => notice.text)).some((line) => line.includes('Codex deleted “Opening”'))).toBe(true);
   });
 

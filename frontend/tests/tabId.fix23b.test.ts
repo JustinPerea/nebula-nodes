@@ -1,4 +1,4 @@
-// PR #199 fix round 23, lane B, item 1 (review 21 reopen-tabs LOW-1): a live
+// PR #199 fix: a live
 // page never changes its tab id. It lets go of its Web Lock at pagehide, so a
 // reload's new page finds it free at once; the claim never waits
 // (`ifAvailable`), so a page whose id another live page holds makes a new one
@@ -60,7 +60,7 @@ function watch(page: TabIdentity) {
   return { sent, rekeys, sample };
 }
 
-describe('review 21 LOW-1: leave, copy, come back', () => {
+describe('leave, copy, come back', () => {
   it('the copy loads first, then the first page comes back from the back/forward cache: no shared id, and only the restored page moves, once, before it sends', async () => {
     const locks = fakeLocks();
     const storageA = tabStorage();
@@ -146,7 +146,7 @@ describe('review 21 LOW-1: leave, copy, come back', () => {
       const storageA = tabStorage();
       const a = createTabIdentity(storageA, locks);
       await vi.waitFor(() => expect(a.confirmed).toBe(true));
-      // The contrived copy that shares the free mark (review 20 LOW-4).
+      // The contrived copy that shares the free mark.
       storageA.setItem('nebula:tabIdFree', a.id);
       const c = createTabIdentity(tabStorage(storageA), locks);
       // Only microtasks: no timer is advanced.
@@ -188,7 +188,7 @@ describe('review 21 LOW-1: leave, copy, come back', () => {
     expect(page.confirmed).toBe(false);
   });
 
-  // Mutant T1 of review 21, re-derived: a claim that settles after the page
+  // A mutant, re-derived: a claim that settles after the page
   // went (or claimed again) changes nothing. Each answer of the lock manager
   // can come after a pagehide.
   it('a page that went while its claim was on its way and refused doesn’t move to a new id', async () => {
@@ -243,7 +243,7 @@ describe('review 21 LOW-1: leave, copy, come back', () => {
     expect([...locks.held]).toEqual([`nebula-tab:${page.id}`]);
   });
 
-  // Item 6 of the lane: a reload whose old page's release hasn't reached the
+  // A reload whose old page's release hasn't reached the
   // lock manager yet finds its id taken, so it makes a fresh one at once
   // rather than wait. Safe (two live pages never share an id), but the tab
   // then goes by a new id for its tab-local nodes.
@@ -301,7 +301,7 @@ class MockWS {
   close() { this.readyState = 3; }
 }
 
-describe('review 21 LOW-1: nothing names the tab before the claim settles', () => {
+describe('nothing names the tab before the claim settles', () => {
   const TOKEN = 'browser-person-token-000000000000000000000';
   let locks: ReturnType<typeof fakeLocks>;
   beforeEach(() => {

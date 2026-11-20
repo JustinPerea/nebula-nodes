@@ -8,7 +8,7 @@ import {
 } from '../src/lib/runHistory';
 
 /**
- * Round 22 of PR #199, 2b.5 (review 20 RV NIT-2), the tab's side: the tab's
+ * PR #199, the tab's side: the tab's
  * run record carries `nodeLandedAt` ({nodeId: epoch ms}), when each node's
  * result (its output, its skip or its failure) landed in this tab for the
  * tab's own run. Nebula compares that, not the run's start plus its length.

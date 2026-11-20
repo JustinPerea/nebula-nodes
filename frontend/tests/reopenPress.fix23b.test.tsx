@@ -1,11 +1,11 @@
-// PR #199 fix round 23, lane B (review 21 reopen-tabs NIT-3, mutants P5 and
-// P7): the person's reopen in place.
-// - P5: a 409 that carries its own hold names the line, even when an older
+// PR #199 fix:
+// the person's reopen in place.
+// - a 409 that carries its own hold names the line, even when an older
 //   verdict read before the press holds something else (the carried hold
 //   wins over the stale one).
-// - P7: a reopen in place that goes moves focus to the canvas it lands on
-//   (lines-ui LOW-2 of review 20). focusCanvasSoon is spied, so a focus
-//   loop still running from an earlier test can't pass it (lines-ui NIT-1).
+// - a reopen in place that goes moves focus to the canvas it lands on.
+//   focusCanvasSoon is spied, so a focus
+//   loop still running from an earlier test can't pass it.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
@@ -156,7 +156,7 @@ afterEach(async () => {
   setProjectContext(null);
 });
 
-describe('review 21 NIT-3 (P5): the 409’s own hold wins over a stale verdict read before the press', () => {
+describe('the 409’s own hold wins over a stale verdict read before the press', () => {
   it('a bootstrap verdict read before the press, then a 409 carrying a run: the run’s line, not the bootstrap one', async () => {
     localNode();
     vi.mocked(projects.getOpenHold).mockResolvedValue({ hold: hold('bootstrap') });
@@ -188,7 +188,7 @@ describe('review 21 NIT-3 (P5): the 409’s own hold wins over a stale verdict r
   });
 });
 
-describe('review 21 NIT-3 (P7): a reopen in place that goes moves focus to the canvas', () => {
+describe('a reopen in place that goes moves focus to the canvas', () => {
   it('focusCanvasSoon runs once the reopen lands, and focus reaches the canvas', async () => {
     localNode();
     const canvas = document.createElement('div');

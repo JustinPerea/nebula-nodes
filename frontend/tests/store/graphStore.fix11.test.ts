@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 11 (GM r16, item 2): a stopped scene save tries once by
+ * PR #198 fix (design): a stopped scene save tries once by
  * itself, but only on evidence that saving works again: a change from
  * another writer arriving in the scene. About 2 s after the last such change
  * it goes once; a success clears "Unsaved" as any save does, a failure stays
  * stopped with no new toast and the popover keeps [Try again]. One try per
- * quiet stretch, never a loop. On round 10's keyed backend in small.
+ * quiet stretch, never a loop. On graphStore.fix10's keyed backend in small.
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -174,7 +174,7 @@ const STOPPED = 'Nebula couldn’t save your changes to “Opening”. They’re
 const QUIET = 80;
 const stopped = () => useGraphStore.getState().stoppedScenes;
 const toast = () => (useGraphStore.getState() as unknown as { undoNotice: { text: string; retryScene?: { nodeId: string } } | null }).undoNotice;
-// GM r28 item 2 (round 19): the stop line, with [Try again], is a state in its own slot.
+// Design: the stop line, with [Try again], is a state in its own slot.
 const stopToast = () => { const line = store.sceneStopLines(useGraphStore.getState()).find((candidate) => candidate.nodeIds.includes('n1'));
   return line ? { text: line.text, retryScene: { nodeId: 'n1' } } : undefined; };
 
@@ -192,7 +192,7 @@ async function stoppedByServer(h: ReturnType<typeof backend>) {
 beforeEach(() => store.setSceneQuietRetryForTests(QUIET));
 afterEach(() => store.setSceneQuietRetryForTests(null));
 
-describe('GM r16: a stopped save tries once after another writer’s change', () => {
+describe('a stopped save tries once after another writer’s change', () => {
   it('Codex’s change arrives once saving works: about 2 s later it goes once, saves, and "Unsaved" clears', async () => {
     const h = backend(S3);
     const before = await stoppedByServer(h);
@@ -315,7 +315,7 @@ describe('GM r16: a stopped save tries once after another writer’s change', ()
     expect(brief()).toEqual(['s1:mine', 's2:codex', 's3:codex during']);
     expect(stopped()).toEqual({ n1: true });
     expect(unsaved()).toBe(STOPPED);
-    // GM r17: silent means silent: no clash prompt, no line of the save's.
+    // Design: silent means silent: no clash prompt, no line of the save's.
     expect(useGraphStore.getState().sceneClashes).toEqual({});
     expect(said).toEqual(saidBefore);
     expect(lines.slice(1).filter((line) => /save|chang(ed|es) to/i.test(line) && !/^Codex changed/.test(line))).toEqual([]);
@@ -326,7 +326,7 @@ describe('GM r16: a stopped save tries once after another writer’s change', ()
     expect(h.backendBrief()).toEqual(['s1:mine', 's2:codex', 's3:codex during']);
     expect(unsaved()).toBeNull();
   });
-  it('the one try refused as changed, and Codex’s change overlaps the person’s field: the clash prompt asks as usual, the stopped state waits behind it (GM r17)', async () => {
+  it('the one try refused as changed, and Codex’s change overlaps the person’s field: the clash prompt asks as usual, the stopped state waits behind it (design)', async () => {
     const h = backend(S3);
     const before = await stoppedByServer(h);
     expect(stopToast()?.retryScene).toEqual({ nodeId: 'n1' });
@@ -377,11 +377,11 @@ function busyCodex(h: ReturnType<typeof backend>, writer?: { kind: string; name:
   return () => { busy = false; h.onPut(async () => {}); };
 }
 
-describe('review 10, L-2: a reconnect sends a save another writer’s refusals stopped', () => {
-  // The quiet try (GM r16) is held off here: the reconnect is what sends.
+describe('a reconnect sends a save another writer’s refusals stopped', () => {
+  // The quiet try (design) is held off here: the reconnect is what sends.
   beforeEach(() => store.setSceneQuietRetryForTests(60_000));
 
-  it('P3: Codex goes quiet, then a reconnect: one PUT, built on the 21st refusal’s scene, saves both changes', async () => {
+  it('Codex goes quiet, then a reconnect: one PUT, built on the 21st refusal’s scene, saves both changes', async () => {
     const h = backend(S3);
     const quiet = busyCodex(h);
     typeIn('s1', 'p1');
@@ -417,7 +417,7 @@ describe('review 10, L-2: a reconnect sends a save another writer’s refusals s
   });
 });
 
-describe('GM r18 answer 2: a stop by another writer names that writer; a server failure keeps its line', () => {
+describe('a stop by another writer names that writer; a server failure keeps its line', () => {
   const cases: [string, { kind: string; name: string } | undefined, string][] = [
     ['an agent by name', undefined,
       'Codex kept changing “Opening”, so your changes aren’t saved yet. Nebula will try again when Codex stops.'],
@@ -452,8 +452,8 @@ describe('GM r18 answer 2: a stop by another writer names that writer; a server 
   });
 });
 
-describe('review 10, N-4: a late sync from a process already replaced is dropped', () => {
-  it('P1: the new process’s id is known (health probe), then the old one’s late sync below what the tab has: the card keeps the person’s typing, no false clash', async () => {
+describe('a late sync from a process already replaced is dropped', () => {
+  it('the new process’s id is known (health probe), then the old one’s late sync below what the tab has: the card keeps the person’s typing, no false clash', async () => {
     revisionCounter = 9_000_000;
     const h = backend(S3);
     noteBackendBootId('boot-1');

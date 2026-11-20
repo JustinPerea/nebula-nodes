@@ -1,5 +1,5 @@
 /**
- * Round 23 of PR #195: GM - Design's failed-save wording (2026-10-27), verbatim.
+ * PR #195: Design's failed-save wording (2026-10-27), verbatim.
  * - One node, 2–3 settings: "Nebula couldn’t save “a” and “b” for “Hero still”." /
  *   "“a”, “b” and “c”".
  * - One node, 4+ settings: "Nebula couldn’t save 4 settings for “Hero still”."
@@ -17,7 +17,7 @@ import { paramSaveFailedLine } from '../src/store/graphStore';
 const on = (node: string, ...settings: string[]): CutOffSave[] =>
   settings.map((setting) => ({ nodeId: `id-${node}`, node, setting }));
 
-describe('GM round 23: the failed-save counted forms', () => {
+describe('the failed-save counted forms', () => {
   it('one node, one setting', () => {
     expect(changesNotSavedLine(on('Hero still', 'a'))).toBe("Nebula couldn’t save “a” for “Hero still”.");
   });
@@ -38,7 +38,7 @@ describe('GM round 23: the failed-save counted forms', () => {
     expect(changesNotSavedLine([...on('A', 'x'), ...on('B', 'x'), ...on('C', 'x'), ...on('D', 'x')]))
       .toBe("Nebula couldn’t save your changes to 4 nodes.");
   });
-  it('two nodes with the same title are two nodes, grouped with a count (GM, 2026-10-27)', () => {
+  it('two nodes with the same title are two nodes, grouped with a count (design, 2026-10-27)', () => {
     expect(changesNotSavedLine([{ nodeId: 'n1', node: 'Text', setting: 'Text' }, { nodeId: 'n2', node: 'Text', setting: 'Text' }]))
       .toBe("Nebula couldn’t save your changes to 2 “Text” nodes.");
   });
@@ -53,7 +53,7 @@ describe('GM round 23: the failed-save counted forms', () => {
   });
 });
 
-describe('GM round 23: a replacement with no agent, edits saved as a copy', () => {
+describe('a replacement with no agent, edits saved as a copy', () => {
   it('names what wasn’t saved and the copy, with no "when … switched projects"', () => {
     expect(changesSavedAsCopyLine(on('Hero prompt', 'Text'), 'Round r20 (recovered)'))
       .toBe("Nebula couldn’t save “Text” for “Hero prompt”. Your edits were saved as a copy, “Round r20 (recovered)”.");

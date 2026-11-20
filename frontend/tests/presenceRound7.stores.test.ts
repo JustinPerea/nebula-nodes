@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
-// PR #204 round 7: the load screens' verb fits what was refused (GM r9 2), and their retry on the
-// promote reads the screen's state, not its line (review 5 NIT-3). Harness from
+// PR #204: the load screens' verb fits what was refused (design), and their retry on the
+// promote reads the screen's state, not its line. Harness from
 // presenceRound6.stores.test.ts.
 const socket = vi.hoisted(() => ({ handlers: [] as Array<(event: ExecutionEvent) => void> }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: {
@@ -82,7 +82,7 @@ function emit(event: Record<string, unknown>): void {
   for (const handler of [...socket.handlers]) handler(event as unknown as ExecutionEvent);
 }
 
-describe('GM r9 (2): every load screen\'s verb fits what was refused', () => {
+describe('every load screen\'s verb fits what was refused', () => {
   it('the first load refused while saving the recovered edits says "save your unsaved edits", as the update reload does', async () => {
     // Another window changed the workspace while this tab held unsaved edits: the next load
     // saves them as a recovered copy first (recoverPendingWork), and the gate refuses that.
@@ -126,7 +126,7 @@ describe('GM r9 (2): every load screen\'s verb fits what was refused', () => {
   });
 });
 
-describe('review 5 NIT-3: the load retry reads the screen, not its line', () => {
+describe('the load retry reads the screen, not its line', () => {
   it('another refusal\'s line took the screen\'s place and cleared first: the load still runs on the promote', async () => {
     useProjectStore.setState(initial, true);
     resetProjectStoreForTests();

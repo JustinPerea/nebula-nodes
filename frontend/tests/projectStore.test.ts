@@ -119,7 +119,7 @@ describe('saved project coordinator', () => {
     expect(projects.openProject).not.toHaveBeenCalled();
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
-    // Error copy round 3e: a plain Error's own words never show; the action's heading and GM's general line do.
+    // Error copy: a plain Error's own words never show; the action's heading and design's general line do.
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
   it('creates a blank canvas without replaying a recipe or clearing the outgoing saved project', async () => {
@@ -190,7 +190,7 @@ describe('saved project coordinator', () => {
     await useProjectStore.getState().restore('beta');
     expect(useProjectStore.getState().trash).toEqual([]);
     expect(useProjectStore.getState().lastDeleted).toBeNull();
-    // Round 3e: the action's heading leads a reason the request carried without one.
+    // The action's heading leads a reason the request carried without one.
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t restore the project because that project is no longer in Recently deleted.");
   });
   it('purges one trashed project or empties the trash', async () => {
@@ -221,7 +221,7 @@ describe('saved project coordinator', () => {
     useGraphStore.setState({ isExecuting: true });
     await useProjectStore.getState().remove('alpha');
     expect(projects.deleteProject).not.toHaveBeenCalled();
-    // Error copy round 3c (GM): every "Finish or stop …" variant reads this way.
+    // Error copy (design): every "Finish or stop …" variant reads this way.
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t delete the project because a run is still going. Let it finish or stop it.");
   });
   it('can return Home and resume the active canvas during a run, but rejects changing projects', async () => {
@@ -313,7 +313,7 @@ describe('saved project coordinator', () => {
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(new Error('Recovery disk full'));
     await useProjectStore.getState().retry();
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('Unsaved alpha edits');
-    // Error copy round 3c-2: never the error's own message, and not GM's
+    // Error copy: never the error's own message, and not design's
     // general line either while these edits wait (it says "reload").
     expect(useProjectStore.getState().error).toBe("Nebula couldn’t load your projects.");
     const firstRecovery = vi.mocked(projects.recoverProject).mock.calls[0];
@@ -331,7 +331,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().screen).toBe('home');
   });
   it('opens the former project through the backend after Try again found no active project', async () => {
-    // Review round 2: a conflict keeps the old canvas; Try again while the
+    // A conflict keeps the old canvas; Try again while the
     // backend has no active project must also forget activeProject, or Open of
     // the same id shortcuts to a canvas with no project context.
     await useProjectStore.getState().initialize();

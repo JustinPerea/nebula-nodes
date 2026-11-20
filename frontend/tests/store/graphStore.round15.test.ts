@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Round 15 of PR #114, review 14's store findings and GM's r15 lines:
- * - M5 (probe S1): Accept's undo step owns only the ids it added and the
+ * PR #114's store behaviour and the design lines:
+ * - Accept's undo step owns only the ids it added and the
  *   param keys it changed.
- * - L2 (probe P1): each save request tracks its own keys; GM's one, two and
+ * - each save request tracks its own keys; design's one, two and
  *   three-or-more lines, exact.
- * - L3 (probe P2): a failed model change names the model the node is on, as
+ * - a failed model change names the model the node is on, as
  *   the picker shows it (the id), in mono.
- * - L1: offline mid-drag, the node springs back to where the drag started.
- * - The round-4 held-delete lines, restored with the node's name and reason.
+ * - offline mid-drag, the node springs back to where the drag started.
+ * - The earlier held-delete lines, restored with the node's name and reason.
  * - Create's cluster line uses the backend's person line.
  */
 
@@ -57,7 +57,7 @@ beforeEach(() => {
   resetBackendConnectionForTests();
   setProjectContext({ id: 'A', revision: 'a' });
   useGraphStore.getState().resetExecution();
-  // Round 21 (the #195 merge): a save's answer lingers for its echo, with
+  // Since the #195 merge: a save's answer lingers for its echo, with
   // the values it saved; a test's canvas starts with none of it.
   useGraphStore.getState().loadGraph([], [], { allowDuringExecution: true });
   useGraphStore.setState({ nodes: [text('n1')], edges: [], undoStack: [], redoStack: [], isExecuting: false,
@@ -65,7 +65,7 @@ beforeEach(() => {
     notify: (line: string, _tone?: string, options?: { mono?: string }) => { notices.push({ line, ...(options?.mono ? { mono: options.mono } : {}) }); } } as never);
 });
 
-describe('M5 (probe S1): Accept on a stale-empty tab', () => {
+describe('Accept on a stale-empty tab', () => {
   it('Undo removes only the node Accept added, never the agent\'s', async () => {
     useGraphStore.setState({ nodes: [], backendFreshStartPending: true } as never);
     const agentN1 = text('n1');
@@ -92,8 +92,8 @@ describe('M5 (probe S1): Accept on a stale-empty tab', () => {
   });
 });
 
-describe('L2: a failed save names its own settings (GM, round 15)', () => {
-  // GM round 23 (2026-10-27) moved the count to four: two or three settings
+describe('a failed save names its own settings (design)', () => {
+  // Design (2026-10-27) moved the count to four: two or three settings
   // on one node are named, four or more counted, the same as every
   // failed-save line (lib/savingCutOff, tests/round23Lines).
   it('the exact one, two-or-three and four-or-more lines', () => {
@@ -113,7 +113,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
       .toBe("Nebula couldn’t save 4 settings for “Banana”.");
   });
 
-  it('probe P1: two requests, the first saved and the second refused, names only the second\'s key and reverts only it', async () => {
+  it('two requests, the first saved and the second refused, names only the second\'s key and reverts only it', async () => {
     useGraphStore.setState({ nodes: [banana({ prompt: 'old prompt', seed: 1 })] } as never);
     const firstAnswer: { resolve?: (response: Response) => void } = {};
     let call = 0;
@@ -144,7 +144,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
   });
 
   // Merged with #198: "prompt" and "seed" have no card label on this node,
-  // and #198 never shows a raw key (GM pr198 r2 ask 3), so the three are
+  // and #198 never shows a raw key (design ask 3), so the three are
   // counted, as #198's own line had it; labelled ones are named (above).
   it('one request with three keys refused, two unlabelled: counted', async () => {
     useGraphStore.setState({ nodes: [banana({ prompt: 'old', seed: 1, aspect_ratio: '1:1' })] } as never);
@@ -171,7 +171,7 @@ describe('L2: a failed save names its own settings (GM, round 15)', () => {
   });
 });
 
-describe('L3 (probe P2): a failed model change names the model the node is on, in mono', () => {
+describe('a failed model change names the model the node is on, in mono', () => {
   it('OpenRouter: the configured model id, as the picker shows it', async () => {
     useGraphStore.setState({ nodes: [{ id: 'n6', type: 'dynamic-node', position: { x: 0, y: 0 },
       data: { label: 'Router', definitionId: 'openrouter-universal', isDynamic: true, state: 'idle', outputs: {},
@@ -192,7 +192,7 @@ describe('L3 (probe P2): a failed model change names the model the node is on, i
   });
 });
 
-describe('L1: offline mid-drag, the node springs back to where the drag started', () => {
+describe('offline mid-drag, the node springs back to where the drag started', () => {
   it('on the spring (not a jump), with one pulse and no line', async () => {
     let pulses = 0;
     const stop = subscribeOfflinePulse(() => { pulses += 1; });
@@ -227,7 +227,7 @@ describe('L1: offline mid-drag, the node springs back to where the drag started'
   });
 });
 
-describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <reason line>")', () => {
+describe('held-delete lines (design: "Couldn’t delete “<node>”. <reason line>")', () => {
   it('one node, unconfirmed start or recovery ID', () => {
     expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
       "Nebula couldn’t delete “Harbor world” because a World Labs run needs your check first. Use the notice at the top of the screen.");
@@ -244,7 +244,7 @@ describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <rea
   it('the canvas refuses a held node with its name', () => {
     useGraphStore.setState({ nodes: [text('n1', 'Harbor world')],
       providerStartAmbiguities: [{ runId: 'r', nodeId: 'n1', kind: 'worldlabs-environment' }],
-      // Run r is this project's (review 20 of PR #199, LOW-2).
+      // Run r is this project's (PR #199).
       runHistory: [{ id: 'r', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }], } as never);
     useGraphStore.getState().deleteNode('n1');
     expect(useGraphStore.getState().undoNotice?.text).toBe(
@@ -253,7 +253,7 @@ describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <rea
   });
 });
 
-describe('Create\'s cluster line (GM, round 15)', () => {
+describe('Create\'s cluster line (design)', () => {
   const request = { definitionId: 'nano-banana', prompt: 'a harbor', refPaths: [], quantity: 1, params: {},
     layoutOrigin: { x: 0, y: 0 }, sessionId: 's', genId: 'g' } as never;
   async function failure() {

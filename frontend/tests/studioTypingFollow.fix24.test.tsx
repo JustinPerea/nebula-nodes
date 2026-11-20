@@ -1,4 +1,4 @@
-// PR #199 round 24 (GM r23, 4): a reopen made elsewhere is followed by a
+// PR #199 (design): a reopen made elsewhere is followed by a
 // window in a Studio, but if the person is typing in a Studio field when the
 // follow arrives, the follow waits until the field loses focus, so a draft is
 // never cut off. The harness is reopenStudio.fix23b's.
@@ -156,7 +156,7 @@ const notFollowed = () => {
   expect(vi.mocked(projects.getProject).mock.calls.length).toBe(baseline);
 };
 
-describe('GM r23, 4: a follow waits while the person types in a Studio field', () => {
+describe('a follow waits while the person types in a Studio field', () => {
   it('waits while a Studio field has focus, then follows when it loses focus; the window stays', async () => {
     useUIStore.setState({ viewMode: 'cinema-editor', cinemaEditorNodeId: 'n1' });
     const box = typeIn();

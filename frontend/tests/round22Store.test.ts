@@ -1,13 +1,13 @@
 /**
- * Round 22 of PR #195: review 21's store findings and GM's round-22 rulings.
- * - GM (review 21 G-a): Undo on an agent's clear line puts the canvas back
+ * PR #195: the store's behaviour and the design rulings.
+ * - Design: Undo on an agent's clear line puts the canvas back
  *   "as last saved": what Nebula had saved before the clear, never the
  *   typing the line says wasn’t saved.
  * - L-c: a rename draft folded into an agent's switch is handed off once;
  *   a later switch carries no phantom `pendingLabels`.
  * - L-d: Cinema's "Send to motion" is refused while following (the bar
  *   pulses, nothing is sent) and offline.
- * - GM 4a: the Agent log says "Couldn’t delete “<node>”, node <id>. Nebula
+ * - Design 4a: the Agent log says "Couldn’t delete “<node>”, node <id>. Nebula
  *   returned HTTP <status>."
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -173,7 +173,7 @@ const hang = () => new Promise<Response>((resolve) => {
     { status: 409, headers: { 'Content-Type': 'application/json' } })));
 });
 
-describe('GM (review 21 G-a): Undo on the agent-clear line restores the canvas as last saved', () => {
+describe('Undo on the agent-clear line restores the canvas as last saved', () => {
   it('typing still in its debounce: Undo puts back the saved value, not the typing', async () => {
     expect(valueOf('n1')).toBe('alpha');
     type('alpha typed');
@@ -271,7 +271,7 @@ describe("L-d: Cinema's Send to motion", () => {
   });
 });
 
-describe('GM round 22 (4a): the Agent log line for a delete answered with a 500', () => {
+describe('the Agent log line for a delete answered with a 500 (design)', () => {
   it('"Couldn’t delete “Hero prompt”, node n1. Nebula returned HTTP 500."', async () => {
     useAgentLogStore.getState().clear();
     graphWrites.answer = (_path, init) => Promise.resolve(init?.method === 'DELETE' ? answer(500, { detail: 'boom' }) : answer());

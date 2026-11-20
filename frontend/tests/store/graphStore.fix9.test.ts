@@ -1,21 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 9 (review 8; GM r12, r13), against a small keyed
+ * PR #198 fix (design), against a small keyed
  * backend that does what main.py does now: every Cinema scene has a sceneKey
  * and a sceneRev (a number that grows with each authoring), in each sync,
  * each save's answer and each 409; a save that sends an ifSceneKey Nebula no
  * longer has is refused with 409 scene_changed; an `onlyIfFree` connect into
  * a taken input is refused with 409 input_taken. The socket can hold its
- * syncs and let them out late, in order (the reviewer's lag).
- * - H-1: a sync older than what the tab already knows never rolls the card
- *   back, never clashes, never stops a save (D1, D1b, a late 409).
- * - M-3 (GM r13 answer 1): a removed shot put back while the choice waits.
- * - L-3: Keep mine's put-back connect never takes an input that holds
+ * syncs and let them out late, in order (a lag found in review).
+ * - a sync older than what the tab already knows never rolls the card
+ *   back, never clashes, never stops a save (a late 409).
+ * - design: a removed shot put back while the choice waits.
+ * - Keep mine's put-back connect never takes an input that holds
  *   another connection.
- * - L-4 (GM r13 answer 2): the person deletes a held connection: no request,
+ * - design: the person deletes a held connection: no request,
  *   no line, and Keep mine doesn't put it back.
- * - GM r12 item 1 / r13 answer 3: the stopped state outlives the toast.
+ * - Design: the stopped state outlives the toast.
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
@@ -184,8 +184,8 @@ const typeIn = (shotId: string, prompt: string) => useGraphStore.getState().upda
 const setPrompt = (shots: Shot[], id: string, prompt: string) => shots.map((s) => (s.id === id ? { ...s, prompt } : s));
 const S3 = [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }];
 
-describe('H-1: a sync older than what the tab knows is never merged as new', () => {
-  it('D1: Codex and the window commit, their syncs lag; a 409 tells the tab; Codex\'s old sync lands while the next save is out', async () => {
+describe('a sync older than what the tab knows is never merged as new', () => {
+  it('Codex and the window commit, their syncs lag; a 409 tells the tab; Codex\'s old sync lands while the next save is out', async () => {
     const h = backend(S3);
     wsq.hold = true;
     h.other((shots) => setPrompt(shots, 's2', 'c1'), 'agent');
@@ -207,7 +207,7 @@ describe('H-1: a sync older than what the tab knows is never merged as new', () 
     expect(said).toEqual([]);
   });
 
-  it('D1b: the person stops typing; the old sync lands while the taken save is out', async () => {
+  it('the person stops typing; the old sync lands while the taken save is out', async () => {
     const h = backend(S3);
     wsq.hold = true;
     h.other((shots) => setPrompt(shots, 's2', 'c1'), 'agent');
@@ -243,7 +243,7 @@ describe('H-1: a sync older than what the tab knows is never merged as new', () 
     expect(brief()).toEqual(['s1:p1', 's2:c1', 's3:w1']);
     expect(clash()).toBeNull();
     expect(said).toEqual([]);
-    // Review 9, N-3: what the revision changes. The old 409 is merged onto
+    // What the revision changes. The old 409 is merged onto
     // the newer scene the tab has, so the next save is the one that lands
     // (never a second refusal from sending onto the 409's older copy), and
     // the card never shows that older copy on the way.
@@ -279,7 +279,7 @@ describe('H-1: a sync older than what the tab knows is never merged as new', () 
   });
 });
 
-describe('M-3 (GM r13 answer 1): a removed shot put back while the choice waits', () => {
+describe('a removed shot put back while the choice waits (design)', () => {
   async function removed(who: 'agent' | 'window') {
     const h = backend(undefined, { edges: [wire('s2', 'n2')] });
     h.failNext(1);
@@ -332,7 +332,7 @@ describe('M-3 (GM r13 answer 1): a removed shot put back while the choice waits'
     const h = await removed('agent');
     h.other((shots) => [...shots, { id: 's2', prompt: 'codex re-added' }]);
     await sleep(60);
-    // Review 9, N-3: the choice is really asked (the re-added shot is a
+    // The choice is really asked (the re-added shot is a
     // clash of its own), so "Use Codex’s" is what settles it.
     expect(clash()?.line).toBe('Codex changed “Shot 2” while you were editing it.');
     expect(unsaved()).toBe('Codex changed “Shot 2” while you were editing it.');
@@ -348,7 +348,7 @@ describe('M-3 (GM r13 answer 1): a removed shot put back while the choice waits'
   });
 });
 
-describe('the held connections (L-3, L-4; GM r13 answer 2)', () => {
+describe('the held connections (design)', () => {
   async function removedClash(edges: Wire[] = [wire('s2', 'n2')]) {
     const h = backend(undefined, { edges });
     h.failNext(1);
@@ -360,7 +360,7 @@ describe('the held connections (L-3, L-4; GM r13 answer 2)', () => {
     return h;
   }
 
-  it('L-3: Codex wired its own shot into the single input, its sync late: Keep mine asks onlyIfFree, and the line says so', async () => {
+  it('Codex wired its own shot into the single input, its sync late: Keep mine asks onlyIfFree, and the line says so', async () => {
     const h = await removedClash();
     wsq.hold = true;
     h.state.edges.push(wire('s1', 'n2'));
@@ -376,7 +376,7 @@ describe('the held connections (L-3, L-4; GM r13 answer 2)', () => {
     expect(wiresNow()).toEqual(['n1:shot_s1->n2:mask']);
   });
 
-  it('L-4: the person deletes the held wire while the choice waits: no request, no line; Keep mine leaves it out', async () => {
+  it('the person deletes the held wire while the choice waits: no request, no line; Keep mine leaves it out', async () => {
     const h = await removedClash();
     const held = useGraphStore.getState().edges.find((e: { sourceHandle?: string | null }) => e.sourceHandle === 'shot_s2');
     expect(held).toBeTruthy();
@@ -413,7 +413,7 @@ describe('the held connections (L-3, L-4; GM r13 answer 2)', () => {
   });
 });
 
-describe('GM r12 item 1 / r13 answer 3: a stopped save stays stoppable after its toast goes', () => {
+describe('a stopped save stays stoppable after its toast goes (design)', () => {
   it('stopped after 8: stoppedScenes says so through an agent\'s toast; [Try again] clears it', async () => {
     store.setSceneRetryDelaysForTests([5]);
     const h = backend();

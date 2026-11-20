@@ -1,5 +1,5 @@
 /**
- * PR #199 round 25: the two rules that keep the lazy flows chunk sound.
+ * PR #199: the two rules that keep the lazy flows chunk sound.
  *  1. Only store/projectFlows.ts sets a project context (so a context exists
  *     only after the chunk is evaluated, and code that runs with one may rely
  *     on the chunk being in).

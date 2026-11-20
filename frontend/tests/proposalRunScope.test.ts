@@ -1,5 +1,5 @@
 /**
- * Review r5 LOW-2 of PR #203 (the reviewer's probes, moved into the suite):
+ * PR #203 (probes moved into the suite):
  * Accept's and the held "Run now"'s key lock read the run each one starts,
  * as the backend runs it. An approval run is not direct, so it skips an
  * agent's placeholder (main.py _skip_placeholders, direct=None); several run
@@ -15,7 +15,7 @@ import type { NodeData } from '../src/types';
 import type { ProposalView } from '../src/lib/wsClient';
 import { keyIdolInEachTest } from './helpers/keyedSpace';
 
-// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
+// PR #203: Idol is keyless. These tests pin the shared key-lock
 // machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
 keyIdolInEachTest();
 const ACC = 'You can accept this after you add your Hugging Face token in Settings.';

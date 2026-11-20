@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 12, L-7, with GM - Design's round-13 rule (verbatim): a Krea node
+ * With the design rule (verbatim): a Krea node
  * whose required field has no default and nothing chosen (Krea 2's Aspect
  * ratio, a Flux 1.1 Pro's Width, Topaz Standard's Model) never reaches Krea:
  * the gateway refuses it. The canvas never fills a value in (a new node and a
@@ -34,7 +34,7 @@ const node = (id: string, label: string, definitionId: string, params: Record<st
   data: { definitionId, label, params, state: 'idle', outputs: {} } });
 const KREA2 = 'krea-image-krea-krea-2-medium';
 const TOPAZ = 'krea-enhance-topaz-standard-enhance';
-/** Round 14 (review 13, M-1): the field is refused on the route that needs it, the Krea gateway here. */
+/** The field is refused on the route that needs it, the Krea gateway here. */
 const ON_KREA = { apiKeys: { KREA_API_TOKEN: '(set)' }, edges: [] };
 
 /** The same inventory backend/tests/test_required_fields_round13.py pins. */
@@ -66,7 +66,7 @@ const INVENTORY: Record<string, string[][]> = {
   'krea-video-alibaba-wan-2-2': WH,
 };
 
-describe('the required-field refusal line (L-7, GM round 13)', () => {
+describe('the required-field refusal line (design)', () => {
   it('covers every Krea node with a required field that has no default (the backend pins the same list)', () => {
     expect(requiredFieldInventory()).toEqual(INVENTORY);
   });
@@ -92,7 +92,7 @@ describe('the required-field refusal line (L-7, GM round 13)', () => {
     expect(modelNotChosenText([node('n2', 'Hero', KREA2, { aspect_ratio: '16:9' }) as never], undefined, ON_KREA))
       .toBe('Nothing ran. Choose a resolution for “Hero” first.');
     expect(modelNotChosenText([node('n3', 'Clean plate', TOPAZ, {}) as never], undefined, ON_KREA))
-      // GM, round 14, item 1: a typed value is "Set".
+      // Design: a typed value is "Set".
       .toBe('Nothing ran. Set a width for “Clean plate” first.');
     expect(modelNotChosenText([node('n3', 'Clean plate', TOPAZ, { width: 2048, height: 2048 }) as never], undefined, ON_KREA))
       .toBe('Nothing ran. Choose a model for “Clean plate” first.');
@@ -106,7 +106,7 @@ describe('the required-field refusal line (L-7, GM round 13)', () => {
   });
 });
 
-describe('every run path refuses it before any dialog (L-7)', () => {
+describe('every run path refuses it before any dialog', () => {
   const initialCache = useUIStore.getState().settingsCache;
   const initialThreshold = useUIStore.getState().runCostConfirmUsd;
   const notice = () => useGraphStore.getState().undoNotice?.text ?? useGraphStore.getState().messageNotice?.text ?? null;

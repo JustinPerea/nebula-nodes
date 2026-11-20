@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #204 round 7, review 5 MEDIUM-1: a scene save the gate refused only because this tab isn't
+ * PR #204: a scene save the gate refused only because this tab isn't
  * connected as the person says so in the because form, and goes again on the promote, as
- * [Try again] does; landing clears its line. Harness from graphStore.fix22.test.ts (GM r32):
+ * [Try again] does; landing clears its line. Harness from graphStore.fix22.test.ts (design):
  * - Answer 1: the run-lock line is not a failure, merged with the shared name
  *   list: "Your changes to “Opening” are kept. Nebula will save them when the
  *   run finishes."
@@ -212,7 +212,7 @@ const refuseWith = (h: ReturnType<typeof backend>, id: string, refusal: { status
 const GATE = { status: 403, body: { detail: 'Only the person can change a scene.', code: 'person_required' } };
 const BECAUSE = (name: string) => `Nebula couldn’t save your changes to ${name} because this tab isn’t connected as you. Open the link Nebula printed when it started.`;
 
-describe('review 5 MEDIUM-1: a scene save refused by the gate', () => {
+describe('a scene save refused by the gate', () => {
   beforeEach(() => session.resetPersonSessionForTests());
   afterEach(() => session.notePersonPromoted());
 

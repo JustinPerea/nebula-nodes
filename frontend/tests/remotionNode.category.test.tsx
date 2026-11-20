@@ -1,5 +1,5 @@
 /**
- * GM - Design (2026-11-14): the Remotion card's selected border takes the
+ * Design (2026-11-14): the Remotion card's selected border takes the
  * node's category colour, as the model card's and the boundary card's do,
  * not the accent.
  */
@@ -22,7 +22,7 @@ afterEach(cleanup);
 describe('the Remotion card\'s selected border', () => {
   it('the rule takes the category colour, with the accent only as a fallback', () => {
     const css = readFileSync(join(__dirname, '../src/styles/remotion-node.css'), 'utf8');
-    // The model card's selection style in the category colour (r7), as the boundary and Cinema scene cards: colour, width and the breathe.
+    // The model card's selection style in the category colour, as the boundary and Cinema scene cards: colour, width and the breathe.
     const rule = /\n(?:body\.app-slava-restraint )?\.remotion-node--selected \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/border-color: var\(--node-category-color, var\(--sr-accent\)\);/);
     expect(rule).toMatch(/border-width: var\(--sr-node-card-selected-border-width\);/);

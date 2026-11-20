@@ -1,19 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 3 (review 3, GM's r3 rulings and answers):
- * - M2 / GM 3: the person's Undo or Redo that would take off a shot still
- *   rendering is refused on the canvas before anything is sent, in GM's
+ * PR #198 fix (design rulings):
+ * - design: the person's Undo or Redo that would take off a shot still
+ *   rendering is refused on the canvas before anything is sent, in design's
  *   words; a restore the backend refuses anyway keeps the spinner and reads
  *   the backend's person line as is.
- * - H1: a scene save the backend refuses keeps the person's typing, and the
- *   next sync doesn't put the older scene over it; GM's save line says so.
- * - L2: a run of the graph holds the scene's shots only while it is on the
+ * - a scene save the backend refuses keeps the person's typing, and the
+ *   next sync doesn't put the older scene over it; design's save line says so.
+ * - a run of the graph holds the scene's shots only while it is on the
  *   scene (its node queued or executing).
- * - G1 / GM 1: a scene with a shot rendering can't be deleted: one toast for
+ * - design: a scene with a shot rendering can't be deleted: one toast for
  *   it alone, "Deleted 3 nodes. “Scene” wasn’t deleted because …" when the
  *   rest goes, and the disabled Delete's tooltip.
- * - GM r3 items 5 and 7: the unknown-actor reorder lines and the unnamed
+ * - Design: the unknown-actor reorder lines and the unnamed
  *   settings in "Nothing was undone".
  */
 
@@ -32,7 +32,7 @@ vi.spyOn(console, 'error').mockImplementation(() => {});
 const { useGraphStore, renderingScenes, sceneDeleteDisabledTitle, sceneStopLines, resetDeletedSceneEditsForTests } = await import('../../src/store/graphStore');
 // A deleted scene's kept edits never reach the next test's node with the same id.
 afterEach(() => resetDeletedSceneEditsForTests());
-// GM r28 item 2 (round 19): the stop line is a state, in its own slot.
+// Design: the stop line is a state, in its own slot.
 const stopLineOf = (nodeId: string) => sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const { GRAPH_PARAMS_VERSION } = await import('../../src/lib/savedParamsUpgrades');
 const { setProjectContext } = await import('../../src/lib/projectContext');
@@ -90,10 +90,10 @@ async function addedShotRendering(withRun: boolean) {
   return added;
 }
 
-// -- M2: Undo / Redo refused before it is sent ---------------------------------------
+// -- Undo / Redo refused before it is sent ---------------------------------------
 
-describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refused before it is sent', () => {
-  it('Undo, with a Stop for the shot: GM\'s line, nothing sent, nothing changed', async () => {
+describe('an undo or redo that would remove a rendering shot is refused before it is sent (design)', () => {
+  it('Undo, with a Stop for the shot: design\'s line, nothing sent, nothing changed', async () => {
     const added = await addedShotRendering(true);
     const stacks = { undo: useGraphStore.getState().undoStack.length, redo: useGraphStore.getState().redoStack.length };
     useGraphStore.getState().undo();
@@ -150,7 +150,7 @@ describe('M2 / GM 3: an undo or redo that would remove a rendering shot is refus
   });
 });
 
-describe('M2: a restore the backend refuses keeps the spinner and reads the backend\'s person line', () => {
+describe('a restore the backend refuses keeps the spinner and reads the backend\'s person line', () => {
   it('a shot run that started while the undo was on its way: the shot comes back still rendering', async () => {
     useGraphStore.setState({ nodes: [cinema('n1', [{ id: 's1', prompt: 'a' }])] } as never);
     const added = useGraphStore.getState().addShot('n1') as string;
@@ -185,14 +185,14 @@ describe('M2: a restore the backend refuses keeps the spinner and reads the back
   });
 });
 
-// -- H1: a refused scene save keeps the typing ------------------------------------------
+// -- a refused scene save keeps the typing ------------------------------------------
 
-describe('H1: a scene save the backend refuses keeps the person\'s typing', () => {
-  // Fix round 4 (review 4, HIGH): any refusal of a scene write puts the scene
+describe('a scene save the backend refuses keeps the person\'s typing', () => {
+  // Fix: any refusal of a scene write puts the scene
   // back as the backend has it, so a later edit never re-sends what was
-  // refused; GM's save line says it went back. This replaces round 3's "the
+  // refused; design's save line says it went back. This replaces the earlier "the
   // typing stays" (kept typing re-sent a refused shot removal with the next edit).
-  it('a refused scene save (400) keeps the typing on screen, and GM\'s line says so', async () => {
+  it('a refused scene save (400) keeps the typing on screen, and design\'s line says so', async () => {
     const said: string[] = [];
     useGraphStore.setState({ nodes: [cinema('n31', [{ id: 's1', prompt: 'old' }], 'Opening')],
       notify: (text: string) => said.push(text) } as never);
@@ -202,15 +202,15 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     useGraphStore.getState().updateScene('n31', (current) => ({ ...current,
       shots: current.shots.map((shot) => ({ ...shot, prompt: 'typed by the person' })) }));
     await sleep(80);
-    // Round 5 (GM r7 item 1): a 400 is Nebula's bug; the typing stays on
-    // screen, unsaved, and GM's line says so.
-    // GM r22 Q3: the one 400 line, with [Try again]; GM r28: in the state slot.
+    // Design: a 400 is Nebula's bug; the typing stays on
+    // screen, unsaved, and design's line says so.
+    // Design: the one 400 line, with [Try again]; design: in the state slot.
     expect(stopLineOf('n31')).toBe('Nebula can’t save your changes to “Opening”.');
     expect(said).toEqual([]);
     expect(shotsOf('n31')[0].prompt).toBe('typed by the person');
   });
 
-  it('a newer edit from someone else after the refusal: the person\'s edits stay on screen, and a clash asks (GM r9)', async () => {
+  it('a newer edit from someone else after the refusal: the person\'s edits stay on screen, and a clash asks (design)', async () => {
     const said: string[] = [];
     useGraphStore.setState({ nodes: [cinema('n32', [{ id: 's1', prompt: 'old' }], 'Opening')],
       notify: (text: string) => said.push(text) } as never);
@@ -223,7 +223,7 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
     socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [cinema('n32', [{ id: 's1', prompt: 'an agent\'s fix' }], 'Opening')],
       edit: { actor: { kind: 'agent', name: 'Codex', id: 'cx' } } });
     await sleep(10);
-    // PR #198 round 7 (GM r9 decision 2): the same field on both sides is a
+    // PR #198 (design decision 2): the same field on both sides is a
     // clash: kept on screen, and the person is asked which to keep.
     expect(shotsOf('n32')[0].prompt).toBe('typed');
     expect(useGraphStore.getState().sceneClashes.n32?.line)
@@ -231,9 +231,9 @@ describe('H1: a scene save the backend refuses keeps the person\'s typing', () =
   });
 });
 
-// -- L2: a graph run holds the shots only while it is on the scene ---------------------------
+// -- a graph run holds the shots only while it is on the scene ---------------------------
 
-describe('L2: a run of the graph holds the scene\'s shots only while it is on the scene', () => {
+describe('a run of the graph holds the scene\'s shots only while it is on the scene', () => {
   const shot = { id: 's1', output: { imageUrl: '/x.png', status: 'done' as const } };
   it.each([
     [undefined, 'stop'], ['queued', 'stop'], ['executing', 'stop'], ['complete', null], ['error', null], ['idle', null],
@@ -252,9 +252,9 @@ describe('L2: a run of the graph holds the scene\'s shots only while it is on th
   });
 });
 
-// -- G1: a scene with a shot rendering can't be deleted ----------------------------------------
+// -- a scene with a shot rendering can't be deleted ----------------------------------------
 
-describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
+describe('a scene with a shot rendering can\'t be deleted (design)', () => {
   const renderingScene = (stoppable = true) => {
     useGraphStore.setState({
       nodes: [cinema('n4', [{ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b', output: { status: 'running' } }], 'Opening'),
@@ -263,7 +263,7 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     } as never);
   };
 
-  it('alone, by the Delete key or the menu: GM\'s toast, nothing sent, the scene stays', async () => {
+  it('alone, by the Delete key or the menu: design\'s toast, nothing sent, the scene stays', async () => {
     renderingScene();
     useGraphStore.getState().deleteNode('n4');
     await sleep(20);
@@ -295,7 +295,7 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
     useGraphStore.getState().deleteSelected();
     await sleep(40);
     expect(useGraphStore.getState().nodes.map((node) => node.id)).toEqual(['n4']);
-    // GM r6: the deleted nodes are named (up to 3).
+    // Design: the deleted nodes are named (up to 3).
     expect(notice()).toBe("Deleted “Brief”, “Note” and “Logo”. “Opening” wasn’t deleted because “Shot 2” is still running.");
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('/n4') && (init as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
   });
@@ -317,14 +317,14 @@ describe('G1 / GM 1: a scene with a shot rendering can\'t be deleted', () => {
   });
 });
 
-// -- GM r3 items 5 and 7 -------------------------------------------------------------------
+// -- the Accept undo lines ------------------------------------------------------------------
 
-describe('GM r3 items 2, 5 and 7: the Accept undo lines', () => {
+describe('the Accept undo lines', () => {
   const agent = { kind: 'agent' as const, name: 'Codex' };
   const you = { kind: 'you' as const };
   const unknown = { kind: 'unknown' as const };
 
-  it('item 5: an unknown source\'s reorder', () => {
+  it('an unknown source\'s reorder', () => {
     expect(acceptUndoLine([{ node: 'X', settings: [], order: 'shots' }], unknown, false))
       .toBe('Undid the proposal except the shot order in “X”. The shots were reordered after you accepted.');
     expect(acceptUndoLine([{ node: 'X', settings: [], order: 'clips' }], unknown, false))
@@ -333,12 +333,12 @@ describe('GM r3 items 2, 5 and 7: the Accept undo lines', () => {
       .toBe('Nothing was undone. The shots were reordered after you accepted.');
   });
 
-  it('item 2: "You reordered them in another tab after you accepted."', () => {
+  it('"You reordered them in another tab after you accepted."', () => {
     expect(acceptUndoLine([{ node: 'X', settings: [], order: 'shots' }], you, false))
       .toBe('Undid the proposal except the shot order in “X”. You reordered them in another tab after you accepted.');
   });
 
-  it('item 7: unnamed settings in "Nothing was undone"', () => {
+  it('unnamed settings in "Nothing was undone"', () => {
     expect(acceptUndoLine([{ node: 'Hero still', settings: [null] }], agent, true))
       .toBe('Nothing was undone. Codex changed a setting on “Hero still” after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero still', settings: [null, 'Seed', null] }], agent, true))

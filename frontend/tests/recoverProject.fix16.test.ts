@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { recoverProject } from '../src/lib/projects';
 
 /**
- * PR #199 round 16 (review 14 HIGH-1; GM r21, 3): the recover route's answer
+ * PR #199 (design): the recover route's answer
  * carries what it changed on the way in, which the kept tab adopts:
  * `renumbered` (each tab-local node id to the copy's backend id) and
  * `droppedWires` (wires its rules left out, each with its line).

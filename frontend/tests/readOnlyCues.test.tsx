@@ -7,13 +7,13 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * Offline is read-only, and it looks it (GM, rounds 14 and 15 of PR #114).
- * Round 15 rebuilt it from React state: every control that edits renders
+ * Offline is read-only, and it looks it (design, PR #114).
+ * Rebuilt it from React state: every control that edits renders
  * `disabled` from useBackendOffline() with the offline mark (not-allowed
- * cursor, dimmed); nothing watches the DOM. Review 14's H1 was the old
+ * cursor, dimmed); nothing watches the DOM. An earlier version's first fault was the old
  * MutationObserver re-triggering itself forever as soon as anything rendered
  * under the canvas while offline (the tab froze when a node was selected);
- * H2/L4 was the observer enabling a field React had disabled.
+ * the second was the observer enabling a field React had disabled.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn() } }));
@@ -77,7 +77,7 @@ afterEach(() => {
 
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
 
-describe('H1: selecting a node while offline', () => {
+describe('selecting a node while offline', () => {
   it('the selection toolbar renders and the page settles (nothing loops on the DOM)', async () => {
     useGraphStore.setState({ nodes: [textNode('n1'), textNode('n2')], edges: [] });
     render(<ReactFlowProvider><div className="canvas-wrapper canvas--read-only"><SelectionToolbar /></div></ReactFlowProvider>);
@@ -126,7 +126,7 @@ describe('H1: selecting a node while offline', () => {
   });
 });
 
-describe('the selection toolbar while offline (GM, round 15)', () => {
+describe('the selection toolbar while offline (design)', () => {
   it('Run, Ask, Note, Duplicate and Delete are disabled with the mark; Copy stays', () => {
     useGraphStore.setState({ nodes: [textNode('n1', true), textNode('n2', true)], edges: [] });
     render(<ReactFlowProvider><SelectionToolbar /></ReactFlowProvider>);
@@ -147,7 +147,7 @@ describe('the selection toolbar while offline (GM, round 15)', () => {
     expect(screen.getByRole('button', { name: 'Note for agents' })).toHaveAttribute('data-offline-disabled');
   });
 
-  it('H2/L4: on reconnect each control follows React again (a running graph keeps Run disabled)', () => {
+  it('on reconnect each control follows React again (a running graph keeps Run disabled)', () => {
     useGraphStore.setState({ nodes: [textNode('n1', true)], edges: [] });
     render(<ReactFlowProvider><SelectionToolbar /></ReactFlowProvider>);
     act(() => noteBackendConnection('offline'));
@@ -213,7 +213,7 @@ describe('the context menu while offline', () => {
   });
 });
 
-describe('a rename being typed when the connection drops (L5)', () => {
+describe('a rename being typed when the connection drops', () => {
   it('keeps its draft, disabled, with no line; Enter after reconnect saves it', () => {
     const renameNode = vi.fn();
     useGraphStore.setState({ renameNode });
@@ -294,16 +294,16 @@ describe('the project bar while offline', () => {
   });
 });
 
-describe('the banner (GM, round 15 item 1)', () => {
+describe('the banner (design)', () => {
   const css = readFileSync(join(__dirname, '../src/App.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  it('keeps the same y whether or not the selection toolbar shows: fixed, top 150px, nothing moves it (but the World Labs notice, which moves the toolbar and so the banner under it: GM r34 A5)', () => {
+  it('keeps the same y whether or not the selection toolbar shows: fixed, top 150px, nothing moves it (but the World Labs notice, which moves the toolbar and so the banner under it: design)', () => {
     const rule = /\.backend-connection\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/position:\s*fixed/);
     // 150px with no notice (the variable unset reads 0px); below the notice's foot while it shows.
     expect(rule).toMatch(/top:\s*max\(150px,\s*calc\(var\(--top-notice-bottom,\s*0px\)\s*\+\s*66px\)\)/);
     // No other rule sets its top (no toolbar-dependent offset), except the
-    // home screen's own place under its top bar (GM, round 17 C); a studio
-    // has a row of its own layout instead (GM, PR #198 r2).
+    // home screen's own place under its top bar (design); a studio
+    // has a row of its own layout instead (design, PR #198).
     const own = new Set([".backend-connection[data-placement='home']"]);
     const others = [...css.matchAll(/([^{}]*\.backend-connection[^{}]*)\{([^}]*)\}/g)]
       .filter(([, selector]) => selector.trim().split(/\s*\n\s*/).at(-1) !== '.backend-connection')

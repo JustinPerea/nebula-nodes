@@ -1,5 +1,5 @@
-// PR #199 fix round 23, lane B, items 2 and 3 (review 21 reopen-tabs LOW-2
-// and NIT-1, GM r36 item 5): the person's reopen of this project in another
+// PR #199 fix (design):
+// the person's reopen of this project in another
 // window keeps this window's studio. A window in Cinema, the video editor or
 // the composition editor stays there with its node carried through the
 // renumbering (and Cinema's shot selection with it); a studio whose node is
@@ -160,7 +160,7 @@ afterEach(async () => {
 const STUDIOS = [['cinema-editor', 'cinemaEditorNodeId'], ['editor', 'editorTargetNodeId'],
   ['remotion-editor', 'remotionEditorTargetNodeId']] as const;
 
-describe('review 21 LOW-2 (GM r36 item 5): a window in a studio stays there through the person’s reopen elsewhere', () => {
+describe('a window in a studio stays there through the person’s reopen elsewhere', () => {
   for (const [mode, key] of STUDIOS) {
     it(`${mode}: its node still exists under the same id: the window stays, editing it`, async () => {
       useUIStore.setState({ viewMode: mode, [key]: 'n1' } as never);
@@ -248,7 +248,7 @@ describe('review 21 LOW-2 (GM r36 item 5): a window in a studio stays there thro
   });
 });
 
-describe('review 21 NIT-1: the canvas view stays the window’s own, and its next save keeps it', () => {
+describe('the canvas view stays the window’s own, and its next save keeps it', () => {
   const VIEW = { x: 312, y: -442, zoom: 3.71 };
 
   it('after the follow the stored viewport is the view (not null), and the next save sends it', async () => {

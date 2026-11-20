@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 
 /**
- * Round 23 of PR #199, 2a and GM r36 item 1 (review 21 LOW-1 and LU LOW-2):
+ * PR #199 (design):
  * Nebula stamps each World Labs record, when it writes it, with the project
  * whose canvas the run is on and the node's type. The person's tab gets
  * those places on its own channels (the graphSync's person form, a frame
@@ -143,7 +143,7 @@ describe('a stamp naming the open project makes a record this project’s', () =
   });
 });
 
-describe('the one type rule (GM r36 item 1)', () => {
+describe('the one type rule (design)', () => {
   it('names the type the record knows, and the names are the node picker’s', () => {
     expect(recordNodeType('worldlabs-world-export', null)).toBe('World Labs Export');
     expect(recordNodeType('worldlabs-environment', null)).toBe('World Labs Environment');

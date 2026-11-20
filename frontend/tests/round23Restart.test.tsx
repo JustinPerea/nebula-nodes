@@ -1,5 +1,5 @@
 /**
- * Round 23 of PR #195 (review 22, L-2), against the fake Nebula of round 17:
+ * PR #195, against the fake Nebula (helpers/undoFakeBackend):
  * the same-canvas adoption across a restart trusts `canvasSyncBoot`, the
  * backend process the canvas last took a sync from. A canvas loaded over
  * HTTP (a project load, an import) or replaced (a clear) is a new canvas:
@@ -69,7 +69,7 @@ const refuseCanvas = (canvas: string) => {
 const BASE = '1793000000000';
 let clock = Date.now();
 
-describe('review 22 L-2: a loaded or replaced canvas never inherits the previous boot', () => {
+describe('a loaded or replaced canvas never inherits the previous boot', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;

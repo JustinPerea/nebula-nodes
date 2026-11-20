@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 
-// Review 7, M-1, made structural: while any modal dialog is open (the paid
+// Made structural: while any modal dialog is open (the paid
 // placeholder confirm, a prompt, the keyboard shortcuts), the app-wide keys
 // that act on the graph don't act behind it, wherever focus is: ⌘O doesn't
 // open a file over the canvas, ⌘K doesn't open the palette (whose "Run graph"

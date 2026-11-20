@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// PR9a live check (2026-10-20): at 1440x900 the docked chat reached 16 px
+// A live check (2026-10-20): at 1440x900 the docked chat reached 16 px
 // from the top, so the Updates chip moved left of it and onto the header
 // pill. The chip holds the top-right corner instead, and the docked chat
 // starts below it. jsdom has no layout, so this pins the rules; the live
@@ -28,7 +28,7 @@ describe('the Updates chip keeps the top-right corner', () => {
   });
 });
 
-describe('the Updates corner off the canvas (Q107 a)', () => {
+describe('the Updates corner off the canvas', () => {
   it('reserves a header slot only while the chip shows', () => {
     expect(rule('.agent-notes-slot')).toMatch(/display:\s*none/);
     const shown = rule('body.agent-notes-shown .agent-notes-slot');
@@ -61,7 +61,7 @@ function headerRule(selector: string): string {
   return header.slice(start, header.indexOf('}', start));
 }
 
-describe('the workspace header keeps the Updates corner (Q107 a)', () => {
+describe('the workspace header keeps the Updates corner', () => {
   const reserved = 'body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--updates-slot';
 
   it('names its gutter and column gap as tokens', () => {
@@ -86,7 +86,7 @@ describe('the workspace header keeps the Updates corner (Q107 a)', () => {
   });
 });
 
-// GM review of Q107 a (2026-10-21): at 1280 wide the Commons toolbar wrapped
+// Design review (2026-10-21): at 1280 wide the Commons toolbar wrapped
 // to two rows (86 px instead of main's 49) once the chip took its room: "treat
 // the two-row wrap at 1280 as a defect". Below about 1360 px the chip shrinks
 // to its author dots and the count, and the header reserves that compact
@@ -133,7 +133,7 @@ function reservedAt(viewport: number): number {
   return parseFloat(px!);
 }
 
-describe('the compact Updates chip below about 1360 px (GM review of Q107 a)', () => {
+describe('the compact Updates chip below about 1360 px (design review)', () => {
   it('names the chip\'s full and compact widths as tokens, the full one by default', () => {
     const root = ruleIn(layouts, ':root');
     // Measured live (2026-10-21, p157: the count as plain figures after a 4 px
@@ -166,12 +166,12 @@ describe('the compact Updates chip below about 1360 px (GM review of Q107 a)', (
   });
 });
 
-// GM review of p157 (the 1280 shots): "the '1' is a lime circle the same size
+// Design review of PR #157 (the 1280 shots): "the '1' is a lime circle the same size
 // and colour as the 'C' author dot. At a glance the chip reads as three
 // people, not two people and one unread. Give the count its own form ... It
 // should not share the author-dot palette. ... A 1px ring in the chip's
 // background colour around each dot would separate them."
-describe('the chip\'s count and dots read apart (GM review of p157)', () => {
+describe('the chip\'s count and dots read apart (design review of PR #157)', () => {
   it('gives the count its own form: no author colour, no dot-sized circle, a clear gap after the dots', () => {
     const count = ruleIn(notesCss, '.agent-notes-chip__count');
     // Not the author-dot palette: neither the newest author's colour nor a dot's.
@@ -206,7 +206,7 @@ describe('the chip\'s count and dots read apart (GM review of p157)', () => {
 const commonsCss = readFileSync(join(__dirname, '../src/styles/commons.css'), 'utf8');
 const COMMONS_FOLD = '(max-width: 1439px)';
 
-describe('the Commons toolbar keeps one row with the chip (GM review of Q107 a)', () => {
+describe('the Commons toolbar keeps one row with the chip (design review)', () => {
   it('hides the More button unless the toolbar folds', () => {
     expect(ruleIn(commonsCss, 'body.app-slava-restraint .commons-tabs__more')).toMatch(/display:\s*none/);
   });
@@ -286,7 +286,7 @@ describe('the toolbar menu marks its checked item', () => {
   });
 });
 
-// GM review of PR #157, round 2 (count-forms.png): "the dim '0' is mono with
+// Design review of PR #157 (count-forms.png): "the dim '0' is mono with
 // a slashed zero, but 1/9/12 look like Inter bold. Use one face for all of
 // them." The unread count asked for weight 700, which the bundled JetBrains
 // Mono doesn't ship (400, 500, 600: src/assets/fonts/README.md), and the
@@ -295,7 +295,7 @@ describe('the toolbar menu marks its checked item', () => {
 const fontsCss = readFileSync(join(__dirname, '../src/assets/fonts/fonts.css'), 'utf8');
 const slavaCss = readFileSync(join(__dirname, '../src/styles/slava-restraint.css'), 'utf8');
 
-describe('every count in the chip shares one face (GM review, round 2)', () => {
+describe('every count in the chip shares one face (design review)', () => {
   it('sets the count in the mono at a weight the bundled mono ships', () => {
     const count = ruleIn(notesCss, '.agent-notes-chip__count');
     const font = declared(count, 'font');
@@ -317,7 +317,7 @@ describe('every count in the chip shares one face (GM review, round 2)', () => {
   });
 });
 
-// GM review of PR #157, round 2: one heading pattern for the Commons'
+// Design review of PR #157: one heading pattern for the Commons'
 // sections. The section's name is the h2 set as the eyebrow line (Blind
 // labeling, Agent review), in the eyebrow style Blind labeling already used;
 // the display line keeps its look as a p; Settings, which has no display
@@ -325,7 +325,7 @@ describe('every count in the chip shares one face (GM review, round 2)', () => {
 // Commons' existing step size (no new size).
 const evaluationCss = readFileSync(join(__dirname, '../src/styles/commons-evaluation.css'), 'utf8');
 
-describe('the Commons sections share one heading pattern (GM review, round 2)', () => {
+describe('the Commons sections share one heading pattern (design review)', () => {
   it('sets the eyebrow line in the eyebrow style Blind labeling used, the h2 included', () => {
     // The same rule as the old eyebrow (`small`), not a copy of it.
     const eyebrow = ruleIn(evaluationCss, '.commons-evaluation small,\n.commons-eyebrow');

@@ -1,19 +1,19 @@
 /**
- * Round 22 of PR #199, section 2 (review 20 with GM r34), the tab's side:
- * - LOW-5 (P1): the 409's own `hold` names the line, before any re-read;
- * - NIT-3: a 409 with nothing holding tries once more, quietly, then says
+ * PR #199 (design), the tab's side:
+ * - the 409's own `hold` names the line, before any re-read;
+ * - a 409 with nothing holding tries once more, quietly, then says
  *   nothing (no stale line, two presses at once included);
- * - NIT-1 (GM r34 A3): `bootstrap` is sent, its line only on its 409;
- * - LOW-3 (GM r34 A2): the person's reopen of this project in another window
+ * - design: `bootstrap` is sent, its line only on its 409;
+ * - design: the person's reopen of this project in another window
  *   keeps this window's view (the Commons, the Settings dock, the selection);
  *   an agent's switch resets it;
- * - NIT-5: Projects is read when the follow lands;
- * - LOW-4: a Web Lock claims the tab id for the page's life;
- * - lines-ui LOW-1 (GM r34 A4): the rail callout isn't drawn over open Run history;
- * - lines-ui LOW-2 and NIT-1: focus after an in-place reopen; the 4 s poll;
- * - lines-ui NIT-2: the live regions mount empty, then get their text;
- * - lens item 4 (GM r34 A5): the toolbar moves below the World Labs notice;
- * - mutants W11 (seq), W14 (pageshow), W17 (a 409 re-read after another open).
+ * - Projects is read when the follow lands;
+ * - a Web Lock claims the tab id for the page's life;
+ * - design: the rail callout isn't drawn over open Run history;
+ * - focus after an in-place reopen; the 4 s poll;
+ * - the live regions mount empty, then get their text;
+ * - design: the toolbar moves below the World Labs notice;
+ * - mutants: sequence numbers, pageshow, and a 409 re-read after another open.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
@@ -57,7 +57,7 @@ vi.mock('../src/lib/personSession', async (original) => ({
 vi.mock('../src/lib/paramsOutdated', async (original) => ({
   ...await original<typeof import('../src/lib/paramsOutdated')>(), reloadPage: vi.fn(),
 }));
-// Spied (lines-ui NIT-1 of review 21): a focus loop an earlier test started
+// Spied: a focus loop an earlier test started
 // keeps looking for a canvas for about a second, so focus landing on the
 // canvas alone can't show that this test's reopen moved it.
 vi.mock('../src/lib/canvasFocus', async (original) => {
@@ -228,7 +228,7 @@ const settle = async () => { for (let i = 0; i < 6; i += 1) await new Promise((r
 const openedAlpha = (revision = 'rev-a3') => ({ project: project('alpha'), workspaceRevision: revision,
   paramsVersion: GRAPH_PARAMS_VERSION, canvasRevision: '0' }) as never;
 
-describe('review 20 LOW-5 (P1): the 409’s own hold names the line', () => {
+describe('the 409’s own hold names the line', () => {
   it('another project’s record: “from “Alpha””, from the 409 body, with no second read and never the refusal’s node', async () => {
     duplicateN1();
     vi.mocked(projects.openProject).mockRejectedValue(refusal(
@@ -251,7 +251,7 @@ describe('review 20 LOW-5 (P1): the 409’s own hold names the line', () => {
   });
 });
 
-describe('review 20 NIT-3: a 409 with nothing holding never leaves a line', () => {
+describe('a 409 with nothing holding never leaves a line', () => {
   it('tries once more, quietly, and lands', async () => {
     duplicateN1();
     vi.mocked(projects.openProject)
@@ -312,7 +312,7 @@ describe('review 20 NIT-3: a 409 with nothing holding never leaves a line', () =
   });
 });
 
-describe('review 20 NIT-1 (GM r34 A3): bootstrap is sent; its line shows on its 409 only', () => {
+describe('bootstrap is sent; its line shows on its 409 only', () => {
   it('no lock and no card line before the press; the press goes', async () => {
     duplicateN1();
     await verdict(hold('bootstrap'));
@@ -335,8 +335,8 @@ describe('review 20 NIT-1 (GM r34 A3): bootstrap is sent; its line shows on its 
   });
 });
 
-describe('mutants W11 and W17: an older read never wins', () => {
-  it('W11: a slower verdict read that started first loses to the newer one', async () => {
+describe('an older read never wins', () => {
+  it('a slower verdict read that started first loses to the newer one', async () => {
     let late: (value: { hold: unknown }) => void = () => {};
     vi.mocked(projects.getOpenHold)
       .mockImplementationOnce(() => new Promise((resolve) => { late = resolve as never; }))
@@ -348,7 +348,7 @@ describe('mutants W11 and W17: an older read never wins', () => {
     expect(useProjectStore.getState().openHold).toBeNull();
   });
 
-  it('W17: a 409’s re-read that lands after another project opened here says nothing', async () => {
+  it('a 409’s re-read that lands after another project opened here says nothing', async () => {
     duplicateN1();
     vi.mocked(projects.openProject).mockRejectedValue(refusal('refused'));
     vi.mocked(projects.getOpenHold).mockImplementation(async () => {
@@ -362,7 +362,7 @@ describe('mutants W11 and W17: an older read never wins', () => {
   });
 });
 
-describe('review 20 lines-ui LOW-2 and NIT-1: focus and the poll', () => {
+describe('focus and the poll', () => {
   const withCanvas = async (run: (canvas: HTMLElement) => Promise<void>) => {
     const canvas = document.createElement('div');
     canvas.className = 'react-flow';
@@ -417,7 +417,7 @@ describe('review 20 lines-ui LOW-2 and NIT-1: focus and the poll', () => {
   });
 });
 
-describe('review 20 LOW-3 (GM r34 A2): the person’s reopen of this project in another tab keeps this window’s view', () => {
+describe('the person’s reopen of this project in another tab keeps this window’s view', () => {
   const reopenBy = (actor: Record<string, unknown>) => bootSwitch({ workspaceRevision: 'rev-a2',
     projectSwitch: { projectId: 'alpha', projectName: P, previousRevision: 'rev-a',
       previousProjectId: 'alpha', previousProjectName: P, actor, created: false } });
@@ -463,7 +463,7 @@ describe('review 20 LOW-3 (GM r34 A2): the person’s reopen of this project in 
   });
 });
 
-describe('review 20 NIT-5: where the window is when the follow lands, not when it began', () => {
+describe('where the window is when the follow lands, not when it began', () => {
   it('a window that left Projects during the follow isn’t put back there', async () => {
     useProjectStore.setState({ screen: 'home' });
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ workspaceRevision: 'rev-a2' }));
@@ -483,8 +483,8 @@ describe('review 20 NIT-5: where the window is when the follow lands, not when i
   });
 });
 
-describe('review 20 LOW-4: the tab claims its id with a Web Lock while the page lives', () => {
-  // Round 23 (review 21 LOW-1): the claim never waits (`ifAvailable`); the
+describe('the tab claims its id with a Web Lock while the page lives', () => {
+  // The claim never waits (`ifAvailable`); the
   // two-page paths are in tabId.fix23b.test.ts.
   function fakeLocks() {
     const held = new Set<string>();
@@ -554,7 +554,7 @@ describe('review 20 LOW-4: the tab claims its id with a Web Lock while the page 
     expect(await page.ready()).toBe(page.id);
   });
 
-  it('W14: back from the back/forward cache, the page takes its id back (its free mark goes); a plain pageshow leaves it', () => {
+  it('back from the back/forward cache, the page takes its id back (its free mark goes); a plain pageshow leaves it', () => {
     const storage = window.sessionStorage;
     const show = (persisted: boolean) => {
       const event = new Event('pageshow');
@@ -571,7 +571,7 @@ describe('review 20 LOW-4: the tab claims its id with a Web Lock while the page 
   });
 });
 
-describe('review 20 lines-ui LOW-1 (GM r34 A4): no callout over open Run history', () => {
+describe('no callout over open Run history (design)', () => {
   const clock = frames();
   beforeEach(() => clock.install());
   afterEach(() => clock.uninstall());
@@ -588,7 +588,7 @@ describe('review 20 lines-ui LOW-1 (GM r34 A4): no callout over open Run history
   });
 });
 
-describe('review 20 lines-ui NIT-2: each live region is in the page before its text', () => {
+describe('each live region is in the page before its text', () => {
   const clock = frames();
   beforeEach(() => clock.install());
   afterEach(() => clock.uninstall());
@@ -630,7 +630,7 @@ describe('review 20 lines-ui NIT-2: each live region is in the page before its t
   });
 });
 
-describe('review 20 lens item 4 (GM r34 A5): the selection toolbar moves below the World Labs notice', () => {
+describe('the selection toolbar moves below the World Labs notice (design)', () => {
   const rect = (top: number, bottom: number) => ({ top, bottom, height: bottom - top, left: 0, right: 680, width: 680, x: 0, y: top,
     toJSON: () => ({}) }) as DOMRect;
   const root = () => document.documentElement.style;
@@ -678,7 +678,7 @@ describe('review 20 lens item 4 (GM r34 A5): the selection toolbar moves below t
   });
 });
 
-describe('GM r33, 2: the headings this PR added lead their lines, whatever the request’s own heading', () => {
+describe('the headings this PR added lead their lines, whatever the request’s own heading', () => {
   it('a reopen in place Nebula refused for good (not a 409): “Nebula couldn’t reopen the project.”, with the reason', async () => {
     duplicateN1();
     vi.mocked(projects.openProject).mockRejectedValue(new projects.ProjectRequestError('That project can’t open.', 422,

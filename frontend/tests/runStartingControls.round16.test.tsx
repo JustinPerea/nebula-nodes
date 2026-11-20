@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-// Review 15, M-B: a run waiting for its inputs counts as starting, and the
+// A run waiting for its inputs counts as starting, and the
 // Run controls show it as their existing disabled state (no new copy).
 
 vi.mock('../src/lib/graphFile', () => ({ saveToFile: vi.fn(), loadFromFile: vi.fn() }));

@@ -5,7 +5,7 @@ import { undosToFitSave, type UndoWalkStep } from '../src/lib/saveFixStep';
 import { applySlice, edgeKey, ownAddStep, type GraphSlice, type OwnParamChange } from '../src/lib/canvasUndo';
 import * as shared from '../src/lib/graphFileShared';
 
-// Review 8 of PR #205, limits LOW-2, LOW-3 and NIT-2: Save's Undo walk applies
+// PR #205: Save's Undo walk applies
 // each step as Undo does (connections keyed by edgeKey on both sides, a
 // removed node's connections dropped), its own add's param changes count, and
 // a node is measured once per content version, not once per snapshot step.
@@ -41,8 +41,8 @@ const atLimit = (rest: Node<NodeData>[], edges: Edge[] = []) => {
   return [node('big', { value: new Array(room).fill(0) }), ...rest];
 };
 
-describe('the walk applies a slice step as Undo does (LOW-2)', () => {
-  it('a paste of two connected nodes whose Undo fits: their connection goes with them (F1)', () => {
+describe('the walk applies a slice step as Undo does', () => {
+  it('a paste of two connected nodes whose Undo fits: their connection goes with them', () => {
     const base = atLimit([]);
     expect(fileCount(base, [])).toBe(GRAPH_MAX_VALUES);
     const nodes = [...base, node('p1'), node('p2')];
@@ -89,7 +89,7 @@ describe('the walk applies a slice step as Undo does (LOW-2)', () => {
   });
 });
 
-describe('an own add\'s param changes count (NIT-2, f03)', () => {
+describe('an own add\'s param changes count', () => {
   it('an accepted proposal that set a param on a node it didn\'t add: its Undo puts the old value back', () => {
     const base = atLimit([node('a', { value: 'x' })]);
     const nodes = base.map((item) => (item.id === 'a' ? node('a', { value: [1, 2, 3, 4] }) : item));
@@ -172,7 +172,7 @@ describe('the walk agrees with Save\'s whole walk after each Undo', () => {
   });
 });
 
-describe('the walk measures a node once per content version (LOW-3)', () => {
+describe('the walk measures a node once per content version', () => {
   it('a 10,000-node canvas with 50 snapshot steps: each node is measured once, within budget', () => {
     // About 1,080,000 values: past Save's limit, and no step fixes it.
     const nodes = Array.from({ length: 10_000 }, (_, index) => node(`n${index}`, { value: new Array(95).fill(index) }));
@@ -190,7 +190,7 @@ describe('the walk measures a node once per content version (LOW-3)', () => {
     const took = performance.now() - started;
     // The root, each node and each connection once: never once per step.
     expect(measureShape.mock.calls.length).toBe(1 + nodes.length + edges.length);
-    // Timed at load average ~30: round 8's walk took 3,008 ms on this canvas,
+    // Timed at load average ~30: the saveFixStep.pr205r8 walk took 3,008 ms on this canvas,
     // this one 237 ms, one Save walk of it 52 ms. A loose wall-clock bound
     // for a loaded machine; the call count above is the exact budget.
     expect(took).toBeLessThan(1_500);

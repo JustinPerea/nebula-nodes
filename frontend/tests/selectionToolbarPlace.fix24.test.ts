@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * PR #199 round 25, GM r24 (toolbar, between-stack-and-selection): "the bar
+ * PR #199 (design; toolbar, between-stack-and-selection): "the bar
  * crosses the stacked cards at about y 150–280, and there's free canvas below
  * them. If one of those cards is the selection, the bar goes below it, as in
  * the near-top shot. If the selection is the card whose header is under the
@@ -30,7 +30,7 @@ const place = (selection: ScreenBox | null, stack = STACK) => placeSelectionTool
 const overlaps = (top: number, selection: ScreenBox) => TOOLBAR.left < selection.right && TOOLBAR.right > selection.left
   && top < selection.bottom && top + H > selection.top;
 
-describe('GM r24: the bar and the stacked cards', () => {
+describe('the bar and the stacked cards', () => {
   // Three cards stacked down the canvas, the first at y 150–280 under the bar.
   const first = box(150, 280);
   const second = box(300, 430);

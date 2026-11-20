@@ -3,10 +3,10 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Round 16 of PR #114 (review 15, L1; GM): zoom, pan and selection while
+ * PR #114 (design): zoom, pan and selection while
  * offline are local view state. Nothing is sent then (and nothing pulses);
  * once Nebula answers again the current view goes out, so agents read the
- * canvas the person is looking at. Plus GM's library count line offline.
+ * canvas the person is looking at. Plus design's library count line offline.
  */
 
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn() } }));
@@ -39,7 +39,7 @@ afterEach(() => {
   resetBackendConnectionForTests();
 });
 
-describe('L1: the canvas view report', () => {
+describe('the canvas view report', () => {
   it('sends nothing while offline, with no pulse, and sends the current view once Nebula answers again', async () => {
     let pulses = 0;
     const stop = subscribeOfflinePulse(() => { pulses += 1; });
@@ -55,7 +55,7 @@ describe('L1: the canvas view report', () => {
   });
 });
 
-describe('the library while offline (GM, round 16)', () => {
+describe('the library while offline (design)', () => {
   it('its count line says adding is paused, and goes back to "Choose a node to add" online', () => {
     useUIStore.setState((state) => ({
       libraryCollapsed: { __nebulaLibraryInit: true },

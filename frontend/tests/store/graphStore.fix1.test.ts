@@ -3,13 +3,13 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 
 /**
- * PR #198 fix round 1 (review 1):
- * - M1: Undo of an Accept never removes a Cinema shot's media, or anything
+ * PR #198 fix:
+ * - Undo of an Accept never removes a Cinema shot's media, or anything
  *   else a run wrote, that the proposal didn't touch. A param that is a
  *   compound value (a scene, a clip list) is put back path by path:
  *   before ⊕ (now − set), never whole.
- * - L1: the undo line names a routed node's settings by their card labels.
- * - GM (pr198 r1, items 1-3): names only when every item is on one node;
+ * - the undo line names a routed node's settings by their card labels.
+ * - Design: names only when every item is on one node;
  *   across nodes, the count.
  */
 
@@ -93,7 +93,7 @@ async function undoAndRead() {
 const shotOf = (shots: Shot[], id: string) => shots.find((shot) => shot.id === id) as Shot;
 const media = (shot: Shot | undefined) => JSON.stringify((shot?.output as { imageUrl?: string } | undefined)?.imageUrl ?? null);
 
-describe('M1: Undo of an Accept keeps what a run wrote into a Cinema scene', () => {
+describe('Undo of an Accept keeps what a run wrote into a Cinema scene', () => {
   for (const marked of [true, false]) {
     it(`two shots: Accept changed s1's prompt, s2 rendered (${marked ? 'a marked' : 'an unmarked'} merge), Undo puts s1 back and keeps s2's image`, async () => {
       useGraphStore.setState({ nodes: [cinema(scene({ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'other' }))] } as never);
@@ -193,7 +193,7 @@ describe('M1: Undo of an Accept keeps what a run wrote into a Cinema scene', () 
   });
 });
 
-describe('M1: the path merge itself (lib/canvasUndo)', () => {
+describe('the path merge itself (lib/canvasUndo)', () => {
   const asNode = (params: Record<string, unknown>, definitionId = 'cinema-scene') =>
     node('n1', params, 'Scene', definitionId) as unknown as Node<NodeData>;
 
@@ -250,7 +250,7 @@ describe('M1: the path merge itself (lib/canvasUndo)', () => {
   });
 });
 
-describe('L1: the undo line names a routed node\'s settings by their card labels', () => {
+describe('the undo line names a routed node\'s settings by their card labels', () => {
   it('FLUX 1.1 [pro] Ultra\'s aspect_ratio is “Aspect ratio”, never the key', async () => {
     const flux = (ratio: string) => node('n1', { prompt: 'p', aspect_ratio: ratio }, 'Hero', 'flux-1-1-ultra');
     useGraphStore.setState({ nodes: [flux('1:1')] } as never);
@@ -265,7 +265,7 @@ describe('L1: the undo line names a routed node\'s settings by their card labels
   });
 });
 
-describe('GM r1 (7): a universal node\'s setting in the undo line is its Inspector label, sentence case', () => {
+describe('a universal node\'s setting in the undo line is its Inspector label, sentence case', () => {
   it('a Replicate model\'s guidance_scale is “Guidance scale”, even with an older Title Case label saved', async () => {
     const rep = (scale: number) => ({ ...node('n1', { model_id: 'o/m', guidance_scale: scale }, 'Hero still', 'replicate-universal'),
       type: 'dynamic-node', data: { ...node('n1', { model_id: 'o/m', guidance_scale: scale }, 'Hero still', 'replicate-universal').data,
@@ -282,7 +282,7 @@ describe('GM r1 (7): a universal node\'s setting in the undo line is its Inspect
   });
 });
 
-describe('GM pr198 r1: names only on one node; across nodes, the count', () => {
+describe('names only on one node; across nodes, the count (design)', () => {
   const agent = { kind: 'agent' as const, name: 'Codex' };
   const unknown = { kind: 'unknown' as const };
 

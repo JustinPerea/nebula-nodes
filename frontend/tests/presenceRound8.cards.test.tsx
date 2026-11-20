@@ -1,11 +1,11 @@
 /**
- * PR #204 round 8, GM r10 on the held cards:
- * (1) the permission card shows GM's line on its own row under the buttons; the buttons have no
+ * PR #204 (design) on the held cards:
+ * (1) the permission card shows design's line on its own row under the buttons; the buttons have no
  *     tooltip and point at the line (aria-describedby); the countdown stays. The question form
  *     does the same.
  * (2) the card's tag says the ACP tool kind in Nebula's words: "execute" is "run".
  * (5) on a held tab, Send and Dismiss are both locked and both take the shared locked look.
- * Review 6 LOW-6 (M3): the card's own guard sends nothing while held, on its own.
+ * The card's own guard sends nothing while held, on its own.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -28,7 +28,7 @@ const part = (extra: Record<string, unknown> = {}) => ({
 beforeEach(() => { session.resetPersonSessionForTests(); useAgentQuestionsStore.getState().reset(); });
 afterEach(() => { cleanup(); session.notePersonPromoted(); session.resetPersonSessionForTests(); });
 
-describe('GM r10 (1): the permission card on a held tab', () => {
+describe('the permission card on a held tab', () => {
   it('the line is on its own row under the buttons; the buttons point at it, with no tooltip; the countdown stays', () => {
     const onDecision = vi.fn();
     render(<PermissionCard part={part()} agentName="Codex" onDecision={onDecision} />);
@@ -46,7 +46,7 @@ describe('GM r10 (1): the permission card on a held tab', () => {
       expect(button).not.toHaveAttribute('title');
       expect(button.getAttribute('aria-describedby')).toBe(line.id);
       expect(button.className).toContain('agent-notes-btn--held');
-      // M3: the card's own guard, with no panel behind it.
+      // The card's own guard, with no panel behind it.
       fireEvent.click(button);
     }
     expect(onDecision).not.toHaveBeenCalled();
@@ -75,7 +75,7 @@ describe('GM r10 (1): the permission card on a held tab', () => {
   });
 });
 
-describe('GM r10 (2): the tool kind in Nebula\'s words', () => {
+describe('the tool kind in Nebula\'s words', () => {
   it('maps every ACP kind through one table', () => {
     expect(Object.fromEntries(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other']
       .map((kind) => [kind, toolKindWord(kind)]))).toEqual({
@@ -99,7 +99,7 @@ const SET = { id: 'qs_8', status: 'open', agent: { name: 'Codex', color: '#7aa2f
   createdAt: 1, closedAt: null, answers: null, update: { id: 'u_q', projectId: 'p1' },
   questions: [{ id: 'q1', text: 'Which mood?', options: ['Warm dusk', 'Cold fog'], multiple: false, allowText: true }] };
 
-describe('GM r10 (1) and (5): the question form on a held tab', () => {
+describe('the question form on a held tab', () => {
   it('Send and Dismiss are both locked, both take the locked look, and point at the line under them', () => {
     act(() => { useAgentQuestionsStore.getState().opened(SET as never, 'k_q'); });
     render(<AgentQuestionsForm setId="qs_8" onClose={() => {}} />);

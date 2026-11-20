@@ -1,15 +1,15 @@
 /**
- * Round 20 of PR #195 (review 19, H1 and M1; GM - Design's follow-up of
+ * PR #195 (design's follow-up of
  * 2026-10-27, verbatim):
- * - H1: the handoff save names the settings and renames Nebula may not have
+ * - the handoff save names the settings and renames Nebula may not have
  *   (`pendingParams`, `pendingLabels`), and Nebula merges exactly those onto
  *   its copy of the project left.
- * - GM follow-up 2: a failed handoff is one line, "Couldn’t save “<setting>”
+ * - Design follow-up 2: a failed handoff is one line, "Couldn’t save “<setting>”
  *   for “<node>” in “<old project>” when <agent> switched projects. Your
  *   edits were saved as a copy, “<copy name>”." with "Open copy"; the toast
  *   no longer says "Edits saved as a copy." beside it.
- * - M1 (GM follow-ups 1 and 3): from the moment the tab sees an agent's
- *   switch until the new canvas is loaded the canvas is read-only (probe A1:
+ * - Design follow-ups 1 and 3: from the moment the tab sees an agent's
+ *   switch until the new canvas is loaded the canvas is read-only (
  *   nothing is typed into a canvas about to go away), the project bar says
  *   "Opening “<project>”…", Run is disabled with "Wait for “<project>” to
  *   open.", and a run press that gets through says "Couldn't run “<node>”.
@@ -162,7 +162,7 @@ const slowListing = () => {
   return () => listed(listing({ activeProjectId: 'beta', workspaceRevision: 'rev-b' }));
 };
 
-describe('H1: the handoff names what Nebula may not have', () => {
+describe('the handoff names what Nebula may not have', () => {
   it('typing still in its debounce: its key and value', async () => {
     type('Typed');
     agentOpens();
@@ -190,7 +190,7 @@ describe('H1: the handoff names what Nebula may not have', () => {
   });
 });
 
-describe('GM follow-up 2: a failed handoff is one line, with Open copy', () => {
+describe('Design follow-up 2: a failed handoff is one line, with Open copy', () => {
   it('names the setting, the node, the project, the agent and the copy', async () => {
     type('Typed');
     vi.mocked(projects.saveProject).mockRejectedValueOnce(new projects.ProjectRequestError('Nope.', 500, { heading: 'x' } as never));
@@ -207,8 +207,8 @@ describe('GM follow-up 2: a failed handoff is one line, with Open copy', () => {
   });
 });
 
-describe('M1: the canvas is read-only while it follows an agent\'s switch', () => {
-  it('A1: typing made while it follows changes nothing and sends nothing', async () => {
+describe('the canvas is read-only while it follows an agent\'s switch', () => {
+  it('typing made while it follows changes nothing and sends nothing', async () => {
     agentOpens();
     const land = slowListing();
     await flush();
@@ -228,7 +228,7 @@ describe('M1: the canvas is read-only while it follows an agent\'s switch', () =
     expect(followingSwitch()).toBeNull();
   });
 
-  it('a run pressed while it follows: not sent, and GM\'s line', async () => {
+  it('a run pressed while it follows: not sent, and design\'s line', async () => {
     agentOpens();
     const land = slowListing();
     await flush();
@@ -248,7 +248,7 @@ describe('M1: the canvas is read-only while it follows an agent\'s switch', () =
   });
 });
 
-describe('Round 21 (review 20, M-1): an agent reopens the project the tab shows', () => {
+describe('an agent reopens the project the tab shows', () => {
   it('the handoff carries the typing still in its debounce', async () => {
     type('Typed');
     vi.mocked(projects.listProjects).mockResolvedValue(listing({ activeProjectId: 'alpha', workspaceRevision: 'rev-a2' }));
@@ -258,7 +258,7 @@ describe('Round 21 (review 20, M-1): an agent reopens the project the tab shows'
         previousProjectName: 'Glass campaign', previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Codex' } } });
     await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
     expect(handoffs()).toContain('Typed');
-    // Round 22 (review 21, L-c): the labels again. The "leak" was the app's:
+    // The labels again. The "leak" was the app's:
     // a rename draft an earlier test folded into its switch stayed in
     // labelsInFlight for good; it goes once handed off now.
     expect(pendingOf()).toEqual({ params: { n1: { value: 'Typed' } }, labels: {}, deleted: [] });

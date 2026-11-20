@@ -1,10 +1,10 @@
 /**
- * PR #204 round 7, the chat socket:
- * - Review 5 NIT-1: each message carries its own ref, and its refusal is read against the promote
+ * PR #204, the chat socket:
+ * - each message carries its own ref, and its refusal is read against the promote
  *   count that message went out under (not the last one sent).
- * - Gates-security NIT-1 (mutant FM9): a message sent after the promote and refused holds the
+ * - a message sent after the promote and refused holds the
  *   tab again.
- * - Review 5 MEDIUM-2, GM r9 (1): a personal agent's permission card locks Allow once and Deny in
+ * - Design: a personal agent's permission card locks Allow once and Deny in
  *   place from the one held state, with "You can answer this when this tab is connected as
  *   you."; a refused answer puts the card back to waiting.
  * Harness from ChatPanel.personal.test.tsx.
@@ -114,7 +114,7 @@ async function personalTurn(socket: ChatSocket) {
   return screen.getByRole('group', { name: 'Fake Agent asks permission' });
 }
 
-describe('review 5 NIT-1 and FM9: each message\'s refusal is read by its own ref', () => {
+describe('each message\'s refusal is read by its own ref', () => {
   beforeEach(() => resetPersonSessionForTests());
   afterEach(() => notePersonPromoted());
 
@@ -130,7 +130,7 @@ describe('review 5 NIT-1 and FM9: each message\'s refusal is read by its own ref
     expect(new Set(refs).size).toBe(2);
   });
 
-  it('a message sent after the promote, refused: the tab is held again (FM9)', async () => {
+  it('a message sent after the promote, refused: the tab is held again', async () => {
     const seen = vi.fn(); window.addEventListener('nebula:person-required', seen);
     const socket = await connected();
     notePersonPromoted();
@@ -156,7 +156,7 @@ describe('review 5 NIT-1 and FM9: each message\'s refusal is read by its own ref
     window.removeEventListener('nebula:person-required', seen);
   });
 
-  it('gates NIT-1: /clear\'s close_session carries its own ref, stamped when it went out', async () => {
+  it('/clear\'s close_session carries its own ref, stamped when it went out', async () => {
     const seen = vi.fn(); window.addEventListener('nebula:person-required', seen);
     const socket = await connected();
     await pickFake();
@@ -181,17 +181,17 @@ describe('review 5 NIT-1 and FM9: each message\'s refusal is read by its own ref
   });
 });
 
-describe('review 5 MEDIUM-2, GM r9 (1): the permission card and the held state', () => {
+describe('the permission card and the held state', () => {
   beforeEach(() => resetPersonSessionForTests());
   afterEach(() => notePersonPromoted());
 
-  it('held: Allow once and Deny stay in place, locked, with GM\'s line, and send nothing', async () => {
+  it('held: Allow once and Deny stay in place, locked, with design\'s line, and send nothing', async () => {
     const socket = await connected();
     const card = await personalTurn(socket);
     act(() => reportPersonRequired());
     const allow = within(card).getByRole('button', { name: 'Allow once' });
     const deny = within(card).getByRole('button', { name: 'Deny' });
-    // GM r10 (1), round 8: the line is on the card under the buttons; they point at it.
+    // Design: the line is on the card under the buttons; they point at it.
     const line = within(card).getByText(HELD_LINE);
     for (const button of [allow, deny]) {
       expect(button).toHaveAttribute('aria-disabled', 'true');

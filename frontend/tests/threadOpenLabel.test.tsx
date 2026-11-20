@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 /**
- * GM r108 c and d on #225: a reply's Update keeps its visible "Open"; the
+ * Design on #225: a reply's Update keeps its visible "Open"; the
  * button's accessible name starts with it and says whose reply and where:
  * "Open Claude Code’s reply in “Coast”". An unnamed project reads “Untitled”.
  */
@@ -35,7 +35,7 @@ function card(projectId: string) {
     hold={hold} onRead={() => {}} onDismiss={() => {}} onAction={() => {}} onShow={() => {}} />);
 }
 
-describe('GM r108 c: Open on a reply’s Update', () => {
+describe('Open on a reply’s Update (design)', () => {
   it('reads “Open”, and is named “Open Claude Code’s reply in “Coast””', () => {
     useProjectStore.setState({ projects: [{ id: 'p2', name: 'Coast' }] as never });
     card('p2');
@@ -43,7 +43,7 @@ describe('GM r108 c: Open on a reply’s Update', () => {
     expect(button.textContent).toBe('Open');
   });
 
-  it('an unnamed project reads “Untitled” (GM r108 d)', () => {
+  it('an unnamed project reads “Untitled” (design)', () => {
     useProjectStore.setState({ projects: [{ id: 'p2', name: '  ' }] as never });
     card('p2');
     expect(screen.getByRole('button', { name: 'Open Claude Code’s reply in “Untitled”' })).toBeTruthy();

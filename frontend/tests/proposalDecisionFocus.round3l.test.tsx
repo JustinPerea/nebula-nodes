@@ -3,12 +3,12 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ProposalView } from '../src/lib/wsClient';
 
 /**
- * PR #216 round 3l (GM r69 a; review 4 logic LOW-1): a keyboard Accept or
+ * PR #216 (design): a keyboard Accept or
  * Reject moves focus when the proposal closes only while focus is still on
  * the card or <body>. Put elsewhere meanwhile (typing in a field while a big
  * Accept applies), it stays there; the decision is said in the region's
- * polite line either way. And review 4's surviving focus mutants, pinned
- * (R16-R18).
+ * polite line either way. And the surviving focus mutants, pinned
+ * in this file.
  */
 const flow = vi.hoisted(() => ({ fitBounds: vi.fn(), getInternalNode: vi.fn() }));
 const graph = vi.hoisted(() => ({
@@ -85,7 +85,7 @@ async function press(name: string): Promise<void> {
   await act(async () => { fireEvent.click(button, { detail: 0 }); });
 }
 
-/** Where focus is at several moments after the decision (review 3 p8's 100/400/900/1600 ms). */
+/** Where focus is at several moments after the decision (100/400/900/1600 ms). */
 async function focusOverTime(): Promise<Element[]> {
   const seen: Element[] = [document.activeElement!];
   let at = 0;
@@ -107,7 +107,7 @@ function field(): HTMLInputElement {
 
 const ACCEPTED = { status: 'accepted', proposalId: 'p_a', idMap: {}, runNodeIds: [], approvalId: null, nodes: [], edges: [], updatedNodes: [] };
 
-describe('round 3l (GM r69 a): focus moved elsewhere while the decision is out stays there', () => {
+describe('focus moved elsewhere while the decision is out stays there', () => {
   it('Reject, the last card: focus put in a field meanwhile stays in it; the decision is said politely', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     let answer!: (value: Response) => void;
@@ -184,8 +184,8 @@ describe('round 3l (GM r69 a): focus moved elsewhere while the decision is out s
   });
 });
 
-describe('review 4 NIT-1: the focus mutants, pinned', () => {
-  it('R16: an Undo notice that draws a frame after the card goes still takes focus (the retry)', async () => {
+describe('the focus mutants, pinned', () => {
+  it('an Undo notice that draws a frame after the card goes still takes focus (the retry)', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     net.apiFetch.mockResolvedValue(respond(200, ACCEPTED));
     graph.state.adoptAcceptedProposal.mockImplementation(() => {
@@ -205,7 +205,7 @@ describe('review 4 NIT-1: the focus mutants, pinned', () => {
     expect(document.activeElement).toBe(document.querySelector('.canvas-undo-notice'));
   });
 
-  it('R17: a new notice with no Undo is not the decision\'s: the canvas', async () => {
+  it('a new notice with no Undo is not the decision\'s: the canvas', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     net.apiFetch.mockResolvedValue(respond(200, ACCEPTED));
     graph.state.adoptAcceptedProposal.mockImplementation(() => {
@@ -222,7 +222,7 @@ describe('review 4 NIT-1: the focus mutants, pinned', () => {
     expect(document.activeElement).toBe(canvas);
   });
 
-  it('R18: a refused decision forgets itself: the proposal closing later (withdrawn) moves no focus', async () => {
+  it('a refused decision forgets itself: the proposal closing later (withdrawn) moves no focus', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     net.apiFetch.mockResolvedValue(respond(409, { detail: 'The canvas changed.' }));
     render(<ProposalBar />);

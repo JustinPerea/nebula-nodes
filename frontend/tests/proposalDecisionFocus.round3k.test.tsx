@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import type { ProposalView } from '../src/lib/wsClient';
 
 /**
- * PR #216 review 3 LOW-6, GM r57: after Accept or Reject from the keyboard,
+ * PR #216 (design): after Accept or Reject from the keyboard,
  * focus goes to the next card's region if there is one, else to the Undo
  * notice the decision raised, else to the canvas container with no ring.
  * Never <body>, at any moment: the button goes disabled while the decision
@@ -79,7 +79,7 @@ async function press(name: string): Promise<void> {
   await act(async () => { fireEvent.click(button, { detail: 0 }); });
 }
 
-/** Where focus is at several moments after the decision (review 3 p8's 100/400/900/1600 ms). */
+/** Where focus is at several moments after the decision (100/400/900/1600 ms). */
 async function focusOverTime(): Promise<Element[]> {
   const seen: Element[] = [document.activeElement!];
   let at = 0;
@@ -91,7 +91,7 @@ async function focusOverTime(): Promise<Element[]> {
   return seen;
 }
 
-describe('focus after a keyboard decision (review 3 LOW-6, GM r57)', () => {
+describe('focus after a keyboard decision (design)', () => {
   it('Reject with another proposal open: the next card\'s region, never body', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     useCanvasProposalsStore.getState().open(proposal('p_b', 2), 'key-b');
@@ -110,7 +110,7 @@ describe('focus after a keyboard decision (review 3 LOW-6, GM r57)', () => {
     expect(useCanvasProposalsStore.getState().proposals.p_b.closing).toBeUndefined();
   });
 
-  it('the last proposal rejected: the canvas, with the ring Tab arrival shows (GM r69 Q2); never body', async () => {
+  it('the last proposal rejected: the canvas, with the ring Tab arrival shows (design); never body', async () => {
     useCanvasProposalsStore.getState().open(proposal('p_a', 1), 'key-a');
     net.apiFetch.mockResolvedValue(respond(200, { status: 'rejected' }));
     render(<ProposalBar />);
@@ -183,7 +183,7 @@ describe('focus after a keyboard decision (review 3 LOW-6, GM r57)', () => {
     expect(canvas.hasAttribute(DECISION_FOCUS_ATTR)).toBe(false);
   });
 
-  it('the canvas after a decision shows the ring Tab arrival shows, inside its edge (GM r69 Q2; slava-restraint.css)', () => {
+  it('the canvas after a decision shows the ring Tab arrival shows, inside its edge (design; slava-restraint.css)', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/slava-restraint.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(css).toMatch(/body\.app-slava-restraint \.canvas-wrapper:focus-visible,\s*body\.app-slava-restraint \.canvas-wrapper\[data-focus-decided\]:focus \{\s*outline: var\(--sr-focus-outline\);\s*outline-offset: -2px;\s*\}/);
     expect(DECISION_FOCUS_ATTR).toBe('data-focus-decided');

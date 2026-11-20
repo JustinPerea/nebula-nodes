@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
- * Round 14 of PR #114, GM's gap wording, verbatim:
+ * PR #114, the design gap wording, verbatim:
  * - a failed param edit (an edit in flight when the connection drops, or a
  *   refused one): "Nebula couldn’t save “<param label>” for “<node>”. It’s back to
  *   its last saved value." The second sentence goes when the value doesn't
  *   revert (a newer edit to the node is still on its way).
  * - a failed model change: "Nebula couldn’t change the model for “<node>”. It’s
  *   still on <route label of current model>."
- * Until round 14 both went to the console only, and a failed param edit kept
+ * Before this change both went to the console only, and a failed param edit kept
  * the unsaved value on the card until the next sync silently replaced it.
  */
 
@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 
 describe('a failed param edit', () => {
-  it('the connection drops while it is sent: GM\'s line, and the value is back to the last saved one', async () => {
+  it('the connection drops while it is sent: Design\'s line, and the value is back to the last saved one', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     edit('edited');
     expect(value()).toBe('edited');
@@ -105,14 +105,14 @@ describe('a failed param edit', () => {
 });
 
 describe('a failed model change', () => {
-  it('OpenRouter: GM\'s line names the node and the model it is still on', async () => {
+  it('OpenRouter: Design\'s line names the node and the model it is still on', async () => {
     fetchMock.mockResolvedValueOnce(json({ detail: 'no key' }, 400));
     await useGraphStore.getState().configureOpenRouterModel('n4', 'anthropic/claude-x');
     expect(alerted()).toEqual(["Nebula couldn’t change the model for “Writer”. It’s still on openai/gpt-5."]);
     expect(useGraphStore.getState().nodes.find((node) => node.id === 'n4')?.data.params.model).toBe('openai/gpt-5');
   });
 
-  // Review 14, L3: the model the backend configured (its ports stamp), not
+  // The model the backend configured (its ports stamp), not
   // the id typed in the Model ID field, which may be the new one.
   it('Replicate: the same line, naming the configured model', async () => {
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => node.id !== 'n4' ? node

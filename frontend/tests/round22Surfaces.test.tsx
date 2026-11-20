@@ -7,7 +7,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * Round 22 of PR #195, GM - Design's blockers A and B, verbatim:
+ * PR #195, Design's blockers A and B, verbatim:
  * A. "Every action surface shares the read-only state while following,
  *    tooltip “Wait for “X” to open.”": the selection toolbar's Run, Ask,
  *    Note, Duplicate and Delete; the Inspector's Run, Duplicate and Delete
@@ -19,7 +19,7 @@ import type { NodeData } from '../src/types';
  * B. While following the bar hides the save status and the node count;
  *    "Opening “X”…" takes the whole slot at the same width, the full name in
  *    the bar's tooltip and aria-label, in every follow frame.
- * Toasts (GM answer 1): up to 3 lines, never cut with "…"; Undo and × sit
+ * Toasts (design): up to 3 lines, never cut with "…"; Undo and × sit
  * vertically centred on the right.
  */
 
@@ -79,7 +79,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** An action surface's control while following: disabled, marked, GM's tooltip. */
+/** An action surface's control while following: disabled, marked, design's tooltip. */
 function expectWaiting(control: HTMLElement, what: string) {
   expect(control, what).toBeDisabled();
   expect(control, what).toHaveAttribute('data-following-disabled');
@@ -216,7 +216,7 @@ describe('A: one source for the read-only state', () => {
   const OFFLINE_ONLY = new Set([
     'components/BackendConnectionStatus.tsx',
     'components/ProviderReadinessBadge.tsx',
-    // PR #199 round 23: reads it only to place the toolbar again when the
+    // PR #199: reads it only to place the toolbar again when the
     // offline banner joins the top stack; the lock's own state still gates Run.
     'components/SelectionToolbar.tsx',
     'components/canvas/CanvasViewReporter.tsx',
@@ -227,7 +227,7 @@ describe('A: one source for the read-only state', () => {
     'components/commons/CommonsReview.tsx',
     'components/commons/CommonsSettings.tsx',
     'components/commons/CommonsView.tsx',
-    // PR #210 round 6c (GM r11 4): the Studio's autosave waits while offline
+    // PR #210 (design): the Studio's autosave waits while offline
     // (a write would be refused) and sends on reconnect. A network wait, not a
     // canvas edit: following an agent's switch mustn't stop it.
     'components/moodboard-studio/MoodboardStudioView.tsx',
@@ -241,11 +241,11 @@ describe('A: one source for the read-only state', () => {
     // PR #198's hook that hides a screen's load-failure notice offline: not a
     // canvas edit, so the lock has nothing to add (the #195 merge).
     'hooks/useOfflineHiddenNotice.ts',
-    // PR #204 round 14 (GM r23 3): offline comes first for not-connected lines and the general
+    // PR #204 (design): offline comes first for not-connected lines and the general
     // notice. They show nothing offline and edit nothing, so the canvas lock (which also covers
     // following, when a lock line should still show) has nothing to add.
     'components/PersonRequiredBanner.tsx',
-    // Round 18d (live LOW-1, GM r23 3): a Commons load line and the Commons-off line hide beside
+    // Design: a Commons load line and the Commons-off line hide beside
     // "Nebula is offline". They edit nothing.
     'components/commons/CommonsErrorLine.tsx',
     'components/commons/CommonsOffView.tsx',
@@ -337,7 +337,7 @@ describe('B: the project bar while following', () => {
   });
 });
 
-describe('Toasts: up to 3 lines, never cut, buttons centred on the right (GM answer 1)', () => {
+describe('Toasts: up to 3 lines, never cut, buttons centred on the right (design)', () => {
   const css = readFileSync(join(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
   const block = (selector: string) => {
     const at = css.indexOf(`\n${selector} {`);

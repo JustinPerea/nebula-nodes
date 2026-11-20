@@ -8,8 +8,8 @@ import { CLOSE_LINES } from './helpers/commonsCloseLines';
 const closeFailed = (status: number, detail?: string) => new CommonsRequestError(
   status === 0 ? "Nebula's server isn't answering. Make sure it's running, then try again." : copyForStatus(status, detail), status,
   { detail, heading: 'Couldn’t close the batch.' });
-/** #204's close lines whose step is a retry: the close button beside them is that retry (GM r41).
- * Round 18o (review 18 logic LOW-6): taken from #204's own table (tests/helpers/commonsCloseLines),
+/** #204's close lines whose step is a retry: the close button beside them is that retry (design).
+ * Taken from #204's own table (tests/helpers/commonsCloseLines),
  * every live row, each line as closeBatchFailedLine words it, plus the 30 s no-answer line; a new
  * live row is a row here with nothing to add by hand. The 429 line ends "Try again in a moment."
  * and stays in tests/commonsCopy.ratchet, outside this house form. */
@@ -28,7 +28,7 @@ import { showError } from '../src/store/projectFlows';
 import { useProjectStore } from '../src/store/projectStore';
 import { endsInTryAgain, expectTryAgainLine } from './helpers/tryAgainLine';
 
-// GM r23 on #208: a line shown with a [Try again] button ends in "Try
+// Design on #208: a line shown with a [Try again] button ends in "Try
 // again." (tests/helpers/tryAgainLine.ts, the shared assert). One row per
 // line; a new line shown beside Try again adds its row here.
 /** What Project home's error holds after showError for a request that failed with `error`. */
@@ -39,17 +39,17 @@ const projectLine = (action: 'open' | 'save' | 'rename', error: unknown): string
 const ROWS: [where: string, line: string][] = [
   ["the Inspector palette's can't-run line (#208)", PALETTE_CANT_RUN],
   ...CLOSE_ROWS,
-  ["the Message box's send that the server didn't answer (GM r50)", SERVER_FAILED_LINE],
-  // #210 round 6m (GM r53 Q1): Restore project's neutral failures, each beside its Try again.
+  ["the Message box's send that the server didn't answer (design)", SERVER_FAILED_LINE],
+  // #210 design: Restore project's neutral failures, each beside its Try again.
   ["Restore project, the server isn't answering (#210)", projectRestoreFailedLine('Shore', 'noAnswer').text],
   ["Restore project, the server didn't accept it (#210)", projectRestoreFailedLine('Shore', 'refused').text],
-  // GM 2026-11 copy sweep item 20: the Cinema upload row's retryable reasons, each beside its Try again.
+  // Design 2026-11 copy sweep: the Cinema upload row's retryable reasons, each beside its Try again.
   ["the Cinema upload row, the server isn't answering", uploadFailure('photo.png', new ConnectionLostError(new TypeError('Failed to fetch'))).line],
   ['the Cinema upload row, the server is busy', uploadFailure('photo.png', new RequestFailedError('', 429)).line],
   ['the Cinema upload row, the server returned an error', uploadFailure('photo.png', new RequestFailedError('', 500)).line],
   ["the Cinema upload row, the server timed out", uploadFailure('photo.png', new RequestFailedError('', 408)).line],
   ['the Cinema upload row, a gateway that did not respond', uploadFailure('photo.png', new RequestFailedError('', 503)).line],
-  // GM 2026-11 copy sweep: Project home, the asset trash and the chat model picker, each beside its own retry.
+  // Design 2026-11 copy sweep: Project home, the asset trash and the chat model picker, each beside its own retry.
   ['Project home, an open that the server did not answer', becauseLine({ heading: "Couldn't open the project.", reason: CONNECTION_LOST_COPY }, 'button')],
   ['Project home, a save that got no response', becauseLine({ heading: "Couldn't save the project.", reason: NO_RESPONSE_COPY }, 'button')],
   ['the workspace Save failed tooltip, no answer', becauseLine({ heading: "Couldn't save the project.", reason: CONNECTION_LOST_COPY }, 'button')],
