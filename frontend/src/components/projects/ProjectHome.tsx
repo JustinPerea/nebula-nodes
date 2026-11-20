@@ -806,7 +806,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               <span className="project-home__notice-actions">
                 <button type="button" className="project-home__notice-restore" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
                   {retry === 'partLoad' ? 'Try again' : <>Open “{openFollowedName}”</>}</button></span></div></div>
-          : showError && <div {...track('error')}><div className="project-home__error" role="alert" tabIndex={-1} data-line-box="">
+          : showError && <div {...track('error')}>{/* Design: the first load trying again by itself is neutral, like the line after the tries
+              (a because line, drawn neutral by styles/becauseLine.css): nothing is lost while it waits. */}
+            <div className="project-home__error" role="alert" tabIndex={-1} data-line-box="" {...(retry === 'retrying' ? { 'data-line-neutral': '' } : {})}>
             {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
               : <span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>}
@@ -819,7 +821,8 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
 
         <section className="project-home__projects" aria-labelledby="recent-projects-title">
           <div className="project-home__section-header">
-            <h2 id="recent-projects-title" ref={recentHeading} tabIndex={-1}>Recent projects{projects.length > 0 && <span className="project-home__count" aria-hidden="true">{projects.length}</span>}</h2>
+            {/* Design: no heading over a list that hasn't loaded yet. */}
+            <h2 id="recent-projects-title" ref={recentHeading} tabIndex={-1} hidden={!workLoaded || undefined}>Recent projects{projects.length > 0 && <span className="project-home__count" aria-hidden="true">{projects.length}</span>}</h2>
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
@@ -827,8 +830,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               lockLine={reopenHold?.id === project.id ? reopenHold.line : null} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && !unsavedEdits && workLoaded && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)}
-                  {...(waitsForLoad ? { 'aria-disabled': true as const, ...(serverWaiting ? { title: NEW_PROJECT_WAITING_TITLE } : {}) } : {})}
-                  onClick={waitsForLoad ? undefined : () => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
+                  onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
       </main>

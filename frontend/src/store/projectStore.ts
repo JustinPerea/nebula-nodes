@@ -430,6 +430,23 @@ let firstLoadLine: string | null = null;
 /** Design: an open that got no answer may have changed the workspace on the server, so the next
  * open or create reads the projects and their revision first (activate), and is not refused as stale. */
 let relistBeforeAction = false;
+/** Design: an open the tab stopped waiting for (20 s), which the server may still commit. Until
+ * it is settled the tab's workspace revision and open project are unconfirmed. `sent`: the
+ * revision the open went with. `newer`: the person's newest open or create since (under way,
+ * landed, or not landed). `held`: a sync of its commit that came while the tab was busy, handled
+ * once it isn't. */
+export interface OpenInDoubt {
+  id: string;
+  name: string;
+  sent: string;
+  newer: null | 'pending' | 'landed' | 'failed';
+  held: GraphSyncEvent | null;
+}
+let opensInDoubt: OpenInDoubt[] = [];
+/** Design: the person's open under way, and a sync of its commit seen while it waited. */
+let openInFlight: { id: string; sent: string; synced: GraphSyncEvent | null } | null = null;
+/** Design: waits for the tab to stop being busy, to handle the held syncs (opensInDoubt). */
+let doubtReplay: (() => void) | null = null;
 export const FIRST_LOAD_TRIES = 5;
 export const firstLoadDelay = (failures: number): number => 1000 * 2 ** failures;
 export function relistIfStale(): void {
@@ -634,6 +651,10 @@ export function resetProjectStoreForTests(): void {
   firstLoadStopped = false;
   firstLoadLine = null;
   relistBeforeAction = false;
+  opensInDoubt = [];
+  openInFlight = null;
+  doubtReplay?.();
+  doubtReplay = null;
 }
 
 /**
@@ -996,6 +1017,12 @@ export const core = {
   set firstLoadAuto(v) { firstLoadAuto = v; },
   get firstLoadFailures() { return firstLoadFailures; },
   set firstLoadFailures(v) { firstLoadFailures = v; },
+  get opensInDoubt() { return opensInDoubt; },
+  set opensInDoubt(v: OpenInDoubt[]) { opensInDoubt = v; },
+  get openInFlight() { return openInFlight; },
+  set openInFlight(v: { id: string; sent: string; synced: GraphSyncEvent | null } | null) { openInFlight = v; },
+  get doubtReplay() { return doubtReplay; },
+  set doubtReplay(v: (() => void) | null) { doubtReplay = v; },
   get relistBeforeAction() { return relistBeforeAction; },
   set relistBeforeAction(v: boolean) { relistBeforeAction = v; },
   get firstLoadLine() { return firstLoadLine; },

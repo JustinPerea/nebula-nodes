@@ -306,10 +306,12 @@ export default function App() {
   // (review 19 item 1): the lock is Nebula's own, read before the press.
   useEffect(() => (isHome ? watchOpenHold() : undefined), [isHome]);
 
+  // Design: the first load found no server (trying again, or out of tries): its line shows on Projects.
+  const firstLoadWaiting = !projects.initialized && projects.errorRetry?.action === 'load' && Boolean(projects.errorRetry.unreachable);
   let mainView;
   if (isHome) {
     mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy} workLoaded={projects.initialized}
-      serverWaiting={!projects.initialized && projects.errorRetry?.action === 'load' && Boolean(projects.errorRetry.unreachable)}
+      serverWaiting={firstLoadWaiting}
       error={projects.error} errorDetails={projectErrorDetails(projects)} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
@@ -358,7 +360,7 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
+      <BackendConnectionStatus placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} bannerHidden={isHome && firstLoadWaiting} />
       <PersonRequiredBanner />
       {/* The World Labs notice; the held-reopen line it clears is its second line (GM r33, 6). */}
       <ProviderRecoveryStatus reopenLine={isCanvas && projects.heldReopenLine?.place === 'worldLabsNotice'

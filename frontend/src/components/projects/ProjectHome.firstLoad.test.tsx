@@ -71,6 +71,41 @@ describe('the line while Nebula tries again', () => {
   });
 });
 
+describe('design: the first-load line and the heading under it', () => {
+  it('the trying-again line is neutral, as the line after the tries is', () => {
+    const { unmount } = render(<ProjectHome {...props({ workLoaded: false, serverWaiting: true, error: FIRST_LOAD_RETRYING_COPY, retry: 'retrying' })} />);
+    expect(screen.getByRole('alert').hasAttribute('data-line-neutral')).toBe(true);
+    unmount();
+    // The line after the tries is a because line: drawn neutral by its own mark.
+    render(<ProjectHome {...props({ workLoaded: false, serverWaiting: true, retry: 'redo',
+      error: 'Nebula couldn’t load your projects because the server isn’t answering. Try again.' })} />);
+    const box = screen.getByRole('alert');
+    expect(box.hasAttribute('data-line-neutral')).toBe(false);
+    expect(box.querySelector('[data-line-because]') ?? (box.matches('[data-line-because]') ? box : null)).not.toBeNull();
+  });
+
+  it('another failure line keeps its own look', () => {
+    render(<ProjectHome {...props({ error: 'Nebula couldn’t rename the project.', retry: 'redo' })} />);
+    expect(screen.getByRole('alert').hasAttribute('data-line-neutral')).toBe(false);
+  });
+
+  it('"Recent projects" is hidden until the first load lands', () => {
+    const { rerender } = render(<ProjectHome {...props({ workLoaded: false, serverWaiting: true, error: FIRST_LOAD_RETRYING_COPY, retry: 'retrying' })} />);
+    expect(screen.queryByRole('heading', { name: 'Recent projects' })).toBeNull();
+    rerender(<ProjectHome {...props({ workLoaded: true })} />);
+    expect(screen.getByRole('heading', { name: 'Recent projects' })).toBeTruthy();
+  });
+
+  it('the empty state’s Create your first project, shown only once loaded, creates', () => {
+    const onCreate = vi.fn();
+    render(<ProjectHome {...props({ onCreate })} />);
+    const button = screen.getByRole('button', { name: 'Create your first project' });
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(button);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('the coordinator', () => {
   it('starts the load on mount and stops the tries on unmount', () => {
     const { unmount } = render(<ProjectCoordinator />);

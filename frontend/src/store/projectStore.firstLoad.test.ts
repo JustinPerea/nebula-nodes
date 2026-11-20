@@ -111,6 +111,38 @@ describe('a first load with no server tries again by itself', () => {
     expect(listProjects).toHaveBeenCalledTimes(5);
   });
 
+  it('Try now: the timer it replaced sends nothing', async () => {
+    listProjects.mockRejectedValue(noServer());
+    void state().initialize();
+    // Tries at 0, 1 and 3 s; the next was due at 7 s.
+    await vi.advanceTimersByTimeAsync(1000 + 2000);
+    expect(listProjects).toHaveBeenCalledTimes(3);
+    await state().retry();
+    await settle();
+    expect(listProjects).toHaveBeenCalledTimes(4);
+    // From the press: 1 s, then 2 s more (4 and 6 s on the clock); the old 7 s timer is gone.
+    await vi.advanceTimersByTimeAsync(4_500);
+    expect(listProjects).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(listProjects).toHaveBeenCalledTimes(6);
+  });
+
+  it('a 500, and a 503 with a written reason, show at once and are not tried again', async () => {
+    for (const error of [new api.ProjectRequestError('Something broke.', 500),
+      new api.ProjectRequestError('Nebula is starting.', 503, { detail: 'Nebula is starting.' })]) {
+      fresh();
+      listProjects.mockReset();
+      listProjects.mockRejectedValue(error);
+      void state().initialize();
+      await settle();
+      expect(state().error).not.toBeNull();
+      expect(state().error).not.toBe(FIRST_LOAD_RETRYING_COPY);
+      expect(projectRetryOffer(state())).not.toBe('retrying');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(listProjects).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('clears the line when a try lands', async () => {
     listProjects.mockRejectedValueOnce(noServer()).mockResolvedValue(listing('Alpha'));
     void state().initialize();
@@ -173,6 +205,18 @@ describe('a first load with no server tries again by itself', () => {
     wakeFirstLoad();
     await settle();
     expect(state().initialized).toBe(true);
+  });
+
+  it('does not wake a screen whose trying-again line another error replaced', async () => {
+    listProjects.mockRejectedValue(noServer());
+    void state().initialize();
+    await settle();
+    expect(state().error).toBe(FIRST_LOAD_RETRYING_COPY);
+    useProjectStore.setState({ error: 'Something else.', errorRetry: { action: 'load', full: true } });
+    wakeFirstLoad();
+    await settle();
+    expect(listProjects).toHaveBeenCalledTimes(1);
+    expect(state().error).toBe('Something else.');
   });
 
   it('does not wake a screen that something else stopped', async () => {
@@ -269,12 +313,28 @@ describe('a project open the server never answers', () => {
     expect(state().busy).toBe(false);
   });
 
+  it('after the timeout, a failed re-read leaves the re-read for the next action', async () => {
+    await timedOut();
+    listProjects.mockRejectedValueOnce(noServer());
+    await state().open('p1');
+    expect(openProject).not.toHaveBeenCalled();
+    listProjects.mockResolvedValue({ ...(listing('Alpha', 'Beta') as object), workspaceRevision: 'r9' } as never);
+    openProject.mockResolvedValue({ ...(opened as object), project: { ...(opened as { project: object }).project, id: 'p1', name: 'Alpha' } } as never);
+    await state().open('p1');
+    expect(listProjects).toHaveBeenCalledTimes(2);
+    expect(listProjects.mock.invocationCallOrder[1]).toBeLessThan(openProject.mock.invocationCallOrder[0]);
+    expect(openProject).toHaveBeenCalledWith('p1', 'r9');
+    expect(state().activeProject?.id).toBe('p1');
+  });
+
   it('after the timeout, Try again still re-reads and opens it', async () => {
     await timedOut();
     listProjects.mockResolvedValue(listing('Alpha', 'Beta'));
     openProject.mockResolvedValue(opened);
     await state().retry();
     await settle();
+    expect(listProjects).toHaveBeenCalled();
+    expect(listProjects.mock.invocationCallOrder[0]).toBeLessThan(openProject.mock.invocationCallOrder[0]);
     expect(openProject).toHaveBeenCalledWith('p2', expect.any(String));
     expect(state().activeProject?.id).toBe('p2');
     expect(state().error).toBeNull();
