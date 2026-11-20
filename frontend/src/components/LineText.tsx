@@ -5,6 +5,16 @@ import { withCodeSpans } from '../lib/codeSpans';
 import { useOfflineFirstBecause } from '../hooks/useOfflineFirstBecause';
 import '../styles/becauseLine.css';
 
+/**
+ * A line in `code` mode: code spans are found first, on the words as they came, and only the prose between them is curled,
+ * so a span (`cmd's`) is never changed whichever way curlApostrophes would have paired the backticks.
+ */
+function curledWithCodeSpans(text: string): ReactNode {
+  const node = withCodeSpans(text);
+  if (typeof node === 'string') return curlApostrophes(node);
+  return Array.isArray(node) ? node.map((part) => (typeof part === 'string' ? curlApostrophes(part) : part)) : node;
+}
+
 const ANCHOR_STYLE = { display: 'none' } as const;
 export const BECAUSE_ATTR = 'data-line-because';
 
@@ -84,6 +94,6 @@ export function LineText({ text, className, children, tone, code }: { text: stri
     return () => { element.hidden = false; };
   }, [own, hide]);
   if (!text) return null;
-  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : body ?? (code ? withCodeSpans(words ?? '') : words)}</span>;
-  return <>{hide ? null : body ?? (code ? withCodeSpans(words ?? '') : words)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
+  if (own) return <span ref={ref} className={className} hidden={hide || undefined}>{hide ? null : body ?? (code ? curledWithCodeSpans(text) : words)}</span>;
+  return <>{hide ? null : body ?? (code ? curledWithCodeSpans(text) : words)}<span ref={ref} data-line-anchor="" style={ANCHOR_STYLE} /></>;
 }

@@ -372,7 +372,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
       {asset.media === 'image' ? (
         <div className="commons-stage">
-          <CommonsMedia className="commons-stage__image" path={detail.blob_url} alt={fields.summary?.value ?? ''} draggable={false} />
+          <CommonsMedia className="commons-stage__image" path={detail.blob_url} alt={curlApostrophes(fields.summary?.value ?? '')} draggable={false} />
           <div
             className="commons-stage__overlay"
             onPointerDown={onPointerDown}

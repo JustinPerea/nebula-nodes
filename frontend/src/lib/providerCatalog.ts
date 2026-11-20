@@ -210,6 +210,8 @@ export function providerMatches(spec: ProviderKeySpec, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   if (spec.label.toLowerCase().includes(q) || spec.key.toLowerCase().includes(q)) return true;
-  if (spec.note?.toLowerCase().includes(q)) return true;
+  // A note's apostrophes are curly where Nebula writes them and a keyboard types a straight one: compare them folded.
+  const fold = (text: string) => text.toLowerCase().replace(/’/g, "'");
+  if (spec.note && fold(spec.note).includes(fold(q))) return true;
   return nodesForKey(spec.key).some((node) => matchesModelSearch(node, q));
 }

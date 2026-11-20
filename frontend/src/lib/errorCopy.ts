@@ -667,13 +667,18 @@ export function foldApostrophes(text: string): string {
 
 /**
  * A straight apostrophe between two letters as the curly one (don't to don’t, Krea's to Krea’s), for
- * words Nebula takes from elsewhere. Nothing else changes: text in “…”, "…" or backticks stays as it
- * is, and so does any word with a slash, a backslash, an underscore, a digit or a file extension of 2 to 10
+ * words Nebula takes from elsewhere. Nothing else changes: text in “…”, "…", '…' or backticks stays as
+ * it is, and so does any word with a slash, a backslash, an underscore, a digit or a file extension of 2 to 10
  * letters (a path, an id, a file name such as "Krea's.png", "Bob's_file" or "Bob's.sketch", "photo 3's").
+ * A '…' run is a quoted value the backend wrote: a ' that opens after the start, a space or an opening bracket
+ * and closes (on the same line) before the end, a space or punctuation, with the run kept as written
+ * (Couldn't open 'Bob's board' keeps 'Bob's board'). A ' that opens no run (a plural possessive such as
+ * "users' notes", or an opening ' with no closing one on its line) protects nothing after it.
  * Design's limit: a file name, an id or code in a reason must never change.
  */
+const PROTECTED_RUN = /(“[^”]*”|"[^"]*"|`[^`]*`|(?<![^\s([{])'(?=\S)[^\n]+?(?<=\S)'(?![^\s.,;:!?)\]}]))/;
 export function curlApostrophes(text: string): string {
-  return text.split(/(“[^”]*”|"[^"]*"|`[^`]*`)/).map((part, index) => {
+  return text.split(PROTECTED_RUN).map((part, index) => {
     if (index % 2 === 1) return part;
     return part.replace(/\S+/g, (word) => (/[\\/\d_]|\w\.[A-Za-z]{2,10}\b/.test(word) ? word : word.replace(/(\p{L})'(?=\p{L})/gu, '$1’')));
   }).join('');

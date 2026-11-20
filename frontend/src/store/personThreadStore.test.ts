@@ -149,9 +149,14 @@ describe('what the socket brings', () => {
     });
     noteActivity(event(10, 'Changing “Prompt”'));
     noteActivity(event(20));
-    expect(usePersonThreadStore.getState().activity[KEY]).toEqual({ at: 20, line: 'Changing “Prompt”' });
+    expect(usePersonThreadStore.getState().activity[KEY]).toEqual({ at: 20, line: 'Changing “Prompt”', nebula: true });
+    // An agent's own say is not Nebula's, and a later event with no line of its own keeps the flag with the line it carries.
+    noteActivity({ ...event(30), say: 'Cooler sky' });
+    expect(usePersonThreadStore.getState().activity[KEY]).toEqual({ at: 30, line: 'Cooler sky', nebula: false });
+    noteActivity(event(35));
+    expect(usePersonThreadStore.getState().activity[KEY]).toEqual({ at: 35, line: 'Cooler sky', nebula: false });
     noteActivity(event(5, 'old'));
-    expect(usePersonThreadStore.getState().activity[KEY].at).toBe(20);
+    expect(usePersonThreadStore.getState().activity[KEY].at).toBe(35);
   });
 
   it('reads "Personal agent" only while a session listens', () => {

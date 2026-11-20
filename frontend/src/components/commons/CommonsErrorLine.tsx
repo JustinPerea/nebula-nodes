@@ -1,6 +1,6 @@
 import { useContext, useLayoutEffect, useRef, type Ref } from 'react';
 import { isBecauseLine } from '../../lib/notConnectedLine';
-import { isBecauseFailure, isLoadLine, retryStem } from '../../lib/errorCopy';
+import { curlApostrophes, isBecauseFailure, isLoadLine, retryStem } from '../../lib/errorCopy';
 import { LineText } from '../LineText';
 import { CommonsLeaveFailure } from './commonsLeave';
 import { FOCUS_LINE_ATTR } from '../../lib/lineAttrs';
@@ -96,7 +96,7 @@ export function CommonsErrorLine({ line: given, className = '', as: Tag = 'p', o
       {stem === null ? <LineText text={words} /> : (
         <LineText text={line}>
           <span className="commons-notice__text">
-            {stem} <RetryButton onRetry={onRetry!} />.
+            {curlApostrophes(stem)} <RetryButton onRetry={onRetry!} />.
           </span>
         </LineText>
       )}

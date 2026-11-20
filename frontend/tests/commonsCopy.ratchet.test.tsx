@@ -276,7 +276,7 @@ describe('the close waits for a running grade, and offline', () => {
 
   it('only the grade line waits; another lock line never asks', async () => {
     vi.useFakeTimers();
-    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there’s nothing to close."));
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
     render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
     fireEvent.click(screen.getByText('Close without sealing…'));
     fireEvent.click(screen.getByText('Close without sealing'));
@@ -298,7 +298,7 @@ describe('the close waits for a running grade, and offline', () => {
     expect(reviewApi.get).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText('Cancel'));
     fireEvent.click(screen.getByText('Close without sealing…'));
-    api.close.mockRejectedValueOnce(failed(409, "These labels are sealed as blind ground truth, so there’s nothing to close."));
+    api.close.mockRejectedValueOnce(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
     fireEvent.click(screen.getByText('Close without sealing'));
     await settle();
     const sealed = 'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.';
@@ -684,7 +684,7 @@ describe('a lock line and offline together', () => {
   const SEALED = 'Nebula couldn’t close the batch because its labels were already sealed as blind ground truth. Reload to see them.';
   it('both reasons, the lock line first, the offline row only once it shows; the line stays through the reconnect', async () => {
     vi.useFakeTimers();
-    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there’s nothing to close."));
+    api.close.mockRejectedValue(failed(409, "These labels are sealed as blind ground truth, so there's nothing to close."));
     render(<><StudioOfflineRow /><CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} /></>);
     fireEvent.click(screen.getByText('Close without sealing…'));
     const close = screen.getByText('Close without sealing');

@@ -128,8 +128,9 @@ const PRIMARY_KINDS = new Set(['suggestion.accept', 'proposal.accept']);
 
 /** What a greyed update says in place of its edit actions, or null while they stand. */
 export function stateLabel(note: AgentNote, actionState?: (action: AgentNoteAction) => string | null): string | null {
-  // An asset proposal's Update: how the proposal ended, in place of Review.
-  if (note.outcome) return note.source === 'nebula' ? curlApostrophes(note.outcome) : note.outcome;
+  // An asset proposal's Update: how the proposal ended, in place of Review. The outcome is always Nebula's line (never the
+  // person's reason or the agent's note), whoever wrote the note, so it is curled whatever the note's source.
+  if (note.outcome) return curlApostrophes(note.outcome);
   if (note.resolvedAt) return 'Done';
   if (note.actedAt) return (note.actedWith && ACTED_STATE[note.actedWith]) || 'Done';
   if (dismissGreys(note)) return 'Not now';

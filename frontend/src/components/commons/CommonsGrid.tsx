@@ -114,7 +114,8 @@ export function CommonsGrid({ rows, selectedId, loading, emptyHint, onOpen, onDr
       ) : (
         <div ref={gridRef} className="commons-grid" role="listbox" aria-label="Commons results" onKeyDown={onKeyDown}>
           {rows.map((row, index) => {
-            const caption = curlApostrophes(row.summary ?? row.collection);
+            // Design: the model-read summary is prose and is curled; a collection name is a name the person chose, and stays as it is.
+            const caption = row.summary != null ? curlApostrophes(row.summary) : row.collection;
             const badges = tileBadges(row, proposed);
             return (
               <button

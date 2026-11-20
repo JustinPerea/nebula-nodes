@@ -100,8 +100,8 @@ export function chatErrorLine({ message, code, source, agentName }: {
   return because(lowerFirst(rest, names));
 }
 
-/** The agent's status hover: the CLI's own message (prose, curled where it shows) and the session. */
+/** The agent's status hover: the CLI's own message (prose, curled where it shows) and the session (a name, kept as it is). */
 export function agentStatusTitle(message: string | null | undefined, sessionTitle: string | null | undefined): string | undefined {
-  return curlApostrophes([message, sessionTitle].filter(Boolean).join(' · ')) || undefined;
+  return [message ? curlApostrophes(message) : message, sessionTitle].filter(Boolean).join(' · ') || undefined;
 }
 
