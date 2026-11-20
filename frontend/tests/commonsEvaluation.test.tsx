@@ -42,6 +42,8 @@ it('does not reveal palette until the server accepts accent observations', async
   await screen.findByText('Assign color roles');
   expect(api.accents).toHaveBeenCalledWith(0, 0, [], true);
   expect(screen.getByLabelText('Quiet – Loud').getAttribute('aria-valuetext')).toBe('Unanswered');
+  // After " · " the state continues the line in lower case (design); the slider's own value text stands alone.
+  expect(screen.getByText(/^Quiet – Loud · unanswered/)).toBeTruthy();
 });
 
 it('preserves unsaved labels when a stale revision is rejected', async () => {
