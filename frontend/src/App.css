@@ -12,10 +12,11 @@
   padding: 0;
 }
 
-/* Controls take the face and size of the page around them; the browser gives them Arial at 13.33px.
-   Zero specificity: any class that sets its own size, weight or family still wins (design). */
+/* Controls take the app's face and the skin's control size. A class that sets its own size keeps it,
+   because :where adds no specificity. Weight and line height stay the browser's (design). */
 :where(button, input, select, textarea) {
-  font: inherit;
+  font-family: inherit;
+  font-size: var(--sr-type-control);
 }
 
 /* The app face comes from the skin on body (body.app-slava-restraint, slava-restraint.css); this

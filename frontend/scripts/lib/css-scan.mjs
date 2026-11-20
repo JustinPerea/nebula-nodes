@@ -155,7 +155,7 @@ export function parseDeclarations(body, bodyStart) {
 
     const prop = part.slice(0, colon).trim().toLowerCase();
     const value = part.slice(colon + 1).trim();
-    const propOffset = bodyStart + offset + part.indexOf(prop);
+    const propOffset = bodyStart + offset + part.toLowerCase().indexOf(prop);
     declarations.push({ prop, value, offset: propOffset });
     offset += part.length + 1;
   }
