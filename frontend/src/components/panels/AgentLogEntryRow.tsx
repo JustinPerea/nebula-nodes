@@ -1,4 +1,4 @@
-import { writtenTime } from '../../lib/commonsFormat';
+import { writtenTime } from '../../lib/writtenDate';
 import type { AgentLogEntry } from '../../store/agentLogStore';
 
 /** One Agent log event row: the log's list, and a thread's opened "3 actions". */

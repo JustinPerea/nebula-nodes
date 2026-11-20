@@ -7,6 +7,7 @@ import { MARK_MODES, MARK_MODE_KEYS, type MarkMode } from './crabModes';
 import { useUIStore } from '../../store/uiStore';
 import { StudioOfflineRow } from '../StudioOfflineRow';
 import './BrandShowcase.css';
+import { aside } from '../../lib/labelAside';
 
 /**
  * Nebula Nodes — Dynamic Mark showcase.
@@ -54,7 +55,7 @@ const STATE_MAP: { mode: MarkMode; state: string; use: string }[] = [
   },
   {
     mode: 'drift',
-    state: 'Ambient · subtle',
+    state: aside('Ambient', 'subtle'),
     use: "Footer wordmark, distant marks. Motion you'd only notice if it stopped.",
   },
 ];

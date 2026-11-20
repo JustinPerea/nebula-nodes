@@ -13,7 +13,7 @@
  * (except where the name couldn't be read).
  */
 import type { CatalogRestore } from '../../lib/projects';
-import { writtenDate } from '../../lib/commonsFormat';
+import { writtenDay } from '../../lib/writtenDate';
 
 /** How many projects are named before a line gives a count. */
 export const RESTORE_NAMED_MAX = 3;
@@ -434,7 +434,7 @@ export function copyAge(copyAt: string | null | undefined, now: number = Date.no
   if (days < 2) return 'a day ago';
   if (days < 7) return `${days} days ago`;
   if (days < 14) return 'a week ago';
-  return writtenDate(new Date(at).toISOString(), new Date(now));
+  return writtenDay(new Date(at), new Date(now));
 }
 
 export interface CatalogRestoreNotice {

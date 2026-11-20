@@ -18,7 +18,7 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import { parseRepresentation, type ParsedRepresentation } from '../../lib/representationViewerRegistry';
 import { WorldPreview, WorldSplatPreview } from './DeferredViewers';
 import { previewSplat, splatAssetLabel, splatSourceLine, worldProviderName } from '../../lib/worldV2Splat';
-import { writtenDateTime } from '../../lib/commonsFormat';
+import { writtenDateTime } from '../../lib/writtenDate';
 import '../../styles/spatial-preview.css';
 
 interface ViewerOptions {

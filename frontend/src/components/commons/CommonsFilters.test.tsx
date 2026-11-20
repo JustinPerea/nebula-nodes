@@ -9,7 +9,7 @@ describe('CommonsFilters role select', () => {
     render(<CommonsFilters filters={EMPTY_FILTERS} collections={[]} onChange={() => {}} />);
     const select = screen.getByRole('combobox', { name: 'Role' }) as HTMLSelectElement;
     expect([...select.options].map((o) => [o.value, o.textContent])).toEqual([
-      ['', 'Any · avoid hidden'], ['attract', 'Attract'], ['avoid', 'Avoid'], ['evidence', 'Evidence'], ['neutral', 'Neutral'],
+      ['', 'Any\u00a0· avoid hidden'], ['attract', 'Attract'], ['avoid', 'Avoid'], ['evidence', 'Evidence'], ['neutral', 'Neutral'],
     ]);
   });
 });

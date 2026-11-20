@@ -24,11 +24,16 @@ const NUMBER_SETTINGS: { key: string; label: string; step: number }[] = [
   { key: 'load_threshold', label: 'Pause above load', step: 1 },
 ];
 
-/** "Last scan November 20, 3:00 AM · 3 added"; never scanned reads once, "Not scanned yet". */
+/**
+ * "Last scan November 20, 3:00 AM · 3 added" (design). A time with no summary reads "Last scan
+ * November 20, 3:00 AM"; a summary with no time keeps the prefix, "Last scan · 3 added", so the
+ * line still says what it reports; neither reads "Not scanned yet".
+ */
 function scanLine(link: FolderLink): string {
-  if (!link.last_scan_at) return link.last_scan_summary ? scanSummaryText(link.last_scan_summary) : 'Not scanned yet';
-  const when = `Last scan ${writtenDateTime(link.last_scan_at)}`;
-  return link.last_scan_summary ? `${when} · ${scanSummaryText(link.last_scan_summary)}` : when;
+  const when = link.last_scan_at ? `Last scan ${writtenDateTime(link.last_scan_at)}` : '';
+  if (!link.last_scan_summary) return when || 'Not scanned yet';
+  const counts = scanSummaryText(link.last_scan_summary);
+  return when ? `${when} · ${counts}` : `Last scan · ${counts}`;
 }
 
 function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<unknown>) => Promise<boolean> }) {
@@ -42,6 +47,7 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
       <label className="commons-field">
         Ignore
         <input
+          aria-describedby={link.ignores.length > 0 ? `commons-ignore-hint-${link.id}` : undefined}
           placeholder="Separate names with commas"
           key={link.ignores.join(',')}
           defaultValue={link.ignores.join(', ')}
@@ -53,8 +59,8 @@ function FolderRow({ link, run }: { link: FolderLink; run: (work: () => Promise<
             if (ignores.join(',') !== link.ignores.join(',')) void run(() => commonsApi.setIgnores(link.id, ignores));
           }}
         />
-        {link.ignores.length > 0 && <span className="commons-meta">Separate names with commas</span>}
       </label>
+      {link.ignores.length > 0 && <span id={`commons-ignore-hint-${link.id}`} className="commons-meta">Separate names with commas</span>}
       <p className="commons-meta">{scanLine(link)}</p>
       {pending.length > 0 && (
         <ul className="commons-list">

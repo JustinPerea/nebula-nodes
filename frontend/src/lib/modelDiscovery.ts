@@ -1,5 +1,6 @@
 import type { APIProvider, ModelNodeDefinition, NodeCategory, PortDefinition } from '../types';
 import { allParamDefinitions, directKeyNames, hasRoutes, PROVIDER_LABELS, routesOf, selectRoute } from './directRoute';
+import { aside } from './labelAside';
 
 export const CATEGORY_LABELS: Record<NodeCategory, string> = {
   'image-gen': 'Image Generation',
@@ -110,8 +111,8 @@ export function matchesModelSearch(definition: ModelNodeDefinition, query: strin
 }
 
 function concisePorts(ports: PortDefinition[], showOptional: boolean): string {
-  // A label's aside ("Guidance · optional") is left out, so an optional port reads "Guidance (optional)" once.
-  const labels = ports.slice(0, 3).map((port) => `${port.label.split(' · ')[0].trim()}${showOptional && !port.required ? ' (optional)' : ''}`);
+  // A label's own aside ("Guidance · optional") is left out, so an optional port reads that once, from here.
+  const labels = ports.slice(0, 3).map((port) => showOptional && !port.required ? aside(port.label.split(' · ')[0].trim(), 'optional') : port.label.split(' · ')[0].trim());
   if (ports.length > 3) labels.push(`${ports.length - 3} more`);
   return labels.join(' + ');
 }

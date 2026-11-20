@@ -8,6 +8,7 @@ import type { CinemaSceneSpec } from '../../types';
 import { CinemaLookControls, CinemaPaletteControls } from './CinemaArtDirectionControls';
 import { lockedAction, useCanvasLock } from '../../lib/canvasLock';
 import { LineText } from '../LineText';
+import { aside } from '../../lib/labelAside';
 
 interface CinemaSharedControlsProps {
   cinemaNodeId: string;
@@ -24,8 +25,8 @@ interface CinemaSharedControlsProps {
  *  (spec §2.3 / §5.3) — never FLUX.1-dev (license guard, spec §10). */
 const BASE_MODELS: Array<{ id: string; label: string }> = [
   { id: 'seedream-4-5', label: 'Seedream 4.5' },
-  { id: 'nano-banana', label: 'Nano Banana · Google' },
-  { id: 'nano-banana-fal-edit', label: 'Nano Banana Edit · FAL' },
+  { id: 'nano-banana', label: aside('Nano Banana', 'Google') },
+  { id: 'nano-banana-fal-edit', label: aside('Nano Banana Edit', 'FAL') },
   { id: 'flux-kontext', label: 'FLUX Kontext' },
 ];
 

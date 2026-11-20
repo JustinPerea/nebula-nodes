@@ -1,5 +1,6 @@
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { RunRecord } from '../../lib/runHistory';
+import { writtenDateTime } from '../../lib/writtenDate';
 
 /** Inputs and outputs belong to this historical run, never the current canvas. */
 export function PaperRunInspection({ record }: { record: RunRecord }) {
@@ -26,7 +27,7 @@ export function PaperRunInspection({ record }: { record: RunRecord }) {
               <img src={backendAssetUrlSync(snapshot.previewUrl)} alt={`Saved Paper input ${snapshot.identity.objectName} for run ${record.id}`} />
             </a>
             <code title={snapshot.hash}>SHA-256: {snapshot.hash}</code>
-            <span>{snapshot.capturedAt} · {snapshot.width} × {snapshot.height} · {snapshot.exportSettings.scale} PNG</span>
+            <span>{writtenDateTime(snapshot.capturedAt)} · {snapshot.width} × {snapshot.height} · {snapshot.exportSettings.scale} PNG</span>
           </div>
         );
       })}

@@ -1,4 +1,4 @@
-import { writtenDateTime } from '../../lib/commonsFormat';
+import { writtenDateTime } from '../../lib/writtenDate';
 import { useEffect, useId, useRef, useState } from 'react';
 import { commonsReviewApi as api, commonsEvaluationApi } from '../../lib/commonsApi';
 import type { EvaluationLabels } from '../../lib/commonsEvaluationTypes';

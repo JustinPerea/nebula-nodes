@@ -5,6 +5,7 @@ import type { CharacterDraft } from './CharacterStudioView';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { currentProject } from '../../lib/currentProject';
 import { useCanvasLock } from '../../lib/canvasLock';
+import { aside } from '../../lib/labelAside';
 
 interface CharacterTestPanelProps {
   /** The saved Character id, or null while the draft is still unsaved. */
@@ -85,7 +86,7 @@ export function CharacterTestPanel({
       </div>
 
       <label className="character-def__field">
-        <span className="character-def__label">Test prompt · guidance</span>
+        <span className="character-def__label">{aside('Test prompt', 'guidance')}</span>
         <input
           type="text"
           className="character-def__input"

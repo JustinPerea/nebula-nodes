@@ -57,9 +57,15 @@ const bad: Array<[string, string]> = [
   ['a label with a parenthesised aside in a string', `const a = 'Mode (beta)';`],
   ['an optional note in parentheses inside a sentence', `const a = <p>Name your board (optional) and save it.</p>;`],
   ['toLocaleString on a new Date', `const a = <p>{new Date(x).toLocaleString()}</p>;`],
+  ['toLocaleString on a camelCase At name', `const a = <p>{run.createdAt.toLocaleString()}</p>;`],
+  ['toLocaleString on a snake_case at name', `const a = <p>{link.last_scan_at.toLocaleString()}</p>;`],
+  ['a brand in parentheses after a label', `const a = <label>Claude (Anthropic)<input /></label>;`],
+  ['a provider in parentheses in a string', `const a = 'Model (Google)';`],
+  ['a plain space before the dot of an optional aside in JSX', `const a = <span>Moodboard · optional</span>;`],
+  ['a plain space before the dot of a default aside in a string', `const a = <span>{'10 · default'}</span>;`],
   ['toLocaleDateString on a date-named value', `const a = <p>{createdDate.toLocaleDateString()}</p>;`],
   ['toLocaleTimeString on an ...At property', `const a = <p>{entry.closedAt.toLocaleTimeString()}</p>;`],
-  ['toLocaleString on a time-named value', `const a = <p>{resetTime.toLocaleString()}</p>;`],
+  ['toLocaleString on a snake_case date name', `const a = <p>{status.resets_date.toLocaleString()}</p>;`],
   ['an Intl.DateTimeFormat', `const a = new Intl.DateTimeFormat(undefined, { month: 'short' }).format(d);`],
 ];
 const fine: Array<[string, string]> = [
@@ -97,6 +103,14 @@ const fine: Array<[string, string]> = [
   ['a property of a label-map lookup with a non-null assertion', `const a = <span className="commons-badge">{SIGHTING_STATE[s.state]!.label}</span>;`],
   ['a property of a badge call', `const a = <span className="commons-badge">{analysisBadge(x).label}</span>;`],
   ['a property of a label call', `const a = <span className="commons-badge">{enumValueLabel(f, v).length}</span>;`],
+  ['format.toLocaleString (a number format, not a date)', `const a = <p>{format.toLocaleString()}</p>;`],
+  ['a duration named elapsedTime', `const a = <p>{elapsedTime.toLocaleString()}</p>;`],
+  ['a timeout in ms', `const a = <p>{timeoutMs.toLocaleString()}</p>;`],
+  ['a unit written out', `const a = <label>Size (pixels)<input /></label>;`],
+  ['a unit in px', `const a = <label>Width (px)<input /></label>;`],
+  ['a count in parentheses', `const a = <h3>Images (3)</h3>;`],
+  ['a long count in parentheses', `const a = <h3>Images (1,204)</h3>;`],
+  ['the aside form with a no-break space', `const a = <span>{'Moodboard\u00a0· optional'}</span>;`],
   ['a label call with ?? and a capitalised fallback', `const a = <span className="commons-badge">{enumValueLabel(f, v) ?? 'Unknown'}</span>;`],
   ['a count after &&', `const a = <span className="commons-badge">{ok && count}</span>;`],
   ['a template with a capitalised head', 'const a = <span className="commons-badge">{`Inbox ${n}`}</span>;'],
@@ -116,7 +130,24 @@ const fine: Array<[string, string]> = [
   ['a written date', `const a = <p>{writtenDateTime(batch.closed_at)}</p>;`],
 ];
 
+// .ts files are read for the word check only.
+const badTs: Array<[string, string]> = [
+  ['a parenthesised default in a placeholder', `export const a = { placeholder: 'Rachel (default)' };`],
+  ['a parenthesised optional appended in a lib', "export const b = (l: string) => `${l} (optional)`;"],
+];
+const fineTs: Array<[string, string]> = [
+  ['a label shape in a .ts file (too noisy outside JSX)', `export const a = 'Claude (Anthropic)';`],
+  ['a middle-dot aside in a .ts file', `export const a = { placeholder: 'Rachel · default' };`],
+  ['a date formatter in a .ts file', `export const a = (d: Date) => d.toLocaleString();`],
+];
+
 describe('check-enum-labels', () => {
+  it.each(badTs)('fails %s', (_name, source) => {
+    expect(findEnumLabelHits(source, 'x.ts')).toHaveLength(1);
+  });
+  it.each(fineTs)('passes %s', (_name, source) => {
+    expect(findEnumLabelHits(source, 'x.ts')).toEqual([]);
+  });
   it.each(bad)('fails %s', (_name, source) => {
     expect(findEnumLabelHits(source)).toHaveLength(1);
   });

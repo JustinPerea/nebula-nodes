@@ -1,5 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ folders: vi.fn(), settings: vi.fn(), candidates: vi.fn() }));
 vi.mock('../src/lib/commonsApi', async (importOriginal) => ({
@@ -24,7 +24,9 @@ async function show(folders: unknown[]) {
   await screen.findByText('/x');
 }
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+// Only Date is faked, so the year in "November 20" stays the current one whenever this runs.
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 20, 9, 0)); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.useRealTimers(); });
 
 describe('the folder panel', () => {
   it('labels the ignore field "Ignore" with the hint as its placeholder', async () => {
@@ -35,14 +37,37 @@ describe('the folder panel', () => {
     expect(screen.queryByText('Separate names with commas')).toBeNull();
   });
 
-  it('keeps the hint under the field once it holds names', async () => {
+  it('keeps the hint under the field once it holds names, outside the label', async () => {
     await show([link({ ignores: ['.DS_Store'] })]);
-    expect(screen.getByText('Separate names with commas')).toBeInTheDocument();
+    const hint = screen.getByText('Separate names with commas');
+    expect(hint).toBeInTheDocument();
+    expect(hint.closest('label')).toBeNull();
+    // The accessible name stays "Ignore"; the hint is its description.
+    const field = screen.getByRole('textbox', { name: 'Ignore' });
+    expect(field).toHaveAccessibleDescription('Separate names with commas');
   });
 
   it('reads the last scan as a written date and time, with the count first', async () => {
     await show([link()]);
     expect(screen.getByText('Last scan November 20, 3:00 AM · 3 added')).toBeInTheDocument();
+  });
+
+  it('leaves unchanged files out: a rescan that found nothing reads "nothing new"', async () => {
+    await show([link({ last_scan_summary: { added: 0, unchanged: 120 } })]);
+    expect(screen.getByText('Last scan November 20, 3:00 AM · nothing new')).toBeInTheDocument();
+    cleanup();
+    await show([link({ last_scan_summary: { added: 3, unchanged: 120 } })]);
+    expect(screen.getByText('Last scan November 20, 3:00 AM · 3 added')).toBeInTheDocument();
+  });
+
+  it('reads a time with no summary as "Last scan <date>"', async () => {
+    await show([link({ last_scan_summary: null })]);
+    expect(screen.getByText('Last scan November 20, 3:00 AM')).toBeInTheDocument();
+  });
+
+  it('keeps the "Last scan" prefix when there is a summary and no time', async () => {
+    await show([link({ last_scan_at: null })]);
+    expect(screen.getByText('Last scan · 3 added')).toBeInTheDocument();
   });
 
   it('reads once when it was never scanned', async () => {

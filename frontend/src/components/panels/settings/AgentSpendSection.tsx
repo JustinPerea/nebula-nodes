@@ -20,6 +20,7 @@ import { useOfflineFirstBecause } from '../../../hooks/useOfflineFirstBecause';
 import { useNowUntil } from '../../../hooks/useBefore';
 import { AMOUNT_UNKNOWN, LEDGER_CANT_READ, holdFigure, holdOn, holdSentence, ledgerHoldLine } from '../../../lib/ledgerHold';
 import { usePersonView, useReadAsPerson } from '../../../hooks/useTabHeld';
+import { aside } from '../../../lib/labelAside';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
@@ -324,7 +325,7 @@ function PlanRunsSelect({ limits, disabled, onChange, lock }: {
         else next.kreaPlanRuns = value === 'none' ? null : Number(value);
         onChange(next);
       }}>
-      <option value={DEFAULT_CHOICE}>{DEFAULT_PLAN_RUNS} · default</option>
+      <option value={DEFAULT_CHOICE}>{aside(DEFAULT_PLAN_RUNS, 'default')}</option>
       <option value="0">Ask every time</option>
       {custom && <option value={current}>{own} run{own === 1 ? '' : 's'}</option>}
       {PLAN_RUN_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{choice} runs</option>)}

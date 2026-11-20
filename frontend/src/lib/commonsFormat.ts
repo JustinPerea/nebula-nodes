@@ -1,6 +1,8 @@
 import { analysisFailureIsNeutral } from './commonsAnalysisCopy';
-import { clockTime } from './clockTime';
 import { capitalised, type AnalysisState, type Collection } from './commonsTypes';
+import { writtenDay } from './writtenDate';
+
+export { writtenDay, writtenDateTime, writtenTime } from './writtenDate';
 
 export const STATE_LABELS: Record<AnalysisState, string> = {
   held: 'Held', queued: 'Queued', analyzing: 'Analyzing', analysis_failed: 'Failed', ready: 'Ready',
@@ -52,8 +54,6 @@ export function withCollection(list: readonly Collection[], created: Collection)
   return list.some((c) => c.id === created.id) ? [...list] : [...list, created];
 }
 
-const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
 /**
  * A stored date written out (design): "November 20", with the year only when it isn't the current
  * one ("November 20, 2025"). A timestamp ('…T02:00:00Z', a comment's `created_at`) is the person's
@@ -64,53 +64,9 @@ const LONG_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
  */
 export function writtenDate(stored: string, now: Date = new Date()): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(stored);
-  if (!match || !LONG_MONTHS[Number(match[2]) - 1]) return stored;
-  let year = Number(match[1]);
-  let month = Number(match[2]) - 1;
-  let day = Number(match[3]);
-  if (match[4]) {
-    const moment = new Date(stored);
-    if (!Number.isNaN(moment.getTime())) {
-      year = moment.getFullYear();
-      month = moment.getMonth();
-      day = moment.getDate();
-    }
-  }
-  const name = `${LONG_MONTHS[month]} ${day}`;
-  return year === now.getFullYear() ? name : `${name}, ${year}`;
-}
-
-type Moment = string | number | Date | null | undefined;
-
-function toMoment(stored: Moment): Date | null {
-  if (stored === null || stored === undefined || stored === '') return null;
-  const moment = stored instanceof Date ? stored : new Date(stored);
-  return Number.isNaN(moment.getTime()) ? null : moment;
-}
-
-/**
- * A stored moment written out with its time (design): "November 20, 3:00 AM", or
- * "November 20, 2025, 3:00 AM" when the year isn't the current one. Local time, no seconds, the clock
- * written "3:00 AM" in every locale (`clockTime`). A date with no time of day (`2026-11-20`) reads as
- * `writtenDate` does. A value that isn't a date reads as it came; null and undefined read ''.
- */
-export function writtenDateTime(stored: Moment, now: Date = new Date()): string {
-  if (stored === null || stored === undefined) return '';
-  if (typeof stored === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(stored)) return writtenDate(stored, now);
-  const moment = toMoment(stored);
-  if (!moment) return stored === '' ? '' : String(stored instanceof Date ? '' : stored);
-  const year = moment.getFullYear();
-  const day = `${LONG_MONTHS[moment.getMonth()]} ${moment.getDate()}${year === now.getFullYear() ? '' : `, ${year}`}`;
-  return `${day}, ${clockTime(moment)}`;
-}
-
-/** The time of day alone, "3:00 AM" (design: no seconds). A value that isn't a date reads as it
- *  came; null and undefined read ''. */
-export function writtenTime(stored: Moment): string {
-  if (stored === null || stored === undefined) return '';
-  const moment = toMoment(stored);
-  if (!moment) return stored instanceof Date ? '' : String(stored);
-  return clockTime(moment);
+  if (!match || +match[2] < 1 || +match[2] > 12) return stored;
+  const date = match[4] ? new Date(stored) : new Date(+match[1], +match[2] - 1, +match[3]);
+  return Number.isNaN(+date) ? stored : writtenDay(date, now);
 }
 
 /** What a folder scan's summary counts are called, in the order they read. Keys are the backend's
@@ -123,20 +79,21 @@ export const SCAN_COUNT_WORDS: Record<string, string> = {
   missing: 'missing',
   downloading: 'downloading',
   failed: 'failed',
-  unchanged: 'unchanged',
 };
 
 /**
  * A folder scan's summary as a line (design): the count first, "3 added · 2 changed". Known keys
  * read in the order above; an unknown key follows as "<n> <key with spaces>". A zero is left out,
  * and when nothing is left the line reads "nothing new". `failed` arrives as a list of files, so
- * its length is the count. Flags and other non-counts are not shown. No summary reads
+ * its length is the count. `unchanged` is left out: the line reports what is new, so a rescan that found nothing reads
+ * "nothing new" however many files were already known. Flags and other non-counts are not shown. No summary reads
  * "Not scanned yet".
  */
 export function scanSummaryText(summary: Record<string, unknown> | null | undefined): string {
   if (!summary) return 'Not scanned yet';
   const counts = new Map<string, number>();
   for (const [key, value] of Object.entries(summary)) {
+    if (key === 'unchanged') continue;
     if (typeof value === 'number' && Number.isFinite(value)) counts.set(key, value);
     else if (Array.isArray(value)) counts.set(key, value.length);
   }

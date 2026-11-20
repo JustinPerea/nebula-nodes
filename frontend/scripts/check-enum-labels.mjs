@@ -33,16 +33,33 @@ import ts from 'typescript';
 //      ("Save (Ctrl+S)") pass, as does a sentence with parentheses in the middle. A parenthesised
 //      "optional", "required", "beta", "experimental", "deprecated", "default" or "recommended"
 //      fails anywhere in a text;
+//      The word check ("(optional)" and the rest) also runs on every string in a .ts file under src
+//      (the node definitions' placeholders, the lib's summaries); the trailing-aside shape does
+//      not, outside JSX it is too noisy. A model or provider's own display name that other code
+//      strips or matches ("Jev Box (experimental)") is listed in ALLOWED_NAMES with its reason.
+//      The label shape passes a written-out unit ("Size (pixels)", "Duration (seconds)") and a
+//      count ("Images (3)"); a brand in parentheses ("Claude (Anthropic)") is an aside and fails;
 //   6. a date shown through `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` or
 //      `Intl.DateTimeFormat` where the receiver is a date (`new Date(x)`, or a name matching
-//      date, time, when, moment or an `...At` suffix): write it with `writtenDate`,
-//      `writtenDateTime` or `writtenTime` (lib/commonsFormat), spelled out with no seconds
-//      (design). Number formatting passes.
+//      date, when or moment, a camelCase `...At` or `...Date` suffix, or a snake_case `..._at`
+//      or `..._date`; `format` and `elapsedTime` are not dates): write it with `writtenDate`,
+//      `writtenDateTime` or `writtenTime` (lib/writtenDate), spelled out with no seconds
+//      (design). Number formatting passes;
+//   7. a plain " · " before "optional", "default", "required", "beta", "experimental",
+//      "deprecated" or "recommended" in a .tsx text: a label built in the aside form is written
+//      with `aside(label, note)` (lib/labelAside), whose space before the dot does not break, so
+//      the dot never strands at the end of a wrapped line. Stored labels in the node
+//      definitions keep the plain space (other code splits on it) and are .ts, not read here.
 // trash.ts's actorLabel already returns "you" and takes a `by` object; only a call whose
 // argument is a bare string actor (commonsFormat's) is read as the leading form. There is no
 // baseline: the check starts at zero.
 
 const SRC = join(process.cwd(), 'src');
+
+/** A model or provider's display name with a parenthesised word, which other code strips or matches. By file and the text. */
+export const ALLOWED_NAMES = [
+  { file: 'constants/nodeDefinitions.ts', value: 'Jev Box (experimental)', why: 'a model\'s display name: tests/lib/jev.test.ts and the backend\'s not-ready lines (fixtures/not_ready_reasons.json) quote it' },
+];
 
 /** An option that shows its value on purpose. By file (under src) and the value expression, with the reason. */
 export const ALLOWED = [
@@ -53,12 +70,13 @@ export const ALLOWED = [
   { file: 'components/cinema-studio/CinemaArtDirectionControls.tsx', value: 'value.method', why: 'the fallback for a palette method the app does not know (an older or newer scene file): shown as it is rather than hidden; outside Commons, for design to rule on' },
 ];
 
-function collectTsx(dir) {
+function collectSources(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) out.push(...collectTsx(full));
+    if (statSync(full).isDirectory()) out.push(...collectSources(full));
     else if (name.endsWith('.tsx') && !/\.test\.tsx$/.test(name)) out.push(full);
+    else if (name.endsWith('.ts') && !/\.(?:test|d)\.ts$/.test(name)) out.push(full);
   }
   return out;
 }
@@ -140,10 +158,17 @@ function attrExpression(attr, sf) {
 
 /** The hits in one source text: { line, reason }. */
 export function findEnumLabelHits(text, file = 'x.tsx') {
-  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  // A .ts file is read for its strings only: the JSX and date rules are the .tsx shapes.
+  const stringsOnly = file.endsWith('.ts');
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, stringsOnly ? ts.ScriptKind.TS : ts.ScriptKind.TSX);
   const hits = [];
   const at = (node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
   const visit = (node) => {
+    if (stringsOnly) {
+      parenAsideHit(node);
+      ts.forEachChild(node, visit);
+      return;
+    }
     if (ts.isJsxElement(node) && node.openingElement.tagName.getText(sf) === 'option') {
       const valueAttr = node.openingElement.attributes.properties
         .find((p) => ts.isJsxAttribute(p) && p.name.getText(sf) === 'value');
@@ -189,20 +214,30 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
   function parenAsideHit(node) {
     if (!TEXT_NODES.has(node.kind)) return;
     const text = node.text.replace(/\s+/g, ' ').trim();
+    if (!stringsOnly && /(?:^|[^\u00a0]) · (?:optional|required|beta|experimental|deprecated|default|recommended)\b/.test(node.text)) {
+      hits.push({ line: at(node), value: text, reason: `"${text}" builds the aside form with a plain space before the dot: write it with aside(label, note) (lib/labelAside) so the dot wraps with its note` });
+    }
     const flagged = /\((?:optional|required|beta|experimental|deprecated|default|recommended)\)/i.exec(text);
     if (flagged) {
-      hits.push({ line: at(node), value: text, reason: `"${flagged[0]}" in a person line: the note goes beside the label as an aside, or in a placeholder` });
+      hits.push({ line: at(node), value: text, reason: `"${flagged[0]}" in a person line: the note goes beside the label as an aside (" · optional"), or in a placeholder` });
       return;
     }
+    if (stringsOnly) return;
     const label = /^[A-Z][^()]{0,40}?\s\(([^()]+)\)[.?!…]?$/.exec(text);
     if (!label) return;
     const aside = label[1];
     if (/^[^\s()]{1,5}$/.test(aside)) return; // a unit: "Duration (s)"
+    if (/^[\d.,]+$/.test(aside)) return; // a count: "Images (3)"
+    if (WRITTEN_UNITS.test(aside)) return; // a unit written out: "Size (pixels)"
     if (/^(?:[A-Za-z⌘⌥⇧^]+\+)*[A-Za-z0-9⌘⌥⇧^]+(?: or (?:[A-Za-z⌘⌥⇧^]+\+)*[A-Za-z0-9⌘⌥⇧^]+)?$/.test(aside) && /[+⌘⌥⇧]|^(?:Ctrl|Cmd|Shift|Alt)/.test(aside)) return; // a key shortcut
     hits.push({ line: at(node), value: text, reason: `"${text}" has a parenthesised aside: a label reads as its name; put the note beside it as an aside or a placeholder` });
   }
+  const WRITTEN_UNITS = /^(?:pixels?|seconds?|minutes?|hours?|days?|milliseconds?|frames?|bytes?|kilobytes?|megabytes?|gigabytes?|percent|degrees?|characters?|words?|tokens?)$/i;
   const FORMATTERS = new Set(['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']);
-  const DATE_NAME = /(?:date|time|when|moment)|[a-z]At$|^at$/i;
+  // By name: date, when, moment (any case), a camelCase `...At` / `...Date` suffix (`createdAt`),
+  // a snake_case `..._at` / `..._date` (`last_scan_at`). `format` and a duration such as
+  // `elapsedTime` are not dates.
+  const DATE_NAME_CASED = (name) => /^(?:date|when|moment|at)$/i.test(name) || /[a-z](?:At|Date|Moment|When)$/.test(name) || /_(?:at|date)$/i.test(name);
   function nameOf(expr) {
     const n = unwrap(expr);
     if (ts.isIdentifier(n)) return n.text;
@@ -213,16 +248,16 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
     const n = unwrap(expr);
     if (ts.isNewExpression(n)) return n.expression.getText(sf) === 'Date';
     if (ts.isCallExpression(n)) return /^Date\.(now|parse)$/.test(n.expression.getText(sf)) || n.expression.getText(sf) === 'Date';
-    return DATE_NAME.test(nameOf(n));
+    return DATE_NAME_CASED(nameOf(n));
   }
   function dateFormatHit(node) {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
       && FORMATTERS.has(node.expression.name.text) && isDateReceiver(node.expression.expression)) {
-      hits.push({ line: at(node), value: exprText(node, sf), reason: `${node.expression.name.text}() on a date shows the browser's raw format: use writtenDate, writtenDateTime or writtenTime (lib/commonsFormat)` });
+      hits.push({ line: at(node), value: exprText(node, sf), reason: `${node.expression.name.text}() on a date shows the browser's raw format: use writtenDate, writtenDateTime or writtenTime (lib/writtenDate)` });
     }
     // new Intl.DateTimeFormat(...): its output is a date a person reads.
     if (ts.isNewExpression(node) && node.expression.getText(sf) === 'Intl.DateTimeFormat') {
-      hits.push({ line: at(node), value: exprText(node, sf), reason: 'Intl.DateTimeFormat in a person line: use writtenDate, writtenDateTime or writtenTime (lib/commonsFormat)' });
+      hits.push({ line: at(node), value: exprText(node, sf), reason: 'Intl.DateTimeFormat in a person line: use writtenDate, writtenDateTime or writtenTime (lib/writtenDate)' });
     }
   }
   /** The text just before a JSX expression, skipping whitespace-only siblings and `{' '}`. */
@@ -321,16 +356,22 @@ export function findEnumLabelHits(text, file = 'x.tsx') {
 function main() {
   const problems = [];
   const used = new Set();
-  for (const file of collectTsx(SRC)) {
+  const usedNames = new Set();
+  for (const file of collectSources(SRC)) {
     const rel = relative(SRC, file);
     for (const hit of findEnumLabelHits(readFileSync(file, 'utf8'), file)) {
       const allowed = ALLOWED.findIndex((a) => a.file === rel && a.value === hit.value);
+      const named = ALLOWED_NAMES.findIndex((a) => a.file === rel && a.value === hit.value);
       if (allowed >= 0) used.add(allowed);
+      else if (named >= 0) usedNames.add(named);
       else problems.push({ file: rel, ...hit });
     }
   }
   ALLOWED.forEach((a, i) => {
     if (!used.has(i)) problems.push({ file: a.file, line: 0, reason: `ALLOWED entry for ${a.value} no longer matches anything: delete it` });
+  });
+  ALLOWED_NAMES.forEach((a, i) => {
+    if (!usedNames.has(i)) problems.push({ file: a.file, line: 0, reason: `ALLOWED_NAMES entry for ${a.value} no longer matches anything: delete it` });
   });
   if (problems.length > 0) {
     console.error('check:enum-labels found person-facing stored values or a leading "You" mid-sentence:');

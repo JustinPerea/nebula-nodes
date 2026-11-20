@@ -1012,7 +1012,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '21m00Tcm4TlvDq8ikWAM',
-        placeholder: 'Rachel (default)',
+        placeholder: 'Rachel · default',
       },
       {
         key: 'similarity_boost',
@@ -1207,7 +1207,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Prompt',
         type: 'string',
         required: false,
-        placeholder: 'Guide the model (optional)',
+        placeholder: 'Guide the model · optional',
       },
     ],
   },
@@ -1424,7 +1424,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'string',
         required: false,
         default: '21m00Tcm4TlvDq8ikWAM',
-        placeholder: 'Rachel (default)',
+        placeholder: 'Rachel · default',
       },
       {
         key: 'model_id',

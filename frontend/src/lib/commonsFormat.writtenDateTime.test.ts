@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { scanSummaryText, writtenDateTime, writtenTime } from './commonsFormat';
+import { scanSummaryText, writtenDateTime, writtenDay, writtenTime } from './commonsFormat';
 
 // A fixed clock, and local-time inputs so the cases hold in any zone.
 const NOW = new Date(2026, 10, 20, 9, 30);
@@ -49,15 +49,17 @@ describe('writtenTime', () => {
     expect(writtenTime(new Date(2026, 10, 20, 0, 0).toISOString())).toBe('12:00 AM');
   });
 
-  it('reads a non-date as it came and null as nothing', () => {
-    expect(writtenTime('soon')).toBe('soon');
+  it('reads a non-date and null as nothing', () => {
+    expect(writtenTime('soon')).toBe('');
     expect(writtenTime(null)).toBe('');
   });
 });
 
 describe('scanSummaryText', () => {
   it('puts the count first and reads known keys in a fixed order', () => {
-    expect(scanSummaryText({ unchanged: 4, added: 3, changed: 2 })).toBe('3 added · 2 changed · 4 unchanged');
+    expect(scanSummaryText({ unchanged: 4, added: 3, changed: 2 })).toBe('3 added · 2 changed');
+    // Unchanged files are not news: a rescan that found nothing reads "nothing new".
+    expect(scanSummaryText({ added: 0, changed: 0, unchanged: 120 })).toBe('nothing new');
   });
 
   it('leaves out a zero, and reads "nothing new" when every count is zero', () => {
@@ -73,5 +75,12 @@ describe('scanSummaryText', () => {
 
   it('reads no summary as not scanned yet', () => {
     expect(scanSummaryText(null)).toBe('Not scanned yet');
+  });
+});
+
+describe('writtenDay', () => {
+  it('writes a Date out, with the year only when it is not the current one', () => {
+    expect(writtenDay(new Date(2026, 10, 20, 3), NOW)).toBe('November 20');
+    expect(writtenDay(new Date(2025, 0, 5, 3), NOW)).toBe('January 5, 2025');
   });
 });
