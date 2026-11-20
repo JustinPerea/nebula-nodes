@@ -24,6 +24,8 @@ import {
 // .commons-badge and .commons-source rules are held to the same rule, and box-shadow, text-shadow,
 // border-image and the other colour-bearing properties count. Known limit: a colour reached
 // through another custom property (`--x: var(--sr-accent)`) or set from TSX is not followed.
+// The no-accent check sees only a literal `var(--sr-accent…)`: a badge whose colour reads an alias
+// token (like `--evaluation-unsaved-ink`) is not checked for the accent.
 // CSS nesting under a badge selector is not read, so it fails.
 // Role badges (`commons-badge--role-*`: Attract, Avoid) are neutral by rule: design says a role is a
 // category, not good or bad news, so a role rule may not set color, border or background at all
@@ -108,6 +110,7 @@ export function findAccentBadges(source, file) {
 const NAMED_BADGES = new Set([
   'world-modal__status', 'moodboard-studio-toolbar__state', 'moodboard-view-switch__badge',
   'world-preview__badge', 'character-studio-toolbar__state', 'jev-result__badge', 'character-def__ref-badge', 'reference-set-node__role-badge',
+  'commons-unsaved',
 ]);
 const CLASS = /\.(-?[_a-zA-Z][\w-]*)/g;
 // Badges design moved off the accent, matched by the exact class so a sibling keeps its tone:

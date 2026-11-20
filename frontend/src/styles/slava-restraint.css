@@ -322,10 +322,8 @@ body.app-slava-restraint {
   /* Keyboard focus: a light neutral ring (GM - Design, sf). Orange already
    * means the agent and the primary action, so focus is drawn in the primary
    * type colour, which carries no meaning of its own and clears 3:1 on every
-   * dark surface (tests/focusRingCss.test.ts). The twin is for the one light
-   * surface a ring sits on: the Commons evaluation form. */
+   * dark surface (tests/focusRingCss.test.ts). */
   --sr-focus-outline: 2px solid var(--sr-ink);
-  --sr-focus-outline-on-light: 2px solid var(--sr-canvas);
   --sr-focus-offset: 2px;
 
   --sr-layer-panel: 10;
