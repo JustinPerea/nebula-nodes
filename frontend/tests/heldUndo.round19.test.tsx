@@ -152,7 +152,7 @@ describe('held Undo: a Clear, switches and imports, and param writes', () => {
     await settle();
   };
 
-  describe('H-A: a Clear is a canvas replacement', () => {
+  describe('a Clear is a canvas replacement', () => {
     it('a PUT held behind a slow undo never reaches the n2 an agent made after clearing', async () => {
       setProjectContext({ id: 'p1', revision: 'r1' });
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
@@ -435,7 +435,7 @@ describe('held Undo: a Clear, switches and imports, and param writes', () => {
       expect(stale()).toEqual([]);
     });
 
-    it('design\'s lines, word for word', () => {
+    it('the switch, import and agent cut-off-saving lines, word for word', () => {
       expect(savingCutOffLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', { kind: 'switch' }))
         .toBe("Nebula couldn’t save “Text” for “Hero prompt” in “Glass campaign”. It was still saving when you switched.");
       expect(savingCutOffLine([], 'Glass campaign', { kind: 'switch' }))
@@ -457,7 +457,7 @@ describe('held Undo: a Clear, switches and imports, and param writes', () => {
     });
   });
 
-  describe('M-A: typing that waited behind an undo, then Delete, the delete fails', () => {
+  describe('typing that waited behind an undo, then Delete, the delete fails', () => {
     it('the typing reaches Nebula, so the node comes back as the card shows it', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
@@ -493,7 +493,7 @@ describe('held Undo: a Clear, switches and imports, and param writes', () => {
     });
   });
 
-  describe('M-B: a failed delete puts back the wires Nebula has', () => {
+  describe('a failed delete puts back the wires Nebula has', () => {
     it('an agent wires the node while its delete is on its way; the delete fails: the wire is on the canvas', async () => {
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
       nebula().holdAnswers = true;
@@ -525,7 +525,7 @@ describe('held Undo: a Clear, switches and imports, and param writes', () => {
     });
   });
 
-  describe('M-C, L-C: a param write carries only the keys the person changed', () => {
+  describe('a param write carries only the keys the person changed', () => {
     it('the PUT body names the changed key alone', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'n1', note: 'x' } }]);
       type('n1', 'B');
@@ -582,7 +582,7 @@ describe('held Undo: a Clear, switches and imports, and param writes', () => {
     });
   });
 
-  describe('L-B: a restore that timed out', () => {
+  describe('a restore that timed out', () => {
     it('says design\'s line at the limit', async () => {
       start([textFakeNode('n1')]);
       type('n1', 'A'); await tick(1100);

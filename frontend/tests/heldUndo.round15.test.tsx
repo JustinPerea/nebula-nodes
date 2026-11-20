@@ -149,7 +149,7 @@ describe('a held Cmd+Z', () => {
   };
   const sameAsBackend = () => expect(cliIds()).toEqual(backend());
 
-  describe('M-A: one delete gesture comes back whole from one undo', () => {
+  describe('one delete gesture comes back whole from one undo', () => {
     it('an agent edit between the two echoes: one Cmd+Z restores both nodes, the next undoes Codex', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
@@ -330,7 +330,7 @@ describe('a held Cmd+Z', () => {
     });
   });
 
-  describe('L-A: an echo that empties the graph', () => {
+  describe('an echo that empties the graph', () => {
     it('delete the last node, type into it, the empty echo, Cmd+Z, the answer: the held press restores it', async () => {
       setGraph([textNode('n1')]);
       act(() => { store().deleteNode('n1'); }); await settle();
@@ -374,7 +374,7 @@ describe('a held Cmd+Z', () => {
     });
   });
 
-  describe('L-B: a clear supersedes only the presses issued before it', () => {
+  describe('a clear supersedes only the presses issued before it', () => {
     it('delete, Cmd+Z, clear, Cmd+Z: the first press goes, the second undoes the clear', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
@@ -403,7 +403,7 @@ describe('a held Cmd+Z', () => {
     });
   });
 
-  describe('L-C: a step taken while a clear is on its way', () => {
+  describe('a step taken while a clear is on its way', () => {
     it('held: clear, upload, Cmd+Z (the upload), the clear answers, the upload lands: the cleared node stays gone', async () => {
       setGraph([textNode('n1')]);
       const c = clearStep();
@@ -436,7 +436,7 @@ describe('a held Cmd+Z', () => {
     });
   });
 
-  describe("L-D: undoing a delete never removes a node it didn't add", () => {
+  describe("undoing a delete never removes a node it didn't add", () => {
     it('held: a reconnect sync drops the deleted node and adds an agent node; the undo keeps it', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
@@ -476,7 +476,7 @@ describe('a held Cmd+Z', () => {
     });
   });
 
-  describe('L-E: the echo is the truth', () => {
+  describe('the echo is the truth', () => {
     it('the echo took the node off, then the answer is 500: no failure line, the held Cmd+Z restores it', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();

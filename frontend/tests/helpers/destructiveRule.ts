@@ -34,7 +34,7 @@ export const ACTION_WORD = /\b(?:delet(?:e|es|ed|ing)|clear(?:s|ed|ing)?|discard
 const RED_SAYS = /\b(?:delet(?:e|es|ed|ing)|clear(?:s|ed|ing)?|discard(?:s|ed|ing)?|purg(?:e|es|ed|ing)|trash(?:es|ed|ing)?|empty|revok(?:e|es|ed|ing)|forget|wip(?:e|es|ed|ing)|uninstall(?:s|ed|ing)?|disconnect(?:s|ed|ing)?)\b/i;
 const NEUTRAL_SAYS = /\b(?:reset(?:s|ting)?|eras(?:e|es|ed|ing)|sign out)\b/i;
 /**
- * Red words on a control design's rule makes neutral (design: an edit inside the
+ * Red words on a control that design's rule makes neutral (design: an edit inside the
  * thing): a search or a filter cleared, and the comparison emptied. Each was
  * reviewed; a new one is a finding until it is added here.
  */
@@ -48,12 +48,12 @@ export const REVIEWED_NEUTRAL: Array<{ file?: string; name: RegExp }> = [
   // PR #199 (design): the kept notice's [Choose a project to delete]
   // opens the chooser; it deletes nothing (each Delete in it is red).
   { file: 'components/projects/KeptEditsNotice.tsx', name: /^Choose a project to delete$/ },
-  // moved the notice into its own lazy file (the first-load split).
+  // A later change moved the notice into its own lazy file (the first-load split).
   { file: 'components/projects/ProjectHomeNotices.tsx', name: /^Open Recently deleted$/ },
 ];
 
 const RED_WORDS = 'danger|destructive|delete|purge|trash|discard|clear|wipe|revoke|forget|bin|disconnect|uninstall';
-// `--neutral` declares the kind where no word fits (an agent's Sign out, design).
+// `--neutral` declares the kind where no word fits (an agent's Sign out, per design).
 const NEUTRAL_WORDS = 'remove|reset|erase|neutral';
 const RED_CLASS = new RegExp(`(?:^|[_-])(?:${RED_WORDS})$`, 'i');
 const NEUTRAL_CLASS = new RegExp(`(?:^|[_-])(?:${NEUTRAL_WORDS})$`, 'i');
@@ -488,8 +488,8 @@ function functionStrings(name: string, source: ts.SourceFile): string[] {
 }
 
 /**
- * What an icon-only control (no words at all) does, read from its code
- * Its icons (<Trash2 /> is "Trash") and the handlers it
+ * What an icon-only control (no words at all) does, read from its code:
+ * its icons (<Trash2 /> is "Trash") and the handlers it
  * calls (onClick={() => deleteProject(id)} is "delete Project").
  */
 /** Icons named for a tool, not its action (<Eraser /> erases). */

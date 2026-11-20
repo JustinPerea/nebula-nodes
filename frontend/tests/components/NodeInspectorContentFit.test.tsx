@@ -26,8 +26,8 @@ import { houseDots } from '../helpers/houseDots';
  * - "A pinned panel keeps its 440 px start and the person's own size."
  *
  * Design: "Cap to the BAND line (~612 at 1440x900), not the bar: the reserved
- * notice band wins; a notice covering Run/Duplicate/Delete is the overlap the
- * earlier ruling rules out. Unpinned only; pinned keeps its rule." So the bottom line is 12
+ * notice band wins; a notice covering Run/Duplicate/Delete is the overlap that
+ * rule 1 in NodeInspectorBand.test.tsx rules out. Unpinned only; pinned keeps its rule." So the bottom line is 12
  * px above the notice region's reserved band, not the bar.
  *
  * jsdom has no layout: the panel's header and foot (CHROME) and the body's
@@ -715,7 +715,7 @@ describe('the card growing under the panel', () => {
     expect(bounds().top).toBe(480 - 10 - 300);
   });
 
-  it('under the node, the card growing holds no top: a resize after it moves the panel at once (design: beside only)', () => {
+  it('under the node, the card growing holds no top: a resize after it moves the panel at once (the held top applies only beside the node)', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     chromeAt(1440, 1400);
     contentHeight = 185;
@@ -748,7 +748,7 @@ describe('the card growing under the panel', () => {
 });
 
 /**
- * The moves a reviewer's mutants showed untested. A zoom
+ * The moves the earlier mutation pass showed untested. A zoom
  * changes the card's size and its place together; a resize can land in the
  * same frame as a move. Both are moves: rigid, never the spring.
  */
@@ -787,7 +787,7 @@ describe('a move that comes with a size change', () => {
 });
 
 /**
- * Design: "hold the top, as the earlier ruling says. A move is read from
+ * Design: "hold the top, as the first ruling above says. A move is read from
  * the node's own box. A card offset change inside a node that hasn't moved
  * counts as growth: the top holds, the height springs, and the file row
  * stays under the pointer."
@@ -1714,7 +1714,7 @@ describe("the foot row's hairline while there is more below", () => {
  * Design: "the line waits until the open has settled.
  * It's hidden during the open (images complete + 2 frames, 300 ms cap), then
  * shows if there's more to scroll, on the pop spring. Add a test that an
- * empty Style Reference open never shows the line." And: "keep the hairline
+ * empty Style Reference open never shows the line." Design also said: "keep the hairline
  * on the pinned Inspector. Wherever a body scrolls, it's the same cue."
  *
  * A reviewer measured the empty Style Reference open live: the panel holds 531
@@ -2043,7 +2043,7 @@ describe('the hairline holds its state through a height spring', () => {
   });
 });
 
-describe('the pinned Inspector (unchanged)', () => {
+describe('the pinned Inspector keeps its own rules', () => {
   it('keeps its 440 px start whatever its content, and never springs', () => {
     useUIStore.getState().setInspectorPinned(true);
     chromeAt(1440, 900);

@@ -2,7 +2,7 @@
  * PR #203, as drawn:
  * - Design: the Accept button's description
  *   is the count chip's tooltip; its name stays the visible text.
- * - The mutants that survived it.
+ * - The mutants that survived an earlier mutation run.
  *   - The bar places canvas nodes' reasons left to right.
  *   - Line 1 has no inline style that could clip it.
  *   - The onboarding tour lets a closing dialog's focus return through.

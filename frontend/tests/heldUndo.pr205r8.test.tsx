@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205: a review of the held Undo (held-undo-order report).
+// PR #205: a review of the held Undo.
 // - A restore whose echo trails its answer, an agent's sync
 //   between that lacks the node: the canvas keeps it, and every Undo and Redo
 //   after leaves the canvas as Nebula has it.
@@ -360,7 +360,7 @@ describe("PR #205: the held Undo", () => {
     expect(cliIds()).toEqual([]);
   });
 
-  it('P-B\'s empty path: Claude deletes the only node, which a restore holds (a sync that empties the canvas, not a clear): its Undo brings it back', async () => {
+  it('an agent clear that empties the canvas: Claude deletes the only node, which a restore holds (a sync that empties the canvas, not a clear): its Undo brings it back', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }]);
     await restoreHeld();
     // Nebula names the same canvas: an agent's delete, not a clear.
@@ -379,7 +379,7 @@ describe("PR #205: the held Undo", () => {
     expect(cliIds()).toEqual([]);
   });
 
-  it('P-B\'s empty path, a refused Delete: Codex edits n1, Claude then deletes n1 and n2 (not a clear): the steps in Nebula\'s order, each Undo as Nebula', async () => {
+  it('an agent clear that empties the canvas, a refused Delete: Codex edits n1, Claude then deletes n1 and n2 (not a clear): the steps in Nebula\'s order, each Undo as Nebula', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }]);
     refuseDelete('n1');
     nebula().holdAnswers = true;

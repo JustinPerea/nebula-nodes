@@ -24,8 +24,7 @@ import { FakeNebula, canvasNode, textFakeNode } from './helpers/undoFakeBackend'
 // a wire made while the delete was out). Seeds:
 // UNDO_PROPERTY_REFUSE_SEEDS (default 30), from UNDO_PROPERTY_REFUSE_FIRST
 // (default 1); UNDO_PROPERTY_SKIP_REFUSE=1 / UNDO_PROPERTY_ONLY_REFUSE=1.
-// The clear variant (the reviewer's propclear
-// probe). An agent clears once at a random step (about 12% a step) and adds
+// The clear variant. An agent clears once at a random step (about 12% a step) and adds
 // 1-3 nodes that reuse ids n1…; the fake models Nebula's fence (no project or
 // an old canvas: 409, nothing applied). Undo and redo stop after the clear.
 // Checks: canvas = Nebula once everything lands, and no value typed before

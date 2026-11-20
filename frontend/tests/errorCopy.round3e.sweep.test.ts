@@ -109,7 +109,7 @@ describe("no surface says 'Could not' or 'failed:'", () => {
     const unexplained = [...found.entries()]
       .filter(([file, lines]) => lines.length > (ALLOWED[file]?.count ?? 0))
       .flatMap(([, lines]) => lines);
-    expect(unexplained, "write \"Couldn't {verb} {object}.\" then the reason (GM)").toEqual([]);
+    expect(unexplained, "write \"Couldn't {verb} {object}.\" then the reason (design)").toEqual([]);
   });
 
   it('the allowed list stays true', () => {

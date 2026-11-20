@@ -328,7 +328,7 @@ describe('held Undo: write admission, dead steps, node holds and restore limits'
       sameAsNebula();
     });
 
-    it('control (P-11): an echo from before the waiting undo still leaves the undo\'s value', async () => {
+    it('control: an echo from before the waiting undo still leaves the undo\'s value', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
       await tick(1100);

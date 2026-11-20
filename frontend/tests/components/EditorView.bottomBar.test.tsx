@@ -3,7 +3,7 @@
  * its top edge. A notice should never sit over a timeline being edited, even
  * one that shares its column."
  *
- * (design, on #181): "Trim editor: yes, publish the transport's top edge
+ * Design, on #181: "Trim editor: yes, publish the transport's top edge
  * as well, so notices sit over the preview's bottom edge. Cut, Vol and zoom
  * are being used while someone edits."
  *

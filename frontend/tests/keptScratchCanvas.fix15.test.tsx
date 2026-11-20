@@ -279,7 +279,7 @@ describe('kept first in the lock order', () => {
     expect(run).not.toHaveAttribute('data-offline-disabled');
   });
 
-  it('merge-integrity: unkept and offline, a control the run holds says the run’s line, not the offline one', () => {
+  it('unkept and offline, a control the run holds says the run’s line, not the offline one', () => {
     const props = lockedAction(canvasLockOf(null, true, false), { title: 'Generate', kept: 'generate' }, { verb: 'generate', run: true, runTitle: runFinishesLine('generate') });
     expect(props.title).toBe(runFinishesLine('generate'));
     expect(props.title).not.toBe(offlineReason('generate'));

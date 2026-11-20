@@ -16,6 +16,8 @@ import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } fr
 // - The ways an answer's wait ends: its sync, a later one, a restart, an
 //   unnumbered sync, another canvas; and the clear's and import's cleanup.
 // - A generator (1-4 agents, every hold kind, four socket orders).
+// - A refused Delete's connection under an agent's disconnect and delete. The
+//   person's refused rename against an agent's rename of a restore-held node.
 // The harness is a reviewer's: echoes and agent syncs share one socket queue,
 // each numbered when Nebula read the graph.
 
@@ -261,7 +263,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     return valueOf('n1') === value;
   };
 
-  // ---- S1: the restore brings n1 back; Claude's sync read before Nebula applied it lacks n1 ----
+  // ---- the restore brings n1 back; Claude's sync read before Nebula applied it lacks n1 ----
   const s1 = async (order: string) => {
     two();
     queueOnSock();
@@ -286,7 +288,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
       expect(nebula().ids()).toEqual(['n1', 'n2']);
     });
   }
-  it('ASL, no echo and no reconnect past 15 s: n1 stays as Nebula has it; the reconnect\'s sync then ends the hold', async () => {
+  it('no echo and no reconnect past 15 s: n1 stays as Nebula has it; the reconnect\'s sync then ends the hold', async () => {
     await s1('ASLC');
     expect(cliIds()).toEqual(['n1', 'n2']);
     expect(nebula().ids()).toEqual(['n1', 'n2']);
@@ -306,7 +308,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     expect(nebula().ids()).toEqual(['n1', 'n2']);
   });
 
-  // ---- S2: the restore applies, then Claude deletes n1 ----
+  // ---- the restore applies, then Claude deletes n1 ----
   for (const order of ['AES', 'EAS', 'ESA', 'ALSR', 'LSA', 'AEwS']) {
     it(`${order}: Claude's delete after the restore is Claude's step; its Undo brings n1 back with n1>n2`, async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }], [wire('n1', 'n2')]);
@@ -329,7 +331,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     });
   }
 
-  // ---- S3: Undo brings n1 back, Redo takes it off; with and without a stale sync ----
+  // ---- Undo brings n1 back, Redo takes it off; with and without a stale sync ----
   for (const [order, stale] of [['AEAE', false], ['AAEE', false], ['EAAE', false], ['SAEAE', true], ['ASAEE', true], ['AASEE', true], ['ASEAE', true], ['SAAEE', true]] as const) {
     it(`${stale ? 'stale ' : ''}${order}: two restores of n1 each wait for their own sync; n1 ends off, as in Nebula`, async () => {
       two();
@@ -352,7 +354,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     });
   }
 
-  // ---- S3b: two Undos of n1: one brings it back, one puts back its typed value ----
+  // ---- two Undos of n1: one brings it back, one puts back its typed value ----
   for (const order of ['AASEE', 'ASAEE', 'SAAEE', 'ASEAE', 'SAEAE']) {
     it(`${order}: the second restore's answer never ends the first's hold; Claude's Redo keeps n1`, async () => {
       two();
@@ -377,7 +379,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     });
   }
 
-  // ---- S5: the person's Delete; Claude's rename of n1 read before Nebula applied it trails the answer ----
+  // ---- the person's Delete; Claude's rename of n1 read before Nebula applied it trails the answer ----
   for (const order of ['SAE', 'ASE', 'SEA', 'AwSE', 'AES']) {
     it(`${order}: Claude's rename is its own step under the Delete; no Undo or Redo of Claude's changes n1's presence`, async () => {
       two();
@@ -404,7 +406,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     });
   }
 
-  // ---- S6: the Redo takes n1 off; Claude's rename of n1 read before Nebula applied it ----
+  // ---- the Redo takes n1 off; Claude's rename of n1 read before Nebula applied it ----
   for (const order of ['SAE', 'ASE', 'SEA', 'ASLR', 'ASCE']) {
     it(`${order}: the stale copy never brings n1 back`, async () => {
       two();
@@ -426,7 +428,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
       await walkChecked({ Claude: {} });
     });
   }
-  it('ASL, no echo past 15 s: n1 stays off as Nebula has it', async () => {
+  it('no echo past 15 s: n1 stays off as Nebula has it', async () => {
     two();
     queueOnSock();
     await deleteLanded('n1');
@@ -448,7 +450,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     expect(cliIds()).toEqual(['n2']);
   });
 
-  // ---- W9c: the restore brings back n1 and n1>n2; 1-3 stale agent syncs ----
+  // ---- the restore brings back n1 and n1>n2; 1-3 stale agent syncs ----
   const w9c = async (stale: number, order: 'ASE' | 'SAE', viaWait: boolean) => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, { ...textFakeNode('n3'), params: { value: 'x0' } }], [wire('n1', 'n2')]);
     queueOnSock();
@@ -676,7 +678,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     sameAsNebula();
     expect(nebula().wires()).toEqual(['n1>n2']);
   });
-  it('Fc: a refused Delete of n1 (n1>n2); Codex sets n1; Claude deletes n2: Codex\'s Undo leaves n1>n2 as Nebula had it', async () => {
+  it('a refused Delete of n1 (n1>n2); Codex sets n1; Claude deletes n2: Codex\'s Undo leaves n1>n2 as Nebula had it', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, textFakeNode('n3')], [wire('n1', 'n2')]);
     refuseDelete('n1');
     nebula().holdAnswers = true;
@@ -696,7 +698,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     expect(nebula().valueOf('n1')).toBe('v0');
     expect(nebula().wires()).toEqual(['n1>n2']);
   });
-  it('Fa: a refused Delete of n1; Claude connects n1>n3; Codex deletes n3: two steps; Codex\'s Undo brings n3 back with n1>n3', async () => {
+  it('a refused Delete of n1; Claude connects n1>n3; Codex deletes n3: two steps; Codex\'s Undo brings n3 back with n1>n3', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2'), textFakeNode('n3')]);
     refuseDelete('n1');
     nebula().holdAnswers = true;
@@ -718,7 +720,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     await redo(); sameAsNebula(); expect(nebula().wires()).toEqual(['n1>n3']);
     await redo(); sameAsNebula(); expect(nebula().ids()).toEqual(['n1', 'n2']);
   });
-  it('Fa2: the same with Claude\'s connect synced twice (one edit): its Undo still takes n1>n3 off', async () => {
+  it('the same with Claude\'s connect synced twice (one edit): its Undo still takes n1>n3 off', async () => {
     start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2'), textFakeNode('n3')]);
     refuseDelete('n1');
     nebula().holdAnswers = true;
@@ -738,7 +740,7 @@ describe('PR #205: no sync older than an edit Nebula answered OK undoes it', () 
     expect(nebula().wires()).toEqual([]);
   });
   for (const restoreFirst of [true, false]) {
-    it(`Fb ${restoreFirst ? 'restore answers first' : 'refusal first'}: Codex connects n1>n2 to a refused-Delete n2; Claude deletes n1: Claude's Undo brings n1 back with n1>n2`, async () => {
+    it(`${restoreFirst ? 'restore answers first' : 'refusal first'}: Codex connects n1>n2 to a refused-Delete n2; Claude deletes n1: Claude's Undo brings n1 back with n1>n2`, async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, textFakeNode('n3')]);
       await deleteLanded('n1');
       nebula().holdAnswers = true;

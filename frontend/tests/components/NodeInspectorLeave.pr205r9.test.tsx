@@ -111,7 +111,7 @@ describe('the shown node leaves while others stay selected', () => {
     expect(view()).toEqual({ pinned: false, visible: true, open: true, title: 'a' });
   });
 
-  it('control (P2): one of two selected leaves, the shown one stays: it shows the shown one', () => {
+  it('control: one of two selected leaves, the shown one stays: it shows the shown one', () => {
     openOn('a');
     shiftClick('b');
     click('a');

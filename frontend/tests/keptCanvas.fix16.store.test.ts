@@ -9,7 +9,7 @@
  * - Design: an update while kept: Save and Discard reload.
  * - The project limit (Justin, 2026-10-31, replacing design's limit line):
  *   the person's kept save asks to pass it, as a restore may.
- * - Review findings on the busy state, the lock order and the lazy restore copy.
+ * - The busy state (one for Save and Discard), the lock order (kept, run, following, offline) and the lazy restore copy.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';

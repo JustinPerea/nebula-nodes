@@ -114,7 +114,7 @@ describe('a run started on a graph that was replaced before its start answered',
 // another tab's) is a graphSync with `cleared: true`, not `graphReplaced`
 // (same project, same revision; ids start again at n1). The canvas counts it
 // as a replacement for its runs, so a start refused after it doesn't mark
-// the agent's new n1 (a reviewer's runcanvas_clear_probe: it went to error).
+// the agent's new n1 (a reviewer's probe: it went to error).
 const RESTARTED = 'The canvas was cleared or replaced since, so nothing was changed. Read the canvas again and send the change again if it still fits.';
 describe('a backend Clear before a start answers', () => {
   it.each([

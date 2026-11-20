@@ -9,7 +9,7 @@ import type { NodeData } from '../src/types';
 //   edit (two deletes: one Cmd+Z undoes the second delete).
 // Each press binds to its own step: the second press to the step below
 //   the first one's. The notice says what happened: a restore's line, and
-//   Design's "1 undo was skipped while a change was saving." when some presses
+//   design's "1 undo was skipped while a change was saving." when some presses
 //   went through and some didn't.
 // Design's dropped line shows after the person's own project switch
 //   and beside the agent's change notice after an agent loads a graph
@@ -117,7 +117,7 @@ describe('a held Cmd+Z', () => {
     undoStack: [], redoStack: [], undoNotice: null, lateNotice: null, messageNotice: null,
     providerRecoveries: [], providerStartAmbiguities: [] } as never);
 
-  it("design's mixed-batch words, verbatim", () => {
+  it("the skipped-undo line for a mixed batch, verbatim", () => {
     expect(skippedUndoText(1)).toBe('1 undo was skipped while a change was saving.');
     expect(skippedUndoText(2)).toBe('2 undos were skipped while a change was saving.');
     expect(SKIPPED_UNDO_TEXT).toBe(skippedUndoText(1));
@@ -154,7 +154,7 @@ describe('a held Cmd+Z', () => {
     expect(restores()).toHaveLength(0);
   });
 
-  it('answers in reverse order: the second delete is undone too', async () => {
+  it('two quick deletes, answers in reverse order: the second delete is undone too', async () => {
     setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
     act(() => { store().deleteNode('n1'); }); await settle();
     act(() => { store().deleteNode('n2'); }); await settle();
@@ -256,7 +256,7 @@ describe('a held Cmd+Z', () => {
     expect(notice()).toBe(DROPPED_UNDO_TEXT);
   });
 
-  it("an agent loads a graph into this project while a delete is held: the held press is dropped with design's line", async () => {
+  it("an agent loads a graph into this project while a delete is held: the held press is dropped with the dropped-undo line", async () => {
     setGraph([textNode('n1'), textNode('n2')]);
     act(() => { store().deleteNode('n2'); }); await settle();
     await undo();
@@ -290,7 +290,7 @@ describe('a held Cmd+Z', () => {
     expect(message()).toBe(DROPPED_UNDO_TEXT);
   });
 
-  it("Clear canvas held: own echo, an agent adds n1, the answer: dropped with design's line; two presses restore", async () => {
+  it("Clear canvas held: own echo, an agent adds n1, the answer: dropped with the dropped-undo line; two presses restore", async () => {
     setGraph([textNode('n1', 'Hero'), textNode('n2')], [wire('n1', 'n2')]);
     const step = store().beginUndoStep();
     await undo();
@@ -378,7 +378,7 @@ describe('a held Cmd+Z', () => {
     expect(stacks()).toEqual({ undo: 0, redo: 2 });
   });
 
-  it("delete held, own echo removes the node, an agent adds n3, the answer: dropped with design's line", async () => {
+  it("delete held, own echo removes the node, an agent adds n3, the answer: dropped with the dropped-undo line", async () => {
     setGraph([textNode('n1'), textNode('n2')]);
     act(() => { store().deleteNode('n2'); }); await settle();
     await undo();
@@ -402,7 +402,7 @@ describe('a held Cmd+Z', () => {
     expect(stacks()).toEqual({ undo: 0, redo: 1 });
   });
 
-  it("delete held, Cmd+Z, an agent adds n3, Cmd+Z, the answer: both held presses are dropped under Codex's edit with design's line", async () => {
+  it("delete held, Cmd+Z, an agent adds n3, Cmd+Z, the answer: both held presses are dropped under Codex's edit with the dropped-undo line", async () => {
     setGraph([textNode('n1'), textNode('n2')]);
     act(() => { store().updateNodeData('n1', { params: { value: 'E1' } }); });
     act(() => { store().deleteNode('n2'); }); await settle();
@@ -600,7 +600,7 @@ describe('a held Cmd+Z', () => {
     expect(ids()).toEqual(['n1', 'n2', 'n3']);
   });
 
-  it('(redo) the restore\'s redo deletes n1 again and never brings back the second delete\'s node', async () => {
+  it('redo: the restore\'s redo deletes n1 again and never brings back the second delete\'s node', async () => {
     setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
     act(() => { store().deleteNode('n1'); }); await settle();
     await undo();
@@ -693,7 +693,7 @@ describe('a held Cmd+Z', () => {
     expect(ids()).toEqual(['n1', 'n3']);
     expect(notice() === DROPPED_UNDO_TEXT || message() === DROPPED_UNDO_TEXT).toBe(true);
   });
-  it('and with each echo before its answer (as the live app has them): the same outcomes', async () => {
+  it('the two-delete cases with each echo before its answer (as the live app has them): the same outcomes', async () => {
     setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
     act(() => { store().deleteNode('n1'); }); await settle();
     act(() => { store().deleteNode('n2'); }); await settle();

@@ -43,15 +43,15 @@ const PINNED_RED = { hex: '#d03030', role: 'pinned', share: null, level: 'confli
 // A bundle from handlers/moodboard.py after #90, default clash mode, notes off.
 const BUNDLE = {
   kind: 'nebula_moodboard',
-  moodboardId: 'mb-gm',
-  name: 'GM Harbor',
+  moodboardId: 'mb-harbor',
+  name: 'Silver Harbor',
   mode: 'look',
   strength: 0.7,
   images: [{ id: 'a', url: '/api/outputs/moodboards/a.png', weight: 1, notes: '', excluded: false }],
   notes: '',
   notesSent: false,
   analysis: { palette: ['#2b2f36', '#8a8f99', '#1c70f2'], accents: [] },
-  styleBrief: "Silver tonalist palette, blue cornflowers. Use the Nebula moodboard 'GM Harbor' as look direction.",
+  styleBrief: "Silver tonalist palette, blue cornflowers. Use the Nebula moodboard 'Silver Harbor' as look direction.",
   negativePrompt: 'blurry, low-detail artifacts, red, orange or pink flowers',
   avoid: ['red, orange or pink flowers'],
   avoidPrompt: 'Keep these out of the image: red, orange or pink flowers, colors close to #00ff00.',

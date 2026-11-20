@@ -360,7 +360,7 @@ describe("PR #205: held edits in one pass, in Nebula's order", () => {
   });
 
   describe('a refused rename leaves no trace on a held copy', () => {
-    it.each([['500', 500], ['409', 409], ['a network failure', 0]] as const)('(%s): the canvas ends as Nebula, and Codex\'s Undo and Redo never write the refused name', async (_label, status) => {
+    it.each([['500', 500], ['409', 409], ['a network failure', 0]] as const)('a refused rename answered %s: the canvas ends as Nebula, and Codex\'s Undo and Redo never write the refused name', async (_label, status) => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       fake.override = (path, init) => {
         if (init?.method === 'DELETE' && path === '/api/graph/node/n1') return nebula().later('refused n1', () => new Response(JSON.stringify({ detail: 'It is running.' }), { status: 409 }));
@@ -467,7 +467,7 @@ describe("PR #205: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  describe('already on main: the late restore (P-A) and the clear (P-B)', () => {
+  describe('already on main: the late restore and the clear', () => {
     it('a restore Nebula applied answers after the limit, Claude connected and renamed n1 meanwhile: no Undo deletes n1', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       store().onNodesChange([{ id: 'n1', type: 'remove' }]);
@@ -556,7 +556,7 @@ describe("PR #205: held edits in one pass, in Nebula's order", () => {
     });
   });
 
-  describe('item 6: typing queued behind a restore, then undone', () => {
+  describe('typing queued behind a restore, then undone', () => {
     it('the typing\'s save is answered before the Undo\'s restore goes: Nebula ends where the canvas does, with no failed-save line', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'h0' } }]);
       store().onNodesChange([{ id: 'n1', type: 'remove' }]);

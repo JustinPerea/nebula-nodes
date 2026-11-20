@@ -6,7 +6,7 @@ import type { NodeData } from '../src/types';
  * Placeholders on the canvas: the flag is the backend's, so a
  * graphSync without it clears it here; the person's undo and redo send it
  * back as the step had it; and a Run that skipped placeholders says so in
- * Design's line (2026-10-25, verbatim).
+ * design's line (2026-10-25, verbatim).
  */
 
 vi.mock('../src/lib/wsClient', () => ({

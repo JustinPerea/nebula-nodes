@@ -24,7 +24,7 @@ function rule(file: string, selector: string): string {
 
 afterEach(cleanup);
 
-describe('Settings: the Daily total row (design)', () => {
+describe("Settings: the Daily total row, as design's review words it", () => {
   const row = (spentUsd: number | null, dailyTotalUsd?: number | null) => render(
     <DailyTotalRow limits={{ sessionUsd: null, models: {}, ...(dailyTotalUsd === undefined ? {} : { dailyTotalUsd }) }}
       spentUsd={spentUsd} disabled={false} onChange={() => {}} />);

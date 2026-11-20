@@ -16,7 +16,7 @@ import { useUIStore } from '../../src/store/uiStore';
  * the space between the floating top chrome (the selection toolbar) and the
  * bottom bar, with 12 px clear of each", and design sets that bottom line:
  * "Cap to the BAND line, not the bar: the reserved notice band wins; a notice
- * covering Run/Duplicate/Delete is the overlap the earlier ruling rules out. Unpinned only;
+ * covering Run/Duplicate/Delete is the overlap rule 1 above rules out. Unpinned only;
  * pinned keeps its rule." So the unpinned panel keeps 12 px clear of the
  * toolbar and of the band, and rule 1 above still holds for it. The pinned
  * Inspector keeps both rules above as they were.
@@ -122,7 +122,7 @@ afterEach(() => {
 });
 
 describe('the floating Inspector and the reserved notice band (12 px clear of the band)', () => {
-  it("design's setup: it ends above the band, so a notice never covers its foot row", () => {
+  it("the setup from design's report: it ends above the band, so a notice never covers its foot row", () => {
     viewport(1280, 800);
     const { bandTop } = barAndBand(1280, 800);
     header(1280);

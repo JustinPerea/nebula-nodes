@@ -228,7 +228,7 @@ function openProject(id: string, nodes: Node<NodeData>[], runs: RunRecord[] = []
   expect(useGraphStore.getState().loadProjectGraph(nodes, [], runs)).toBe(true);
 }
 
-describe('copy in one project, paste in another (Justin, P2: "copy the node moodboards live in to a different project")', () => {
+describe('copy in one project, paste in another (Justin: "copy the node moodboards live in to a different project")', () => {
   it('Cmd+C in A, open B, Cmd+V adds the nodes with params intact and outputs cleared; undo in B removes them', () => {
     openProject('A', [moodboardNode('n1'), { ...node('A', 'n2'), selected: true }]);
     useGraphStore.setState({ edges: [{ id: 'e1', source: 'n1', sourceHandle: 'moodboard', target: 'n2', targetHandle: 'in' }] });

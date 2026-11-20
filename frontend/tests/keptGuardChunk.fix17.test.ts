@@ -4,7 +4,7 @@
  * `npm run build` after the budget, fails the build when the kept unload
  * guard or the kept fallback line leaves the entry chunk or lands in the lazy
  * catalogRestoreCopy chunk. Here against small build folders of its shape;
- * the real build was checked when this was written (notes).
+ * the real build was checked when this was written.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

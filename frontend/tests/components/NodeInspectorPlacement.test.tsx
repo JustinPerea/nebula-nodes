@@ -116,7 +116,7 @@ afterEach(() => {
 });
 
 describe('the floating Inspector beside a node low on the screen', () => {
-  it('design\'s setup: shifts up so it ends above the bottom bar, still beside the node', () => {
+  it('the setup from design\'s report: shifts up so it ends above the bottom bar, still beside the node', () => {
     // The cover screenshot: a Text Input at 575-657 x 437-527 at 1280x800.
     openBeside(rect(575, 437, 82, 90));
     expect(panel()).toHaveAttribute('data-placement', 'right');

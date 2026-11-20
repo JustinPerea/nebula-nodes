@@ -346,7 +346,7 @@ describe('two open tabs', () => {
   });
 });
 
-describe('the canvas names the edit its undo step came from (U1)', () => {
+describe('the canvas names the edit its undo step came from', () => {
   // n2's params, so the person's typing on n1 in earlier tests (kept until
   // its save lands) can't hide the agent's change.
   const wide = () => ({ ...imageNode('n2'), data: { ...imageNode('n2').data, params: { aspect_ratio: '16:9' } } });

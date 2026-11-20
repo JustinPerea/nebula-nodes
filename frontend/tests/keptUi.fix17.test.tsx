@@ -3,7 +3,7 @@
  * - b: a node added while kept has a tab-local id no agent can address, so
  *   its id slot is empty (its room kept) until it has a real `nN` id.
  * - c: on such a node the selection bar shows Note and Ask, both locked with
- *   Design's lines (Note is no longer hidden: hiding it shifted the bar), and
+ *   design's lines (Note is no longer hidden: hiding it shifted the bar), and
  *   both Run buttons, the selection bar's and the bottom bar's, are locked
  *   through the shared lock with "You can run nodes after you save it as a
  *   project.".

@@ -77,8 +77,8 @@ describe('the palette list shows every swatch, then the Add row', () => {
   });
 });
 
-// The floating Inspector's height (it took the whole palette before its body
-// scrolled, design) is now the same content-fit rule for every body (design:
+// The floating Inspector's height (design's earlier rule: it took the whole palette before its body
+// scrolled) is now the same content-fit rule for every body (design:
 // "Drop ... the palette exception"): NodeInspectorContentFit.test.tsx. Here,
 // with the real Inspector (#226): its palette sits in the
 // box the popover measures, and swatches added on the real control change
@@ -176,7 +176,7 @@ describe('the floating Inspector with the real Inspector and a palette', () => {
   });
 });
 
-describe("the palette's read-only × and Extract (folded)", () => {
+describe("the palette's read-only × and Extract", () => {
   const css = (name: string) => readFileSync(resolve(__dirname, `../../src/styles/${name}`), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rules = (text: string) => [...text.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
 

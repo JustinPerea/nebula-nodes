@@ -188,7 +188,7 @@ const askToReopen = async () => {
 };
 
 describe('the World Labs line names the press', () => {
-  it('design’s line, quoting the notice button’s own label', () => {
+  it('the reopen line for a World Labs run quotes the notice button’s own label', () => {
     expect(reopenHoldLine('Glass campaign', 'alpha', AMBIGUITY_ALPHA as never)).toBe(WL);
     expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'uncertain' })).toBe(WL);
     expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'uncertain' })).toContain(`press “${UNLOCK_LABEL}”.`);
@@ -293,7 +293,7 @@ describe('the reload line, with its subject, true until the reload', () => {
   const OF = (name: string) => `Nebula couldn’t save your changes because it was updated. Reload Nebula and they’ll open in a recovered copy of “${name}”.`;
   const relist = (names: Array<[string, string]>) => useProjectStore.setState({ projects: names.map(([id, name]) => summary(id, name)) });
 
-  it('design’s subject: “Nebula couldn’t save your changes because it was updated.”', async () => {
+  it('the reload line names its subject: “Nebula couldn’t save your changes because it was updated.”', async () => {
     vi.mocked(projects.recoverProject).mockResolvedValue({ ...project('copy-1', 'Recovered Shot 7 copy'), sourceName: 'Shot 7' });
     update();
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBe(OF('Shot 7')));

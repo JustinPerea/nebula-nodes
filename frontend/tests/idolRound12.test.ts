@@ -1,5 +1,5 @@
 /**
- * PR #203: design, and a reviewer's copy and settings items.
+ * PR #203: design's rulings and a reviewer's copy and settings items.
  *
  * - Design: "~$0.13 · 1 may cost", pinned on the Run chip.
  * - Design: person lines say "Krea API key", as the row does.

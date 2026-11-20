@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Justin, 2026-10-25: on every way the canvas runs the
- * person's direct run, a Cinema shot (the panel's
+ * person's direct run: a Cinema shot (the panel's
  * Generate) and a replay of a node run or a shot from Run history make the
  * placeholders feeding them run, so a paid one asks first in design's dialog and
  * the run carries what the person confirmed. A shot is priced as the one shot

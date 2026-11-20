@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205: a review of the agent steps under a hold, and design.
+// PR #205: a review of the agent steps under a hold, and design's rulings.
 // - Two agent edits to a node an Undo's restore holds:
 //   the canvas keeps Nebula's connections, one step per edit;
-//   a refused Delete's connections (R6, R12, and an earlier link's).
+//   a refused Delete's connections (a multi-node refused Delete, a Codex-then-Claude pair, and an earlier link's).
 // - The chain's intermediate connections, the order across
 //   nodes, and the selection after an agent step's Undo.
 // - Design: a sync with no origin (a reconnect's) is someone's, held

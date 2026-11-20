@@ -1,8 +1,8 @@
 /**
- * PR #203: design.
+ * PR #203: design's later rulings.
  *
- * - Item 3: the Krea mode label is "API key · API balance".
- * - Item 6: the not-ready nodes follow the shared rule: up to 3 a line each,
+ * - The Krea mode label is "API key · API balance".
+ * - The not-ready nodes follow the shared rule: up to 3 a line each,
  *   from 4 one line that counts them ("4 nodes can’t run here yet.").
  * Design: every provider's notices say its own noun, the word its
  * link uses ("Replicate token saved."). The

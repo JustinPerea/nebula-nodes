@@ -3,7 +3,7 @@
  * "Every error alert becomes a canvas notice (non-blocking, dismissable),
  * using the words you listed. A native alert stops the whole canvas over
  * something that needs no answer." The size and "saved without" alerts become
- * notices with design's words. (The delete confirm kept is gone since
+ * notices with design's words. (The delete confirm that stayed is gone since
  * undo puts back everything a delete removed: tests/undoRestoresDeletes.test.tsx.)
  *
  * The notice is the canvas's own (CanvasUndoNotice, the graph store's
@@ -71,6 +71,6 @@ describe('design\'s size and "saved without" lines', () => {
   });
 });
 
-// The delete confirm kept is gone: undo now puts back everything a
+// The delete confirm that stayed is gone: undo now puts back everything a
 // delete removed, and every delete path says "Deleted the node." with Undo
 // (design, 2026-10-23; tests/undoRestoresDeletes.test.tsx).

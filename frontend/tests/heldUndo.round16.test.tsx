@@ -7,7 +7,7 @@ import type { NodeData } from '../src/types';
 // canvas ends where Nebula's graph does: a fake backend applies each delete
 // (its answer), each sync (it is the backend's graph then), each clear and
 // each restore, in the order they reach it.
-// M-A follow-up and L-1 (coordinator's decision): an undo removes only the
+// Coordinator's decision: an undo removes only the
 //   node ids its own step added. A step taken between a multi-node delete's
 //   echoes (typing) never takes back a node the delete's undo restored, and
 //   a typing step never takes off a node a sync brought.
@@ -149,7 +149,7 @@ describe('an undo takes off only what its step added; no silent Cmd+Z', () => {
   };
   const sameAsBackend = () => expect(cliIds()).toEqual(backend());
 
-  describe('M-A follow-up: a step taken between a delete\'s echoes', () => {
+  describe('a step taken between a delete\'s echoes', () => {
     it('typing between the echoes; Cmd+Z x2 then Cmd+Shift+Z x2', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
@@ -418,7 +418,7 @@ describe('an undo takes off only what its step added; no silent Cmd+Z', () => {
       sameAsBackend();
     });
 
-    it("control: a refused delete's own line stays where it was; the press held on it says nothing beside it", async () => {
+    it("control (as in heldUndo.round14's refused-delete case): a refused delete's own line stays where it was; the press held on it says nothing beside it", async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       type('n1', 'E1');
       act(() => { store().deleteNode('n2'); }); await settle();

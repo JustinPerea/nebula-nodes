@@ -13,7 +13,7 @@
  *   surface's element and writes its words as a text node right before its hidden anchor; with a
  *   class it registers its own span. So the words must be that text node (or inside that span),
  *   not another text beside a LineText in the same parent.
- * - Data-agent-text counts only on the two Update texts.
+ * - The data-agent-text attribute counts only on the two Update texts.
  * - A "connected as you" line in a `title` (a tooltip) or an `aria-label` is never right.
  */
 import { LINE_ATTR, registeredLines } from '../../src/lib/notConnectedLine';

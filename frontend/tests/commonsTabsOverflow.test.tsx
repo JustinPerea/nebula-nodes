@@ -23,7 +23,7 @@ vi.mock('../src/components/commons/CommonsMedia', () => ({ CommonsMedia: () => n
 const { CommonsView } = await import('../src/components/commons/CommonsView');
 const { useUIStore } = await import('../src/store/uiStore');
 
-// Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 beforeEach(() => {
   useUIStore.setState({ viewMode: 'commons', commonsEnabled: true, commonsReturnView: 'canvas' });

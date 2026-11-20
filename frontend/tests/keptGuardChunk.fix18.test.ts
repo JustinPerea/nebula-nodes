@@ -47,7 +47,7 @@ describe('the check finds the kept guard itself', () => {
     expect(run(`${OTHER_GUARD};${KEPT_GUARD};${KEPT_LINE}`, 'export const a=1;').ok).toBe(true);
   });
 
-  // (PR #199): the bundler may put what the entry and the lazy chunks
+  // PR #199: the bundler may put what the entry and the lazy chunks
   // share in a common chunk the entry imports, which loads as early as it does.
   it('the kept guard in a chunk the entry imports statically passes, one reached only by a dynamic import does not', () => {
     const entry = (link: string) => `import{a}from"./${link}";${OTHER_GUARD};`;

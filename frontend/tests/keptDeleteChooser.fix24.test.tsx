@@ -46,7 +46,7 @@ afterEach(() => {
   useProjectStore.setState(initialProject, true);
 });
 
-describe('the lines, verbatim', () => {
+describe('the project-limit and storage-cap lines, verbatim', () => {
   it('the three kept-save refusals match', () => {
     expect(keptLimitLine(3, 3)).toBe(AT_LIMIT);
     expect(keptLimitLine(2, 1)).toBe('Nebula couldn’t save your edits as a project because you have 2 projects, over the limit of 1. Delete 2 projects, and Nebula saves your edits.');

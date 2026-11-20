@@ -137,7 +137,7 @@ describe('held Undo: an agent\'s clear, a backend restart and a refused delete',
     empty: nebula().nodes.size === 0, workspaceRevision: 'r1', canvasRevision: canvas, ...extra });
 
   describe("an agent's clear says what it dropped", () => {
-    it('CLR1: typing still in its debounce: never sent, and named', async () => {
+    it('typing still in its debounce: never sent, and named', async () => {
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n2', 'Typed');
@@ -149,7 +149,7 @@ describe('held Undo: an agent\'s clear, a backend restart and a refused delete',
       expect(lines()).toContain("Codex cleared the canvas while you were editing “Text” for “n2”. That change wasn’t saved.");
     });
 
-    it('CLR2: a PUT on its way that Nebula refuses for the old canvas is named', async () => {
+    it('a PUT on its way that Nebula refuses for the old canvas is named', async () => {
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
       refuse((path, init) => path === '/api/graph/node/n2' && init?.method === 'PUT', 409, STALE_CANVAS_DETAIL);
@@ -250,7 +250,7 @@ describe('held Undo: an agent\'s clear, a backend restart and a refused delete',
       expect(lines()).toEqual([]);
     });
 
-    it("RST as the reviewer wrote it: a sync with no edit whose revision moved but whose canvas didn't keeps the typing", async () => {
+    it("a sync with no edit whose revision moved but whose canvas didn't keeps the typing", async () => {
       // Only when Nebula says it lost its revisions.
       setProjectContext({ id: 'p1', revision: 'r1', canvas: '2' });
       start([textFakeNode('n1'), textFakeNode('n2')]);
@@ -370,7 +370,7 @@ describe('held Undo: an agent\'s clear, a backend restart and a refused delete',
     expect(useUIStore.getState().selectedNodeId).toBeNull();
   });
 
-  it('DR (L4): two drains at once: the save that landed is cut off for neither', async () => {
+  it('two drains at once: the save that landed is cut off for neither', async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2')]);
     nebula().holdAnswers = true;
@@ -444,7 +444,7 @@ describe('held Undo: an agent\'s clear, a backend restart and a refused delete',
     });
   });
 
-  it("(seed 84's shape): a delete from before an agent's clear never drops the typing on the new node with its id", async () => {
+  it("a delete from before an agent's clear never drops the typing on the new node with its id (seed 84's shape)", async () => {
     setProjectContext({ id: 'p1', revision: 'r1', canvas: '0' });
     start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
     nebula().holdAnswers = true;

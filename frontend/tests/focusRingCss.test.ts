@@ -386,7 +386,7 @@ describe('a field that clears its outline gets the token ring back on focus', ()
 
 // Design: the ring "stays clear of orange and the lime unread ring". The Updates
 // chip draws its unread ring outside itself (::after at a negative inset), so
-// a 2px ring at the 2px offset painted over half of it (review of sf). While
+// a 2px ring at the 2px offset painted over half of it. While
 // the unread ring shows, the focus ring sits outside it with a 1px gap.
 describe('the focus ring clears the Updates chip\'s unread ring', () => {
   const FILE = 'components/agent-notes/agentNotes.css';
@@ -403,7 +403,7 @@ describe('the focus ring clears the Updates chip\'s unread ring', () => {
     // The ring covers outer - width .. outer px outside the chip.
     const base = find('.agent-notes-chip:focus-visible');
     expect(decl(base!, 'outline')).toMatch(TOKEN_OUTLINE);
-    expect(px(decl(base!, 'outline-offset')), 'the chip keeps GM\'s 2px offset without the unread ring').toBe(2);
+    expect(px(decl(base!, 'outline-offset')), 'the chip keeps design\'s 2px offset without the unread ring').toBe(2);
     const ringed = find('.agent-notes-chip--ringed:focus-visible');
     expect(ringed, 'a ringed chip moves its focus ring out').toBeTruthy();
     expect(px(decl(ringed!, 'outline-offset'))).toBeGreaterThanOrEqual(outer + 1);

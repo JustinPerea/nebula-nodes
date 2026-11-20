@@ -1,7 +1,7 @@
-// PR #199, lane B: a refused delete brings its node back as it was at the press only when
+// PR #199: a refused delete brings its node back as it was at the press only when
 // the person hasn't moved on. Moving on is either half alone: inspecting
 // another node with no canvas selection, or selecting another node on
-// the canvas with nothing inspected. An earlier test (SEL) changes both at once,
+// the canvas with nothing inspected. The earlier test in heldUndo.round20.test.tsx ("a refused delete after the person moved on comes back unselected") changes both at once,
 // so it can't tell the halves apart.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';

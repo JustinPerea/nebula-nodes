@@ -33,7 +33,7 @@ const INPUTS = 'Nebula couldn’t connect two inputs. Drag from an output to an 
 describe('a drop on a handle of the same kind', () => {
   const nodes = [node('t', 'text-input'), node('t2', 'text-input'), node('s', 'seedream-4-5'), node('s2', 'seedream-4-5')];
 
-  it('design’s two lines, verbatim', () => {
+  it('the two same-kind drop lines, verbatim', () => {
     expect(SAME_KIND_DROP_LINES).toEqual({ source: OUTPUTS, target: INPUTS });
   });
 

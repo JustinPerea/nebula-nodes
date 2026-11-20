@@ -143,7 +143,7 @@ describe('focus the person moved counts as moving on; focus Nebula moved doesn\u
     expect(nodeOf('n2')?.selected ?? false).toBe(false);
   });
 
-  it('Nebula moved focus itself (to a line, after a timer): n2 comes back selected and inspected, focus not stolen (G4)', async () => {
+  it('Nebula moved focus itself (to a line, after a timer): n2 comes back selected and inspected, focus not stolen', async () => {
     await deleteRefusedLater();
     await tick(50);
     chat.focus(); // no input from the person: Nebula's own move

@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205: a review of the agent's step under a Delete, and design.
+// PR #205: a review of the agent's step under a Delete, and design's rulings.
 // - An agent's rename after the person's own rename
-//   landed is kept through a Delete and its Undo (A3, A3b; both orders).
+//   landed is kept through a Delete and its Undo (both orders).
 // - Design: each agent edit during a Delete is its
 //   own step with its own line, newest first, never merged across agents,
 //   on a Delete that goes through and on one Nebula refuses.
@@ -296,7 +296,7 @@ describe('PR #205: the agent edits under a Delete', () => {
 
     it('the person connects n1 to n2, then deletes n1 at once; Codex\'s sync lacks it: Undo brings the connection back', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
-      // As U7p: Nebula read Codex's sync before the person's writes.
+      // As in the test above where the person takes a connection off: Nebula read Codex's sync before the person's writes.
       nebula().nodes.get('n1')!.params = { value: 'AGENT' };
       nebula().holdAnswers = true;
       nebula().holdEchoes = true;

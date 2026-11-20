@@ -3,7 +3,7 @@ import { act } from '@testing-library/react';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// PR #205: a reviewer's held-undo findings and design's.
+// PR #205: a reviewer's held-undo findings and design's ruling.
 // A Delete partly refused brings back, and names, only what left.
 // A held press handed to the step below its Delete (that Delete
 //   changed nothing) is no longer "held on a Delete": its refusal says the

@@ -95,7 +95,7 @@ describe('the selection toolbar while the canvas is kept', () => {
     expect(download).toHaveAttribute('title', 'Download 1 selected output');
   });
 
-  it("design's lines, verbatim; Ask names the chat's agent, unquoted", () => {
+  it("the kept toolbar lines, verbatim; Ask names the chat's agent, unquoted", () => {
     // A later design ruling replaced the earlier "You can add notes…".
     expect(keptLockTitle('note')).toBe('You can leave a note after you save it as a project.');
     expect(keptLockTitle('settings')).toBe('You can change settings after you save it as a project.');

@@ -6,7 +6,7 @@ import type { NodeData } from '../src/types';
 /**
  * Design (PR #203): nothing on the canvas runs until the Hugging Face
  * token is added. The toolbar's Run is locked (aria-disabled, focusable)
- * with the canvas's line, and reads it out as its scope line (item 3);
+ * with the canvas's line, and reads it out as its scope line;
  * Cmd+Enter and the palette's "Run graph" (both executeGraph) show that line
  * as a neutral one-line notice and send nothing. An Idol node next to other
  * nodes locks the whole run.

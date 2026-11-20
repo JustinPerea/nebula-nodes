@@ -109,7 +109,7 @@ describe('the node card\'s general line', () => {
     const person = 'Add a fal.ai API key in Settings to run this node.';
     expect(nodeErrorCopy({ raw: RAW, category: 'auth', person, provider: 'fal.ai' }).reason).toBe(`Nebula couldn’t run the node. ${person}`);
     const friendly = 'fal.ai is having trouble right now. Try again in a few minutes.';
-    // A classified failure takes the category's clause with the provider named (design D18), not the backend's words.
+    // A classified failure takes the category's clause with the provider named (design), not the backend's words.
     expect(nodeErrorCopy({ raw: RAW, category: 'network', friendly, provider: 'fal.ai' }).reason)
       .toBe('Nebula couldn’t run the node because fal.ai isn’t answering. Check your connection, then try again.');
   });

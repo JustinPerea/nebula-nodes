@@ -9,7 +9,7 @@
 // person's delete and Undo): Codex's edit to another field…" lost it on #219
 // (Undo dropped, its waitFor timed out at 3 s). A fixed sleep between the
 // delete and the Undo is the same race with a deadline (PR #221:
-// fix24 and fix21stops A2 failed with the answer stalled 350 ms).
+// fix24 and fix21stops failed with the answer stalled 350 ms).
 // Tests wait on helpers/deleteLanded.ts instead.
 //
 // The check, read from each test file's syntax tree, so
@@ -24,8 +24,8 @@
 //   (PR #221). So toBe(true), toBeTruthy(), toEqual(true),
 //   `if (!x.deleted) throw …`, `expect(x.deleted === true)` and
 //   `waitUntil(() => x.deleted)` are all caught.
-// - Wait before Undo (inverted: it names what makes a wait
-//   safe, not the waits that aren't): in one block, a delete, then any wait,
+// - Wait before Undo (stated as what makes a wait
+//   safe, not as the waits that aren't): in one block, a delete, then any wait,
 //   then an Undo, with no landing between the delete and the Undo.
 //   - A delete: deleteNode, deleteNodes, deleteSelected, or the Delete or
 //     Backspace key (`{ key: 'Delete' }` in fireEvent, `{Delete}` in

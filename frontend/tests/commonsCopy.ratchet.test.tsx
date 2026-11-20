@@ -20,7 +20,7 @@
  *    line and offline both reasons, the line first, the row once it shows; a retry line goes
  *    offline for good; the grade wait follows the pane's poll and stops offline.
  * Focus here is asserted under tests/helpers/focusFixup (Chrome's focus fixup).
- * The table below is the one design rules.
+ * The table below holds the design rules.
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,7 +75,7 @@ const settle = (ms = 10) => act(async () => { await vi.advanceTimersByTimeAsync(
 /** The studio's offline row opens 1 s after Nebula goes offline (StudioOfflineRow), plus a frame. */
 const STUDIO_ROW_MS = 1_100;
 
-// Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 const fixup = withFocusFixup();
 beforeEach(() => {
   document.body.className = 'app-slava-restraint';

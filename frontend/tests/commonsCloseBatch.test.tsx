@@ -7,7 +7,7 @@ import { RequestFailedError } from '../src/lib/errorCopy';
 const api = vi.hoisted(() => ({ close: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api, commonsReviewApi: { get: vi.fn(async () => null) } }));
 
-// Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 const fixup = withFocusFixup();
 beforeEach(() => { vi.clearAllMocks(); api.close.mockResolvedValue({ state: 'closed' }); });
 afterEach(() => cleanup());

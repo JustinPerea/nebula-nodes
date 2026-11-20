@@ -109,11 +109,11 @@ describe('a held Cmd+Z is bound to the step it was pressed for', () => {
   const setGraph = (nodes: Node<NodeData>[], edges: Edge[] = []) => useGraphStore.setState({ nodes, edges, isExecuting: false,
     undoStack: [], redoStack: [], undoNotice: null, messageNotice: null, providerRecoveries: [], providerStartAmbiguities: [] } as never);
 
-  it("design's words, verbatim", () => {
+  it("the dropped-undo notice, verbatim", () => {
     expect(DROPPED_UNDO_TEXT).toBe('Nothing was undone. Your last change was still saving.');
   });
 
-  it('(control) a delete whose answer lands after an agent edit: the held press waits silently, then is dropped under the newer edit; then Codex\'s edit, then the delete, are undone in turn', async () => {
+  it('control: a delete whose answer lands after an agent edit: the held press waits silently, then is dropped under the newer edit; then Codex\'s edit, then the delete, are undone in turn', async () => {
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); });
     await settle();
@@ -174,7 +174,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for', () => {
     expect(dropped()).toBe(true);
   });
 
-  it('(live) Clear canvas with Codex adding n1 mid-clear: nothing lost, two presses bring the canvas back', async () => {
+  it('live: Clear canvas with Codex adding n1 mid-clear: nothing lost, two presses bring the canvas back', async () => {
     setGraph([textNode('n1', 'Hero prompt'), textNode('n2', 'Second prompt')], [wire('n1', 'n2')]);
     const step = store().beginUndoStep();
     ownSync([]);
@@ -196,7 +196,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for', () => {
     expect(stacks()).toEqual({ undo: 0, redo: 2 });
   });
 
-  it("answer first: the clear's answer before its echo still empties the canvas and is undone by the held press", async () => {
+  it("Clear canvas with Codex adding n1 mid-clear, answer first: the clear's answer before its echo still empties the canvas and is undone by the held press", async () => {
     setGraph([textNode('n1', 'Hero prompt'), textNode('local', 'Local')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });

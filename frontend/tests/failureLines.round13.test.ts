@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * With design's lines (verbatim). A cancelled
+ * Design's lines, verbatim. A cancelled
  * step's held Cmd+Z goes to nothing, and the failure that cancelled it says
  * why. Three failures used to say nothing at all:
  * - chat /clear: "Couldn't clear the canvas. Nothing was removed." when the

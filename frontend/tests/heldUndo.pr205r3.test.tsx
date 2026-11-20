@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205: a review of the newest-synced-copy restore, and design.
+// PR #205: a review of the newest-synced-copy restore, and design's rulings.
 // - Typing never sent (and a rename on its way) is
 //   kept in the Delete's step when the DELETE answers before the "node gone"
 //   sync (both orders, both paths: the held Undo and one after).

@@ -44,7 +44,7 @@ function linesWithoutRetry(source: string, name: string): number {
   return count;
 }
 
-// Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 withFocusFixup();
 afterEach(() => { cleanup(); resetLinesForTests(); });
 

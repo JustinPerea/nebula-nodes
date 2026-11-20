@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * provider's settings failed; a missing key names the key to add, after
  * Design's "Couldn't set up “X”."; a malformed id is "Couldn't set up “X”.".
  *
- * (The earlier header, kept below for the shared mocks:) With design's lines (verbatim). A cancelled
+ * (failureLines.round13.test.ts's header, kept below for the shared mocks:) Design's lines, verbatim. A cancelled
  * step's held Cmd+Z goes to nothing, and the failure that cancelled it says
  * why. Three failures used to say nothing at all:
  * - chat /clear: "Couldn't clear the canvas. Nothing was removed." when the
