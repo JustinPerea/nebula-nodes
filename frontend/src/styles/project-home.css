@@ -54,7 +54,9 @@ body.app-slava-restraint .project-home h2 { display: flex; align-items: center; 
 body.app-slava-restraint .project-home__count { color: var(--sr-ink-light); font: 11px var(--sr-mono); }
 body.app-slava-restraint .project-home__search { display: flex; align-items: center; gap: 8px; width: min(100%, 236px); min-height: 38px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); }
 body.app-slava-restraint .project-home__search svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--sr-ink-meta); }
-body.app-slava-restraint .project-home__search input { width: 100%; min-width: 0; padding: 9px 0; border: 0; background: transparent; color: var(--sr-ink); font: 12px var(--sr-ui); }
+body.app-slava-restraint .project-home__search input { width: 100%; min-width: 0; padding: 9px 0; border: 0; outline: none; background: transparent; color: var(--sr-ink); font: 12px var(--sr-ui); }
+/* Design: the field is bare inside its box, so the box takes the focus ring. */
+body.app-slava-restraint .project-home__search:has(input:focus-visible) { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 body.app-slava-restraint .project-home__search input::placeholder { color: var(--sr-ink-light); }
 body.app-slava-restraint .project-home__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px; }
 body.app-slava-restraint .project-home__card { min-width: 0; border: 1px solid var(--sr-edge); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); transition: border-color var(--sr-motion-fast), background var(--sr-motion-fast); }

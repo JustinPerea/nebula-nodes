@@ -352,7 +352,9 @@ const CLEARED: Record<string, string> = {
   'styles/create-studio.css::body.app-slava-restraint .param-pill__number':
     'body.app-slava-restraint .param-pill:has(:is(.param-pill__select, .param-pill__number):focus-visible)',
   'styles/create-studio.css::body.app-slava-restraint .model-picker__search input':
-    'body.app-slava-restraint .model-picker input:focus-visible',
+    'body.app-slava-restraint .model-picker__search:has(input:focus-visible)',
+  'styles/project-home.css::body.app-slava-restraint .project-home__search input':
+    'body.app-slava-restraint .project-home__search:has(input:focus-visible)',
   'styles/jev-result.css::body.app-slava-restraint .model-node__jev-field .model-node__jev-input':
     'body.app-slava-restraint .model-node__jev-field .model-node__jev-input:focus-visible',
   'styles/moodboard-studio.css::body.app-slava-restraint .moodboard-color': 'body.app-slava-restraint .moodboard-color:focus-visible',
