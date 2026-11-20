@@ -113,7 +113,7 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--sr-mono);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;

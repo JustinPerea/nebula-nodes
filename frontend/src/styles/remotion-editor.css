@@ -369,7 +369,7 @@ body.app-slava-restraint .remotion-properties-panel__type {
 
 body.app-slava-restraint .remotion-properties-panel__id {
   color: var(--sr-ink-light);
-  font-family: monospace;
+  font-family: var(--sr-mono);
 }
 
 body.app-slava-restraint .remotion-properties-panel__section h4 {
@@ -453,7 +453,7 @@ body.app-slava-restraint .remotion-properties-panel__keyframe-group {
 
 body.app-slava-restraint .remotion-properties-panel__keyframe-prop {
   color: var(--sr-ink);
-  font-family: monospace;
+  font-family: var(--sr-mono);
   font-size: 11px;
 }
 
