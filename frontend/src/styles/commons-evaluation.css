@@ -45,6 +45,7 @@
   /* The review meters fill in ink, not the accent: the fill stays ink so the primary stays the one
    * orange action on the card, and grey reads better on the track (design). */
   --evaluation-meter-fill:var(--sr-ink-light);
+  --evaluation-meter-tick:var(--sr-ink-meta);
   --evaluation-chip-edge:var(--sr-edge-strong);
   /* --sr-ink-faint (white at .20) used as an edge, the only token at that strength */
   --evaluation-swatch-edge:var(--sr-ink-faint);
