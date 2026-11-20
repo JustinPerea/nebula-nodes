@@ -90,6 +90,7 @@ describe('check-badge-tone: capitals', () => {
     '.jev-result__badge { text-transform: uppercase; }',
     '.character-def__ref-badge { text-transform: uppercase; }',
     '.reference-set-node__role-badge { text-transform: uppercase; }',
+    '.commons-unsaved { letter-spacing: 1.5px; text-transform: uppercase; }',
     '.commons-badge { text-transform: uppercase; }',
     '.commons-source--corrected { text-transform: uppercase; }',
     '.run-history__tag { text-transform: uppercase; }',
