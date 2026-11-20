@@ -136,15 +136,15 @@ def ended_line(reason: str, name: str | None) -> str:
 
 
 def start_interrupted_line(reason: str, name: str) -> str:
-    """The line for a personal start Nebula cut short (the agent never ran): "<Name> couldn’t start. <why>",
-    with the same why as ``ended_line`` for the same reason."""
+    """The line for a personal start Nebula cut short (the agent never ran): "<Name> couldn’t start because <why>",
+    mirroring the "stopped because" lines of ``ended_line`` (shutdown reads the same before and after a start)."""
     if reason == "agent_changed":
-        return f"{name} couldn’t start, because it was switched off or changed in Settings. If it’s still switched on, send again."
+        return f"{name} couldn’t start because it was switched off or changed in Settings. If it’s still switched on, send again."
     if reason == "commons_enabled":
-        return f"{name} couldn’t start, because Commons is on. Pick Claude or Codex to chat."
+        return f"{name} couldn’t start because Commons is on. Pick Claude or Codex to chat."
     if reason == "shutdown":
-        return f"{name} couldn’t start. Nebula is shutting down."
-    return f"{name} couldn’t start, because the chat closed it first. Send again to start a new conversation."
+        return f"{name} couldn’t start because Nebula is shutting down."
+    return f"{name} couldn’t start because the chat was closed or replaced. Send again to start a new conversation."
 
 
 def agent_base_env(command: Path) -> dict[str, str]:

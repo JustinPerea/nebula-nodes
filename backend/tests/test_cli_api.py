@@ -1531,8 +1531,8 @@ class TestChatAgentDispatch:
             first = ws.receive_json()
             assert first["type"] == "error"
             assert first["message"] == (
-                "Nebula doesn\u2019t recognize the agent for this chat. Pick another with Choose model, "
-                "then send again.")
+                "Nebula doesn\u2019t recognize the agent for this chat. Pick another with the model button "
+                "at the top of the chat, then send again.")
             assert "bogus" not in first["message"] and "Valid:" not in first["message"]
 
             second = ws.receive_json()

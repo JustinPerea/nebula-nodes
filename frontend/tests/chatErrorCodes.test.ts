@@ -11,6 +11,8 @@
  *  - the literal `"code": "<x>"`, and `code="<x>"` as a keyword argument;
  *  - the first argument of the error classes the chat handler raises or relays (PersonalSessionError,
  *    ChatModelSelectionError, _DiscoveryError, start_refusal, and PersonalAgentError for the launch_spec path);
+ *  - the second argument of PreflightRefusal(text, "code") (its text is first), and the default of a
+ *    getattr(x, "code", DEFAULT) that start_refusal is given;
  *  - a module-level constant (`NAME_CODE = "<x>"`, or any UPPER_CASE constant used where a code goes);
  *  - an f-string whose placeholder has a known expansion (`personal_agent_{view.status}`); one that has none is
  *    reported as unreadable, since its codes can't be listed.
@@ -72,6 +74,30 @@ export function constantsIn(text: string): Map<string, string> {
   return constants;
 }
 
+/** The top-level arguments of the call whose "(" is at `open`, as written: commas inside a string, a bracket or a
+ * nested call don't split. Python strings only (single or double quoted, with a backslash escape). */
+export function callArguments(text: string, open: number): string[] {
+  const args: string[] = [];
+  let depth = 0;
+  let quote = '';
+  let from = open + 1;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = '';
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') {
+      depth--;
+      if (depth === 0) { args.push(text.slice(from, i)); return args.map((a) => a.trim()).filter(Boolean); }
+    } else if (c === ',' && depth === 1) { args.push(text.slice(from, i)); from = i + 1; }
+  }
+  return args.map((a) => a.trim()).filter(Boolean);
+}
+
 /** One code written as `expr`, listed: a literal is itself, a constant is its value, an f-string is its expansions.
  * What can't be listed comes back as the text itself, so the caller reports it. */
 function resolve(expr: string, constants: ReadonlyMap<string, string>, expansions: Readonly<Record<string, readonly string[]>>): string[] {
@@ -104,6 +130,15 @@ export function codesIn(
   for (const m of text.matchAll(new RegExp(`["']code["']\\s*:\\s*${EXPR}`, 'g'))) add(m[1]);
   for (const m of text.matchAll(new RegExp(`\\bcode\\s*=\\s*${EXPR}`, 'g'))) add(m[1]);
   for (const m of text.matchAll(new RegExp(`${CLASSES}\\(\\s*${EXPR}`, 'g'))) add(m[1]);
+  // PreflightRefusal(text, "code"): the code is the second argument; the text comes first. With no second argument the
+  // class's own default applies (a constant named _CODE, read below).
+  for (const m of text.matchAll(/\bPreflightRefusal\(/g)) {
+    const second = callArguments(text, m.index + m[0].length - 1)[1];
+    const written = second ? new RegExp(`^(?:code\\s*=\\s*)?${EXPR}$`).exec(second) : null;
+    if (written) add(written[1]);
+  }
+  // start_refusal(getattr(refusal, "code", DEFAULT), text): the code an object carries, or DEFAULT when it has none.
+  for (const m of text.matchAll(new RegExp(`getattr\\([^,()]+,\\s*["']code["']\\s*,\\s*${EXPR}`, 'g'))) add(m[1]);
   // A constant named for what it is: NAME_CODE = "x" is a code wherever it is sent from.
   for (const [name, code] of constants) if (name.endsWith('_CODE') && text.includes(name)) codes.add(code);
   // launch_spec: PersonalAgentError("personal_agent_<x>", ...) reaches the chat; the REST codes (invalid, conflict, not_found) do not.
@@ -182,6 +217,26 @@ describe('every error code the chat handler can send is one the chat line reads'
       'services/fake_session.py: limit_reached', 'services/fake_session.py: NO_SUCH (a constant with no string value)']);
     const table = [{ file: 'services/fake_session.py', text: 'CODES = {"a": "x_a"}\nraise PersonalSessionError(CODES.get(kind), "x")' }];
     expect(unreadCodes(table, WHOLE_LINE_CODES)).toHaveLength(1);
+  });
+
+  it('reads the second argument of PreflightRefusal(text, "code"), whatever the first holds', () => {
+    const text = [
+      'return PreflightRefusal(f"Codex, with a (comma), isn\'t ready ({names}). Update it.", "preflight_code_a")',
+      'return PreflightRefusal("two lines "\n    "joined", code="preflight_code_b")',
+      'return PreflightRefusal("no code given, so the class default applies")',
+      'return PreflightRefusal(chat_refusal_message("cli_not_installed", "codex", ""), PREFLIGHT_NAMED)',
+      'PREFLIGHT_NAMED = "preflight_code_c"',
+    ].join('\n');
+    expect([...codesIn(text)].sort()).toEqual(['preflight_code_a', 'preflight_code_b', 'preflight_code_c']);
+    expect(unreadCodes([{ file: 'services/fake_session.py', text }], WHOLE_LINE_CODES).sort())
+      .toEqual(['services/fake_session.py: preflight_code_a', 'services/fake_session.py: preflight_code_b', 'services/fake_session.py: preflight_code_c']);
+  });
+
+  it('reads the default of a getattr(x, "code", DEFAULT) given to start_refusal, however the constant is named', () => {
+    const text = 'FEATURES = "features_default"\nyield start_refusal(getattr(refusal, "code", FEATURES), str(refusal))\nyield start_refusal(getattr(other, "code", "literal_default"), "x")';
+    expect([...codesIn(text)].sort()).toEqual(['features_default', 'literal_default']);
+    // Not a code: getattr of another attribute.
+    expect([...codesIn('getattr(exc, "status_code", None)\nNAME = "not_a_code"')]).toEqual([]);
   });
 
   it('expands an f-string code with a known placeholder, and reports one with none', () => {

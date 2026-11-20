@@ -424,12 +424,14 @@ async def test_a_closed_session_prompt_raises_its_own_stop(env):
 def test_a_start_cut_short_reads_couldnt_start_for_each_reason():
     line = acp_session.start_interrupted_line
     assert line("agent_changed", "Your Gemini") == (
-        "Your Gemini couldn’t start, because it was switched off or changed in Settings. If it’s still switched on, send again.")
-    assert line("commons_enabled", "Your Gemini") == "Your Gemini couldn’t start, because Commons is on. Pick Claude or Codex to chat."
-    assert line("shutdown", "Your Gemini") == "Your Gemini couldn’t start. Nebula is shutting down."
+        "Your Gemini couldn’t start because it was switched off or changed in Settings. If it’s still switched on, send again.")
+    assert line("commons_enabled", "Your Gemini") == "Your Gemini couldn’t start because Commons is on. Pick Claude or Codex to chat."
+    assert line("shutdown", "Your Gemini") == "Your Gemini couldn’t start because Nebula is shutting down."
     assert line("ended", "Your Gemini") == (
-        "Your Gemini couldn’t start, because the chat closed it first. Send again to start a new conversation.")
-    # The same why as the ended line, worded for a start that didn't finish.
+        "Your Gemini couldn’t start because the chat was closed or replaced. Send again to start a new conversation.")
+    # "because" with no comma, as the stop lines read, and the same why as the ended line for the two Settings reasons.
+    for reason in ("agent_changed", "commons_enabled", "shutdown", "ended"):
+        assert ", because" not in line(reason, "Your Gemini")
     for reason in ("agent_changed", "commons_enabled"):
         ended = acp_session.ended_line(reason, "Your Gemini").split(" stopped because ", 1)[1].split(". ")[0]
         assert ended in line(reason, "Your Gemini")
@@ -444,7 +446,7 @@ async def test_commons_switched_on_during_a_start_is_a_refusal(env):
     with pytest.raises(PersonalSessionError) as info:
         await opening
     assert info.value.code == "personal_agent_start_interrupted" and info.value.stop is None
-    assert info.value.message == "Fake Agent couldn’t start, because Commons is on. Pick Claude or Codex to chat."
+    assert info.value.message == "Fake Agent couldn’t start because Commons is on. Pick Claude or Codex to chat."
 
 
 @pytest.mark.asyncio
@@ -673,7 +675,7 @@ async def test_close_during_session_new_wins_over_start(env, slow_kill):
         await opening
     # The agent never ran: a refusal ("couldn’t start"), not an ended stop.
     assert info.value.code == "personal_agent_changed" and info.value.message == (
-        "Fake Agent couldn’t start, because it was switched off or changed in Settings. If it’s still switched on, send again.")
+        "Fake Agent couldn’t start because it was switched off or changed in Settings. If it’s still switched on, send again.")
     assert info.value.stop is None and info.value.reason is None and "stop" not in info.value.event()
     assert host.closed and host.state == "closed" and host.closed_reason == "agent_changed"
     assert actors.agent_registry.lookup(token) is None
@@ -694,7 +696,7 @@ async def test_close_during_initialize_mints_no_token(env, slow_kill):
     with pytest.raises(PersonalSessionError) as info:
         await opening
     assert info.value.code == "personal_agent_start_interrupted" and info.value.message == (
-        "Fake Agent couldn’t start, because the chat closed it first. Send again to start a new conversation.")
+        "Fake Agent couldn’t start because the chat was closed or replaced. Send again to start a new conversation.")
     assert info.value.stop is None and "stop" not in info.value.event()
     assert host.token is None and actors.agent_registry._tokens == {}
     assert "session/new" not in env.methods()
@@ -728,7 +730,7 @@ async def test_close_during_spawn_kills_the_late_process(env, monkeypatch):
         await opening
     # A shutdown that cuts a start short reads as the one noticed just after a start.
     assert info.value.code == "personal_agent_shutting_down" and info.value.message == (
-        "Fake Agent couldn’t start. Nebula is shutting down.")
+        "Fake Agent couldn’t start because Nebula is shutting down.")
     assert info.value.stop is None and "stop" not in info.value.event()
     assert host.proc is None and host.token is None and actors.agent_registry._tokens == {}
     assert await wait_until(lambda: not alive(spawned[0].pid))
@@ -747,7 +749,7 @@ async def test_registry_change_while_starting_is_caught_after_start(env):
     with pytest.raises(PersonalSessionError) as info:
         await opening
     assert info.value.code == "personal_agent_changed" and info.value.message == (
-        "Fake Agent couldn’t start, because it was switched off or changed in Settings. If it’s still switched on, send again.")
+        "Fake Agent couldn’t start because it was switched off or changed in Settings. If it’s still switched on, send again.")
     assert info.value.stop is None and "stop" not in info.value.event()
     assert actors.agent_registry._tokens == {}
     assert env.manager.live() == [] and env.manager._sessions == {}

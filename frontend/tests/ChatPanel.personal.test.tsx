@@ -499,6 +499,16 @@ describe('the chat line per event kind', () => {
     expect(screen.queryByText(/stopped/)).toBeNull();
   });
 
+  it('a failed Stop is a because line in the warning ink, as any error-tone line is', async () => {
+    const line = 'Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload if it keeps happening.';
+    await sendAndReceive({ type: 'cancellation', status: 'failed', active: true, message: 'cancel failed' });
+    const text = await screen.findByText(line);
+    expect(toneOf(line)).toBe('error');
+    // The warning ink is the line not being marked a neutral because line (LineText draws a marked one in the neutral ink).
+    expect(text.closest('[data-line-because]')).toBeNull();
+    expect(text.closest('[data-chat-system-tone]')?.querySelector('[data-line-because]')).toBeNull();
+  });
+
   it('a limit line (a system event) stays neutral and unchanged', async () => {
     await sendAndReceive({ type: 'system', text: 'Fake Agent declined to continue.' });
     expect(await screen.findByText('Fake Agent declined to continue.')).toBeInTheDocument();

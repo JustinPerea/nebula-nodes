@@ -17,9 +17,8 @@ export interface ChatCancellationTransition {
 
 export interface ChatCancellationNotice {
   text: string;
+  /** A failed Stop is an error: the chat draws it in the warning ink (components/panels/ChatPanel.tsx). */
   tone?: 'error';
-  /** A because line: it takes the error class but stays in the neutral ink (components/panels/ChatPanel.tsx). */
-  neutralInk?: true;
 }
 
 /** A failed Stop, GM's pattern (error-copy round 2): "Couldn't stop the
@@ -35,7 +34,6 @@ export function chatCancellationNotice(
   return {
     text: becauseLine({ heading: "Couldn’t stop the reply.", reason: reason || REFUSED_FALLBACK_COPY }),
     tone: 'error',
-    neutralInk: true,
   };
 }
 

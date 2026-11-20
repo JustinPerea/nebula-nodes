@@ -362,8 +362,8 @@ def test_chat_turn_refuses_to_start_when_output_root_contains_commons(client, mo
     errors = [e for e in events if e['type'] == 'error']
     # The agent never ran: a refusal (a code, no stop) in a line that names no path.
     assert errors == [{'type': 'error', 'code': 'agent_grant_overlap', 'source': 'claude', 'message': (
-        'Nebula didn’t start Claude Code, because a folder it would get access to overlaps storage Nebula keeps private. '
-        'Check that Nebula’s output and Commons folders don’t overlap, then send again.')}]
+        'Nebula didn’t start Claude Code because a folder it would open overlaps one Nebula keeps private. '
+        'Make sure Nebula’s output and Commons folders are separate, then send again.')}]
 
 
 def _clear_png() -> bytes:

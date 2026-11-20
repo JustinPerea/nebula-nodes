@@ -300,11 +300,11 @@ describe('the chat’s person_required wording, by what the tab was doing', () =
 describe('a turn Claude or Codex was refused before the CLI ran is a whole line, not a stop', () => {
   const REFUSALS: ReadonlyArray<readonly [string, string]> = [
     ['cli_not_installed', 'Claude Code isn’t installed. Install it, then send again.'],
-    ['agent_grant_overlap', 'Nebula didn’t start Claude Code, because a folder it would get access to overlaps storage Nebula keeps private. Check that Nebula’s output and Commons folders don’t overlap, then send again.'],
-    ['agent_knowledge_unavailable', 'Nebula couldn’t copy its reference files for Claude Code, so it didn’t start. Check that Nebula’s folder is intact, then send again.'],
-    ['codex_features_refused', 'Codex has features on that Nebula hasn’t reviewed (browser_use), so it didn’t start. Update Nebula, then send again.'],
-    ['codex_chatgpt_required', 'Codex is using an API key, and Nebula needs a ChatGPT account. Use “Connect ChatGPT account” in Nebula, then send again.'],
-    ['personal_agent_start_interrupted', 'Fake Agent couldn’t start, because the chat closed it first. Send again to start a new conversation.'],
+    ['agent_grant_overlap', 'Nebula didn’t start Claude Code because a folder it would open overlaps one Nebula keeps private. Make sure Nebula’s output and Commons folders are separate, then send again.'],
+    ['agent_knowledge_unavailable', 'Nebula couldn’t copy its reference files for Claude Code, so it didn’t start. Restart Nebula, then send again. If it keeps happening, reinstall Nebula.'],
+    ['codex_features_refused', 'Codex has features on that Nebula hasn’t reviewed (`browser_use`), so it didn’t start. Update Nebula, then send again.'],
+    ['codex_chatgpt_required', 'Codex is using an API key, and Nebula needs a ChatGPT account. Use Connect ChatGPT account above the message box, then send again.'],
+    ['personal_agent_start_interrupted', 'Fake Agent couldn’t start because the chat was closed or replaced. Send again to start a new conversation.'],
   ];
 
   it.each(REFUSALS)('reads %s as its own line in the warning tone, with no "Claude stopped"', (code, message) => {

@@ -157,8 +157,8 @@ async def test_claude_grant_overlap_is_a_refusal_that_names_no_path(caplog):
 
     assert events == [
         {"type": "error", "code": "agent_grant_overlap", "message": (
-            "Nebula didn’t start Claude Code, because a folder it would get access to overlaps storage Nebula keeps private. "
-            "Check that Nebula’s output and Commons folders don’t overlap, then send again.")},
+            "Nebula didn’t start Claude Code because a folder it would open overlaps one Nebula keeps private. "
+            "Make sure Nebula’s output and Commons folders are separate, then send again.")},
         {"type": "done"},
     ]
     assert "/private/" not in events[0]["message"]
@@ -177,7 +177,7 @@ async def test_claude_knowledge_snapshot_failure_is_a_refusal():
     assert events == [
         {"type": "error", "code": "agent_knowledge_unavailable", "message": (
             "Nebula couldn’t copy its reference files for Claude Code, so it didn’t start. "
-            "Check that Nebula’s folder is intact, then send again.")},
+            "Restart Nebula, then send again. If it keeps happening, reinstall Nebula.")},
         {"type": "done"},
     ]
     spawn.assert_not_called()

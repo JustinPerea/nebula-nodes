@@ -41,6 +41,9 @@ CLI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 # (frontend/src/components/panels/ChatModelPicker.tsx: "Choose model"). Lines name this
 # button, never the dialog's own heading.
 CHOOSE_MODEL = "Choose model"
+# The clause that sends a person to the model button when the one they have can't be used (design). The
+# button is named by what it is, not by its label, so a line that has no room for a label still reads.
+PICK_ANOTHER_MODEL = "Pick another with the model button at the top of the chat, then send again."
 # The command each CLI answers "am I signed in?" with, for a line that tells the person to check.
 _CLI_AUTH_CHECK = {"claude": "claude auth status", "codex": "codex login status"}
 _CLI_SIGN_IN = {
@@ -61,9 +64,9 @@ def chat_refusal_message(code: str, agent: str, fallback: str) -> str:
     if code == "model_required":
         return f"No model is selected. Pick one with {CHOOSE_MODEL} at the top of the chat, then send again."
     if code == "model_unsupported":
-        return f"That model isn\u2019t offered anymore. Pick another with {CHOOSE_MODEL}, then send again."
+        return f"That model isn\u2019t offered anymore. {PICK_ANOTHER_MODEL}"
     if code == "effort_unsupported":
-        return f"This model doesn\u2019t support that thinking effort. Pick another with {CHOOSE_MODEL}, then send again."
+        return f"This model doesn\u2019t support that thinking effort. {PICK_ANOTHER_MODEL}"
     if code == "auth_required":
         return f"{cli} isn\u2019t signed in, so Nebula can\u2019t list its models. {_CLI_SIGN_IN.get(agent, 'Sign in to it in a terminal')}, then send again."
     if code in {"catalog_unavailable", "catalog_cleanup_failed"}:

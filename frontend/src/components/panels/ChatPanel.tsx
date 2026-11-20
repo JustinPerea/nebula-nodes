@@ -154,9 +154,6 @@ type SystemLine = {
   /** Text behind a collapsed Details toggle under the line: a person-only
    * refusal's own words, written for agents (GM, Q116 a). */
   details?: string;
-  /** An error-class line that stays in the neutral ink (a failed Stop notice, which is a because line). Any other line
-   * with `tone: 'error'` is drawn in the warning ink, by its tone alone: a stop error, a refusal, the person-gate line. */
-  neutralInk?: true;
   /** Its only reason was this tab not being connected as the person: it goes
    * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
   personGate?: true;
@@ -410,9 +407,9 @@ export function AssistantBubble({ message, agentName, onPermission }: {
         if (part.kind === 'system') {
           const tone = part.tone ?? 'neutral';
           // The warning ink follows the tone, so a line that is built as an error can't miss it (LineText would draw a
-          // because failure, or a not-connected line, neutral): every error-tone system line is warning ink, except one
-          // that says neutralInk.
-          const inkTone = tone === 'error' && !part.neutralInk ? 'warning' : undefined;
+          // because failure, or a not-connected line, neutral): every error-tone system line is warning ink, a failed
+          // Stop included.
+          const inkTone = tone === 'error' ? 'warning' : undefined;
           return (
             <div
               key={idx}

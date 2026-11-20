@@ -201,7 +201,7 @@ async def test_run_codex_refuses_api_key_auth_before_exec():
     # Codex never ran: a refusal (a code, no stop).
     assert events[0] == {"type": "error", "code": "codex_chatgpt_required", "message": (
         "Codex is using an API key, and Nebula needs a ChatGPT account. "
-        "Use “Connect ChatGPT account” in Nebula, then send again.")}
+        "Use Connect ChatGPT account above the message box, then send again.")}
     assert events[-1] == {"type": "done"}
 
 
@@ -210,13 +210,13 @@ async def test_run_codex_refuses_api_key_auth_before_exec():
     ({"installed": False, "loggedIn": False, "mode": None},
      {"code": "cli_not_installed", "message": "Codex isn’t installed. Install it, then send again."}),
     ({"installed": True, "loggedIn": False, "mode": None},
-     {"code": "codex_chatgpt_required", "message": "Codex isn’t signed in. Use “Connect ChatGPT account” in Nebula, then send again."}),
+     {"code": "codex_chatgpt_required", "message": "Codex isn’t signed in. Use Connect ChatGPT account above the message box, then send again."}),
     ({"installed": True, "loggedIn": True, "mode": "access_token"},
      {"code": "codex_chatgpt_required", "message": "Codex is using an access token, and Nebula needs a ChatGPT account. "
-                                                    "Use “Connect ChatGPT account” in Nebula, then send again."}),
+                                                    "Use Connect ChatGPT account above the message box, then send again."}),
     ({"installed": True, "loggedIn": True, "mode": "weird"},
      {"code": "codex_chatgpt_required", "message": "Codex is using a sign-in Nebula doesn’t accept, and Nebula needs a ChatGPT account. "
-                                                    "Use “Connect ChatGPT account” in Nebula, then send again."}),
+                                                    "Use Connect ChatGPT account above the message box, then send again."}),
 ])
 async def test_codex_sign_in_refusals_are_refusals_with_a_line_each(monkeypatch, status, event):
     monkeypatch.setattr(codex_session, "codex_login_status", AsyncMock(return_value=status))
@@ -235,8 +235,8 @@ async def test_codex_grant_overlap_is_a_refusal_that_names_no_path(monkeypatch):
     events = await _collect(run_codex("hi", None))
     assert events == [
         {"type": "error", "code": "agent_grant_overlap", "message": (
-            "Nebula didn’t start Codex, because a folder it would get access to overlaps storage Nebula keeps private. "
-            "Check that Nebula’s output and Commons folders don’t overlap, then send again.")},
+            "Nebula didn’t start Codex because a folder it would open overlaps one Nebula keeps private. "
+            "Make sure Nebula’s output and Commons folders are separate, then send again.")},
         {"type": "done"}]
 
 
@@ -436,18 +436,58 @@ async def test_preflight_fails_closed(monkeypatch, tmp_path):
     assert seen["cwd"] == str(tmp_path)
     seen["proc"] = proc(0, _listing(browser="true").encode())
     refused = await codex_session.codex_feature_preflight(args, tmp_path)
-    assert refused == ("Codex has features on that Nebula hasn’t reviewed (browser_use), so it didn’t start. "
+    assert refused == ("Codex has features on that Nebula hasn’t reviewed (`browser_use`), so it didn’t start. "
                        "Update Nebula, then send again.")
     assert refused.code == "codex_features_refused"
     seen["proc"] = proc(1, b"", b"Error: Unknown feature flag: hooks")
     refused = await codex_session.codex_feature_preflight(args, tmp_path)
-    assert refused == ("This version of Codex refused Nebula’s agent settings: Error: Unknown feature flag: hooks. "
-                       "Update Codex, then send again.")
+    assert refused == ("This version of Codex refused Nebula’s agent settings (`Error: Unknown feature flag: hooks`). "
+                       "Update Codex and Nebula, then send again.")
     assert refused.code == "codex_features_refused"
     seen["proc"] = proc(0, b"nothing useful")
     refused = await codex_session.codex_feature_preflight(args, tmp_path)
     assert refused == "Nebula couldn’t read Codex’s feature list, so it didn’t start. Update Codex, then send again."
     assert refused.code == "codex_features_refused"
+
+
+def test_preflight_refused_flag_detail_is_one_short_line_with_no_path_and_nothing_a_code_span_cannot_hold():
+    from services.chat_lines import one_line_detail
+    trace = ("Error: failed to read /Users/jane/.codex/config.toml: unknown field `hooks'\n"
+             "    at load (/Users/jane/work/codex/lib/config.js:41:9)\n    at main (/opt/codex/bin/codex.js:3:1)\n")
+    line = one_line_detail(trace)
+    assert line == "Error: failed to read config.toml: unknown field hooks"
+    assert "/" not in line and "jane" not in line and "`" not in line and "\n" not in line
+    # A Windows path, a quote, a curly quote and a trailing backslash can't break the span either.
+    assert one_line_detail('bad "flag" at C:\\Users\\jane\\codex.toml\\') == "bad flag at"
+    assert one_line_detail("") == "" and one_line_detail("\n  \n") == ""
+    long = one_line_detail("x" * 400)
+    assert len(long) <= 81 and long.endswith("…")
+
+
+@pytest.mark.asyncio
+async def test_preflight_a_refused_flag_with_a_home_path_and_a_trace_reaches_the_chat_as_one_short_line(monkeypatch, tmp_path):
+    stderr = (b"Error: unknown feature `hooks' in /Users/jane/.codex/config.toml\n"
+              b"    at load (/Users/jane/.nvm/versions/node/lib/codex.js:41:9)\n" + b"    at x\n" * 60)
+    proc = MagicMock()
+    proc.returncode = 1
+    proc.communicate = AsyncMock(return_value=(b"", stderr))
+    monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc))
+    refused = await codex_session.codex_feature_preflight(["codex", "exec", "--disable", "hooks"], tmp_path)
+    assert refused == ("This version of Codex refused Nebula’s agent settings (`Error: unknown feature hooks in config.toml`). "
+                       "Update Codex and Nebula, then send again.")
+    assert refused.count("`") == 2 and "\n" not in refused and "jane" not in refused and len(refused) < 200
+
+
+@pytest.mark.asyncio
+async def test_preflight_a_feature_missing_from_the_listing_keeps_its_note_outside_the_code_span(tmp_path):
+    trimmed = "\n".join(line for line in _listing(browser="true").splitlines() if not line.startswith("hooks "))
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.communicate = AsyncMock(return_value=(trimmed.encode(), b""))
+    with patch("services.codex_session.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        refused = await codex_session.codex_feature_preflight(["codex", "exec", "--disable", "hooks"], tmp_path)
+    assert refused == ("Codex has features on that Nebula hasn’t reviewed (`browser_use`, `hooks` (no longer listed)), "
+                       "so it didn’t start. Update Nebula, then send again.")
 
 
 @pytest.mark.asyncio

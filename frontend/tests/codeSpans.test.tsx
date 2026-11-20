@@ -252,3 +252,23 @@ describe('curling around code spans', () => {
     expect(shown('Don\'t \uE000 `x` it\'s')).toBe('Don’t \uE000 x it’s');
   });
 });
+
+describe('the preflight refusals the backend sends draw their code as spans', () => {
+  const shown = (text: string) => render(<p>{curledWithCodeSpans(text)}</p>).container.firstElementChild as HTMLElement;
+  it('each unreviewed feature is its own span, and the "(no longer listed)" note stays prose', () => {
+    const el = shown('Codex has features on that Nebula hasn’t reviewed (`browser_use`, `hooks` (no longer listed)), so it didn’t start. Update Nebula, then send again.');
+    expect(codes(el)).toEqual(['browser_use', 'hooks']);
+    expect(el.textContent).toBe('Codex has features on that Nebula hasn’t reviewed (browser_use, hooks (no longer listed)), so it didn’t start. Update Nebula, then send again.');
+  });
+  it('a refused flag shows its short detail as one span, with its apostrophes and punctuation left alone', () => {
+    const el = shown('This version of Codex refused Nebula’s agent settings (`Error: unknown feature hooks in config.toml`). Update Codex and Nebula, then send again.');
+    expect(codes(el)).toEqual(['Error: unknown feature hooks in config.toml']);
+    expect(el.textContent).toContain('Nebula’s agent settings (Error: unknown feature hooks in config.toml). Update');
+  });
+  it('a detail the backend left a quote or backtick in would not break the line: the span is refused, the words stay', () => {
+    // The backend takes those characters out (chat_lines.one_line_detail); this is what the page does if one got through.
+    const el = shown("This version of Codex refused Nebula’s agent settings (`unknown field `hooks'). Update Codex and Nebula, then send again.");
+    expect(el.textContent).toContain('Update Codex and Nebula, then send again.');
+    expect(el.textContent).toContain('settings (');
+  });
+});

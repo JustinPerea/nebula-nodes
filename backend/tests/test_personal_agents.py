@@ -131,7 +131,7 @@ def test_launch_spec_refuses_what_cannot_start(tmp_path):
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "nope")
     assert info.value.code == "personal_agent_unknown"
-    assert info.value.message == "Nebula doesn’t recognize that personal agent. Pick another with Choose model, then send again."
+    assert info.value.message == "Nebula doesn’t recognize that personal agent. Pick another with the model button at the top of the chat, then send again."
     personal_agents.create_custom(tmp_path, {"id": "off", "command": sys.executable, "enabled": False})
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "off")

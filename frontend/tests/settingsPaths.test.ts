@@ -78,10 +78,16 @@ export type BadPath = { path: string; why: string };
 const COMMENT_LINE = /^\s*(?:\/\/+|#+|\*(?!\/)|\/\*+|<!--)/;
 const COMMENT_MARKER = /^\s*(?:\/\/+|#+|\*(?!\/)|\/\*+|<!--)[ \t]?/;
 
-/** The text as a person reads it: consecutive comment lines joined into one line (the way check-internal-ids joins
- * them), a path that breaks after its ">" (or opens the next line with one) joined, and runs of spaces made one. */
+/** Two string literals written one after the other ("a" "b", the Python way), or joined with a "+" ('a' + 'b', the
+ * JS way, the "+" at the end of a line or the start of the next): the quotes and what sits between them go, so
+ * the words are one run, as the person sees them. An f or r prefix on the second literal goes with it. */
+const ADJACENT_LITERALS = /(["'])[ \t]*(?:\r?\n[ \t]*)?(?:\+[ \t]*(?:\r?\n[ \t]*)?)?[fr]?(["'])/g;
+
+/** The text as a person reads it: string literals written side by side or joined with "+" made one, consecutive
+ * comment lines joined into one line (the way check-internal-ids joins them), a path that breaks after its ">" (or
+ * opens the next line with one) joined, and runs of spaces made one. */
 export function readAsProse(text: string): string {
-  const lines = text.replace(/\u00a0/g, ' ').split('\n');
+  const lines = text.replace(/\u00a0/g, ' ').replace(ADJACENT_LITERALS, '').split('\n');
   const out: string[] = [];
   for (const line of lines) {
     const last = out.length - 1;
@@ -212,6 +218,21 @@ describe('badSettingsPaths reads a path the way a person does', () => {
     expect(badSettingsPaths('Open Settings > preferences > personal agents.')).toHaveLength(1);
     expect(badSettingsPaths('Add a key in Settings > providers.')).toHaveLength(1);
     expect(badSettingsPaths('Open Settings > Preferences > Personal agents.')).toEqual([]);
+  });
+
+  it('reads a path split across string literals, written side by side or joined with +', () => {
+    const wrong = [{ path: 'Settings > Preferences > Run cost', why: 'not a section of Preferences' }];
+    expect(badSettingsPaths('x = "Open Settings > Preferences > " "Run cost."')).toEqual(wrong);
+    expect(badSettingsPaths('x = ("Open Settings > Preferences > "\n     "Run cost.")')).toEqual(wrong);
+    expect(badSettingsPaths("const t = 'Open Settings > Preferences > ' + 'Run cost.';")).toEqual(wrong);
+    expect(badSettingsPaths('const t = "Open Settings > Preferences > " +\n  "Run cost.";')).toEqual(wrong);
+    expect(badSettingsPaths('const t = "Open Settings > Preferences > "\n  + "Run cost.";')).toEqual(wrong);
+    expect(badSettingsPaths('x = f"Open Settings > Preferences > " f"Run cost."')).toEqual(wrong);
+    // A right path split the same ways is still right.
+    expect(badSettingsPaths('x = "Open Settings > Preferences > " "Personal agents."')).toEqual([]);
+    expect(badSettingsPaths("const t = 'Open Settings > ' + 'Providers.';")).toEqual([]);
+    // Nothing else is joined: a literal and a name, or two separate statements, stay apart.
+    expect(badSettingsPaths('a = "Settings > Providers"\nb = "Run cost"')).toEqual([]);
   });
 
   it('reads doubled spaces as one', () => {

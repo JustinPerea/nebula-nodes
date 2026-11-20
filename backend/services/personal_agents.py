@@ -38,6 +38,7 @@ from typing import Any
 from services import agent_binaries, agent_token_file, antigravity_agent, gemini_cli_setup
 from services.agent_name_in_sentence import in_sentence  # noqa: F401 (re-exported: the name inside a sentence)
 from services.agent_presence import clean_agent_name
+from services.chat_models import PICK_ANOTHER_MODEL
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 
 FILE_NAME = "personal-agents.json"
@@ -510,7 +511,7 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
     """How to start ``agent_id``: absolute argv, extra env and timeouts."""
     view = get_agent(state_dir, agent_id, home)
     if view is None:
-        raise PersonalAgentError("personal_agent_unknown", "Nebula doesn’t recognize that personal agent. Pick another with Choose model, then send again.")
+        raise PersonalAgentError("personal_agent_unknown", f"Nebula doesn’t recognize that personal agent. {PICK_ANOTHER_MODEL}")
     if view.status != "ready":
         messages = {
             "disabled": f"{view.displayName} is switched off. Turn it on in Settings > Preferences > Personal agents, then send again.",

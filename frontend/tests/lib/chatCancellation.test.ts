@@ -52,7 +52,6 @@ describe('chat cancellation truth state', () => {
       // Design, verbatim: "People need to know it might still be spending."
       text: "Nebula couldn’t stop the reply because the connection dropped before Nebula confirmed the stop. The reply may still be running.",
       tone: 'error',
-      neutralInk: true,
     });
     expect(chatCancellationDisconnectNotice('idle')).toBeNull();
   });
@@ -61,7 +60,6 @@ describe('chat cancellation truth state', () => {
     expect(chatCancellationNotice('failed', "Nebula's server isn't answering. Make sure it's running, then try again.")).toEqual({
       text: "Nebula couldn’t stop the reply because the server isn’t answering. Check that Nebula is running, then try again.",
       tone: 'error',
-      neutralInk: true,
     });
     expect(chatCancellationNotice('failed').text)
       .toBe("Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload if it keeps happening.");

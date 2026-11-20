@@ -20,8 +20,8 @@ import stat
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from services.chat_lines import (CODEX_CHATGPT_CODE, CODEX_FEATURES_CODE, grant_overlap_refusal, not_installed_refusal,
-                                 start_refusal)
+from services.chat_lines import (CODEX_CHATGPT_CODE, CODEX_FEATURES_CODE, CONNECT_CHATGPT, grant_overlap_refusal,
+                                 not_installed_refusal, one_line_detail, start_refusal)
 from services.chat_models import chat_refusal_message
 from services.agent_process import (
     spawn_agent_process,
@@ -499,17 +499,20 @@ async def codex_feature_preflight(exec_args: list[str], workdir: Path) -> str | 
             if proc.returncode is None:
                 await terminate_agent_process_tree(proc)
     if proc.returncode != 0:
-        detail = stderr.decode("utf-8", errors="replace").strip()[-400:]
+        # The CLI's stderr is cut to one short line, paths reduced to file names; the rest stays out of the chat.
+        detail = one_line_detail(stderr.decode("utf-8", errors="replace"))
         # (For a developer: the fix is the reviewed feature list in services/agent_profiles.py.)
-        why = f": {detail.rstrip('.')}." if detail else "."
-        return PreflightRefusal(f"This version of Codex refused Nebula’s agent settings{why} Update Codex, then send again.")
+        why = f" (`{detail}`)" if detail else ""
+        return PreflightRefusal(f"This version of Codex refused Nebula’s agent settings{why}. Update Codex and Nebula, then send again.")
     unreviewed = unreviewed_codex_features(stdout.decode("utf-8", errors="replace"))
     if unreviewed is None:
         return PreflightRefusal("Nebula couldn’t read Codex’s feature list, so it didn’t start. Update Codex, then send again.")
     if unreviewed:
         # (For a developer: add each to CODEX_ALLOWED_FEATURES or CODEX_DISABLED_FEATURES in services/agent_profiles.py.)
-        return PreflightRefusal("Codex has features on that Nebula hasn’t reviewed (" + ", ".join(unreviewed)
-                                + "), so it didn’t start. Update Nebula, then send again.")
+        # Each feature name is a code span; a "(no longer listed)" note stays plain after it.
+        names = ", ".join(re.sub(r"^(\S+)", r"`\1`", name) for name in unreviewed)
+        return PreflightRefusal(f"Codex has features on that Nebula hasn’t reviewed ({names}), so it didn’t start. "
+                                "Update Nebula, then send again.")
     return None
 
 
@@ -542,11 +545,11 @@ async def _require_codex_chatgpt_login() -> dict[str, Any] | None:
         return not_installed_refusal("codex")
     if not status.get("loggedIn"):
         return start_refusal(CODEX_CHATGPT_CODE,
-                             "Codex isn’t signed in. Use “Connect ChatGPT account” in Nebula, then send again.")
+                             f"Codex isn’t signed in. Use {CONNECT_CHATGPT}, then send again.")
     how = {"api": "an API key", "access_token": "an access token"}.get(str(mode), "a sign-in Nebula doesn’t accept")
     return start_refusal(CODEX_CHATGPT_CODE, (
         f"Codex is using {how}, and Nebula needs a ChatGPT account. "
-        "Use “Connect ChatGPT account” in Nebula, then send again."))
+        f"Use {CONNECT_CHATGPT}, then send again."))
 
 
 def _normalize_codex_event(ev: dict[str, Any]) -> list[dict[str, Any]]:

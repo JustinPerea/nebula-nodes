@@ -30,7 +30,7 @@ from tests.test_commons_integration import isolated_app  # noqa: F401
 pytestmark = pytest.mark.usefixtures("person")
 
 RELOAD = "Nebula couldn’t read that message. Reload the page, then send again."
-UNKNOWN_AGENT = "Nebula doesn’t recognize the agent for this chat. Pick another with Choose model, then send again."
+UNKNOWN_AGENT = "Nebula doesn’t recognize the agent for this chat. Pick another with the model button at the top of the chat, then send again."
 ENDED_UNKNOWN = "This chat’s agent stopped. Send again to start a new conversation."
 
 
@@ -72,9 +72,9 @@ def test_ended_lines_per_reason():
     ("model_required", "claude",
      "No model is selected. Pick one with Choose model at the top of the chat, then send again."),
     ("model_unsupported", "claude",
-     "That model isn’t offered anymore. Pick another with Choose model, then send again."),
+     "That model isn’t offered anymore. Pick another with the model button at the top of the chat, then send again."),
     ("effort_unsupported", "codex",
-     "This model doesn’t support that thinking effort. Pick another with Choose model, then send again."),
+     "This model doesn’t support that thinking effort. Pick another with the model button at the top of the chat, then send again."),
     ("auth_required", "claude",
      "Claude Code isn’t signed in, so Nebula can’t list its models. Run `claude` in a terminal and sign in, "
      "then send again."),
@@ -212,9 +212,9 @@ async def test_catalog_refusals_reach_the_chat_in_the_new_wording(isolated_app, 
     ("  ", None, "model_invalid", RELOAD),
     ("m", "  ", "effort_invalid", RELOAD),
     ("gone", None, "model_unsupported",
-     "That model isn’t offered anymore. Pick another with Choose model, then send again."),
+     "That model isn’t offered anymore. Pick another with the model button at the top of the chat, then send again."),
     ("m", "turbo", "effort_unsupported",
-     "This model doesn’t support that thinking effort. Pick another with Choose model, then send again."),
+     "This model doesn’t support that thinking effort. Pick another with the model button at the top of the chat, then send again."),
 ])
 async def test_model_choice_refusals_reach_the_chat(isolated_app, monkeypatch, model, effort, code, text):
     async def catalog(agent, *, refresh=False):
@@ -452,7 +452,7 @@ async def test_a_start_cut_short_by_settings_reaches_the_chat_as_a_refusal(ws_en
     events = await socket.until_done()
     error = next(e for e in events if e["type"] == "error")
     assert error["code"] == "personal_agent_changed" and "stop" not in error and "reason" not in error
-    assert error["message"] == ("Fake Agent couldn’t start, because it was switched off or changed in Settings. "
+    assert error["message"] == ("Fake Agent couldn’t start because it was switched off or changed in Settings. "
                                 "If it’s still switched on, send again.")
     socket.disconnect()
     await asyncio.wait_for(task, 5)
