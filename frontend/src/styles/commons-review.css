@@ -3,7 +3,6 @@
 .review-reference { width:100%; height:auto; max-height:72vh; object-fit:contain; display:block; }
 .review-progress { flex-shrink:0; text-align:right; }
 .review-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:24px; }
-.review-actions .commons-button--primary { margin:0; }
 body.app-slava-restraint .review-actions .commons-button--primary { margin:0; }
 .review-grade { padding:10px 0; border-bottom:1px solid var(--evaluation-card-rule); }
 .review-grade label { margin:4px 0; }

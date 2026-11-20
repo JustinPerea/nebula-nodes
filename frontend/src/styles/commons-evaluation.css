@@ -112,9 +112,6 @@
 .commons-evaluation input:not([type=checkbox]):not([type=range]),.commons-evaluation select {
   width:100%;
   padding:9px;
-  background:var(--evaluation-field-fill);
-  color:var(--evaluation-field-ink);
-  border:1px solid var(--evaluation-field-edge);
   border-radius:4px;
   font:inherit;
 }
@@ -235,16 +232,6 @@
   justify-content:space-between;
   align-items:center;
   font-size:10px;
-}
-.evaluation-form .commons-button {
-  background:var(--evaluation-button-fill);
-  color:var(--evaluation-button-ink);
-  border:1px solid var(--evaluation-button-edge);
-}
-.evaluation-form .commons-button--primary {
-  background:var(--evaluation-primary-fill);
-  color:var(--evaluation-primary-ink);
-  margin:20px 0 0;
 }
 .evaluation-form .evaluation-role {
   display:flex;
