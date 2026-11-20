@@ -31,6 +31,13 @@ describe('check-badge-tone', () => {
     '.commons-badge { &--inbox { color: var(--sr-accent); } }',
     '.commons-badge { &.commons-badge--inbox { color: var(--sr-accent); } }',
   ];
+  accented.push(
+    '.moodboard-studio-toolbar__state--saved { color: #FF5A1F; }',
+    '.character-studio-toolbar__state--saved { color: var(--sr-accent); }',
+    '.character-def__ref-badge { color: var(--sr-accent); }',
+    'body.app-slava-restraint .reference-set-node__role-badge { border-color: var(--sr-accent-border); }',
+    '.world-preview__badge { background: var(--sr-accent-soft); }',
+  );
   for (const css of accented) {
     it(`fails: ${css}`, () => expect(hits(css)).toHaveLength(1));
   }
@@ -47,6 +54,11 @@ describe('check-badge-tone', () => {
     '.commons-badge { color: var(--sr-ink-light); box-shadow: none; }',
     '.commons-badge--x { color: #FF5A1E; }',
     '.commons-badges-list { color: var(--sr-accent); }',
+    '.moodboard-studio-toolbar__state--saved { color: var(--sr-ink-meta); }',
+    '.moodboard-studio-toolbar__state--error { color: var(--sr-error); }',
+    '.character-def__ref-badge { color: var(--sr-ink-meta); }',
+    '.character-def__ref-badge-list { color: var(--sr-accent); }',
+    '.character-def__ref-button { color: var(--sr-accent); }',
     '/* .commons-badge--x { color: var(--sr-accent); } */',
   ];
   for (const css of fine) {

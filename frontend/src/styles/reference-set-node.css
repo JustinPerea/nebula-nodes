@@ -90,9 +90,9 @@ body.app-slava-restraint .reference-set-node__preview {
 
 body.app-slava-restraint .reference-set-node__preview-empty {
   color: var(--sr-ink-meta);
+  /* Design: a hint is a sentence, so normal text, not the caps label style. */
   font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  line-height: 1.4;
 }
 
 body.app-slava-restraint .reference-set-node__preview-item {

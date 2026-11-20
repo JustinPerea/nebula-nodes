@@ -17,3 +17,12 @@ it('the reference role badge stylesheet does not capitalise the label', () => {
   expect(rule).not.toBe('');
   expect(rule).not.toMatch(/text-transform:\s*uppercase/);
 });
+
+it('the reference set hint is a sentence in normal text, with a full stop', () => {
+  const css = readFileSync(join(process.cwd(), 'src/styles/reference-set-node.css'), 'utf8');
+  const rule = css.match(/\.reference-set-node__preview-empty\s*\{[^}]*\}/)?.[0] ?? '';
+  expect(rule).not.toBe('');
+  expect(rule).not.toMatch(/text-transform/);
+  const tsx = readFileSync(join(process.cwd(), 'src/components/nodes/ReferenceSetNode.tsx'), 'utf8');
+  expect(tsx).toContain('>Connect references with priority above 0.</div>');
+});

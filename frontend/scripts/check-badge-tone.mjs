@@ -11,7 +11,8 @@ import {
   stripComments,
 } from './lib/css-scan.mjs';
 
-// Design: orange is the brand accent, not a status. A state badge (`commons-badge--*`) or a
+// Design: orange is the brand accent, not a status. The badge classes listed under findCapsBadges
+// (World, Saved, Cover and the like) take the accent-free rule too: no accent var or literal. A state badge (`commons-badge--*`) or a
 // source tag (`commons-source--*`) is neutral, or uses the pending, warning or success tone;
 // it is never painted in the accent.
 //
@@ -68,7 +69,10 @@ export function findAccentBadges(source, file) {
   const hits = [];
   for (const rule of parseRules(css)) {
     const selector = compact(rule.selector);
-    if (!BADGE.test(selector)) continue;
+    const commons = BADGE.test(selector);
+    // Design: the named badge classes (the list below) never take the accent either. The suffix
+    // match (__badge, __tag, __state, __status) stays with the caps rule: other accent badges are for design to rule on.
+    if (!commons && !selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => NAMED_BADGES.has(m[1].replace(/--[\w-]+$/, ''))))) continue;
     // Nested CSS isn't read: a nested block under any badge selector (`.commons-badge { &--inbox {...} }`) fails.
     if (rule.nested) {
       hits.push({ file, line: lineForOffset(lineStarts, rule.bodyStart), selector, decl: '{ ... }', reason: "nested CSS isn't read by this check; write each rule on its own" });
@@ -76,7 +80,13 @@ export function findAccentBadges(source, file) {
     }
     for (const declaration of parseDeclarations(rule.body, rule.bodyStart)) {
       if (!COLOUR_PROP.test(declaration.prop)) continue;
-      const reason = ROLE.test(selector)
+      const reason = !commons
+        ? ACCENT_VAR.test(declaration.value)
+          ? 'the brand accent: a badge is a kind or a state, not the current selection'
+          : ACCENT_LITERAL.test(declaration.value)
+            ? 'the literal accent colour'
+            : null
+        : ROLE.test(selector)
         ? 'a role badge is neutral: it takes the plain badge colours'
         : ACCENT_VAR.test(declaration.value)
         ? 'the brand accent'
@@ -97,13 +107,13 @@ export function findAccentBadges(source, file) {
 // below, and any class that ends in __badge, __tag, __state or __status or contains -badge.
 const NAMED_BADGES = new Set([
   'world-modal__status', 'moodboard-studio-toolbar__state', 'moodboard-view-switch__badge',
-  'world-preview__badge', 'jev-result__badge', 'character-def__ref-badge', 'reference-set-node__role-badge',
+  'world-preview__badge', 'character-studio-toolbar__state', 'jev-result__badge', 'character-def__ref-badge', 'reference-set-node__role-badge',
 ]);
 const CLASS = /\.(-?[_a-zA-Z][\w-]*)/g;
 const BADGE_SUFFIX = /(?:__(?:badge|tag|state|status)(?![a-zA-Z0-9_])|-badge)/;
 const CAPS_PROP = /^(?:text-transform|font-variant|font-variant-caps)$/i;
 const CAPS_VALUE = /(?:^|\s)(?:uppercase|small-caps|all-small-caps|petite-caps|all-petite-caps)(?![\w-])/i;
-const isBadgeClass = (name) => NAMED_BADGES.has(name) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
+const isBadgeClass = (name) => NAMED_BADGES.has(name.replace(/--[\w-]+$/, '')) || /^commons-(?:badge|source)/.test(name) || BADGE_SUFFIX.test(name);
 
 /** Every declaration that capitalises a badge or tag: { file, line, selector, decl }. */
 export function findCapsBadges(source, file) {

@@ -149,7 +149,7 @@ export function ReferenceSetNode({ id, data, selected }: NodeProps) {
 
       <div className="reference-set-node__preview">
         {preview.length === 0 ? (
-          <div className="reference-set-node__preview-empty">Connect references with priority above 0</div>
+          <div className="reference-set-node__preview-empty">Connect references with priority above 0.</div>
         ) : (
           preview.map(({ role, weight }) => (
             <div key={role} className="reference-set-node__preview-item">
