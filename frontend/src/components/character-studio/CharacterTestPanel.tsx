@@ -89,7 +89,7 @@ export function CharacterTestPanel({
         <input
           type="text"
           className="character-def__input"
-          placeholder="A scene, such as the character drinking coffee at a window, morning light"
+          placeholder="The character drinking coffee at a window, morning light"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
         />
