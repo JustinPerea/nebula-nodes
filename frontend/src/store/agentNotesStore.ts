@@ -127,7 +127,7 @@ interface ReadWanted {
  * id asked for, and goes once on the promote (lib/personWork whenPerson). No line: the updates
  * simply stay unread until the tab connects. A read refused after it went out (a demote while it
  * was in flight, or the promote's own send refused again) joins the same wait, with no line either
- * PR #204 (design): a mark-read is never the person's own press, the page's because line says
+ * (design, PR #204): a mark-read is never the person's own press, the page's because line says
  * why, and nothing was marked read in the tab, so the updates simply stay unread.
  *
  * `covered` keeps the unread updates an `upTo` read covered when it was

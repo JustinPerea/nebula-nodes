@@ -51,7 +51,7 @@ interface CanvasPinsState {
   /** A refusal's one neutral line (design): what happened, then what to do. */
   error: string | null;
   /** Design: `error` is the person gate's refusal (person_required) of a send
-   * ('add') or, design, a delete ('delete'). While the banner shows,
+   * ('add') or a delete ('delete'; design). While the banner shows,
    * the toast says only "Your note wasn’t added." or "Your note wasn’t
    * deleted." (PinComposer decides as it draws: the banner can come or go).
    * The server promoting the tab clears it. */
@@ -366,7 +366,7 @@ function keepDraft(drafts: Record<string, string>, project: string, text: string
 /** The open dialog's target was a node or a spot of the canvas that is
  * going (a follow started) or went (a replacement): the dialog closes, and
  * what the person typed is kept, with the design line saying why. Its target is never re-anchored:
- * the canvas that replaces it reuses the same ids. PR #200 (design):
+ * the canvas that replaces it reuses the same ids. PR #200 (design, 2026-10-28):
  * only an open dialog's note is cut off. A draft the person closed on
  * purpose gets no line; it stays their project's draft. A send that had
  * already failed keeps its own failure line. */

@@ -165,7 +165,7 @@ export function getCinemaUploadIssue(nodeId: string, shotId?: string, includeAll
   // PR #205 (design): a lock reason, in the lock form, naming the
   // uploads by the shared name-list rule (up to 3 by name, from 4 a count).
   // PR #205 (design): one sentence per kind, from what each row offers. The
-  // Cinema toolbar's Generate all says "generate all" (the default until design answers).
+  // Cinema toolbar's Generate all says "generate all" (the default until the design says otherwise).
   const retry = uploads.filter(uploadOffersTryAgain);
   const removeOnly = uploads.filter((upload) => !uploadOffersTryAgain(upload));
   const names = (list: CinemaReferenceUpload[]) => quotedNames(list.map((upload) => upload.name), 'uploads');

@@ -161,7 +161,7 @@ describe('following an agent’s project switch', () => {
     await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
     expect(api.recoverProject).toHaveBeenCalledTimes(1);
     expect(useProjectStore.getState().switchNotice?.keptCopy).toBe(true);
-    // Design: "Claude Code made “{name}”. Edits saved as a copy."
+    // Design (2026-10-24): "Claude Code made “{name}”. Edits saved as a copy."
     expect(switchMessage(useProjectStore.getState().switchNotice!))
       .toBe('Claude Code made “Agent sketches”. Edits saved as a copy.');
   });

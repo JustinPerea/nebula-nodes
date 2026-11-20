@@ -333,9 +333,8 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     const entry = get().proposals[id];
     if (!entry || entry.closing || get().pending[id]) return;
     // Not while the canvas follows an agent's project switch (the canvas is about to go; the bar
-    // pulses), as the
-    // store's gates ask it first. Offline is read-only (PR #114): nothing is sent or marked; the
-    // banner pulses.
+    // pulses), as the store's gates ask it first. Offline is read-only (PR #114): nothing is sent
+    // or marked; the banner pulses.
     if (refuseEditWhileFollowing()) return;
     // Kept in this tab after a restore (design, PR #199): only typing.
     if (refuseEditWhileKept()) return;

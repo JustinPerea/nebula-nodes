@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// PR #199: after a delete freed the slot the waiting canvas then took, Undo
+// PR #199 (Justin, 2026-10-29): after a delete freed the slot the waiting canvas then took, Undo
 // may pass the project limit, so it is never refused by it (it used to be
 // refused with the design line in the Undo toast's place). Any other refusal
 // still says so in the banner.

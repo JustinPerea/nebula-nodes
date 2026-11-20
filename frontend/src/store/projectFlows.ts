@@ -1446,7 +1446,7 @@ export async function recoverPendingWork(): Promise<boolean> {
 
 
 /**
- * Design: the canvas a sync with no agent
+ * Design (2026-10-27): the canvas a sync with no agent
  * behind it is about to replace (the reconnect after a gap, a restart that
  * brought another canvas) held edits it cuts off: they go into a recovered
  * copy of the open project, as a failed handoff's do, so the design line can say
@@ -2069,7 +2069,7 @@ async function projectAlreadyHolds(projectId: string, held: ProjectSnapshot, las
 
 
 /** Follow an agent's project switch instead of stopping the tab as if
- * another window took over . `snapshot` was captured before the graph
+ * another window took over. `snapshot` was captured before the graph
  * store replaced the canvas; if it has changes the backend never saw (a pan,
  * a run record, a node only this tab has), they go into the project that was
  * open (the backend's handoff, open until the next switch), or into a
@@ -2682,7 +2682,7 @@ export const actions = {
     // saves everything first. Not while kept: the kept lines say what unlocks.
     // While that reopen can't go (a run, a World Labs hold), Open still goes
     // back to the canvas, with no request, and the canvas says when it can
-    // Design: Open is the way back from Projects.
+    // (design): Open is the way back from Projects.
     const hold = state.initialized && !state.busy && id === state.activeProject?.id ? reopenHold(id) : null;
     if (state.initialized && !state.busy && id === state.activeProject?.id && (!reopenGivesIds(id) || hold)) {
       // The person's own open of the project already loaded: no request goes

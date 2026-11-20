@@ -28,7 +28,7 @@ export interface HeldProposal {
 /** An Update's held Review (and an asset proposal's lock): "window" in the app (PR #204), through
  * the one lock line (lib/errorCopy personLockLine). */
 export const heldProposalLine = (): string => personLockLine('review this');
-/** Design: a question set's held action (the Agents panel's Needs-you row), worded as the line
+/** Design (2026-10-29): a question set's held action (the Agents panel's Needs-you row), worded as the line
  * above. */
 export const heldQuestionsLine = (): string => personLockLine('answer this');
 

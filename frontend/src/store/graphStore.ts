@@ -639,7 +639,7 @@ function offerApplies(notice: UndoNotice, stacks: { undoStack: UndoEntry[]; redo
 }
 
 /**
- * Design: "a notice whose button no longer applies clears
+ * Design (2026-10-23): "a notice whose button no longer applies clears
  * when a new undo step lands." A notice with an offer shows only while its
  * step is the top of its stack (undoStack for Undo, redoStack for Redo). Every
  * write to the store goes through here (the store's own `set` and
@@ -1992,12 +1992,12 @@ function paramLogName(node: Node<NodeData> | undefined, key: string): string {
 }
 
 /** Design: the Agent log's line for a delete Nebula answered
- * with a server error (the canvas says the design locked line). */
+ * with a server error (the canvas says the design's locked line). */
 export function deleteServerErrorLogLine(node: string, nodeId: string, status: number | string): string {
   return `Couldn’t delete “${node}”, node ${nodeId}. Nebula returned HTTP ${status}.`;
 }
 /** PR #114 (design): one setting, or several. The
- * second sentence only when every one went back. PR #195 (design): several are counted as every
+ * second sentence only when every one went back. PR #195 (design, 2026-10-27): several are counted as every
  * failed-save line counts them
  * (lib/savingCutOff settingsOnOneNode): “a” and “b”; “a”, “b” and “c”; then
  * "4 settings". A setting with no readable name (null) is "a setting on
@@ -2541,7 +2541,7 @@ function replaceCanvasByClear(agentClear?: { agent: string | null }, options: { 
 }
 
 /**
- * Design: a replacement found with no agent
+ * Design (2026-10-27): a replacement found with no agent
  * behind it (the reconnect after a gap, a restart that brought another
  * canvas) that cut off the person's edits keeps them: the canvas as the tab
  * held it, typing included, is saved as a recovered copy (a whole project in
@@ -2576,7 +2576,7 @@ interface PendingLanding {
   nodeId: string;
   /** What it saves, as the design lines name it (the copy's line). */
   saves: CutOffSave[];
-  /** The canvas it was sent on (canvasReplacementRevision). Follow-up to PR
+  /** The canvas it was sent on (canvasReplacementRevision). Follow-up to
    * PR #195: node ids start again at n1 on every canvas, so a
    * landing only ever counts for the canvas it was sent on. */
   graph: number;
@@ -3151,7 +3151,7 @@ function pushNodeParams(nodeId: string, options: { resent?: boolean } = {}): Pro
   if (edits.linger !== undefined) clearTimeout(edits.linger);
   edits.linger = undefined;
   // This save's own keys: those edited since the previous save was sent
-  // PR #114: a failure names and puts back these.
+  // (PR #114): a failure names and puts back these.
   const gen = paramEditGen.get(nodeId) ?? 0;
   const since = lastPushGen.get(nodeId) ?? 0;
   lastPushGen.set(nodeId, gen);
@@ -3599,7 +3599,7 @@ const DELETED_SCENES_KEPT = 32;
  *   retires the scenes a reload suspended);
  * - the node and wire writes still out, the deletes still on their way, the
  *   copies held through a delete, rename drafts, and the labels in flight
- *   with what they were saved over (fix17's Redo
+ *   with what they were saved over (PR #221: fix17's Redo
  *   test left its restore's hold on n1 to the next test).
  * - the person's saves still on their way (landingsOut): each names a node
  *   and carries an `apply` that puts its edit on that node, which an agent
@@ -5341,8 +5341,8 @@ function settleSceneAnswerNow(nodeId: string, entry: CinemaScenePersistence, ans
     case 'kept': {
       holdRemovedWires(nodeId, entry);
       // Design: a run's line is a state while the run holds the save; any
-      // other answer says its own (or none), so it goes after the answer is handled,
-      // so a stop it sets takes the run line's place in the same store update
+      // other answer says its own (or none), so it goes, after the answer is handled:
+      // a stop it sets takes the run line's place in the same store update
       // (dropRunLockStop leaves a stop be).
       const leavesRun = answer.refused !== 'run-lock';
       if (leavesRun) entry.runLockTry = null;
@@ -5810,7 +5810,8 @@ async function readBackendGraphAgain(): Promise<void> {
 // graph, so the scene reconciles (reconcileSceneEntries) without waiting
 // for someone else's edit.
 // Design: a reconnect never cuts kept scene edits off; they go
-// again, and only a refusal of that resend says
+// again, saves whose timed retries stopped included (resendKeptScenes),
+// and only a refusal of that resend says
 // anything (its own line).
 subscribeBackendConnection(() => {
   if (isBackendOffline()) return;
@@ -6410,7 +6411,7 @@ interface HeldCopy {
    * took it off with that node, which is no edit of this one's). */
   there?: ReadonlySet<string>;
   /** Each edit someone else made to it while it was held, in Nebula's order
-   * PR #205 (design): one per edit, never merged across edits (the
+   * (design, PR #205): one per edit, never merged across edits (the
    * app makes one step per edit everywhere else too). Syncs of one edit
    * fold into its link. A sync with no origin (a reconnect's) is a link of
    * its own with none (design): as outside a hold, it makes no step
@@ -6786,7 +6787,7 @@ function placeEarlierLink(id: string, link: HeldLink, set: GraphSet, get: GraphG
 }
 
 /** A node's connections as a sync from someone else left them, over `edges`
- * Design: a local node's, one this tab is still writing, and one
+ * (design): a local node's, one this tab is still writing, and one
  * whose other end wasn't in that sync keep this tab's way. */
 function carriedEdges(edges: readonly Edge[], nodeId: string, synced: readonly Edge[], there: ReadonlySet<string> | undefined): Edge[] {
   const touches = (edge: Edge) => edge.source === nodeId || edge.target === nodeId;
@@ -7454,7 +7455,7 @@ async function renderingOf(response: Response): Promise<RenderingShots | null> {
 }
 
 /** The design notice after a delete: "Deleted the node." / "Deleted {n} nodes.",
- * with Undo for the step that holds it (confirm is gone); the
+ * with Undo for the step that holds it (the earlier confirm dialog is gone); the
  * scenes kept because a shot renders follow it in the design form (scenesKeptLine). */
 function deletedNotice(count: number, step: UndoEntry, kept: readonly KeptScene[] = [], names: readonly string[] = []): Partial<GraphState> {
   // Design: a multi-delete names what it deleted (up to 3, grouped by title,
@@ -9364,7 +9365,7 @@ export function saveUndoWalk(stack: readonly UndoEntry[] = useGraphStore.getStat
  * stack, or under steps of the person's still on their way only: it applies
  * beneath them, and they take its change in (applyHistory). A newer step on top (another actor's, or a later step of the
  * person's that settled above it) drops that press and every one after it,
- * and the notice says so (announceDrop): the design "Nothing was undone. Your last
+ * and the notice says so (announceDrop): the design's "Nothing was undone. Your last
  * change was still saving." when none went through, else the restore's own
  * line followed by "1 undo was skipped while a change was saving." So do the
  * 15 s limit (a press is never applied late) and a project switch.
@@ -9760,7 +9761,7 @@ function placeDeleteStep(undoStep: UndoEntry | undefined, removed: string[], set
   if (!undoStep || at < 0) {
     // No step of its own on the stack (none taken, or it left it): one now.
     const successor = pushUndo(set, get);
-    // A delete's step: it adds nothing (follow-up).
+    // A delete's step: it adds nothing (the "Decided:" rule above syncRemoved).
     markDeleteStep(successor);
     if (undoStep) {
       if (undoStep.removals) successor.removals = undoStep.removals;
@@ -10511,7 +10512,7 @@ function applyHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet, tar
   }
   breakUndoDebounce();
   // The person's own step that brings nodes back says "Restored the node.",
-  // one that deletes them again "Deleted the node." (design). The
+  // one that deletes them again "Deleted the node." (design, 2026-10-23). The
   // restored line waits for the backend's answer when it has backend nodes,
   // since it counts the proposals that couldn't be reopened.
   const before = new Set(nodes.map((node) => node.id));
@@ -10850,7 +10851,7 @@ function sendRestore(
   const known = new Set<UndoEntry>([...undosNow, ...redosNow]);
   // Shown once the backend answers, unless another notice came since, or a
   // new step has landed since: its Redo (or Undo) would no longer apply, so
-  // the line stays away (withLiveNotice; design). What it
+  // the line stays away (withLiveNotice; design, 2026-10-23). What it
   // couldn't put back is never lost with it: that count shows on its own
   // plain line above the newer notice (lateCount; design).
   const answerNotice = (missed: Missed) => set((state) => {
@@ -10975,7 +10976,7 @@ function sendRestore(
   };
   /** Nebula applied it after the limit. The step follows
    * Nebula: it counts as done, so the next Cmd+Z is never a silent no-op;
-   * the design "Nothing was undone" line, no longer true, goes. */
+   * the design's "Nothing was undone" line, no longer true, goes. */
   const landedLate = (response: Response) => {
     if (!response.ok || abandoned || admission.graph !== canvasReplacementRevision) return;
     set((state) => {
@@ -11383,9 +11384,8 @@ function applyGraphSync(event: ExecutionEvent, options: { fromExport?: boolean }
     ? Object.fromEntries(Object.entries(raw as Record<string, unknown>)
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== entry[1]))
     : {};
-  // The graphNotForThisTab check here is defence only (equivalent today): a switch's
-  // sync reaches this store after
-  // projectStore's subscribeFirst handler has cleared the project context,
+  // The graphNotForThisTab check here is defence only (removing it changes nothing today): a switch's
+  // sync reaches this store after projectStore's subscribeFirst handler has cleared the project context,
   // so applyGraphSyncNow would refuse it anyway. Kept so a renumbered sync
   // for another canvas never removes this tab's nodes if that order changes.
   if (Object.keys(renumbered).length === 0 || graphNotForThisTab(event as ExecutionEvent & { workspaceRevision?: unknown; paramsVersion?: unknown })) {
@@ -11467,7 +11467,7 @@ function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolea
   // The presses held for the old graph's steps go; the
   // line saying so shows once the new graph is on the canvas, beside an
   // agent's "changed the canvas" rather than under it.
-  // Which canvas Nebula holds. When it moved
+  // The canvas Nebula holds: when it moved
   // (a clear, an import) the writes held from before are another canvas's:
   // node ids start again at n1, so they must never reach the new nodes.
   // A sync from a backend that doesn't say it (older, or a test's) reads
@@ -12579,7 +12579,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     holdStep(step);
     if (options?.clear) {
       clearSteps.set(step, ++historyOrder);
-      // A clear adds nothing: its undo takes no node off (follow-up).
+      // A clear adds nothing: its undo takes no node off (the "Decided:" rule above syncRemoved).
       stepAdds.set(step, new Set());
     }
     return step;
@@ -13180,7 +13180,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
     const state = get();
     const nodes = nodeIds.filter((id) => state.nodes.some((node) => node.id === id));
     if (state.isExecuting) {
-      // The run lock is never silent (wires alone).
+      // The run lock is never silent, for wires alone too (PR #198).
       if (nodes.length > 0) refuseRunLockedDelete(state, nodes, set);
       else if (edgeIds.length > 0) set({ undoNotice: { id: ++undoNoticeSeq, text: runLockedWiresLine(edgeIds.length), offer: null } });
       return;

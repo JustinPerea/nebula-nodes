@@ -46,9 +46,8 @@ export interface KeptEdits {
    * [Choose a project to delete] while this is set and the line shows. */
   chooseToDelete?: 'projects' | 'storage' | null;
   /** PR #199: the project-limit refusal's numbers. The notice's line is derived from them and the
-   * live
-   * project count, so it follows each Delete. `autoRetried`: the one automatic save after deleting made
-   * room has been spent (a refusal after it is shown as any other; the person's own press resets it). */
+   * live project count, so it follows each Delete. `autoRetried`: the one automatic save after
+   * deleting made room has been spent (a refusal after it is shown as any other; the person's own press resets it). */
   limitCounts?: { count: number; limit: number; deletes: number | null } | null;
   autoRetried?: boolean;
 }
@@ -226,7 +225,7 @@ export interface ProjectState {
    * limit: its size as the save check counts it, kept current as it
    * changes. Null otherwise. */
   savePaused: { bytes: number } | null;
-  /** The one region notice for this state (design's "Saving paused. …", the
+  /** The one region notice for this state (the design's "Saving paused. …", the
    * Load graph line, then "Saving again. …"); `action`: it offers "See
    * what's large". A new id is a new notice. */
   sizeNotice: { id: number; text: string; action: boolean } | null;
@@ -382,7 +381,7 @@ let sizeNoticeId = 0;
 /** A save that would have ended the pause failed for another reason (a
  * dropped connection, a 5xx): the pause is dropped then, since the project
  * measured at the limit or under and the real problem is the failed save,
- * and the save that lands next still says the design "Saving again". */
+ * and the save that lands next still says the design's "Saving again". */
 let resumePending = false;
 /** The person downloaded the held edits during a params-version stop: the
  * tab asks for its reload instead of reloading, so the design line saying where
