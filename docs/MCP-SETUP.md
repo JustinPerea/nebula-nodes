@@ -777,7 +777,8 @@ The server exposes these tools for building and running (see
   the same protected-path check as the other file tools. The model read of an
   image is not an agent tool yet; it comes in a later round. The tools run in the
   MCP process with no Nebula server, and the same work is `python -m extraction
-  measure|list|show` from `backend/`.
+  measure|list|show` from `backend/`. A local page (`python -m extraction serve`)
+  shows the same records, so what an agent measures appears there and the reverse.
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, Styles, projects), and bring one back with the same id. A
   project restore may pass the project limit; after one, `new_project` is

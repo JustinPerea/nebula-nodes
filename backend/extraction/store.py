@@ -27,6 +27,7 @@ from extraction.errors import StoreRefused
 
 SOURCE_EXTS = ("jpg", "png", "gif", "webp", "heic")
 MAX_RECORD_BYTES = 5 * 1024 * 1024
+MAX_RENDERING_BYTES = 128 * 1024 * 1024
 _PNG = b"\x89PNG\r\n\x1a\n"
 _DIR_NAME = re.compile(r"^ex_[0-9a-f]{16}$")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -172,6 +173,32 @@ def _locate(target: str | os.PathLike[str]) -> str:
 def load(target: str | os.PathLike[str]) -> dict[str, Any]:
     """Read a record from its folder or its record.json."""
     return _read_record_file(_locate(target))
+
+
+def rendering_bytes(target: str | os.PathLike[str]) -> bytes:
+    """The saved ``rendering.png`` of a record (its folder or its record.json), checked like ``load``."""
+    directory = _locate(target)
+    _read_record_file(directory)  # only a good record's rendering is served
+    path = os.path.join(directory, "rendering.png")
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        raise StoreRefused("That record has no rendering.") from None
+    if stat.S_ISLNK(info.st_mode):
+        raise StoreRefused("That rendering is a symlink, so it won't be read.")
+    if not stat.S_ISREG(info.st_mode):
+        raise StoreRefused("That rendering isn't a regular file.")
+    if info.st_size > MAX_RENDERING_BYTES:
+        raise StoreRefused("That rendering is too large to read.")
+    _contained(path, directory)
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(MAX_RENDERING_BYTES + 1)
+    except OSError:
+        raise StoreRefused("That rendering couldn't be read.") from None
+    if not data.startswith(_PNG):
+        raise StoreRefused("That rendering isn't a PNG.")
+    return data
 
 
 def list_records(folder: str | os.PathLike[str]) -> list[dict[str, Any]]:

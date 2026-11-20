@@ -75,6 +75,12 @@ def _show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _serve(args: argparse.Namespace) -> int:
+    from extraction.server import serve
+
+    return serve(port=args.port, dev=args.dev)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m extraction", description="Measure images into records.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -93,6 +99,11 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("--json", action="store_true")
     show.add_argument("--effective", action="store_true", help="with corrections applied")
     show.set_defaults(run=_show)
+    serve = sub.add_parser("serve", help="run the local page's server on 127.0.0.1")
+    serve.add_argument("--port", type=int, default=8870, help="the port to listen on (default 8870)")
+    serve.add_argument("--dev", action="store_true",
+                       help="the page comes from the Vite dev server on 5870, which proxies /api here")
+    serve.set_defaults(run=_serve)
     return parser
 
 

@@ -45,3 +45,47 @@ FastAPI, the Commons store or `commons.activation`, and importing it leaves the 
   byte for byte (`tests/fixtures/extraction/measure_file_v6.json`, made before the split).
 - `apply_op` creates missing parents, so a correction to a show that doesn't exist would build a half entry;
   the show checks above stop that.
+
+## Extraction page (round 2)
+
+Run it: `cd backend && python -m extraction serve` prints one line, `http://127.0.0.1:8870/#token=<token>`, and
+serves the built page from `frontend/dist-extraction/` (`cd frontend && npm run extraction:build` first; until
+then `/` says to build it). For the Vite dev server: `python -m extraction serve --dev` in one terminal and
+`npm run extraction:dev` in another, then open the printed address (port 5870, which proxies `/api` to 8870).
+`--port` moves the server. The page is its own Vite build (`vite.extraction.config.ts`, entry `extraction.html`),
+so the app's startup bundle is unchanged; `src/extraction/importBoundary.test.ts` fails if anything outside
+`src/extraction/` imports it.
+
+Guards (one ASGI middleware in `server.py`, before any route): `Host` must be `127.0.0.1:<port>` or
+`localhost:<port>` (plus the 5870 pair with `--dev`), else 421. `/api/*` needs `X-Extraction-Token` equal to the
+launch token (`hmac.compare_digest`), else 401. An `Origin` header must be exactly the page's own origin, so
+`Origin: null` and any other origin are 403, and any POST without an Origin is 403. No CORS headers. The body is
+read in the middleware and counted as it arrives: over the image cap plus 256 KiB is 413, by `Content-Length`
+or by bytes read. The token lives in the URL fragment, which the browser doesn't send, and is never in a
+response body, header or log (uvicorn's access log is off). The page keeps it in `sessionStorage` and clears
+the fragment with `history.replaceState`.
+
+Decisions beyond the brief:
+- Order of checks is Host, token, Origin, size. A foreign Host never learns whether a token was right.
+- The server buffers the whole body (at most about 25.25 MB) before routing, so the route sees a complete form
+  and a body with no length can't skip the cap.
+- Static files and error replies carry `X-Content-Type-Options`, `Referrer-Policy: no-referrer`,
+  `X-Frame-Options: DENY` and a CSP (`default-src 'self'`, images from `blob:` and `data:`). The page uses blob
+  URLs for renderings because an `<img>` can't send the token header.
+- `store.rendering_bytes` is new: it serves `rendering.png` with the same checks as `load` (no symlink,
+  regular file, inside the record, a PNG, at most 128 MB, and only for a record that validates).
+- Record ids in URLs must match `ex_` plus 16 hex digits before the store sees them. Unknown `/api/*` paths are
+  404 JSON; any `/api/*` path needs the token first, even a path that doesn't exist.
+- Static serving is a catch-all route checked by `realpath` against `dist-extraction` (symlinks that leave it
+  are 404), not `StaticFiles`.
+- The dev proxy keeps the browser's Host and Origin (`changeOrigin: false`), so `--dev` accepts the 5870 pair. The
+  dev server has no `index.html`, so a proxy `bypass` on `^/$` serves `extraction.html` there instead of a plugin.
+- The page remembers the last folder in `localStorage` and opens it on load. The list fetches every record's
+  rendering for its 40 px thumbnail (full PNG, cached as a blob URL for the session). A folder with hundreds of
+  large records would want a smaller thumbnail file; not done in this round.
+- Several images are posted one after another through a promise queue; an image that fails is skipped with the
+  server's sentence (prefixed with its name when there are several) and the rest go on. The last good one opens.
+- A "Close" button in the record view returns to the drop area. Values from the model are not shown yet, so the
+  "code" origin tag sits on every measured and source value.
+- `vite.extraction.config.ts` isn't in `tsconfig.node.json`'s include (that file is outside this lane), so it
+  isn't type-checked; Vite loads it as is.

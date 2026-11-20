@@ -1,0 +1,227 @@
+/* The extraction page. Nebula's own look: a #111 ground, #ccc text, the system font stack,
+   small type, quiet greys. Everything is scoped under .ex-app so it can move into Nebula later. */
+
+html, body, #root { height: 100%; margin: 0; }
+body { background: #111; }
+
+.ex-app {
+  --ex-bg: #111;
+  --ex-text: #ccc;
+  --ex-strong: #e6e6e6;
+  --ex-muted: #888;
+  --ex-fill: #191919;
+  --ex-fill-hover: #202020;
+  --ex-fill-selected: #272727;
+  --ex-line: #262626;
+  --ex-notice: #2a1d1d;
+  --ex-notice-text: #e3b4b4;
+  --ex-focus: #8fb4ff;
+  --ex-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --ex-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-width: 960px;
+  background: var(--ex-bg);
+  color: var(--ex-text);
+  font: 13px/1.45 var(--ex-font);
+}
+
+.ex-app *, .ex-app *::before, .ex-app *::after { box-sizing: border-box; }
+
+.ex-app button, .ex-app input { font: inherit; color: inherit; }
+.ex-app :focus-visible { outline: 2px solid var(--ex-focus); outline-offset: 1px; }
+
+.ex-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ex-line);
+}
+.ex-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--ex-strong); }
+.ex-folder { display: flex; gap: 8px; flex: 0 1 460px; }
+.ex-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ex-line);
+  border-radius: 6px;
+  background: var(--ex-fill);
+}
+.ex-input::placeholder { color: #5f5f5f; }
+.ex-using { flex: 1; display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0; color: var(--ex-muted); }
+.ex-using-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.ex-using-count { flex: none; }
+
+.ex-button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--ex-fill-selected);
+  color: var(--ex-strong);
+  cursor: pointer;
+}
+.ex-button:hover:not(:disabled) { background: #323232; }
+.ex-button:disabled { color: #666; cursor: default; }
+.ex-button-quiet { background: transparent; color: var(--ex-muted); }
+.ex-button-quiet:hover:not(:disabled) { background: var(--ex-fill); color: var(--ex-text); }
+
+.ex-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 0; }
+
+.ex-side-list { min-height: 0; overflow-y: auto; border-right: 1px solid var(--ex-line); }
+.ex-list-head { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 12px 6px; }
+.ex-busy { color: var(--ex-muted); }
+.ex-list { list-style: none; margin: 0; padding: 0 6px 12px; display: grid; gap: 2px; }
+
+.ex-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.ex-row:hover { background: var(--ex-fill-hover); }
+.ex-row.ex-selected { background: var(--ex-fill-selected); }
+.ex-row-broken { display: flex; align-items: center; gap: 10px; padding: 6px; color: var(--ex-muted); }
+.ex-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  background: var(--ex-fill-hover);
+  overflow: hidden;
+}
+.ex-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ex-row-text { display: grid; min-width: 0; }
+.ex-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ex-strong); }
+.ex-row-sub { font-size: 11px; color: var(--ex-muted); }
+
+.ex-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 16px; }
+.ex-main.ex-dragging::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+
+.ex-notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--ex-notice);
+  color: var(--ex-notice-text);
+}
+.ex-quiet { margin: 0; color: var(--ex-muted); }
+.ex-pad { padding: 4px 0; }
+
+.ex-drop {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-radius: 10px;
+  background: var(--ex-fill);
+}
+.ex-drop-active { background: var(--ex-fill-hover); }
+.ex-drop-line { margin: 0; font-size: 14px; color: var(--ex-strong); }
+
+.ex-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ex-muted);
+}
+.ex-list-head .ex-label { margin: 0; }
+
+.ex-record { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; min-height: 0; }
+.ex-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 10px;
+  background: var(--ex-fill);
+  overflow: hidden;
+}
+.ex-rendering { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.ex-side { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 22px; }
+.ex-side-head { display: flex; align-items: center; justify-content: space-between; }
+.ex-status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ex-fill-selected);
+  font-size: 11px;
+  color: var(--ex-strong);
+}
+
+.ex-bar { display: flex; height: 22px; margin-bottom: 10px; border-radius: 6px; overflow: hidden; }
+.ex-seg { position: relative; height: 100%; transform-origin: left center; }
+.ex-seg-accent::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: #fff;
+  mix-blend-mode: difference;
+}
+
+.ex-colors { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ex-colors li { display: grid; grid-template-columns: 16px 64px 40px 1fr auto; align-items: center; gap: 10px; padding: 3px 0; }
+.ex-swatch { width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.ex-hex { font-family: var(--ex-mono); font-size: 12px; color: var(--ex-strong); }
+.ex-share { text-align: right; color: var(--ex-text); }
+.ex-accent-tag { color: var(--ex-muted); }
+
+.ex-app dl { margin: 0; }
+.ex-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; }
+.ex-line dt { color: var(--ex-muted); }
+.ex-line dd { margin: 0; display: flex; align-items: baseline; gap: 8px; min-width: 0; text-align: right; }
+.ex-value { overflow-wrap: anywhere; color: var(--ex-strong); }
+.ex-mono { font-family: var(--ex-mono); font-size: 12px; }
+
+.ex-origin {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ex-fill-selected);
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--ex-muted);
+}
+
+/* Springs: arrivals use the POP spring from lib/springs (the CSS variables come from the page root). */
+@keyframes ex-row-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ex-seg-in {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.ex-arrived { animation: ex-row-in var(--spring-pop-ms) var(--spring-pop) both; }
+.ex-seg { animation: ex-seg-in var(--spring-pop-ms) var(--spring-pop) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-arrived, .ex-seg { animation: none; }
+}
