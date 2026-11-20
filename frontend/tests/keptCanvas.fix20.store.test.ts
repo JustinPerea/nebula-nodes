@@ -1,5 +1,5 @@
 /**
- * Round 20 of PR #199 (GM r29): Nebula's own reopen this tab couldn't
+ * PR #199 (design): Nebula's own reopen this tab couldn't
  * follow ends on Projects with [Open “…”]; the reload line names the project
  * Nebula recorded with the recovered copy; open proposals survive a reopen
  * of the same project.
@@ -103,7 +103,7 @@ let notices: CanvasNoticeDetail[] = [];
 const onNotice = (event: Event) => { notices.push((event as CustomEvent<CanvasNoticeDetail>).detail); };
 let unsubscribe: (() => void) | null = null;
 
-// The table of lines loads when a hold first arrives (review 21 LOW-1); these
+// The table of lines loads when a hold first arrives; these
 // tests are about the lines themselves, so it is loaded first.
 beforeAll(async () => { await loadReopenHoldLines(); });
 
@@ -163,7 +163,7 @@ const bootSwitch = (more: Record<string, unknown> = {}) => {
     nodes: [{ ...n1 }], edges: [], ...more });
 };
 
-describe('GM r29, 1: Nebula’s own reopen this tab couldn’t follow, on Projects', () => {
+describe('Nebula’s own reopen this tab couldn’t follow, on Projects', () => {
   it('the line ends at the failure, and the box offers [Open “Glass campaign”] in place of Try again', async () => {
     vi.mocked(projects.listProjects).mockRejectedValue(new Error('down'));
     bootSwitch();
@@ -199,7 +199,7 @@ describe('GM r29, 1: Nebula’s own reopen this tab couldn’t follow, on Projec
   });
 });
 
-describe('GM r29, 2: the reload line names what was actually recovered', () => {
+describe('the reload line names what was actually recovered', () => {
   const update = () => {
     type('Unsaved edit');
     useProjectStore.setState({ activeProject: null });
@@ -245,7 +245,7 @@ function proposal(id: string): ProposalView {
   };
 }
 
-describe('GM r29, 3: open proposals survive a reopen of the same project', () => {
+describe('open proposals survive a reopen of the same project', () => {
   beforeEach(() => {
     useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null, deferredRun: null });
     useCanvasProposalsStore.getState().open(proposal('p_a'), 'key-a');
@@ -266,7 +266,7 @@ describe('GM r29, 3: open proposals survive a reopen of the same project', () =>
   });
 });
 
-describe('GM r29, 3 and a restart: proposals from before a restart don’t stay', () => {
+describe('a restart: proposals from before a restart don’t stay (design)', () => {
   beforeEach(() => {
     useCanvasProposalsStore.setState({ proposals: {}, drag: {}, pending: {}, errors: {}, focusedId: null, deferredRun: null });
   });
@@ -299,7 +299,7 @@ const noticeNow = () => useGraphStore.getState().messageNotice?.text ?? useGraph
 const RUN_LINE = 'You can reopen “Glass campaign” when the run finishes.';
 const WL_LINE = 'You can reopen “Glass campaign” after you check its World Labs run in Marble and press “I’ve checked Marble”.';
 
-describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t go yet', () => {
+describe('a reopen in place that can’t go yet', () => {
   it('the lines', () => {
     expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'tabRun' })).toBe(RUN_LINE);
     expect(reopenHoldLine('Glass campaign', 'alpha', { state: 'uncertain' })).toBe(WL_LINE);
@@ -333,7 +333,7 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
     await useProjectStore.getState().open('alpha');
     expect(vi.mocked(projects.openProject)).not.toHaveBeenCalled();
     expect(useProjectStore.getState().screen).toBe('workspace');
-    // By the World Labs notice (GM r32, 2), not the notice by Stop.
+    // By the World Labs notice (design), not the notice by Stop.
     expect(useProjectStore.getState().heldReopenLine?.line).toBe(WL_LINE);
     useGraphStore.setState({ uncertainWorldLabsRunId: null });
     expect(useProjectStore.getState().heldReopenLine).toBeNull();
@@ -344,7 +344,7 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
     expect(reopenHold('alpha')).toBeNull();
   });
 
-  it('a refusal after the press (Nebula’s 409) when Nebula’s verdict names no hold by then: back on the canvas, the bar not left on Saving…, and no line (review 20 NIT-3: one quiet retry, then nothing false is said)', async () => {
+  it('a refusal after the press (Nebula’s 409) when Nebula’s verdict names no hold by then: back on the canvas, the bar not left on Saving…, and no line (one quiet retry, then nothing false is said)', async () => {
     vi.mocked(projects.getOpenHold).mockResolvedValue({ hold: null });
     duplicateN1();
     // Saved before the press: the bar says what it said then, never “Saving…”.
@@ -385,7 +385,7 @@ describe('review 18 MEDIUM-2 and GM r30 item 2: a reopen in place that can’t g
   });
 });
 
-describe('review 18 MEDIUM-1: the handoff names the tab-local nodes this tab deleted, and only those', () => {
+describe('the handoff names the tab-local nodes this tab deleted, and only those', () => {
   it('a duplicate deleted here is named; one Nebula gave an id is not; a project load starts over', () => {
     const local = duplicateN1();
     expect(tabLocalDeletes()).toEqual([]);
@@ -410,7 +410,7 @@ describe('review 18 MEDIUM-1: the handoff names the tab-local nodes this tab del
   });
 });
 
-describe('review 18 LOW-1 and GM r30 item 4: the person’s reopen in another tab', () => {
+describe('the person’s reopen in another tab', () => {
   const personReopen = (tab: string) => bootSwitch({ workspaceRevision: 'rev-a2', proposalsKept: true,
     projectSwitch: { projectId: 'alpha', projectName: 'Glass campaign', previousRevision: 'rev-a',
       previousProjectId: 'alpha', previousProjectName: 'Glass campaign', actor: { kind: 'person', tab }, created: false } });

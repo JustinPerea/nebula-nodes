@@ -58,7 +58,7 @@ beforeEach(() => {
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
     api.acceptProposal, api.rejectProposal, api.releaseApproval]) fn.mockReset();
   // As the real store: once adopted, the run's nodes are on the canvas (the
-  // accept's run is sent only while they are: review 11, L-5).
+  // accept's run is sent only while they are).
   graph.state.adoptAcceptedProposal.mockImplementation((result: { runNodeIds?: string[] }) => {
     const ids = new Set(graph.state.nodes.map((node) => node.id));
     graph.state.nodes = [...graph.state.nodes, ...(result.runNodeIds ?? []).filter((id) => !ids.has(id)).map((id) => ({ id }))];
@@ -68,11 +68,11 @@ beforeEach(() => {
   graph.state.endUndoStep.mockClear();
 });
 
-// Review 16, L-2 (round 17): a second proposal accepted while a run was going
+// A second proposal accepted while a run was going
 // overwrote the first's held run without releasing its approval. Decision:
 // held runs queue in order; none is dropped, each runs once (or gets its
 // existing refusal line), and no approval is ever left held.
-describe('held runs queue (review 16, L-2)', () => {
+describe('held runs queue', () => {
   const acceptWhileRunning = async (id: string, nodeIds: string[], approvalId: string | null) => {
     emit({ type: 'proposalOpened', proposal: proposal(id), acceptKey: `key-${id}` });
     graph.state.isExecuting = true;

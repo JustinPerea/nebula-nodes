@@ -2,15 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 6: review 5 of the agent steps under a hold (GM r10 item 1).
-// - MEDIUM-1: a held change never goes under a step the person took during
-//   the hold (O1t, O1u): it is its own step on top then, and every Undo takes
+// PR #205: a review of the agent steps under a hold (design).
+// - A held change never goes under a step the person took during
+//   the hold: it is its own step on top then, and every Undo takes
 //   back only what it names.
-// - LOW-1: the newest held copy keeps the person's rename in flight.
-// - LOW-2: a run's write-back never folds into a sourceless sync.
-// - LOW-3: Nebula's order across held nodes (O3, O3b, O8, alternation).
-// - NIT-1: the newest chain step's place (O9) and the no-link gate (O11).
-// The harness is round 5's (round 18's fake Nebula).
+// - The newest held copy keeps the person's rename in flight.
+// - A run's write-back never folds into a sourceless sync.
+// - Nebula's order across held nodes, including alternation.
+// - The newest chain step's place and the no-link gate.
+// The harness is the fake Nebula in tests/helpers/undoFakeBackend.ts.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -69,7 +69,7 @@ const claude = { actor: { kind: 'agent', name: 'Claude', id: 'claude' } };
 const wire = (source: string, target: string): FakeWire => ({ id: `w-${source}-${target}`, source, sourceHandle: 'text', target, targetHandle: 'text' });
 let clock = Date.now();
 
-describe("PR #205 round 6: held changes in Nebula's order, never under the person's steps", () => {
+describe("PR #205: held changes in Nebula's order, never under the person's steps", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -179,8 +179,8 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
     await releaseLabelled('params');
   };
 
-  describe('MEDIUM-1: the person types during the hold, above the step the agent\'s sync made', () => {
-    it('O1t: Claude connects n1>n2 and renames it in one edit, the person types: each Undo takes back only what it names', async () => {
+  describe('the person types during the hold, above the step the agent\'s sync made', () => {
+    it('Claude connects n1>n2 and renames it in one edit, the person types: each Undo takes back only what it names', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await restoreHeld();
       agentDoes(claude, 'ed_r6o1tclaude001', () => { nebula().edges.push(wire('n1', 'n2')); n1().label = 'Claude'; });
@@ -189,7 +189,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
       await releaseAll();
       expect(state()).toEqual({ v: 'mine', l: 'Claude', w: ['n1>n2'] });
       sameAsNebula();
-      // The agent's held change is its own step on top (GM r10 item 1, (a)).
+      // The agent's held change is its own step on top (design).
       expect(stackKinds()).toEqual(['F(Claude)', 'own', 'F(Claude)']);
       await undo();
       expect(notice()).toBe('Undid Claude’s edit.');
@@ -211,7 +211,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
       sameAsNebula();
     });
 
-    it('O1u: Codex renames (no step of its own), Claude connects, the person types: Codex\'s Undo never brings the typing back', async () => {
+    it('Codex renames (no step of its own), Claude connects, the person types: Codex\'s Undo never brings the typing back', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await restoreHeld();
       agentDoes(codex, 'ed_r6o1ucodex0001', () => { n1().label = 'Codex'; });
@@ -256,7 +256,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
     });
   });
 
-  describe('LOW-1: the newest held copy keeps the person\'s rename in flight', () => {
+  describe('the newest held copy keeps the person\'s rename in flight', () => {
     it('a stale sourceless sync, then Codex sets a value: the name stays the person\'s, never Codex\'s', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       agentDoes(claude, 'ed_r6l1claude0001', () => { n1().label = 'C0'; });
@@ -288,7 +288,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
     });
   });
 
-  describe('LOW-2: a run\'s write-back next to a sourceless sync, during a refused Delete', () => {
+  describe('a run\'s write-back next to a sourceless sync, during a refused Delete', () => {
     it.each([['an output sync, then the write-back', 'outFirst'], ['the write-back, then an output sync', 'runFirst']] as const)('%s: the value stays Codex\'s and its Redo keeps the run\'s value', async (_label, order) => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       agentDoes(codex, 'ed_r6l2codex00001', () => { n1().params = { value: 'CODEX' }; });
@@ -318,7 +318,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
     });
   });
 
-  describe('LOW-3: Nebula\'s order across held nodes', () => {
+  describe('Nebula\'s order across held nodes', () => {
     const twoBack = async () => {
       store().onNodesChange([{ id: 'n1', type: 'remove' }, { id: 'n2', type: 'remove' }]);
       await settle(); await tick(6000); await settle();
@@ -334,7 +334,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
       return lines;
     };
 
-    it('O3: a restore of two nodes, Claude sets n2, then Codex sets n1: Undo takes Codex first', async () => {
+    it('a restore of two nodes, Claude sets n2, then Codex sets n1: Undo takes Codex first', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, textFakeNode('n3')]);
       await twoBack();
       agentDoes(claude, 'ed_r6o3claude0001', () => { n2().params = { value: 'CLAUDE2' }; });
@@ -379,7 +379,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
       expect([valueOf('n1'), valueOf('n3')]).toEqual(['v0', 'x0']);
     });
 
-    it('O3b: a refused Delete of two nodes, Claude sets n2, then Codex sets n1: Undo takes Codex first', async () => {
+    it('a refused Delete of two nodes, Claude sets n2, then Codex sets n1: Undo takes Codex first', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, textFakeNode('n3')]);
       fake.override = (path, init) => (init?.method === 'DELETE' && /^\/api\/graph\/node\/n[12]$/.test(path)
         ? nebula().later(`refused ${path}`, () => new Response(JSON.stringify({ detail: 'It is running.' }), { status: 409 }))
@@ -397,7 +397,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
       expect(await undoLines(2)).toEqual(['Undid Codex’s edit.', 'Undid Claude’s edit.']);
     });
 
-    it.each([['the restore answers first', 'restoreFirst'], ['the refusal first', 'refuseFirst']] as const)('O8: a refused Delete inside a restore hold, %s: Codex connects n1>n2, Claude sets n1, Gemini sets n2', async (_label, order) => {
+    it.each([['the restore answers first', 'restoreFirst'], ['the refusal first', 'refuseFirst']] as const)('a refused Delete inside a restore hold, %s: Codex connects n1>n2, Claude sets n1, Gemini sets n2', async (_label, order) => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }]);
       await restoreHeld();
       fake.override = (path, init) => (init?.method === 'DELETE' && path === '/api/graph/node/n2'
@@ -422,8 +422,8 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
     });
   });
 
-  describe('NIT-1: the guards review 5 found load-bearing', () => {
-    it('O9: Codex moves n1, then Claude renames it under a Delete that goes through: the node stays where Codex put it', async () => {
+  describe('the guards a reviewer found load-bearing', () => {
+    it('Codex moves n1, then Claude renames it under a Delete that goes through: the node stays where Codex put it', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await deleteHeld();
       agentEdits(codex, { ...textFakeNode('n1'), position: { x: 500, y: 400 } }, 'ed_r6o9codex00001', [], { moved: ['n1'] });
@@ -441,7 +441,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
       expect([pos(), labelOf('n1')]).toEqual([{ x: 500, y: 400 }, 'Claude']);
     });
 
-    it('O11: the person renames a node its restore holds and no one else edits it: the name is theirs, no "someone" on it', async () => {
+    it('the person renames a node its restore holds and no one else edits it: the name is theirs, no "someone" on it', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       agentDoes(claude, 'ed_r6o11claude001', () => { n1().label = 'C0'; });
       await settle();
@@ -454,7 +454,7 @@ describe("PR #205 round 6: held changes in Nebula's order, never under the perso
     });
   });
 
-  describe('GM r10 items 2-3: the pinned Inspector when its node goes, every way', () => {
+  describe('the pinned Inspector when its node goes, every way (design)', () => {
     const pin = (id: string) => {
       useUIStore.getState().selectNode(id);
       useUIStore.getState().setInspectorPinned(true);

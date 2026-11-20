@@ -39,7 +39,7 @@ afterEach(() => cleanup());
 
 describe('Commons comment submissions', () => {
   it('preserves a rejected comment, shows the error and permits an explicit successful retry', async () => {
-    // Round 3e: the Commons API's typed refusals (CommonsRequestError is one), not plain Errors.
+    // The Commons API's typed refusals (CommonsRequestError is one), not plain Errors.
     api.comment.mockRejectedValueOnce(new RequestFailedError("Couldn't save the comment.", 409, { reason: 'The comment was not saved.' }));
     const onChanged = vi.fn();
     render(<CommonsDetail assetId="fixture-asset" onClose={vi.fn()} onDeleted={vi.fn()} onChanged={onChanged} />);
@@ -94,7 +94,7 @@ describe('Commons linked-folder submissions', () => {
     api.linkFolder.mockRejectedValueOnce(new RequestFailedError("Couldn't link the folder.", 403, { reason: 'Folder is not allowed.' }));
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
-    // Round 18b (GM r29): the form shows once the settings read answers.
+    // Design: the form shows once the settings read answers.
     const input = await screen.findByRole('textbox', { name: 'Folder path' });
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/references' } });
@@ -115,7 +115,7 @@ describe('Commons linked-folder submissions', () => {
     const pending = deferred<unknown>(); api.linkFolder.mockReturnValueOnce(pending.promise);
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
-    // Round 18b (GM r29): the form shows once the settings read answers.
+    // Design: the form shows once the settings read answers.
     const input = await screen.findByRole('textbox', { name: 'Folder path' });
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/first' } });
@@ -134,14 +134,14 @@ describe('Commons linked-folder submissions', () => {
     api.folders.mockResolvedValueOnce([]).mockRejectedValue(new RequestFailedError("Couldn't load the folders.", 409, { reason: 'Folder refresh offline.' }));
     const onChanged = vi.fn();
     render(<CommonsSettings status={null} onOpenAsset={vi.fn()} onChanged={onChanged} />);
-    // Round 18b (GM r29): the form shows once the settings read answers.
+    // Design: the form shows once the settings read answers.
     const input = await screen.findByRole('textbox', { name: 'Folder path' });
     await waitFor(() => expect(api.folders).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: '/synthetic/committed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Link folder' }));
     await waitFor(() => expect(input).toHaveValue(''));
-    // Round 18d (GM r32 3, review 14 LOW-1): the write landed; the read-back's failure is a load's,
-    // neutral, in GM's words, never the failure's own.
+    // Design: the write landed; the read-back's failure is a load's,
+    // neutral, in design's words, never the failure's own.
     expect(await screen.findByRole('alert')).toHaveTextContent('Saved. Nebula couldn’t load the settings back because the server didn’t accept it. Reload to see them.');
     expect(screen.getByRole('alert')).toHaveAttribute('data-line-neutral');
     expect(document.body.textContent).not.toContain('Folder refresh offline.');

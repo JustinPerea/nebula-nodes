@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ProposalView, ProposalWait } from '../src/lib/wsClient';
 
 /**
- * The daily total (Justin decided, 2026-10-31; GM - Design's design,
+ * The daily total (Justin decided, 2026-10-31; design's own wording,
  * verbatim): the Settings row, the proposal bar's line, the waiting node's
  * status (its header, NodeWaitSwap; tests/nodeWaitHeader.test.tsx), and the bar's lock while the
  * tab isn't connected as the person.
@@ -37,13 +37,13 @@ const { useCanvasProposalsStore } = await import('../src/store/canvasProposalsSt
 const { readAgentSpend } = await import('../src/store/settingsDraftStore');
 const { notePersonPromoted, reportPersonRequired } = await import('../src/lib/personSession');
 
-// GM - Design, 2026-10-31, verbatim.
+// Design, 2026-10-31, verbatim.
 const DESCRIPTION = 'Agent chats, agents outside Nebula, scripts and tabs not opened from your link all count '
   + 'toward it. Your own runs don’t.';
 const BAR = 'This would pass the $5 daily total, which has $0.20 left.';
 
 describe('the lines', () => {
-  it('reads usage as GM wrote it', () => {
+  it('reads usage as design wrote it', () => {
     expect(dailyUsageLine(0, 5)).toBe('Nothing spent in the last 24 hours.');
     expect(dailyUsageLine(3.4, 5)).toBe('$3.40 of $5 used in the last 24 hours.');
     expect(dailyUsageLine(5.2, 5)).toBe('$5.20 of $5 used in the last 24 hours. New runs wait for your OK.');
@@ -92,7 +92,7 @@ describe('Settings: the Daily total row', () => {
 
   afterEach(cleanup);
 
-  it('labels it as GM wrote it, with $5 preselected and no "(default)"', () => {
+  it('labels it as design wrote it, with $5 preselected and no "(default)"', () => {
     const { container } = row({});
     expect(screen.getByLabelText('Daily total')).toBeTruthy();
     expect(container.querySelector('#settings-agent-daily-help')!.textContent!.replace(/\s+/g, ' ').trim()).toBe(DESCRIPTION);
@@ -203,7 +203,7 @@ describe('a run the daily total holds', () => {
     notePersonPromoted();
   });
 
-  it('puts GM\'s line in the bar\'s line spot', () => {
+  it('puts design\'s line in the bar\'s line spot', () => {
     const { container } = render(<ProposalBar />);
     const line = container.querySelector('.proposal-bar__note')!;
     expect(line.textContent).toBe(BAR);

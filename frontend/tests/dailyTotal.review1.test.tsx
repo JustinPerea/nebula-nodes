@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { AgentPresenceEvent } from '../src/lib/wsClient';
 
 /**
- * The daily total, PR #212 round 2: review 1's findings and GM - Design's
+ * The daily total, PR #212: a reviewer's findings and design's
  * answers (2026-10-31). Escape in "Other amount…" goes back without closing
  * Settings; focus returns to the select after Enter saves; the draft reads
  * 7.50; what can't be saved keeps the field open with a line and never saves

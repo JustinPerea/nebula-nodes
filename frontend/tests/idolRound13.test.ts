@@ -1,11 +1,11 @@
 /**
- * PR #203 round 13: GM r24.
+ * PR #203: design's later rulings.
  *
- * - Item 3: the Krea mode label is "API key · API balance".
- * - Item 6: the not-ready nodes follow the shared rule: up to 3 a line each,
+ * - The Krea mode label is "API key · API balance".
+ * - The not-ready nodes follow the shared rule: up to 3 a line each,
  *   from 4 one line that counts them ("4 nodes can’t run here yet.").
- * GM r25 item 3: every provider's notices say its own noun, the word its
- * link uses ("Replicate token saved."). Review 12, copy LOW-1: the
+ * Design: every provider's notices say its own noun, the word its
+ * link uses ("Replicate token saved."). The
  * screen-reader name says the noun once ("Krea · API key").
  */
 import { readFileSync } from 'node:fs';
@@ -22,7 +22,7 @@ import type { ProposalNotReady } from '../src/lib/wsClient';
 
 const SRC = resolve(__dirname, '../src');
 
-describe('the Krea mode label (GM r24 item 3)', () => {
+describe('the Krea mode label', () => {
   it('says "API key · API balance" in every Krea node and in Settings', () => {
     const labels = new Set(Object.values(NODE_DEFINITIONS).flatMap((definition) =>
       (definition.params ?? []).filter((param) => param.key === '_kreaAuth')
@@ -34,7 +34,7 @@ describe('the Krea mode label (GM r24 item 3)', () => {
   });
 });
 
-describe('the not-ready nodes by the shared rule (GM r24 item 6)', () => {
+describe('the not-ready nodes by the shared rule', () => {
   const rows = (count: number): ProposalNotReady[] => ['a', 'b', 'c', 'd', 'e'].slice(0, count).map((ref) => ({
     ref: `+${ref}`, nodeId: null, name: ref.toUpperCase(), missing: `needs ${ref.toUpperCase()}_KEY`,
     person: `“${ref.toUpperCase()}” needs your key. Add it in Settings.`,
@@ -56,7 +56,7 @@ describe('the not-ready nodes by the shared rule (GM r24 item 6)', () => {
   it('counts nodes, not the lines a key lock merges', () => {
     const locked = rows(4).map((row) => ({ ...row, routeKeyLine: true as const }));
     const shown = notReadyShown(locked, 'You can accept this after you add your Hugging Face token in Settings.');
-    // The Accept line stays in view beside the count (review 13, copy NIT-3).
+    // The Accept line stays in view beside the count.
     expect(shown.lines.map((line) => line.text)).toEqual(['4 nodes can’t run here yet.',
       'You can accept this after you add your Hugging Face token in Settings.']);
     expect(shown.inDetails.map((line) => line.text)).toEqual(['You can accept this after you add your Hugging Face token in Settings.']);
@@ -72,7 +72,7 @@ describe('the not-ready nodes by the shared rule (GM r24 item 6)', () => {
   });
 });
 
-describe('every provider says the word its link uses (GM r25 item 3)', () => {
+describe('every provider says the word its link uses', () => {
   it.each(PROVIDER_KEYS.map((spec) => [spec.key, spec] as const))('%s', (key, spec) => {
     const linkWord = LINK_NOUNS[/ (keys|tokens|service accounts)$/.exec(spec.keyLink)![1]];
     // The notice and the name end in the link's word ("Krea · API key" ends in "key").
@@ -82,17 +82,17 @@ describe('every provider says the word its link uses (GM r25 item 3)', () => {
     expect(credentialNoun(spec)).toBe(linkWord);
     // Said once: never "key key", "API API" or "token key".
     expect(credentialName(spec)).not.toMatch(/\b(\w+) \1\b|key key|token key|API API/i);
-    // Round 14 (GM r26 item 5): the run-failure lines say the same noun,
+    // Design: the run-failure lines say the same noun,
     // the backend's person_line.KEY_NAMES included (route_tables.json pins
     // it to KEY_NAMES here): "Add a Replicate token in Settings to run this node."
-    // GM r28 item 1 (PR #203 round 15): Vertex too, no exception left.
+    // Design (PR #203): Vertex too, no exception left.
     const phrase = keyPhrase([key])!;
     expect(phrase.endsWith(` ${linkWord}`), phrase).toBe(true);
     expect(missingKeyLine([key])).toBe(`Add ${withArticle(phrase)} in Settings to run this node.`);
     expect(modelKeyMissingText('X', [key])).toBe(`Nebula couldn’t set up “X” because it needs ${withArticle(phrase)}. Add one in Settings.`);
   });
 
-  it('says "Add a Replicate token in Settings to run this node." on a run failure and in the model picker (GM r26 item 5)', () => {
+  it('says "Add a Replicate token in Settings to run this node." on a run failure and in the model picker', () => {
     expect(missingKeyLine(['REPLICATE_API_TOKEN'])).toBe('Add a Replicate token in Settings to run this node.');
     expect(modelKeyMissingText('X', ['REPLICATE_API_TOKEN'])).toBe('Nebula couldn’t set up “X” because it needs a Replicate token. Add one in Settings.');
   });

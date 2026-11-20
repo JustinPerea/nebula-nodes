@@ -1,15 +1,14 @@
 /**
- * Round 16 of PR #199 (GM r21 and r22; review 14), the kept tab's own side.
- * - GM r22 (3): the Discard confirm is modal: the page behind it is inert,
- *   its own kept notice included (and, GM r25 (4) of round 18, every notice
+ * PR #199 (design), the kept tab's own side.
+ * - Design: the Discard confirm is modal: the page behind it is inert,
+ *   its own kept notice included (and, per design, every notice
  *   already showing, dimmed; one that arrives while it is open stays
  *   reachable above it); Escape closes it and focus goes back to [Discard
  *   edits].
- * - GM r22 (4): the locked adds' own verbs; the wire-drop popup is live.
- * - Review 14 kept-hold LOW-1 (one busy state) and LOW-2 (H19, the switch
- *   toast's way back held while kept); lock-order NIT-3 (following holds
- *   Save and Discard, after kept and the run) and LOW-3 (the lazy restore
- *   copy retries and never leaves a blank notice).
+ * - Design: the locked adds' own verbs; the wire-drop popup is live.
+ * - One busy state for Save and Discard; the switch toast's way back
+ *   held while kept; following holds Save and Discard, after kept and the
+ *   run; the lazy restore copy retries and never leaves a blank notice.
  */
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,7 +59,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('GM r22 (3): the Discard confirm is modal, with the page behind it inert', () => {
+describe('the Discard confirm is modal, with the page behind it inert', () => {
   function renderApp() {
     return render(<>
       <div data-testid="app"><button type="button">Canvas control</button></div>
@@ -88,7 +87,7 @@ describe('GM r22 (3): the Discard confirm is modal, with the page behind it iner
     const notice = document.querySelector('[data-kept-edits]')!;
     expect(notice).toHaveAttribute('inert');
     expect(document.querySelector('[data-notice-region]')).not.toHaveAttribute('inert');
-    // GM r25 (4): a notice already showing goes under the scrim too.
+    // Design: a notice already showing goes under the scrim too.
     expect(screen.getByText('Other notice').closest('[inert]')).not.toBeNull();
     render(<InNoticeRegion slot="pin"><div><button type="button">Newer notice</button></div></InNoticeRegion>);
     expect(screen.getByText('Newer notice').closest('[inert]')).toBeNull();
@@ -108,7 +107,7 @@ describe('GM r22 (3): the Discard confirm is modal, with the page behind it iner
   });
 });
 
-describe('review 14 of PR #199, kept-hold LOW-1: one busy state for Save and Discard', () => {
+describe('PR #199, kept-hold: one busy state for Save and Discard', () => {
   it('while either is on its way, both buttons wait', () => {
     useProjectStore.setState({ keptEdits: { ...KEPT, discarding: true } });
     const view = render(<KeptEditsNotice />);
@@ -121,7 +120,7 @@ describe('review 14 of PR #199, kept-hold LOW-1: one busy state for Save and Dis
   });
 });
 
-describe('review 14 of PR #199, lock-order NIT-3: kept, then the run, following and offline', () => {
+describe('PR #199, lock-order: kept, then the run, following and offline', () => {
   it('following holds Save and Discard with its own line (kept leaves them on)', () => {
     act(() => setFollowingSwitch({ projectName: 'Beta', agent: 'Claude' }));
     render(<KeptEditsNotice />);
@@ -133,7 +132,7 @@ describe('review 14 of PR #199, lock-order NIT-3: kept, then the run, following 
   });
 });
 
-describe('review 14 of PR #199, kept-hold LOW-2 (H19): the switch toast’s way back while kept', () => {
+describe('PR #199, kept-hold: the switch toast’s way back while kept', () => {
   it('“Back to …” is held with the kept mark and its line, and a press pulses the kept line', () => {
     useProjectStore.setState({ switchNotice: { actorName: 'Claude', projectName: 'Beta', previousProjectId: 'alpha',
       previousProjectName: 'Alpha', created: false } as never });
@@ -147,7 +146,7 @@ describe('review 14 of PR #199, kept-hold LOW-2 (H19): the switch toast’s way 
   });
 });
 
-describe('GM r22 (4): the locked adds say their own verbs; the wire-drop popup is live', () => {
+describe('the locked adds say their own verbs; the wire-drop popup is live', () => {
   it('the lines, verbatim, and where each is used', () => {
     expect(keptLockTitle('add-character')).toBe('You can add characters after you save it as a project.');
     expect(keptLockTitle('add-moodboard')).toBe('You can add moodboards after you save it as a project.');
@@ -161,7 +160,7 @@ describe('GM r22 (4): the locked adds say their own verbs; the wire-drop popup i
   });
 });
 
-describe('review 14 of PR #199, lock-order LOW-3: the lazy restore copy', () => {
+describe('PR #199, lock-order: the lazy restore copy', () => {
   const real = restoreCopyNow();
   afterEach(() => { setRestoreCopyImportForTests(null); primeRestoreCopyForTests(real); });
 
@@ -186,7 +185,7 @@ describe('review 14 of PR #199, lock-order LOW-3: the lazy restore copy', () => 
   });
 });
 
-describe('GM r22 (2): the update line while kept shows under the kept line', () => {
+describe('the update line while kept shows under the kept line', () => {
   it('the store’s kept update line is on the canvas, and goes with kept mode', async () => {
     const { KEPT_UPDATE_LINE } = await import('../src/store/projectStore');
     useProjectStore.setState({ error: KEPT_UPDATE_LINE });

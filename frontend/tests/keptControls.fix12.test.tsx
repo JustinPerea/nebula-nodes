@@ -18,13 +18,13 @@ import { buildCommands } from '../src/lib/commandPalette';
 import { setSelectionActionSlot } from '../src/lib/selectionActionSlot';
 
 /**
- * GM r16, r17 and r18 on PR #199: while the canvas is kept in this tab
+ * Design on PR #199: while the canvas is kept in this tab
  * after a restore, every control that writes to Nebula or spends is disabled
  * in the shared disabled look, its tooltip saying what unlocks it, one line
  * per control (the generic line is only a safety net nobody sees). What only
  * changes this tab's canvas stays live: typing, Duplicate (its copies are
  * this tab's own nodes), Settings (it opens the Inspector, whose param edits
- * are typing) and, GM r18, Delete, Arrange, Clear canvas and Undo on
+ * are typing) and, by design, Delete, Arrange, Clear canvas and Undo on
  * the kept tab's own steps (tests/keptScratchCanvas.fix14.test.tsx); Copy,
  * Download, zoom, pan and the Agent log too. The lock reasons go run,
  * follow, offline, then kept (PR #198's run lock first); the keyboard shortcuts for the disabled actions are
@@ -57,8 +57,8 @@ afterEach(() => {
 
 const button = (name: RegExp) => screen.getByRole('button', { name });
 
-describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
-  it('disables Ask and Run with their own lines; Copy, Download, Duplicate, Arrange and Delete stay (GM r18)', () => {
+describe('the selection toolbar while the canvas is kept', () => {
+  it('disables Ask and Run with their own lines; Copy, Download, Duplicate, Arrange and Delete stay', () => {
     render(<SelectionToolbar />);
     expect(button(/^Run selected nodes$/)).not.toBeDisabled();
     act(() => setCanvasKept(true));
@@ -85,7 +85,7 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
     expect(button(/^Arrange$/)).toHaveAttribute('title', 'Arrange selected nodes');
   });
 
-  it('Download is live while kept when the selection has outputs (GM r17 bug: it only reads)', () => {
+  it('Download is live while kept when the selection has outputs (design: it only reads)', () => {
     useGraphStore.setState({ nodes: [node('n1', 0, { image: { type: 'Image', value: '/api/outputs/a.png' } as never })] });
     act(() => setCanvasKept(true));
     render(<SelectionToolbar />);
@@ -95,15 +95,15 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
     expect(download).toHaveAttribute('title', 'Download 1 selected output');
   });
 
-  it("GM r17's and r18's lines, verbatim; Ask names the chat's agent, unquoted", () => {
-    // GM r25 (3) replaced GM r17's "You can add notes…".
+  it("the kept toolbar lines, verbatim; Ask names the chat's agent, unquoted", () => {
+    // A later design ruling replaced the earlier "You can add notes…".
     expect(keptLockTitle('note')).toBe('You can leave a note after you save it as a project.');
     expect(keptLockTitle('settings')).toBe('You can change settings after you save it as a project.');
     expect(keptLockTitle('run')).toBe('You can run this after you save it as a project.');
-    // GM r18.
+    // Design's line.
     expect(keptLockTitle('unlock')).toBe('You can unlock nodes after you save it as a project.');
     expect(keptLockTitle('generate')).toBe('You can generate after you save it as a project.');
-    // GM r18: "your agent" when none is picked.
+    // Design: "your agent" when none is picked.
     expect(keptLockTitle('ask')).toBe('You can ask your agent after you save it as a project.');
     window.localStorage.setItem('nebula:chat-selection', JSON.stringify({ agent: 'codex' }));
     expect(keptLockTitle('ask')).toBe('You can ask Codex after you save it as a project.');
@@ -139,7 +139,7 @@ describe('GM r16/r17: the selection toolbar while the canvas is kept', () => {
   });
 });
 
-describe('GM r17: every control names its own kept line', () => {
+describe('every control names its own kept line', () => {
   const root = join(__dirname, '../src/components');
   const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -162,7 +162,7 @@ describe('GM r17: every control names its own kept line', () => {
     expect(calls.length).toBeGreaterThan(40);
     for (const { path, call } of calls) {
       // SelectionToolbar's runLocked(running, own) passes its own LockOwn, whose `kept` tsc requires.
-      // AssetsPanel's AssetItem passes each add's own (GM r22, 4: keptAdd, below).
+      // AssetsPanel's AssetItem passes each add's own (design: keptAdd, below).
       expect(call, path).toMatch(/kept: (item\.kept|paletteKeptAction\(cmd\.id\)|keptAdd|'[a-z-]+')|^lock\.act\(own, \{ run: running, runTitle: runFinishesLine\(verb\) \}\)$/);
       expect(call, path).not.toMatch(/kept: 'other'/);
     }
@@ -185,7 +185,7 @@ describe('GM r17: every control names its own kept line', () => {
   });
 });
 
-describe('the lock reasons go kept, run, follow, offline (GM r16, 4; GM r19, 4)', () => {
+describe('the lock reasons go kept, run, follow, offline', () => {
   const following = { projectId: 'p', projectName: 'Delta' } as never;
   it('kept first: its own line and its mark only, over a run, a follow and offline', () => {
     const keptLine = { [KEPT_MARK]: '', disabled: true, title: keptLockTitle('run') };
@@ -266,8 +266,8 @@ describe('the keyboard shortcuts while kept', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     await each('run (⌘Enter)', () => store.executeGraph());
     await each('paste (⌘V)', () => store.pasteClipboard({ view: null }));
-    // GM r19 (5): an add is the kept tab's own (a local node, a kept step):
-    // see keptScratchCanvas.fix15; so is a wire since GM r21 (3), held to
+    // Design: an add is the kept tab's own (a local node, a kept step):
+    // see keptScratchCanvas.fix15; so is a wire since a later ruling, held to
     // the server's rules (keptCanvas.fix16.store).
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(useGraphStore.getState().isExecuting).toBe(false);
@@ -276,7 +276,7 @@ describe('the keyboard shortcuts while kept', () => {
     stop();
   });
 
-  it('Duplicate (⌘D, the toolbar, the Inspector, the context menu) makes this tab\'s copies and sends nothing (GM r17)', async () => {
+  it('Duplicate (⌘D, the toolbar, the Inspector, the context menu) makes this tab\'s copies and sends nothing', async () => {
     act(() => setCanvasKept(true));
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     let pulses = 0;
@@ -307,7 +307,7 @@ describe('the keyboard shortcuts while kept', () => {
   });
 });
 
-describe('GM r17: the disabled trash is neutral, never a dim red', () => {
+describe('the disabled trash is neutral, never a dim red', () => {
   it('the shared disabled look (PR #198, disabled-buttons.css) covers it; canvas.css adds no look of its own', () => {
     const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
     expect(shared).toContain('.selection-toolbar__button,');

@@ -7,7 +7,7 @@ import type { LabelingWork } from '../src/components/commons/commonsLeave';
  * The Commons' own ways out while it holds unsaved labels (commons-exits,
  * 2026-10-22): the browser's Back or a hash edit stays in the Commons and
  * puts the URL back, and the header's Projects button asks first
- * (commons-leave: GM - Design replaced #163's disabled button and its
+ * (commons-leave: design replaced #163's disabled button and its
  * reason with the leave popover). After a save each works again.
  */
 const commons = vi.hoisted(() => ({
@@ -140,7 +140,7 @@ describe('the browser Back button or a hash edit', () => {
 });
 
 describe("the header's Projects button", () => {
-  // GM - Design changed this expectation (commons-leave): enabled, with no
+  // Design changed this expectation (commons-leave): enabled, with no
   // "save or discard" title; a click asks in the leave popover.
   it('stays enabled while labels are unsaved and asks; after saving it goes to Projects at once', async () => {
     render(<Shell />);

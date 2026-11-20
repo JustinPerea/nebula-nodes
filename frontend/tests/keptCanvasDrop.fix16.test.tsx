@@ -54,7 +54,7 @@ import { resetBackendConnectionForTests } from '../src/lib/backendConnection';
 import { resetKeptCanvasForTests, subscribeKeptPulse } from '../src/lib/keptCanvas';
 
 /**
- * Review 14 of PR #199 (lock-order LOW-1, M8): a library node dropped on a
+ * PR #199: a library node dropped on a
  * kept canvas lands on this tab only (refuseTabOnlyEdit, not the whole
  * canvas lock): a local node and a kept step, nothing sent, no pulse.
  */
@@ -63,7 +63,7 @@ const initialGraph = useGraphStore.getState();
 const text = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
   data: { label: 'Brief', definitionId: 'text-input', params: { value: '' }, state: 'idle', outputs: {} } } as unknown as Node<NodeData>;
 
-describe('M8: a library drop on a kept canvas', () => {
+describe('a library drop on a kept canvas', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
     resetBackendConnectionForTests();

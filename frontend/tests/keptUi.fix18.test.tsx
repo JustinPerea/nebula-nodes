@@ -1,12 +1,12 @@
 /**
- * Round 18 of PR #199, the selection bar's Ask and Note (and the context
+ * PR #199, the selection bar's Ask and Note (and the context
  * menu's note):
- * - GM r25 (3): while edits are kept, one wording on any node, saved (nN) or
+ * - Design: while edits are kept, one wording on any node, saved (nN) or
  *   tab-only: "You can ask Codex after you save it as a project." (the chat's
  *   agent, "your agent" when none is picked) and "You can leave a note after
- *   you save it as a project.". The separate tab-only lines and GM r17's
+ *   you save it as a project.". The separate tab-only lines and design's
  *   "You can add notes…" are gone.
- * - GM r26 (4): on a normal tab, a duplicated or pasted node keeps a
+ * - Design: on a normal tab, a duplicated or pasted node keeps a
  *   tab-local id until the project is next opened. Ask and Note on a
  *   selection holding one are locked through the shared lock
  *   (TAB_LOCAL_MARK), Note kept in place: "You can ask an agent about this
@@ -67,7 +67,7 @@ function expectLocked(control: HTMLElement, line: string, mark: string) {
   expect(control).toHaveAttribute(mark, '');
 }
 
-describe('GM r25 (3): one wording for Ask and Note while kept', () => {
+describe('one wording for Ask and Note while kept', () => {
   it('a tab-only node: the chat agent named, and the one note line', () => {
     window.localStorage.setItem('nebula:chat-selection', JSON.stringify({ agent: 'codex' }));
     useGraphStore.setState({ nodes: [node(TAB_LOCAL)] });
@@ -120,8 +120,8 @@ describe('GM r25 (3): one wording for Ask and Note while kept', () => {
   });
 });
 
-describe('GM r26 (4): a tab-local node on a normal tab (a stopgap)', () => {
-  it('Ask and Note are locked with GM’s lines, in the shared lock’s look; Note stays in place', () => {
+describe('a tab-local node on a normal tab (a stopgap)', () => {
+  it('Ask and Note are locked with design’s lines, in the shared lock’s look; Note stays in place', () => {
     useGraphStore.setState({ nodes: [node(TAB_LOCAL)] });
     render(<SelectionToolbar />);
     expectLocked(ask(), ASK_LOCAL, TAB_LOCAL_MARK);

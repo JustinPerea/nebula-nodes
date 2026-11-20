@@ -31,7 +31,7 @@ import {
   worldV2Fixture,
 } from './fixtures/spatialValues';
 
-// Error copy round 3f (GM): every alert is a canvas notice now. `noticeSpy`
+// Error copy (design): every alert is a canvas notice now. `noticeSpy`
 // records each notice's text, so the checks below read as they did; the
 // window.alert stub stays to prove nothing still calls it.
 const noticeStops: (() => void)[] = [];
@@ -444,7 +444,7 @@ describe('portable graph asset bounds', () => {
     expect(revoke).toHaveBeenCalledWith('blob:spatial-save');
   });
 
-  // Q121 a (Justin, 2026-10-24): "Save graph can write a bundle for a
+  // Justin, 2026-10-24: "Save graph can write a bundle for a
   // project over the limit." The graph inside a bundle may be as large as the
   // bundle itself; only the bundle's ceiling refuses it.
   it('saves a bundle whose graph is over the 16 MiB save limit', async () => {
@@ -513,12 +513,12 @@ describe('portable graph asset bounds', () => {
     expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas because it’s over the 528 MB Nebula can save.");
   });
 
-  // GM - Design, 2026-10-24: a graph Nebula would open (up to 528 MB) but the
+  // Design, 2026-10-24: a graph Nebula would open (up to 528 MB) but the
   // browser can't write. Chromium (the desktop app's engine too) caps a
   // string at 2^29 - 24 = 536,870,888 characters, just under 512 MiB, so
   // JSON.stringify of a graph.json past that throws RangeError("Invalid
   // string length") before the 528 MB check can measure it.
-  it("a graph too big for the browser's string limit: GM's line, before any asset fetch", async () => {
+  it("a graph too big for the browser's string limit: design's line, before any asset fetch", async () => {
     const alertSpy = noticeSpy();
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -599,7 +599,7 @@ describe('portable graph asset bounds', () => {
 });
 
 describe('graph structural complexity', () => {
-  // GM PR #205 r10 item 4: the person's line for where the check ran, and
+  // Design (PR #205): the person's line for where the check ran, and
   // the engine's exact reason kept for the log (one error, two fields).
   const thrown = (value: unknown, use: 'save' | 'open') => {
     try {
@@ -626,13 +626,13 @@ describe('graph structural complexity', () => {
   const complexOpen = 'This file is too complex to open.';
   const valueOpen = 'Part of this file holds a value Nebula can’t read.';
 
-  // GM PR #205 r14, r15: a file being loaded is "This file", the CLI import "This canvas"; Save keeps "The canvas".
+  // Design (PR #205): a file being loaded is "This file", the CLI import "This canvas"; Save keeps "The canvas".
   it('matches the backend node and edge ceilings before walking individual nodes, in the person\'s words', () => {
     const lines = {
-      // GM PR #205 r12 item 1, verbatim: the "because" form, the limit and a step.
+      // Design (PR #205), verbatim: the "because" form, the limit and a step.
       save: [`Nebula couldn’t save the canvas because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula saves. Delete some, then try again.`,
         `Nebula couldn’t save the canvas because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula saves. Delete some, then try again.`],
-      // GM PR #205 r12 item 2: a file being opened is one whole line.
+      // Design (PR #205): a file being opened is one whole line.
       open: [`Nebula couldn’t open this file because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula opens.`,
         `Nebula couldn’t open this file because it has more than ${GRAPH_MAX_EDGES.toLocaleString()} connections, the most Nebula opens.`],
       import: [`Nebula couldn’t import the CLI canvas because it has more than ${GRAPH_MAX_NODES.toLocaleString()} nodes, the most Nebula opens.`,
@@ -710,7 +710,7 @@ describe('graph import memory ceiling', () => {
     expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/^Nebula couldn’t load the canvas because this canvas is over the 528 MB Nebula opens\.$/));
   });
 
-  // Q118 (Justin, 2026-10-23): "Let Load graph open bigger .nebula files (up
+  // Justin, 2026-10-23: "Let Load graph open bigger .nebula files (up
   // to the 512 MiB it already allows for a bundle)". A plain JSON file past
   // the 16 MiB save limit is read now; only the bundle's ceiling refuses it
   // before reading, and the shape walk's limits still apply.
@@ -822,13 +822,13 @@ describe('graph import memory ceiling', () => {
   });
 
   it.each([
-    // Round 16 (GM: lead with what the person pressed): Load graph's own
+    // Design: lead with what the person pressed. Load graph's own
     // heading, then the reason, never "(HTTP 503)"; on 1fc3d846 this said
     // "Failed to load graph: Asset restore failed (HTTP 503)", and on fc906cb6
     // "Couldn't restore the asset.".
     [new Response('', { status: 503 }), "Nebula couldn’t load the canvas because the server didn’t respond. Try again."],
     // A refusal with no code reads as a damaged file, never the backend's
-    // words (review 8 of PR #205, limits LOW-4).
+    // words (PR #205).
     [new Response('', { status: 400 }), 'Nebula couldn’t load the canvas because this file is damaged or isn’t a Nebula canvas.'],
     [new Response(JSON.stringify({ detail: 'That bundle has too many files.' }), { status: 422, headers: { 'Content-Type': 'application/json' } }),
       'Nebula couldn’t load the canvas because this file is damaged or isn’t a Nebula canvas.'],
@@ -867,7 +867,7 @@ describe('graph import memory ceiling', () => {
 
     await expect(loadFromFile()).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    // Error copy round 3e (GM): the person reads a written line; the check's
+    // Error copy (design): the person reads a written line; the check's
     // own text ("nodes[0] must be an object") goes to the console only.
     expect(alertSpy).toHaveBeenCalledWith('Nebula couldn’t load the canvas because this file is damaged or isn’t a Nebula canvas.');
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', expect.stringContaining('nodes[0] must be an object'));
@@ -988,7 +988,7 @@ describe('graph import memory ceiling', () => {
   });
 });
 
-// GM PR #205 r9 item 2, r10 item 4: the lines under the save and load
+// Design (PR #205): the lines under the save and load
 // headings, by where the check ran; the log keeps the engine's reason.
 describe('the canvas limit lines on each surface', () => {
   const textNode = (params: Record<string, unknown>) => ({
@@ -1021,7 +1021,7 @@ describe('the canvas limit lines on each surface', () => {
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph save', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
   });
 
-  // GM PR #205 r13 item 1: the step the line offers follows the newest Undo step.
+  // Design (PR #205): the step the line offers follows the newest Undo step.
   it.each([
     ['the person\'s step: unchanged', { kind: 'person' } as const,
       'Nebula couldn’t save the canvas because it’s too complex. Undo your last change, then try again.',
@@ -1029,7 +1029,7 @@ describe('the canvas limit lines on each surface', () => {
     ['an agent\'s step: that agent\'s last change', { kind: 'agent', name: 'Claude' } as const,
       'Nebula couldn’t save the canvas because it’s too complex. Undo Claude’s last change, then try again.',
       'Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo Claude’s last change, then try again.'],
-    ['a step from an origin Nebula doesn\'t know: "the last change", never "your" (GM r14 item 2)', { kind: 'unknown' } as const,
+    ['a step from an origin Nebula doesn\'t know: "the last change", never "your"', { kind: 'unknown' } as const,
       'Nebula couldn’t save the canvas because it’s too complex. Undo the last change, then try again.',
       'Nebula couldn’t save the canvas because part of it holds a value it can’t store. Undo the last change, then try again.'],
     ['no step at all: the cause and nothing more', { kind: 'none' } as const,
@@ -1061,7 +1061,7 @@ describe('the canvas limit lines on each surface', () => {
     }
   });
 
-  it('Save, no step: the Agent log names the values limit in the "because" form (GM PR #205 r17 item 1)', async () => {
+  it('Save, no step: the Agent log names the values limit in the "because" form (design, PR #205)', async () => {
     noticeSpy();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const logged: string[] = [];
@@ -1102,7 +1102,7 @@ describe('the canvas limit lines on each surface', () => {
     expect(consoleError).toHaveBeenCalledWith('[nebula] graph load', `Graph is nested more than ${GRAPH_MAX_DEPTH} levels deep.`);
   });
 
-  // GM PR #205 r12 item 2: one whole line, no "Nebula couldn’t load the canvas." over it.
+  // Design (PR #205): one whole line, no "Nebula couldn’t load the canvas." over it.
   it('Load: a plain .nebula with too many nodes or connections says the whole line', async () => {
     const alertSpy = noticeSpy();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);

@@ -64,7 +64,7 @@ vi.mock('../../src/store/graphStore', async () => {
     authorGenerationCluster: (...args) => mocks.author(...args),
     executeClusterConcurrent: (...args) => mocks.execute(...args),
     cancelCreateGeneration: vi.fn(), cancelRun: vi.fn(), deleteGeneration: vi.fn(),
-    // Create's lines show in the app's notice region (GM r8, #204 r7).
+    // Create's lines show in the app's notice region (design, #204).
     notify: (...args) => mocks.notify(...args),
   }));
   mocks.graph = store;

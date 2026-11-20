@@ -1,12 +1,12 @@
 /**
- * Error copy round 3c (GM - Design): a node's run error, for the person.
+ * Error copy (design): a node's run error, for the person.
  *
- * GM, on the World nodes: "the person reads these on the node, so their
+ * Design, on the World nodes: "the person reads these on the node, so their
  * lines shouldn't carry ids or record names. ... The node's error stores the
  * specific text for agents (and the run record and MCP keep it), and the
  * canvas shows the written line."
  *
- * GM's guard for every other node: "On a node with no written line yet,
+ * Design's guard for every other node: "On a node with no written line yet,
  * show "Couldn't run the node." with the general line, and put the raw
  * provider text behind the same collapsed "Details" toggle used for Commons
  * analysis."
@@ -36,7 +36,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
   Handle: ({ id, type }: { id?: string; type: string }) => <span data-testid={`handle-${type}-${id}`} />,
 }));
 
-// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// Design: a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
 const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
@@ -64,7 +64,7 @@ describe('NodeError', () => {
     expect(container.querySelector('details')).toBeNull();
   });
 
-  it("with no written line: GM's general line, and the raw text only behind a closed Details", () => {
+  it("with no written line: design's general line, and the raw text only behind a closed Details", () => {
     const { container } = render(<NodeError raw={RAW} category="unknown" friendly={RAW.slice(0, 140)} />);
     expect(heading(container)).toBeNull(); // a failure is one line now, not a heading over a reason
     expect(reason(container)).toBe(GENERAL);

@@ -1,5 +1,5 @@
 /**
- * PR #199 round 25, GM r24 (b): the kept save the project limit or the
+ * Design (PR #199): the kept save the project limit or the
  * storage cap refused is fixed by deleting, and kept mode locks Projects, so
  * the kept notice offers [Choose a project to delete] beside the refusal's
  * line, and its dialog lists the projects (each with Delete) and, when
@@ -46,7 +46,7 @@ afterEach(() => {
   useProjectStore.setState(initialProject, true);
 });
 
-describe('GM r24 (b): the lines, verbatim', () => {
+describe('the project-limit and storage-cap lines, verbatim', () => {
   it('the three kept-save refusals match', () => {
     expect(keptLimitLine(3, 3)).toBe(AT_LIMIT);
     expect(keptLimitLine(2, 1)).toBe('Nebula couldn’t save your edits as a project because you have 2 projects, over the limit of 1. Delete 2 projects, and Nebula saves your edits.');
@@ -55,12 +55,12 @@ describe('GM r24 (b): the lines, verbatim', () => {
     // No second "Nebula" before "project list", and no "Nebula will".
     for (const line of [AT_LIMIT, STORAGE]) expect(line.match(/Nebula/g)).toHaveLength(2);
   });
-  it('the button is named as GM named it', () => {
+  it('the button is named as design named it', () => {
     expect(CHOOSE_A_PROJECT_TO_DELETE).toBe('Choose a project to delete');
   });
 });
 
-describe('GM r24 (b): [Choose a project to delete] on the project-limit and storage-cap notices', () => {
+describe('[Choose a project to delete] on the project-limit and storage-cap notices', () => {
   it('shows beside the project-limit line and the storage-cap line, and on no other kept notice', () => {
     keptWith(AT_LIMIT, 'projects');
     const { rerender } = render(<KeptEditsNotice />);

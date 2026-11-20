@@ -46,7 +46,7 @@ describe('Commons backend capability', () => {
     transport.fetch.mockRejectedValue(new Error('offline'));
     expect(await fetchCommonsEnabled()).toBe(false);
   });
-  // PR #204 round 18i (GM r39 Fix E): a canvas tab notes the backend's "off" too, so an Update's
+  // PR #204 (design): a canvas tab notes the backend's "off" too, so an Update's
   // Review on a Commons proposal locks with its reason; no answer notes nothing.
   it('a canvas tab notes the backend\'s off, and only its off', async () => {
     const { commonsOffNow, noteCommonsAnswered } = await import('../src/lib/commonsOff');
@@ -101,7 +101,7 @@ describe('Commons backend capability', () => {
     await waitFor(() => expect(transport.fetch).toHaveBeenCalledTimes(1));
     expect(useUIStore.getState().viewMode).toBe('canvas');
     expect(commons.status).not.toHaveBeenCalled();
-    // PR #204 round 18d (GM r32 1): the app shows the Commons-off view for it (App), reading nothing.
+    // PR #204 (design): the app shows the Commons-off view for it (App), reading nothing.
     await waitFor(() => expect(useUIStore.getState().commonsOffShown).toBe(true));
     first.unmount();
     transport.fetch.mockResolvedValue(json({ enabled: true }));

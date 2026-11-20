@@ -1,5 +1,5 @@
 /**
- * GM - Design, 2026-10-23 (answer 4): "Yes, the composer publishes its top
+ * Design, 2026-10-23: "Yes, the composer publishes its top
  * edge the way the canvas bar does, and notices sit 8 px above it on Creator
  * Studio." The composer area (the reference tray, the reuse line and the
  * composer card) is Creator Studio's bottom bar: it carries

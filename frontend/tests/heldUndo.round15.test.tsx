@@ -3,20 +3,20 @@ import { act } from '@testing-library/react';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Review 14 (probes M2-M6, E2/E3, C3, C5/C5b, X1/X1b, F1), round 15. Every
+// Every
 // case checks the restore bodies sent to the backend, the line the person
 // reads, and that the canvas ends where Nebula's graph does: a fake backend
 // applies each delete (its answer), each sync (it is the backend's graph
 // then), each clear and each restore, in the order they reach it.
-// M-A: one delete gesture is one undo step that brings back every node it
+// One delete gesture is one undo step that brings back every node it
 //   removed, whatever lands between its echoes (an agent's edit, the
 //   person's typing), held or not, in either echo order.
-// L-A: an echo that empties the graph places the delete's step like any echo.
-// L-B: a clear supersedes only the presses issued before it; a press issued
+// An echo that empties the graph places the delete's step like any echo.
+// A clear supersedes only the presses issued before it; a press issued
 //   after it targets the clear and runs once the clear settles.
-// L-C: a step taken while a clear is on its way loses the nodes the clear removes.
-// L-D: undoing a delete never removes a node the delete didn't add.
-// L-E: a delete whose echo already took the node off is done, whatever its answer says.
+// A step taken while a clear is on its way loses the nodes the clear removes.
+// Undoing a delete never removes a node the delete didn't add.
+// A delete whose echo already took the node off is done, whatever its answer says.
 
 type Answer = { status: number; body: unknown };
 const net = vi.hoisted(() => ({
@@ -124,7 +124,7 @@ const clearAnswers = (step: object) => {
   act(() => { store().endUndoStep(step); });
 };
 
-describe('a held Cmd+Z, round 15 (review 14)', () => {
+describe('a held Cmd+Z', () => {
   beforeEach(() => {
     net.calls.length = 0;
     net.held.clear();
@@ -149,8 +149,8 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
   };
   const sameAsBackend = () => expect(cliIds()).toEqual(backend());
 
-  describe('M-A: one delete gesture comes back whole from one undo', () => {
-    it('M2: an agent edit between the two echoes: one Cmd+Z restores both nodes, the next undoes Codex', async () => {
+  describe('one delete gesture comes back whole from one undo', () => {
+    it('an agent edit between the two echoes: one Cmd+Z restores both nodes, the next undoes Codex', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
       ownSync([textNode('n2'), textNode('n3')]);
@@ -159,19 +159,19 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       await answer('n1'); await answer('n2');
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): the delete's step stays below Codex's edit, so the first Cmd+Z undoes Codex.
+      // Design: the delete's step stays below Codex's edit, so the first Cmd+Z undoes Codex.
       expect(restores()).toEqual([{ nodes: [], remove: ['n4'] }]);
       expect(ids()).toEqual(['n3']);
       sameAsBackend();
       await undo();
-      // Round 18 (GM option (c)): the second Cmd+Z restores both nodes in one step.
+      // Design: the second Cmd+Z restores both nodes in one step.
       expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
 
-    it('M3: the person types between the two echoes: both nodes back, the typing kept', async () => {
+    it('the person types between the two echoes: both nodes back, the typing kept', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
       ownSync([textNode('n2'), textNode('n3')]);
@@ -180,23 +180,23 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       await answer('n1'); await answer('n2');
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): the typing is the newer step, so the first Cmd+Z undoes it.
+      // Design: the typing is the newer step, so the first Cmd+Z undoes it.
       expect(restores()).toEqual([{ nodes: ['n3=n3'], remove: [] }]);
       expect(valueOf('n3')).toBe('n3');
       sameAsBackend();
       await undo();
-      // Round 18 (GM option (c)): the second Cmd+Z restores both nodes in one step.
+      // Design: the second Cmd+Z restores both nodes in one step.
       expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
       sameAsBackend();
     });
 
-    it('M5: three nodes, Cmd+Z held from the start, an agent edit after the first echo: the press is dropped, then Codex, then all three undo', async () => {
+    it('three nodes, Cmd+Z held from the start, an agent edit after the first echo: the press is dropped, then Codex, then all three undo', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3'), textNode('n4')]);
       removeTogether('n1', 'n2', 'n3'); await settle();
       await undo();
-      // GM r39 item 3: held, silently.
+      // Design: held, silently.
       expect(dropped()).toBe(false);
       expect(ids()).toEqual(['n4']);
       ownSync([textNode('n2'), textNode('n3'), textNode('n4')]);
@@ -204,17 +204,17 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       ownSync([textNode('n3'), textNode('n4'), textNode('n5')]);
       ownSync([textNode('n4'), textNode('n5')]);
       await answer('n1'); await answer('n2'); await answer('n3');
-      // Since r18 the delete's step is placed at Delete, so the agent edit that settled above it is newer:
-      // the bound press is dropped with GM's line when the answers land (review 11, M-1).
+      // The delete's step is placed at Delete, so the agent edit that settled above it is newer:
+      // the bound press is dropped with design's line when the answers land.
       expect(dropped()).toBe(true);
       expect(restores()).toEqual([]);
       expect(ids()).toEqual(['n4', 'n5']);
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): Codex's edit is the newer step, undone first.
+      // Design: Codex's edit is the newer step, undone first.
       expect(restores()).toEqual([{ nodes: [], remove: ['n5'] }]);
       await undo();
-      // Round 18 (GM option (c)): then one Cmd+Z restores all three.
+      // Design: then one Cmd+Z restores all three.
       expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2', 'n3=n3'], remove: [] });
       expect(notice()).toBe('Restored 3 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
@@ -223,21 +223,21 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       expect(ids()).toEqual(['n1', 'n2', 'n3', 'n4']);
     });
 
-    it('M6: typing after the first echo, Cmd+Z held after both echoes', async () => {
+    it('typing after the first echo, Cmd+Z held after both echoes', async () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
       ownSync([textNode('n2'), textNode('n3')]);
       type('n3', 'F');
       ownSync([textNode('n3', 'F')]);
       await undo();
-      // Round 18 (GM option (c)): the typing is the newer step (the delete's step stays below it), so this press undoes it (on the canvas: its write hadn't gone out).
+      // Design: the typing is the newer step (the delete's step stays below it), so this press undoes it (on the canvas: its write hadn't gone out).
       expect(restores()).toEqual([]);
       expect(valueOf('n3')).toBe('n3');
       expect(dropped()).toBe(false);
       await answer('n1'); await answer('n2');
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): once the delete has landed, the next Cmd+Z restores both nodes.
+      // Design: once the delete has landed, the next Cmd+Z restores both nodes.
       expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
@@ -253,11 +253,11 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       await answer('n2'); await answer('n1');
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): Codex's edit is the newer step, undone first.
+      // Design: Codex's edit is the newer step, undone first.
       expect(restores()).toEqual([{ nodes: [], remove: ['n4'] }]);
       sameAsBackend();
       await undo();
-      // Round 18 (GM option (c)): then one Cmd+Z brings both back.
+      // Design: then one Cmd+Z brings both back.
       expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
@@ -268,25 +268,25 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2'), textNode('n3')]);
       removeTogether('n1', 'n2'); await settle();
       await undo();
-      // GM r39 item 3: held, silently.
+      // Design: held, silently.
       expect(dropped()).toBe(false);
       expect(ids()).toEqual(['n3']);
       ownSync([textNode('n1'), textNode('n3')]);
       type('n3', 'G');
       ownSync([textNode('n3', 'G')]);
       await answer('n2'); await answer('n1');
-      // Since r18 the delete's step is placed at Delete, so the typing that settled above it is newer:
-      // the bound press is dropped with GM's line when the answers land (review 11, M-1).
+      // The delete's step is placed at Delete, so the typing that settled above it is newer:
+      // the bound press is dropped with design's line when the answers land.
       expect(dropped()).toBe(true);
       // The typing stays.
       expect(restores()).toEqual([]);
       expect(valueOf('n3')).toBe('G');
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): the typing is the newer step, undone first.
+      // Design: the typing is the newer step, undone first.
       expect(restores()).toEqual([{ nodes: ['n3=n3'], remove: [] }]);
       await undo();
-      // Round 18 (GM option (c)): then one Cmd+Z brings both back.
+      // Design: then one Cmd+Z brings both back.
       expect(restores()[1]).toEqual({ nodes: ['n1=n1', 'n2=n2'], remove: [] });
       expect(notice()).toBe('Restored 2 nodes.');
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
@@ -299,7 +299,7 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       ownSync([textNode('n2'), textNode('n3')]);
       type('n3', 'F');
       await answer('n2', 500); await answer('n1');
-      // GM round 21 (LOCKED): a 500 names the node and says it's back.
+      // Design (LOCKED): a 500 names the node and says it's back.
       expect(failure()).toBe("Nebula couldn’t delete “n2” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula.");
       expect(ids()).toEqual(['n2', 'n3']);
       net.holdDeletes = false;
@@ -330,19 +330,19 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
     });
   });
 
-  describe('L-A: an echo that empties the graph', () => {
-    it('E2: delete the last node, type into it, the empty echo, Cmd+Z, the answer: the held press restores it', async () => {
+  describe('an echo that empties the graph', () => {
+    it('delete the last node, type into it, the empty echo, Cmd+Z, the answer: the held press restores it', async () => {
       setGraph([textNode('n1')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       type('n1', 'E');
       ownSync([]);
       expect(ids()).toEqual([]);
       await undo();
-      // GM r39 item 3: held, silently.
+      // Design: held, silently.
       expect(dropped()).toBe(false);
       await answer('n1');
-      // GM r39 item 3: once it answers, the held press restores the node.
-      // Round 18 (GM option (c)): the node left the canvas at Delete, so the later typing never reached it.
+      // Design: once it answers, the held press restores the node.
+      // Design: the node left the canvas at Delete, so the later typing never reached it.
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(notice()).toBe('Restored the node.');
       expect(ids()).toEqual(['n1']);
@@ -351,13 +351,13 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       expect(ids()).toEqual(['n1']);
     });
 
-    it('E3: a frontend-only node typed into, the empty echo, Cmd+Z: the node back, the typing kept', async () => {
+    it('a frontend-only node typed into, the empty echo, Cmd+Z: the node back, the typing kept', async () => {
       setGraph([textNode('n1'), textNode('local-a')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       type('local-a', 'E');
       ownSync([textNode('local-a', 'E')]);
       await undo();
-      // Round 18 (GM option (c)): the typing is the newer step (the delete's step stays below it), so this press undoes it.
+      // Design: the typing is the newer step (the delete's step stays below it), so this press undoes it.
       expect(dropped()).toBe(false);
       expect(valueOf('local-a')).toBe('local-a');
       expect(ids()).toEqual(['local-a']);
@@ -365,17 +365,17 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       expect(restores()).toEqual([]);
       net.holdDeletes = false;
       await undo();
-      // Round 18 (GM option (c)): once the delete has landed, the next Cmd+Z restores the node.
+      // Design: once the delete has landed, the next Cmd+Z restores the node.
       expect(restores()).toEqual([{ nodes: ['n1=n1'], remove: [] }]);
       expect(ids()).toEqual(['local-a', 'n1']);
-      // Round 18 (GM option (c)): the typing was undone by the first press.
+      // Design: the typing was undone by the first press.
       expect(valueOf('local-a')).toBe('local-a');
       sameAsBackend();
     });
   });
 
-  describe('L-B: a clear supersedes only the presses issued before it', () => {
-    it('C3: delete, Cmd+Z, clear, Cmd+Z: the first press goes, the second undoes the clear', async () => {
+  describe('a clear supersedes only the presses issued before it', () => {
+    it('delete, Cmd+Z, clear, Cmd+Z: the first press goes, the second undoes the clear', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
@@ -403,8 +403,8 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
     });
   });
 
-  describe('L-C: a step taken while a clear is on its way', () => {
-    it('C5 held: clear, upload, Cmd+Z (the upload), the clear answers, the upload lands: the cleared node stays gone', async () => {
+  describe('a step taken while a clear is on its way', () => {
+    it('held: clear, upload, Cmd+Z (the upload), the clear answers, the upload lands: the cleared node stays gone', async () => {
       setGraph([textNode('n1')]);
       const c = clearStep();
       const up = store().beginUndoStep();
@@ -417,7 +417,7 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       sameAsBackend();
     });
 
-    it('C5b not held: the same, Cmd+Z after: the cleared node stays gone', async () => {
+    it('not held: the same, Cmd+Z after: the cleared node stays gone', async () => {
       setGraph([textNode('n1')]);
       const c = clearStep();
       const up = store().beginUndoStep();
@@ -436,8 +436,8 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
     });
   });
 
-  describe("L-D: undoing a delete never removes a node it didn't add", () => {
-    it('X1 held: a reconnect sync drops the deleted node and adds an agent node; the undo keeps it', async () => {
+  describe("undoing a delete never removes a node it didn't add", () => {
+    it('held: a reconnect sync drops the deleted node and adds an agent node; the undo keeps it', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
@@ -450,7 +450,7 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       expect(ids()).toEqual(['n1', 'n2', 'n3']);
     });
 
-    it('X1b not held: the same, Cmd+Z after the answer', async () => {
+    it('not held: the same, Cmd+Z after the answer', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       plainSync([textNode('n2'), textNode('n3')]);
@@ -476,8 +476,8 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
     });
   });
 
-  describe('L-E: the echo is the truth', () => {
-    it('F1: the echo took the node off, then the answer is 500: no failure line, the held Cmd+Z restores it', async () => {
+  describe('the echo is the truth', () => {
+    it('the echo took the node off, then the answer is 500: no failure line, the held Cmd+Z restores it', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await undo();
@@ -490,7 +490,7 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       sameAsBackend();
     });
 
-    it('F1 not held: the delete counts as done, and its undo step stays', async () => {
+    it('not held: the delete counts as done, and its undo step stays', async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       ownSync([textNode('n2')]);
@@ -507,7 +507,7 @@ describe('a held Cmd+Z, round 15 (review 14)', () => {
       setGraph([textNode('n1'), textNode('n2')]);
       act(() => { store().deleteNode('n1'); }); await settle();
       await answer('n1', 500);
-      // GM round 21 (LOCKED): a 500 names the node and says it's back.
+      // Design (LOCKED): a 500 names the node and says it's back.
       expect(failure()).toBe("Nebula couldn’t delete “n1” because the server hit an error, so it’s back on the canvas. Try again, and if it keeps happening, restart Nebula.");
       expect(ids()).toEqual(['n1', 'n2']);
       expect(store().undoStack.length).toBe(0);

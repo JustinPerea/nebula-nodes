@@ -6,7 +6,7 @@ import { DeferredKeyboardShortcutsDialog } from '../../src/lib/deferredChunks';
 // The dialog is its own chunk: in hand before a test opens it.
 await DeferredKeyboardShortcutsDialog.preload();
 
-// Review 8, L-c: after a click on the dialog's text, focus fell to the page;
+// After a click on the dialog's text, focus fell to the page;
 // "?" no longer closed it (canvas keys yield to an open modal) and Escape
 // never did. It gets the placeholder dialog's focus return, and Escape (or
 // "?") closes it from the page as well.

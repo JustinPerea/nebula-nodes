@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
 
-// PR #205 round 2, GM r2 item 2 (review 1 LOW-3): an agent's edit to a node
+// Design (PR #205): an agent's edit to a node
 // whose Delete is on its way is what Undo brings back. "Undo means 'bring
 // back what I deleted', not 'roll back what someone else did since'." Both
 // paths: the Undo held on the Delete, and an Undo pressed after its answer
 // (main's path; before, both restored the copy from when Delete was pressed).
-// The harness is round 18's (a fake Nebula that applies each request).
+// The harness is tests/helpers/undoFakeBackend.ts (a fake Nebula that applies each request).
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -58,7 +58,7 @@ const emit = (event: Record<string, unknown>) => {
 const codex = { actor: { kind: 'agent', name: 'Codex', id: 'codex' } };
 let clock = Date.now();
 
-describe('GM PR #205 r2 item 2: Undo brings back the newest copy Nebula synced', () => {
+describe('Undo brings back the newest copy Nebula synced (design, PR #205)', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;

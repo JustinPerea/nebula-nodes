@@ -1,4 +1,4 @@
-// Nebula says connected, never wired (GM - Design, 2026-10-25). The node
+// Nebula says connected, never wired (design, 2026-10-25). The node
 // descriptions a person reads in the library and an agent reads in
 // describe_node: the TypeSafe Jev gates name their ports in curly quotes, and
 // no description says wired.
@@ -28,7 +28,7 @@ describe('node descriptions say connected', () => {
   });
 });
 
-// Second pass (GM - Design's ruling): the verb is "connect" and the noun
+// Second pass (design's ruling): the verb is "connect" and the noun
 // "connection(s)" in everything a person reads.
 const WIRE = /\b(wire|wires|wired|wiring|unwired)\b/i;
 

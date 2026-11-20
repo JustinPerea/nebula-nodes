@@ -39,7 +39,7 @@ describe('Krea authoring and saved billing choice', () => {
 
   it('freezes the current default in a new Canvas node without executing it', async () => {
     const execute = vi.spyOn(api, 'executeNode');
-    // Round 13 of PR #114: an add always goes through the backend, so the
+    // PR #114: an add always goes through the backend, so the
     // frozen choice is what the create sends.
     apiFetchMock.mockImplementation(async (url: string) => (url === '/api/graph/export'
       ? { ok: true, json: async () => ({ empty: true }) }

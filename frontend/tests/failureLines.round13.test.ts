@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 12, L-4, with GM - Design's round-13 lines (verbatim). A cancelled
+ * Design's lines, verbatim. A cancelled
  * step's held Cmd+Z goes to nothing, and the failure that cancelled it says
  * why. Three failures used to say nothing at all:
  * - chat /clear: "Couldn't clear the canvas. Nothing was removed." when the
@@ -53,8 +53,8 @@ function writer(id: string, definitionId: string, params: Record<string, unknown
     data: { label: 'Writer', definitionId, params, state: 'idle', outputs: {} } };
 }
 
-describe("GM's failure lines (round 13), verbatim", () => {
-  it('reads as GM wrote them', () => {
+describe("the clear and model-load failure lines, verbatim", () => {
+  it('reads as design wrote them', () => {
     expect(CLEAR_REFUSED_TEXT).toBe("Nebula couldn’t clear the canvas because the server didn’t accept it. Nothing was removed.");
     expect(CLEAR_FAILED_TEXT).toBe("Nebula couldn’t clear the canvas.");
     expect(modelSettingsFailedText('Writer')).toBe("Nebula couldn’t load the model settings for “Writer”.");
@@ -62,7 +62,7 @@ describe("GM's failure lines (round 13), verbatim", () => {
   });
 });
 
-describe('chat /clear that fails says so (L-4)', () => {
+describe('chat /clear that fails says so', () => {
   beforeEach(() => {
     net.calls.length = 0;
     net.reply = null;
@@ -72,8 +72,8 @@ describe('chat /clear that fails says so (L-4)', () => {
   });
   afterEach(() => { vi.restoreAllMocks(); useGraphStore.setState(initialGraph, true); });
 
-  // Round 21 (the #114 merge): the outcome is the chat's line (lib/chatClear.ts,
-  // #114's GM lines); the chat says it, and a refusal's reason shows under
+  // After the #114 merge: the outcome is the chat's line (lib/chatClear.ts,
+  // #114's design lines); the chat says it, and a refusal's reason shows under
   // Clear's heading in the chat (ChatPanel.clear.test.tsx), not on the canvas.
   it('refused before clearing (409, a run is going): the canvas and the steps are as they were', async () => {
     net.reply = () => json(409, { detail: 'Stop the run first.' });
@@ -101,7 +101,7 @@ describe('chat /clear that fails says so (L-4)', () => {
     expect(shown()).not.toContain(CLEAR_REFUSED_TEXT);
   });
 
-  it('(control) a clear that goes through: no failure line, one step', async () => {
+  it('control: a clear that goes through: no failure line, one step', async () => {
     net.reply = () => json(200, { status: 'cleared' });
     await clearCanvasFromChat();
     await settle();
@@ -119,7 +119,7 @@ describe('chat /clear that fails says so (L-4)', () => {
   });
 });
 
-describe('a model picker that fails says so, and the node keeps its settings (L-4)', () => {
+describe('a model picker that fails says so, and the node keeps its settings', () => {
   beforeEach(() => {
     net.calls.length = 0;
     net.reply = null;
@@ -159,8 +159,8 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         net.reply = (path) => /model$|universal\/ports$/.test(path) ? json(409, { detail: 'It is running.' }) : json(200, {});
         await configure(id);
         await settle();
-        // Round 21 (the #114 merge): #114's GM line for a failed model change
-        // (channel round 14) where neither of #195's two lines applies.
+        // After the #114 merge: #114's design line for a failed model change
+        // (channel) where neither of #195's two lines applies.
         expect(shown().join('\n')).toContain("Nebula couldn’t change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });
@@ -173,8 +173,8 @@ describe('a model picker that fails says so, and the node keeps its settings (L-
         };
         await configure(id);
         await settle();
-        // Round 21 (the #114 merge): #114's GM line for a failed model change
-        // (channel round 14) where neither of #195's two lines applies.
+        // After the #114 merge: #114's design line for a failed model change
+        // (channel) where neither of #195's two lines applies.
         expect(shown().join('\n')).toContain("Nebula couldn’t change the model for “Writer”.");
         expect(store().nodes[0].data.params).toEqual(params);
       });

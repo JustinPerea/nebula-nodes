@@ -7,7 +7,7 @@ import { RequestFailedError } from '../src/lib/errorCopy';
 const api = vi.hoisted(() => ({ close: vi.fn() }));
 vi.mock('../src/lib/commonsApi', () => ({ commonsEvaluationApi: api, commonsReviewApi: { get: vi.fn(async () => null) } }));
 
-// Round 18l: Chrome's focus fixup, so focus asserted here is where Chrome would leave it.
+// Runs under Chrome's focus fixup (withFocusFixup), so focus asserted here is where Chrome would leave it.
 const fixup = withFocusFixup();
 beforeEach(() => { vi.clearAllMocks(); api.close.mockResolvedValue({ state: 'closed' }); });
 afterEach(() => cleanup());
@@ -37,8 +37,8 @@ it('closes once with the current revision after confirmation', async () => {
 });
 
 it('shows the server refusal and stays open', async () => {
-  // Round 3e: the API's typed refusal, as commonsApi throws it (the backend's words in `detail`).
-  // Round 18j (GM r40): said in the because form, never the backend's own words.
+  // The API's typed refusal, as commonsApi throws it (the backend's words in `detail`).
+  // Design: said in the because form, never the backend's own words.
   api.close.mockRejectedValue(new RequestFailedError("Couldn't close the batch.", 409, { detail: 'A grading attempt is still running. Close after it finishes.' }));
   render(<CommonsCloseBatch revision={1} assisted={false} disabled={false} onClosed={vi.fn()} />);
   fireEvent.click(screen.getByText('Close without sealing…'));
@@ -52,7 +52,7 @@ it('cannot be opened while disabled', () => {
   expect((screen.getByText('Close review & resume library analysis…') as HTMLButtonElement).disabled).toBe(true);
 });
 
-it('cannot confirm once the parent disables it mid-dialog: an aria lock, never native (review 17 MEDIUM-2)', () => {
+it('cannot confirm once the parent disables it mid-dialog: an aria lock, never native', () => {
   const { rerender } = render(<CommonsCloseBatch revision={1} assisted disabled={false} onClosed={vi.fn()} />);
   fireEvent.click(screen.getByText('Close review & resume library analysis…'));
   const close = screen.getByText('Close as assisted review') as HTMLButtonElement;

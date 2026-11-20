@@ -13,8 +13,8 @@ const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
 
 afterEach(() => cleanup());
 
-describe('ProviderReadinessBadge on Idol (GM, PR #203 r12)', () => {
-  it('reads "Hugging Face · free" without the token, with GM\'s detail', () => {
+describe('ProviderReadinessBadge on Idol (PR #203)', () => {
+  it('reads "Hugging Face · free" without the token, with design\'s detail', () => {
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys: {} } });
     const { container } = render(<ProviderReadinessBadge definition={IDOL} />);
     expect(container.querySelector('.provider-readiness')).not.toHaveClass('provider-readiness--warning');

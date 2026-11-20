@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReviewBatch } from '../src/lib/commonsReviewTypes';
 
 /**
- * One heading pattern for the Commons' three sections (GM - Design, second
+ * One heading pattern for the Commons' three sections (design, second
  * review of PR #157, 2026-10-21): "The page h1 stays 'Commons' in the header.
  * The section name is the h2, set as the eyebrow line. Merge it with the
  * existing eyebrow: 'Blind labeling · C1 / C2 human ground truth'. The
@@ -126,7 +126,7 @@ function expectDisplayLine(region: HTMLElement, line: string) {
   expect(within(region).queryByRole('heading', { name: line })).toBeNull();
 }
 
-describe('one heading pattern for the Commons sections (GM review, round 2)', () => {
+describe('one heading pattern for the Commons sections', () => {
   for (const [path, choose] of [['its tab (1440)', fromTab], ['More (1280)', fromMore]] as const) {
     it(`Blind labeling, opened from ${path}: its name is the h2 on the eyebrow line`, async () => {
       await view();
@@ -168,7 +168,7 @@ describe('one heading pattern for the Commons sections (GM review, round 2)', ()
     await view();
     fromTab('Blind labeling');
     expectEyebrow((await expectSection('Blind labeling')).heading, 'Blind labeling · C1 / C2 human ground truth');
-    // Round 18d (GM r32 5): the loading line shows once the load has taken 300 ms.
+    // Design: the loading line shows once the load has taken 300 ms.
     expect(await screen.findByText('Loading held-out references…')).toBeTruthy();
     fromTab('Agent review');
     expectEyebrow((await expectSection('Agent review')).heading, 'Agent review · agent grades · your judgment');

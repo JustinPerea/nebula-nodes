@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeNebula, canvasNode, textFakeNode } from './helpers/undoFakeBackend';
 
-// Review 16, H1 (the coordinator's decision): a property-style test. Random
+// A property-style test (a decision made for this PR). Random
 // sequences of the person's own edits (type, add from the library, add and
 // connect, upload, paste, duplicate, delete, Cmd+Z, Cmd+Shift+Z), with
 // Nebula's echoes and HTTP answers reaching the tab in random order (echoes
@@ -12,20 +12,19 @@ import { FakeNebula, canvasNode, textFakeNode } from './helpers/undoFakeBackend'
 //   3. no press is silent while its stack holds a step: pressed with nothing
 //      on its way, a Cmd+Z or Cmd+Shift+Z changes the canvas or says why.
 // Seeds: UNDO_PROPERTY_SEEDS (default 120), from UNDO_PROPERTY_FIRST (default 1).
-// Review 17, M-1 (round 18): the foreign-add variant also has nodes added by
+// The foreign-add variant also has nodes added by
 // someone else at random (an agent's edit, a reconnect's sync with no edit,
 // another window's edit). A plain sync's node is no step, so it stays at the
 // end; an agent's or another window's add is a step the person can undo.
 // Seeds: UNDO_PROPERTY_FOREIGN_SEEDS (default 60), from
 // UNDO_PROPERTY_FOREIGN_FIRST (default 1).
-// Review 18 (round 19): the refusal variant refuses 30% of node DELETEs at
+// The refusal variant refuses 30% of node DELETEs at
 // random (409, on its way like any answer), so a failed delete's put-back
-// meets every other write in flight (M-A: typing that waited behind an undo;
-// M-B: a wire made while the delete was out). Seeds:
+// meets every other write in flight (typing that waited behind an undo;
+// a wire made while the delete was out). Seeds:
 // UNDO_PROPERTY_REFUSE_SEEDS (default 30), from UNDO_PROPERTY_REFUSE_FIRST
 // (default 1); UNDO_PROPERTY_SKIP_REFUSE=1 / UNDO_PROPERTY_ONLY_REFUSE=1.
-// Review 19 (round 20, M3): the clear variant (the reviewer's propclear
-// probe). An agent clears once at a random step (about 12% a step) and adds
+// The clear variant. An agent clears once at a random step (about 12% a step) and adds
 // 1-3 nodes that reuse ids n1…; the fake models Nebula's fence (no project or
 // an old canvas: 409, nothing applied). Undo and redo stop after the clear.
 // Checks: canvas = Nebula once everything lands, and no value typed before
@@ -39,7 +38,7 @@ const fake = vi.hoisted(() => ({ backend: null as unknown as FakeNebula, refuseD
 vi.mock('../src/lib/backend', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/lib/backend')>(),
   apiFetch: (path: string, init?: RequestInit, options?: { project?: { canvas?: string } | null }) => {
-    // Review 19's clear variant: Nebula's fence (backend main.py): a tab write with no project, or made for a
+    // A reviewer's clear variant: Nebula's fence (backend main.py): a tab write with no project, or made for a
     // canvas cleared since, is refused with the stale line, after Nebula applied nothing.
     const method0 = String(init?.method ?? 'GET').toUpperCase();
     if (fake.fence && method0 !== 'GET' && path.startsWith('/api/graph')) {
@@ -102,10 +101,10 @@ const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 const REAL_SET_TIMEOUT = globalThis.setTimeout;
 /** The slice of the shared fake clock a seed is advancing now, if any. */
 let sliceInFlight: Promise<unknown> = Promise.resolve();
-/** Review 14 NIT-2: the shared fake timers advance in slices of at most a
+/** The shared fake timers advance in slices of at most a
  * second, and an abandoned block's run (`mine` no longer the generation)
  * stops before and after every slice, so it never finishes a step or its
- * final phase against the next block's canvas. Review 15 NIT-2: and the
+ * final phase against the next block's canvas, and the
  * slice in flight when it was abandoned finishes before the next block
  * starts (afterEach waits for it), so it can't advance that block's clock. */
 function guardedTimers(mine: number) {
@@ -157,13 +156,13 @@ interface Failure { seed: number; step: number; what: string; log: string[]; cal
 
 type Variant = 'plain' | 'foreign' | 'refuse' | 'clear';
 
-/** PR #198 fix round 14 (review 13's flake): a block vitest timed out isn't
+/** PR #198 (a reviewer's flake): a block vitest timed out isn't
  * cancelled; its seed loop went on against the shared fake Nebula and store
  * while the next block ran, so the next block read the abandoned block's
  * typing ("pre-clear typing landed on the new canvas", seeds 10 and 24
  * under load; reproduced by forcing the block before it to time out). Each
  * block runs under its own generation; an abandoned one stops at its next
- * step; review 14 NIT-2: and at every await within a step and in the final
+ * step, and at every await within a step and in the final
  * phase (guardedTimers). */
 let generation = 0;
 class Abandoned extends Error {}
@@ -215,7 +214,7 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
     const fk = nebula() as unknown as { broadcast: () => void; deliverEcho: () => boolean;
       echoes: Array<{ nodes: unknown[]; edges: unknown[]; request: number; seq: number; canvas?: string; agent?: boolean }> };
     fk.broadcast = function broadcast(): void {
-      // Numbered when read, as main.py numbers every graphSync (PR #205 round 9).
+      // Numbered when read, as main.py numbers every graphSync (PR #205).
       fk.echoes.push({ nodes: [...nebula().nodes.values()].map((n) => JSON.parse(JSON.stringify(n))), edges: JSON.parse(JSON.stringify(nebula().edges)),
         request: nebula().request, seq: nebula().nextSyncSeq(), canvas: fake.canvas, agent: agentNow });
       if (!nebula().holdEchoes) nebula().deliverEchoes();
@@ -444,7 +443,7 @@ async function runSeedInner(seed: number, foreign: boolean, clearing = false): P
 
 let clock = Date.now();
 
-describe('round 17 (review 16, H1): random sequences of edits, undos and echoes', () => {
+describe('random sequences of edits, undos and echoes', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     // Each block starts later than the last one ended (a clock run backwards
@@ -459,7 +458,7 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
   afterEach(async () => {
-    // Review 15 NIT-2: a block vitest timed out is over: its run stops at its
+    // A block vitest timed out is over: its run stops at its
     // next await, and the slice it has in flight ends here, on this block's
     // clock, before the next block fakes its own (at most 10 s of real time).
     generation += 1;
@@ -484,7 +483,7 @@ describe('round 17 (review 16, H1): random sequences of edits, undos and echoes'
     : chunksOf(Number(process.env.UNDO_PROPERTY_FOREIGN_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_FOREIGN_SEEDS ?? 60));
   const refuse = process.env.UNDO_PROPERTY_SKIP_REFUSE === '1' || ONLY_FOREIGN || ONLY_CLEAR ? []
     : chunksOf(Number(process.env.UNDO_PROPERTY_REFUSE_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_REFUSE_SEEDS ?? 30));
-  // Review 19, M3: seeds 84 and 1123 always run (a pre-clear delete's answer
+  // Seeds 84 and 1123 always run (a pre-clear delete's answer
   // wiped the typing on the new node with its id).
   const clear = process.env.UNDO_PROPERTY_SKIP_CLEAR === '1' || ONLY_FOREIGN || ONLY_REFUSE ? []
     : [...chunksOf(Number(process.env.UNDO_PROPERTY_CLEAR_FIRST ?? 1), Number(process.env.UNDO_PROPERTY_CLEAR_SEEDS ?? 30)),

@@ -12,9 +12,9 @@ vi.mock('../../src/lib/api', async (importOriginal) => ({
   getSettings: vi.fn().mockResolvedValue({}),
 }));
 
-// GM PR #205 r10 items 2-3: a pinned Inspector whose node went (several came
+// Design (PR #205): a pinned Inspector whose node went (several came
 // back, or an Undo, a Delete or a reopen took it off) stays on the screen
-// with its empty state, as the store says (review 5, lines LOW-1). The real
+// with its empty state, as the store says. The real
 // Inspector draws it.
 
 let previousUi: ReturnType<typeof useUIStore.getState>;
@@ -75,7 +75,7 @@ describe('the pinned Inspector with no node', () => {
     advanceLayout();
     expect(screen.getByText('standby')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByText('No node selected')).not.toHaveAttribute('aria-hidden');
-    // GM PR #205 r13 item 6: read when someone moves to it, not announced.
+    // Design (PR #205): read when someone moves to it, not announced.
     const empty = document.querySelector('[data-inspector-empty="true"]');
     expect(empty?.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
   });
@@ -128,7 +128,7 @@ describe('the pinned Inspector with no node', () => {
   });
 });
 
-// GM PR #205 r11 item 3 and r12: the Inspector follows the canvas selection,
+// Design (PR #205): the Inspector follows the canvas selection,
 // so it and the rings agree. None selected: "No node selected". One, however
 // it was selected: that node. From 2: "N nodes selected", then "Select one
 // node to see its settings.". Screen readers get the words on the screen.
@@ -260,11 +260,11 @@ describe('the pinned Inspector over a selection', () => {
   });
 });
 
-// Review 6 of PR #205 (inspector-pin MEDIUM-1), GM r13 item 5: with the
+// Design (PR #205): with the
 // Inspector pinned, Delete, Cmd+Z, Cmd+Shift+Z and Cmd+Z again all stay the
 // canvas's: when the shown node leaves, focus goes to the canvas, and the node
 // an Undo brings back shows in the Inspector without taking focus.
-// GM PR #205 r16 item 5: the unpinned Inspector follows the selection. One
+// Design (PR #205): the unpinned Inspector follows the selection. One
 // node: that node. 2 or more: "N nodes selected", whether or not its old node
 // is among them. None: it closes, as on main (where selectNode(null) closes an
 // unpinned Inspector).
@@ -426,7 +426,7 @@ describe('the pinned Inspector and the keyboard', () => {
   });
 
   // React Flow copies the nodes into its own store, so a card leaves a commit
-  // after the selection clears (review 7 of PR #205, inspector LOW-1).
+  // after the selection clears (PR #205).
   function LaggingCards() {
     const nodes = useGraphStore((state) => state.nodes);
     const [shown, setShown] = useState(nodes);

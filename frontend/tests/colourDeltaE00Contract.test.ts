@@ -43,7 +43,7 @@ describe('CIEDE2000 matches the backend', () => {
     }
   });
 
-  it('takes both hue wraps away from zero chroma as an independent CIEDE2000 does (review 4 N1)', () => {
+  it('takes both hue wraps away from zero chroma as an independent CIEDE2000 does', () => {
     const wraps = CONTRACT.labPairs.filter((c) => c.independent !== undefined);
     expect(wraps.length).toBe(2);
     for (const c of wraps) expect(Math.abs(deltaE00Lab(c.a, c.b) - c.independent!)).toBeLessThanOrEqual(1e-4);

@@ -2,17 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 5: review 4 of the agent steps under a hold, and GM r7/r8.
-// - Review 4, MEDIUM-1: two agent edits to a node an Undo's restore holds:
-//   the canvas keeps Nebula's connections, one step per edit (R1, R1b);
-//   a refused Delete's connections (R6, R12, and an earlier link's).
-// - Review 4, LOW-1: the chain's intermediate connections, the order across
-//   nodes (R9), and the selection after an agent step's Undo (R8).
-// - GM r7 item 1: a sync with no origin (a reconnect's) is someone's, held
+// PR #205: a review of the agent steps under a hold, and design's rulings.
+// - Two agent edits to a node an Undo's restore holds:
+//   the canvas keeps Nebula's connections, one step per edit;
+//   a refused Delete's connections (a multi-node refused Delete, a Codex-then-Claude pair, and an earlier link's).
+// - The chain's intermediate connections, the order across
+//   nodes, and the selection after an agent step's Undo.
+// - Design: a sync with no origin (a reconnect's) is someone's, held
 //   or not: never credited to an agent, never folded into an agent's step.
-// - GM r8 items 1-2: several nodes brought back leave a pinned Inspector
+// - Design: several nodes brought back leave a pinned Inspector
 //   pinned; a real multi-selection draws a ring and a pill per node.
-// The harness is review 4's probe file (round 18's fake Nebula).
+// The harness is the fake Nebula in tests/helpers/undoFakeBackend.ts.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -78,7 +78,7 @@ const claude = { actor: { kind: 'agent', name: 'Claude', id: 'claude' } };
 const wire = (source: string, target: string): FakeWire => ({ id: `w-${source}-${target}`, source, sourceHandle: 'text', target, targetHandle: 'text' });
 let clock = Date.now();
 
-describe('PR #205 round 5: holds, someone, and the selection', () => {
+describe('PR #205: holds, someone, and the selection', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -175,8 +175,8 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       : null);
   };
 
-  describe('review 4 MEDIUM-1: the restore hold with two agent edits', () => {
-    it('R1: Codex sets a value, then Codex connects n1 to n2: the canvas keeps the connection, as Nebula; one step each', async () => {
+  describe('the restore hold with two agent edits', () => {
+    it('Codex sets a value, then Codex connects n1 to n2: the canvas keeps the connection, as Nebula; one step each', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await restoreHeld();
       agentDoes(codex, 'ed_r1val000000001', () => { n1().params = { value: 'AGENT' }; });
@@ -200,7 +200,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       expect(restoreEdits().slice(-2)).toEqual(['ed_r1con000000001', 'ed_r1val000000001']);
     });
 
-    it('R1b: Claude connects n1 to n2 and renames, then Codex takes it off and sets a value: no connection, as Nebula; no duplicate step', async () => {
+    it('Claude connects n1 to n2 and renames, then Codex takes it off and sets a value: no connection, as Nebula; no duplicate step', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await restoreHeld();
       agentDoes(claude, 'ed_r1bcon00000001', () => { nebula().edges.push(wire('n1', 'n2')); n1().label = 'Claude'; });
@@ -228,7 +228,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
     });
   });
 
-  describe('mutation guards (round 5)', () => {
+  describe('mutation guards', () => {
     it('one edit synced twice during a restore\'s hold (its connection, then again with nothing new) stays one step', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await restoreHeld();
@@ -318,8 +318,8 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
     });
   });
 
-  describe('review 4 MEDIUM-1: a refused Delete\'s connections', () => {
-    it('R6: a multi-node Delete, n1 goes, n2 refused, two agents edit n2: their steps on top, each Undo matches Nebula', async () => {
+  describe('a refused Delete\'s connections', () => {
+    it('a multi-node Delete, n1 goes, n2 refused, two agents edit n2: their steps on top, each Undo matches Nebula', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, { ...textFakeNode('n2'), params: { value: 'w0' } }, textFakeNode('n3')]);
       refuseDelete('n2');
       await deleteHeld(['n1', 'n2']);
@@ -344,7 +344,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       sameAsNebula();
     });
 
-    it('R12: Codex connects, then Claude renames: "Undid Claude’s edit." keeps the connection, "Undid Codex’s edit." takes it off', async () => {
+    it('Codex connects, then Claude renames: "Undid Claude’s edit." keeps the connection, "Undid Codex’s edit." takes it off', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       refuseDelete();
       nebula().holdAnswers = true;
@@ -393,7 +393,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
     });
   });
 
-  describe('review 4 LOW-1: the chain under a confirmed Delete', () => {
+  describe('the chain under a confirmed Delete', () => {
     it('the later agent changes the connections: Codex connects n1>n2, Claude connects n1>n3; each Undo takes off its own', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2'), textFakeNode('n3')]);
       await deleteHeld();
@@ -415,7 +415,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       sameAsNebula();
     });
 
-    it('R8: an agent step\'s Undo brings nothing back, and the selection stays on the restored node', async () => {
+    it('an agent step\'s Undo brings nothing back, and the selection stays on the restored node', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await deleteHeld();
       agentEdits(codex, { ...textFakeNode('n1'), params: { value: 'CODEX' } }, 'ed_r8codex0000001');
@@ -429,7 +429,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
       expect(inUi()).toBe('n1');
     });
 
-    describe('R9: two nodes under one Delete, in Nebula\'s order across nodes', () => {
+    describe('two nodes under one Delete, in Nebula\'s order across nodes', () => {
       const slowDeletes = () => {
         const waiting: Array<() => void> = [];
         fake.override = (path, init) => {
@@ -474,7 +474,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
     });
   });
 
-  describe('GM r7 item 1: a sync with no origin is someone\'s, held or not', () => {
+  describe('a sync with no origin is someone\'s, held or not', () => {
     const someoneLine = 'This node was renamed “Reconnect” while Nebula was offline, so your rename to “Draft” wasn’t saved.';
     const expectSomeone = () => {
       expect(lastForeignToucher('n1')).toEqual({ kind: 'unknown' });
@@ -597,7 +597,7 @@ describe('PR #205 round 5: holds, someone, and the selection', () => {
     });
   });
 
-  describe('GM r8 items 1-2: several nodes back', () => {
+  describe('several nodes back (design)', () => {
     const pin = (id: string) => {
       useUIStore.getState().selectNode(id);
       useUIStore.getState().setInspectorPinned(true);

@@ -158,7 +158,7 @@ describe('Cinema reference feedback and explicit generation', () => {
     expect(screen.queryByText('sibling.png')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Try again uploading “logo.png”' }));
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
-    // The shot panel's Remove is named with its file too (review 7 of PR #205, inspector NIT-1, M21).
+    // The shot panel's Remove is named with its file too (PR #205).
     fireEvent.click(screen.getByRole('button', { name: 'Remove “logo.png”' }));
     expect(removeCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('pending');
     metadata.uploads = [];

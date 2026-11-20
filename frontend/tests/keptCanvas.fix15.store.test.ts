@@ -1,19 +1,19 @@
 /**
- * Round 15 of PR #199 (review 13; GM r19 and r20), the store's side. The
+ * PR #199 (design), the store's side. The
  * harness is catalogRestore.fix11.store's.
  *
- * Fix round 11 of PR #199 (review 11; GM r14 and r15), the harness's own notes:
- * - HIGH-1 and GM r15: a restore while the person types keeps the
- *   canvas where they are, with GM r12, 1's line and [Save as a project] in
+ * PR #199 (design), the harness's own notes:
+ * - Design: a restore while the person types keeps the
+ *   canvas where they are, with design's line and [Save as a project] in
  *   the canvas notice region. Nothing typed is reverted or sent; typing goes
  *   on and joins the kept edits; the button files everything typed up to the
  *   click, opens that project and shows the saved toast.
  * - The tab learns of the restore from the backend's graphSync, and from
  *   `projectsChanged{catalogRestored}` when that sync is late or lost.
- * - GM r14, 3: an agent's write that closed the project the tab showed: its
+ * - Design: an agent's write that closed the project the tab showed: its
  *   line on Projects home, or kept in the tab with the edits not saved.
- * - LOW-2: a restore (or a reconnect) lets the person's next edit say
- *   `personInput` again. GM r15: the person's log row says "kept".
+ * - A restore (or a reconnect) lets the person's next edit say
+ *   `personInput` again. Design: the person's log row says "kept".
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
@@ -171,7 +171,7 @@ function keepWithEdits(): void {
   expect(useGraphStore.getState().keptUndo.length).toBeGreaterThan(0);
 }
 
-describe('GM r20 on PR #199 (review 12 HIGH-1, review 13 kept-scratch HIGH-1): nothing replaces a kept canvas', () => {
+describe('nothing replaces a kept canvas (design, PR #199)', () => {
   it('kept, then Back to projects and an open: both refused with a pulse; the canvas, kept mode and its Undo stay', async () => {
     keepWithEdits();
     const keptUndo = useGraphStore.getState().keptUndo;
@@ -199,7 +199,7 @@ describe('GM r20 on PR #199 (review 12 HIGH-1, review 13 kept-scratch HIGH-1): n
     // [Save as a project] has nothing to file now: never Beta's canvas under alpha.
     await useProjectStore.getState().saveKeptEdits();
     expect(vi.mocked(projects.recoverProject)).not.toHaveBeenCalled();
-    // A kept Undo step of the lost canvas never lands on Beta (review 13, K6c).
+    // A kept Undo step of the lost canvas never lands on Beta.
     useGraphStore.getState().undo();
     expect(valueOf()).toBe('beta typed');
   });
@@ -249,7 +249,7 @@ describe('GM r20 on PR #199 (review 12 HIGH-1, review 13 kept-scratch HIGH-1): n
     expect(useProjectStore.getState().keptEdits).toBeNull();
   });
 
-  it('[Discard edits] and [Save as a project] wait while a run holds the switch (GM r19, 4; review 13 LOW-3)', async () => {
+  it('[Discard edits] and [Save as a project] wait while a run holds the switch', async () => {
     keepWithEdits();
     useGraphStore.setState({ isExecuting: true });
     vi.mocked(projects.listProjects).mockClear();
@@ -313,7 +313,7 @@ describe('GM r20 on PR #199 (review 12 HIGH-1, review 13 kept-scratch HIGH-1): n
   });
 });
 
-describe('GM r19 on PR #199, 4: in the store’s gate, kept comes before the run', () => {
+describe('in the store’s gate, kept comes before the run (design, PR #199)', () => {
   it('a delete while the kept save is on its way and this tab runs: the kept pulse, not the run’s lock', () => {
     keepWithEdits();
     setKeptCanvasSaving(true);
@@ -328,7 +328,7 @@ describe('GM r19 on PR #199, 4: in the store’s gate, kept comes before the run
   });
 });
 
-describe('review 13 of PR #199, kept-scratch LOW-1: a kept step says nothing to Nebula and leaves the saved history', () => {
+describe('PR #199, kept-scratch: a kept step says nothing to Nebula and leaves the saved history', () => {
   it('a kept duplicate, Arrange, typing and an add: no personInput, the saved Undo untouched', async () => {
     keepWithEdits();
     acts.said = [];
