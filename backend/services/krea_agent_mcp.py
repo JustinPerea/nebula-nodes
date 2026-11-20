@@ -68,6 +68,8 @@ NEBULA_MCP_TOOLS = (
     "load_graph_file",
     # Whether the person's canvas can reach this session through the Nebula channel.
     "channel_status",
+    # Images measured into records in a folder (the model read comes later).
+    "extraction_measure", "extraction_list", "extraction_show", "extraction_correct",
     # The Message box's thread: answer the person there, and read your own rows.
     "reply_to_person", "read_thread",
 )

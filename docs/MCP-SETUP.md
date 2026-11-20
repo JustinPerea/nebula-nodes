@@ -756,6 +756,28 @@ The server exposes these tools for building and running (see
   move a board or a Character to Global or a canvas project (`to`:
   "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
+- `extraction_measure`, `extraction_list`, `extraction_show`, `extraction_correct`:
+  still images measured by code into records kept as plain files in a folder
+  you name (a draft schema, `extracted-example/1`). `extraction_measure(image_path,
+  folder, replace=False)` takes a JPEG, PNG, GIF, WebP or HEIC file and writes
+  `<folder>/<id>/record.json`, `rendering.png` and the original; the record holds
+  the palette with shares and accents, value range, aspect, lightness, saturation
+  and a perceptual hash, all set by code, with status `proposal`. The id comes from
+  the file's bytes, so measuring the same image again keeps the existing record and
+  its corrections (`existed: true`); `replace=True` measures again and still keeps
+  them. The folder must already exist and can't be Nebula's state folder or its
+  source tree; video and other file types are refused. `extraction_list(folder)`
+  lists the records, and `extraction_show(record)` (a record's folder or its
+  `record.json`) returns the record and `effective`, the same with its corrections
+  applied. `extraction_correct(record, corrections)` adds corrections as the agent,
+  each `{path, op, value, reason?}` with `op` set, add or remove, on `brand`, on
+  `structure.read.*` or on `shows.*`. Measured values (`structure.measured`,
+  `rendering`, `source`), the id and the schema can't be corrected, and approval
+  isn't a correction: an agent can't approve a record. Every path goes through
+  the same protected-path check as the other file tools. The model read of an
+  image is not an agent tool yet; it comes in a later round. The tools run in the
+  MCP process with no Nebula server, and the same work is `python -m extraction
+  measure|list|show` from `backend/`.
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, Styles, projects), and bring one back with the same id. A
   project restore may pass the project limit; after one, `new_project` is
