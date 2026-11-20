@@ -29,7 +29,7 @@ body.app-slava-restraint .chat-model-picker__selection {
 }
 
 body.app-slava-restraint .chat-model-picker__effort-label {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
 }
 
@@ -107,7 +107,7 @@ body.app-slava-restraint .chat-model-picker__connection {
   flex: 0 0 auto;
   margin: 0;
   padding: 0 12px 8px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
   overflow-wrap: anywhere;
 }
@@ -172,7 +172,7 @@ body.app-slava-restraint .chat-model-picker__footer {
   margin: 0;
   padding: 8px 12px;
   border-top: 1px solid var(--sr-edge);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
 }
 
@@ -208,7 +208,7 @@ body.app-slava-restraint .chat-model-picker__option > span {
 body.app-slava-restraint .chat-model-picker__description {
   display: block;
   margin-top: 2px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
 }
 

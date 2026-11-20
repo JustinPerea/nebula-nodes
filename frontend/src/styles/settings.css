@@ -24,7 +24,7 @@ body.app-slava-restraint .settings__tabpanel {
 body.app-slava-restraint .settings__loading,
 body.app-slava-restraint .settings__load-error {
   padding: var(--sr-space-6) var(--sr-space-2);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   text-align: center;
 }
 
@@ -88,7 +88,7 @@ body.app-slava-restraint .settings-tabs__tab[aria-selected="true"] { color: var(
 body.app-slava-restraint .settings-tabs__tab:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
 
 body.app-slava-restraint .settings-tabs__count {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
 }
@@ -138,7 +138,7 @@ body.app-slava-restraint .settings-list__note { margin: 6px 2px 0; }
 
 body.app-slava-restraint .settings-hint {
   margin: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
   line-height: var(--sr-line-meta);
 }
@@ -303,7 +303,7 @@ body.app-slava-restraint .settings-search {
   border: 1px solid var(--sr-edge);
   border-radius: var(--sr-radius-control);
   background: var(--sr-surface-control);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   transition: border-color var(--sr-motion-fast), background-color var(--sr-motion-fast);
 }
 
@@ -328,7 +328,7 @@ body.app-slava-restraint .settings-search input {
   font: var(--sr-type-body) var(--sr-ui);
 }
 
-body.app-slava-restraint .settings-search input::placeholder { color: var(--sr-ink-meta); }
+body.app-slava-restraint .settings-search input::placeholder { color: var(--sr-ink-light); }
 body.app-slava-restraint .settings-search input::-webkit-search-cancel-button { filter: invert(0.6); }
 
 body.app-slava-restraint .settings-providers {
@@ -390,7 +390,7 @@ body.app-slava-restraint .settings-row__name {
    "15 nodes, including Nano Banana and Veo 3.1" is wider than the row's column). */
 body.app-slava-restraint .settings-row__summary {
   margin-top: 1px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
   white-space: normal;
   overflow-wrap: break-word;
@@ -471,7 +471,7 @@ body.app-slava-restraint .settings-row__error {
 /* A line that lost nothing (another Nebula is saving the settings): the
    row's normal muted text, not the error colour (GM, PR #203 r39). */
 body.app-slava-restraint .settings-row__error--neutral {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 /* Key field */
@@ -510,7 +510,7 @@ body.app-slava-restraint .settings-key__reveal {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font: var(--sr-type-meta) var(--sr-ui);
   cursor: pointer;
 }
@@ -657,7 +657,7 @@ body.app-slava-restraint .settings-daily__field {
   border: 1px solid var(--sr-edge-strong);
   border-radius: 7px;
   background: var(--sr-surface-control);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font: var(--sr-type-label) var(--sr-ui);
 }
 body.app-slava-restraint .settings-daily__field:has(.settings-daily__input:focus-visible) { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
@@ -670,7 +670,7 @@ body.app-slava-restraint .settings-daily__edit {
   max-width: 180px;
 }
 body.app-slava-restraint .settings-daily__invalid {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label);
   line-height: var(--sr-line-meta);
   text-align: right;
@@ -813,7 +813,7 @@ body.app-slava-restraint .settings-pref--link:hover svg { color: var(--sr-ink); 
 
 body.app-slava-restraint .settings-pref__text { display: grid; gap: 1px; min-width: 0; }
 body.app-slava-restraint .settings-pref__title { color: var(--sr-ink); font-size: var(--sr-type-body); font-weight: 500; cursor: inherit; }
-body.app-slava-restraint .settings-pref__description { color: var(--sr-ink-meta); font-size: var(--sr-type-label); line-height: var(--sr-line-meta); }
+body.app-slava-restraint .settings-pref__description { color: var(--sr-ink-light); font-size: var(--sr-type-label); line-height: var(--sr-line-meta); }
 
 body.app-slava-restraint .settings-switch {
   position: relative;

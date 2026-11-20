@@ -108,7 +108,7 @@
 .agent-roster__group-title {
   margin: 0;
   padding: 8px 16px 4px;
-  color: var(--an-faint);
+  color: var(--sr-ink-light);
   font: 600 11px/1 var(--an-ui);
 }
 

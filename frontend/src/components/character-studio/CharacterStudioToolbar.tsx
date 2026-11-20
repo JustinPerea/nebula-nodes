@@ -18,7 +18,7 @@ interface CharacterStudioToolbarProps {
 
 const SAVE_LABEL: Record<SaveState, string> = {
   idle: '',
-  draft: 'Draft — not yet saved',
+  draft: 'Draft · not saved yet',
   saving: 'Saving…',
   saved: 'Saved',
   error: 'Save failed',

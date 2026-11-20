@@ -21,7 +21,6 @@ body.app-slava-restraint .agent-notes-root {
   --an-ink: var(--sr-ink);
   --an-ink-bold: var(--sr-ink-bold);
   --an-muted: var(--sr-ink-light);
-  --an-faint: var(--sr-ink-meta);
   --an-hover: rgba(255, 255, 255, 0.035);
   --an-ui: var(--sr-ui);
   --an-mono: var(--sr-mono);
@@ -146,7 +145,7 @@ body.app-slava-restraint .agent-notes-root {
  * the two were drawn from different instances of the face and read as two
  * fonts. 600 is the heaviest weight shipped. */
 .agent-notes-chip__count[data-muted='true'] {
-  color: var(--an-faint);
+  color: var(--sr-ink-light);
 }
 
 .agent-notes-chip__count[data-pop='true'] {
@@ -276,7 +275,7 @@ body.app-slava-restraint .agent-notes-root {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--an-faint);
+  color: var(--sr-ink-meta);
   cursor: pointer;
 }
 
@@ -810,7 +809,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-questions-form__input::placeholder {
-  color: var(--an-faint);
+  color: var(--sr-ink-light);
 }
 
 .agent-questions-form__input:focus {
@@ -881,7 +880,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 .agent-questions-answers__answer[data-blank='true'] {
-  color: var(--an-faint);
+  color: var(--sr-ink-light);
 }
 
 /* =============== Node outlines (inside React Flow's viewport) =============== */

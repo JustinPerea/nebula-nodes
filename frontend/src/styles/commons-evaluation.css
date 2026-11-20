@@ -15,7 +15,7 @@
   --evaluation-ground:var(--sr-canvas-elevated);
   --evaluation-ink:var(--sr-ink);
   --evaluation-body-ink:var(--sr-ink-light);
-  --evaluation-eyebrow-ink:var(--sr-ink-meta);
+  --evaluation-eyebrow-ink:var(--sr-ink-light);
   --evaluation-unsaved-ink:var(--sr-warning);
   /* Panels, rows and reference buttons on the ground; the current reference in the accent */
   --evaluation-panel-edge:var(--sr-edge-strong);
@@ -29,7 +29,7 @@
   --evaluation-card-fill:var(--sr-glass-strong);
   --evaluation-card-ink:var(--sr-ink);
   --evaluation-card-body-ink:var(--sr-ink-light);
-  --evaluation-card-muted-ink:var(--sr-ink-meta);
+  --evaluation-card-muted-ink:var(--sr-ink-light);
   --evaluation-card-rule:var(--sr-edge);
   --evaluation-field-fill:var(--sr-surface-control-focus);
   --evaluation-field-ink:var(--sr-ink);

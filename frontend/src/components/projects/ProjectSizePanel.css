@@ -74,7 +74,7 @@
 .project-size-panel__download:hover { background: rgb(255 255 255 / 0.1); }
 .project-size-panel__label {
   margin: var(--sr-space-4, 16px) 0 var(--sr-space-1, 4px);
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
   font: 500 11px/1.4 var(--sr-ui, sans-serif);
 }
 .project-size-panel__rows {
@@ -111,7 +111,7 @@ button.project-size-panel__row:hover { background: var(--sr-surface-control-hove
 }
 .project-size-panel__dim {
   flex: 0 0 auto;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
   white-space: nowrap;
 }
 /* A type label beside the part: a dot between, so the two dim words read apart. */
@@ -129,5 +129,5 @@ button.project-size-panel__row:hover { background: var(--sr-surface-control-hove
 }
 .project-size-panel__rest {
   margin: var(--sr-space-2, 8px) 0 0;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
 }

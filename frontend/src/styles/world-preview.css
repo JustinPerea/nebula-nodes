@@ -570,7 +570,7 @@ body.app-slava-restraint .world-modal__segmented button.is-active {
 
 body.app-slava-restraint .world-modal__status,
 body.app-slava-restraint .world-modal__metadata {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-micro);
 }

@@ -286,7 +286,7 @@
 /* r61 answer 4: an answered question's quiet line. */
 .message-box__answered {
   margin: 8px 0 0;
-  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label, 11px);
   line-height: var(--sr-line-body, 1.45);
 }
@@ -323,7 +323,7 @@
   gap: 6px;
   padding-top: 4px;
   font-size: var(--sr-type-label, 11px);
-  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  color: var(--sr-ink-light);
 }
 
 .message-box__breath {
@@ -567,7 +567,7 @@
 }
 
 .message-box__field::placeholder {
-  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  color: var(--sr-ink-light);
 }
 
 .message-box__field-row[data-locked] .message-box__field {
@@ -602,6 +602,13 @@
   opacity: var(--sr-disabled-opacity);
 }
 
+/* Locked is a real disabled state (the field is aria-disabled): the placeholder and
+   the "/" key keep meta ink under the disabled opacity. Unlocked they read the light ink. */
+.message-box__field[aria-disabled='true']::placeholder,
+.message-box__field[aria-disabled='true'] ~ .message-box__key {
+  color: var(--sr-ink-meta);
+}
+
 /* The field clears its own outline: the row it sits in draws the token
    ring while it has keyboard focus (the house focus rule). */
 .message-box__field-row:has(.message-box__field:focus-visible) {
@@ -619,7 +626,7 @@
   margin: 2px;
   border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12));
   border-radius: 5px;
-  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono, monospace);
   font-size: var(--sr-type-label, 11px);
 }
@@ -642,7 +649,7 @@
 }
 
 .message-box__copied {
-  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-label, 11px);
 }
 
@@ -650,7 +657,7 @@
   display: block;
   text-wrap: pretty;
   margin-top: 4px;
-  color: var(--sr-ink-meta, rgba(255, 255, 255, 0.4));
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono, monospace);
   font-size: var(--sr-type-meta, 10px);
   text-align: right;

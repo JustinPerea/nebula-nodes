@@ -67,7 +67,7 @@
 
 .keyboard-shortcuts__group h3 {
   margin: 0 0 8px;
-  color: var(--sr-ink-meta, #888);
+  color: var(--sr-ink-light);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.04em;

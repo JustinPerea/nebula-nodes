@@ -46,14 +46,14 @@ body.app-slava-restraint .character-node__thumb-img {
 }
 
 body.app-slava-restraint .character-node__thumb-placeholder {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 body.app-slava-restraint .character-node__summary {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   margin-bottom: 8px;
   word-break: break-word;

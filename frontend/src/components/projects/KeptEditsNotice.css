@@ -9,7 +9,7 @@
 .kept-edits-notice__error {
   display: block;
   margin-top: 2px;
-  color: var(--sr-ink-meta, #9a9a96);
+  color: var(--sr-ink-light);
 }
 .kept-edits-notice--pulse .canvas-undo-notice__text {
   animation: kept-edits-pulse 420ms linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);

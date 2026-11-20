@@ -80,7 +80,7 @@ body.app-slava-restraint .commons-tab {
   border: 1px solid transparent;
   border-radius: 2px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font: inherit;
   padding: 4px 10px;
   cursor: pointer;
@@ -192,7 +192,7 @@ body.app-slava-restraint .commons-button--danger:active:not(:disabled) {
 body.app-slava-restraint .commons-link {
   border: 0;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font: inherit;
   font-size: 11px;
   padding: 0 2px;
@@ -221,6 +221,7 @@ body.app-slava-restraint .commons-link.commons-filter__reset:hover:not(:disabled
 }
 
 body.app-slava-restraint .commons-link:disabled {
+  color: var(--sr-ink-meta);
   opacity: var(--sr-disabled-opacity);
   cursor: default;
   text-decoration: none;
@@ -239,7 +240,7 @@ body.app-slava-restraint .commons-status {
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -325,7 +326,7 @@ body.app-slava-restraint .commons-field {
   flex-direction: column;
   gap: 5px;
   min-width: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -388,7 +389,7 @@ body.app-slava-restraint .commons-check {
 }
 
 body.app-slava-restraint .commons-meta {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   margin: 0;
 }
@@ -583,7 +584,7 @@ body.app-slava-restraint .commons-filters__group {
 body.app-slava-restraint .commons-filters__group legend {
   margin-bottom: 6px;
   padding: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -613,7 +614,7 @@ body.app-slava-restraint .commons-axis__head {
 }
 
 body.app-slava-restraint .commons-axis__value {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: 10px;
 }
@@ -648,7 +649,7 @@ body.app-slava-restraint .commons-chip {
 body.app-slava-restraint .commons-chip__remove {
   border: 0;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font: inherit;
   padding: 0 3px;
   cursor: pointer;
@@ -755,13 +756,13 @@ body.app-slava-restraint .commons-tile__caption {
    content will appear: no box, no rail (CommonsLoadingLine). */
 body.app-slava-restraint .commons-loading {
   margin: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .commons-empty {
   margin: 40px auto;
   max-width: 360px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   text-align: center;
 }
 
@@ -845,14 +846,14 @@ body.app-slava-restraint .commons-source {
   border: 1px solid var(--sr-edge);
 }
 
-/* Design: a correction is not an alert, so it is neutral. Brighter than the
-   model tag (--sr-ink-meta is under 4.5:1 at 9px) so the two stay apart. */
+/* Design: a correction is not an alert, so it is neutral: the light ink, the
+   same as the model tag. */
 body.app-slava-restraint .commons-source--corrected {
   color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .commons-source--model {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 /* -- detail panel ------------------------------------------------------------ */
@@ -910,7 +911,7 @@ body.app-slava-restraint .commons-field-block__head {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1001,7 +1002,7 @@ body.app-slava-restraint .commons-keyframe {
   border: 1px solid var(--sr-edge);
   border-radius: 3px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font: inherit;
   font-size: 10px;
   font-family: var(--sr-mono);
@@ -1096,7 +1097,7 @@ body.app-slava-restraint .commons-comment {
 }
 
 /* The quoted comment's date reads at the same ink as its text (design), so it
-   holds 4.5:1 on the fill; dates elsewhere keep --sr-ink-meta. */
+   holds 4.5:1 on the fill, as every other date does. */
 body.app-slava-restraint .commons-comment .commons-meta {
   color: var(--sr-ink-light);
 }
@@ -1321,7 +1322,7 @@ body.app-slava-restraint .commons-leave__line {
 body.app-slava-restraint .commons-leave__reason {
   text-wrap: pretty;
   margin: 4px 0 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   overflow-wrap: anywhere;
 }
 

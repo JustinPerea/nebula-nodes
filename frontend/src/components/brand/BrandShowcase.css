@@ -50,7 +50,7 @@
 }
 
 .nn-bs__brand-meta {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--sr-ink-light);
 }
 
 .nn-bs__close {
@@ -101,7 +101,7 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--sr-ink-light);
   max-width: 620px;
 }
 
@@ -141,7 +141,7 @@
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--sr-ink-light);
 }
 
 .nn-bs-hero__telemetry--top {
@@ -149,7 +149,7 @@
 }
 .nn-bs-hero__telemetry--bottom {
   bottom: 24px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--sr-ink-light);
 }
 
 .nn-bs-hero__center {
@@ -264,7 +264,7 @@
   font-size: 9px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--sr-ink-light);
   margin-bottom: 14px;
 }
 
@@ -339,7 +339,7 @@
   font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--sr-ink-light);
   margin-bottom: 16px;
 }
 
@@ -413,7 +413,7 @@
   font-family: var(--sr-mono, 'JetBrains Mono', monospace);
   font-size: 10px;
   letter-spacing: 0.14em;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--sr-ink-light);
 }
 
 .nn-bs__variant-desc {
@@ -452,7 +452,7 @@
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--sr-ink-light);
 }
 
 @media (max-width: 900px) {
@@ -473,7 +473,7 @@
   font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--sr-ink-light);
 }
 
 @media (max-width: 640px) {

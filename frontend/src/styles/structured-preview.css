@@ -330,7 +330,7 @@ body.app-slava-restraint .structured-preview__title {
 
 body.app-slava-restraint .structured-preview__type,
 body.app-slava-restraint .structured-preview__port {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   letter-spacing: 0.04em;
@@ -338,7 +338,7 @@ body.app-slava-restraint .structured-preview__port {
 }
 
 body.app-slava-restraint .structured-preview__meta {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
 }
@@ -396,7 +396,7 @@ body.app-slava-restraint .structured-preview--full .structured-preview__swatch {
 body.app-slava-restraint .structured-preview__swatch-more,
 body.app-slava-restraint .structured-preview__note,
 body.app-slava-restraint .structured-preview .structured-preview__reason {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
@@ -408,12 +408,12 @@ body.app-slava-restraint .structured-preview__text {
 }
 
 body.app-slava-restraint .structured-preview__empty {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-body);
 }
 
 body.app-slava-restraint .structured-preview__status {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -430,12 +430,12 @@ body.app-slava-restraint .structured-preview__item {
 
 /* Design: the "+N more" line is meta ink; it follows the base item rule so it wins. */
 body.app-slava-restraint .structured-preview__item--more {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
 body.app-slava-restraint .structured-preview__field dt {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: 10.5px;
 }

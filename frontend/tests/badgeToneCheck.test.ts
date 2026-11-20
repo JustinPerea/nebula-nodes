@@ -61,9 +61,9 @@ describe('check-badge-tone', () => {
     '.commons-badge { color: var(--sr-ink-light); box-shadow: none; }',
     '.commons-badge--x { color: #FF5A1E; }',
     '.commons-badges-list { color: var(--sr-accent); }',
-    '.moodboard-studio-toolbar__state--saved { color: var(--sr-ink-meta); }',
+    '.moodboard-studio-toolbar__state--saved { color: var(--sr-ink-light); }',
     '.moodboard-studio-toolbar__state--error { color: var(--sr-error); }',
-    '.character-def__ref-badge { color: var(--sr-ink-meta); }',
+    '.character-def__ref-badge { color: var(--sr-ink-light); }',
     '.character-def__ref-badge-list { color: var(--sr-accent); }',
     '.character-def__ref-button { color: var(--sr-accent); }',
     '/* .commons-badge--x { color: var(--sr-accent); } */',
@@ -73,7 +73,7 @@ describe('check-badge-tone', () => {
     'body.app-slava-restraint .cinema-shots-rail__badge--running { background: var(--sr-surface-control); color: var(--sr-ink-light); }',
     // The unread count keeps the accent (design).
     'body.app-slava-restraint .cinema-shots-rail__badge { background: var(--sr-accent); color: var(--sr-on-accent); }',
-    '.edit-node__speed-badge { color: var(--sr-ink-meta); border-color: var(--sr-edge); }',
+    '.edit-node__speed-badge { color: var(--sr-ink-light); border-color: var(--sr-edge); }',
   ];
   for (const css of fine) {
     it(`passes: ${css}`, () => expect(hits(css)).toHaveLength(0));
