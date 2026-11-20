@@ -82,7 +82,10 @@ export interface ProjectSwitchNotice {
  * whole reason), `reopen` when it then finishes an open whose reply was lost.
  */
 export type ProjectRetry =
-  | { action: 'load'; full?: boolean; reopen?: string }
+  | { action: 'load'; full?: boolean; reopen?: string;
+    /** Design: the first load found no server. `retrying`: Nebula is trying again by itself
+     * (its line says so; the button is "Try now"); without it the tries ran out. */
+    unreachable?: boolean; retrying?: boolean }
   | { action: 'list' }
   | { action: 'save' }
   | { action: 'open'; id: string }
@@ -122,7 +125,7 @@ export interface CopyNotice {
  * 'save' (GM r12 on PR #199, 1: [Save as a project] after a restore stopped
  * this tab's edits; the whole line stays), 'reloadNebula' ([Reload Nebula]
  * after an update) or 'none' (no button; the whole line). */
-export type ProjectRetryOffer = 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad';
+export type ProjectRetryOffer = 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad' | 'retrying';
 
 /** PR #204 round 11: Try again redoes a person-only action ("Delete forever", "Empty":
  * require_person), so it locks on a tab that isn't connected as the person. */
@@ -136,6 +139,7 @@ export function projectRetryOffer(state: { error: string | null; errorRetry: Pro
   if (state.errorRetry.action === 'reloadForUpdate') return 'reloadNebula';
   if (state.errorRetry.action === 'openFollowed') return 'openFollowed';
   if (state.errorRetry.action === 'part') return 'partLoad';
+  if (state.errorRetry.action === 'load' && state.errorRetry.retrying) return 'retrying';
   return state.errorRetry.action === 'load' && state.errorRetry.full ? 'reload' : 'redo';
 }
 
@@ -413,8 +417,37 @@ let listingGeneration = 0;
  * a fresh count. */
 let relistTimer: ReturnType<typeof setTimeout> | undefined;
 let relistFailures = 0;
+/** Design: a first load that found no server tries again by itself, 1, 2, 4, 8 and 16 s later
+ * (as the relist above does), then stops with today's line and "Try again". One timer, never two
+ * loads at once (initialize returns the one under way). `firstLoadLine`: the line the retrying or
+ * given-up state shows, so a wake only acts on that state. `firstLoadAuto`: the timer's own load
+ * (it keeps the line up and keeps the count). `firstLoadStopped`: the Projects screen is gone. */
+let firstLoadTimer: ReturnType<typeof setTimeout> | undefined;
+let firstLoadFailures = 0;
+let firstLoadAuto = false;
+let firstLoadStopped = false;
+let firstLoadLine: string | null = null;
+export const FIRST_LOAD_TRIES = 5;
+export const firstLoadDelay = (failures: number): number => 1000 * 2 ** failures;
 export function relistIfStale(): void {
   if (listingStale && useProjectStore.getState().screen === 'home' && !paramsVersionChange) { listingStale = false; relistNow(); }
+}
+
+/** Design: the Projects screen is gone: no retry of the first load is left waiting, and none
+ * starts from a load still on its way. A new mount's initialize lifts this. */
+export function stopFirstLoadRetry(): void {
+  clearTimeout(firstLoadTimer);
+  firstLoadTimer = undefined;
+  firstLoadStopped = true;
+}
+
+/** Design: the server may be back (the health probe answered, the window came online or into
+ * view): load now, with the count started again, but only while the first load is what's showing
+ * (its retrying or given-up line), never over another stop's screen. */
+export function wakeFirstLoad(): void {
+  const state = useProjectStore.getState();
+  if (state.initialized || state.loading || firstLoadStopped || firstLoadLine === null || state.error !== firstLoadLine) return;
+  void state.initialize();
 }
 
 /** The flows' listing, run once the chunk is in (a listing on Projects needs a
@@ -591,6 +624,12 @@ export function resetProjectStoreForTests(): void {
   clearTimeout(relistTimer);
   relistFailures = 0;
   listingStale = false;
+  clearTimeout(firstLoadTimer);
+  firstLoadTimer = undefined;
+  firstLoadFailures = 0;
+  firstLoadAuto = false;
+  firstLoadStopped = false;
+  firstLoadLine = null;
 }
 
 /**
@@ -949,6 +988,16 @@ export const core = {
   set projectViewport(v: ProjectSnapshot['viewport']) { projectViewport = v; },
   get quietReopenOf() { return quietReopenOf; },
   set quietReopenOf(v: string | null) { quietReopenOf = v; },
+  get firstLoadAuto() { return firstLoadAuto; },
+  set firstLoadAuto(v) { firstLoadAuto = v; },
+  get firstLoadFailures() { return firstLoadFailures; },
+  set firstLoadFailures(v) { firstLoadFailures = v; },
+  get firstLoadLine() { return firstLoadLine; },
+  set firstLoadLine(v: string | null) { firstLoadLine = v; },
+  get firstLoadStopped() { return firstLoadStopped; },
+  set firstLoadStopped(v) { firstLoadStopped = v; },
+  get firstLoadTimer() { return firstLoadTimer; },
+  set firstLoadTimer(v: ReturnType<typeof setTimeout> | undefined) { firstLoadTimer = v; },
   get relistFailures() { return relistFailures; },
   set relistFailures(v) { relistFailures = v; },
   get relistTimer() { return relistTimer; },

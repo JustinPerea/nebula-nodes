@@ -14,7 +14,7 @@ import { deleteForeverLine, emptyTrashLine, PROJECT_TRASH_NOTE, type GoesWith } 
 import { CrabMark } from '../brand/CrabMark';
 import { ProposalsFor } from '../proposals/ProposalsFor';
 import { UpdatesSlot } from '../agent-notes/UpdatesSlot';
-import { failureMessage, besideButton } from '../../lib/errorCopy';
+import { failureMessage, besideButton, NEW_PROJECT_WAITING_TITLE } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { UnsavedEditsNotice } from './UnsavedEditsNotice';
 import { editsSavedLine } from './unsavedEditsCopy';
@@ -77,8 +77,8 @@ export interface ProjectHomeProps {
    * PR #199, 1): Nebula's own reopen this tab couldn't follow, in the
    * neutral box (nothing was lost) with [Open “<openFollowedName>”].
    * 'partLoad' (GM r24, c): a flow's chunk didn't load; the same box with
-   * [Try again]. */
-  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad';
+   * [Try again]. 'retrying' (design): the first load is trying again by itself; [Try now]. */
+  retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad' | 'retrying';
   /** The project [Open “…”] opens, with retry 'openFollowed'. */
   openFollowedName?: string | null;
   /** The open project's reopen that can't go yet (review 18 MEDIUM-2, GM r30
@@ -101,6 +101,8 @@ export interface ProjectHomeProps {
    * counts come with it: while it couldn't (a tab that isn't connected as you), they show
    * nothing rather than a 0 nobody counted. */
   workLoaded?: boolean;
+  /** Design: the first load found no server (retrying or out of tries): New project waits, and says why. */
+  serverWaiting?: boolean;
   trash?: TrashedProject[];
   /** The project the person just moved to Recently deleted (the Undo
    * toast). Its Undo may pass the project limit (Justin, 2026-10-29), so it
@@ -656,7 +658,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   agentClosedNote = null, onDismissAgentClosedNote = noop,
   canvasHeldUnreadable = null, onDismissCanvasHeldUnreadable = noop,
   unsavedEdits = null, editsSavedAs = null, onDownloadEdits = noop, onContinueWithoutEdits = noop,
-  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, retryPersonOnly = false }: ProjectHomeProps) {
+  copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, serverWaiting = false, retryPersonOnly = false }: ProjectHomeProps) {
   const retryLock = usePersonLock('delete projects for good', retry !== 'none' && retryPersonOnly);
   const [query, setQuery] = useState('');
   // Offline is read-only (round 15 of PR #114): create, open, rename,
@@ -664,6 +666,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   // "Try again" (a read) still work.
   const offline = useBackendOffline();
   const locked = busy || offline;
+  const waitsForLoad = !workLoaded;
   const stack = useRef<HTMLDivElement>(null);
   const recentHeading = useRef<HTMLHeadingElement>(null);
   // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
@@ -763,7 +766,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       <main className="project-home__main" aria-busy={loading || busy}>
         <section className="project-home__welcome" aria-labelledby="project-home-title">
           <div><p className="project-home__eyebrow">Your workspace</p><h1 id="project-home-title">A place for your next idea.</h1><p className="project-home__intro">Start a new canvas or pick up where you left off.</p></div>
-          <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />New project</button>
+          {/* Until the first load lands there is no project list to add to (design): it keeps focus and its
+              tooltip (aria-disabled, as a locked control does) and says why when the server is what it waits on. */}
+          <button className="project-home__new" type="button" disabled={loading || locked || Boolean(unsavedEdits)} {...offlineMark(offline)}
+            {...(waitsForLoad ? { 'aria-disabled': true as const, ...(serverWaiting ? { title: NEW_PROJECT_WAITING_TITLE } : {}) } : {})}
+            onClick={waitsForLoad ? undefined : () => onCreate()}><Plus aria-hidden="true" />New project</button>
         </section>
 
         {/* Every notice on the home, in page order, under one focus rule
@@ -805,7 +812,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
               : <span>{retry === 'redo' ? <LineText text={besideButton(error!)} /> : <LineText text={error} />}</span>}
             {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
             {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
-              {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : 'Try again'}</button>}
+              {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : retry === 'retrying' ? 'Try now' : 'Try again'}</button>}
             <PersonLockLine lock={retryLock} place="control" /></div></div>}
         </div>}
         </div>
@@ -819,7 +826,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={locked} offline={offline} counts={workLoaded} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover}
               lockLine={reopenHold?.id === project.id ? reopenHold.line : null} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary project-home__search-reset" onClick={() => setQuery('')}>Clear search</button></div>
-                : !error && !unsavedEdits && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
+                : !error && !unsavedEdits && workLoaded && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={locked} {...offlineMark(offline)}
+                  {...(waitsForLoad ? { 'aria-disabled': true as const, ...(serverWaiting ? { title: NEW_PROJECT_WAITING_TITLE } : {}) } : {})}
+                  onClick={waitsForLoad ? undefined : () => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
       </main>

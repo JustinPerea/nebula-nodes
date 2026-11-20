@@ -19,7 +19,7 @@ import { refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
 import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, waitUntilOnline } from '../lib/backendConnection';
-import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, isNoAnswer, nodeNameList, notConnectedBecause, oneLine } from '../lib/errorCopy';
+import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, failureCopy, FIRST_LOAD_RETRYING_COPY, isBackendUnreachable, isNoAnswer, nodeNameList, OPEN_TIMEOUT_MS, openTimedOutLine, notConnectedBecause, oneLine } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
@@ -38,7 +38,7 @@ import { sameValue, type EditOrigin } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
 import { WORLD_LABS_NEEDS_CHECK, deleteRefusalText } from '../lib/worldLabsWaiting';
 import { withRestoreCopy } from '../components/projects/restoreCopyLoader';
-import { applyingSync, cancelPendingSaves, captureProjectSnapshot, core, detailsFor, dismissedHeldNotes, dismissedRestores, type FiledCopy, type GraphSyncEvent, heldLine, KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, type KeptEdits, type KeptStudio, type ListingNotices, loggedRestores, markDirty, measured, PARAMS_UPDATED, type PendingRecovery, type ProjectRetry, type ProjectState, type ProjectSwitchNotice, relistIfStale, type ReopenSaid, RESTORED_LIST_UNSAVED, type SavedUnderNote, summary, TAB, typingInStudioField, type UIStateNow, useProjectStore, viewingOf } from './projectStore';
+import { applyingSync, cancelPendingSaves, captureProjectSnapshot, core, detailsFor, dismissedHeldNotes, dismissedRestores, type FiledCopy, FIRST_LOAD_TRIES, firstLoadDelay, type GraphSyncEvent, heldLine, KEPT_UPDATE_LINE, KEPT_UPDATE_RELOAD_LINE, type KeptEdits, type KeptStudio, type ListingNotices, loggedRestores, markDirty, measured, PARAMS_UPDATED, type PendingRecovery, type ProjectRetry, type ProjectState, type ProjectSwitchNotice, relistIfStale, type ReopenSaid, RESTORED_LIST_UNSAVED, type SavedUnderNote, summary, TAB, typingInStudioField, type UIStateNow, useProjectStore, viewingOf } from './projectStore';
 
 const set = useProjectStore.setState;
 const get = useProjectStore.getState;
@@ -549,6 +549,21 @@ function followReopenLineNow(current: NonNullable<typeof core.shownReopen>): voi
   shown.stop();
 }
 
+/** Design: the person's open waited 20 s with no answer. */
+class OpenTimedOut extends Error {
+  constructor() { super('The open got no answer in time.'); this.name = 'OpenTimedOut'; }
+}
+
+/** Waits for the open's answer, 20 s at most. Whichever comes first settles it; an answer that
+ * arrives after the timeout is ignored, not applied: the person was told the open failed, may
+ * have gone on to something else, and the switch would replace the canvas under them. */
+function withinOpenTimeout<T>(pending: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new OpenTimedOut()), OPEN_TIMEOUT_MS);
+    pending.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
+  });
+}
+
 async function activate(action: () => Promise<api.ProjectActivation>, retry: { action: 'open'; id: string } | { action: 'create'; name?: string },
   then?: () => Promise<void>, inPlace = false, quiet = false): Promise<boolean> {
   const state = useProjectStore.getState();
@@ -605,7 +620,7 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     }
     reserved = useGraphStore.getState().reserveGraphImport();
     if (!reserved) throw runStillGoing(heading);
-    const result = await action();
+    const result = retry.action === 'open' ? await withinOpenTimeout(action()) : await action();
     useGraphStore.getState().releaseGraphImport({ discardSuspended: true });
     reserved = false;
     const backendVersion = backendParamsVersion(result.paramsVersion);
@@ -690,7 +705,13 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // landed (the reason line is the open's own: Try again redoes it). A
     // create isn't: a second one could make a second project, so its Try
     // again only reloads, and says so.
-    if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
+    if (error instanceof OpenTimedOut && retry.action === 'open') {
+      // Design: no answer in 20 s. Nothing was applied, and an answer that comes later is
+      // dropped (see withinOpenTimeout). The server may have opened it, so Try again reads the
+      // saved projects first, then opens it unless that already landed (the lost-reply path).
+      const name = useProjectStore.getState().projects.find((project) => project.id === retry.id)?.name ?? 'the project';
+      preserveWorkspaceConflict(openTimedOutLine(name), undefined, undefined, { action: 'load', reopen: retry.id });
+    } else if (reserved && !(error instanceof api.ProjectRequestError && error.status < 500)) {
       if (retry.action === 'open') {
         preserveWorkspaceConflict(failureMessage(error, "Couldn’t open the project."), undefined, undefined,
           { action: 'load', reopen: retry.id });
@@ -2746,8 +2767,17 @@ export const actions = {
   },
     initialize: async () => {
     if (get().initialized) return;
+    // Design: a load of the person's own (mount, Try now, Try again, the server coming back)
+    // starts the tries again and takes the timer's place; the timer's own keeps its count and
+    // leaves the "trying again" line up while it loads.
+    const auto = core.firstLoadAuto;
+    core.firstLoadAuto = false;
+    clearTimeout(core.firstLoadTimer);
+    core.firstLoadTimer = undefined;
+    if (!auto) { core.firstLoadStopped = false; core.firstLoadFailures = 0; }
     if (core.initializing) return core.initializing;
-    set({ loading: true, error: null, errorRetry: null });
+    core.firstLoadLine = null;
+    set(auto ? { loading: true } : { loading: true, error: null, errorRetry: null });
     core.initializing = (async () => {
       // GM r9 (2): the verb fits what was refused: saving the recovered edits, or the load.
       let saving = true;
@@ -2757,6 +2787,8 @@ export const actions = {
         await recoverPendingWork();
         saving = false;
         await loadWorkspace();
+        // Design: a try that landed takes the "trying again" line away.
+        if (get().error === FIRST_LOAD_RETRYING_COPY) set({ error: null, errorRetry: null });
       } catch (error) {
         // Refused for good: the held edits' screen says it (holdRefusedEdits).
         if (error instanceof EditsRefused) return;
@@ -2779,8 +2811,23 @@ export const actions = {
         const line = error instanceof RequestFailedError && error.storageFull
           ? oneLine({ heading: LOAD_HEADING, reason: LOAD_DISK_FULL }) : copy.reason;
         const shown = core.pendingRecovery && general ? `Nebula couldn’t ${failedWhat(LOAD_HEADING)}.` : line;
+        // Design: no server yet (not a refusal): try again by itself, 1, 2, 4, 8 and 16 s later,
+        // with its own line; after those, today's line and "Try again".
+        const unreachable = isBackendUnreachable(error);
+        if (unreachable && !core.firstLoadStopped && core.firstLoadFailures < FIRST_LOAD_TRIES) {
+          const delay = firstLoadDelay(core.firstLoadFailures++);
+          core.firstLoadLine = FIRST_LOAD_RETRYING_COPY;
+          set({ error: FIRST_LOAD_RETRYING_COPY, errorDetails: null, errorRetry: { action: 'load', unreachable: true, retrying: true } });
+          core.firstLoadTimer = setTimeout(() => {
+            core.firstLoadTimer = undefined;
+            core.firstLoadAuto = true;
+            void useProjectStore.getState().initialize();
+          }, delay);
+          return;
+        }
+        if (unreachable) core.firstLoadLine = shown;
         set({ error: shown, errorDetails: detailsFor(shown, error),
-          errorRetry: refusedForGood(error) ? { action: 'load', full: true } : { action: 'load' } });
+          errorRetry: refusedForGood(error) ? { action: 'load', full: true } : unreachable ? { action: 'load', unreachable: true } : { action: 'load' } });
       }
       finally { set({ loading: false }); core.initializing = null; }
       // GM r9 decision 1: back from a reload for an update, in the copy

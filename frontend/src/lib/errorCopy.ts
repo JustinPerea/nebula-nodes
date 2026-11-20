@@ -486,6 +486,19 @@ export const NEBULA_NOT_ANSWERING_COPY = 'Nebula isn’t answering. Make sure it
 /** A plain browser tab that found no backend on its ports (GM, round 2).
  * The ports it tried stay on the error for the console. */
 export const BACKEND_NOT_RUNNING_COPY = 'Nebula’s backend isn’t running. Start it, then reload.';
+/** Design: the first load of the projects while Nebula's server can't be reached yet. It tries again by
+ * itself (1, 2, 4, 8, 16 s), and its button reads "Try now". Once the tries run out the line is today's,
+ * with "Try again". */
+export const FIRST_LOAD_RETRYING_COPY = 'Nebula can’t reach its server yet. Trying again…';
+/** Design: why "New project" is off until the first load lands (its title). */
+export const NEW_PROJECT_WAITING_TITLE = 'You can make a project when Nebula reaches its server.';
+/** Design: how long a project open waits for the server before it stops waiting. */
+export const OPEN_TIMEOUT_MS = 20_000;
+/** Design: a project open the server never answered. Ends in "Try again." as the button's own words, so it
+ * stands whole beside the button. */
+export function openTimedOutLine(project: string): string {
+  return `Nebula couldn’t open “${project}” because the server didn’t respond. Try again.`;
+}
 /**
  * GM r12 (2), PR #204 round 9: the Commons with no person session. The person's session is one
  * per launch and never expires on its own (backend services/person_session.py; commons/actors.py

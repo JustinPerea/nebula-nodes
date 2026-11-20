@@ -309,6 +309,7 @@ export default function App() {
   let mainView;
   if (isHome) {
     mainView = <ProjectHome projects={projects.projects} loading={projects.loading} busy={projects.busy} workLoaded={projects.initialized}
+      serverWaiting={!projects.initialized && projects.errorRetry?.action === 'load' && Boolean(projects.errorRetry.unreachable)}
       error={projects.error} errorDetails={projectErrorDetails(projects)} onCreate={(name) => void projects.createProject(name)}
       onOpen={(id) => void projects.open(id)} onRename={(id, name) => void projects.rename(id, name)}
       onDelete={(id) => void projects.remove(id)} trash={projects.trash} lastDeleted={projects.lastDeleted}
