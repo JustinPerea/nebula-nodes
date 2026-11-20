@@ -54,16 +54,16 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
     expect(nodesKeyLockReason(nodes, ['a'], { loaded: true, apiKeys: { HF_TOKEN: TOKEN } })).toBeNull();
   });
 
-  it('reads "Hugging Face · Free" without the token and "Hugging Face token · Saved" with it, in GM\'s r12 words', () => {
+  it('reads "Hugging Face · free" without the token and "Hugging Face token · Saved" with it, in GM\'s r12 words', () => {
     const anonymous = modelReadiness(IDOL, {}, { apiKeys: {}, loaded: true }, HEALTH);
-    expect(anonymous).toEqual({ label: 'Free', tone: 'neutral',
+    expect(anonymous).toEqual({ label: 'free', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face',
       detail: 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. Add a Hugging Face token in Settings '
         + 'to use your own allowance.' });
     const signedIn = modelReadiness(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, loaded: true }, HEALTH);
     expect(signedIn).toEqual({ label: 'Saved', tone: 'neutral',
       setupTarget: { kind: 'api-key', key: 'HF_TOKEN' }, connectionLabel: 'Hugging Face token',
-      detail: 'Idol uses your Hugging Face allowance.' });
+      detail: 'Idol uses your Hugging Face allowance.', tokenSaved: true });
     // No allowance numbers and no run counts anywhere (GM r12).
     for (const line of [anonymous?.detail, signedIn?.detail]) expect(line).not.toMatch(/\d/);
   });
@@ -71,14 +71,14 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
   it('switcher: "Free on Hugging Face." and "Auto · free" without the token; "Uses your Hugging Face allowance." and "Auto" with it', () => {
     const anonymous = providerSwitchState(IDOL, {}, { apiKeys: {}, kreaSignedIn: false });
     expect(anonymous.rows.map((row) => [row.id, row.label, row.keyState])).toEqual([
-      ['auto', 'Auto · free', null], ['hf-space', 'Speridlabs', 'none'],
+      ['auto', 'Auto · free', null], ['hf-space', 'Hugging Face', 'none'],
     ]);
     expect(anonymous.rows[1].info).toBe('Free on Hugging Face.');
     expect(anonymous.rows[1].setup).toEqual({ kind: 'api-key', key: 'HF_TOKEN' });
     expect(anonymous.blocked).toBe(false);
     const signedIn = providerSwitchState(IDOL, {}, { apiKeys: { HF_TOKEN: TOKEN }, kreaSignedIn: false });
     expect(signedIn.rows.map((row) => [row.id, row.label, row.keyState])).toEqual([
-      ['auto', 'Auto', null], ['hf-space', 'Speridlabs', 'connected'],
+      ['auto', 'Auto', null], ['hf-space', 'Hugging Face', 'connected'],
     ]);
     expect(signedIn.rows[1].info).toBe('Uses your Hugging Face allowance.');
   });

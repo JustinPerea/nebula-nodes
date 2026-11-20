@@ -160,7 +160,7 @@ describe('the provider chip', () => {
     render(<ProviderSwitcher definition={TABLE} params={{}} variant="chip" onPick={vi.fn()} />);
     // GM, PR #203 r32 item 3: the name is the chip's visible text, the full name its description.
     const chip = screen.getByRole('button', { name: 'Auto · BFL', description: 'Provider for “Fixture Route Table”: Auto · Black Forest Labs' });
-    expect(chip).toHaveAttribute('title', 'Runs on Auto · Black Forest Labs. Change provider');
+    expect(chip).toHaveAttribute('title', 'Auto runs it on Black Forest Labs. Change provider');
     expect(chip).toHaveTextContent('Auto · BFL');
   });
 

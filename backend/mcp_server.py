@@ -2990,7 +2990,7 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     puts back, in one checked write, only what this change changed, so
     edits others made since are kept: a setting someone changed again since
     is left as they set it, and the result's `skipped` says so ("Direction
-    changed since, left as is"). With `undo`, the other arguments are only
+    changed after that step, so Nebula left it as it is."). With `undo`, the other arguments are only
     what an older Nebula puts back instead (`remove`, a list change or a Keep
     beside it is refused). Changing images, notes, mode or strength
     clears the analysis (run moodboard_analyze again); a rename and the brief
@@ -3069,8 +3069,8 @@ def moodboard_edit(board: str, ops: list[dict], base_version: int | None = None,
     `frames`), `version`, `applied` (one entry per op: "applied" or
     "unchanged") and `undo`. To undo the change, call moodboard_edit again
     with `undo.ops` as `ops`: it puts back only what is still as you left it,
-    and `applied[0].skipped` names what changed since ("Image 12 changed since,
-    left as is")."""
+    and `applied[0].skipped` names what changed since ("Image 12 changed after
+    that step, so Nebula left it as it is.")."""
     import moodboard_client as boards
 
     result = _board_call(boards.edit_board, _api(), board, ops, base_version=base_version, say=say,

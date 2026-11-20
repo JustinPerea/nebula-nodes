@@ -19,12 +19,12 @@ interface CinemaShotsRailProps {
   onReorder: (shots: CinemaShot[]) => void;
 }
 
-function statusBadge(shot: CinemaShot): { label: string; cls: string; description: string } | null {
+function statusBadge(shot: CinemaShot): { label: string; cls: string; name: (number: number) => string } | null {
   const status = shot.output?.status;
   if (!status || status === 'idle') return null;
-  if (status === 'running') return { label: '●', cls: 'cinema-shots-rail__badge--running', description: 'Generating' };
-  if (status === 'done') return { label: '✓', cls: 'cinema-shots-rail__badge--done', description: 'Complete' };
-  return { label: '⚠', cls: 'cinema-shots-rail__badge--error', description: 'Failed' };
+  if (status === 'running') return { label: '●', cls: 'cinema-shots-rail__badge--running', name: (n) => `Generating shot ${n}` };
+  if (status === 'done') return { label: '✓', cls: 'cinema-shots-rail__badge--done', name: (n) => `Complete shot ${n}` };
+  return { label: '⚠', cls: 'cinema-shots-rail__badge--error', name: (n) => `Shot ${n} failed` };
 }
 
 export function CinemaShotsRail({
@@ -131,7 +131,7 @@ export function CinemaShotsRail({
           && (run.kind === 'graph' || run.shotId === shot.id));
         const badge = owner ? {
           label: '●', cls: 'cinema-shots-rail__badge--running',
-          description: owner.status === 'cancelling' ? 'Stopping' : 'Generating',
+          name: (n: number) => `${owner.status === 'cancelling' ? 'Stopping' : 'Generating'} shot ${n}`,
         } : statusBadge(shot);
         const thumb = shot.output?.imageUrl ?? null;
         // A shot that is rendering can't be removed (GM, PR #198 r2): × is
@@ -167,7 +167,7 @@ export function CinemaShotsRail({
                 ) : (
                   <span className="cinema-shots-rail__thumb-empty">{idx + 1}</span>
                 )}
-                {badge && <span role="status" aria-label={`${badge.description} shot ${idx + 1}`}
+                {badge && <span role="status" aria-label={badge.name(idx + 1)}
                   className={`cinema-shots-rail__badge ${badge.cls}`}>{badge.label}</span>}
               </span>
               <span className="cinema-shots-rail__caption">

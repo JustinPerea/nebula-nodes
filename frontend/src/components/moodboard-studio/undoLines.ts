@@ -6,10 +6,14 @@
  * never on its sentence): an image that changed after the step, an image
  * removed after it, and a field changed again after it. Any other kept reason
  * (a switch only the person turns on, a colour choice made since, a card that
- * can't go back there) still reads "Undid" with the server's line under it,
- * and so does an undo that put some parts back.
+ * can't go back there) still reads "Undid" with the server's line under it.
+ * An undo that put some parts back and kept images that changed after the step
+ * says so in one line (partialUndoLine); any other partial mix keeps the server's
+ * line under "Undid".
  */
 
+import { countsInstead, joinedList } from '../../lib/errorCopy';
+import { clipGraphemes } from './boardPlaceholder';
 import { FIELD_NOUNS } from './fieldSteps';
 
 /** How a kept field reads in "because ‹the field› changed again after that" (design): the field's noun, as the step's
@@ -27,7 +31,35 @@ export function undoneLine(direction: 'undo' | 'redo', label: string): string {
   return `${direction === 'undo' ? 'Undid' : 'Redid'} ${inQuotes(label)}`;
 }
 
-interface SkippedSlice { part?: unknown; field?: unknown; reason?: unknown; number?: unknown; settings?: unknown }
+/** The most characters a look's name shows in a line, as the backend cuts it (clean_name(name, 60, ellipsis)). */
+export const LOOK_NAME_CHARS = 60;
+
+/** A look's name as the toast says it: whitespace runs are one space, the ends are stripped, and a name past 60
+ *  characters ends in an ellipsis inside the 60 (design: the same cut as the backend's line for that look). */
+export function lookNameInLine(name: string): string {
+  const clean = name.replace(/\s+/g, ' ').trim();
+  const cut = clipGraphemes(clean, LOOK_NAME_CHARS);
+  return cut === clean ? clean : `${cut.slice(0, -1).trimEnd()}…`;
+}
+
+/** The images a step names (design, names rule): "image 4", "images 4, 5 and 6" (no serial comma), and from four a
+ *  count, "6 images". `numbers` are the numbers the person saw when they made the step. */
+export function imageStepWords(numbers: readonly number[]): string {
+  if (numbers.length === 1) return `image ${numbers[0]}`;
+  if (countsInstead(numbers.length)) return `${numbers.length} images`;
+  return `images ${joinedList(numbers.map(String))}`;
+}
+
+/** `numberBefore` is the kept image's 1-based place just before the undo (the server adds it beside `number`, which is
+ *  its place after); a payload without it can't say whether the undo renumbered the image. */
+interface SkippedSlice { part?: unknown; field?: unknown; reason?: unknown; number?: unknown; numberBefore?: unknown; settings?: unknown }
+
+/** The image numbers a step label lists ("Added images 5, 6 and 7", "Moved image 5"); null when it lists none
+ *  ("Added 6 images", "Changed the direction"). */
+function labelImageNumbers(label: string): number[] | null {
+  const list = /\bimages? (\d+(?:, \d+)*(?: and \d+)?)/.exec(label);
+  return list ? list[1].split(/, | and /).map(Number) : null;
+}
 
 /** "image 5", "images 5 and 6", "images 3, 5 and 6". */
 function imageNumbers(numbers: readonly number[]): string {
@@ -99,4 +131,99 @@ export function keptUndoLine(label: string, skipped: readonly SkippedSlice[]): s
     ...(notNebulas.length ? [`${imageNumbers(notNebulas)} ${notNebulas.length === 1 ? 'isn’t' : 'aren’t'} one of Nebula’s own files`] : []),
   ];
   return `Nebula couldn’t undo ${inQuotes(label)} because ${joined(parts)}.`;
+}
+
+/**
+ * The toast for an undo (or redo) that put some parts back and kept others, in one line (design): "Undid “Moved
+ * image 5” except image 5, which changed after that.", "... except image 5, which was removed after that.",
+ * "images 3 and 5, which were removed after that.", and from four images on a count ("... except 4 images that changed after
+ * that."). What can be kept: a field ("the direction"), a look ("“Dusk”", named by `lookName` from the board), an
+ * image or one of its settings ("image 5’s note and weight"), an image removed after the step, and an image with no
+ * number ("1 image"). Fields come first, then looks, then images, as "a, b and c" with no serial comma; the
+ * verb is "changed", "was/were removed", or "changed or were removed" when both kinds are kept. Any other mix (a
+ * reason other than "changed since" / "removed since", a switch only the person turns on, a colour choice made since,
+ * a card that can't go back there, a file that isn't Nebula's own, a look whose name isn't known) is null, and the
+ * toast keeps "Undid" with the server's line under it. Keyed on `part`, `reason`, `field`, `number`, `numberBefore` and
+ * `settings`, never on the server's sentence.
+ *
+ * A kept image is named by its number only when the undo left that number alone (design: a number in the toast has to
+ * match the board the person looks at next): its `numberBefore` equals its `number`, and a label that lists image
+ * numbers lists that one. Otherwise no kept image is named, and they read "one of them" or "2 of them" ("... except 2
+ * of them, which changed after that."); never a named image beside a count. A payload without `numberBefore` takes the
+ * count form. An image removed after the step is not on the board, so it keeps its number.
+ */
+export function partialUndoLine(
+  direction: 'undo' | 'redo',
+  label: string,
+  skipped: readonly SkippedSlice[],
+  lookName?: (frameId: string) => string | undefined,
+): string | null {
+  if (skipped.length === 0) return null;
+  const fields: string[] = [];
+  const looks: string[] = [];
+  const changed = new Set<number>();
+  const removed = new Set<number>();
+  const settings = new Map<number, string[]>();
+  let unnumberedChanged = 0;
+  let unnumberedRemoved = 0;
+  let renumbered = false;
+  const labelNumbers = labelImageNumbers(label);
+  for (const slice of skipped) {
+    if (slice.part === 'fields') {
+      const noun = typeof slice.field === 'string' ? FIELD_IN_SENTENCE[slice.field] : undefined;
+      if (!noun || slice.reason !== 'changed since') return null;
+      if (!fields.includes(noun)) fields.push(noun);
+      continue;
+    }
+    if (slice.part === 'frame') {
+      const name = typeof (slice as { frame?: unknown }).frame === 'string' ? lookName?.((slice as { frame: string }).frame) : undefined;
+      if (!name || slice.reason !== 'changed since') return null;
+      const quoted = inQuotes(lookNameInLine(name));
+      if (!looks.includes(quoted)) looks.push(quoted);
+      continue;
+    }
+    if (slice.part !== 'image' && slice.part !== 'card' && slice.part !== 'settings') return null;
+    if (slice.reason !== 'changed since' && slice.reason !== 'removed since') return null;
+    const isRemoved = slice.reason === 'removed since';
+    const words = !isRemoved && slice.part === 'settings' && Array.isArray(slice.settings) ? slice.settings.map((key) => SETTING_WORDS[String(key)]) : null;
+    if (words && !words.every(Boolean)) return null;
+    if (!isRemoved && slice.settings !== undefined && !words) return null;
+    if (typeof slice.number !== 'number') {
+      if (isRemoved) unnumberedRemoved += 1; else unnumberedChanged += 1;
+    } else if (isRemoved) removed.add(slice.number);
+    else {
+      const held = slice.numberBefore === slice.number && (labelNumbers === null || labelNumbers.includes(slice.number));
+      if (!held) renumbered = true;
+      if (words?.length) {
+        const had = settings.get(slice.number) ?? [];
+        settings.set(slice.number, [...had, ...words.filter((word) => !had.includes(word))]);
+      } else changed.add(slice.number);
+    }
+  }
+  // An image removed wins over any change kept for it; a plain change over its settings.
+  for (const n of removed) { changed.delete(n); settings.delete(n); }
+  for (const n of changed) settings.delete(n);
+  const unnumbered = unnumberedChanged + unnumberedRemoved;
+  const imageTotal = changed.size + removed.size + settings.size + unnumbered;
+  const named = unnumbered === 0 && imageTotal < 4 && !renumbered;
+  const nums = (set: ReadonlySet<number>) => [...set].sort((a, b) => a - b);
+  const imageParts: string[] = [];
+  if (named) {
+    const plain = nums(new Set([...changed, ...removed]));
+    if (plain.length) imageParts.push(imageNumbers(plain));
+    for (const n of [...settings.keys()].sort((a, b) => a - b)) imageParts.push(`image ${n}’s ${joined(settings.get(n) ?? [])}`);
+  } else if (imageTotal) {
+    const ofThem = renumbered && fields.length + looks.length === 0;
+    imageParts.push(ofThem ? `${imageTotal === 1 ? 'one' : imageTotal} of them` : `${imageTotal} ${imageTotal === 1 ? 'image' : 'images'}`);
+  }
+  const subjects = fields.length + looks.length + (named ? changed.size + removed.size + settings.size : imageTotal);
+  const hasRemoved = removed.size + unnumberedRemoved > 0;
+  const hasChanged = fields.length + looks.length + changed.size + settings.size + unnumberedChanged > 0;
+  if (subjects === 0) return null;
+  const verb = hasRemoved && hasChanged ? 'changed or were removed' : hasRemoved ? (subjects === 1 ? 'was removed' : 'were removed') : 'changed';
+  const done = undoneLine(direction, label);
+  const list = [...fields, ...looks, ...imageParts];
+  // Four or more images alone are a count with "that"; beside a field or a look the count joins the one comma form.
+  if (!named && !renumbered && imageTotal >= 4 && list.length === 1) return `${done} except ${list[0]} that ${verb} after that.`;
+  return `${done} except ${joined(list)}, which ${verb} after that.`;
 }

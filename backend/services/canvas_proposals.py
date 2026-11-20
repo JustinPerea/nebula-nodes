@@ -989,19 +989,26 @@ def plan_groups(view: Mapping[str, Any]) -> list[str]:
 
 
 def _may_cost_clauses(rows: list[Mapping[str, Any]], *, named: bool) -> str:
-    """"may use your Hugging Face credits", or named when other classes run
-    beside it, or for several accounts: "Idol may use your Hugging Face
-    credits" (GM, PR #203 r14 item 2). Frontend mayCostSentence's twin for the
-    plan line."""
+    """The may-cost segments of the plan line, a row of " · " segments with no
+    final stop (design): "may use your Hugging Face credits" when the first
+    segment already names the node (Idol alone), else the name quoted leads it
+    ("“Idol” may use your Hugging Face credits", "“A” and “B” may use ..."), as
+    it must beside any other run (paid, on the plan or free) or when several
+    accounts are named. From more
+    than PLAN_NAMES nodes a count ("4 nodes may use ..."). Frontend
+    mayCostSentence's twin for the plan line."""
     by_account: dict[str, list[str]] = {}
     for row in rows:
         names = by_account.setdefault(str(row.get("account") or ""), [])
-        name = str(row.get("name") or "")
+        name = _plan_name(row.get("name"))
         if name and name not in names:
             names.append(name)
     clauses = []
     for account, names in by_account.items():
-        who = f"{_and_list(names)} " if names and (named or len(by_account) > 1) else ""
+        if names and (named or len(by_account) > 1):
+            who = f"{_plural(len(names), 'node')} " if len(names) > PLAN_NAMES else f"{_and_list([f'“{n}”' for n in names])} "
+        else:
+            who = ""
         clauses.append(f"{who}may use your {account} credits")
     return " · ".join(clauses)
 
@@ -1055,7 +1062,17 @@ def plan_line(view: Mapping[str, Any]) -> str:
             if plan_runs > 0:
                 segments.append(f"{plan_runs} on your Krea plan")
         if may_rows:
-            segments.append(_may_cost_clauses(may_rows, named=bool(paid or plan_runs)))
+            # The name is said whenever the plan runs anything beside the
+            # may-cost nodes (paid, on the plan, or free), so the segment says
+            # which node may use the credits; the first segment names them
+            # all and can't (design: "Runs “Idol” and “Splat” · “Idol” may use ...").
+            # may_rows are the distinct nodes (name and account); the runs
+            # are counted by mayCostRuns, so two runs of nodes both named
+            # "Idol" are one row and two runs, and don't read as a free run.
+            may_runs = max(int(cost.get("mayCostRuns") or 0), len(may_rows))
+            free_runs = max(len(run) - paid - plan_runs - may_runs,
+                            sum(1 for entry in entries if entry.get("kind") == "free"))
+            segments.append(_may_cost_clauses(may_rows, named=bool(paid or plan_runs or free_runs > 0)))
         if not paid and not plan_runs and not may_rows:
             segments.append("free")
         if paid > 0 or plan_runs > 0:

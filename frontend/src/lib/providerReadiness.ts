@@ -35,6 +35,9 @@ export interface ModelReadiness {
   connectionLabel?: string;
   /** Muted words after the connection label ("Optional", GM PR #203 r1). */
   connectionNote?: string;
+  /** A Hugging Face token is saved for the route this row describes (a Space route with a saved key), whatever the
+   *  label says; the library button reads "Settings" then and "Set up" without one (design). */
+  tokenSaved?: boolean;
 }
 
 export const PROVIDER_HEALTH_TTL_MS = 5 * 60 * 1000;
@@ -179,7 +182,7 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
 
 /** A maker's Hugging Face Space route (handler hf-space: Idol). Keyless
  * (PR #203 round 7: the first live call ran with no token), in GM's r12
- * words: without the token "Hugging Face · Free" and that it can be busy;
+ * words, and design's case: without the token "Hugging Face · free" and that it can be busy;
  * with it "Hugging Face token · Saved" (the shared key vocabulary: "Saved"
  * until a check runs, "Connected" after one passes, "Not connected" after
  * one fails) and "Idol uses your Hugging Face allowance." A keyed Space route
@@ -205,12 +208,12 @@ function spaceReadiness(
     const target: ProviderSetupTarget = { kind: 'api-key', key: route.key };
     const checked = checkedReadiness(PROVIDER_KEY_LABELS[route.key] ?? route.key, target, health);
     const allowance = `${def.displayName} uses your ${PROVIDER_KEY_LABELS[route.key] ?? route.key} allowance.`;
-    if (checked?.tone === 'success') return { ...checked, label: 'Connected', connectionLabel, detail: allowance };
+    if (checked?.tone === 'success') return { ...checked, label: 'Connected', connectionLabel, detail: allowance, tokenSaved: true };
     if (checked?.tone === 'warning' && checked.label !== 'Check unavailable' && checked.label !== 'Check rate limited') {
-      return { ...checked, label: 'Not connected', connectionLabel };
+      return { ...checked, label: 'Not connected', connectionLabel, tokenSaved: true };
     }
-    if (ready.label === 'Checking connection') return { ...ready, connectionLabel };
-    return { label: 'Saved', tone: 'neutral', setupTarget: target, connectionLabel, detail: allowance };
+    if (ready.label === 'Checking connection') return { ...ready, connectionLabel, tokenSaved: true };
+    return { label: 'Saved', tone: 'neutral', setupTarget: target, connectionLabel, detail: allowance, tokenSaved: true };
   }
   if (!keyless && tokenKey) {
     if (!cache.loaded) return { ...keyReadiness(tokenKey, cache, health), connectionLabel };
@@ -224,7 +227,8 @@ function spaceReadiness(
   // GM, PR #203 r12 item 1: no allowance numbers, and no "your allowance"
   // without a token: whose pool an anonymous call uses isn't known.
   return {
-    label: 'Free', tone: 'neutral',
+    // Lower case after the name: "Hugging Face · free" (design). The badge joins the name and this with " · ".
+    label: 'free', tone: 'neutral',
     ...(tokenKey ? { setupTarget: { kind: 'api-key', key: tokenKey } as const } : {}),
     ...(name ? { connectionLabel: name } : {}),
     detail: name

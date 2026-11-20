@@ -897,7 +897,7 @@ def test_an_undo_that_would_replace_the_persons_new_brief_leaves_it_and_says_so(
     _person_override(board["id"], "The person's words.")
     restored, _removed, _redo, skipped = boards.undo_board(app.api, board["id"], previous["undo"])
     assert restored["direction"] == "" and restored["briefOverride"]["text"] == "The person's words."
-    assert skipped == ["The hand-written brief changed since, left as is"]
+    assert skipped == ["The hand-written brief changed after that step, so Nebula left it as it is."]
 
 
 def test_an_old_previous_that_would_replace_the_persons_new_brief_changes_nothing_and_says_how(app, tmp_path):
@@ -1131,7 +1131,10 @@ def test_a_keep_lost_to_a_race_hands_back_what_puts_the_saved_part_back(app, tmp
         _cli(app, ["moodboard", "set", board["id"], "--avoid", "z", "--keep-brief"], capsys)
     err = capsys.readouterr().err
     assert "The other changes were saved" in err and f"nebula moodboard set {board['id']} --restore" in err
-    printed = json.loads(err[err.index("{"):])
+    # The JSON follows the CLI's own "To put the board back ... --restore <file>`:" line;
+    # anything else on stderr (a stray thread's traceback) is not part of it.
+    marker = "--restore <file>`:\n"
+    printed = json.loads(err[err.index(marker) + len(marker):])
     assert printed["previous"]["avoid"] == ["x", "y"] and set(printed["previous"]) == {"avoid", "undo"}
     # A Keep lost after a write that changed nothing has nothing to put back.
     with pytest.raises(boards.MoodboardError, match="saved, and changed nothing") as same:
@@ -1439,12 +1442,12 @@ def test_skipped_lines_end_in_one_full_stop(capsys):
     """A skipped step prints with exactly one closing full stop, whether or not
     the backend's line carries its own; a line ending in ?, ! or … is left."""
     result = {"board": {"id": "b1", "name": "Dusk", "analysis": {"x": 1}}, "applied": [{"status": "applied", "skipped": [
-        {"message": "Image 2 changed since, left as is"},
+        {"message": "Image 2 changed after that step, so Nebula left it as it is."},
         {"message": "Nebula couldn’t undo “Changed the direction” because only you can change the direction."},
         {"message": "Is that right?"}, {"message": "Gone…"}]}]}
     moodboard_cmd._print_edit(result, undoing=True)
     lines = [line for line in capsys.readouterr().out.splitlines() if line.startswith("  ")]
-    assert lines == ["  Image 2 changed since, left as is.",
+    assert lines == ["  Image 2 changed after that step, so Nebula left it as it is.",
                      "  Nebula couldn’t undo “Changed the direction” because only you can change the direction.",
                      "  Is that right?", "  Gone…"]
     assert moodboard_cmd._skipped_line("Done..") == "  Done.."

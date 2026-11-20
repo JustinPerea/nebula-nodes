@@ -1,7 +1,6 @@
 import type { Moodboard, MoodboardImage, MoodboardPlacement } from '../types';
 import { cardWeight } from '../components/moodboard-studio/steering';
 import { sizeFor } from './moodboardLayout';
-import { RequestFailedError } from './errorCopy';
 
 /**
  * Checked board edits, the Studio's side (backend services/moodboard_edits.py,
@@ -43,22 +42,7 @@ export interface MoodboardEditResult {
   undo: { ops: Array<Record<string, unknown>> };
 }
 
-/** A write sent with `baseVersion` after someone else saved the board (409).
- *  `board` is the board as it is now, to rebase on. The Studio rebases and
- *  sends again; after three in a row its notice says this (GM, error-copy
- *  round 2: "Couldn’t save the board. This board changed in another window.
- *  Reload to get the latest version."), with no version number. The version
- *  stays on the error (`detail`) for debugging. */
-export class MoodboardVersionConflict extends RequestFailedError {
-  readonly board: Moodboard;
-
-  constructor(board: Moodboard) {
-    super("Couldn’t save the moodboard.", 409, { reason: 'This moodboard changed in another tab. Reload to get the latest version.',
-      detail: { code: 'version_conflict', version: board.version } });
-    this.name = 'MoodboardVersionConflict';
-    this.board = board;
-  }
-}
+export { MoodboardVersionConflict } from './versionConflicts';
 
 /** Whether an op changes what the analysis reads (backend `steering`):
  *  a private note doesn't. */

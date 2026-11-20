@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BOARD_TOAST_MS, BoardUndoToast } from './BoardUndoToast';
 
@@ -7,7 +9,7 @@ import { BOARD_TOAST_MS, BoardUndoToast } from './BoardUndoToast';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-const toast = (run = vi.fn()) => ({ id: 1, text: 'Removed #1', skipped: ['#2 changed since, left as is'],
+const toast = (run = vi.fn()) => ({ id: 1, text: 'Removed #1', skipped: ['#2 changed after that step, so Nebula left it as it is.'],
   action: { label: 'Undo' as const, run } });
 
 describe('the board undo toast', () => {
@@ -17,7 +19,7 @@ describe('the board undo toast', () => {
     render(<BoardUndoToast toast={toast(run)} onDismiss={onDismiss} />);
     const status = screen.getByRole('status', { name: 'Moodboard undo' });
     expect(status.textContent).toContain('Removed #1');
-    expect(status.textContent).toContain('#2 changed since, left as is');
+    expect(status.textContent).toContain('#2 changed after that step, so Nebula left it as it is.');
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(run).toHaveBeenCalledTimes(1);
     expect(onDismiss).toHaveBeenCalledTimes(1);
@@ -91,5 +93,11 @@ describe('the board undo toast', () => {
     render(<BoardUndoToast toast={toast()} onDismiss={onDismiss} />);
     fireEvent.keyDown(screen.getByRole('button', { name: 'Undo' }), { key: 'Escape' });
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('breaks a wrapped message evenly, so no word is left alone on its last line (design)', () => {
+    const css = readFileSync(resolve(__dirname, '../../styles/moodboard-board.css'), 'utf8');
+    const rule = css.match(/\.moodboard-board-toast__line \{[^}]*\}/);
+    expect(rule?.[0]).toContain('text-wrap: pretty;');
   });
 });

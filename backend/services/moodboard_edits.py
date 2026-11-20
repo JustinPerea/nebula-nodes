@@ -101,8 +101,8 @@ FIELD_KEYS = ("name", "notes", "mode", "strength", "direction", "avoid", "pinned
 # What the board's mode, strength and notes are to the whole-board analysis.
 STEERING_FIELDS = ("mode", "strength", "notes")
 FIELD_LABELS = {
-    "name": "The name", "notes": "The moodboard\u2019s notes", "mode": "Mode", "strength": "Strength",
-    "direction": "Direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
+    "name": "The name", "notes": "The moodboard\u2019s notes", "mode": "The mode", "strength": "The strength",
+    "direction": "The direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
     "clashMode": "The clash mode", "colorChoices": "The colour choices",
     "sendNotes": "“Moodboard notes to generators”", "coverImageId": "The cover",
     "briefOverride": "The hand-written brief",
@@ -134,6 +134,13 @@ def in_quotes(text: Any) -> str:
     ``inQuotes`` in moodboard-studio/undoLines.ts (shared cases:
     tests/fixtures/moodboard_undo_lines.json)."""
     return "\u201c" + str(text).replace("\u201c", "\u2018").replace("\u201d", "\u2019") + "\u201d"
+
+
+def kept_clause(subject: str) -> str:
+    """The line for a part an undo left as it is because it changed after the
+    step (design: "Image 5 changed after that step, so Nebula left it as it
+    is."). Agents, the CLI and MCP read it; the ``reason`` stays "changed since"."""
+    return f"{subject} changed after that step, so Nebula left it as it is."
 
 
 def join_words(words: list[str]) -> str:
@@ -916,7 +923,7 @@ class _Batch:
         ‘Moodboard notes to generators’")."""
         noun = FIELD_NOUNS.get(key, key)
         if reason == "changed since":
-            return {"part": "fields", "field": key, "reason": reason, "message": f"{FIELD_LABELS[key]} {reason}, left as is"}
+            return {"part": "fields", "field": key, "reason": reason, "message": kept_clause(FIELD_LABELS[key])}
         if key == "sendNotes":
             step = f"{'Turned on' if expect else 'Turned off'} \u2018Moodboard notes to generators\u2019"
         elif key == "coverImageId":
@@ -959,6 +966,12 @@ class _Batch:
             report["message"] = f"Nebula couldn’t undo the change to {subject} because its place on the moodboard was taken or removed after that."
         elif reason == "isn’t one of Nebula’s own files":
             report["message"] = f"Nebula couldn’t undo the change to {subject} because {subject} isn’t one of Nebula’s own files."
+        elif reason == "changed since":
+            report["message"] = kept_clause(label if item.get("image") is not None else in_quotes(label))
+        elif reason == "removed since":
+            report["message"] = f"{label if item.get('image') is not None else in_quotes(label)} was removed after that step, so Nebula left it as it is."
+        elif reason == "is an image link from outside Nebula":
+            report["message"] = f"{label} links to an image outside Nebula, so Nebula left it as it is."
         else:
             report["message"] = f"{label} {reason}, left as is"
         return report
@@ -1561,6 +1574,41 @@ def parse_ops(raw: Any) -> list[dict[str, Any]]:
     return raw
 
 
+def _renumber_skips(board: dict[str, Any], applied: list[dict[str, Any]], before: dict[str, Any]) -> None:
+    """Number each kept image by its place on the board as the batch leaves it
+    (design): the person reads the toast after the undo, and an agent reads
+    the board after the line, so both count the images that are there then.
+    A slice is judged mid-batch, before later slices add or remove images, so
+    its number can be one off. The lines are worded by this module, so "image
+    N" in a message is always the entry's own number.
+
+    A kept image that was on the board before the batch also gets
+    ``numberBefore``, its 1-based place on ``before`` (the board the undo was
+    sent against). The toast names an image only when ``number`` and
+    ``numberBefore`` agree (design: a number in the toast has to match the
+    board, which the undo may have renumbered); an entry without the field is
+    read as "the number may have moved"."""
+    places = {str(img.get("id")): n for n, img in enumerate(board["images"], 1)}
+    earlier = {str(img.get("id")): n for n, img in
+               enumerate([i for i in before.get("images") or [] if isinstance(i, dict)], 1)}
+    for entry in applied:
+        reports = entry.get("skipped")  # an add's is a count of duplicates
+        for report in reports if isinstance(reports, list) else []:
+            if not isinstance(report, dict) or "number" not in report:
+                continue
+            image_id = str(report.get("image"))
+            now = places.get(image_id)
+            if now is None:
+                continue
+            if image_id in earlier:
+                report["numberBefore"] = earlier[image_id]
+            if now == report["number"]:
+                continue
+            old = report["number"]
+            report["message"] = re.sub(rf"\b([Ii]mage ){old}(?!\d)", rf"\g<1>{now}", report["message"])
+            report["number"] = now
+
+
 def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = None) -> EditResult:
     """``ops`` staged on a copy of ``board`` (laid out, as the store reads
     it). Raises EditError naming the op that failed; ``board`` is never
@@ -1599,6 +1647,7 @@ def apply_edits(board: dict[str, Any], ops: Any, *, by: str, now: str | None = N
         layout.check_image_placements(staged["images"], {f["id"] for f in staged["frames"]})
     except ValueError as exc:
         raise EditError(f"the board after these ops: {exc}") from None
+    _renumber_skips(staged, applied, board)
     # A cover whose image left the board goes (it opens on #1 again), before
     # the diff, so the batch's undo brings the cover back with the image.
     from services.moodboard_store import follow_cover
