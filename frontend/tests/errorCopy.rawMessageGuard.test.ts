@@ -1,6 +1,6 @@
 /**
- * Error copy round 3e, item 5: raw error text can't come back (GM - Design,
- * round 1: "Never show raw error.message strings in UI.").
+ * Error copy: raw error text can't come back (design,
+ * "Never show raw error.message strings in UI.").
  *
  * The lightest guard that works is a source check, like the inline-style and
  * Slava CSS scope checks: it reads every file under src/ and fails on the
@@ -18,7 +18,7 @@
  * A line that only logs (console.*) is fine. The fix is lib/errorCopy.ts:
  * `failureMessage(error, "Couldn't {verb} {object}.")` (one line) or
  * `failureCopy(error, { heading })` (two lines), which keep a written
- * failure's heading and reason and give anything else the heading over GM's
+ * failure's heading and reason and give anything else the heading over design's
  * general line. A line written in the browser is thrown as a FailureNotice,
  * so it survives that mapping. A site whose message is never shown, or is
  * known to be written, goes in ALLOWED with its reason; an entry that no
@@ -42,10 +42,10 @@ const SHAPES: { name: string; pattern: RegExp }[] = [
 
 /** file (relative to src/) -> the number of matching lines allowed, and why. */
 const ALLOWED: Record<string, { count: number; why: string }> = {
-  // GM, PR #198 r5: the Agent log's line for a card or studio that couldn't
+  // Design (PR #198): the Agent log's line for a card or studio that couldn't
   // draw data that checks out is "Couldn't draw “X”, node n4. <error message>":
   // the error is the point (agents read it); the person's line never has it.
-  'lib/studioBoundary.ts': { count: 1, why: "GM r5's Agent log line names the drawing error, never on screen" },
+  'lib/studioBoundary.ts': { count: 1, why: "the Agent log line names the drawing error, never on screen" },
   // Reads a failed chunk import's message to tell a lost chunk from a
   // render error; it never reaches the screen.
   'lib/lazyWithPreload.ts': { count: 1, why: 'classifies a chunk-load failure, not shown' },
@@ -54,12 +54,12 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   // a backend that is down from other failures; the panel shows its own line.
   // `${err.message}` under `err instanceof GraphBundleImportTooLargeError`:
   // a FailureNotice whose reason is a written size line.
-  // lib/graphFile.ts left the list in round 3f: its size notice reads failureMessage, not err.message.
-  // GM (round 12 of PR #114): when an add can't read the backend's graph into
+  // lib/graphFile.ts left the list: its size notice reads failureMessage, not err.message.
+  // Design (PR #114): when an add can't read the backend's graph into
   // an empty tab, the person reads "Couldn't add “<label>”." and the raw
   // reason goes to the Agent log (TabSyncFailure: the fetch's and the JSON
   // parse's own messages), never to the notice.
-  'store/graphStore.ts': { count: 2, why: "an add's failed sync: the raw reason for the Agent log only (GM)" },
+  'store/graphStore.ts': { count: 2, why: "an add's failed sync: the raw reason for the Agent log only (design)" },
 };
 
 function files(dir: string): string[] {
@@ -107,7 +107,7 @@ describe("no surface renders an Error's own message", () => {
       'setError((e as Error).message);',
       '(e: Error) => { setError(e.message); }',
       'setError(String(error));',
-      // Round 3e review: the direct shapes the first list missed.
+      // The direct shapes the first list missed.
       'return <p role="alert">{error.message}</p>;',
       'catch (err) { if (err instanceof Error) setError(err.message); }',
       'setError(String(e));',

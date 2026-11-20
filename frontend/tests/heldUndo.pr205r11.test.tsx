@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge } from '@xyflow/react';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode, type FakeWire } from './helpers/undoFakeBackend';
 
-// PR #205 round 11: the held-undo mutants rounds 9 and 10 left alive (each test names its mutant).
+// PR #205: the held-undo mutants two earlier mutation runs left alive (each test names its mutant).
 // - gap_emptyNoBind: a sync that empties the canvas binds the held links it made to its own step.
 // - clearHeldOffEdgeEndsOff: an agent's clear brings back a deleted node's connections only to nodes
 //   the clear's Undo also brings back.
 // - syncForgetsClearedHeldOffOff: what a clear set aside for its step never reaches a later sync's step.
-// The harness is round 8's (round 18's fake Nebula).
+// The harness is the fake Nebula in tests/helpers/undoFakeBackend.ts.
 
 const fake = vi.hoisted(() => ({
   backend: null as unknown as FakeNebula,
@@ -65,7 +65,7 @@ const claude = { actor: { kind: 'agent', name: 'Claude', id: 'claude' } };
 const wire = (source: string, target: string): FakeWire => ({ id: `w-${source}-${target}`, source, sourceHandle: 'text', target, targetHandle: 'text' });
 let clock = Date.now();
 
-describe("PR #205 round 11: the held-undo mutants rounds 9 and 10 left alive", () => {
+describe("PR #205: the held-undo mutants two earlier mutation runs left alive", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;

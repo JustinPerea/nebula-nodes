@@ -1,21 +1,21 @@
 /**
- * PR #203 round 10: one cost class with the Krea plan and the sourced $0 in
+ * PR #203: one cost class with the Krea plan and the sourced $0 in
  * it, one cost formatter for every Run surface, and a key change that keeps
  * every check it didn't touch.
  *
- * - GM r18 item 1, r19 item 1 (review 9, cost MEDIUM-1): the class
+ * - Design: the class
  *   (costClass) agrees with the backend's (model_pricing.cost_class) case by
  *   case (pricing_cases.json classCases). A sourced $0 is free; a run on the
  *   Krea plan is its own class, "1 on Krea plan", with its own reason line.
- * - GM r19 item 2 (review 9, cost LOW-1): the Run buttons' title and
+ * - Design: the Run buttons' title and
  *   screen-reader text are the chip's tooltip; a second derivation of any
  *   cost sentence fails the ratchet.
- * - Review 9, cost LOW-3 (mutant C11): no card label is written outside
- *   keyBillingLabel; the account (C12) is pinned in sharedKeyedPaths.test.ts.
- * - Review 9, cost NIT-2: an unknown reason kind reads as no listed price.
- * - GM r19 item 7 (review 9, keys LOW-2): a key change clears only that
+ * - No card label is written outside
+ *   keyBillingLabel; the account is pinned in sharedKeyedPaths.test.ts.
+ * - An unknown reason kind reads as no listed price.
+ * - Design: a key change clears only that
  *   key's connection check.
- * - Review 9, keys NIT-2: Settings stores a key only when the backend would
+ * - Settings stores a key only when the backend would
  *   (key_text_cases.json storeCases), before anything is written.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -57,7 +57,7 @@ const fixture = pricingCases as unknown as {
 // The fixture's prices over the shipped table, as the backend case reads them.
 const classPricing = { ...shippedTable, nodes: { ...shippedTable.nodes, ...fixture.pricing.nodes } } as unknown as PricingTable;
 
-describe('one cost class, as the backend gives it (GM r18 item 1, r19 item 1)', () => {
+describe('one cost class, as the backend gives it', () => {
   const added = Object.keys(fixture.definitions).filter((id) => !(id in NODE_DEFINITIONS));
   beforeAll(() => { for (const id of added) NODE_DEFINITIONS[id] = fixture.definitions[id]; });
   afterAll(() => { for (const id of added) delete NODE_DEFINITIONS[id]; });
@@ -91,7 +91,7 @@ describe('one cost class, as the backend gives it (GM r18 item 1, r19 item 1)', 
     for (const id of testCase.expected.plan) {
       expect(summary.cost!.reasons?.find((entry) => entry.name === id)?.reason).toEqual({ kind: 'plan' });
     }
-    // Each node's reason, as the backend's (round 11; GM r20 item 2), and the tooltip they write.
+    // Each node's reason, as the backend's (design), and the tooltip they write.
     if (testCase.expected.reasons) {
       const got = Object.fromEntries((summary.cost!.reasons ?? []).map((entry) => [entry.name, entry.reason]));
       expect(got).toEqual(testCase.expected.reasons);
@@ -105,7 +105,7 @@ describe('one cost class, as the backend gives it (GM r18 item 1, r19 item 1)', 
   });
 });
 
-describe('the class of a node by its own price (GM r18 item 1)', () => {
+describe('the class of a node by its own price', () => {
   const nano = NODE_DEFINITIONS['nano-banana'];
   it('free only for a sourced $0: USD, exactly 0, nothing left out', () => {
     expect(costClass(nano, {}, {}, { currency: 'usd', low: 0, high: 0 })).toBe('free');
@@ -117,7 +117,7 @@ describe('the class of a node by its own price (GM r18 item 1)', () => {
   });
 });
 
-describe('the switcher\'s price rows say a sentence (GM r19 item 4)', () => {
+describe('the switcher\'s price rows say a sentence', () => {
   it('list price, estimate and the Krea plan', () => {
     const state = providerSwitchState(NODE_DEFINITIONS['krea-3'], {}, {
       apiKeys: { FAL_KEY: 'set', BFL_API_KEY: 'set', KREA_API_TOKEN: 'set' }, kreaSignedIn: true,
@@ -134,15 +134,15 @@ describe('the switcher\'s price rows say a sentence (GM r19 item 4)', () => {
   });
 });
 
-// -- the Krea plan is counted apart (GM r19 item 1) ----------------------------------------
+// -- the Krea plan is counted apart (design) ----------------------------------------
 
 const KEYS = { HF_TOKEN: 'hf_fixture', GOOGLE_API_KEY: 'set', ANTHROPIC_API_KEY: 'set' };
 const PLAN = { _kreaAuth: 'mcp' };
 
-describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost MEDIUM-1)', () => {
+describe('a run on the Krea plan is its own class', () => {
   const pricing = shippedTable as unknown as PricingTable;
 
-  it('"2 paid · 1 on Krea plan" beside unpriced paid nodes, and the tooltip in GM\'s order', () => {
+  it('"2 paid · 1 on Krea plan" beside unpriced paid nodes, and the tooltip in design\'s order', () => {
     const graph = [at('a', 'claude-chat', 'A', 0), at('b', 'claude-chat', 'B', 100), at('k', 'krea-2-generate', 'Krea 2', 200, PLAN),
       at('i', 'speridlabs-idol', 'Idol', 300)];
     const summary = summarizeRunScope(graph, [], { kind: 'graph' }, { pricing, apiKeys: KEYS });
@@ -150,7 +150,7 @@ describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost
     expect(summary.plan).toEqual(['Krea 2']);
     expect(runChipLabel(summary)).toBe('2 paid · 1 on Krea plan · 1 may cost');
     // The paid lead, the figure (none here), the reason lines with the plan's, Idol's sentence.
-    // Line 1 and the reason line naming the same nodes are one (GM, PR #203 r20 item 2).
+    // Line 1 and the reason line naming the same nodes are one (design, PR #203).
     expect(runChipTitle(summary)).toBe('“A” and “B” call paid providers that have no listed price.\n'
       + '“Krea 2” runs on your Krea plan.\n'
       + '“Idol” may use your Hugging Face credits');
@@ -160,7 +160,7 @@ describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost
     const graph = [at('n', 'nano-banana', 'Hero', 0), at('k', 'krea-2-generate', 'Krea 2', 100, PLAN)];
     const summary = summarizeRunScope(graph, [], { kind: 'graph' }, { pricing, apiKeys: KEYS });
     const label = runChipLabel(summary)!;
-    // "+" joins money, "·" joins classes (GM, PR #203 r20).
+    // "+" joins money, "·" joins classes (design, PR #203).
     expect(label).toMatch(/^~\$\d+\.\d\d · 1 on Krea plan$/);
     const title = runChipTitle(summary)!.split('\n');
     expect(title[0]).toMatch(/^“Hero” calls a paid provider\. Estimated cost \$/);
@@ -200,14 +200,14 @@ describe('a run on the Krea plan is its own class (GM r19 item 1; review 9, cost
   });
 });
 
-// -- a sourced $0 is free (GM r18 item 1) --------------------------------------------------
+// -- a sourced $0 is free (design) --------------------------------------------------
 
-describe('a sourced $0 is free (GM r18 item 1)', () => {
+describe('a sourced $0 is free', () => {
   const added = Object.keys(fixture.definitions).filter((id) => !(id in NODE_DEFINITIONS));
   beforeAll(() => { for (const id of added) NODE_DEFINITIONS[id] = fixture.definitions[id]; });
   afterAll(() => { for (const id of added) delete NODE_DEFINITIONS[id]; });
 
-  it('alone: no chip, as any free run (GM r20 item 1), and the tooltip is only "This costs nothing to run."', () => {
+  it('alone: no chip, as any free run, and the tooltip is only "This costs nothing to run."', () => {
     const summary = summarizeRunScope([at('z', 'zeroed', 'Zero', 0)], [], { kind: 'graph' }, { pricing: classPricing, apiKeys: { FAL_KEY: 'set' } });
     expect([summary.paid, runChipLabel(summary), runChipTitle(summary)]).toEqual([[], null, 'This costs nothing to run.']);
     expect(describeRunScope(summary)).toBe('Runs 1 node.\nThis costs nothing to run.');
@@ -221,9 +221,9 @@ describe('a sourced $0 is free (GM r18 item 1)', () => {
   });
 });
 
-// -- one formatter for the Run buttons (GM r19 item 2; review 9, cost LOW-1) ----------------
+// -- one formatter for the Run buttons (design) ----------------
 
-describe('the Run buttons\' text is the chip\'s tooltip (GM r19 item 2)', () => {
+describe('the Run buttons\' text is the chip\'s tooltip', () => {
   const pricing = shippedTable as unknown as PricingTable;
   const graphs: Record<string, Node<NodeData>[]> = {
     priced: [at('n', 'nano-banana', 'Hero', 0)],
@@ -283,7 +283,7 @@ const ALLOWED: Record<string, string[]> = {
   estimateSentence: ['lib/runScope.ts:costTitle'],
   reasonGroups: ['lib/runScope.ts:costTitle'],
   mergedLead: ['lib/runScope.ts:costTitle'],
-  // The chip rule (GM, PR #203 r20: "+" joins money, "·" joins classes): both chips, nothing else.
+  // The chip rule (design, PR #203: "+" joins money, "·" joins classes): both chips, nothing else.
   costChip: ['lib/canvasProposalsBar.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
   classCounts: ['lib/canvasProposalsBar.ts:acceptCountChip', 'lib/runScope.ts:runChipLabel'],
   mayCostSentence: ['lib/canvasProposalsBar.ts:proposalMayCostSentence', 'lib/runScope.ts:costTitle'],
@@ -296,7 +296,7 @@ const ALLOWED: Record<string, string[]> = {
     'lib/kreaConnection.ts:ownKeyStatus', 'lib/providerReadiness.ts:modelReadiness'],
 };
 
-describe('one derivation of each cost sentence and of the class (review 9, cost LOW-1 and LOW-3)', () => {
+describe('one derivation of each cost sentence and of the class', () => {
   it('in the app', () => {
     const files = APP();
     expect(Object.keys(files).length).toBeGreaterThan(100);
@@ -336,7 +336,7 @@ function labelTemplates(files: Record<string, string>): string[] {
   return found;
 }
 
-describe('no card label is written outside keyBillingLabel (review 9, cost LOW-3, mutant C11)', () => {
+describe('no card label is written outside keyBillingLabel', () => {
   it('in the app', () => {
     const files = APP();
     expect(code(files['lib/directRoute.ts'])).toMatch(/may cost' : 'free'\} · \$\{account\}/);
@@ -352,9 +352,9 @@ describe('no card label is written outside keyBillingLabel (review 9, cost LOW-3
   });
 });
 
-// -- an unknown reason kind (review 9, cost NIT-2) -----------------------------------------
+// -- an unknown reason kind -----------------------------------------
 
-describe('a reason kind this tab doesn\'t know reads as no listed price (review 9, cost NIT-2)', () => {
+describe('a reason kind this tab doesn\'t know reads as no listed price', () => {
   it('in entryReason', () => {
     expect(entryReason({ kind: 'fromTheFuture' } as unknown as ProposalCostReason)).toEqual({ kind: 'noPrice' });
     expect(entryReason({ kind: 'plan' })).toEqual({ kind: 'plan' });
@@ -379,9 +379,9 @@ describe('a reason kind this tab doesn\'t know reads as no listed price (review 
   });
 });
 
-// -- every provider's link names it (GM r19 item 5) ----------------------------------------
+// -- every provider's link names it (design) ----------------------------------------
 
-describe('every key link is "Open <provider> keys", the provider\'s own word, no domain (GM r19 item 5)', () => {
+describe('every key link is "Open <provider> keys", the provider\'s own word, no domain', () => {
   it.each(PROVIDER_KEYS.map((spec) => [spec.key, spec] as const))('%s', (_key, spec) => {
     expect(spec.keyLink).toMatch(/^Open \S.* (keys|tokens|service accounts)$/);
     // A host only where it is the provider's own name (fal.ai).
@@ -391,9 +391,9 @@ describe('every key link is "Open <provider> keys", the provider\'s own word, no
   });
 });
 
-// -- a key change clears only its own check (GM r19 item 7) --------------------------------
+// -- a key change clears only its own check (design) --------------------------------
 
-describe('a key change keeps every connection check it didn\'t touch (GM r19 item 7; review 9, keys LOW-2)', () => {
+describe('a key change keeps every connection check it didn\'t touch', () => {
   const entry = { configured: true, status: 'valid' as const, last_checked: '2026-10-30T12:00:00Z' };
   const seed = () => useProviderReadinessStore.setState({ providers: { OpenAI: entry, FAL: entry, 'Hugging Face': entry }, checkedAt: 1 });
   const send = (type: string, detail?: unknown) => window.dispatchEvent(new CustomEvent(type, detail === undefined ? undefined : { detail }));
@@ -443,7 +443,7 @@ describe('a key change keeps every connection check it didn\'t touch (GM r19 ite
   });
 });
 
-// -- Settings stores a key only when the backend would (review 9, keys NIT-2) --------------
+// -- Settings stores a key only when the backend would --------------
 
 describe('a key Settings stores is one the backend keeps (key_text_cases.json storeCases)', () => {
   type StoreCase = { key: string; raw: string; stored: string | null };

@@ -17,7 +17,7 @@ interface FakeGraph {
   reserveCreateGeneration: (id: string) => boolean;
   releaseCreateGeneration: (id: string) => void;
   cancelCreateGeneration: (id: string) => void;
-  // GM r8 (3), #204 r7: Generate's lines go to the app's notice region.
+  // Design (#204): Generate's lines go to the app's notice region.
   messageNotice: { id: number; text: string; tone: 'error' | 'info' } | null;
   undoNotice: null;
   notify: (text: string, tone?: 'error' | 'info') => void;
@@ -180,14 +180,14 @@ describe('Create lifecycle across view visits', () => {
     expect(mocks.store!.getState().messageNotice).toBeNull();
   });
 
-  it('GM r10 (3): the cluster refused only for this tab says GM\'s line, nodes not added', async () => {
+  it('the cluster refused only for this tab says design\'s line, nodes not added', async () => {
     mocks.author.mockRejectedValueOnce(Object.assign(new Error('refused'), { code: 'person_required' }));
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));
     await waitFor(() => expect(mocks.store!.getState().messageNotice?.text).toBe('Nebula couldn’t start the generation. Its nodes weren’t added to the canvas. This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.'));
   });
 
-  it('GM r13 (1): a start refused after the cluster was added says the nodes are there, and never try again', async () => {
+  it('a start refused after the cluster was added says the nodes are there, and never try again', async () => {
     mocks.execute.mockImplementationOnce(() => { throw Object.assign(new Error('refused'), { code: 'person_required' }); });
     const view = render(<CreateView />);
     fireEvent.click(view.getByRole('button', { name: 'Generate' }));

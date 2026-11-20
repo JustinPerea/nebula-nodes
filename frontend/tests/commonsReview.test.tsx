@@ -42,7 +42,7 @@ it('preserves corrections and navigation guard if a stale save fails', async () 
   render(<CommonsReview />);
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
   fireEvent.change(screen.getByLabelText('Type style'), { target: { value: 'serif' } });
-  // Round 18o (GM r51 Q3): the reference buttons lock in place, the status line their reason.
+  // Design: the reference buttons lock in place, the status line their reason.
   const reference = screen.getByRole('button', { name: /Reference 01/ }) as HTMLButtonElement;
   expect(reference.disabled).toBe(false);
   expect(reference.getAttribute('aria-disabled')).toBe('true');
@@ -86,7 +86,7 @@ it('shows the committed close even when the reload fails, and stops offering new
   expect(screen.queryByText('Generate remaining grades')).toBeNull();
 });
 
-// Round 18o (GM r51 Q2, R6 updated on purpose): a running grade locks the opener in place (aria,
+// Design (a test updated on purpose): a running grade locks the opener in place (aria,
 // focusable, presses ignored) with its own line, no longer natively.
 it('does not offer closing while a grade is running', async () => {
   const value = batch(); value.items[0].status = 'running'; value.items[0].proposal = null;
@@ -234,7 +234,7 @@ it('does not start generation while an explicit human acceptance is still pendin
   expect(api.propose).not.toHaveBeenCalled();
 });
 
-it('round 18m (GM r44 1): unsaved corrections lock the opener in place, its line under it; live again once discarded', async () => {
+it('unsaved corrections lock the opener in place, its line under it; live again once discarded', async () => {
   render(<CommonsReview />);
   await screen.findByText('Edit grades'); fireEvent.click(screen.getByText('Edit grades'));
   const opener = screen.getByText('Close review & resume library analysis…') as HTMLButtonElement;
@@ -257,7 +257,7 @@ it('round 18m (GM r44 1): unsaved corrections lock the opener in place, its line
   expect(screen.getByRole('alertdialog')).toBeTruthy();
 });
 
-it('round 18m: while corrections save, the opener is natively disabled for that moment, with no line', async () => {
+it('while corrections save, the opener is natively disabled for that moment, with no line', async () => {
   let finish: (value: ReviewBatch) => void = () => {};
   api.accept.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   render(<CommonsReview />);

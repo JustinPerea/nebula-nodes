@@ -139,7 +139,7 @@ describe('Pinned Inspector navigation clearance', () => {
     expect(screen.getByText('new-video')).toBeVisible();
   });
 
-  // Review 7 of PR #205 (inspector NIT-1, M13): the picker's ask is used once.
+  // PR #205: the picker's ask is used once.
   it('the picker\'s ask is used once: a node change soon after (an Undo bringing one back) leaves focus on the page', () => {
     useUIStore.getState().setInspectorVisible(false);
     renderWorkbench();

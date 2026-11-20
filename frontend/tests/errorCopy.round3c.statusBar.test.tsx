@@ -1,5 +1,5 @@
 /**
- * Error copy round 3c (GM - Design), the status bar and its warnings:
+ * Error copy (design), the status bar and its warnings:
  * ""PAID START" WORDING ... People never see the word "start"; they ran a
  * World Labs job. Status bar: "Paid start needs review." → "A World Labs run
  * needs your check." In its warnings and the node's run errors, write "World

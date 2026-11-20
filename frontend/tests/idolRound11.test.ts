@@ -1,17 +1,17 @@
 /**
- * PR #203 round 11: one chip rule, a sourced $0 that reads as any free run,
+ * PR #203: one chip rule, a sourced $0 that reads as any free run,
  * merged reason lines, Krea's one verb and the article fix.
  *
- * - GM r20: "+" joins money, "·" joins classes (costChip), so the Run chip
+ * - Design: "+" joins money, "·" joins classes (costChip), so the Run chip
  *   reads "$0.07 + unpriced · 1 on Krea plan" and the Accept chip "2 paid ·
  *   1 on Krea plan".
- * - GM r20 item 1: a sourced $0 shows no chip, as free runs don't, and its
+ * - Design: a sourced $0 shows no chip, as free runs don't, and its
  *   tooltip stays "This costs nothing to run.".
- * - GM r20 item 2: a reason line naming line 1's nodes merges into it.
- * - GM r21 items 5 and 6, and the one Krea verb, "Sign in to Krea in Settings".
- * - Review 10, NIT-3: the placeholder dialog's row for a sourced $0 is "free".
- * - Review 10, copy MEDIUM-2: "an Anthropic", never "a Anthropic".
- * - Review 10, copy LOW-1: the bar's actions wrap (the live check measures
+ * - Design: a reason line naming line 1's nodes merges into it.
+ * - Design: the one Krea verb, "Sign in to Krea in Settings".
+ * - The placeholder dialog's row for a sourced $0 is "free".
+ * - "an Anthropic", never "a Anthropic".
+ * - The bar's actions wrap (the live check measures
  *   them at 700, 760 and 1024 px).
  */
 import { readFileSync } from 'node:fs';
@@ -41,7 +41,7 @@ const added = Object.keys(fixture.definitions).filter((id) => !(id in NODE_DEFIN
 beforeAll(() => { for (const id of added) NODE_DEFINITIONS[id] = fixture.definitions[id]; });
 afterAll(() => { for (const id of added) delete NODE_DEFINITIONS[id]; });
 
-describe('one chip rule: "+" joins money, "·" joins classes (GM r20)', () => {
+describe('one chip rule: "+" joins money, "·" joins classes', () => {
   it('builds every chip', () => {
     expect(costChip('$0.07 + unpriced', classCounts({ plan: 1 }))).toBe('$0.07 + unpriced · 1 on Krea plan');
     expect(costChip(null, classCounts({ paid: 2, plan: 1 }))).toBe('2 paid · 1 on Krea plan');
@@ -66,7 +66,7 @@ describe('one chip rule: "+" joins money, "·" joins classes (GM r20)', () => {
   });
 });
 
-describe('a sourced $0 reads as any free run (GM r20 item 1)', () => {
+describe('a sourced $0 reads as any free run', () => {
   it('no chip, alone or beside another free node, and the tooltip stays', () => {
     const alone = summarizeRunScope([at('z', 'zeroed', 'Free one', 0)], [], { kind: 'graph' }, { pricing, apiKeys: { FAL_KEY: 'set' } });
     expect(runChipLabel(alone)).toBeNull();
@@ -76,7 +76,7 @@ describe('a sourced $0 reads as any free run (GM r20 item 1)', () => {
   });
 });
 
-describe('a reason line naming line 1’s nodes merges into it (GM r20 item 2)', () => {
+describe('a reason line naming line 1’s nodes merges into it', () => {
   it('the same nodes: one line; other nodes: their own', () => {
     expect(costTitle({ paid: ['Writer', 'Editor'], reasons: [{ name: 'Writer', reason: 'noPrice' }, { name: 'Editor', reason: 'noPrice' }] } as never))
       .toBe('“Writer” and “Editor” call paid providers that have no listed price.');
@@ -87,7 +87,7 @@ describe('a reason line naming line 1’s nodes merges into it (GM r20 item 2)',
   });
 });
 
-describe('Krea’s one verb and the plan-only line (GM r21 items 5 and 6)', () => {
+describe('Krea’s one verb and the plan-only line (design)', () => {
   it('the switcher says the node runs on the plan, with its name in quotes', () => {
     const state = providerSwitchState(NODE_DEFINITIONS['krea-3'], { _provider: 'krea', _kreaAuth: 'mcp' }, {
       apiKeys: {}, kreaSignedIn: false, pricing: shippedTable as unknown as PricingTable });
@@ -96,7 +96,7 @@ describe('Krea’s one verb and the plan-only line (GM r21 items 5 and 6)', () =
   });
 });
 
-describe('the placeholder dialog’s row for a sourced $0 (review 10, NIT-3)', () => {
+describe('the placeholder dialog’s row for a sourced $0', () => {
   it('reads "free", and the total isn’t missing for it', () => {
     const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
     const nodes = [
@@ -116,7 +116,7 @@ describe('the placeholder dialog’s row for a sourced $0 (review 10, NIT-3)', (
   });
 });
 
-describe('articles and the key notices (review 10, copy MEDIUM-2; GM r21 item 4)', () => {
+describe('articles and the key notices', () => {
   it('"an" before a vowel and before xAI', () => {
     expect(withArticle('Anthropic')).toBe('an Anthropic');
     expect(withArticle('OpenAI')).toBe('an OpenAI');
@@ -139,7 +139,7 @@ describe('articles and the key notices (review 10, copy MEDIUM-2; GM r21 item 4)
   });
 });
 
-describe('the bar’s actions never clip (review 10, copy LOW-1)', () => {
+describe('the bar’s actions never clip', () => {
   it('the Accept button wraps its count chip; the decide group clips nothing', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/canvasProposals.css'), 'utf8');
     const rule = css.match(/\n\.proposal-bar__button--primary:has\(\.proposal-bar__count\) \{([^}]*)\}/)?.[1] ?? '';

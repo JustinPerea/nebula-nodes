@@ -3,10 +3,10 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * Placeholders on the canvas (Q125 item 3): the flag is the backend's, so a
+ * Placeholders on the canvas: the flag is the backend's, so a
  * graphSync without it clears it here; the person's undo and redo send it
  * back as the step had it; and a Run that skipped placeholders says so in
- * GM's line (2026-10-25, verbatim).
+ * design's line (2026-10-25, verbatim).
  */
 
 vi.mock('../src/lib/wsClient', () => ({
@@ -124,7 +124,7 @@ describe('a placeholder the backend made normal', () => {
 });
 
 describe('the Run skip line', () => {
-  it("says what Run skipped, in GM's words", async () => {
+  it("says what Run skipped, in design's words", async () => {
     useGraphStore.setState({ nodes: [textNode('n1', CODEX_FLAG), textNode('n2')] });
     const notices: string[] = [];
     const listen = (event: Event) => notices.push((event as CustomEvent<{ text: string }>).detail.text);

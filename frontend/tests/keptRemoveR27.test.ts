@@ -1,5 +1,5 @@
 /**
- * PR #199 round 27 (final review, HIGH-1): while the canvas is kept, the store never deletes the project it
+ * PR #199: while the canvas is kept, the store never deletes the project it
  * is on or the one its edits came from, so no caller (the chooser, Projects home, anything) can release
  * the kept canvas through remove(). Other projects delete as always.
  */

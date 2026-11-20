@@ -3,17 +3,17 @@ import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 import { FakeNebula, canvasNode, textFakeNode, type FakeNode } from './helpers/undoFakeBackend';
 
-// Review 16, round 17. Every case runs against a fake Nebula that applies
+// Every case runs against a fake Nebula that applies
 // each request (its graph, params and wires), and checks the restore bodies
 // sent and that the canvas ends where Nebula's graph does.
-// H1 (coordinator's decision): "arrived elsewhere" is relative to time. A
+// Decided: "arrived elsewhere" is relative to time. A
 //   node an undo or redo puts back is someone else's only for the steps taken
 //   after the change it undoes; an older step keeps owning what it added, so
 //   undoing the paste, duplicate, connect or upload still takes its node off.
-// M1: every path that adds nodes has its own undo step that owns them
+// Every path that adds nodes has its own undo step that owns them
 //   (the node library, a canvas drop and the command palette through
 //   addNode; Character and Moodboard drops; Creator's cluster).
-// L-3: a param the person typed that Nebula has (its PUT answered) isn't
+// A param the person typed that Nebula has (its PUT answered) isn't
 //   overwritten by a sync sent before it; the typing's step survives.
 
 const fake = vi.hoisted(() => ({ backend: null as unknown as FakeNebula }));
@@ -73,7 +73,7 @@ const plainSync = (nodes: FakeNode[]) => {
 
 let clock = Date.now();
 
-describe('round 17 (review 16): an undo always takes off what its own step added', () => {
+describe('an undo always takes off what its own step added', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     // Each case starts later than the last one ended: a clock run backwards
@@ -129,8 +129,8 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     await tick(1100);
   };
 
-  describe('H1: a node an undo puts back stays its adding step\'s', () => {
-    it('A2: paste, delete the pasted node, Cmd+Z, Cmd+Z: the paste is undone', async () => {
+  describe('a node an undo puts back stays its adding step\'s', () => {
+    it('paste, delete the pasted node, Cmd+Z, Cmd+Z: the paste is undone', async () => {
       start([textFakeNode('n1')], [], ['n1']);
       const [pasted] = await pasteOne();
       await del(pasted);
@@ -143,7 +143,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('A3: duplicate, delete the duplicate, Cmd+Z, Cmd+Z: the duplicate is undone', async () => {
+    it('duplicate, delete the duplicate, Cmd+Z, Cmd+Z: the duplicate is undone', async () => {
       start([textFakeNode('n1')], [], ['n1']);
       store().duplicateSelected();
       await tick(1100);
@@ -157,7 +157,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('A4: add and connect n2, delete it, Cmd+Z, Cmd+Z: the node and its wire go, here and in Nebula', async () => {
+    it('add and connect n2, delete it, Cmd+Z, Cmd+Z: the node and its wire go, here and in Nebula', async () => {
       start([textFakeNode('n1')]);
       await connectImage();
       expect(cliIds()).toEqual(['n1', 'n2']);
@@ -173,7 +173,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('U1: upload n9, delete it, Cmd+Z, Cmd+Z: the upload is undone', async () => {
+    it('upload n9, delete it, Cmd+Z, Cmd+Z: the upload is undone', async () => {
       start([textFakeNode('n1')]);
       await upload();
       await del('n9');
@@ -185,7 +185,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('U1 with the delete\'s echo after its answer: the undo, then the stale echo, then the restore\'s echo', async () => {
+    it('with the delete\'s echo after its answer: the undo, then the stale echo, then the restore\'s echo', async () => {
       start([textFakeNode('n1')]);
       await upload();
       nebula().holdEchoes = true;
@@ -203,7 +203,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('A10: paste two as one step, delete one, Cmd+Z, Cmd+Z: the whole paste is undone', async () => {
+    it('paste two as one step, delete one, Cmd+Z, Cmd+Z: the whole paste is undone', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [], ['n1', 'n2']);
       const pasted = await pasteOne();
       expect(pasted).toHaveLength(2);
@@ -228,7 +228,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('control (r16 P1): typing between a delete\'s echoes keeps the restored nodes', async () => {
+    it('control: typing between a delete\'s echoes keeps the restored nodes', async () => {
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
       nebula().holdEchoes = true;
       nebula().holdAnswers = true;
@@ -241,7 +241,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       while (nebula().releaseAnswer()) await settle();
       nebula().holdAnswers = false;
       nebula().holdEchoes = false;
-      // Round 18 (GM, option (c)): the delete's change lands when Delete is
+      // Design: the delete's change lands when Delete is
       // pressed, so the typing after it is the newer step: the first Cmd+Z
       // takes the typing back, the second brings both nodes back.
       await undo();
@@ -253,13 +253,13 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     });
   });
 
-  describe('M1: every path that adds nodes has its own undo step', () => {
+  describe('every path that adds nodes has its own undo step', () => {
     const addFromLibrary = async () => {
       await store().addNode('text-input', { x: 300, y: 300 });
       await settle();
     };
 
-    it('A1: typing, then a node from the library: Cmd+Z takes the node off, the next one the typing', async () => {
+    it('typing, then a node from the library: Cmd+Z takes the node off, the next one the typing', async () => {
       start([textFakeNode('n1')]);
       type('n1', 'A');
       await tick(1100);
@@ -274,7 +274,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('A1b: a node from the library on an empty stack: Cmd+Z takes it off', async () => {
+    it('a node from the library on an empty stack: Cmd+Z takes it off', async () => {
       start([textFakeNode('n1')]);
       await addFromLibrary();
       await undo();
@@ -355,8 +355,8 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     });
   });
 
-  describe('L-3: a sync sent before the person\'s saved typing never takes it back', () => {
-    it('A11: the PUT answered, a sync from before it arrives, then its own echo: the value and its step stay', async () => {
+  describe('a sync sent before the person\'s saved typing never takes it back', () => {
+    it('the PUT answered, a sync from before it arrives, then its own echo: the value and its step stay', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       nebula().holdEchoes = true;
       type('n1', 'A');
@@ -376,7 +376,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('A11b: Cmd+Z between that sync and the echo undoes the typing, and the canvas ends where Nebula does', async () => {
+    it('Cmd+Z between that sync and the echo undoes the typing, and the canvas ends where Nebula does', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       nebula().holdEchoes = true;
       type('n1', 'A');
@@ -412,7 +412,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     const connectFrom = (origin: string) => store().addNodeAndConnect('gpt-image-1-generate', { x: 400, y: 100 },
       { source: origin, sourceHandle: 'text', target: '', targetHandle: 'prompt', newNodeIs: 'target' });
 
-    it('P-1: a node made from a node deleted before its answer is still its step\'s: undo takes it off', async () => {
+    it('a node made from a node deleted before its answer is still its step\'s: undo takes it off', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       nebula().holdAnswers = true;
       const made = connectFrom('n1');
@@ -432,7 +432,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('P-2: a node made and then deleted before its answer: the next Cmd+Z is not silent', async () => {
+    it('a node made and then deleted before its answer: the next Cmd+Z is not silent', async () => {
       start([textFakeNode('n1')]);
       nebula().holdAnswers = true;
       const made = connectFrom('n1');
@@ -451,7 +451,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('P-2b: the same with a Cmd+Z held for the add: no step is left that waits for the deleted node', async () => {
+    it('the same with a Cmd+Z held for the add: no step is left that waits for the deleted node', async () => {
       start([textFakeNode('n1')]);
       // Unsized cards, as the app's are until resized: they match their snapshot after a sync.
       useGraphStore.setState({ nodes: store().nodes.map(unsized) as never });
@@ -473,7 +473,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('P-3: a delete placed beneath an add on its way never takes in that add\'s node', async () => {
+    it('a delete placed beneath an add on its way never takes in that add\'s node', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')], [], ['n2']);
       const [local] = await pasteOne(); // a canvas-only node leaves with the delete's answer
       nebula().holdAnswers = true;
@@ -495,7 +495,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
       sameAsNebula();
     });
 
-    it('P-4: an undo\'s restore that waits behind a delete never brings back a node deleted since', async () => {
+    it('an undo\'s restore that waits behind a delete never brings back a node deleted since', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       nebula().holdAnswers = true;
       await del('n1'); // its answer is slow: restores wait behind it
@@ -528,7 +528,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     it.each([
       ['applied beneath the steps above it', true],
       ['passing over it as changing nothing', false],
-    ])('P-5: Cmd+Z held for an upload whose node a later delete took off (%s): no node is left that no undo takes off', async (_, sized) => {
+    ])('Cmd+Z held for an upload whose node a later delete took off (%s): no node is left that no undo takes off', async (_, sized) => {
       start([textFakeNode('n1'), textFakeNode('n2')], [], []);
       // Unsized cards match their snapshot after a sync, so the press finds nothing to change there.
       if (!sized) useGraphStore.setState({ nodes: store().nodes.map(unsized) as never });
@@ -559,7 +559,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     // Seeds 1624 and 147 (3000-seed run): an undo's restore waits behind an
     // earlier restore whose answer is slow, and the person's next write went
     // out at once, ahead of it.
-    it('P-6: typing after an undo whose restore is still waiting: the typing is what Nebula keeps', async () => {
+    it('typing after an undo whose restore is still waiting: the typing is what Nebula keeps', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
       await tick(1100);
@@ -580,7 +580,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
 
     // Seed 147: the node the waiting restore puts back isn't in Nebula yet,
     // so a delete sent ahead of it missed, and the restore made it again.
-    it('P-7: deleting a node a waiting restore puts back: it stays deleted', async () => {
+    it('deleting a node a waiting restore puts back: it stays deleted', async () => {
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
       await del('n3');
       await del('n2');
@@ -601,7 +601,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     });
 
     // Seed 1624: typing on it went ahead too, and the restore wrote over it.
-    it('P-8: typing on a node a waiting restore puts back: Nebula keeps the typing', async () => {
+    it('typing on a node a waiting restore puts back: Nebula keeps the typing', async () => {
       start([textFakeNode('n1'), textFakeNode('n2'), textFakeNode('n3')]);
       await del('n3');
       await del('n2');
@@ -624,7 +624,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     // Seed 266: the earlier restore's echo, sent before the queued one
     // reached Nebula, still had the node the queued undo took off. It came
     // back on the canvas, and a step taken then kept it.
-    it('P-9: an echo from before a waiting undo leaves what that undo did on the canvas', async () => {
+    it('an echo from before a waiting undo leaves what that undo did on the canvas', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       const added = store().addNode('text-input', { x: 300, y: 300 }); // n3
       await settle();
@@ -658,12 +658,12 @@ describe('round 17 (review 16): an undo always takes off what its own step added
     // so the person can delete it again meanwhile. Two steps then claimed
     // its delete; undoing the second brought it back, and the first's Cmd+Z
     // did nothing, without a word.
-    it('P-10: deleting a node again while its delete is on its way: every Cmd+Z does something', async () => {
+    it('deleting a node again while its delete is on its way: every Cmd+Z does something', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       nebula().holdEchoes = true;
       nebula().holdAnswers = true;
       await del('n1');
-      // Round 18 (GM, option (c)): the node is off the canvas at once, so a
+      // Design: the node is off the canvas at once, so a
       // second Delete has nothing to press on; a remove for it (a stale
       // selection) is left to the delete on its way.
       expect(cliIds()).toEqual(['n2']);
@@ -687,7 +687,7 @@ describe('round 17 (review 16): an undo always takes off what its own step added
 
     // Seed 914: the same with a param. The earlier restore's echo shows the
     // node there, with the value from before the queued undo.
-    it('P-11: an echo from before a waiting undo leaves that undo\'s value on the canvas', async () => {
+    it('an echo from before a waiting undo leaves that undo\'s value on the canvas', async () => {
       start([textFakeNode('n1'), textFakeNode('n2')]);
       type('n1', 'A');
       await tick(1100);

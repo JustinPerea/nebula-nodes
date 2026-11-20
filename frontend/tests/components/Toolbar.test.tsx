@@ -104,7 +104,7 @@ describe('Canvas toolbar hierarchy', () => {
     mocks.fetch.mockResolvedValue({ ok: true });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.spyOn(window, 'alert').mockImplementation(() => undefined);
-    // Error copy round 3f (GM): the alerts are canvas notices now.
+    // Error copy (design): the alerts are canvas notices now.
     notices.mockReset();
     window.addEventListener(CANVAS_NOTICE_EVENT, onNotice);
   });
@@ -115,7 +115,7 @@ describe('Canvas toolbar hierarchy', () => {
     vi.useRealTimers();
   });
 
-  // GM - Design, 2026-10-23: notices sit "just above the bottom bar", and the
+  // Design, 2026-10-23: notices sit "just above the bottom bar", and the
   // Inspector clamps "so it stays above the bottom bar". Both read where the
   // bar really starts, measured here, not a fixed number.
   it('publishes where the bar starts, its open Canvas actions panel included', () => {
@@ -249,7 +249,7 @@ describe('Canvas toolbar hierarchy', () => {
 
   it.each([
     [{ isExecuting: true }, 'You can save, load, import or clear the canvas when the run finishes.'],
-    // GM, PR #205 r1: the import and the preparation say what unlocks them too.
+    // Design (PR #205): the import and the preparation say what unlocks them too.
     [{ isImportingGraph: true }, 'You can save, load, import or clear the canvas when the import finishes.'],
     [{ createLaunchingIds: ['preparing'] }, 'You can save, load, import or clear the canvas when Nebula finishes preparing the run.'],
   ])('keeps replacement and saving blocked while unavailable: %j', (state, reason) => {
@@ -269,7 +269,7 @@ describe('Canvas toolbar hierarchy', () => {
       }
       fireEvent.keyDown(trigger, { key: 's', ctrlKey: true });
       fireEvent.keyDown(trigger, { key: 'o', metaKey: true });
-      // GM PR #205 r4 item 4: each key says the palette's line for its wait.
+      // Design (PR #205): each key says the palette's line for its wait.
       const until = reason.replace('You can save, load, import or clear the canvas ', '');
       expect(mocks.say.mock.calls).toEqual([[`You can save the canvas ${until}`], [`You can load a canvas ${until}`]]);
       expect(onSave).not.toHaveBeenCalled();
@@ -324,7 +324,7 @@ describe('Canvas toolbar hierarchy', () => {
     // One undo step, taken before the backend clear's graphSync can empty the canvas.
     expect(mocks.beginStep).toHaveBeenCalledTimes(1);
     expect(mocks.clear).toHaveBeenCalledWith({ undoStep: mocks.undoStep });
-    // Review 10, L-2: the step ends once the clear is on the canvas, so a Cmd+Z held meanwhile applies.
+    // The step ends once the clear is on the canvas, so a Cmd+Z held meanwhile applies.
     expect(mocks.endStep).toHaveBeenCalledWith(mocks.undoStep);
   });
 
@@ -334,7 +334,7 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     const { panel } = openActions();
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
-    // error-copy round 2 (GM): the heading names the action, then the reason.
+    // error-copy (design): the heading names the action, then the reason.
     await waitFor(() => expect(notices).toHaveBeenCalledWith('Nebula couldn’t clear the canvas. Provider is still settling.'));
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
@@ -343,7 +343,7 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.graph!.getState().nodes).toHaveLength(1);
   });
 
-  it('round 11 (GM): a clear refused while a run is going reads GM\'s line, word for word', async () => {
+  it('a clear refused while a run is going reads design\'s line, word for word', async () => {
     // The backend's person line (main.CLEAR_DURING_RUN_PERSON) under the
     // canvas's heading; agents keep "Cannot clear the canvas while a run is active. ...".
     mocks.fetch.mockResolvedValue({ ok: false, status: 409,
@@ -355,7 +355,7 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.clear).not.toHaveBeenCalled();
   });
 
-  it('error-copy round 2: a refused clear with no reason says GM\'s line, never the status', async () => {
+  it('error-copy: a refused clear with no reason says design\'s line, never the status', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({}) });
     render(<Toolbar />);
@@ -386,7 +386,7 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.fit).not.toHaveBeenCalled();
   });
 
-  describe('a CLI canvas past Save\'s limits (review 6 of PR #205, GM r13 item 2)', () => {
+  describe('a CLI canvas past Save\'s limits (PR #205)', () => {
     const deep = (levels: number): unknown => (levels === 0 ? 'leaf' : { next: deep(levels - 1) });
     const cliNode = (value: unknown) => ({ id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
       data: { label: 'Brief', definitionId: 'text-input', params: { value }, state: 'idle' } });
@@ -402,7 +402,7 @@ describe('Canvas toolbar hierarchy', () => {
       window.removeEventListener(CANVAS_NOTICE_EVENT, listener);
       return said;
     };
-    it('a value nested past Save\'s depth: GM\'s line under the import heading, and nothing comes in', async () => {
+    it('a value nested past Save\'s depth: design\'s line under the import heading, and nothing comes in', async () => {
       // A param's value sits 5 deep: 59 more is Save's edge, 60 past it.
       expect(await importWith([cliNode(deep(60))])).toEqual(['Nebula couldn’t import the CLI canvas because this canvas is too complex to open.']);
       expect(mocks.load).not.toHaveBeenCalled();
@@ -412,7 +412,7 @@ describe('Canvas toolbar hierarchy', () => {
       expect(await importWith([cliNode(deep(59))])).toEqual([]);
       expect(mocks.load).toHaveBeenCalledTimes(1);
     });
-    // Review 7 of PR #205 (limits MEDIUM-3): counted as Save's file counts it
+    // PR #205: counted as Save's file counts it
     // (its root fields, viewport and every node's outputs key), not just
     // {nodes, edges}, which counts fewer.
     const fileCount = (length: number) => measureShape({ ...serializeGraph([cliNode(Array.from({ length }, () => 0)) as never], [],
@@ -429,12 +429,12 @@ describe('Canvas toolbar hierarchy', () => {
       expect(await importWith([cliNode(Array.from({ length: atSaveEdge }, () => 0))])).toEqual([]);
       expect(mocks.load).toHaveBeenCalledTimes(1);
     });
-    it('a value Nebula can\'t read: GM\'s value line', async () => {
+    it('a value Nebula can\'t read: design\'s value line', async () => {
       expect(await importWith([cliNode(Number.NaN)])).toEqual(['Nebula couldn’t import the CLI canvas because part of this canvas holds a value Nebula can’t read.']);
       expect(mocks.load).not.toHaveBeenCalled();
     });
 
-    it('a CLI canvas with too many nodes or connections is one whole line (GM PR #205 r12 item 1)', async () => {
+    it('a CLI canvas with too many nodes or connections is one whole line (design, PR #205)', async () => {
       const nodes = new Array(10_001).fill(0).map((_, i) => cliNode(i));
       expect(await importWith(nodes)).toEqual(['Nebula couldn’t import the CLI canvas because it has more than 10,000 nodes, the most Nebula opens.']);
     });
@@ -495,7 +495,7 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.fit).not.toHaveBeenCalled();
   });
 
-  // Error copy round 3e (GM): "Nebula couldn’t import the CLI canvas." then the
+  // Error copy (design): "Nebula couldn’t import the CLI canvas." then the
   // reason; it said "Could not fetch CLI graph — is the backend running?".
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch')), 'the server isn’t answering. Check that Nebula is running, then try again.'],
@@ -508,7 +508,7 @@ describe('Canvas toolbar hierarchy', () => {
     await waitFor(() => expect(notices).toHaveBeenCalledWith(`Nebula couldn’t import the CLI canvas because ${reason}`));
   });
 
-  it('an empty CLI canvas says so in the canvas words (GM PR #205 r6 item 5)', async () => {
+  it('an empty CLI canvas says so in the canvas words (design, PR #205)', async () => {
     mocks.cli.mockResolvedValue({ empty: true, nodes: [], edges: [] });
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Import CLI canvas' }));
@@ -533,7 +533,7 @@ describe('Canvas toolbar hierarchy', () => {
     }
   });
 
-  // Round 15 of PR #114 (GM): offline is read-only and looks it. The bottom
+  // PR #114 (design): offline is read-only and looks it. The bottom
   // Run is disabled (nothing queues, no Stop starts); Load graph, Import CLI,
   // Clear and Arrange are disabled with the offline mark; Save graph (a
   // download), zoom and Reset panels stay.

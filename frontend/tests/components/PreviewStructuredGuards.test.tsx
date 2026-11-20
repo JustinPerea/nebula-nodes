@@ -235,7 +235,7 @@ describe('Inspector last output', () => {
     for (const img of thumbs) expect(img).not.toHaveAttribute('loading', 'lazy');
   });
 
-  // Q98: a Moodboard node run before board images were checked could save an
+  // A Moodboard node run before board images were checked could save an
   // old board's outside link in `representative_images`. Opening that
   // project never loads it: the Last output shows the placeholder instead.
   it('never loads an outside link a Moodboard node saved in its representative images', () => {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * GM - Design, round 12 addendum (b): Topaz Standard with no model chosen
+ * Design: Topaz Standard with no model chosen
  * can't run (Krea requires the model; the gateway refuses it). "If Nebula
  * can tell the run will be refused before the box opens, skip the box and
  * show the refusal straight away. Don't ask someone to approve a run that
@@ -28,8 +28,8 @@ import { useUIStore } from '../src/store/uiStore';
 import * as api from '../src/lib/api';
 
 const TOPAZ = 'krea-enhance-topaz-standard-enhance';
-const GM = 'Nothing ran. Choose a model for “Clean plate” first.';
-/** Round 13 (GM: only the first missing field, in the card's order): Topaz
+const MODEL_NOT_CHOSEN_LINE = 'Nothing ran. Choose a model for “Clean plate” first.';
+/** Design: only the first missing field, in the card's order. Topaz
  * Standard's Width and Height come before its Model, so they are set. */
 const SIZE = { width: 2048, height: 2048 };
 const initialCache = useUIStore.getState().settingsCache;
@@ -48,7 +48,7 @@ function setCanvas(topaz: ReturnType<typeof node>) {
     providerRecoveries: [], providerStartAmbiguities: [], undoNotice: null, messageNotice: null } as never);
 }
 
-describe('a run with no model chosen is refused before any dialog (round 12 addendum b)', () => {
+describe('a run with no model chosen is refused before any dialog', () => {
   let started: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
@@ -72,13 +72,13 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
     vi.restoreAllMocks();
   });
 
-  it("an agent's paid placeholder: no dialog opens, GM's refusal shows, nothing is sent", async () => {
+  it("an agent's paid placeholder: no dialog opens, design's refusal shows, nothing is sent", async () => {
     setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE }, { pending: codex }));
     await useGraphStore.getState().executeNode('n2');
     expect(askMock).not.toHaveBeenCalled();
     expect(window.confirm).not.toHaveBeenCalled();
     expect(started).not.toHaveBeenCalled();
-    expect(notice()).toBe(GM);
+    expect(notice()).toBe(MODEL_NOT_CHOSEN_LINE);
   });
 
   it.each([
@@ -92,7 +92,7 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
     await run();
     expect(window.confirm).not.toHaveBeenCalled();
     expect(started).not.toHaveBeenCalled();
-    expect(notice()).toBe(GM);
+    expect(notice()).toBe(MODEL_NOT_CHOSEN_LINE);
   });
 
   it('a replay from Run history: the saved node with no model is refused too', async () => {
@@ -104,11 +104,11 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
         nodeIds: ['n1', 'n2'] }] as never, undoNotice: null, messageNotice: null });
       await useGraphStore.getState().rerunHistoryRecord('r1');
       expect(started).not.toHaveBeenCalled();
-      expect(notice()).toBe(GM);
+      expect(notice()).toBe(MODEL_NOT_CHOSEN_LINE);
     }
   });
 
-  it('(control) a chosen model runs; a placeholder a whole-canvas run skips is not refused', async () => {
+  it('control: a chosen model runs; a placeholder a whole-canvas run skips is not refused', async () => {
     setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE, model: 'CGI' }));
     await useGraphStore.getState().executeNode('n2');
     expect(started).toHaveBeenCalled();
@@ -116,6 +116,6 @@ describe('a run with no model chosen is refused before any dialog (round 12 adde
     useGraphStore.getState().resetExecution();
     setCanvas(node('n2', 'Clean plate', TOPAZ, { ...SIZE }, { pending: codex }));
     await useGraphStore.getState().executeGraph();
-    expect(notice()).not.toBe(GM);
+    expect(notice()).not.toBe(MODEL_NOT_CHOSEN_LINE);
   });
 });

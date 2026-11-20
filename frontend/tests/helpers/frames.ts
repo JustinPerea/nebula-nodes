@@ -1,7 +1,7 @@
 import { act } from '@testing-library/react';
 import { vi } from 'vitest';
 
-/** A manual animation-frame queue (review 21 LOW-1 on PR #199): a live
+/** A manual animation-frame queue (on PR #199): a live
  * region's text arrives from the second frame after its commit
  * (lib/useAnnounced), so a test says when frames happen. `install()` before
  * the render; `flush(n)` runs n frames, each inside act; `pending()` counts

@@ -1,16 +1,16 @@
 /**
- * Round 18 of PR #199, the store's side, on keptCanvas.fix17.store's harness:
- * - review 16 HIGH-1: an agent that reopens the project this tab shows gave
+ * PR #199, the store's side, on keptCanvas.fix17.store's harness:
+ * - An agent that reopens the project this tab shows gave
  *   its duplicated node Nebula's id; the handoff the tab sends speaks of it
  *   by that id (never the old one, which Nebula would add back beside it);
- * - GM r26, 3: a connection the canvas refused at the drop says why, on
+ * - Design: a connection the canvas refused at the drop says why, on
  *   kept and normal tabs alike (the store's sayRefusedConnection, which
  *   Canvas.onConnectEnd calls for a drop isValidConnection refused);
- * - review 16 kept-ui LOW-1: after a scene edit, a Cinema node's Character
+ * - After a scene edit, a Cinema node's Character
  *   refs keep every connection, on kept and normal tabs;
- * - review 16 kept-ui LOW-3: the reload line names the project a recovered
+ * - The reload line names the project a recovered
  *   copy was made from, never "Recovered Recovered …";
- * - review 16 MEDIUM-1: the first sync after a boot that renumbered the
+ * - The first sync after a boot that renumbered the
  *   open project's tab-local nodes is Nebula's own reopen of it (actor
  *   system): the tab follows it as an agent's reopen, so its run history
  *   takes the new id and its next autosave can't write the old one back,
@@ -183,7 +183,7 @@ const noticeText = () => {
 };
 
 
-describe('review 16 HIGH-1: an agent reopens the project this tab shows', () => {
+describe('an agent reopens the project this tab shows', () => {
   it('the handoff carries the duplicate under the id the open gave it, with the latest typing', async () => {
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: true })) }));
     useGraphStore.getState().duplicateSelected();
@@ -223,16 +223,16 @@ describe('review 16 HIGH-1: an agent reopens the project this tab shows', () => 
   });
 });
 
-describe('GM r26, 3: a refused drop says why, on kept and normal tabs alike', () => {
+describe('a refused drop says why, on kept and normal tabs alike', () => {
   const seedream = () => canvasNode('s1', 'seedream-4-5', 400);
-  it('a normal tab: the wrong kind, in GM’s words, masks named', () => {
+  it('a normal tab: the wrong kind, in design’s words, masks named', () => {
     useGraphStore.setState((state) => ({ nodes: [...state.nodes, seedream()] }));
     useGraphStore.getState().sayRefusedConnection({ source: 'n1', sourceHandle: 'text', target: 's1', targetHandle: 'images' });
     expect(noticeText()).toBe('Nebula couldn’t connect to “References”. It takes images and masks, not text.');
     expect(graphWrites.sent).toEqual([]);
   });
 
-  it('a normal tab: a loop says GM’s loop line', () => {
+  it('a normal tab: a loop says design’s loop line', () => {
     useGraphStore.setState((state) => ({ nodes: [...state.nodes, canvasNode('a', 'seedream-4-5', 400), canvasNode('b', 'seedream-4-5', 800)],
       edges: [{ id: 'e1', source: 'a', sourceHandle: 'image', target: 'b', targetHandle: 'images' }] }));
     useGraphStore.getState().sayRefusedConnection({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' });
@@ -255,7 +255,7 @@ describe('GM r26, 3: a refused drop says why, on kept and normal tabs alike', ()
   });
 });
 
-describe('review 16 kept-ui LOW-1: a Cinema scene’s Character refs keep every connection after a scene edit', () => {
+describe('a Cinema scene’s Character refs keep every connection after a scene edit', () => {
   const cinemaWithShot = () => {
     useGraphStore.setState((state) => ({ nodes: [...state.nodes, canvasNode('cin', 'cinema-scene', 400),
       canvasNode('i1', 'image-input', 0), canvasNode('i2', 'image-input', 0)] }));
@@ -285,7 +285,7 @@ describe('review 16 kept-ui LOW-1: a Cinema scene’s Character refs keep every 
   });
 });
 
-describe('review 16 MEDIUM-1: Nebula’s reopen after a boot renumbering', () => {
+describe('Nebula’s reopen after a boot renumbering', () => {
   it('the tab follows it: run history takes the new id, nothing names an agent, no toast', async () => {
     useGraphStore.setState((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: true })) }));
     useGraphStore.getState().duplicateSelected();
@@ -313,7 +313,7 @@ describe('review 16 MEDIUM-1: Nebula’s reopen after a boot renumbering', () =>
       nodes: [{ ...n1, selected: false }, { ...local, id: 'n2', selected: false }], edges: [] });
     await vi.waitFor(() => expect(useProjectStore.getState().busy).toBe(false));
     await vi.waitFor(() => expect(followingSwitch()).toBeNull());
-    // The handoff went under the new id (the tab's end of HIGH-1).
+    // The handoff went under the new id (the tab's end).
     const handoff = vi.mocked(projects.saveProject).mock.calls.at(-1)!;
     expect(handoff[0]).toBe('alpha');
     expect(JSON.stringify(handoff[1])).not.toContain(local.id);

@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Round 14 (review 13, L-5): the model picker's answer says which failure it
+ * The model picker's answer says which failure it
  * was. "Couldn't load the model settings for “X”." only when reading the
  * provider's settings failed; a missing key names the key to add, after
- * GM's "Couldn't set up “X”."; a malformed id is "Couldn't set up “X”.".
+ * Design's "Couldn't set up “X”."; a malformed id is "Couldn't set up “X”.".
  *
- * (Round 13's header, kept below for the shared mocks:) Review 12, L-4, with GM - Design's round-13 lines (verbatim). A cancelled
+ * (failureLines.round13.test.ts's header, kept below for the shared mocks:) Design's lines, verbatim. A cancelled
  * step's held Cmd+Z goes to nothing, and the failure that cancelled it says
  * why. Three failures used to say nothing at all:
  * - chat /clear: "Couldn't clear the canvas. Nothing was removed." when the
@@ -54,7 +54,7 @@ function writer(id: string, definitionId: string, params: Record<string, unknown
     data: { label: 'Writer', definitionId, params, state: 'idle', outputs: {} } };
 }
 
-describe('the model picker names the failure (L-5)', () => {
+describe('the model picker names the failure', () => {
   beforeEach(() => {
     net.calls.length = 0;
     net.reply = null;
@@ -65,7 +65,7 @@ describe('the model picker names the failure (L-5)', () => {
   const cases = [
     ['OpenRouter', 'openrouter-universal', { model: 'openai/gpt-4o-mini' }, 'OpenRouter API key',
       (id: string) => store().configureOpenRouterModel(id, 'anthropic/claude-x')],
-    // GM - Design, round 15, item 1, then PR #203 r26 item 5: "Replicate token".
+    // Design (PR #203): "Replicate token".
     ['Replicate', 'replicate-universal', { model_id: 'owner/old' }, 'Replicate token',
       (id: string) => store().fetchReplicateSchemaAndConfigure(id, 'owner', 'new')],
   ] as const;
@@ -91,8 +91,8 @@ describe('the model picker names the failure (L-5)', () => {
           ? json(400, { detail: 'A Replicate model_id is owner/name.' }) : json(200, {});
         await configure(id);
         await settle();
-        // Round 21 (the #114 merge): #114's GM line for a failed model change
-        // (channel round 14) where neither of #195's two lines applies.
+        // After the #114 merge: #114's design line for a failed model change
+        // (channel) where neither of #195's two lines applies.
         expect(shown().join('\n')).toContain("Nebula couldn’t change the model for “Writer”.");
       });
       it(`${name} (${id}): a failed read: "Couldn't load the model settings"`, async () => {

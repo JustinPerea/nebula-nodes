@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * GM, PR #203 r15 item 2, through the store: the person's run over an
+ * PR #203, through the store (design's ruling): the person's run over an
  * agent's Idol placeholder reads the keys this tab loaded. With no token Idol
  * is free and the run goes ahead without the placeholder dialog; with one it
  * may cost, so the dialog asks first (graphStore directRunConfirm passes the

@@ -1,6 +1,6 @@
 /**
- * PR #199 round 27 check: with the real NoticeRegion, a Delete that makes no room keeps the chooser open and
- * its Undo toast stays outside every inert or aria-hidden subtree, so the person can press Undo (the round 26
+ * PR #199 check: with the real NoticeRegion, a Delete that makes no room keeps the chooser open and
+ * its Undo toast stays outside every inert or aria-hidden subtree, so the person can press Undo (the earlier
  * test reads the toast with `hidden: true`, which would pass even if it were inert). Also: a chooser failure
  * is cleared when the chooser closes, so no stale line waits for Projects home.
  */

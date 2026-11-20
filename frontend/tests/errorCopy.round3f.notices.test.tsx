@@ -1,9 +1,9 @@
 /**
- * Error copy round 3f, alerts and confirms (GM - Design, "my call"):
+ * Error copy, alerts and confirms (design, "my call"):
  * "Every error alert becomes a canvas notice (non-blocking, dismissable),
  * using the words you listed. A native alert stops the whole canvas over
  * something that needs no answer." The size and "saved without" alerts become
- * notices with GM's words. (The delete confirm this round kept is gone since
+ * notices with design's words. (The delete confirm that stayed is gone since
  * undo puts back everything a delete removed: tests/undoRestoresDeletes.test.tsx.)
  *
  * The notice is the canvas's own (CanvasUndoNotice, the graph store's
@@ -60,7 +60,7 @@ describe('a canvas notice for an error', () => {
   });
 });
 
-describe('GM\'s size and "saved without" lines', () => {
+describe('the size and "saved without" notice lines', () => {
   it('names the graph\'s size and what Nebula opens', () => {
     expect(graphSizeLine(300 * 1024 * 1024, 250 * 1024 * 1024)).toBe('This canvas is 300 MB. Nebula opens canvases up to 250 MB.');
   });
@@ -71,6 +71,6 @@ describe('GM\'s size and "saved without" lines', () => {
   });
 });
 
-// The delete confirm round 3f kept is gone: undo now puts back everything a
+// The delete confirm that stayed is gone: undo now puts back everything a
 // delete removed, and every delete path says "Deleted the node." with Undo
-// (GM, 2026-10-23; tests/undoRestoresDeletes.test.tsx).
+// (design, 2026-10-23; tests/undoRestoresDeletes.test.tsx).

@@ -5,7 +5,7 @@ import { houseDots } from '../helpers/houseDots';
 import { useUIStore } from '../../src/store/uiStore';
 
 /**
- * GM - Design, 2026-10-23 (the separate bug in the cover screenshot): "the
+ * Design, 2026-10-23 (the separate bug in the cover screenshot): "the
  * Inspector opened low runs past the bottom edge, so its Run / Duplicate /
  * Delete row is cut off and it overlaps the bottom bar. Clamp it so it stays
  * above the bottom bar inside the viewport. When there's no room below the
@@ -116,7 +116,7 @@ afterEach(() => {
 });
 
 describe('the floating Inspector beside a node low on the screen', () => {
-  it('GM\'s setup: shifts up so it ends above the bottom bar, still beside the node', () => {
+  it('the setup from design\'s report: shifts up so it ends above the bottom bar, still beside the node', () => {
     // The cover screenshot: a Text Input at 575-657 x 437-527 at 1280x800.
     openBeside(rect(575, 437, 82, 90));
     expect(panel()).toHaveAttribute('data-placement', 'right');
@@ -249,11 +249,11 @@ describe('the pinned Inspector', () => {
 });
 
 /**
- * GM r111: a port is a drag source and can't sit under the panel. The panel
+ * Design: a port is a drag source and can't sit under the panel. The panel
  * sits 8 px clear of the outer edge of the facing port's dot: right of the
  * node, its output ports; left of it, its input ports. With no port on the
  * facing side the gap stays 10 px from the card. The dot is measured as it is
- * on screen, so the rule holds at every zoom. GM r114: the panel also clears
+ * on screen, so the rule holds at every zoom. Design: the panel also clears
  * the port's 20 px hit target and hover circle by 2 px, whichever stands
  * farthest.
  *
@@ -261,7 +261,7 @@ describe('the pinned Inspector', () => {
  * width), centred 14 px out from the card's edge, its 9 px dot drawn 4 px
  * toward the card; so at zoom z the dot's outer edge is 14.5 z px out.
  */
-describe('the gap to the facing port (GM r111)', () => {
+describe('the gap to the facing port', () => {
   let flowNode: HTMLElement | null = null;
 
   afterEach(() => {
@@ -302,7 +302,7 @@ describe('the gap to the facing port (GM r111)', () => {
   }
 
   /**
-   * GM r114: from a port's centre, the panel stands at the farthest of the
+   * Design: from a port's centre, the panel stands at the farthest of the
    * dot's outer edge + 8 (the 9 px dot drawn 4 px toward the card), the hit
    * target's edge + 2 and the hover circle's edge + 2 (both 20 px). Past
    * about 100 % the target governs.
@@ -328,7 +328,7 @@ describe('the gap to the facing port (GM r111)', () => {
   }
 
   /**
-   * GM r114 (review 5 MEDIUM-1): at 100, 200 and 400 % the panel never
+   * Design: at 100, 200 and 400 % the panel never
    * overlaps the facing port's handle box (its hit target) or its hover
    * circle, which reach 10 x zoom from the centre; measured from the real
    * boxes the page gives, not from the rule's constants.

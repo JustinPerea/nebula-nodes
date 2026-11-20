@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 
 /**
- * GM r23 on #208 (the house form, as #204's close lines): a line shown with
+ * Design on #208 (the house form, as #204's close lines): a line shown with
  * a [Try again] button ends in "Try again.", which says what the button
  * beside it does. One shared assert, for any PR's ratchet row.
  */

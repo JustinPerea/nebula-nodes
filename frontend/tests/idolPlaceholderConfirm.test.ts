@@ -1,5 +1,5 @@
 /**
- * GM, PR #203 r15 item 2 (verbatim): "Running over the placeholder: yes.
+ * Design, PR #203 (verbatim): "Running over the placeholder: yes.
  * With no token, Idol is free and adds no paid confirm on its own. With a
  * token, it's "may cost" and still asks. Idol's cost class should come from
  * one function" (directRoute keyBilling; backend node_route.key_billing,
@@ -62,7 +62,7 @@ describe('the person\'s run over an Idol placeholder', () => {
   });
 });
 
-describe('the Run description puts Idol\'s sentence after the estimate (review 7, NIT-4)', () => {
+describe('the Run description puts Idol\'s sentence after the estimate', () => {
   it('paid nodes, the estimate, then Idol', () => {
     const placed = canvas(true);
     // Not placeholders here: a graph run skips those.

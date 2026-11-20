@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * Review 14, M-B (probes D1-D5), round 15: never ask the person to approve a
- * run that can't go out (GM - Design). Before deciding, the canvas makes sure
+ * Never ask the person to approve a
+ * run that can't go out (design). Before deciding, the canvas makes sure
  * it knows what the refusal reads: the keys (settings) and, for a run on the
  * Krea plan, the plan's sign-in, loading them when not loaded (a bounded
  * wait). Only when they still can't be known does it leave the refusal to the
@@ -49,7 +49,7 @@ function setCanvas(target: ReturnType<typeof node>) {
 const wireStyle = () => useGraphStore.setState((s) => ({ edges: [...s.edges,
   { id: 'e2', source: 'n3', target: 'n2', sourceHandle: 'image', targetHandle: 'style_images' }] }) as never);
 
-describe('review 14, M-B: the refusal is checked on what is known, and again on yes', () => {
+describe('the refusal is checked on what is known, and again on yes', () => {
   let started: ReturnType<typeof vi.fn>;
   const initialCache = useUIStore.getState().settingsCache;
   const initialThreshold = useUIStore.getState().runCostConfirmUsd;
@@ -74,8 +74,8 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
     vi.restoreAllMocks();
   });
 
-  describe('(1) the inputs are made known before deciding', () => {
-    it('D1: settings not loaded: they are loaded first, and the refusal shows with no dialog', async () => {
+  describe('the inputs are made known before deciding', () => {
+    it('settings not loaded: they are loaded first, and the refusal shows with no dialog', async () => {
       useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false }, runCostConfirmUsd: 0 } as never);
       apiFetchMock.mockImplementation(async (path: string) => {
         if (path === '/api/settings') return json({ apiKeys: { KREA_API_TOKEN: '••••' } });
@@ -90,7 +90,7 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
       expect(useUIStore.getState().settingsCache.loaded).toBe(true);
     });
 
-    it('D1 control: the settings still can\'t be read: the dialog asks as before and the backend refuses', async () => {
+    it('control: the settings still can\'t be read: the dialog asks as before and the backend refuses', async () => {
       useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false }, runCostConfirmUsd: 0 } as never);
       setCanvas(node('n2', 'Hero', KREA2, {}, { pending: codex }));
       askMock.mockImplementation(async (model: unknown) => model);
@@ -104,7 +104,7 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
       ["an accepted proposal's run", () => useGraphStore.getState().executeNode('n2', { approvalId: 'ap1' })],
       ['Run selected', () => useGraphStore.getState().executeCluster(['n1', 'n2'])],
       ["Creator Studio's run", () => useGraphStore.getState().executeClusterConcurrent(['n1', 'n2'])],
-    ] as const)('D1 on %s: settings loaded first, refused, nothing asked or sent', async (_name, run) => {
+    ] as const)('%s: settings loaded first, refused, nothing asked or sent', async (_name, run) => {
       useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: false }, runCostConfirmUsd: 0 } as never);
       apiFetchMock.mockImplementation(async (path: string) => {
         if (path === '/api/settings') return json({ apiKeys: { KREA_API_TOKEN: '••••' } });
@@ -117,7 +117,7 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
       expect(notice()).toBe('Nothing ran. Choose an aspect ratio for “Hero” first.');
     });
 
-    it('D2: the Krea plan\'s sign-in not known yet: it is read first, and the refusal shows with no dialog', async () => {
+    it('the Krea plan\'s sign-in not known yet: it is read first, and the refusal shows with no dialog', async () => {
       useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true }, runCostConfirmUsd: 0 } as never);
       apiFetchMock.mockImplementation(async (path: string) => {
         if (path === '/api/krea/connection') return json({ status: 'connected' });
@@ -132,7 +132,7 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
       expect(useUIStore.getState().settingsCache.kreaConnection?.status).toBe('connected');
     });
 
-    it('D2 control: read as not signed in: no field line (the sign-in line is the backend\'s)', async () => {
+    it('control: read as not signed in: no field line (the sign-in line is the backend\'s)', async () => {
       useUIStore.setState({ settingsCache: { apiKeys: {}, loaded: true }, runCostConfirmUsd: 0 } as never);
       apiFetchMock.mockImplementation(async (path: string) => {
         if (path === '/api/krea/connection') return json({ status: 'disconnected' });
@@ -153,8 +153,8 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
     });
   });
 
-  describe('(2) on yes the refusal is checked again, and a changed route asks again', () => {
-    it('D3: Codex wires Style images while the dialog is open (the run moves to Krea): the refusal, nothing sent', async () => {
+  describe('on yes the refusal is checked again, and a changed route asks again', () => {
+    it('Codex wires Style images while the dialog is open (the run moves to Krea): the refusal, nothing sent', async () => {
       useUIStore.setState({ settingsCache: { apiKeys: { XAI_API_KEY: 'x', KREA_API_TOKEN: 'k' }, loaded: true }, runCostConfirmUsd: 0 } as never);
       setCanvas(node('n2', 'Alt still', GROK, {}, { pending: codex }));
       askMock.mockImplementationOnce(async (model: unknown) => { wireStyle(); return model; });
@@ -164,7 +164,7 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
       expect(notice()).toBe('Nothing ran. Choose an aspect ratio for “Alt still” first.');
     });
 
-    it('D4: the OpenAI key is removed while the dialog is open (Krea token left): the refusal, nothing sent', async () => {
+    it('the OpenAI key is removed while the dialog is open (Krea token left): the refusal, nothing sent', async () => {
       useUIStore.setState({ settingsCache: { apiKeys: { OPENAI_API_KEY: 'o', KREA_API_TOKEN: 'k' }, loaded: true }, runCostConfirmUsd: 0 } as never);
       setCanvas(node('n2', 'Hero still', FLARE, {}, { pending: codex }));
       askMock.mockImplementationOnce(async (model: unknown) => { useUIStore.getState().setSettingsCache({ KREA_API_TOKEN: 'k' }); return model; });
@@ -174,7 +174,7 @@ describe('review 14, M-B: the refusal is checked on what is known, and again on 
       expect(notice()).toBe('Nothing ran. Choose an aspect ratio for “Hero still” first.');
     });
 
-    it('D5 control: refused before the dialog when the state is known', async () => {
+    it('control: refused before the dialog when the state is known', async () => {
       useUIStore.setState({ settingsCache: { apiKeys: { KREA_API_TOKEN: 'k' }, loaded: true }, runCostConfirmUsd: 0 } as never);
       setCanvas(node('n2', 'Hero still', FLARE, {}, { pending: codex }));
       await useGraphStore.getState().executeNode('n2');

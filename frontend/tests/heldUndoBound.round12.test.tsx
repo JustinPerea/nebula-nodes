@@ -3,11 +3,10 @@ import { act } from '@testing-library/react';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// Review 11, M-1, L-2, L-3, L-4 and L-6 (probes H1-H13 and the live S1).
 // A Cmd+Z pressed while a step's request is on its way is bound to that
 // step. When the step settles it undoes that step (or a delete's re-pushed
 // successor of it), never whatever else landed on top meanwhile: then it is
-// dropped, and GM - Design's notice says so (round 12, addendum a). A clear
+// dropped, and design's notice says so. A clear
 // changes only the nodes it sent, never ones that arrived after it. An upload
 // settles only once its node is on the canvas. The 15 s limit drops a held
 // press, never applies it late. A project switch drops the old project's
@@ -61,9 +60,9 @@ const graph = () => ({
 });
 const valueOf = (id: string) => store().nodes.find((node) => node.id === id)?.data.params.value;
 const stacks = () => ({ undo: store().undoStack.length, redo: store().redoStack.length });
-/** Whether GM's dropped-undo line shows, in either notice place. */
+/** Whether design's dropped-undo line shows, in either notice place. */
 const dropped = () => store().undoNotice?.text === DROPPED_UNDO_TEXT || store().messageNotice?.text === DROPPED_UNDO_TEXT;
-/** GM r40 item 2: a held Undo's give-up line, in either notice place; with a name, that line exactly. */
+/** Design: a held Undo's give-up line, in either notice place; with a name, that line exactly. */
 const broughtBack = (name?: string) => [store().undoNotice?.text, store().messageNotice?.text].some((text) => (name
   ? text === `Nebula couldn\u2019t bring back \u201c${name}\u201d. Try Undo again.` : Boolean(text?.startsWith('Nebula couldn\u2019t bring back'))));
 // delete-landed-wait: off, the fake holds each DELETE until the test answers it by hand (or answers at once when not
@@ -95,7 +94,7 @@ const agentSync = (nodes: Node<NodeData>[], edges: Edge[] = []) => emit({ nodes,
 /** Another project opened. */
 const projectSwitch = (nodes: Node<NodeData>[]) => emit({ nodes, empty: nodes.length === 0, graphReplaced: true });
 
-describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)', () => {
+describe('a held Cmd+Z is bound to the step it was pressed for', () => {
   beforeEach(() => {
     net.calls.length = 0;
     net.held.clear();
@@ -110,26 +109,26 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
   const setGraph = (nodes: Node<NodeData>[], edges: Edge[] = []) => useGraphStore.setState({ nodes, edges, isExecuting: false,
     undoStack: [], redoStack: [], undoNotice: null, messageNotice: null, providerRecoveries: [], providerStartAmbiguities: [] } as never);
 
-  it("GM's words, verbatim (round 12, addendum a)", () => {
+  it("the dropped-undo notice, verbatim", () => {
     expect(DROPPED_UNDO_TEXT).toBe('Nothing was undone. Your last change was still saving.');
   });
 
-  it('H1 (control) a delete whose answer lands after an agent edit: the held press waits silently, then is dropped under the newer edit; then Codex\'s edit, then the delete, are undone in turn', async () => {
+  it('control: a delete whose answer lands after an agent edit: the held press waits silently, then is dropped under the newer edit; then Codex\'s edit, then the delete, are undone in turn', async () => {
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); });
     await settle();
-    // Round 18 (GM option (c)): the node and its wire leave the canvas at once.
+    // Design: the node and its wire leave the canvas at once.
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     await undo();
-    // GM r39 item 3: the press waits, silently, and changes nothing yet.
+    // Design: the press waits, silently, and changes nothing yet.
     expect(dropped()).toBe(false);
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     agentSync([textNode('n1'), textNode('n2'), textNode('n3')], [wire('n1', 'n2')]);
     await answer('n2');
-    // Since r18 the delete's step is placed when Delete is pressed (the node
+    // The delete's step is placed when Delete is pressed (the node
     // leaves then), so Codex's edit is the newer step on top when the answer
-    // lands. The bound-press rule (review 11, M-1) drops the press with GM's
-    // line rather than undo beneath Codex's edit. (Pre-r18 the delete's step
+    // lands. The bound-press rule drops the press with design's
+    // line rather than undo beneath Codex's edit. (Before design's later ruling the delete's step
     // was re-pushed above it at the answer, and the press restored n2.)
     expect(graph()).toEqual({ nodes: ['n1', 'n3'], edges: [] });
     expect(dropped()).toBe(true);
@@ -143,7 +142,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(stacks()).toEqual({ undo: 0, redo: 2 });
   });
 
-  it("H2 an upload: an agent edit lands before the answer, so the press is dropped and Codex's edit stays", async () => {
+  it("an upload: an agent edit lands before the answer, so the press is dropped and Codex's edit stays", async () => {
     setGraph([textNode('n1')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });
@@ -161,7 +160,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(graph().nodes).toEqual(['n1']);
   });
 
-  it('H3 Clear canvas: own echo, then an agent adds a node, then the answer: the agent node stays, the press is dropped', async () => {
+  it('Clear canvas: own echo, then an agent adds a node, then the answer: the agent node stays, the press is dropped', async () => {
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });
@@ -175,7 +174,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(dropped()).toBe(true);
   });
 
-  it('S1 (live) Clear canvas with Codex adding n1 mid-clear: nothing lost, two presses bring the canvas back', async () => {
+  it('live: Clear canvas with Codex adding n1 mid-clear: nothing lost, two presses bring the canvas back', async () => {
     setGraph([textNode('n1', 'Hero prompt'), textNode('n2', 'Second prompt')], [wire('n1', 'n2')]);
     const step = store().beginUndoStep();
     ownSync([]);
@@ -197,7 +196,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(stacks()).toEqual({ undo: 0, redo: 2 });
   });
 
-  it("S1, answer first: the clear's answer before its echo still empties the canvas and is undone by the held press", async () => {
+  it("Clear canvas, answer first: the clear's answer before its echo still empties the canvas and is undone by the held press", async () => {
     setGraph([textNode('n1', 'Hero prompt'), textNode('local', 'Local')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });
@@ -209,19 +208,19 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(dropped()).toBe(false);
   });
 
-  it('H5 the person types after the press, before the delete answers: the held press is dropped under the typing; the typing, then the delete, are undone in turn', async () => {
+  it('the person types after the press, before the delete answers: the held press is dropped under the typing; the typing, then the delete, are undone in turn', async () => {
     setGraph([textNode('n1'), textNode('n2')]);
     act(() => { store().deleteNode('n2'); });
     await settle();
     await undo();
-    // GM r39 item 3: held, silently.
+    // Design: held, silently.
     expect(dropped()).toBe(false);
     expect(graph().nodes).toEqual(['n1']);
     act(() => { store().updateNodeData('n1', { params: { value: 'Typed' } }); });
     await answer('n2');
-    // Since r18 the delete's step is placed at the press, so the typing is the
-    // newer settled step: the press is dropped with GM's line, never applied
-    // beneath it (review 11, M-1). n2 stays deleted, the typing stays.
+    // The delete's step is placed at the press, so the typing is the
+    // newer settled step: the press is dropped with design's line, never applied
+    // beneath it. n2 stays deleted, the typing stays.
     expect(dropped()).toBe(true);
     expect(graph().nodes).toEqual(['n1']);
     expect(valueOf('n1')).toBe('Typed');
@@ -235,7 +234,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(valueOf('n1')).toBe('n1');
   });
 
-  it('H6 a project switch drops the old project\'s press, and a press in the new project never waits for the old delete', async () => {
+  it('a project switch drops the old project\'s press, and a press in the new project never waits for the old delete', async () => {
     setGraph([textNode('n1'), textNode('n2')]);
     act(() => { store().deleteNode('n2'); });
     await settle();
@@ -253,7 +252,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(restores().some((body) => body.nodes.some((node) => node.id === 'n2'))).toBe(false);
   });
 
-  it('H7 (L-2) an upload whose answer lands before its echo: the press waits for the node, then undoes it; Redo puts it back', async () => {
+  it('an upload whose answer lands before its echo: the press waits for the node, then undoes it; Redo puts it back', async () => {
     setGraph([textNode('n1')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });
@@ -271,7 +270,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(restores().at(-1)?.nodes.map((node) => node.id)).toEqual(['n2']);
   });
 
-  it('H8 a model configure: an agent edit lands before the answer, so the press is dropped', async () => {
+  it('a model configure: an agent edit lands before the answer, so the press is dropped', async () => {
     setGraph([textNode('n1')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });
@@ -286,7 +285,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(dropped()).toBe(true);
   });
 
-  it('H9 an accept: own echo, then an agent edit, then the answer: the press is dropped, no stray redo', async () => {
+  it('an accept: own echo, then an agent edit, then the answer: the press is dropped, no stray redo', async () => {
     setGraph([textNode('n1')]);
     const step = store().beginUndoStep();
     act(() => { store().undo(); });
@@ -301,19 +300,19 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(dropped()).toBe(true);
   });
 
-  it('H10 (L-3) the 15 s limit gives the press up; the late answer deletes as usual, and the next press undoes it', async () => {
+  it('the 15 s limit gives the press up; the late answer deletes as usual, and the next press undoes it', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); });
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });
-    // Round 18 (GM option (c)): the node and its wire leave the canvas at once.
+    // Design: the node and its wire leave the canvas at once.
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
     act(() => { store().undo(); });
-    // GM r39 item 3: held, silently, until the limit.
+    // Design: held, silently, until the limit.
     expect(dropped()).toBe(false);
     expect(broughtBack()).toBe(false);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_010); });
-    // GM r40 item 2 (c): the give-up names the node, not DROPPED_UNDO_TEXT.
+    // Design: the give-up names the node, not DROPPED_UNDO_TEXT.
     expect(broughtBack('n2')).toBe(true);
     expect(dropped()).toBe(false);
     expect(graph()).toEqual({ nodes: ['n1'], edges: [] });
@@ -321,7 +320,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     const resolve = net.held.get('n2')!;
     net.held.delete('n2');
     await act(async () => { resolve({ status: 200, body: { status: 'deleted', id: 'n2' } }); await vi.advanceTimersByTimeAsync(50); });
-    // GM r40 item 2: the late answer never restores by itself.
+    // Design: the late answer never restores by itself.
     expect(graph().nodes).toEqual(['n1']);
     expect(stacks()).toEqual({ undo: 1, redo: 0 });
     expect(restores()).toHaveLength(0);
@@ -332,7 +331,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(stacks()).toEqual({ undo: 0, redo: 1 });
   });
 
-  it('H11 (L-3) the echo is in, the limit gives the press up: the canvas and Nebula agree, no restore, no stray redo', async () => {
+  it('the echo is in, the limit gives the press up: the canvas and Nebula agree, no restore, no stray redo', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     setGraph([textNode('n1'), textNode('n2')], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); });
@@ -340,7 +339,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     ownSync([textNode('n1')]);
     act(() => { store().undo(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(15_010); });
-    // GM r40 item 2 (c): the give-up line, read live.
+    // Design: the give-up line, read live.
     expect(broughtBack('n2')).toBe(true);
     expect(graph().nodes).toEqual(['n1']);
     expect(restores()).toHaveLength(0);
@@ -352,7 +351,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(restores()).toHaveLength(0);
   });
 
-  it('H12 (L-3) refused after the limit: the earlier edit stays, no no-op redo', async () => {
+  it('refused after the limit: the earlier edit stays, no no-op redo', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     setGraph([textNode('n1'), textNode('n2')]);
     act(() => { store().updateNodeData('n1', { params: { value: 'Edited' } }); });
@@ -360,7 +359,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });
     act(() => { store().undo(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(15_010); });
-    // GM r40 item 2 (c): the give-up line, read live.
+    // Design: the give-up line, read live.
     expect(broughtBack('n2')).toBe(true);
     expect(valueOf('n1')).toBe('Edited');
     const resolve = net.held.get('n2')!;
@@ -371,7 +370,7 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     expect(stacks()).toEqual({ undo: 1, redo: 0 });
   });
 
-  it('H13 (L-6) chat /clear: a node an agent adds in the gap (ids restart at n1) stays on the canvas', async () => {
+  it('chat /clear: a node an agent adds in the gap (ids restart at n1) stays on the canvas', async () => {
     setGraph([textNode('n1'), textNode('n2'), textNode('local')]);
     const step = store().beginUndoStep();
     ownSync([]);
@@ -399,20 +398,20 @@ describe('a held Cmd+Z is bound to the step it was pressed for (review 11, M-1)'
     await settle();
     ownSync([textNode('n1')]);
     await undo();
-    // GM r39 item 3: held, silently, until the answer.
+    // Design: held, silently, until the answer.
     expect(dropped()).toBe(false);
     expect(graph().nodes).toEqual(['n1']);
     agentSync([textNode('n1'), textNode('n4')]);
     await answer('n2');
     expect(graph().nodes).toEqual(['n1', 'n4']);
     expect(stacks()).toEqual({ undo: 2, redo: 0 });
-    // A newer step (Codex's) landed on top: the press is dropped and says so, as before r18.
+    // A newer step (Codex's) landed on top: the press is dropped and says so, as before design's later ruling.
     expect(dropped()).toBe(true);
     expect(restores()).toHaveLength(0);
   });
 });
 
-describe('every upload step waits for its node (review 11, L-2)', () => {
+describe('every upload step waits for its node', () => {
   it.each([
     ['components/panels/ChatPanel.tsx'],
     ['lib/canvasFileDrop.ts'],

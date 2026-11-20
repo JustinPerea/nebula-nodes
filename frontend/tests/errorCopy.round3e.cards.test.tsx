@@ -1,11 +1,11 @@
 /**
- * Error copy round 3e, item 1 (GM - Design): every card on the canvas says
- * why its node's run failed. Round 3c-2 found nine cards whose state turned
+ * Error copy (design): every card on the canvas says
+ * why its node's run failed. An earlier pass found nine cards whose state turned
  * to error with no line at all (Video Edit, Remotion, Cinema Scene,
  * Character, Camera Rig, Reference Set, Moodboard, Paper source, and the
  * reroute dot). Each now renders the shared NodeError (lib/nodeErrorCopy):
  * "Couldn't run the node." over the person's line, the classifier's line or
- * GM's general line, the raw text behind a closed Details. It clears when the
+ * Design's general line, the raw text behind a closed Details. It clears when the
  * node runs again, and reads the same after a reload (a graph sync carries
  * the same fields).
  *
@@ -37,7 +37,7 @@ import { useUIStore } from '../src/store/uiStore';
 // Cinema scenes on the graph store: reset its per-node state after each test (tests/sceneEditsResetRatchet.test.ts).
 afterEach(() => resetDeletedSceneEditsForTests());
 
-// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// Design: a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
 const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
@@ -99,7 +99,7 @@ describe('every card on the canvas shows its run error', () => {
 
   for (const type of Object.keys(CASES)) {
     describe(type, () => {
-      it("shows GM's general line over a closed Details for raw provider text", () => {
+      it("shows design's general line over a closed Details for raw provider text", () => {
         seed(type, { state: 'error', error: RAW, errorCategory: 'unknown', errorFriendly: RAW.slice(0, 140) });
         const { container } = render(<Card type={type} />);
         expect(reason(container)).toMatch(/^Nebula couldn’t run the node/);
@@ -112,7 +112,7 @@ describe('every card on the canvas shows its run error', () => {
         expect(container.querySelector('.model-node__error-message')?.textContent).not.toContain('req_123');
       });
 
-      // Round 3d: a status-table line keeps the provider's own words behind Details.
+      // A status-table line keeps the provider's own words behind Details.
       it("keeps the provider's words behind Details under a status-table line", () => {
         seed(type, { state: 'error', error: RAW, errorCategory: 'unknown', errorPerson: TABLE_LINE, errorProviderText: true });
         const { container } = render(<Card type={type} />);
@@ -145,7 +145,7 @@ describe('every card on the canvas shows its run error', () => {
   }
 });
 
-/** Round 3e review: a linked Paper source's run error stays through a graph
+/** A linked Paper source's run error stays through a graph
  * sync. The run's closing sync (an agent's run_nodes or `nebula run`) and
  * every later one carry the backend's 'error' (services/node_errors.py);
  * the Paper source merge used to set 'complete' or 'idle' over it. */

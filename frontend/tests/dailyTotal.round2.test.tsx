@@ -4,10 +4,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 /**
- * PR #212 round 2, GM - Design's review (2026-10-31), built verbatim:
+ * Design's review of PR #212 (2026-10-31), built verbatim:
  * the usage line on its own line with the meter right under it in the text
  * column, the new help, and the "Same as chats" select under its help. The
- * waiting band on the node card is in dailyTotal.review1.test.tsx (GM moved
+ * waiting band on the node card is in dailyTotal.review1.test.tsx (design moved
  * the tag inside the card, replacing the overlay).
  */
 
@@ -24,7 +24,7 @@ function rule(file: string, selector: string): string {
 
 afterEach(cleanup);
 
-describe('Settings: the Daily total row, GM round 2', () => {
+describe("Settings: the Daily total row, as design's review words it", () => {
   const row = (spentUsd: number | null, dailyTotalUsd?: number | null) => render(
     <DailyTotalRow limits={{ sessionUsd: null, models: {}, ...(dailyTotalUsd === undefined ? {} : { dailyTotalUsd }) }}
       spentUsd={spentUsd} disabled={false} onChange={() => {}} />);

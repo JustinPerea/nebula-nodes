@@ -1,5 +1,5 @@
 /**
- * Error copy round 3e, item 3 (GM - Design): the Paper source card. It showed
+ * Error copy (design): the Paper source card. It showed
  * a Paper route's detail as is ("Paper CLI unavailable; open Paper Desktop or
  * configure NEBULA_PAPER_CLI", "Paper tool failed") and its own fallbacks
  * started "Could not". Now a route's refusal reads "Couldn't {verb} {object}."
@@ -63,7 +63,7 @@ describe("a Paper route's refusal", () => {
     expect(JSON.stringify(error.detail)).toContain('NEBULA_PAPER_CLI');
   });
 
-  it("an answer with no line reads GM's line for its status, never its body", async () => {
+  it("an answer with no line reads design's line for its status, never its body", async () => {
     vi.mocked(apiFetch).mockResolvedValue(answer(400, { detail: 'Paper tool failed' }));
     const error = await refreshPaperSource('source-a').catch((e: unknown) => e) as Error;
     expect(error.message).toBe("Nebula couldn’t refresh the source because the server didn’t accept it. Try again, or reload if it keeps happening.");
@@ -97,7 +97,7 @@ describe('the Paper source card', () => {
     expect(document.body.textContent).not.toContain('NEBULA_PAPER_CLI');
   });
 
-  it("a record saved before 3e reads GM's general line, its text behind Details", () => {
+  it("a record saved before the line was written reads design's general line, its text behind Details", () => {
     seed({ ...source, state: 'unavailable', lastError: RAW });
     render(<Harness />);
     const alert = screen.getByRole('alert');

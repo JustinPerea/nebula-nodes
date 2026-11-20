@@ -75,7 +75,7 @@ vi.mock('@react-three/fiber', async () => {
     // camera and stage size; without a selector, the state itself.
     // R3F's `get` is one function for the store's life; a new one per call
     // re-ran the scene's load effect on every render, a 'ready' loop that
-    // failed the camera test under load (PR #203 round 3).
+    // failed the camera test under load (PR #203).
     useThree: (selector?: (state: unknown) => unknown) => {
       const state = getThreeState();
       return selector ? selector({ ...state, get: stableGet(state) }) : state;
@@ -91,7 +91,7 @@ vi.mock('@sparkjsdev/spark', async () => {
     sortDirty = true;
     sortTimeoutId = -1;
     disposedWith: { sorting: boolean; sortDirty: boolean; sortTimeoutId: number } | null = null;
-    // What the sort state was when it was disposed (review r4 NIT-3, r5 LOW-1).
+    // What the sort state was when it was disposed.
     dispose = vi.fn(() => {
       this.disposedWith = { sorting: this.sorting, sortDirty: this.sortDirty, sortTimeoutId: this.sortTimeoutId };
     });
@@ -330,7 +330,7 @@ describe('WorldEnvironmentViewer', () => {
     });
 
     await waitFor(() => expect(mesh.dispose).toHaveBeenCalledTimes(2));
-    // Both disposes are the quiet one (PR #203 r2 review, NIT-1).
+    // Both disposes are the quiet one (PR #203).
     expect(vi.mocked(disposeSparkQuietly).mock.calls.filter(([target]) => target === mesh)).toHaveLength(2);
     expect(onStatusChange).not.toHaveBeenCalledWith('ready');
   });
@@ -369,7 +369,7 @@ describe('WorldEnvironmentViewer', () => {
 
     const offset = camera.position.clone();
     const distance = offset.length();
-    // Drawn at the unit radius (review r3 LOW-3): the 0.4 sphere is scaled 2.5x.
+    // Drawn at the unit radius: the 0.4 sphere is scaled 2.5x.
     const scale = (viewerHarness.meshes.at(-1) as Object3D).scale.x;
     expect(scale * 0.4).toBeCloseTo(OBJECT_VIEW_UNIT_RADIUS, 1);
     const radius = 0.4 * scale;
@@ -395,7 +395,7 @@ describe('WorldEnvironmentViewer', () => {
     expect(camera.far).toBeGreaterThanOrEqual(controls.maxDistance + 2 * radius);
   });
 
-  it('opens a 1 mm object at the same share of the stage, zoomable, with clip planes at its scale (review LOW 2)', async () => {
+  it('opens a 1 mm object at the same share of the stage, zoomable, with clip planes at its scale', async () => {
     viewerHarness.renderScene = true;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       getExtension: vi.fn().mockReturnValue(null),
@@ -429,7 +429,7 @@ describe('WorldEnvironmentViewer', () => {
     expect(camera.near).toBeLessThan(distance - radius);
   });
 
-  it('draws a ×20,000 object at the unit radius, so its zoom-out limit stays in range (review r3 LOW-3)', async () => {
+  it('draws a ×20,000 object at the unit radius, so its zoom-out limit stays in range', async () => {
     viewerHarness.renderScene = true;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       getExtension: vi.fn().mockReturnValue(null),
@@ -479,7 +479,7 @@ describe('WorldEnvironmentViewer', () => {
     await waitFor(() => expect(onFailure).toHaveBeenCalledWith('missing'));
     unmount();
 
-    // Any other answer, or a dropped connection, didn't load: worth trying again (GM r3).
+    // Any other answer, or a dropped connection, didn't load: worth trying again (design).
     for (const error of [new RequestFailedError("Couldn't load the world.", 500), new TypeError('Failed to fetch')]) {
       viewerHarness.fetchWorldSplatBytes.mockRejectedValueOnce(error);
       const onLoad = vi.fn();
@@ -500,7 +500,7 @@ describe('WorldEnvironmentViewer', () => {
     await waitFor(() => expect(onOther).toHaveBeenCalledWith('other'));
   });
 
-  it('says no WebGL 2 as its own failure, with nothing on screen when quiet (GM r2, r3)', async () => {
+  it('says no WebGL 2 as its own failure, with nothing on screen when quiet', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const onFailure = vi.fn();
     const { container } = render(
@@ -532,7 +532,7 @@ describe('WorldEnvironmentViewer', () => {
     expect(viewerHarness.fetchWorldSplatBytes.mock.calls.length).toBeGreaterThan(1);
     expect(screen.getByRole('application', { name: 'Idol object, interactive 3D object' })).toBeInTheDocument();
   });
-  it('gives orbit controls made for a new camera the object\'s bounds (review r4 NIT-1)', async () => {
+  it('gives orbit controls made for a new camera the object\'s bounds', async () => {
     viewerHarness.renderScene = true;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       getExtension: vi.fn().mockReturnValue(null),
@@ -564,7 +564,7 @@ describe('WorldEnvironmentViewer', () => {
     expect(next.maxDistance).toBeCloseTo(first.maxDistance, 6);
     expect(next.minDistance).toBeCloseTo(first.minDistance, 6);
   });
-  it('cancels the renderer\'s pending sort before it is disposed (review r4 NIT-3)', () => {
+  it('cancels the renderer\'s pending sort before it is disposed', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       getExtension: vi.fn().mockReturnValue(null),
     } as unknown as WebGL2RenderingContext);
@@ -580,7 +580,7 @@ describe('WorldEnvironmentViewer', () => {
     expect(spark.disposedWith).toEqual({ sorting: false, sortDirty: false, sortTimeoutId: -1 });
   });
 
-  it('waits for a sort already running to settle before the renderer is disposed (review r5 LOW-1)', () => {
+  it('waits for a sort already running to settle before the renderer is disposed', () => {
     vi.useFakeTimers();
     try {
       vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({

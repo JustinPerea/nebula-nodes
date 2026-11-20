@@ -11,11 +11,11 @@ vi.mock('../../src/lib/api', async (importOriginal) => ({
   getSettings: vi.fn().mockResolvedValue({}),
 }));
 
-// Review 8 of PR #205, lines-inspector (probes zzR8li P1-P7): GM r16 item 5
+// PR #205: design
 // says the unpinned Inspector closes only at zero. When the node it shows
-// leaves the canvas and others stay selected, it shows the selection (MEDIUM-1);
+// leaves the canvas and others stay selected, it shows the selection;
 // focus in a card that leaves goes to the canvas whichever node the Inspector
-// shows (LOW-1); and a drag-select ends however the drag ends (NIT-2).
+// shows; and a drag-select ends however the drag ends.
 
 let previousUi: ReturnType<typeof useUIStore.getState>;
 let previousGraph: ReturnType<typeof useGraphStore.getState>;
@@ -57,7 +57,7 @@ const removeFromCanvas = (id: string) => act(() => {
   useGraphStore.setState({ nodes: useGraphStore.getState().nodes.filter((node) => node.id !== id) });
 });
 
-describe('the shown node leaves while others stay selected (MEDIUM-1)', () => {
+describe('the shown node leaves while others stay selected', () => {
   const click = (id: string) => act(() => {
     const others = useGraphStore.getState().nodes.filter((node) => node.selected && node.id !== id).map((node) => node.id);
     useGraphStore.getState().onNodesChange([...others.map((other) => ({ type: 'select' as const, id: other, selected: false })),
@@ -96,7 +96,7 @@ describe('the shown node leaves while others stay selected (MEDIUM-1)', () => {
     expect(view()).toEqual({ pinned, visible: true, open: true, title: id });
   }
 
-  it('P1: the shown node leaves while two others stay selected: open, "2 nodes selected"', () => {
+  it('the shown node leaves while two others stay selected: open, "2 nodes selected"', () => {
     openOn('a');
     shiftClick('b'); shiftClick('c');
     expect([view().title, useUIStore.getState().selectedNodeId]).toEqual(['3 nodes selected', 'c']);
@@ -104,14 +104,14 @@ describe('the shown node leaves while others stay selected (MEDIUM-1)', () => {
     expect(view()).toEqual({ pinned: false, visible: true, open: true, title: '2 nodes selected' });
   });
 
-  it('P3: the shown node leaves while one other stays selected: it shows that one', () => {
+  it('the shown node leaves while one other stays selected: it shows that one', () => {
     openOn('a');
     shiftClick('b');
     removeFromCanvas('b');
     expect(view()).toEqual({ pinned: false, visible: true, open: true, title: 'a' });
   });
 
-  it('control (P2): one of two selected leaves, the shown one stays: it shows the shown one', () => {
+  it('control: one of two selected leaves, the shown one stays: it shows the shown one', () => {
     openOn('a');
     shiftClick('b');
     click('a');
@@ -203,7 +203,7 @@ describe('the shown node leaves while others stay selected (MEDIUM-1)', () => {
   });
 });
 
-describe('focus in a card that leaves goes to the canvas (LOW-1)', () => {
+describe('focus in a card that leaves goes to the canvas', () => {
   // React Flow drops a removed card a frame after the store change: so do these.
   function LaggingCards() {
     const nodes = useGraphStore((state) => state.nodes);
@@ -238,7 +238,7 @@ describe('focus in a card that leaves goes to the canvas (LOW-1)', () => {
 
   for (const pinned of [true, false]) {
     const how = pinned ? 'pinned' : 'unpinned';
-    it(`P6 ${how}: an agent deletes the focused shown card while another stays selected: focus on the canvas`, () => {
+    it(`${how}: an agent deletes the focused shown card while another stays selected: focus on the canvas`, () => {
       setUp(['a', 'b'], 'b', pinned);
       focusCard('b');
       expect(where()).toBe('card b');
@@ -249,7 +249,7 @@ describe('focus in a card that leaves goes to the canvas (LOW-1)', () => {
       expect([document.querySelector('[data-card="b"]'), useUIStore.getState().selectedNodeId, where()]).toEqual([null, 'a', 'canvas']);
     });
 
-    it(`P7 ${how}: an agent deletes a focused card the Inspector doesn't show: focus on the canvas`, () => {
+    it(`${how}: an agent deletes a focused card the Inspector doesn't show: focus on the canvas`, () => {
       setUp(['a', 'b', 'c'], 'b', pinned);
       focusCard('a');
       removeFromCanvas('a');
@@ -284,7 +284,7 @@ describe('focus in a card that leaves goes to the canvas (LOW-1)', () => {
   });
 });
 
-describe('a drag-select ends however the drag ends (NIT-2)', () => {
+describe('a drag-select ends however the drag ends', () => {
   const unpinnedOpenWithNone = () => {
     act(() => {
       useGraphStore.setState({ nodes: [textNode('a', true), textNode('b')] as never, edges: [] });
@@ -334,7 +334,7 @@ describe('a drag-select ends however the drag ends (NIT-2)', () => {
     expect([isCanvasSelectionDragging(), ...inspector()]).toEqual([false, 'b', true]);
   });
 
-  // Coordinator ruling (PR #205 round 10, b): the hold releases on the real pointerup that ends the
+  // Decided (PR #205): the hold releases on the real pointerup that ends the
   // box select, not on Escape, and releases exactly once.
   it('Escape, then the real pointerup: the hold releases on the pointerup, exactly once', async () => {
     const ended = vi.fn();

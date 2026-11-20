@@ -1,13 +1,13 @@
 /**
- * Round 19 of PR #199, the store's side, on keptCanvas.fix18.store's harness:
- * - review 17 drops-locks-ui MEDIUM-2: GM r26 4's stopgap lines say "after
+ * PR #199, the store's side, on keptCanvas.fix18.store's harness:
+ * - Design's stopgap lines say "after
  *   you reopen the project"; Projects → Open of the project already open
  *   sent nothing, so the lock stayed. With a node only this tab has, the
  *   open now goes to Nebula, which gives it its `nN` id, and the lines lift;
- * - GM r28, 1: a drop on a handle of the same kind says GM's line, on kept
+ * - Design: a drop on a handle of the same kind says design's line, on kept
  *   and normal tabs alike, through the store's sayRefusedDrop;
- * - GM r27, 3: Nebula's reopen that can't be followed says what to do;
- * - review 17 drops-locks-ui NIT: a card addDynamicNode shows while Nebula
+ * - Design: Nebula's reopen that can't be followed says what to do;
+ * - A card addDynamicNode shows while Nebula
  *   makes the node isn't a tab-local node (no stopgap line flashes).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -190,7 +190,7 @@ function duplicateN1(): string {
   return local.id;
 }
 
-describe('review 17 drops-locks-ui MEDIUM-2: Projects → Open of the open project gives a duplicate its id', () => {
+describe('Projects → Open of the open project gives a duplicate its id', () => {
   it('the open goes to Nebula after a save, and the duplicate comes back as n2: the stopgap lifts', async () => {
     const local = duplicateN1();
     expect(isTabLocalNode(local)).toBe(true);
@@ -233,9 +233,9 @@ describe('review 17 drops-locks-ui MEDIUM-2: Projects → Open of the open proje
   });
 });
 
-describe('GM r28, 1: a drop on a handle of the same kind', () => {
+describe('a drop on a handle of the same kind', () => {
   const seedreams = () => [canvasNode('s1', 'seedream-4-5', 400), canvasNode('s2', 'seedream-4-5', 800)];
-  it('a normal tab: two outputs, two inputs, GM’s lines; nothing drawn or sent', () => {
+  it('a normal tab: two outputs, two inputs, design’s lines; nothing drawn or sent', () => {
     useGraphStore.setState((state) => ({ nodes: [...state.nodes, ...seedreams()] }));
     expect(useGraphStore.getState().sayRefusedDrop({ nodeId: 's1', handleId: 'image', handleType: 'source' },
       { isValid: false, toHandle: { nodeId: 's2', id: 'image', type: 'source' } })).toBe(true);
@@ -263,7 +263,7 @@ describe('GM r28, 1: a drop on a handle of the same kind', () => {
   });
 });
 
-describe('GM r27, 3: Nebula’s own reopen that the tab can’t follow says what to do', () => {
+describe('Nebula’s own reopen that the tab can’t follow says what to do', () => {
   it('“Nebula opened “P”, but this tab couldn’t follow it.”', async () => {
     vi.mocked(projects.listProjects).mockRejectedValue(new Error('down'));
     const n1 = useGraphStore.getState().nodes.find((node) => node.id === 'n1')!;
@@ -273,7 +273,7 @@ describe('GM r27, 3: Nebula’s own reopen that the tab can’t follow says what
         previousProjectId: 'alpha', previousProjectName: 'Glass campaign', actor: { kind: 'system' }, created: false },
       nodes: [{ ...n1 }], edges: [] });
     await vi.waitFor(() => expect(useProjectStore.getState().error).toBeTruthy());
-    // GM r29, 1 (round 20): on Projects the line ends at the failure, beside [Open “…”]; the tab says “tab”.
+    // Design: on Projects the line ends at the failure, beside [Open “…”]; the tab says “tab”.
     expect(useProjectStore.getState().error).toBe('Nebula opened “Glass campaign”, but this tab couldn’t follow it.');
     expect(followingSwitch()).toBeNull();
   });
@@ -291,7 +291,7 @@ describe('GM r27, 3: Nebula’s own reopen that the tab can’t follow says what
   });
 });
 
-describe('review 17 drops-locks-ui NIT: a dynamic node’s card while Nebula makes it', () => {
+describe('a dynamic node’s card while Nebula makes it', () => {
   it('isn’t a tab-local node, and its nN id replaces it', async () => {
     let answer: (value: Response) => void = () => {};
     graphWrites.answer = (path) => (path === '/api/graph/node'

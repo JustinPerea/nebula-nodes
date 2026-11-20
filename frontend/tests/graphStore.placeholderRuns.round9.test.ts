@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review 8 of the Q133 confirm (Justin, 2026-10-25: a paid placeholder never
+ * A review of the confirm (Justin, 2026-10-25: a paid placeholder never
  * runs without the person's confirmation, and what runs never costs more than
- * they were shown), with GM - Design's ruling on L-b (2026-10-26):
- * - L-a: a node whose model is a free-text param (OpenRouter, Nous Portal…)
+ * they were shown), with design's ruling on the replay (2026-10-26):
+ * - A node whose model is a free-text param (OpenRouter, Nous Portal…)
  *   names the chosen model in its row, so a switch is a changed row: the open
  *   dialog redraws, and after the click it asks again.
- * - L-b: a replay whose placeholder the agent changed after the run was saved
+ * - A replay whose placeholder the agent changed after the run was saved
  *   says the replay uses the saved settings ("Replay the saved version?").
- * - L-d: the wire-sync failure and the held-delete refusal never take an
+ * - The wire-sync failure and the held-delete refusal never take an
  *   agent's Undo away (through notify).
  */
 
@@ -57,7 +57,7 @@ const agentUndo = () => {
 
 const OPENROUTER_EDGES = [{ id: 'e1', source: 'p', target: 'u', sourceHandle: 'image', targetHandle: 'images' }];
 
-describe('review 8', () => {
+describe('the placeholder confirm: a free-text model row, a replay and the Undo notices', () => {
   beforeEach(() => {
     useGraphStore.getState().resetExecution();
     useGraphStore.setState({ nodes: [], edges: [], undoStack: [], redoStack: [], runHistory: [], isExecuting: false, isImportingGraph: false,
@@ -78,7 +78,7 @@ describe('review 8', () => {
     vi.restoreAllMocks();
   });
 
-  describe('L-a: an OpenRouter row names its model', () => {
+  describe('an OpenRouter row names its model', () => {
     beforeEach(() => {
       useGraphStore.setState({ nodes: [node('p', 'nano-banana', {}, {}, 'Still'),
         node('u', 'openrouter-universal', { pending: codex }, { model: 'openai/gpt-4o-mini' }, 'Writer')] as never,
@@ -117,7 +117,7 @@ describe('review 8', () => {
     });
   });
 
-  describe("L-b (GM): a replay where the agent's version isn't what runs", () => {
+  describe("a replay where the agent's version isn't what runs", () => {
     const record = (): RunRecord => ({ id: 'saved', trigger: 'node', status: 'complete', startedAt: 1, targetNodeId: 'b',
       snapshot: { nodes: [
         { id: 'a', definitionId: 'nano-banana', params: { model: 'cheap' }, outputs: {} },
@@ -178,7 +178,7 @@ describe('review 8', () => {
     });
   });
 
-  describe("L-d: the two direct writers never take an agent's Undo away", () => {
+  describe("the two direct writers never take an agent's Undo away", () => {
     it('a refused wire: the line shows beside "Codex changed the canvas", which keeps its Undo', async () => {
       // Canvas ids the backend knows (n1, n2): their wires are sent.
       useGraphStore.setState({ nodes: [node('n1'), node('n2')] as never, edges: [] });
@@ -197,7 +197,7 @@ describe('review 8', () => {
     it('a held delete: the refusal shows beside the Undo too', () => {
       useGraphStore.setState({ nodes: [node('w', 'worldlabs-environment')] as never, edges: [],
         providerRecoveries: [{ runId: 'r', nodeId: 'w', resumeOperationId: 'op', existingWorldId: null }],
-        // Run r is this project's (review 20 of PR #199, LOW-2).
+        // Run r is this project's (PR #199).
         runHistory: [{ id: 'r', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }], } as never);
       agentUndo();
       expect(useGraphStore.getState().allowCanvasDelete(['w'])).toBe(false);

@@ -1,5 +1,5 @@
 /**
- * PR #199 round 25: the kept canvas's [Choose a project to delete] deletes
+ * PR #199: the kept canvas's [Choose a project to delete] deletes
  * with the store's workspace revision. While a canvas is kept its project is
  * gone from the list, so the relist must still refresh that revision (it was
  * left stale: every Delete answered "This project view is out of date", found

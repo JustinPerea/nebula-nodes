@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 
 /**
- * GM - Design, 2026-10-23 ("One more, visible in both shots"): "when the
+ * Design, 2026-10-23 ("One more, visible in both shots"): "when the
  * Inspector is clamped shorter, its body cuts the State value in half above
  * the foot row, so 'idle' is barely visible. Let the body scroll, with a
  * 12-16 px fade at its bottom edge so the cut reads as scrollable instead of
@@ -82,13 +82,13 @@ describe("the clamped Inspector's body", () => {
 });
 
 /**
- * GM r87 (review 2 MEDIUM-1): "A 1 px hairline in the Restraint border token
+ * Design: "A 1 px hairline in the Restraint border token
  * on the top edge of the Run/Duplicate/Delete foot row whenever the body can
  * scroll further down; gone at the end. It comes and goes on an opacity
  * spring, not a timed fade. The fade still works when the cut lands inside a
  * field." When it shows: NodeInspectorContentFit.test.tsx.
  */
-describe("the foot row's hairline (GM r87)", () => {
+describe("the foot row's hairline", () => {
   const restraint = css('slava-restraint.css');
   const bare = restraint.replace(/\/\*[\s\S]*?\*\//g, '');
   const reduced = [...bare.matchAll(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{((?:[^{}]*\{[^}]*\})*)\s*\}/g)].map((m) => m[1]).join('\n');
@@ -97,7 +97,7 @@ describe("the foot row's hairline (GM r87)", () => {
     .map(([, selector, block]) => ({ selectors: selector.split(',').map((one) => one.trim()), block }));
   const FOOT = 'body.app-slava-restraint .node-inspector-popover__foot';
   const HIDDEN = `${FOOT}::before`;
-  // GM r92 Q3, r98: NodeInspectorPopover.tsx decides when it shows (off
+  // Design: NodeInspectorPopover.tsx decides when it shows (off
   // through the open, held through a height spring) and marks the foot with
   // data-more-below; the CSS only draws that state.
   const SHOWN = 'body.app-slava-restraint .node-inspector-popover__foot[data-more-below]::before';
@@ -137,13 +137,13 @@ describe("the foot row's hairline (GM r87)", () => {
     }
   });
 
-  it('draws a held state, never a CSS hide, and shows on the pinned Inspector too (GM r92 Q2, r98)', () => {
+  it('draws a held state, never a CSS hide, and shows on the pinned Inspector too', () => {
     const footRules = rules(bare).filter((rule) => rule.selectors.some((one) => one.includes('node-inspector-popover__foot')));
     expect(footRules.length).toBeGreaterThan(0);
     for (const rule of footRules) {
       // Wherever a body scrolls, the same cue: nothing keeps it off the pinned one.
       expect(rule.selectors.join(','), 'no pinned exception').not.toMatch(/pinned/);
-      // GM r98: the open and a running spring hold its state in the
+      // Design: the open and a running spring hold its state in the
       // component; no rule hides it on the popover's open or spring marks.
       expect(rule.selectors.join(','), 'no hide on the open or the spring').not.toMatch(/data-opening|data-content-resizing|:not\(/);
     }

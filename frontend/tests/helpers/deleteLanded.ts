@@ -9,8 +9,8 @@ interface GraphStoreLike {
  * Waits until the person's delete (deleteNode on a backend node) has had its
  * answer. A fake backend's own "deleted" flag is no such sign: it flips when
  * the DELETE arrives, before the answer. Until the answer, the product drops
- * an Undo ("Nothing was undone. Your last change was still saving.", GM r18
- * option (c)) and holds a sync that brings the node back, so a test that
+ * an Undo ("Nothing was undone. Your last change was still saving.", design)
+ * and holds a sync that brings the node back, so a test that
  * presses Undo (or restores from another window) on the flag, or after a
  * fixed sleep, races the answer. A busy CI runner lost that race:
  * graphStore.fix16 "nothing unsaved" timed out in run 41591009433, attempt 1,
@@ -26,7 +26,7 @@ interface GraphStoreLike {
  * graphStore.fix16 "the delete's hold has ended by the time anything can act
  * on its notice" pins that for the tests that wait on the notice's text.
  * Reading the hold here keeps this helper right even if that coupling breaks
- * (PR #221 review 1 NIT-3).
+ * (PR #221).
  *
  * The store module is read when the wait starts, so the test file has
  * already loaded it (after its own vi.mock and fetch setup).

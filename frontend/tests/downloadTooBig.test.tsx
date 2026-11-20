@@ -1,9 +1,9 @@
 /**
- * GM copy batch (2026-10-25, with the Agents panel PR): "Download your edits"
+ * Design copy batch (2026-10-25, with the Agents panel PR): "Download your edits"
  * (saveEditsToFile) and "Download a copy" (saveProjectCopyToFile) past V8's
  * string cap. JSON.stringify throws RangeError("Invalid string length") for a
  * canvas over 2^29 - 24 characters, the case #190 handles for Save graph
- * ("Nebula couldn’t save the canvas. It's too big to save in a browser."). GM: the
+ * ("Nebula couldn’t save the canvas. It's too big to save in a browser."). Design: the
  * headings stay, and the body is "It's too big to download in a browser.",
  * so the two read as a pair with only the verb changed.
  */
@@ -64,7 +64,7 @@ describe('a download past the browser string cap', () => {
 });
 
 describe('the held edits screen after a download too big for the browser', () => {
-  it("shows GM's heading and line, with both choices still there", () => {
+  it("shows design's heading and line, with both choices still there", () => {
     render(<UnsavedEditsNotice reason="Nebula couldn't keep these edits." downloadTooBig busy={false}
       onDownload={() => {}} onContinue={() => {}} />);
     const alert = screen.getByRole('alert');

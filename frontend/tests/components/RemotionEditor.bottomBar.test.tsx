@@ -1,5 +1,5 @@
 /**
- * GM - Design, 2026-10-23 (round 3, answer 4): "Yes, the Remotion tray
+ * Design, 2026-10-23: "Yes, the Remotion tray
  * publishes its top edge, the same as the canvas bar and the composer." The
  * Remotion editor's timeline tray (320 px along the bottom) carries
  * `data-bottom-bar` and writes `--bottom-bar-clearance` through the same hook

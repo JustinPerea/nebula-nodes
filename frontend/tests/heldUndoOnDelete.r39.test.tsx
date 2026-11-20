@@ -3,7 +3,7 @@ import { act } from '@testing-library/react';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// GM r39 item 3 and r40 items 1 and 2 (PR #198 review 24, "Undo before the
+// Design (PR #198, "Undo before the
 // Delete is answered"): an Undo pressed while its Delete is still on its way
 // waits for the Delete's answer with nothing said, then restores like any
 // Undo ("Restored the node."). A refused Delete brings the node back with its
@@ -11,7 +11,7 @@ import type { NodeData } from '../src/types';
 // restore, or no Delete answer within 15 s, says one neutral line that reads
 // the name live: "Nebula couldn’t bring back “X”. Try Undo again." After the
 // 15 s give-up a late Delete answer never restores by itself; the next Undo
-// press does. Before r39 (r18 option (c)) the press was refused at once with
+// press does. Before design's later ruling that a delete leaves the canvas at once, the press was refused at once with
 // "Nothing was undone. Your last change was still saving."
 
 type Answer = { status: number; body: unknown };
@@ -51,7 +51,7 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe:
 import { resetDeletedSceneEditsForTests, useGraphStore } from '../src/store/graphStore';
 
 const DROPPED = 'Nothing was undone. Your last change was still saving.';
-/** GM r39 item 3 / r40 item 2, verbatim (curly quotes). */
+/** Design, verbatim (curly quotes). */
 const bringBack = (names: string) => `Nebula couldn’t bring back ${names}. Try Undo again.`;
 
 // delete-landed-wait: off, the fake answers each DELETE at once (or holds it until the test lets it go), so
@@ -87,7 +87,7 @@ const answer = async (id: string, status = 200) => {
 };
 const restores = () => net.calls.filter((call) => call.method === 'POST' && call.path === '/api/graph/restore');
 
-describe('an Undo held on a Delete (GM r39 item 3, r40 items 1 and 2)', () => {
+describe('an Undo held on a Delete (design)', () => {
   beforeEach(() => {
     net.calls.length = 0;
     net.held.clear();
@@ -119,7 +119,7 @@ describe('an Undo held on a Delete (GM r39 item 3, r40 items 1 and 2)', () => {
   ])('%s: the press waits silently, then restores once the Delete answers, with "Restored the node."', async (_kind, node) => {
     setGraph([textNode('n1', 'Prompt'), node], [wire('n1', 'n2')]);
     act(() => { store().deleteNode('n2'); }); await settle();
-    // The node leaves at once (GM r18), and the press waits with nothing said.
+    // The node leaves at once (design), and the press waits with nothing said.
     expect(ids()).toEqual(['n1']);
     await undo();
     expect(lines()).not.toContain(DROPPED);

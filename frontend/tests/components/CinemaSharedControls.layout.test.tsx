@@ -141,7 +141,7 @@ describe('Cinema collapsed shared scene settings', () => {
     expect(change).not.toHaveBeenCalled();
   });
 
-  it('GM 2026-11 copy sweep item 20: a retryable upload\'s line is the because form and ends in "Try again."', () => {
+  it('a retryable upload\'s line is the because form and ends in "Try again." (design, 2026-11 copy sweep)', () => {
     metadata.uploads = [
       { id: 'failed', nodeId: 'scene', name: 'failed.png', status: 'error', canRetry: true,
         error: 'Nebula couldn’t upload “failed.png” because the server isn’t answering. Try again.' },
@@ -156,11 +156,11 @@ describe('Cinema collapsed shared scene settings', () => {
     ]);
   });
 
-  it('GM PR #205 r13 item 3: an upload a canvas import stopped: its line, then [Try again] and [Remove], each named with the file', () => {
+  it('an upload a canvas import stopped: its line, then [Try again] and [Remove], each named with the file (design, PR #205)', () => {
     metadata.uploads = [{ id: 'stopped', nodeId: 'scene', name: 'ref.png', status: 'error', canRetry: true,
       error: 'The upload stopped because a canvas import started.', stopped: true }];
     render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);
-    // GM PR #205 r14 item 4: nothing broke and nothing was lost, so its reason is
+    // Design (PR #205): nothing broke and nothing was lost, so its reason is
     // the row's neutral status, never the warning colour's alert.
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('The upload stopped because a canvas import started.')).toHaveAttribute('role', 'status');
@@ -172,7 +172,7 @@ describe('Cinema collapsed shared scene settings', () => {
     expect(retryCinemaReferenceUpload).toHaveBeenCalledExactlyOnceWith('stopped');
   });
 
-  it('GM PR #205 r14 item 4, control: a failed upload the person must fix stays an alert in the warning colour', () => {
+  it('control: a failed upload the person must fix stays an alert in the warning colour (design, PR #205)', () => {
     metadata.uploads = [{ id: 'failed', nodeId: 'scene', name: 'ref.png', status: 'error', canRetry: true,
       error: 'Nebula couldn’t upload “ref.png” because the server hit an error. Try again.' }];
     render(<CinemaSharedControls cinemaNodeId="scene" scene={scene()} onChange={vi.fn()} />);

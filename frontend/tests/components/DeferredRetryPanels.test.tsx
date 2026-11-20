@@ -116,7 +116,7 @@ describe('a deferred panel whose chunk failed once', () => {
     const props = { imageUrl: '/api/outputs/a.png', initialMask: null, onSave: () => {}, onClose };
     const first = render(<MaskPainterModal {...props} />);
     await flush();
-    // Error copy round 3b (GM's WRAP rule): Try again sits beside it and
+    // Error copy (design's WRAP rule): Try again sits beside it and
     // redoes the load, so the line drops its own "try again".
     expect(screen.getByRole('alert').textContent).toBe('Nebula couldn’t load the mask painter because the server isn’t answering. Try again.');
     first.unmount();

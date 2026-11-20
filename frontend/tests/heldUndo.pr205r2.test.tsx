@@ -3,15 +3,15 @@ import { act } from '@testing-library/react';
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
-// PR #205 round 2: review 1's held-undo findings and GM's r2 item 1.
-// LOW-1: a Delete partly refused brings back, and names, only what left.
-// NIT-1: a held press handed to the step below its Delete (that Delete
+// PR #205: a reviewer's held-undo findings and design's ruling.
+// A Delete partly refused brings back, and names, only what left.
+// A held press handed to the step below its Delete (that Delete
 //   changed nothing) is no longer "held on a Delete": its refusal says the
 //   undo's own line, not the bring-back line.
-// GM r2 item 1: a late refusal after the 15 s give-up replaces the give-up
+// Design: a late refusal after the 15 s give-up replaces the give-up
 //   line in place; the Delete's own line stands alone.
-// (The r39 header follows.)
-// GM r39 item 3 and r40 items 1 and 2 (PR #198 review 24, "Undo before the
+// (The later header follows.)
+// Design (PR #198, "Undo before the
 // Delete is answered"): an Undo pressed while its Delete is still on its way
 // waits for the Delete's answer with nothing said, then restores like any
 // Undo ("Restored the node."). A refused Delete brings the node back with its
@@ -19,7 +19,7 @@ import type { NodeData } from '../src/types';
 // restore, or no Delete answer within 15 s, says one neutral line that reads
 // the name live: "Nebula couldn’t bring back “X”. Try Undo again." After the
 // 15 s give-up a late Delete answer never restores by itself; the next Undo
-// press does. Before r39 (r18 option (c)) the press was refused at once with
+// press does. Before design's later ruling that a delete leaves the canvas at once, the press was refused at once with
 // "Nothing was undone. Your last change was still saving."
 
 type Answer = { status: number; body: unknown };
@@ -63,7 +63,7 @@ import { forgetHeldHistoryForTests, useGraphStore } from '../src/store/graphStor
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
-/** GM r39 item 3 / r40 item 2, verbatim (curly quotes). */
+/** Design, verbatim (curly quotes). */
 const bringBack = (names: string) => `Nebula couldn’t bring back ${names}. Try Undo again.`;
 
 // delete-landed-wait: off, the fake answers each DELETE at once (or holds it until the test lets it go), so
@@ -97,7 +97,7 @@ const plainSync = (nodes: Node<NodeData>[], edges: Edge[] = []) => {
   act(() => { for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event); });
 };
 
-describe('PR #205 round 2: held undo on a Delete', () => {
+describe('PR #205: held undo on a Delete', () => {
   beforeEach(() => {
     net.calls.length = 0;
     net.held.clear();
@@ -123,7 +123,7 @@ describe('PR #205 round 2: held undo on a Delete', () => {
     undoStack: [], redoStack: [], undoNotice: null, lateNotice: null, messageNotice: null,
     providerRecoveries: [], providerStartAmbiguities: [] } as never);
 
-  describe('LOW-1: a Delete partly refused names only what it brings back', () => {
+  describe('a Delete partly refused names only what it brings back', () => {
     it('a refused restore after one of two Deletes was refused: the line names the one that left, not the one still on the canvas', async () => {
       net.restore = 409;
       setGraph([textNode('n1', 'Prompt'), textNode('n2', 'Brief'), textNode('n3', 'Note')]);
@@ -150,7 +150,7 @@ describe('PR #205 round 2: held undo on a Delete', () => {
     });
   });
 
-  describe('NIT-1: a press handed on from its Delete is no longer held on a Delete', () => {
+  describe('a press handed on from its Delete is no longer held on a Delete', () => {
     it('its Delete changed nothing in the end, so the press goes to the edit below; that edit\'s refused restore says the undo\'s own line', async () => {
       setGraph([textNode('n1', 'Prompt'), textNode('n2', 'Brief'), textNode('n3', 'Note')]);
       act(() => { store().updateNodeData('n1', { params: { value: 'Edited' } }); });
@@ -174,7 +174,7 @@ describe('PR #205 round 2: held undo on a Delete', () => {
     });
   });
 
-  describe('GM r2 item 1: a late refusal after the give-up replaces the give-up line', () => {
+  describe('a late refusal after the give-up replaces the give-up line', () => {
     const giveUp = async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       setGraph([textNode('n1', 'Prompt'), textNode('n2', 'Brief')]);

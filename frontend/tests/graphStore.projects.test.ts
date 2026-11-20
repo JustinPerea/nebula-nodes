@@ -222,13 +222,13 @@ function worldNode(id: string, params: Record<string, unknown>): Node<NodeData> 
     data: { label: 'World Labs Environment', definitionId: 'worldlabs-environment', params, state: 'idle', outputs: {} } };
 }
 /** `runs`: the project's run history; a World Labs record of one of them is
- * this project's (review 20 of PR #199, LOW-2). */
+ * this project's (PR #199). */
 function openProject(id: string, nodes: Node<NodeData>[], runs: RunRecord[] = []) {
   setProjectContext({ id, revision: id.toLowerCase() });
   expect(useGraphStore.getState().loadProjectGraph(nodes, [], runs)).toBe(true);
 }
 
-describe('copy in one project, paste in another (Justin, P2: "copy the node moodboards live in to a different project")', () => {
+describe('copy in one project, paste in another (Justin: "copy the node moodboards live in to a different project")', () => {
   it('Cmd+C in A, open B, Cmd+V adds the nodes with params intact and outputs cleared; undo in B removes them', () => {
     openProject('A', [moodboardNode('n1'), { ...node('A', 'n2'), selected: true }]);
     useGraphStore.setState({ edges: [{ id: 'e1', source: 'n1', sourceHandle: 'moodboard', target: 'n2', targetHandle: 'in' }] });
@@ -265,7 +265,7 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
     useGraphStore.getState().pasteClipboard();
 
     expect(useGraphStore.getState().nodes).toEqual([]);
-    // GM - Design, round 4: the duplicate refusal in one line.
+    // Design: the duplicate refusal in one line.
     expect(alert).toHaveBeenCalledWith("Nebula couldn’t duplicate a paid World Labs node. Add a new one from the Nodes rail instead.");
   });
 

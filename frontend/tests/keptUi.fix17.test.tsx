@@ -1,9 +1,9 @@
 /**
- * Round 17 of PR #199 (GM r23), the person's side of a kept canvas:
+ * PR #199 (design), the person's side of a kept canvas:
  * - b: a node added while kept has a tab-local id no agent can address, so
  *   its id slot is empty (its room kept) until it has a real `nN` id.
  * - c: on such a node the selection bar shows Note and Ask, both locked with
- *   GM's lines (Note is no longer hidden: hiding it shifted the bar), and
+ *   design's lines (Note is no longer hidden: hiding it shifted the bar), and
  *   both Run buttons, the selection bar's and the bottom bar's, are locked
  *   through the shared lock with "You can run nodes after you save it as a
  *   project.".
@@ -71,7 +71,7 @@ afterEach(() => {
 
 const button = (name: RegExp) => screen.getByRole('button', { name });
 
-describe('GM r23 (b): a tab-only node shows no id', () => {
+describe('a tab-only node shows no id', () => {
   function renderCard(id: string) {
     const data = node(id).data;
     useGraphStore.setState({ nodes: [{ ...node(id), id }] });
@@ -116,14 +116,14 @@ describe('GM r23 (b): a tab-only node shows no id', () => {
   });
 });
 
-describe('GM r23 (c): the selection bar on a tab-only node while kept', () => {
-  it('Note and Ask both show, locked, with GM’s lines; Run is locked with the run-nodes line', () => {
+describe('the selection bar on a tab-only node while kept', () => {
+  it('Note and Ask both show, locked, with design’s lines; Run is locked with the run-nodes line', () => {
     useGraphStore.setState({ nodes: [node(TAB_ONLY)] });
     act(() => setCanvasKept(true));
     render(<SelectionToolbar />);
     const expected: [RegExp, string][] = [
       [/^Note for agents$/, 'You can leave a note after you save it as a project.'],
-      // GM r25 (3): the one Ask line, the agent's name or "your agent".
+      // Design: the one Ask line, the agent's name or "your agent".
       [/^Ask$/, 'You can ask your agent after you save it as a project.'],
       [/^Run selected nodes$/, 'You can run nodes after you save it as a project.'],
     ];
@@ -135,7 +135,7 @@ describe('GM r23 (c): the selection bar on a tab-only node while kept', () => {
     }
   });
 
-  it('the lines are declared with the other kept lines (GM r25, 3: one Ask and one Note line on any node)', () => {
+  it('the lines are declared with the other kept lines (one Ask and one Note line on any node)', () => {
     expect(keptLockTitle('note')).toBe('You can leave a note after you save it as a project.');
     expect(keptLockTitle('run-nodes')).toBe('You can run nodes after you save it as a project.');
     window.localStorage.setItem('nebula:chat-selection', JSON.stringify({ agent: 'claude' }));
@@ -188,7 +188,7 @@ describe('GM r23 (c): the selection bar on a tab-only node while kept', () => {
   });
 });
 
-describe('GM r23 (d): the Discard confirm’s scrim', () => {
+describe('the Discard confirm’s scrim', () => {
   it('is the shared .prompt-dialog overlay, the scrim of the app’s other aria-modal confirms', () => {
     render(<KeptDiscardConfirm onKeep={vi.fn()} onDiscard={vi.fn()} />);
     const dialog = screen.getByRole('alertdialog');
@@ -203,7 +203,7 @@ describe('GM r23 (d): the Discard confirm’s scrim', () => {
   });
 });
 
-describe('GM r23 (3): the chunk-retry fallback', () => {
+describe('the chunk-retry fallback', () => {
   const real = restoreCopyNow();
   afterEach(() => { setRestoreCopyImportForTests(null); primeRestoreCopyForTests(real); });
 
@@ -226,7 +226,7 @@ describe('GM r23 (3): the chunk-retry fallback', () => {
     expect(await fallbackFor(false)).toBe('Nebula restored its project list.');
   });
 
-  it('while kept: GM’s full sentence, from the entry chunk, never a reload', async () => {
+  it('while kept: design’s full sentence, from the entry chunk, never a reload', async () => {
     const line = await fallbackFor(true);
     expect(line).toBe('Nebula restored its project list before your latest edits were saved. They’re kept in this tab.');
     expect(line).toBe(RESTORE_COPY_FALLBACK_KEPT);

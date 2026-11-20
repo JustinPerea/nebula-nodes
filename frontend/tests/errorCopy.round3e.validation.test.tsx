@@ -1,12 +1,12 @@
 /**
- * Error copy round 3e, item 2 (GM - Design): a pre-run check reads like a
+ * Error copy (design): a pre-run check reads like a
  * run error. The backend's validation errors carry an additive `person`
  * line (ValidationErrorDetail.person) beside `message`, the specific text
  * agents keep word for word. The store puts it in `errorPerson` from both
  * places a refusal arrives (the run call's answer and the socket's
  * validationError event), several checks on one node read together, and a
  * check with no line (only an agent or a damaged saved graph reaches it)
- * reads GM's general line with the text behind Details. The Batch card
+ * reads design's general line with the text behind Details. The Batch card
  * doesn't say its cap twice.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,7 +29,7 @@ import { ModelNode } from '../src/components/nodes/ModelNode';
 import { BatchNode } from '../src/components/nodes/BatchNode';
 import { OutputRenderer } from '../src/components/create-studio/OutputRenderer';
 
-// Round 3f (GM): a card's general line, with no provider named. "Run the node
+// Design: a card's general line, with no provider named. "Run the node
 // again. If it keeps failing, Details shows what {Provider} said." when the run
 // names one (tests/errorCopy.round3f.test.tsx).
 const GENERAL = "Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.";
@@ -78,7 +78,7 @@ describe("the socket's validationError event", () => {
     expect(data('n1')).toMatchObject({ error: `${PORT}; ${KEY}`, errorPerson: `${PORT_LINE} ${KEY_LINE}` });
   });
 
-  it("a check with no line reads GM's general line, with its text behind Details", () => {
+  it("a check with no line reads design's general line, with its text behind Details", () => {
     send({ type: 'validationError', errors: [{ nodeId: 'n1', portId: '', message: "Duplicate node id 'n1' makes edge endpoints ambiguous" }] });
     expect(data('n1').errorPerson).toBeUndefined();
     expect(data('n1').errorCategory).toBe('unknown');
@@ -131,7 +131,7 @@ describe('a refused run for a missing key: the socket frame and the run call agr
   });
 });
 
-describe('the Create Studio result card (LOW-3)', () => {
+describe('the Create Studio result card', () => {
   const output = (missing: boolean) => render(<OutputRenderer outputs={{}} state="error" error={KEY} errorPerson={KEY_LINE}
     errorNotStarted errorMissingKey={missing} />);
 
@@ -156,7 +156,7 @@ describe('the card', () => {
     expect(container.textContent).not.toContain('OPENAI_API_KEY');
   });
 
-  it("shows GM's general line over a closed Details for a check with no line", () => {
+  it("shows design's general line over a closed Details for a check with no line", () => {
     const { container } = render(<ModelNode {...card({ error: "Duplicate node id 'n1'", errorCategory: 'unknown' })} />);
     expect(reason(container)).toBe(GENERAL);
     expect((container.querySelector('details') as HTMLDetailsElement).open).toBe(false);
@@ -175,7 +175,7 @@ describe('the Batch card over its cap', () => {
     expect(container.textContent).not.toContain('batch_size_cap');
   });
 
-  it('draws a missing key neutral, as the canvas card does (LOW-3)', () => {
+  it('draws a missing key neutral, as the canvas card does', () => {
     const keyed = render(<BatchNode {...batch({ state: 'error', error: KEY, errorPerson: KEY_LINE, errorNotStarted: true, errorMissingKey: true })} />);
     expect(keyed.container.querySelector('.batch-node__warning--key')).not.toBeNull();
     keyed.unmount();

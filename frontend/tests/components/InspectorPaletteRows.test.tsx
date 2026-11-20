@@ -6,11 +6,11 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 
 /**
- * GM r12 on #208 (round 8, 7b): "the inspector shows exactly 3 palette rows;
+ * Design on #208: "the inspector shows exactly 3 palette rows;
  * the 4th swatch onwards and the Add / Extract from reference row are hidden
  * with no sign of more." The palette list shows every swatch with no scroll
  * of its own and the Add / Extract row comes right after the last swatch.
- * The floating Inspector grows to fit any body, the palette's too (GM r68).
+ * The floating Inspector grows to fit any body, the palette's too (design).
  */
 
 vi.mock('../../src/lib/backend', async (original) => ({
@@ -41,7 +41,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', () => {
+describe('the palette list shows every swatch, then the Add row', () => {
   it('renders N rows and the Add / Extract row right after the last, for N from 1 to 12', () => {
     for (let n = 1; n <= 12; n++) {
       useGraphStore.setState({ nodes: [colorNode(hexes(n))], edges: [], undoNotice: null });
@@ -54,7 +54,7 @@ describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', (
       // The Add / Extract row is the list's next sibling: right after the last swatch.
       const actions = list.nextElementSibling!;
       expect(actions.className).toBe('inspector__palette-actions');
-      // GM r23: "Add" and "Extract" (the full name on the input).
+      // Design: "Add" and "Extract" (the full name on the input).
       expect(actions.textContent).toBe('AddExtract');
       // No container between a row and the Inspector's body clips it.
       for (let el: Element | null = rows[n - 1]; el && !el.classList.contains('inspector__body'); el = el.parentElement) {
@@ -69,7 +69,7 @@ describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', (
     const css = readFileSync(resolve(__dirname, '../../src/styles/panels.css'), 'utf8')
       + readFileSync(resolve(__dirname, '../../src/styles/slava-restraint.css'), 'utf8');
     // Rules whose subject is the stack, the list, a row or the actions row
-    // (a button inside the row may clip its own label, round 8f).
+    // (a button inside the row may clip its own label).
     const rules = [...css.matchAll(/([^{}]*)\{([^}]*)\}/g)].filter(([, selector]) => selector.split(',')
       .some((one) => /\.inspector__palette(?:-list|-row|-actions)?(?![\w-])[^\s>+~]*\s*$/.test(one.trim())));
     expect(rules.length).toBeGreaterThan(0);
@@ -77,13 +77,13 @@ describe('the palette list shows every swatch, then the Add row (GM r12, 7b)', (
   });
 });
 
-// The floating Inspector's height (it took the whole palette before its body
-// scrolled, GM r12) is now the same content-fit rule for every body (GM r68:
+// The floating Inspector's height (design's earlier rule: it took the whole palette before its body
+// scrolled) is now the same content-fit rule for every body (design:
 // "Drop ... the palette exception"): NodeInspectorContentFit.test.tsx. Here,
-// with the real Inspector (review 1 LOW-4 on #226): its palette sits in the
+// with the real Inspector (#226): its palette sits in the
 // box the popover measures, and swatches added on the real control change
 // the height the popover gives it.
-describe('the floating Inspector with the real Inspector and a palette (review 1 LOW-4)', () => {
+describe('the floating Inspector with the real Inspector and a palette', () => {
   // jsdom has no layout: the panel's header and foot are CHROME; the content
   // box is as tall as the real rows rendered in it (ROW each, past a BASE).
   const CHROME = 115;
@@ -176,7 +176,7 @@ describe('the floating Inspector with the real Inspector and a palette (review 1
   });
 });
 
-describe("the palette's read-only × and Extract (GM r22, folded)", () => {
+describe("the palette's read-only × and Extract", () => {
   const css = (name: string) => readFileSync(resolve(__dirname, `../../src/styles/${name}`), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rules = (text: string) => [...text.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
 
@@ -194,7 +194,7 @@ describe("the palette's read-only × and Extract (GM r22, folded)", () => {
     }
   });
 
-  it('shows no ring on the pending line, which gets focus by code (GM r23)', () => {
+  it('shows no ring on the pending line, which gets focus by code', () => {
     const panels = rules(css('panels.css'));
     for (const skin of ['body.app-slava-restraint']) {
       const rule = panels.find((r) => r.selector.split(',').map((s) => s.trim()).includes(`${skin} .inspector__palette-pending:focus`));

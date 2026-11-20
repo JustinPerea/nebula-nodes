@@ -16,7 +16,7 @@ vi.mock('../src/lib/api', () => ({ executeGraph: boundary.execute, executeNode: 
 vi.mock('../src/lib/backend', () => ({ apiFetch: boundary.apiFetch,
   getCachedBackendBaseUrl: () => 'http://synthetic.invalid',
   rewriteBackendAssetUrls: <T,>(value: T) => value,
-  // Round 17 (review 16 M2): undo compares values through this.
+  // Undo compares values through this.
   canonicalBackendAssetUrls: <T,>(value: T) => value,
   rewriteExecutionAssetUrls: <T,>(value: T) => value }));
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: boundary.subscribe } }));
@@ -25,7 +25,7 @@ vi.mock('../src/store/uiStore', () => ({ useUIStore: { getState: () => ({
   settingsCache: { apiKeys: {}, loaded: true }, canvasFocusRequest: null,
   clearCanvasViewport: boundary.clearCanvasViewport,
   clearCinemaSelectedShots: boundary.clearCinemaSelectedShots,
-  // PR #205 r4: a Paste or Duplicate selects its copy in the UI too (one selection).
+  // PR #205: a Paste or Duplicate selects its copy in the UI too (one selection).
   selectedNodeId: null, selectNode: boundary.selectNode,
 }) } }));
 
@@ -176,7 +176,7 @@ describe('Batch preview ownership through real graph store paths', () => {
     expect(copy.data.outputs).toEqual({}); expect(copy.data.batchOutputs).toBeUndefined();
     expect(copy.data.batchVariants).toBeUndefined(); expect(copy.data.batchRunId).toBeUndefined();
     expect(live().batchOutputs).toHaveLength(2); expect(boundary.execute).not.toHaveBeenCalled();
-    // PR #205 r4: Paste and Duplicate move the UI's one selection to the copy.
+    // PR #205: Paste and Duplicate move the UI's one selection to the copy.
     if (action !== 'duplicateNode') expect(boundary.selectNode).toHaveBeenCalledWith(copy.id, { keepPin: true });
   });
 

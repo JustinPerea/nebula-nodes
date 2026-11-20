@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 /**
  * A small cascade model for jsdom, which neither resolves var() nor weighs
- * !important against an inline style (the model #216's round 3k test
+ * !important against an inline style (the model #216's test
  * reads layouts.css with, for any list of stylesheets in load order): every
  * rule outside an at-rule whose selector the element matches (jsdom's
  * matches), !important over the inline style over the rest, specificity then

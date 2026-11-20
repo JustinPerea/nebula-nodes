@@ -4,7 +4,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../src/types';
 
 /**
- * Review r4 MEDIUM-1 and GM, PR #203 r8 items 1-2: one rule for every scope.
+ * Design (PR #203): one rule for every scope.
  * Run locks only when the run plan for that scope (lib/runScope nodesThatRun)
  * includes a real Idol. A canvas run skips an agent's placeholder and what
  * needs it, so a placeholder Idol never locks the toolbar's Run, Cmd+Enter
@@ -37,8 +37,8 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { keyIdolInEachTest } from './helpers/keyedSpace';
 
-// PR #203 round 7: Idol is keyless. These tests pin the shared key-lock
-// machinery on Idol's keyed shape (rounds 4 to 6; tests/helpers/keyedSpace.ts).
+// PR #203: Idol is keyless. These tests pin the shared key-lock
+// machinery on Idol's keyed shape (tests/helpers/keyedSpace.ts).
 keyIdolInEachTest();
 
 const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
@@ -82,7 +82,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("a placeholder Idol never locks the canvas's Run (review r4 MEDIUM-1, GM r8 item 1)", () => {
+describe("a placeholder Idol never locks the canvas's Run", () => {
   it("the toolbar's Run is unlocked", () => {
     setup(true);
     render(<Toolbar />);
@@ -117,7 +117,7 @@ describe('a real Idol in the plan locks it', () => {
   });
 });
 
-describe("the store's selection runs read the same plan (GM r8 item 2)", () => {
+describe("the store's selection runs read the same plan", () => {
   it('Export with Text runs only those two, so Idol is not in the plan: it runs', async () => {
     setup(false);
     await useGraphStore.getState().executeCluster(['export', 'text']);
@@ -132,7 +132,7 @@ describe("the store's selection runs read the same plan (GM r8 item 2)", () => {
     expect(useGraphStore.getState().undoNotice?.text).toBe(IDOL_LOCK);
   });
 
-  it("the person's own run of the placeholder Idol itself makes it real, so it locks with Idol's line (GM r9 item 1)", async () => {
+  it("the person's own run of the placeholder Idol itself makes it real, so it locks with Idol's line", async () => {
     setup(true);
     await useGraphStore.getState().executeNode('idol');
     expect(sentRuns()).toEqual([]);

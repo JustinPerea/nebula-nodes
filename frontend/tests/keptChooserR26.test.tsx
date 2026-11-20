@@ -1,5 +1,5 @@
 /**
- * PR #199 round 26: the kept canvas's project chooser deletes the way the app deletes (the Undo toast, no
+ * PR #199: the kept canvas's project chooser deletes the way the app deletes (the Undo toast, no
  * confirm; Projects home's Delete is the same), in the app's modal, with the facts the project list shows;
  * and the refusal line follows the live project count, saving once by itself when deleting made room.
  */

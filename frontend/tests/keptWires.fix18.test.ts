@@ -1,13 +1,13 @@
 /**
- * Round 18 of PR #199, the connection lines as a library:
- * - GM r25, 1: "It takes" lists every type the input takes, by the shared
+ * PR #199, the connection lines as a library:
+ * - Design: "It takes" lists every type the input takes, by the shared
  *   name-list join ("images and masks");
- * - GM r25, 2: "takes only one connection there", "doesn’t have that input
+ * - Design: "takes only one connection there", "doesn’t have that input
  *   anymore";
- * - GM r26, 3: a loop is "Nebula couldn’t connect to “B”. It would make a loop.",
+ * - Design: a loop is "Nebula couldn’t connect to “B”. It would make a loop.",
  *   and a drop the canvas refused gets its line (refusedConnectionLine);
- * - review 16 kept-ui NIT-1: "3D models" and "lists" pinned;
- * - review 16 kept-ui LOW-1: the multiple-port lookup falls back to the
+ * - "3D models" and "lists" pinned;
+ * - The multiple-port lookup falls back to the
  *   definition where the node's dynamic ports don't hold the handle.
  */
 import { readFileSync } from 'node:fs';
@@ -26,7 +26,7 @@ const node = (id: string, definitionId: string, data: Record<string, unknown> = 
 const edge = (source: string, sourceHandle: string, target: string, targetHandle: string): Edge =>
   ({ id: `${source}-${target}-${targetHandle}`, source, sourceHandle, target, targetHandle });
 
-describe('GM r25, 1: what an input takes, every type, by the shared join', () => {
+describe('what an input takes, every type, by the shared join', () => {
   it('an image input takes images and masks; a text input text; Any anything', () => {
     expect(takesTypes('Image')).toBe('images and masks');
     expect(takesTypes('Mask')).toBe('masks and images');
@@ -40,13 +40,13 @@ describe('GM r25, 1: what an input takes, every type, by the shared join', () =>
       .toEqual({ ok: false, line: 'Nebula couldn’t connect to “References”. It takes images and masks, not text.' });
   });
 
-  it('review 16 NIT-1: “3D models” and “lists” as GM wrote them', () => {
+  it('“3D models” and “lists” as design wrote them', () => {
     expect(typeName('Mesh')).toBe('3D models');
     expect(typeName('Array')).toBe('lists');
   });
 });
 
-describe('GM r25, 2: the two edited left-out reasons', () => {
+describe('the two edited left-out reasons', () => {
   const wire = (kind: string, more: Partial<DroppedWire> = {}): DroppedWire => ({ kind, source: 'n1', target: 'n2',
     sourceName: 'A', targetName: 'B', ...more });
   it('“only one connection”, and “anymore” as one word', () => {
@@ -60,7 +60,7 @@ describe('GM r25, 2: the two edited left-out reasons', () => {
   });
 });
 
-describe('GM r26, 3: a loop, and a refused drop’s line', () => {
+describe('a loop, and a refused drop’s line', () => {
   const nodes = [node('a', 'seedream-4-5'), node('b', 'seedream-4-5'), node('t', 'text-input')];
   it('a loop: “Nebula couldn’t connect to “References”. It would make a loop.”', () => {
     expect(checkKeptWire({ source: 'b', sourceHandle: 'image', target: 'a', targetHandle: 'images' }, nodes,
@@ -85,7 +85,7 @@ describe('GM r26, 3: a loop, and a refused drop’s line', () => {
   });
 });
 
-describe('review 16 kept-ui LOW-1: the multiple-port lookup', () => {
+describe('the multiple-port lookup', () => {
   it('a dynamic node whose dynamic inputs don’t hold the handle answers from its definition', () => {
     const cinema = node('cin', 'cinema-scene', { isDynamic: true, dynamicInputPorts: [], dynamicOutputPorts: [] });
     expect(targetHandleAllowsMultiple(cinema, 'character_refs')).toBe(true);
@@ -98,7 +98,7 @@ describe('review 16 kept-ui LOW-1: the multiple-port lookup', () => {
   });
 });
 
-describe('GM r26, 3: the canvas’s drop end', () => {
+describe('the canvas’s drop end', () => {
   it('a drop on a handle the canvas refused: the connection it would have made, from either end', () => {
     expect(refusedDropConnection({ nodeId: 't', handleId: 'text', handleType: 'source' }, { isValid: false, toHandle: { nodeId: 's', id: 'images' } }))
       .toEqual({ source: 't', sourceHandle: 'text', target: 's', targetHandle: 'images' });
@@ -115,7 +115,7 @@ describe('GM r26, 3: the canvas’s drop end', () => {
   it('Canvas.onConnectEnd says the refused drop’s line before anything else', () => {
     const canvas = readFileSync(resolve(__dirname, '../src/components/Canvas.tsx'), 'utf8');
     const end = canvas.slice(canvas.indexOf('const onConnectEnd'));
-    // Round 19: through the store's sayRefusedDrop (GM r28, 1: a handle of the same kind says its own line).
+    // Through the store's sayRefusedDrop (design: a handle of the same kind says its own line).
     expect(end).toMatch(/if \(useGraphStore\.getState\(\)\.sayRefusedDrop\(info, connectionState\)\) return;/);
     expect(end.indexOf('sayRefusedDrop')).toBeLessThan(end.indexOf('showConnectionPopup'));
   });

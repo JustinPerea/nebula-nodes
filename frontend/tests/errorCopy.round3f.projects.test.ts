@@ -1,8 +1,8 @@
 /**
- * Error copy round 3f (GM - Design): the Projects startup line and the
+ * Error copy (design): the Projects startup line and the
  * provider-readiness line.
  *
- * GM: "Projects startup: drop "That didn't work." → "Couldn't load your
+ * Design: "Projects startup: drop "That didn't work." → "Couldn't load your
  * projects. Try again, or reload the page if it keeps happening." A full disk
  * is the one cause a person can fix, so give it its own line: "Couldn't load
  * your projects. Your disk is full. Free up some space, then try again.""
@@ -11,7 +11,7 @@
  * refusal (507) carries an additive `storage: "full"` when an ENOSPC/EDQUOT
  * OSError is in its causes (main._storage_error_body).
  *
- * GM: the provider-readiness line "should become "Couldn't check the
+ * Design: the provider-readiness line "should become "Couldn't check the
  * connections. Nebula's server isn't answering. Make sure it's running, then
  * try again."" That is a request with no answer; an answered failure says
  * the request's own line under the same heading.
@@ -90,7 +90,7 @@ describe('the Projects startup line', () => {
 });
 
 describe('the provider-readiness line', () => {
-  it('no answer: GM\'s line', async () => {
+  it('no answer: design\'s line', async () => {
     fetch.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
     await useProviderReadinessStore.getState().checkConnections();
     expect(useProviderReadinessStore.getState().error)
@@ -100,7 +100,7 @@ describe('the provider-readiness line', () => {
   it('an answered failure is not "isn\'t answering"', async () => {
     fetch.mockResolvedValueOnce(json(503, {}));
     await useProviderReadinessStore.getState().checkConnections();
-    // Round 3g (GM): ""Nebula didn't respond" is wrong when something did answer."
+    // Design: ""Nebula didn't respond" is wrong when something did answer."
     expect(useProviderReadinessStore.getState().error).toBe("Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.");
   });
 });

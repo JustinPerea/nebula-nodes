@@ -1081,7 +1081,7 @@ describe('graphStore run-history lifecycle', () => {
       undoStack: [guardedSnapshot],
       redoStack: [guardedSnapshot],
       providerRecoveries: [checkpoint],
-      // This project's run (review 20 of PR #199, LOW-2).
+      // This project's run (PR #199).
       runHistory: [{ id: 'recoverable-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }],
       isExecuting: false,
     });
@@ -1199,7 +1199,7 @@ describe('graphStore run-history lifecycle', () => {
       ...worldEnvironmentNode('world-source'),
       selected: true,
     };
-    // This project's run (review 20 of PR #199, LOW-2).
+    // This project's run (PR #199).
     useGraphStore.setState({ nodes: [source], edges: [], runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }], });
     useGraphStore.getState().copySelected();
 
@@ -1231,7 +1231,7 @@ describe('graphStore run-history lifecycle', () => {
     useGraphStore.setState({
       nodes: [source],
       edges: [],
-      // This project's run (review 20 of PR #199, LOW-2).
+      // This project's run (PR #199).
       runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }],
       providerRecoveries: [{
         runId: 'paid-run',
@@ -1292,7 +1292,7 @@ describe('graphStore run-history lifecycle', () => {
 
     expect(useGraphStore.getState().nodes).toEqual([source]);
     expect(alert).toHaveBeenCalledTimes(3);
-    // GM - Design, round 4: one line at 560 px.
+    // Design: one line at 560 px.
     expect(alert.mock.calls.map(([text]) => text)).toEqual(Array(3).fill(
       "Nebula couldn’t duplicate a paid World Labs node. Add a new one from the Nodes rail instead."));
   });
@@ -1314,7 +1314,7 @@ describe('graphStore run-history lifecycle', () => {
       nodes: [worldEnvironmentNode(operation.nodeId)],
       edges: [],
       providerRecoveries: [operation],
-      // This project's run (review 20 of PR #199, LOW-2).
+      // This project's run (PR #199).
       runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } }],
     });
     useGraphStore.getState().hydrateProviderRecoveries([operation]);
