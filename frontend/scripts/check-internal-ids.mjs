@@ -28,7 +28,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // are reachable, an entry counts as a raise only when it is above both the merge-base value and
 // main's value (so a branch that is merely behind main passes), and the allowance on paths that
 // neither had may not exceed what the branch freed against the merge base by removing or lowering
-// paths.
+// paths. In a shallow checkout with no merge base (CI fetches main at depth 1 before lint), main
+// is the base.
 //
 // What counts as a comment:
 //   TS, TSX, JS, MJS, CJS: // to end of line, and /* ... */ blocks.
@@ -513,12 +514,17 @@ export function readMainBaselines(root) {
   try {
     const opts = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 };
     execFileSync('git', ['rev-parse', '--verify', '--quiet', 'origin/main'], opts);
-    const mergeBase = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], opts).trim();
-    if (!mergeBase) return null;
-    return {
-      main: JSON.parse(execFileSync('git', ['show', `origin/main:${BASELINE_REL}`], opts)),
-      base: JSON.parse(execFileSync('git', ['show', `${mergeBase}:${BASELINE_REL}`], opts)),
-    };
+    let mergeBase = '';
+    try {
+      mergeBase = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], opts).trim();
+    } catch {
+      mergeBase = '';
+    }
+    const main = JSON.parse(execFileSync('git', ['show', `origin/main:${BASELINE_REL}`], opts));
+    // A shallow checkout has no merge base. CI checks out the pull request already merged into
+    // main, at depth 1, so the tree is never behind main there and main itself is the base.
+    const base = mergeBase ? JSON.parse(execFileSync('git', ['show', `${mergeBase}:${BASELINE_REL}`], opts)) : main;
+    return { main, base };
   } catch {
     return null;
   }

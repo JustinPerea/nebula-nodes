@@ -98,6 +98,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Fetch main for the baseline guards
+        # check-internal-ids compares its baseline with main's copy, so a hand-raised count fails here.
+        run: git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
       - name: Run frontend lint
         working-directory: frontend
         run: npm run lint

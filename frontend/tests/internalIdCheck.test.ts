@@ -464,6 +464,31 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     expect(r.out).toContain('baseline 3 is above');
   });
 
+  it('a shallow checkout with no merge base compares with main, as CI does', () => {
+    gitIn(root, 'init', '-q', '-b', 'main');
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'base');
+    gitIn(root, 'checkout', '-qb', 'feat');
+    writeFileSync(baselineFile(), JSON.stringify({ 'frontend/src/a.ts': 3 }));
+    write('frontend/src/a.ts', '// GM one\n// GM two\n// GM three\n');
+    gitIn(root, 'add', '-A');
+    gitIn(root, 'commit', '-qm', 'feat raises');
+    const shallow = join(root, 'shallow');
+    gitIn(root, 'clone', '-q', '--depth', '1', '--branch', 'feat', `file://${root}`, shallow);
+    gitIn(shallow, 'fetch', '-q', '--depth=1', 'origin', '+refs/heads/main:refs/remotes/origin/main');
+    let code = 0;
+    let out = '';
+    try {
+      execFileSync('node', [script, '--root', shallow], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (e) {
+      const err = e as { status: number; stdout: string; stderr: string };
+      code = err.status;
+      out = `${err.stdout}${err.stderr}`;
+    }
+    expect(code).toBe(1);
+    expect(out).toContain('baseline 3 is above');
+  });
+
   it('--write-baseline with --move is refused', () => {
     const r = run('--write-baseline', '--move', 'frontend/src/a.ts', 'frontend/src/b.ts');
     expect(r.code).toBe(1);
