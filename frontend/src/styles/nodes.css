@@ -270,7 +270,7 @@ body.app-slava-restraint .before-after__handle {
 }
 
 body.app-slava-restraint .mesh-modal__fallback-copy {
-  color: var(--sr-ink-meta, rgba(0, 0, 0, 0.55));
+  color: var(--sr-ink-light);
 }
 
 .mesh-modal__close {

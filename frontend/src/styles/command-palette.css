@@ -135,10 +135,10 @@ body.app-slava-restraint .command-palette__item--selected {
 }
 body.app-slava-restraint .command-palette__group-label,
 body.app-slava-restraint .command-palette__item-sub {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
-body.app-slava-restraint .command-palette__empty { color: var(--sr-ink-meta); text-align: left; }
+body.app-slava-restraint .command-palette__empty { color: var(--sr-ink-light); text-align: left; }
 body.app-slava-restraint .command-palette__empty p { margin: 0 0 8px; }
 body.app-slava-restraint .command-palette__empty button {
   padding: 5px 8px;

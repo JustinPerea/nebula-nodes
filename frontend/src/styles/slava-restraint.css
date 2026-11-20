@@ -59,7 +59,7 @@ body.app-slava-restraint {
   --sr-ink: rgba(255, 255, 255, 0.92);          /* primary type */
   --sr-ink-bold: #FFFFFF;                       /* the BOLD half of two-tone */
   --sr-ink-light: rgba(255, 255, 255, 0.55);    /* the LIGHT half of two-tone */
-  --sr-ink-meta: rgba(255, 255, 255, 0.40);     /* metadata, secondary */
+  --sr-ink-meta: rgba(255, 255, 255, 0.40);     /* non-text, disabled and icon-only; text takes --sr-ink-light (design) */
   --sr-ink-faint: rgba(255, 255, 255, 0.20);    /* footers, tertiary */
 
   /* Single accent — Nothing-orange placeholder. Used only for the primary
@@ -838,9 +838,14 @@ body.app-slava-restraint .context-menu__shortcut,
 body.app-slava-restraint .connection-popup__item-port,
 body.app-slava-restraint .connection-popup__category-count,
 body.app-slava-restraint .connection-popup__category-chevron {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
+}
+
+/* The chevron is an icon: its colour tints an svg, which needs 3:1, so it keeps meta ink (design). */
+body.app-slava-restraint .connection-popup__category-chevron {
+  color: var(--sr-ink-meta);
 }
 
 body.app-slava-restraint .connection-popup__header {
@@ -859,7 +864,7 @@ body.app-slava-restraint .connection-popup__search::placeholder {
 
 body.app-slava-restraint .connection-popup__empty,
 body.app-slava-restraint .connection-popup__category-label {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-ui);
 }
 
@@ -1068,7 +1073,7 @@ body.app-slava-restraint .chat__tool-header:focus-visible {
 
 body.app-slava-restraint .chat-panel__meta,
 body.app-slava-restraint .chat-panel__session {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   letter-spacing: 0;
@@ -1132,7 +1137,7 @@ body.app-slava-restraint .chat__empty {
 }
 
 body.app-slava-restraint .chat__empty-hint {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .chat__empty code {
@@ -1206,6 +1211,11 @@ body.app-slava-restraint .chat-panel__system-line,
 body.app-slava-restraint .chat__cursor,
 body.app-slava-restraint .chat__tool-icon,
 body.app-slava-restraint .chat__tool-status {
+  color: var(--sr-ink-light);
+}
+
+/* The tool icon is an svg: it keeps meta ink (design). */
+body.app-slava-restraint .chat__tool-icon {
   color: var(--sr-ink-meta);
 }
 
@@ -1319,7 +1329,7 @@ body.app-slava-restraint .chat-panel__textarea {
 }
 
 body.app-slava-restraint .chat-panel__textarea::placeholder {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .chat-panel__textarea:focus {
@@ -1545,7 +1555,7 @@ body.app-slava-restraint .panel__group-count {
   font-family: var(--sr-mono);
   font-weight: 400;
   font-size: var(--sr-type-meta);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   background: transparent;
   border: none;
   padding: 0 4px;
@@ -2097,7 +2107,7 @@ body.app-slava-restraint .inspector__model-error {
 
 body.app-slava-restraint .inspector__model-selection,
 body.app-slava-restraint .inspector__state-value {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
 }
 
@@ -2178,7 +2188,7 @@ body.app-slava-restraint .inspector__info-panel {
 
 body.app-slava-restraint .inspector__info-heading {
   border-bottom-color: var(--sr-edge);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   letter-spacing: 0.04em;
 }
@@ -2193,7 +2203,7 @@ body.app-slava-restraint .inspector__info-name {
 
 body.app-slava-restraint .inspector__info-type,
 body.app-slava-restraint .inspector__info-meta {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .inspector__info-meta {
@@ -2744,7 +2754,7 @@ body.app-slava-restraint .agent-log--executing .agent-log__signal-cell:nth-child
 }
 
 body.app-slava-restraint .agent-log__count {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .agent-log__status {
@@ -2887,7 +2897,7 @@ body.app-slava-restraint .agent-log__source {
   overflow: hidden;
   /* An agent's name: its cursor's shade, or the nearest tone of it that
    * reads 4.5:1 here (agentLogTones); the dot keeps the shade. */
-  color: var(--agent-log-name-color, var(--agent-log-source-color));
+  color: var(--agent-log-name-color, var(--sr-ink-light));
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;
@@ -3055,7 +3065,7 @@ body.app-slava-restraint .mesh-preview__hud {
   align-items: center;
   justify-content: space-between;
   gap: var(--sr-space-2);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   letter-spacing: 0;
@@ -3115,7 +3125,7 @@ body.app-slava-restraint .mesh-modal__info {
 }
 
 body.app-slava-restraint .mesh-modal__format {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-control);
 }
@@ -3422,7 +3432,7 @@ body.app-slava-restraint .model-node__label-input:focus-visible {
 }
 
 body.app-slava-restraint .model-node__label-input::placeholder {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .model-node__badge--warning {
@@ -3449,7 +3459,7 @@ body.app-slava-restraint .dynamic-node__model-badge {
   margin: 0 var(--sr-space-3) var(--sr-space-2);
   padding: 0;
   overflow: hidden;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   background: transparent;
   border-radius: 0;
   font-family: var(--sr-mono);
@@ -4015,7 +4025,7 @@ body.app-slava-restraint :is(.model-node--text-surface, .model-node--image-surfa
 }
 
 body.app-slava-restraint .model-node--image-surface .model-node__id-chip {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 /* The id chip and header actions are for the node you're working with: they
@@ -4099,7 +4109,7 @@ body.app-slava-restraint .model-node__loop-toggle {
   border: 1px solid transparent;
   border-radius: var(--sr-radius-pill);
   background: rgba(0, 0, 0, 0.46);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   cursor: pointer;
   opacity: 0;
   transition:
@@ -4466,7 +4476,7 @@ body.app-slava-restraint .editor-breadcrumb {
 }
 
 body.app-slava-restraint .editor-breadcrumb__label {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .editor-breadcrumb__source {
@@ -4711,7 +4721,7 @@ body.app-slava-restraint .final-export__error {
 
 body.app-slava-restraint .final-export__summary,
 body.app-slava-restraint .final-export__status {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
 }
@@ -4792,7 +4802,7 @@ body.app-slava-restraint .editor-tl__ruler-thumb-placeholder {
 
 body.app-slava-restraint .editor-tl__ruler {
   border-bottom: 1px dashed var(--sr-edge);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: 8px;
   line-height: var(--sr-line-tight);
@@ -4940,7 +4950,7 @@ body.app-slava-restraint .edit-node__speed-badge {
   right: 6px;
   background: var(--sr-surface-control);
   border: 1px solid var(--sr-edge-strong);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono, monospace);
   font-size: 8px;
   padding: 1px 5px;

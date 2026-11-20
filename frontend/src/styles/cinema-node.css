@@ -82,14 +82,14 @@ body.app-slava-restraint .cinema-scene-node__thumb-img {
 }
 
 body.app-slava-restraint .cinema-scene-node__thumb-placeholder {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 body.app-slava-restraint .cinema-scene-node__summary {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   margin-bottom: 8px;
 }
@@ -110,7 +110,7 @@ body.app-slava-restraint .cinema-scene-node__input-port-row {
 
 body.app-slava-restraint .cinema-scene-node__input-label {
   font-size: 10px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .cinema-scene-node__open {
@@ -149,7 +149,7 @@ body.app-slava-restraint .cinema-scene-node__shot-port-row {
 
 body.app-slava-restraint .cinema-scene-node__shot-label {
   font-size: 10px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   padding-right: 6px;
 }
 
@@ -170,7 +170,7 @@ body.app-slava-restraint .cinema-scene-node__unsaved-row {
 }
 
 body.app-slava-restraint .cinema-scene-node__unsaved {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0;

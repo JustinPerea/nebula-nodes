@@ -313,7 +313,7 @@ describe('every count in the chip shares one face (GM review, round 2)', () => {
     for (const selector of [".agent-notes-chip__count[data-muted='true']", ".agent-notes-chip__count[data-pop='true']"]) {
       expect(ruleIn(notesCss, selector)).not.toMatch(/font(-family|-weight|-style|-stretch|-variant[\w-]*)?:/);
     }
-    expect(declared(ruleIn(notesCss, ".agent-notes-chip__count[data-muted='true']"), 'color')).toBe('var(--an-faint)');
+    expect(declared(ruleIn(notesCss, ".agent-notes-chip__count[data-muted='true']"), 'color')).toBe('var(--sr-ink-light)');
   });
 });
 
@@ -332,7 +332,7 @@ describe('the Commons sections share one heading pattern (GM review, round 2)', 
     expect(declared(eyebrow, 'font-size')).toBe('10px');
     expect(declared(eyebrow, 'letter-spacing')).toBe('1.5px');
     expect(declared(eyebrow, 'color')).toBe('var(--evaluation-eyebrow-ink)');
-    expect(declared(ruleIn(evaluationCss, '.commons-evaluation'), '--evaluation-eyebrow-ink')).toBe('var(--sr-ink-meta)');
+    expect(declared(ruleIn(evaluationCss, '.commons-evaluation'), '--evaluation-eyebrow-ink')).toBe('var(--sr-ink-light)');
     // The h2 takes the line's type: no heading size, weight or margin of its own.
     const name = ruleIn(evaluationCss, '.commons-eyebrow h2');
     expect(declared(name, 'font')).toBe('inherit');

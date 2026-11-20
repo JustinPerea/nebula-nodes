@@ -77,7 +77,7 @@ body.app-slava-restraint .remotion-editor-view__title {
 }
 
 body.app-slava-restraint .remotion-editor-view__meta {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 12px;
 }
 
@@ -254,7 +254,7 @@ body.app-slava-restraint .remotion-editor-view__empty-state {
   display: grid;
   place-items: center;
   padding: 40px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 /* ── RemotionEditorToolbar ──────────────────────────────────────────────────── */
@@ -343,7 +343,7 @@ body.app-slava-restraint .remotion-properties-panel {
 }
 
 body.app-slava-restraint .remotion-properties-panel--empty {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   display: grid;
   place-items: center;
   height: 100%;
@@ -368,7 +368,7 @@ body.app-slava-restraint .remotion-properties-panel__type {
 }
 
 body.app-slava-restraint .remotion-properties-panel__id {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: monospace;
 }
 
@@ -376,7 +376,7 @@ body.app-slava-restraint .remotion-properties-panel__section h4 {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   margin: 0 0 6px 0;
 }
 
@@ -407,7 +407,7 @@ body.app-slava-restraint .remotion-properties-panel__section textarea:focus {
 body.app-slava-restraint .remotion-properties-panel__field-label {
   display: block;
   margin-bottom: 4px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 

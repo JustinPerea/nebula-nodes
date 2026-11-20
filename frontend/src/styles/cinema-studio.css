@@ -43,7 +43,7 @@ body.app-slava-restraint .cinema-studio-view__panel-empty {
   display: grid;
   place-items: center;
   height: 100%;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 13px;
 }
 
@@ -131,7 +131,7 @@ body.app-slava-restraint .cinema-scene-settings__overview {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px 12px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   overflow-wrap: anywhere;
 }
 
@@ -154,7 +154,7 @@ body.app-slava-restraint .cinema-connected-inputs {
 body.app-slava-restraint .cinema-connected-inputs__label {
   flex: 0 0 auto;
   font-size: 11px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .cinema-connected-inputs__source {
@@ -177,7 +177,7 @@ body.app-slava-restraint .cinema-connected-inputs__source {
 body.app-slava-restraint .cinema-connected-inputs__source:hover { border-color: var(--sr-accent); }
 body.app-slava-restraint .cinema-connected-inputs__role { font-weight: 600; }
 body.app-slava-restraint .cinema-connected-inputs__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.app-slava-restraint .cinema-connected-inputs__detail { grid-column: 1 / 3; font-size: 11px; color: var(--sr-ink-meta); }
+body.app-slava-restraint .cinema-connected-inputs__detail { grid-column: 1 / 3; font-size: 11px; color: var(--sr-ink-light); }
 body.app-slava-restraint .cinema-connected-inputs__view { grid-column: 3; grid-row: 1 / 3; align-self: center; color: var(--sr-accent); }
 
 body.app-slava-restraint .cinema-shared-controls {
@@ -200,12 +200,12 @@ body.app-slava-restraint .cinema-shared-controls__label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .cinema-shared-controls__sub {
   font-size: 11px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   min-width: 64px;
 }
 
@@ -487,7 +487,7 @@ body.app-slava-restraint .cinema-shots-rail__thumb-empty {
   place-items: center;
   width: 100%;
   height: 100%;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 18px;
 }
 
@@ -513,7 +513,7 @@ body.app-slava-restraint .cinema-shots-rail__caption {
   justify-content: space-between;
   padding: 4px 8px;
   font-size: 11px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .cinema-shots-rail__remove {
@@ -577,7 +577,7 @@ body.app-slava-restraint .cinema-shot-panel__editor {
 
 body.app-slava-restraint .cinema-shot-panel__heading { margin: 0; font-size: 15px; font-weight: 600; }
 body.app-slava-restraint .cinema-shot-panel__heading h2 { margin: 0 0 4px; font-size: 18px; }
-body.app-slava-restraint .cinema-shot-panel__heading span { font-size: 12px; font-weight: 400; color: var(--sr-ink-meta); }
+body.app-slava-restraint .cinema-shot-panel__heading span { font-size: 12px; font-weight: 400; color: var(--sr-ink-light); }
 
 body.app-slava-restraint .cinema-shot-panel__preview {
   position: relative;
@@ -610,7 +610,7 @@ body.app-slava-restraint .cinema-shot-panel__preview-empty {
   place-items: center;
   width: 100%;
   height: 100%;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 13px;
 }
 
@@ -663,7 +663,7 @@ body.app-slava-restraint .cinema-shot-panel__variations-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .cinema-shot-panel__stepper {
@@ -706,7 +706,7 @@ body.app-slava-restraint .cinema-shot-panel__variation img {
 body.app-slava-restraint .cinema-shot-panel__variation--empty {
   display: grid;
   place-items: center;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 14px;
 }
 
@@ -714,7 +714,7 @@ body.app-slava-restraint .cinema-shot-panel__label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .cinema-shot-panel__prompt {
@@ -766,7 +766,7 @@ body.app-slava-restraint .cinema-shot-panel__reset {
 
 body.app-slava-restraint .cinema-shot-panel__inheritance {
   margin: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -878,7 +878,7 @@ body.app-slava-restraint .cinema-shot-panel__motion-feedback {
   margin: 0;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   overflow-wrap: anywhere;
 }
 
@@ -911,7 +911,7 @@ body.app-slava-restraint .cinema-reference-upload__status,
 body.app-slava-restraint .cinema-reference-upload__message {
   font-size: 12px;
   line-height: 1.4;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   overflow-wrap: anywhere;
 }
 

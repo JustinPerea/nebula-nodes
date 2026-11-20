@@ -41,7 +41,7 @@ body.app-slava-restraint .remotion-node__title {
 }
 
 body.app-slava-restraint .remotion-node__summary {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   margin-bottom: 8px;
 }

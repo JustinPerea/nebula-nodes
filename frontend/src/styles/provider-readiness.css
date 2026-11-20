@@ -8,7 +8,7 @@ body.app-slava-restraint .provider-readiness {
   padding: 4px 8px 8px;
   font-size: 11px;
   line-height: 1.5;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .provider-readiness__label { overflow-wrap: anywhere; }
@@ -35,7 +35,7 @@ body.app-slava-restraint .provider-readiness__setup:disabled { opacity: 0.45; cu
    disabled grey, and "Set up" is a disabled button (no accent on hover). */
 body.app-slava-restraint .provider-readiness--offline .provider-readiness__label,
 body.app-slava-restraint .provider-readiness--offline.provider-readiness--warning .provider-readiness__label,
-body.app-slava-restraint .provider-readiness--offline.provider-readiness--success .provider-readiness__label { color: var(--sr-ink-meta); }
+body.app-slava-restraint .provider-readiness--offline.provider-readiness--success .provider-readiness__label { color: var(--sr-ink-light); }
 body.app-slava-restraint .provider-readiness--offline .provider-readiness__setup:disabled {
   border-color: var(--sr-edge);
   color: var(--sr-ink-meta);

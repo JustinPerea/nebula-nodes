@@ -27,7 +27,7 @@ body.app-slava-restraint .reference-set-node__title {
 
 body.app-slava-restraint .reference-set-node__guidance {
   margin: 0 0 8px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
   line-height: 1.4;
 }
@@ -89,7 +89,7 @@ body.app-slava-restraint .reference-set-node__preview {
 }
 
 body.app-slava-restraint .reference-set-node__preview-empty {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   /* Design: a hint is a sentence, so normal text, not the caps label style. */
   font-size: 10px;
   line-height: 1.4;
@@ -103,7 +103,7 @@ body.app-slava-restraint .reference-set-node__preview-item {
 }
 
 body.app-slava-restraint .reference-set-node__preview-weight {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }

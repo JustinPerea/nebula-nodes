@@ -51,11 +51,11 @@ body.app-slava-restraint .project-home__new svg,
 body.app-slava-restraint .project-home__secondary svg { width: 16px; height: 16px; stroke-width: var(--sr-icon-stroke); }
 body.app-slava-restraint .project-home__section-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 body.app-slava-restraint .project-home h2 { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 500; letter-spacing: -0.02em; }
-body.app-slava-restraint .project-home__count { color: var(--sr-ink-meta); font: 11px var(--sr-mono); }
+body.app-slava-restraint .project-home__count { color: var(--sr-ink-light); font: 11px var(--sr-mono); }
 body.app-slava-restraint .project-home__search { display: flex; align-items: center; gap: 8px; width: min(100%, 236px); min-height: 38px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); }
 body.app-slava-restraint .project-home__search svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--sr-ink-meta); }
 body.app-slava-restraint .project-home__search input { width: 100%; min-width: 0; padding: 9px 0; border: 0; background: transparent; color: var(--sr-ink); font: 12px var(--sr-ui); }
-body.app-slava-restraint .project-home__search input::placeholder { color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__search input::placeholder { color: var(--sr-ink-light); }
 body.app-slava-restraint .project-home__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px; }
 body.app-slava-restraint .project-home__card { min-width: 0; border: 1px solid var(--sr-edge); border-radius: var(--sr-node-media-radius); background: var(--sr-canvas-elevated); transition: border-color var(--sr-motion-fast), background var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__card:hover { border-color: var(--sr-edge-strong); }
@@ -91,7 +91,7 @@ body.app-slava-restraint .project-home__graph-edge { fill: none; stroke: var(--s
 body.app-slava-restraint .project-home__graph-detail { fill: none; stroke: var(--sr-ink-faint); stroke-width: 2; stroke-linecap: round; }
 body.app-slava-restraint .project-home__graph-port { fill: var(--sr-ink-light); }
 body.app-slava-restraint .project-home__card-name { display: block; margin: 18px 16px 6px; overflow-wrap: anywhere; font-size: 14px; font-weight: 500; line-height: 1.4; letter-spacing: -0.015em; }
-body.app-slava-restraint .project-home__card-date { display: block; margin: 0 16px; color: var(--sr-ink-meta); font-size: 11px; line-height: 1.5; }
+body.app-slava-restraint .project-home__card-date { display: block; margin: 0 16px; color: var(--sr-ink-light); font-size: 11px; line-height: 1.5; }
 body.app-slava-restraint .project-home__card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; color: var(--sr-ink-light); font-size: 11px; line-height: 1.5; }
 body.app-slava-restraint .project-home__rename { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
 body.app-slava-restraint .project-home__rename:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--sr-edge); background: var(--sr-surface-control-hover); color: var(--sr-ink); }
@@ -113,12 +113,12 @@ body.app-slava-restraint .project-home__trash-toggle { display: inline-flex; ali
 body.app-slava-restraint .project-home__trash-toggle:hover { background: var(--sr-surface-control-hover); }
 body.app-slava-restraint .project-home__trash-toggle svg { width: 15px; height: 15px; color: var(--sr-ink-meta); transition: transform var(--sr-motion-handle); }
 body.app-slava-restraint .project-home__trash-toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
-body.app-slava-restraint .project-home__trash-note { margin: 8px 0 14px 4px; color: var(--sr-ink-meta); font-size: 12px; line-height: 1.5; }
+body.app-slava-restraint .project-home__trash-note { margin: 8px 0 14px 4px; color: var(--sr-ink-light); font-size: 12px; line-height: 1.5; }
 body.app-slava-restraint .project-home__trash-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 body.app-slava-restraint .project-home__trash-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 16px; padding: 10px 10px 10px 14px; border: 1px solid var(--sr-edge); border-radius: var(--sr-radius-control); background: var(--sr-canvas-elevated); }
 body.app-slava-restraint .project-home__trash-name { min-width: 0; overflow: hidden; color: var(--sr-ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 /* The name stays on one line (ellipsis) and the date line never wraps. */
-body.app-slava-restraint .project-home__trash-meta { grid-row: 2; min-width: 0; margin-top: 2px; overflow: hidden; color: var(--sr-ink-meta); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+body.app-slava-restraint .project-home__trash-meta { grid-row: 2; min-width: 0; margin-top: 2px; overflow: hidden; color: var(--sr-ink-light); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 /* Delete forever's confirm: its own full-width row under the name, the date
    line and Restore. It opens on the layout spring (a sampled spring, as
    panels.css's) and closes back on Cancel; with no row gap, a closed row
@@ -208,7 +208,7 @@ body.app-slava-restraint .project-home__notices .project-home__notice,
 body.app-slava-restraint .project-home__notices .project-home__error { margin-bottom: 0; }
 body.app-slava-restraint .project-home__notice-text { min-width: 0; overflow-wrap: anywhere; }
 /* Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen that can't go yet, under its card. */
-body.app-slava-restraint .project-home__card-lock { margin: 0; padding: 0 16px 12px; color: var(--sr-ink-meta); font-family: var(--sr-ui); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+body.app-slava-restraint .project-home__card-lock { margin: 0; padding: 0 16px 12px; color: var(--sr-ink-light); font-family: var(--sr-ui); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 body.app-slava-restraint .project-home__notice-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
 body.app-slava-restraint .project-home__notice-restore { min-height: 34px; padding: 0 12px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-surface-control); color: var(--sr-ink); font-size: 12px; }
 body.app-slava-restraint .project-home__notice-restore:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--sr-surface-control-hover); }

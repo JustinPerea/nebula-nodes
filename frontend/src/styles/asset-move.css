@@ -71,4 +71,4 @@
 .asset-move__item[aria-checked="true"] { color: var(--sr-ink, inherit); font-weight: 600; }
 .asset-move__item[aria-checked="true"]::before { content: "✓"; position: absolute; left: 8px; top: 6px; line-height: inherit; }
 .asset-move__label { overflow-wrap: anywhere; }
-.asset-move__reason { font-size: 11px; color: var(--sr-ink-meta, rgba(0, 0, 0, 0.6)); white-space: normal; }
+.asset-move__reason { font-size: 11px; color: var(--sr-ink-light); white-space: normal; }

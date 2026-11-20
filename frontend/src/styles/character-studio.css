@@ -50,7 +50,7 @@ body.app-slava-restraint .character-studio-view__loading {
   justify-items: center;
   gap: 10px;
   height: 100%;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 13px;
 }
 
@@ -114,20 +114,20 @@ body.app-slava-restraint .character-studio-toolbar__spacer { flex: 1; }
 body.app-slava-restraint .character-studio-toolbar__state {
   font-size: 11px;
   letter-spacing: 0.03em;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .character-studio-toolbar__state--saving {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .character-studio-toolbar__state--saved {
-  /* Design: a finished save is the calm case, so the neutral meta ink. */
-  color: var(--sr-ink-meta);
+  /* Design: a finished save is the calm case, so the neutral light ink. */
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .character-studio-toolbar__state--draft {
-  color: var(--sr-ink-faint);
+  color: var(--sr-ink-light);
 }
 
 /* Design: a save that failed is a warning (the warning token, not a salmon literal). */
@@ -157,7 +157,7 @@ body.app-slava-restraint .character-palette__scope-tab {
   flex: 1;
   background: none;
   border: 1px solid var(--sr-edge);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   padding: 4px 8px;
   border-radius: 2px;
   cursor: pointer;
@@ -212,7 +212,7 @@ body.app-slava-restraint .character-palette__empty--error {
 
 /* The open Character is another project's: say where, above the list. */
 body.app-slava-restraint .character-rail__empty--notice {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .character-rail__new:disabled,
@@ -379,7 +379,7 @@ body.app-slava-restraint .character-def__label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .character-def__hint {
@@ -489,7 +489,7 @@ body.app-slava-restraint .character-def__ref-add {
   border: 1px dashed var(--sr-edge-strong);
   border-radius: 3px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   cursor: pointer;
   font-size: 20px;
 }
@@ -523,7 +523,7 @@ body.app-slava-restraint :is(.character-studio-view__notice--guard, .character-s
 }
 
 body.app-slava-restraint .character-studio-view__notice--warn {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 /* Someone else changed a field the person was editing: theirs is kept, and
@@ -646,7 +646,7 @@ body.app-slava-restraint .panel__body--assets {
 body.app-slava-restraint .assets-panel__tab {
   border: 1px solid var(--sr-edge, rgba(0, 0, 0, 0.12));
   background: transparent;
-  color: var(--sr-ink-meta, rgba(0, 0, 0, 0.6));
+  color: var(--sr-ink-light);
 }
 body.app-slava-restraint .assets-panel__tab--active {
   border: 1px solid var(--sr-accent);

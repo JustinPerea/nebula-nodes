@@ -115,13 +115,13 @@ body.app-slava-restraint .moodboard-studio-toolbar__spacer {
 }
 
 body.app-slava-restraint .moodboard-studio-toolbar__state {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
 body.app-slava-restraint .moodboard-studio-toolbar__state--saved {
   /* Design: a finished save is the calm case, so the neutral meta ink; the word carries it. */
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 /* Design: a save that failed is a warning (the warning token, not an amber literal). */
@@ -167,7 +167,7 @@ body.app-slava-restraint .moodboard-studio-view__main {
 
 body.app-slava-restraint .moodboard-studio-view__loading,
 body.app-slava-restraint .moodboard-analysis__empty {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 12px;
 }
 
@@ -293,7 +293,7 @@ body.app-slava-restraint .moodboard-field {
   flex-direction: column;
   gap: 5px;
   min-width: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -362,7 +362,7 @@ body.app-slava-restraint .moodboard-dropzone__hint,
 body.app-slava-restraint .moodboard-analysis__hint {
   display: block;
   margin-top: 2px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
@@ -417,7 +417,7 @@ body.app-slava-restraint .moodboard-tile__upload-name {
 
 body.app-slava-restraint .moodboard-tile__upload-state {
   font-size: 12px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .moodboard-tile__remove {
@@ -442,7 +442,7 @@ body.app-slava-restraint .moodboard-tile__controls {
 
 body.app-slava-restraint .moodboard-tile__controls label,
 body.app-slava-restraint .moodboard-tile__toggle {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
@@ -470,7 +470,7 @@ body.app-slava-restraint .moodboard-tile__note--private textarea {
 }
 
 body.app-slava-restraint .moodboard-analysis__summary {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -508,7 +508,7 @@ body.app-slava-restraint .moodboard-palette__new {
   border: 1px solid var(--sr-edge);
   border-radius: 2px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   padding: 5px 8px;
   font: inherit;
   font-size: 11px;
@@ -552,7 +552,7 @@ body.app-slava-restraint .moodboard-rail__empty--error {
 
 /* The open board is another project's: say where, above the list. */
 body.app-slava-restraint .moodboard-rail__empty--notice {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
 }
 
 body.app-slava-restraint .moodboard-rail__item,
@@ -615,7 +615,7 @@ body.app-slava-restraint .moodboard-palette__name {
 
 body.app-slava-restraint .moodboard-rail__sub,
 body.app-slava-restraint .moodboard-palette__sub {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
 }
 
@@ -674,7 +674,7 @@ body.app-slava-restraint .moodboard-chip {
 body.app-slava-restraint .moodboard-analysis .moodboard-chip button {
   border: none;
   padding: 0 4px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 13px;
   line-height: 1;
 }
@@ -761,7 +761,7 @@ body.app-slava-restraint .moodboard-brief__extras {
 }
 
 body.app-slava-restraint .moodboard-brief__extras dt {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -824,7 +824,7 @@ body.app-slava-restraint .moodboard-color__share {
 }
 
 body.app-slava-restraint .moodboard-color__sources {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
@@ -854,7 +854,7 @@ body.app-slava-restraint .moodboard-color__detail-row {
   display: grid;
   grid-template-columns: auto auto auto;
   gap: 10px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-variant-numeric: tabular-nums;
 }
 
@@ -863,7 +863,7 @@ body.app-slava-restraint .moodboard-color__detail-row span:first-child {
 }
 
 body.app-slava-restraint .moodboard-colors__hint {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 12px;
 }
 
@@ -893,7 +893,7 @@ body.app-slava-restraint .moodboard-image-colors__item {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -928,7 +928,7 @@ body.app-slava-restraint .moodboard-clashes {
 
 body.app-slava-restraint .moodboard-clashes__off {
   margin: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 12px;
 }
 
@@ -998,7 +998,7 @@ body.app-slava-restraint .moodboard-clash__role {
 
 body.app-slava-restraint .moodboard-clash__reason {
   min-width: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   line-height: 1.35;
 }
 
@@ -1043,7 +1043,7 @@ body.app-slava-restraint .moodboard-advanced__toggle {
   border: none;
   padding: 0;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1106,7 +1106,7 @@ body.app-slava-restraint .moodboard-advanced__default {
 
 body.app-slava-restraint .moodboard-advanced__hint {
   grid-column: 2;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   line-height: 1.35;
 }
@@ -1210,7 +1210,7 @@ body.app-slava-restraint .moodboard-def__cover img {
 
 body.app-slava-restraint .moodboard-def__cover-caption {
   margin: 0;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -1241,7 +1241,7 @@ body.app-slava-restraint .moodboard-tile__cover-button {
   border: 1px solid var(--sr-edge);
   border-radius: 2px;
   background: none;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   padding: 2px 8px;
   font: inherit;
   font-size: 11px;

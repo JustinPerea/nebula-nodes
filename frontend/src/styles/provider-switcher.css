@@ -244,13 +244,13 @@ body.app-slava-restraint .provider-switcher__block {
 }
 
 body.app-slava-restraint .provider-switcher__info {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
 }
 
 body.app-slava-restraint .provider-switcher__price,
 body.app-slava-restraint .provider-switcher__key {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
 }
@@ -300,7 +300,7 @@ body.app-slava-restraint .provider-switcher--inspector .provider-switcher__stop 
 body.app-slava-restraint .model-node__provider-chip {
   border: 1px solid var(--sr-edge);
   background: transparent;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   transition: color var(--sr-motion-ui), border-color var(--sr-motion-ui);
@@ -336,7 +336,7 @@ body.app-slava-restraint .model-node__provider-note {
   font-size: var(--sr-type-label);
 }
 
-body.app-slava-restraint .model-node__provider-note-dismiss { color: var(--sr-ink-meta); }
+body.app-slava-restraint .model-node__provider-note-dismiss { color: var(--sr-ink-light); }
 
 body.app-slava-restraint .model-node__provider-note-dismiss:hover,
 body.app-slava-restraint .model-node__provider-note-dismiss:focus-visible { color: var(--sr-ink-bold); }
@@ -359,7 +359,7 @@ body.app-slava-restraint .provider-switcher__pill:focus-visible { outline: var(-
 
 body.app-slava-restraint .param-pills__note { color: var(--sr-ink-light); font-size: var(--sr-type-label); }
 
-body.app-slava-restraint .param-pills__note-dismiss { color: var(--sr-ink-meta); }
+body.app-slava-restraint .param-pills__note-dismiss { color: var(--sr-ink-light); }
 
 /* A Space route's Hugging Face token set (Idol's), or a keyless route's
    optional key: the Settings row's green dot and "Connected" (settings.css .settings-row__dot--ok). */

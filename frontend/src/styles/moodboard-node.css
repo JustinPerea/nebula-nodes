@@ -56,7 +56,7 @@ body.app-slava-restraint .moodboard-node__preview img {
 
 body.app-slava-restraint .moodboard-node__meta {
   margin-top: 8px;
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
@@ -95,7 +95,7 @@ body.app-slava-restraint .moodboard-node__output {
   align-items: center;
   gap: 5px;
   transform: translateX(100%);
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 10px;
   pointer-events: none;
 }

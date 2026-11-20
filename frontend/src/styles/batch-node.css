@@ -17,7 +17,7 @@ body.app-slava-restraint .batch-node__header {
   margin-bottom: 10px;
 }
 body.app-slava-restraint .batch-node__name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-body.app-slava-restraint .batch-node__count { color: var(--sr-ink-meta); white-space: nowrap; }
+body.app-slava-restraint .batch-node__count { color: var(--sr-ink-light); white-space: nowrap; }
 body.app-slava-restraint .batch-node__edit {
   background: transparent;
   border: 0;
@@ -33,10 +33,10 @@ body.app-slava-restraint .batch-node__item > span:last-child {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-body.app-slava-restraint .batch-node__item-index { color: var(--sr-ink-meta); min-width: 15px; }
+body.app-slava-restraint .batch-node__item-index { color: var(--sr-ink-light); min-width: 15px; }
 body.app-slava-restraint .batch-node__empty,
 body.app-slava-restraint .batch-node__overflow,
-body.app-slava-restraint .batch-node__guidance { color: var(--sr-ink-meta); }
+body.app-slava-restraint .batch-node__guidance { color: var(--sr-ink-light); }
 body.app-slava-restraint .batch-node__guidance { margin: 10px 0; font-size: 10px; line-height: 1.4; }
 body.app-slava-restraint .batch-node__warning {
   margin: 8px 0;
@@ -76,5 +76,5 @@ body.app-slava-restraint .batch-carousel__controls button {
 }
 body.app-slava-restraint .batch-carousel__controls button:disabled { opacity: 0.35; cursor: default; }
 body.app-slava-restraint .batch-carousel__position { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-body.app-slava-restraint .batch-carousel__note { display: block; margin-top: 5px; color: var(--sr-ink-meta); font-size: 9px; }
-body.app-slava-restraint .batch-carousel__active-label { color: var(--sr-ink-meta); font-size: 11px; }
+body.app-slava-restraint .batch-carousel__note { display: block; margin-top: 5px; color: var(--sr-ink-light); font-size: 9px; }
+body.app-slava-restraint .batch-carousel__active-label { color: var(--sr-ink-light); font-size: 11px; }

@@ -26,7 +26,7 @@
 }
 
 body.app-slava-restraint .node-skip {
-  color: var(--sr-ink-meta, #a0a0a0);
+  color: var(--sr-ink-light);
   background: color-mix(in srgb, var(--sr-ink-meta, #a0a0a0) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--sr-ink-meta, #a0a0a0) 28%, transparent);
   font-family: var(--sr-mono, ui-monospace, monospace);

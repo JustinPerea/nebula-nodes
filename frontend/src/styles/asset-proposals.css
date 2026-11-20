@@ -128,13 +128,13 @@
 .asset-proposal__cover-auto {
   display: grid;
   place-items: center;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
 .asset-proposal__cover figcaption {
   overflow: hidden;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -143,7 +143,7 @@
 .asset-proposal__arrow {
   width: 14px;
   height: 14px;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
 }
 
 /* A Commons reference's edits: one row each, the field on the left, the
@@ -169,7 +169,7 @@
 
 .asset-proposal__edit-label {
   flex-shrink: 0;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
   font-size: 11px;
 }
 
@@ -180,7 +180,7 @@
 }
 
 .asset-proposal__edit-arrow {
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
 }
 
 .asset-proposal__edit-to {
@@ -212,7 +212,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
   font: 11px var(--sr-mono, ui-monospace, monospace);
 }
 
@@ -263,7 +263,7 @@
 /* A pin whose image left the project (Q90 a): why the cover is automatic. */
 .asset-proposal__lost {
   margin: 0;
-  color: var(--sr-ink-meta, rgb(255 255 255 / 0.4));
+  color: var(--sr-ink-light);
   font-size: 11px;
   line-height: 1.35;
 }

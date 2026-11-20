@@ -102,7 +102,7 @@
 }
 
 .spatial-preview__metric dt {
-  color: var(--sr-ink-meta);
+  color: var(--sr-ink-light);
   font-size: 8px;
   font-weight: 650;
   letter-spacing: 0.06em;

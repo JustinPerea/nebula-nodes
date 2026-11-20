@@ -298,7 +298,7 @@ body.app-slava-restraint .react-flow__minimap {
   font-size: 12px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--sr-ink-light);
   margin-top: 6px;
 }
 

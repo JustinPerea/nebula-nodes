@@ -113,7 +113,7 @@
 
 .placeholder-run__free,
 .placeholder-run__note {
-  color: var(--sr-ink-meta, #b5b5b5);
+  color: var(--sr-ink-light);
 }
 
 .placeholder-run__total {
@@ -124,7 +124,7 @@
    3): muted, no dot, its name lined up with the agents' rows. */
 .placeholder-run__row--muted {
   text-indent: 0;
-  color: var(--sr-ink-meta, #b5b5b5);
+  color: var(--sr-ink-light);
 }
 
 .placeholder-run__row--muted .placeholder-run__name {
