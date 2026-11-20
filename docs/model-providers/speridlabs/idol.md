@@ -239,10 +239,13 @@ $0 and spend tracking never counts it as paid.
     wraps and the chip goes onto its own line under "Accept and run",
     never clipped (GM r19 item 8). The bar's line 1 counts plan runs
     outside paid: "runs 2 paid models · 1 on Krea plan".
-  - The bar (GM r14 item 2): "Runs “Idol” · may use your Hugging Face credits",
-    or with paid models "Runs 2 paid models and “Idol” · “Idol” may use your
-    Hugging Face credits", no provider tag, and the amount leads the line
-    under it: "~$0.13 · List prices, not a quote · expires in 14:59".
+  - The plan line (design; `canvas_proposals.plan_line`): "Runs “Idol” · may use your Hugging Face credits"
+    when Idol is all the plan runs, and with other runs the segment names the
+    node, as in "Runs “A”, “B” and “Idol” · 2 paid runs · “Idol” may use your
+    Hugging Face credits · ~$0.13" (two paid runs and Idol; with a free run
+    instead: "Runs “Idol” and “Splat” · “Idol” may use your Hugging Face
+    credits"). It has no final stop and no provider tag; the chip under it
+    reads "List prices, not a quote · expires in 14:59".
   - The ghost card (GM r15 item 1): "may cost · Hugging Face" with the
     token, "free · Hugging Face" without. Its tag is in the node's cost
     class (`canvas_proposals._ghost_cost`, review 10, NIT-3): the run

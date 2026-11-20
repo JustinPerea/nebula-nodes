@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keptUndoLine, partialUndoLine, undoneLine } from './undoLines';
+import { imageStepWords, keptUndoLine, lookNameInLine, partialUndoLine, undoneLine } from './undoLines';
 
 describe('the undo and redo toasts’ words (design r160 and r161)', () => {
   it('have no colon: the step’s label sits in curly quotes', () => {
@@ -199,5 +199,27 @@ describe('the toast for an undo that put some parts back and kept others (design
     expect(partialUndoLine('undo', 'x', [{ part: 'settings', reason: 'changed since', number: 5, settings: ['colour'] }])).toBeNull();
     // one unsayable slice spoils the whole mix
     expect(partialUndoLine('undo', 'x', [image(5), field('direction', { reason: 'something else' })])).toBeNull();
+  });
+
+  it('names the images a step touched by the names rule: up to three listed, from four a count', () => {
+    expect(imageStepWords([4])).toBe('image 4');
+    expect(imageStepWords([4, 5])).toBe('images 4 and 5');
+    expect(imageStepWords([4, 5, 6])).toBe('images 4, 5 and 6');
+    expect(imageStepWords([4, 5, 6, 7, 8, 9])).toBe('6 images');
+    expect(partialUndoLine('undo', `Added ${imageStepWords([4, 5, 6])}`, [{ part: 'image', reason: 'changed since', number: 5 }]))
+      .toBe('Undid “Added images 4, 5 and 6” except image 5, which changed after that.');
+  });
+
+  it('shortens a look’s name as the backend does (60 characters, an ellipsis inside them)', () => {
+    const long = `${'Dusk over the harbour '.repeat(4)}end`;
+    expect(long.length).toBeGreaterThan(60);
+    const cut = lookNameInLine(long);
+    expect(cut.length).toBe(60);
+    expect(cut.endsWith('…')).toBe(true);
+    expect(lookNameInLine('  Dusk \n  Noon ')).toBe('Dusk Noon');
+    const seventy = 'x'.repeat(70);
+    expect(lookNameInLine(seventy)).toBe(`${'x'.repeat(59)}…`);
+    expect(partialUndoLine('undo', 'Moved 2 looks', [look('f1')], () => seventy))
+      .toBe(`Undid “Moved 2 looks” except “${'x'.repeat(59)}…”, which changed after that.`);
   });
 });

@@ -78,7 +78,7 @@ import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { boardCover } from '../../lib/moodboardCover';
 import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './fieldSteps';
-import { keptUndoLine, partialUndoLine, undoneLine } from './undoLines';
+import { imageStepWords, keptUndoLine, partialUndoLine, undoneLine } from './undoLines';
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
@@ -1084,7 +1084,7 @@ function createDraftImage(url: string): MoodboardImage {
 /** The board fields whose change clears the analysis (it reads them). */
 const STEERING_FIELDS = ['mode', 'strength', 'notes'] as const;
 
-/** A step's name for the undo toast: what changed on which reference. */
+/** A step's name for the undo toast: what changed on which image. */
 function imagePatchLabel(patch: Partial<MoodboardImage>, number: number): string {
   if ('excluded' in patch) return patch.excluded ? `Set aside image ${number}` : `Used image ${number} again`;
   if ('weight' in patch) return `Changed the weight of image ${number}`;
@@ -1801,7 +1801,8 @@ export function MoodboardStudioView() {
         if (target) ops.forEach((op, index) => addViews.set(op, { view: target.view, seen: target.seen, band: Boolean(target.band),
           size: [placed[index].holder.width, placed[index].holder.height] }));
         const count = images.length;
-        const label = placed.length === 1 ? `Added image ${count + 1}` : `Added ${placed.length} references`;
+        // New images go on the end, so they are numbered from count + 1 on the board the person is looking at.
+        const label = `Added ${imageStepWords(placed.map((_, index) => count + index + 1))}`;
         // On the Board the new cards are sized from their aspect at once; a List add leaves that to the server, as it always has.
         const aspectsOf: Record<string, number> = target ? Object.fromEntries(placed.map((item) => [item.url, item.aspect])) : {};
         // Each uploaded image takes its spot: its placeholder stays under it
@@ -1932,11 +1933,12 @@ export function MoodboardStudioView() {
     sendNow();
   };
 
-  /** Remove references as one step, sent at once, with Undo in the toast (Q15). */
+  /** Remove images as one step, sent at once, with Undo in the toast (Q15). */
   const removeImages = (ids: string[]) => {
     if (ids.length === 0) return;
     const images = draftNow()?.images ?? draft.images;
-    const label = ids.length === 1 ? `Removed image ${numberOf(images, ids[0])}` : `Removed ${ids.length} references`;
+    // Numbered as the board reads before the removal: the numbers on the cards the person picked.
+    const label = `Removed ${imageStepWords(ids.map((id) => numberOf(images, id)).sort((a, b) => a - b))}`;
     const stepId = commitOps([{ op: 'remove', images: ids }], label, { now: true });
     if (stepId) showToast({ text: label, action: { label: 'Undo', run: () => { void runUndo('undo', stepId); } }, undoOf: stepId });
   };
@@ -1946,8 +1948,10 @@ export function MoodboardStudioView() {
   const moveCards = (moves: BoardMove[]) => {
     if (moves.length === 0) return;
     const images = draftNow()?.images ?? draft.images;
-    const owner = images.findIndex((image) => image.placements?.some((card) => card.id === moves[0].placement));
-    const label = moves.length === 1 ? `Moved image ${owner + 1}` : `Moved ${moves.length} references`;
+    // The images whose cards moved, by their numbers on the board as it was when the person moved them.
+    const owners = [...new Set(moves.map((move) => images.findIndex((image) => image.placements?.some((card) => card.id === move.placement)) + 1))]
+      .filter((n) => n > 0).sort((a, b) => a - b);
+    const label = owners.length ? `Moved ${imageStepWords(owners)}` : 'Moved cards';
     commitOps(moves.map(({ placement, x, y }) => ({ op: 'place', placement, x, y })), label, { now: true });
   };
 

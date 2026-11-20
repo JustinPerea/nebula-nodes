@@ -563,6 +563,19 @@ UNDONE_VERBS = (("removed", "removed"), ("added", "put back"), ("changed", "rese
                 ("placeholders", "made pending"))
 
 
+def kept_lines(skipped: list[dict[str, Any]]) -> list[str]:
+    """What an undo left, one line each, as a person or an agent reads it
+    (design): a node whose params and name both changed has two entries (each
+    its own ``part``) that say the same sentence, and it is said once. The
+    entries themselves are not merged."""
+    lines: list[str] = []
+    for item in skipped:
+        line = str(item.get("message") or item.get("reason") or "")
+        if line and line not in lines:
+            lines.append(line)
+    return lines
+
+
 def nothing_went_back(skipped: list[dict[str, Any]], left: str = "") -> str:
     """The reply when an undo put nothing back: every part was changed or run
     since. ``left`` (the per-part list, for MCP and HTTP callers) goes in the

@@ -220,7 +220,7 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, nothing_went_back,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, kept_lines, nothing_went_back,
     plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
@@ -19975,8 +19975,7 @@ def _undo_ran_since(record: Any) -> dict[str, list[dict[str, Any]]]:
 
 def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
     """The parts an undo left, in its reply's message."""
-    messages = [str(item.get("message") or item.get("reason") or "") for item in skipped]
-    return "Left as is: " + "; ".join(message for message in messages if message) + "."
+    return "Left as is: " + "; ".join(kept_lines(skipped)) + "."
 
 
 @app.post("/api/graph/apply/undo")

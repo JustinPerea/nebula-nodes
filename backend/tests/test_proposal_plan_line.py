@@ -520,3 +520,21 @@ def test_a_quoted_name_is_quoted_once_in_the_not_ready_line(api):  # noqa: F811 
     import main
 
     assert main._quoted_name_line("FLUX 3 can't run here.", "'Hero'", {"displayName": "FLUX 3"}) == "“Hero” can't run here."
+
+
+def test_the_may_cost_segment_names_its_node_beside_a_free_run():
+    """Design: Runs “Idol” and “Splat” · “Idol” may use your Hugging Face credits.
+    The name stays off only when the may-cost node is all the plan runs."""
+    both = _view(run=["n1", "n2"],
+                 cost={"mayCostRuns": 1, "mayCost": [_idol()],
+                       "nodes": [{"ref": "n1", "nodeId": "n1", "kind": "mayCost", "name": "Idol"},
+                                 {"ref": "n2", "nodeId": "n2", "kind": "free", "name": "Splat"}]})
+    line = plan_line(both)
+    assert line == "Runs “Idol” and “Splat” · “Idol” may use your Hugging Face credits"
+    assert not line.endswith(".")
+    # The same by the run list alone (no per-node entries).
+    by_run = _view(run=["n1", "n2"], cost={"mayCostRuns": 1, "mayCost": [_idol()]})
+    assert plan_line(by_run) == "Runs 2 nodes · “Idol” may use your Hugging Face credits"
+    # Idol alone: the first segment names it, so the second doesn't repeat it (r189).
+    alone = _view(nodes=[{"ref": "n1", "name": "Idol"}], run=["n1"], cost={"mayCostRuns": 1, "mayCost": [_idol()]})
+    assert plan_line(alone) == "Adds and runs “Idol” · may use your Hugging Face credits"

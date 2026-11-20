@@ -911,3 +911,21 @@ def test_the_mcp_tool_and_docs_say_runs_count():
     root = Path(__file__).resolve().parents[2]
     assert "ran since" in (root / "docs" / "MCP-SETUP.md").read_text()
     assert "ran" in (root / "skills" / "nebula" / "SKILL.md").read_text().split("nebula undo <token>")[1][:600]
+
+
+def test_a_node_whose_params_and_name_both_changed_since_is_said_once_to_a_person_or_an_agent(api):
+    from cli.formatter import format_undone
+
+    prompt, _image = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    token = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}],
+                         "rename": {prompt: "Draft"}})["undo"]["token"]
+    assert api.client.put(f"/api/graph/node/{prompt}", headers=PERSON, json={"params": {"value": "a castle"}}).status_code == 200
+    api.graph.set_label(prompt, "Final")
+    result = _undone(api, token)
+    line = "“Final” changed after that step, so Nebula left it as it is."
+    # Both structured entries stay, one per part, with the same sentence.
+    assert sorted((item["part"], item["message"]) for item in result["skipped"]) == [("name", line), ("params", line)]
+    # The agent's message (HTTP and MCP) and the CLI's lines say it once.
+    assert result["message"].count(line) == 1
+    assert format_undone(result).splitlines().count(f"  Left as is: {line}") == 1

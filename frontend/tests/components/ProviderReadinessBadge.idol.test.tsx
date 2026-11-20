@@ -32,4 +32,15 @@ describe('ProviderReadinessBadge on Idol (GM, PR #203 r12)', () => {
     expect(label).toHaveTextContent(/^Hugging Face token · Saved$/);
     expect(label).toHaveAttribute('title', 'Idol uses your Hugging Face allowance.');
   });
+
+  it('offers "Change" beside a saved token and "Set up" only without one', () => {
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true,
+      apiKeys: { HF_TOKEN: 'hf_fixture' } } });
+    const saved = render(<ProviderReadinessBadge definition={IDOL} />);
+    expect(screen.getByRole('button', { name: 'Connection settings for Idol' })).toHaveTextContent(/^Change$/);
+    saved.unmount();
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys: {} } });
+    render(<ProviderReadinessBadge definition={IDOL} />);
+    expect(screen.getByRole('button', { name: 'Connection settings for Idol' })).toHaveTextContent(/^Set up$/);
+  });
 });

@@ -9,7 +9,7 @@ from services.node_readiness import node_access  # noqa: F401 (re-exported for t
 from services.agent_name_in_sentence import in_sentence
 from services.agent_params import ASSET_PARAM_TYPES
 from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
-from services.canvas_undo import UNDONE_VERBS, nothing_went_back
+from services.canvas_undo import UNDONE_VERBS, kept_lines, nothing_went_back
 from services.maker_sizes import rule_note
 from services.text_cut import clean_name
 from services.wording import counted
@@ -1360,8 +1360,8 @@ def format_undone(result: dict[str, Any]) -> str:
         lines.append(f"  Reopened: {', '.join(reopened)}")
     for row in result.get("notReopened") or []:
         lines.append(f"  Couldn't reopen {row.get('id')}: {row.get('reason')}")
-    for item in result.get("skipped") or []:
-        lines.append(f"  Left as is: {item.get('message') or item.get('reason')}")
+    for line in kept_lines(result.get("skipped") or []):
+        lines.append(f"  Left as is: {line}")
     return "\n".join(lines)
 
 

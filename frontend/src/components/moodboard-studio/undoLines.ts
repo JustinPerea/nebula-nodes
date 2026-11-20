@@ -12,6 +12,8 @@
  * line under "Undid".
  */
 
+import { countsInstead, joinedList } from '../../lib/errorCopy';
+import { clipGraphemes } from './boardPlaceholder';
 import { FIELD_NOUNS } from './fieldSteps';
 
 /** How a kept field reads in "because ‹the field› changed again after that" (design): the field's noun, as the step's
@@ -27,6 +29,25 @@ function inQuotes(label: string): string {
 /** "Undid “Made image 3 the cover”" or "Redid “…”". */
 export function undoneLine(direction: 'undo' | 'redo', label: string): string {
   return `${direction === 'undo' ? 'Undid' : 'Redid'} ${inQuotes(label)}`;
+}
+
+/** The most characters a look's name shows in a line, as the backend cuts it (clean_name(name, 60, ellipsis)). */
+export const LOOK_NAME_CHARS = 60;
+
+/** A look's name as the toast says it: whitespace runs are one space, the ends are stripped, and a name past 60
+ *  characters ends in an ellipsis inside the 60 (design: the same cut as the backend's line for that look). */
+export function lookNameInLine(name: string): string {
+  const clean = name.replace(/\s+/g, ' ').trim();
+  const cut = clipGraphemes(clean, LOOK_NAME_CHARS);
+  return cut === clean ? clean : `${cut.slice(0, -1).trimEnd()}…`;
+}
+
+/** The images a step names (design, names rule): "image 4", "images 4, 5 and 6" (no serial comma), and from four a
+ *  count, "6 images". `numbers` are the numbers the person saw when they made the step. */
+export function imageStepWords(numbers: readonly number[]): string {
+  if (numbers.length === 1) return `image ${numbers[0]}`;
+  if (countsInstead(numbers.length)) return `${numbers.length} images`;
+  return `images ${joinedList(numbers.map(String))}`;
 }
 
 interface SkippedSlice { part?: unknown; field?: unknown; reason?: unknown; number?: unknown; settings?: unknown }
@@ -140,7 +161,7 @@ export function partialUndoLine(
     if (slice.part === 'frame') {
       const name = typeof (slice as { frame?: unknown }).frame === 'string' ? lookName?.((slice as { frame: string }).frame) : undefined;
       if (!name || slice.reason !== 'changed since') return null;
-      const quoted = inQuotes(name);
+      const quoted = inQuotes(lookNameInLine(name));
       if (!looks.includes(quoted)) looks.push(quoted);
       continue;
     }

@@ -969,7 +969,7 @@ def _send(api: NebulaAPI, method: str, path: str, *, person_brief: str | None = 
 BOARD_WRITE_TRIES = 3
 
 _FIELD_LABELS = {
-    "name": "The name", "notes": "Notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
+    "name": "The name", "notes": "The notes", "mode": "The mode", "strength": "The strength", "direction": "The direction",
     "avoid": "The Avoid list", "pinnedColors": "The pinned colours", "clashMode": "The clash mode",
     "colorChoices": "The colour choices", "sendNotes": "“Moodboard notes to generators”",
     "briefOverride": "The hand-written brief",

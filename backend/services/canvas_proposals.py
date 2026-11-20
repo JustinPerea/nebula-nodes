@@ -993,7 +993,8 @@ def _may_cost_clauses(rows: list[Mapping[str, Any]], *, named: bool) -> str:
     final stop (design): "may use your Hugging Face credits" when the first
     segment already names the node (Idol alone), else the name quoted leads it
     ("“Idol” may use your Hugging Face credits", "“A” and “B” may use ..."), as
-    it must beside other classes or when several accounts are named. From more
+    it must beside any other run (paid, on the plan or free) or when several
+    accounts are named. From more
     than PLAN_NAMES nodes a count ("4 nodes may use ..."). Frontend
     mayCostSentence's twin for the plan line."""
     by_account: dict[str, list[str]] = {}
@@ -1061,7 +1062,13 @@ def plan_line(view: Mapping[str, Any]) -> str:
             if plan_runs > 0:
                 segments.append(f"{plan_runs} on your Krea plan")
         if may_rows:
-            segments.append(_may_cost_clauses(may_rows, named=bool(paid or plan_runs)))
+            # The name is said whenever the plan runs anything beside the
+            # may-cost nodes (paid, on the plan, or free), so the segment says
+            # which node may use the credits; the first segment names them
+            # all and can't (design: "Runs “Idol” and “Splat” · “Idol” may use ...").
+            free_runs = max(len(run) - paid - plan_runs - len(may_rows),
+                            sum(1 for entry in entries if entry.get("kind") == "free"))
+            segments.append(_may_cost_clauses(may_rows, named=bool(paid or plan_runs or free_runs > 0)))
         if not paid and not plan_runs and not may_rows:
             segments.append("free")
         if paid > 0 or plan_runs > 0:

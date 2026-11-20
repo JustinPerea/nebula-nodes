@@ -881,7 +881,7 @@ def test_cli_set_direction_racing_a_put_of_direction_overwrites_only_through_a_f
     # and the error names it; running `set` again (a fresh read) then wins.
     path = write_board(root, fixture_board())
     _race_reads(monkeypatch, [lambda: _studio_put(client, {"direction": "bright noon", "name": "Studio name"})])
-    with pytest.raises(boards.MoodboardError, match="Direction was changed") as raised:
+    with pytest.raises(boards.MoodboardError, match="The direction was changed") as raised:
         boards.update_board(app.api, BOARD_ID, direction="moody dusk", mode="world")
     assert "Nothing more was written" in str(raised.value)
     saved = json.loads(path.read_text())
@@ -904,7 +904,7 @@ def test_cli_set_refuses_a_field_changed_between_its_read_and_its_image_edits(ap
     # the Studio's Direction, so the PUT stops and hands back the undo.
     path = write_board(root, fixture_board())
     _race_reads(monkeypatch, [lambda: _studio_put(client, {"direction": "bright noon"})])
-    with pytest.raises(boards.MoodboardError, match="Direction was changed") as raised:
+    with pytest.raises(boards.MoodboardError, match="The direction was changed") as raised:
         boards.update_board(app.api, BOARD_ID, direction="moody dusk", images=[{"image": 1, "weight": 0.5}])
     assert "image changes were saved" in str(raised.value)
     assert raised.value.previous["images"][0]["weight"] == 1.0
