@@ -150,6 +150,8 @@ describe('check-badge-tone: eyebrows', () => {
     '.x__eyebrow { -webkit-text-fill-color: var(--sr-accent); }',
     '.a { .a__eyebrow { color: var(--sr-accent); } }',
     '.a { .b { .a__kicker { color: #FF5A1F; } } }',
+    '.a { &__eyebrow { color: var(--sr-accent); } }',
+    '.page { &-kicker { color: #FF5A1F; } }',
     '.a__eyebrow { &:hover { color: var(--sr-ink-light); } }',
   ];
   for (const css of failing) it(`fails: ${css}`, () => expect(eyebrows(css)).toHaveLength(1));
@@ -160,6 +162,8 @@ describe('check-badge-tone: eyebrows', () => {
     '.world-modal__title { color: var(--sr-accent); }',
     '.a { .a__eyebrow { color: var(--sr-ink-light); } }',
     '.a { .a__title { color: var(--sr-accent); } }',
+    '.a { &__title { color: var(--sr-accent); } }',
+    '.a { &__eyebrow { color: var(--sr-ink-light); } }',
   ];
   for (const css of passing) it(`passes: ${css}`, () => expect(eyebrows(css)).toHaveLength(0));
 });

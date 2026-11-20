@@ -119,11 +119,14 @@ export function findAccentBadges(source, file) {
 const EYEBROW_CLASS = /(?:^|[_-])(?:eyebrow|kicker|overline)(?:$|[_-])/;
 
 const hasEyebrowClass = (selector) => selector.split(',').some((part) => [...part.matchAll(CLASS)].some((m) => EYEBROW_CLASS.test(m[1])));
+// A nested BEM suffix (`&__eyebrow`, `&-kicker`) names an eyebrow without a leading dot.
+const NESTED_EYEBROW_SUFFIX = /&(?:[\w-]*[_-])?(?:eyebrow|kicker|overline)(?![\w])/;
 function nestedAccentEyebrow(body) {
   return parseRules(body).some((inner) => {
     const accent = ACCENT_VAR.test(inner.body) || ACCENT_LITERAL.test(inner.body);
-    if (inner.nested) return nestedAccentEyebrow(inner.body) || (hasEyebrowClass(inner.selector) && accent);
-    return hasEyebrowClass(inner.selector) && accent;
+    const eyebrow = hasEyebrowClass(inner.selector) || NESTED_EYEBROW_SUFFIX.test(inner.selector);
+    if (inner.nested) return nestedAccentEyebrow(inner.body) || (eyebrow && accent);
+    return eyebrow && accent;
   });
 }
 
