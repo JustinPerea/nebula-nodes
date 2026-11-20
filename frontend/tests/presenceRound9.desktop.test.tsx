@@ -1,5 +1,5 @@
 /**
- * PR #204 round 9, GM r12 (check on shot 07): in the desktop app's two developer setups the
+ * PR #204 (design): in the desktop app's two developer setups the
  * line says "this window" and ends "The notice below says why.", so the general notice under it
  * must be the desktop dev text, never the browser tab's ("This tab…", "Open the link Nebula
  * printed"). The reason comes from where it really does: the shell decides the launch's token
@@ -39,7 +39,7 @@ const DEV_NOTICES = {
   'dev-renderer': 'Dev mode: the Vite renderer can’t use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.',
 } as const;
 
-describe('GM r12 (07): the general notice in the desktop app\'s dev setups', () => {
+describe('the general notice in the desktop app\'s dev setups', () => {
   for (const [reason, launch] of [
     ['debug-port', { debugPort: '9222' }],
     ['debug-port', { debugSwitches: ['remote-debugging-port'] }],
@@ -76,8 +76,8 @@ describe('GM r12 (07): the general notice in the desktop app\'s dev setups', () 
   });
 });
 
-describe('GM r13 (1): Generate after its nodes were added', () => {
-  it('in a tab: GM\'s line exactly, a fix line, never "try again"', () => {
+describe('Generate after its nodes were added', () => {
+  it('in a tab: design\'s line exactly, a fix line, never "try again"', () => {
     const line = copy.generateRefusedCopy(true, false);
     expect(line).toBe('Nebula added the nodes to the canvas but couldn’t start the generation because this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.');
     expect(notConnectedKind(line)).toBe('fix');
@@ -85,7 +85,7 @@ describe('GM r13 (1): Generate after its nodes were added', () => {
     expect(copy.saysPersonRequired(line)).toBe(true);
   });
 
-  it('every Generate line opens with GM r12\'s heading', () => {
+  it('every Generate line opens with design\'s heading', () => {
     expect(copy.GENERATE_HEADING).toBe('Nebula couldn’t start the generation.');
     expect(copy.generateRefusedCopy(false, false).startsWith(copy.GENERATE_HEADING)).toBe(true);
   });

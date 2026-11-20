@@ -1,5 +1,5 @@
 /**
- * PR #199 round 22 (GM r33).
+ * PR #199 (design).
  * - 6: the held reopen's Marble forms are the World Labs notice's own second
  *   line, inside its box, in its one alert region (announced once); with
  *   nothing else to say (a `params` hold) the box holds only the line.
@@ -34,7 +34,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); clock.uninstall(); });
 
-describe('GM r33, 6: the reopen line is the World Labs notice’s second line', () => {
+describe('the reopen line is the World Labs notice’s second line', () => {
   it('renders inside the notice’s box, after its text and button, and quotes the button as it shows', () => {
     useGraphStore.setState({ providerStartAmbiguities: [AMBIGUITY] });
     const { container } = render(<ProviderRecoveryStatus reopenLine={{ line: ITS, onDismiss: () => {} }} />);
@@ -94,7 +94,7 @@ describe('GM r33, 6: the reopen line is the World Labs notice’s second line', 
   });
 });
 
-describe('GM r33, 3: “I’ve checked Marble”, curly, and quoted from the one label', () => {
+describe('“I’ve checked Marble”, curly, and quoted from the one label', () => {
   it('the button, its accessible names and the reopen line all read the curly label', () => {
     expect(UNLOCK_LABEL).toBe('I’ve checked Marble');
     expect(unlockAriaLabel('“World”')).toBe('I’ve checked Marble. Unlock “World”.');
@@ -114,7 +114,7 @@ describe('GM r33, 3: “I’ve checked Marble”, curly, and quoted from the one
   });
 });
 
-describe('GM r33, 2: the failure headings this PR adds say who, with the curly apostrophe', () => {
+describe('the failure headings this PR adds say who, with the curly apostrophe', () => {
   it('closing a restore notice that fails reads “Nebula couldn’t close the notice.”', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ detail: 'boom' }), { status: 500,
       headers: { 'Content-Type': 'application/json' } }));
@@ -129,7 +129,7 @@ describe('GM r33, 2: the failure headings this PR adds say who, with the curly a
     for (const heading of ['Nebula couldn’t open the project.', 'Nebula couldn’t discard the kept edits.',
       'Nebula couldn’t save your edits.', 'Nebula couldn’t reopen the project.',
       'Nebula couldn’t save your edits as a project.']) expect(store).toContain(heading);
-    // Review 21 NIT-2: the retry of the recovered-edits save has its own heading, with its subject.
+    // The retry of the recovered-edits save has its own heading, with its subject.
     expect(store).toMatch(/saveRecovered: "Nebula couldn’t save your edits as a project\."/);
     for (const old of ['"Couldn\'t discard the kept edits."', 'openFollowed: "Couldn\'t open the project."',
       'failureMessage(error, "Couldn\'t save your edits.")', "'Couldn’t reopen the project.'"]) expect(store).not.toContain(old);

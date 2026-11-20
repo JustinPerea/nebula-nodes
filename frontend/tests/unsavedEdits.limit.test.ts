@@ -1,8 +1,8 @@
 /**
- * Q116 a) review: the held edits' screen reads two structured fields from
+ * The held edits' screen reads two structured fields from
  * the recover route's answer, never its words:
  * - `limit` ("projects" / "storage") on a 413 from the project store's own
- *   limits: those get the mapped reason, not GM's "too large" line;
+ *   limits: those get the mapped reason, not design's "too large" line;
  * - `code: "person_required"` on a 403 from a tab that isn't connected as the
  *   person (no person token, or one from an earlier launch): reconnecting
  *   fixes it, so it keeps Try again instead of holding the copy.
@@ -120,14 +120,14 @@ describe('the held edits screen, from a real answer', () => {
     expect(state().unsavedEdits?.reason).not.toContain('too large for Nebula to save');
   });
 
-  it('a copy that is itself too large gets GM\'s line', async () => {
+  it('a copy that is itself too large gets design\'s line', async () => {
     fetch.mockResolvedValueOnce(json(413, { detail: 'Project snapshot exceeds the 16 MiB limit' }));
     await useProjectStore.getState().retry();
     expect(state().unsavedEdits).toEqual({ reason:
       'These edits are too large for Nebula to save. Download them so nothing is lost, or continue without them.' });
   });
 
-  // PR #204 r6 (GM r7 2): no Try again while the reason is "not connected"; the promote retries.
+  // PR #204 (design): no Try again while the reason is "not connected"; the promote retries.
   it('person_required shows no Try again and holds nothing', async () => {
     fetch.mockResolvedValueOnce(json(403, { detail: BILLING, code: 'person_required' }));
     await useProjectStore.getState().retry();

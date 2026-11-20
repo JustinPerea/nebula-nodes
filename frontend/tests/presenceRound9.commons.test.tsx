@@ -1,5 +1,5 @@
 /**
- * PR #204 round 9 (the coordinator, after GM r12 (2)): a Commons because line ("Nebula couldn’t …
+ * PR #204 (design): a Commons because line ("Nebula couldn’t …
  * because this tab isn’t connected as you. …") must not stay on screen once the tab is connected.
  * On the promote the line clears and the Commons loads what the refusal stopped: the references
  * load and the status line reads as it normally does. On a held page (the tab never had the
@@ -69,7 +69,7 @@ async function promote() {
   await act(async () => { notePersonPromoted(); });
 }
 
-describe('PR #204 round 9: a Commons not-connected line clears on the promote, and the Commons loads', () => {
+describe('PR #204: a Commons not-connected line clears on the promote, and the Commons loads', () => {
   it('a held page (no person token): the because line, then on the promote it goes and the references load', async () => {
     act(() => reportPersonRequired());
     expect(personGateHeld()).toBe(true);
@@ -181,7 +181,7 @@ export function linesOutsideTheHook(files: { name: string; text: string }[]): st
   return found;
 }
 
-describe('PR #204 round 9: every Commons screen\'s line goes through useCommonsLine', () => {
+describe('PR #204: every Commons screen\'s line goes through useCommonsLine', () => {
   const files = readdirSync(COMMONS_DIR).filter((name) => /\.tsx?$/.test(name) && !name.includes('.test.'))
     .map((name) => ({ name, text: readFileSync(join(COMMONS_DIR, name), 'utf8') }));
 

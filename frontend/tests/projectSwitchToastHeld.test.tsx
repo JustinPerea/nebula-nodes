@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * An agent's open_project while the Commons holds unsaved labels opens the
  * project behind the Commons (#163); the person stays to save or discard.
  * The toast that says who switched it must not time out meanwhile
- * (commons-leave, GM - Design): no timer while they're still in the Commons
+ * (commons-leave, design): no timer while they're still in the Commons
  * after the held switch, then its usual 15 s once they reach the canvas.
  */
 
@@ -51,7 +51,7 @@ describe('the project-switch toast', () => {
     expect(useProjectStore.getState().switchNotice).toBeNull();
   });
 
-  // Review: Projects keeps viewMode 'commons' and #commons (#163), and App
+  // Projects keeps viewMode 'commons' and #commons (#163), and App
   // shows Projects over the Commons (isHome wins), so leaving by Projects is
   // reaching Projects, not staying in the Commons.
   it('starts its 15 s once the person leaves the Commons by Projects', () => {

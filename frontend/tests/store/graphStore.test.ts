@@ -25,7 +25,7 @@ vi.mock('../../src/lib/backend', async (importOriginal) => {
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 vi.spyOn(console, 'warn').mockImplementation(() => {});
-// Round 3f: the alerts are canvas notices (tests/helpers/noticeSpy.ts).
+// The alerts are canvas notices (tests/helpers/noticeSpy.ts).
 const alertMock = noticeSpy();
 
 import { useGraphStore, resetDeletedSceneEditsForTests } from '../../src/store/graphStore';
@@ -63,14 +63,14 @@ function resetStore() {
 }
 
 /** A frontend-only node with its own undo step, as the add made one in a tab
- * with no backend until round 13 of PR #114 (GM: local-only adds are now
+ * with no backend until PR #114 (design: local-only adds are now
  * refused; the store's add path has its own tests below and in
  * graphStore.addSync.test.ts). These tests are about what happens to nodes
  * once they're on the canvas. */
 let localNodeSeq = 0;
 async function addNode(definitionId: string, position: { x: number; y: number }) {
   const definition = NODE_DEFINITIONS[definitionId];
-  // Round 21 (the #195 merge): a step taken before a change is on its way
+  // Since the #195 merge: a step taken before a change is on its way
   // until it ends; an undo pressed meanwhile waits for it.
   const step = useGraphStore.getState().beginUndoStep();
   const id = `local-${++localNodeSeq}`;
@@ -229,7 +229,7 @@ describe('graphStore', () => {
     const subscribed = vi.mocked(wsClient.subscribe).mock.calls[0]?.[0] as
       | ((event: ExecutionEvent) => void)
       | undefined;
-    // The tab's own run (review 20 of PR #199, LOW-2: only this project's
+    // The tab's own run (PR #199: only this project's
     // record writes its ID into a node).
     useGraphStore.setState({ runHistory: [{ id: 'paid-run', trigger: 'graph', startedAt: 1, status: 'complete',
       snapshot: { nodes: [], edges: [] } }] });
@@ -627,14 +627,14 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // error-copy round 2 (GM): a 5xx says Nebula didn't respond, whatever its
+    // error-copy (design): a 5xx says Nebula didn't respond, whatever its
     // body said; the backend's text stays in the console.
     expect(alertMock).toHaveBeenCalledWith(
       "Nebula couldn’t add “World Labs Environment” because the server didn’t respond. Try again.",
     );
   });
 
-  // Round 12 of PR #114 (GM approved): the first add on an empty tab brings
+  // PR #114 (design approved): the first add on an empty tab brings
   // the backend's nodes in and never clears (it sent DELETE
   // /api/graph?force=true here, and said "Couldn't clear the canvas. ..."
   // when that was refused). tests/store/graphStore.addSync.test.ts has the rest.
@@ -685,7 +685,7 @@ describe('graphStore', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/api/graph/node');
   });
 
-  // Round 13 of PR #114 (GM): "Local-only adds are refused." Until then the
+  // PR #114 (design): "Local-only adds are refused." Until then the
   // node stayed in this tab only.
   it('refuses the first empty-canvas node when no backend was discovered', async () => {
     backendDiscovery.baseUrl = null;
@@ -780,8 +780,9 @@ describe('graphStore', () => {
 
     expect(nodeId).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(0);
-    // Round 14 (GM dropped round 13's offline add line): the add heading,
-    // as round 12 had it; the reason goes to the Agent log. Before round 12:
+    // Design dropped a later offline add line: the add heading alone, as when the
+    // first add began syncing the backend; the reason goes to the Agent log.
+    // Before that change:
     // "Couldn't add Text Input. Nebula lost contact with its backend, ...".
     expect(alertMock).toHaveBeenCalledWith('Nebula couldn’t add \u201cText Input\u201d.');
   });
@@ -882,7 +883,7 @@ describe('graphStore', () => {
 
     useGraphStore.getState().onNodesChange([{ type: 'remove', id: cliNode.id }]);
 
-    // GM r18, option (c): it leaves the canvas when Delete is pressed, and
+    // Design: it leaves the canvas when Delete is pressed, and
     // the refusal puts it back as it was, with the failure line.
     expect(useGraphStore.getState().nodes).toEqual([]);
     await vi.waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining(

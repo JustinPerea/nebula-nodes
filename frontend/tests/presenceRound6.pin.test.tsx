@@ -1,4 +1,4 @@
-// PR #204 round 6, GM r7 (3): the pin's Send note reads the one held state (useTabHeld, held,
+// PR #204 (design): the pin's Send note reads the one held state (useTabHeld, held,
 // demoted or not answered yet) with the same lock and the 150 ms rule, never personGateHeld.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { blocked, lockLine } from './helpers/personLock';
@@ -57,7 +57,7 @@ async function openWithNote() {
   });
 }
 
-describe('GM r7 (3): Send note reads the one held state', () => {
+describe('Send note reads the one held state', () => {
   it('demoted with the banner closed (only the one state says so): Send note waits, with its reason', async () => {
     await openWithNote();
     expect(blocked(send())).toBe(false);

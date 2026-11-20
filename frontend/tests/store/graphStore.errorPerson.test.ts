@@ -1,5 +1,5 @@
 /**
- * Error copy round 3c: the person's line travels with a node's run error
+ * Error copy: the person's line travels with a node's run error
  * (the backend's ErrorEvent `person`, node data `errorPerson`), the way
  * `friendly` and `category` already do, and never outlives the error it was
  * written for. The specific text stays in `error` (agents read it there).

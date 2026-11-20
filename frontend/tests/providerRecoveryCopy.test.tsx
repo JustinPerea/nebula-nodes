@@ -1,8 +1,8 @@
 /**
- * Error copy round 3b, item 3 (GM - Design: "Never show raw error.message
+ * Error copy (Design: "Never show raw error.message
  * strings in UI."). Run history's "Forget ID" and the status bar's "I've
- * checked Marble" (round 13 of PR #114 labels) say written copy for every failure: a
- * request's own line, the store's own written refusals, and GM's general line
+ * checked Marble" (PR #114 labels) say written copy for every failure: a
+ * request's own line, the store's own written refusals, and design's general line
  * for an error that isn't a request's (no request was made).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +23,7 @@ const checkpoint = { runId: 'paid-run', nodeId: 'world-node', resumeOperationId:
 
 function forget() {
   render(<RunHistoryPanel />);
-  // Round 14 (GM): the row's button is named for the ID it forgets.
+  // Design: the row's button is named for the ID it forgets.
   fireEvent.click(screen.getByRole('button', { name: /^Forget the recovery ID for / }));
   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Forget ID' }));
 }
@@ -36,7 +36,7 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('Forget ID never shows a raw message', () => {
-  it('an error that is not a request says GM\'s general line under the heading', async () => {
+  it('an error that is not a request says design\'s general line under the heading', async () => {
     const alert = noticeSpy();
     useGraphStore.setState({ providerRecoveries: [checkpoint],
       deleteProviderRecovery: vi.fn().mockRejectedValue(new Error('Backend still has an active provider task.')) });
@@ -62,7 +62,7 @@ describe('Forget ID never shows a raw message', () => {
       .rejects.toThrow(`${FORGET_ONE_LINE} because it isn’t there anymore. Reload to get the latest run history.`);
   });
 
-  it('a checkpoint with two IDs (a broken state; nothing is sent) alerts GM\'s general line', async () => {
+  it('a checkpoint with two IDs (a broken state; nothing is sent) alerts design\'s general line', async () => {
     const alert = noticeSpy();
     const fetch = vi.spyOn(globalThis, 'fetch');
     useGraphStore.setState({ providerRecoveries: [{ ...checkpoint, existingWorldId: 'world-1' }] });
@@ -73,7 +73,7 @@ describe('Forget ID never shows a raw message', () => {
 });
 
 describe('I’ve checked Marble never shows a raw message', () => {
-  it('an error that is not a request says GM\'s general line under the heading', async () => {
+  it('an error that is not a request says design\'s general line under the heading', async () => {
     useGraphStore.setState({
       providerStartAmbiguities: [{ runId: 'r1', nodeId: 'world-node', kind: 'worldlabs-world', message: 'Check Marble.', durable: true }] as never,
       acknowledgeProviderStartAmbiguity: vi.fn().mockRejectedValue(new Error('internal: lifecycle fd closed')),

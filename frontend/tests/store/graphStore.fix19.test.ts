@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 19 (review 17, GM r28), on a keyed backend in small
+ * PR #198 fix (design), on a keyed backend in small
  * that holds several scenes:
- * - LOW-1: the person's own delete of a stopped scene leaves "Deleted the
+ * - the person's own delete of a stopped scene leaves "Deleted the
  *   node." [Undo] as the only line; no stop line stays for it.
- * - LOW-2: another writer's change that makes a stopped scene match the
+ * - another writer's change that makes a stopped scene match the
  *   person's values clears the stop, its line and the mark together.
- * - LOW-3 (GM r28 answer 1, option c): Undo brings a scene deleted while
+ * - Design: Undo brings a scene deleted while
  *   stopped back as it was: stopped, with its line and [Try again], for every
  *   cause. No new round of timed retries; the quiet try still goes on the
  *   next sign that saving works.
- * - GM r28 item 2: a stop line is a state in its own slot above the event
+ * - Design: a stop line is a state in its own slot above the event
  *   slot, one line per cause, merging the scenes of the same cause (up to 3
  *   by name, then a count). Events can't push it out; a scene whose stop
  *   clears leaves its line; a merged [Try again] that fails for some keeps
@@ -225,7 +225,7 @@ async function stopBy(h: ReturnType<typeof backend>, id: string, cause: Cause, p
 }
 const lineFor = (cause: Cause, name: string) => (cause === 'server' ? SERVER(`“${name}”`) : cause === 400 ? CANT(`“${name}”`) : TOO_BIG_ONE(name));
 
-describe('GM r28 item 2: one line per cause, in the state slot', () => {
+describe('one line per cause, in the state slot', () => {
   it('two scenes stopped by the same cause share one line, naming both; [Try again] there retries both', async () => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene' });
     await stopBy(h, 'n1', 'server');
@@ -246,7 +246,7 @@ describe('GM r28 item 2: one line per cause, in the state slot', () => {
     expect(h.brief('n2')[0]).toBe('s1:mine n2');
   });
 
-  it('400s and 413s merge the same way: GM’s plural lines', async () => {
+  it('400s and 413s merge the same way: the design plural lines', async () => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene', n3: 'Finale' });
     await stopBy(h, 'n1', 400);
     await stopBy(h, 'n2', 400);
@@ -336,7 +336,7 @@ describe('GM r28 item 2: one line per cause, in the state slot', () => {
   });
 });
 
-describe('review 17 LOW-1: the person’s own delete of a stopped scene', () => {
+describe('the person’s own delete of a stopped scene', () => {
   it.each<Cause>(['server', 400, 413])('%s: "Deleted the node." [Undo] is the only line; no stop line stays', async (cause) => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', cause);
@@ -363,7 +363,7 @@ describe('review 17 LOW-1: the person’s own delete of a stopped scene', () => 
     expect(stopLines()).toEqual([]);
   });
 
-  // GM r36 Q1: the retries' line is a state now (the state slot), beside
+  // Design: the retries' line is a state now (the state slot), beside
   // Codex's toast; the delete takes it with the scene.
   it('a scene still retrying, its retry line beside another toast: the delete takes that line too (the path another writer’s delete uses)', async () => {
     const h = backend({ n1: 'Opening' });
@@ -398,9 +398,9 @@ describe('review 17 LOW-1: the person’s own delete of a stopped scene', () => 
   });
 });
 
-// GM r29 call 3 (round 20) changed this describe: Undo saves first; only a
+// A design ruling changed this describe: Undo saves first; only a
 // save that still fails comes back stopped (graphStore.fix20 pins it closely).
-describe('review 17 LOW-3 (GM r28 answer 1, r29 call 3): Undo saves first; still failing, the scene comes back stopped', () => {
+describe('Undo saves first; still failing, the scene comes back stopped (design)', () => {
   it.each<Cause>([400, 413])('%s again: one save at once, refused; back stopped with its line and [Try again]; nothing more until the person acts', async (cause) => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', cause);
@@ -494,7 +494,7 @@ describe('review 17 LOW-3 (GM r28 answer 1, r29 call 3): Undo saves first; still
   });
 });
 
-describe('review 17 LOW-2: another writer’s change that makes a stopped scene match the person’s values', () => {
+describe('another writer’s change that makes a stopped scene match the person’s values', () => {
   it.each<Cause>(['server', 400, 413])('%s: the stop, its line and the mark go together; nothing is said or sent', async (cause) => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene' });
     await stopBy(h, 'n1', cause);

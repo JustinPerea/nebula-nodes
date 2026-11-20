@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 23, on graphStore.fix22b's keyed backend:
- * - Review 21 LOW-1: the save after a run that is still the one try (GM r33
- *   answer 3) has the 15 s bound: hung, it goes back to stopped with its
- *   line and [Try again]; its late answer goes through GM r31's rule.
- * - Review 21 NIT-1: the run line gives way to a stop in one store update.
- * - GM r34 Q2: an "other" stop gets one quiet try when another writer
+ * PR #198 fix, on graphStore.fix22b's keyed backend:
+ * - the save after a run that is still the one try (design)
+ *   has the 15 s bound: hung, it goes back to stopped with its
+ *   line and [Try again]; its late answer goes through design's rule.
+ * - the run line gives way to a stop in one store update.
+ * - Design: an "other" stop gets one quiet try when another writer
  *   changes the scene; then it waits for the person.
- * - GM r34 Q3: a reason the backend wrote stays one line per scene; only
+ * - Design: a reason the backend wrote stays one line per scene; only
  *   Nebula's own reason merges.
- * - GM r34: every state line (and the mark) reads the names live: a rename
+ * - Design: every state line (and the mark) reads the names live: a rename
  *   during a try, while stopped, and on a merged line.
- * - Review 21 NIT-5: the run line dropped by another refusal; "other"
+ * - the run line dropped by another refusal; "other"
  *   lines before the run line.
  */
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
@@ -214,7 +214,7 @@ async function stopBy(h: ReturnType<typeof backend>, id: string, cause: Cause, p
 }
 
 
-// GM r32 answer 1: the run's line is not a failure.
+// Design: the run's line is not a failure.
 const RUN_LINE = 'Your changes to “Opening” are kept. Nebula will save them when the run finishes.';
 /** The next PUT to `id` only waits for `release()`; the others go. */
 function holdNextPut(id: string) {
@@ -287,7 +287,7 @@ async function runLockedTry(h: ReturnType<typeof backend>) {
   await vi.waitFor(() => expect(stopLines()).toEqual([RUN_LINE]), { timeout: 3000, interval: 5 });
 }
 
-describe('review 21 LOW-1: the save after a run, still the one try, has the 15 s bound', () => {
+describe('the save after a run, still the one try, has the 15 s bound', () => {
   it('it hangs: past the bound, back to stopped with its line and [Try again]; the run line gives way in one update', async () => {
     store.setSceneTryTimeoutForTests(120);
     const h = backend({ n1: 'Opening' });
@@ -309,7 +309,7 @@ describe('review 21 LOW-1: the save after a run, still the one try, has the 15 s
     await sleep(100);
   });
 
-  it.each<Outcome>(['ok', 'fail'])('its late answer (%s) goes through GM’s rule: a success with the values unchanged clears the stop; a failure changes nothing', async (outcome) => {
+  it.each<Outcome>(['ok', 'fail'])('its late answer (%s) goes through design’s rule: a success with the values unchanged clears the stop; a failure changes nothing', async (outcome) => {
     store.setSceneTryTimeoutForTests(120);
     const h = backend({ n1: 'Opening' });
     await runLockedTry(h);
@@ -328,7 +328,7 @@ describe('review 21 LOW-1: the save after a run, still the one try, has the 15 s
   });
 });
 
-describe('review 21 NIT-1: the run line gives way to a stop in one store update', () => {
+describe('the run line gives way to a stop in one store update', () => {
   it.each<[string, { status: number; body: Record<string, unknown> }, string]>([
     ['a 400', { status: 400, body: { detail: 'bad', code: 'bad_params' } }, 'Nebula can’t save your changes to “Opening”.'],
     ['"other"', OTHER_422, OTHER('“Opening”')],
@@ -344,7 +344,7 @@ describe('review 21 NIT-1: the run line gives way to a stop in one store update'
   });
 });
 
-describe('GM r34 Q2: an "other" stop gets one quiet try when the scene changes elsewhere', () => {
+describe('an "other" stop gets one quiet try when the scene changes elsewhere', () => {
   it.each<'[Try again]' | 'an edit'>(['[Try again]', 'an edit'])('one quiet try, it fails, a second change sends nothing; then the person’s %s sends', async (how) => {
     const h = backend({ n1: 'Opening' });
     refuseWith(h, 'n1', OTHER_422);
@@ -388,7 +388,7 @@ describe('GM r34 Q2: an "other" stop gets one quiet try when the scene changes e
   });
 });
 
-describe('GM r34 Q3: a reason the backend wrote stays one line per scene; only Nebula’s own merges', () => {
+describe('a reason the backend wrote stays one line per scene; only Nebula’s own merges', () => {
   it('two scenes, the same backend reason: two lines, in reading order, each [Try again]', async () => {
     const h = backend({ n1: 'Opening', n2: 'Ref scene' });
     refuseWith(h, 'n1', SHOT2);
@@ -410,7 +410,7 @@ describe('GM r34 Q3: a reason the backend wrote stays one line per scene; only N
   });
 });
 
-describe('GM r34: state lines read the names live', () => {
+describe('state lines read the names live', () => {
   it('a rename while stopped: the line and the mark say the new name at once', async () => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 'server');
@@ -460,8 +460,8 @@ describe('GM r34: state lines read the names live', () => {
   });
 });
 
-describe('review 21 NIT-5: the run line and other refusals', () => {
-  // GM r36 Q1: the retries' line is a state, so it takes the run line's
+describe('the run line and other refusals', () => {
+  // Design: the retries' line is a state, so it takes the run line's
   // place in the state slot (never a toast).
   it('an ordinary save the run held, refused another way after the run (a server error): the run line goes', async () => {
     const h = backend({ n1: 'Opening' });

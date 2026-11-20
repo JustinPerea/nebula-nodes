@@ -6,7 +6,7 @@ import {
   assertGraphComplexityWithinLimits, GRAPH_MAX_DEPTH, GraphStructureLimitError, measureShape, serializeGraph,
 } from '../src/lib/graphFileShared';
 
-// PR #205 round 10, ruling (a): the Undo walk's "fits Save" and the Save's refusal share one
+// PR #205 (design): the Undo walk's "fits Save" and the Save's refusal share one
 // predicate: the engine's. The engine (assertGraphComplexityWithinLimits, and the backend's
 // RESTORE_MAX_GRAPH_DEPTH checks) refuses a value deeper than 64 (`depth > 64`, the file's root at
 // depth 0), so a canvas at depth 64 saves and one at 65 does not. The line therefore reads "more than

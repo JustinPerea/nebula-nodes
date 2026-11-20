@@ -13,7 +13,7 @@ import {
 import { useUIStore } from '../src/store/uiStore';
 
 /**
- * GM - Design, PR #216 r11: a floating log gives way held at the edge away
+ * Design, PR #216: a floating log gives way held at the edge away
  * from the card (the top with the card under it, the bottom with the card
  * above it), and springs back from that edge when the card leaves; a
  * collapse the person makes wins over the card's give; and the card's fold
@@ -142,9 +142,9 @@ describe('the person\'s collapse wins over the card\'s give (uiStore)', () => {
     act(() => ui().holdAgentLogForCard(true, true));
     expect(header().getAttribute('aria-expanded')).toBe('false');
     expect(header().getAttribute('aria-description')).toBe(LOG_CARD_FOLD_DESCRIPTION);
-    // GM r57 Q5: the tooltip says why too, the same words exactly.
+    // Design: the tooltip says why too, the same words exactly.
     expect(header().getAttribute('title')).toBe('Folded to make room for the proposal card. It reopens when the card closes.');
-    // GM r12's words: why it folded.
+    // Design: why it folded.
     expect(LOG_CARD_FOLD_DESCRIPTION).toBe('Folded to make room for the proposal card. It reopens when the card closes.');
     act(() => ui().holdAgentLogForCard(false, false));
     expect(header().getAttribute('aria-expanded')).toBe('true');
@@ -168,7 +168,7 @@ describe('the person\'s collapse wins over the card\'s give (uiStore)', () => {
   });
 });
 
-describe('the held edge and the spring back, in CSS (GM r11)', () => {
+describe('the held edge and the spring back, in CSS (design)', () => {
   const css = readFileSync(resolve(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rule = (selector: string) => {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

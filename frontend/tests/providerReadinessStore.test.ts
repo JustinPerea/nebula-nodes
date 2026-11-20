@@ -71,9 +71,9 @@ describe('explicit provider connection checks', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  // Error copy round 3e (GM): "Couldn't {verb} {object}." then the reason.
-  // Round 3f: a plain Error or a malformed answer reads GM's general line;
-  // no answer at all reads GM's "server isn't answering" line
+  // Error copy (design): "Couldn't {verb} {object}." then the reason.
+  // A plain Error or a malformed answer reads design's general line;
+  // no answer at all reads design's "server isn't answering" line
   // (tests/errorCopy.round3f.projects.test.ts).
   const CHECK_FAILED = "Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.";
   it('sanitizes transport failures and rejects malformed status data', async () => {

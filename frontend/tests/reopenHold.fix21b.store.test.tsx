@@ -1,13 +1,13 @@
 /**
- * Round 21 of PR #199, section 2 (review 19 with GM r32), the tab's side:
- * - item 1: the reopen lock reads Nebula's own verdict, one table of lines
- *   keyed by its state (GM r32, 1), parity with the backend's state list;
- * - item 2: Nebula's 409 after the press shows the hold's line, not agents' text;
- * - item 3: a window on Projects stays there when the person reopens in another;
- * - item 5: the tab keeps its id across a reload; a kept delete is said;
- * - item 6: focus goes to the canvas after a held Open;
- * - items 9 and 10: the line follows the hold, in that hold's place;
- * - items 12-15: no number read in a name, the shared run helper, curly
+ * PR #199 (design), the tab's side:
+ * - the reopen lock reads Nebula's own verdict, one table of lines
+ *   keyed by its state (design), parity with the backend's state list;
+ * - Nebula's 409 after the press shows the hold's line, not agents' text;
+ * - a window on Projects stays there when the person reopens in another;
+ * - the tab keeps its id across a reload; a kept delete is said;
+ * - focus goes to the canvas after a held Open;
+ * - the line follows the hold, in that hold's place;
+ * - no number read in a name, the shared run helper, curly
  *   apostrophes, the messageNotice path.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -114,7 +114,7 @@ let notices: CanvasNoticeDetail[] = [];
 const onNotice = (event: Event) => { notices.push((event as CustomEvent<CanvasNoticeDetail>).detail); };
 let unsubscribe: (() => void) | null = null;
 
-// The table of lines loads when a hold first arrives (review 21 LOW-1); these
+// The table of lines loads when a hold first arrives; these
 // tests are about the lines themselves, so it is loaded first.
 beforeAll(async () => { await loadReopenHoldLines(); });
 
@@ -215,8 +215,8 @@ const LINES = {
   run: `You can reopen “${P}” when the run finishes.`,
 };
 
-describe('review 19 item 1 and GM r32, 1: one table of lines, keyed by Nebula’s state', () => {
-  it('GM r32’s lines, exactly: Delta’s node says “its” or names it; another project’s adds “from”', () => {
+describe('one table of lines, keyed by Nebula’s state', () => {
+  it('the lines as design wrote them: Delta’s node says “its” or names it; another project’s adds “from”', () => {
     expect(reopenHoldLine(P, 'alpha', RECOVERY_ALPHA as never)).toBe(LINES.recovery);
     expect(reopenHoldLine(P, 'alpha', RECOVERY_OTHER as never)).toBe(LINES.recoveryOther);
     expect(reopenHoldLine(P, 'alpha', { ...RECOVERY_OTHER, count: 2 } as never)).toBe(LINES.recovery2);
@@ -228,7 +228,7 @@ describe('review 19 item 1 and GM r32, 1: one table of lines, keyed by Nebula’
     expect(reopenHoldLine(P, 'alpha', hold('ambiguity', { nodeName: 'World', projectId: 'beta', projectName: 'Alpha' }) as never)).toBe(LINES.ambiguityOther);
     expect(reopenHoldLine(P, 'alpha', { state: 'uncertain' })).toBe(LINES.ambiguityIts);
     expect(reopenHoldLine(P, 'alpha', hold('run') as never)).toBe(LINES.run);
-    // Review 19 item 13: the run form is the shared lock helper's.
+    // The run form is the shared lock helper's.
     expect(reopenHoldLine(P, 'alpha', { state: 'tabRun' })).toBe(runFinishesLine(`reopen “${P}”`));
   });
 
@@ -255,7 +255,7 @@ describe('review 19 item 1 and GM r32, 1: one table of lines, keyed by Nebula’
   });
 });
 
-describe('review 19 item 1: each state locks before the press, says its line on the card and the canvas, sends nothing, and clears with its own action', () => {
+describe('each state locks before the press, says its line on the card and the canvas, sends nothing, and clears with its own action', () => {
   it('recovery: by Run history; Forget ID clears it', async () => {
     duplicateN1();
     useGraphStore.setState({ providerRecoveries: [{ runId: 'r1', nodeId: 'n1', resumeOperationId: 'op-1', existingWorldId: null }] as never });
@@ -302,7 +302,7 @@ describe('review 19 item 1: each state locks before the press, says its line on 
     expect(card()).toBeNull();
   });
 
-  it('bootstrap: by Stop, on its 409 (GM r34 A3: the press is sent, nothing locks before it); a restart (Nebula’s next read) clears it', async () => {
+  it('bootstrap: by Stop, on its 409 (design: the press is sent, nothing locks before it); a restart (Nebula’s next read) clears it', async () => {
     duplicateN1();
     await verdict(hold('bootstrap'));
     vi.mocked(projects.openProject).mockRejectedValue(new projects.ProjectRequestError('safeguards', 409,
@@ -351,7 +351,7 @@ describe('review 19 item 1: each state locks before the press, says its line on 
   });
 });
 
-describe('review 19 item 2: Nebula’s own 409 after the press says the hold’s line', () => {
+describe('Nebula’s own 409 after the press says the hold’s line', () => {
   it('a run another tab started (no hold here at the press): Nebula’s real body, then the run’s line from its verdict', async () => {
     duplicateN1();
     vi.mocked(projects.openProject).mockRejectedValue(new projects.ProjectRequestError(
@@ -374,7 +374,7 @@ describe('review 19 item 2: Nebula’s own 409 after the press says the hold’s
   });
 });
 
-describe('review 19 item 9: the canvas line follows the hold, never stale', () => {
+describe('the canvas line follows the hold, never stale', () => {
   it('World Labs to a run to a recovery ID and back to nothing: each its own line, in its own place', async () => {
     duplicateN1();
     useGraphStore.setState({ uncertainWorldLabsRunId: 'wl', isExecuting: true });
@@ -395,7 +395,7 @@ describe('review 19 item 9: the canvas line follows the hold, never stale', () =
     expect(noticeNow()).toBeNull();
   });
 
-  it('review 19 item 15: a line said while an Undo offer shows (in messageNotice) goes from there too', async () => {
+  it('a line said while an Undo offer shows (in messageNotice) goes from there too', async () => {
     duplicateN1();
     useGraphStore.setState({ isExecuting: true });
     useGraphStore.setState({ undoNotice: { text: 'Deleted “Hero prompt”.', undo: () => {} } as never });
@@ -421,7 +421,7 @@ describe('review 19 item 9: the canvas line follows the hold, never stale', () =
   });
 });
 
-describe('review 19 item 10 and GM r32, 2: the line sits by what clears it', () => {
+describe('the line sits by what clears it', () => {
   it('the callout is one polite status region, shown only in its own place', async () => {
     duplicateN1();
     await verdict(RECOVERY_ALPHA);
@@ -444,13 +444,13 @@ describe('review 19 item 10 and GM r32, 2: the line sits by what clears it', () 
     expect(anchor).toContain('label="Open run history"');
     expect(anchor).toContain('<ReopenHoldCallout place="runHistory" />');
     const app = readFileSync(resolve(__dirname, '../src/App.tsx'), 'utf8');
-    // GM r33, 6: the notice's own second line, never a callout of its own.
+    // Design: the notice's own second line, never a callout of its own.
     expect(app).toMatch(/<ProviderRecoveryStatus reopenLine=\{isCanvas && projects\.heldReopenLine\?\.place === 'worldLabsNotice'/);
     expect(app).not.toContain('ReopenHoldCallout');
   });
 });
 
-describe('review 19 item 6: focus goes to the canvas after a held Open', () => {
+describe('focus goes to the canvas after a held Open', () => {
   it('document.activeElement is the canvas, not <body>', async () => {
     const canvas = document.createElement('div');
     canvas.className = 'react-flow';
@@ -472,7 +472,7 @@ describe('review 19 item 6: focus goes to the canvas after a held Open', () => {
   });
 });
 
-describe('review 19 item 3 (GM r32, 3): the person’s reopen in another tab', () => {
+describe('the person’s reopen in another tab', () => {
   const personReopen = (tab: string) => bootSwitch({ workspaceRevision: 'rev-a2', proposalsKept: true,
     projectSwitch: { projectId: 'alpha', projectName: P, previousRevision: 'rev-a',
       previousProjectId: 'alpha', previousProjectName: P, actor: { kind: 'person', tab }, created: false } });
@@ -507,7 +507,7 @@ describe('review 19 item 3 (GM r32, 3): the person’s reopen in another tab', (
   });
 });
 
-describe('review 19 item 5: a delete this tab said is never lost silently', () => {
+describe('a delete this tab said is never lost silently', () => {
   it('the tab keeps its id across a reload of the same tab', () => {
     const storage = window.sessionStorage;
     storage.clear();
@@ -533,7 +533,7 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
     expect(takeTabId(null)).not.toBe(takeTabId(null));
   });
 
-  it('the line for nodes Nebula kept (GM r24 a, verbatim)', () => {
+  it('the line for nodes Nebula kept (design, verbatim)', () => {
     expect(deletesKeptLine(['Hero prompt'])).toBe('Nebula kept “Hero prompt” because another tab changed it. Delete it again if you still want it gone.');
     expect(deletesKeptLine(['Hero prompt', 'Brief'])).toBe('Nebula kept “Hero prompt” and “Brief” because another tab changed them. Delete them again if you still want them gone.');
   });
@@ -558,7 +558,7 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
     await vi.waitFor(() => expect(noticeNow()).toBe('Nebula kept “Kept copy” because another tab changed it. Delete it again if you still want it gone.'));
   });
 
-  it('round 23 (review 21 NIT-2): a handoff whose delete a World Labs record held says so, never silently', async () => {
+  it('a handoff whose delete a World Labs record held says so, never silently', async () => {
     const local = duplicateN1();
     await useProjectStore.getState().flush();
     useGraphStore.setState((state) => ({ nodes: state.nodes.filter((node) => node.id !== local) }));
@@ -578,7 +578,7 @@ describe('review 19 item 5: a delete this tab said is never lost silently', () =
   });
 });
 
-describe('review 19 item 12: saved canvases are ordered by what Nebula owns, never a number in a name', () => {
+describe('saved canvases are ordered by what Nebula owns, never a number in a name', () => {
   it('equal save times: by id, then as listed; "Shot 12" and "Shot 7" aren’t read', () => {
     const at = '2026-10-31T10:00:00.000Z';
     const rows = [{ id: 'p-b', name: 'Shot 7', filedAt: at }, { id: 'p-a', name: 'Shot 12', filedAt: at }];
@@ -590,7 +590,7 @@ describe('review 19 item 12: saved canvases are ordered by what Nebula owns, nev
   });
 });
 
-describe('review 19 item 14: curly apostrophes on the lines round 20 touched', () => {
+describe('curly apostrophes on the lines touched', () => {
   it('the update line and the reopen fallback', () => {
     const store = projectStoreSource();
     // The update line is now its heading and a because line (becauseThen), so the old sentence is gone, straight or curly.

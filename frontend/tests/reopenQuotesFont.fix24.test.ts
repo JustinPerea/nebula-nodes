@@ -1,11 +1,11 @@
 // @vitest-environment node
 /**
- * PR #199 round 25, GM r24 (d): in the World Labs banner "You can reopen
+ * PR #199 (design): in the World Labs banner "You can reopen
  * “Delta” … press “I’ve checked Marble”." showed closing quotes on both
  * sides. The codepoints were right (U+201C opens, U+201D closes, in every line
  * of the table); the face was not the cause alone: Inter draws both as
  * slanted ticks, the system face draws them apart. So the codepoints are
- * pinned here. Copy sweep, design r160 (answer 1): the studio notices stay Inter
+ * pinned here. Copy sweep, design: the studio notices stay Inter
  * and the held-reopen line is the one that was off, so every surface that says
  * one draws it in the UI face the state chip uses (var(--sr-ui), Inter) and the
  * --notice-font token that held the system face is gone.
@@ -29,7 +29,7 @@ const holds: ReopenHold[] = [
   { state: 'bootstrap', count: 0, fields: [] } as never,
 ];
 
-describe('GM r24 (d): the held-reopen lines’ quotes', () => {
+describe('the held-reopen lines’ quotes (design)', () => {
   it('the uncertain line, verbatim, by codepoint: U+201C opens each quote and U+201D closes it', () => {
     const line = reopenHoldLine('Delta', 'delta', { state: 'uncertain' }, false);
     expect(line).toBe(`You can reopen ${OPEN}Delta${CLOSE} after you check its World Labs run in Marble and press ${OPEN}I’ve checked Marble${CLOSE}.`);
@@ -60,7 +60,7 @@ function rule(text: string, selector: string): string {
   return match[2];
 }
 
-describe('design r160: every surface that says a held-reopen line draws it in the UI face the state chip uses', () => {
+describe('every surface that says a held-reopen line draws it in the UI face the state chip uses (design)', () => {
   it('the face is the --sr-ui token, Inter, and the system-face token is gone', () => {
     expect(rule(css('styles/slava-restraint.css'), 'body.app-slava-restraint')).toMatch(/--sr-ui:\s*'Inter',/);
     for (const file of ['App.css', 'styles/run-history.css', 'styles/project-home.css']) {

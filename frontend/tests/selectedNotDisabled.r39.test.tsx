@@ -4,19 +4,19 @@ import { appRules, cascaded } from './helpers/cssCascade';
 import { SwitchRow } from '../src/components/panels/settings/Switch';
 
 /**
- * GM, PR #198 r39 item 1: a selected control is an on or chosen state, never
+ * Design, PR #198: a selected control is an on or chosen state, never
  * a disabled one. "A selected control must never borrow the disabled tokens,
  * or 'on' reads as 'off limits'." The checked Settings switch and the chosen
  * Remotion anchor cell keep their own look; only a control that is actually
  * locked takes the disabled look, and that look covers its selected state too.
  */
 
-/** GM r33's disabled tokens and #200's, by name, and the r33 values a rule could spell out. */
+/** The design disabled tokens and #200's, by name, and the values a rule could spell out. */
 const DISABLED_TOKEN = /--(?:sr-)?disabled-(?:fill|label|ink|edge|fill-label)\b|--(?:sr-)?disabled-opacity[\w-]*/;
-/** The same values spelled out, in either rgb() syntax and as a fraction or a percentage (review 1 of PR #205, NIT-1). */
+/** The same values spelled out, in either rgb() syntax and as a fraction or a percentage (PR #205). */
 const DISABLED_VALUE = /rgba?\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(?:0?\.(?:42|55)|42%|55%)\s*\)|rgba?\(\s*255\s+255\s+255\s*\/\s*(?:0?\.(?:42|55)|42%|55%)\s*\)|rgba?\(\s*17\s*,\s*17\s*,\s*17\s*,\s*(?:0?\.62|62%)\s*\)|rgba?\(\s*17\s+17\s+17\s*\/\s*(?:0?\.62|62%)\s*\)/;
-/** A selected, checked, pressed or chosen state in a selector (review 1 of
- * PR #205, NIT-1: the app's `.is-active` too, and the other spellings). */
+/** A selected, checked, pressed or chosen state in a selector (PR #205:
+ * the app's `.is-active` too, and the other spellings). */
 const SELECTED = /aria-(?:pressed|checked|selected|current)|:checked|--(?:active|selected|chosen|on|checked|pressed|current)\b|\.is-(?:active|selected|checked|pressed|current|on)\b|\[data-(?:active|selected|chosen|state|checked|pressed)\b/;
 /** A state that locks the control. */
 // data-person-lock (PR #204): a control the person lock holds is locked, so its checked state may take the disabled look.
@@ -42,7 +42,7 @@ describe('the ratchet: a selected state never borrows a disabled token unless it
     expect(offenders).toEqual([]);
   });
 
-  // Review 1 of PR #205 (NIT-1): the selected forms and disabled values the
+  // PR #205: the selected forms and disabled values the
   // ratchet missed, each caught; the same with a lock, and an enabled look, are not.
   it.each([
     ['.preset-library__cat.is-active', 'var(--disabled-fill)', true],
@@ -61,7 +61,7 @@ describe('the ratchet: a selected state never borrows a disabled token unless it
     expect(borrows({ selector, decls: [{ value }] })).toBe(caught);
   });
 
-  it('the locked selected marks are the reviewed ones (GM\'s image-only and chip rule, the anchor by PR #205 r1, and a checkbox the person lock holds by PR #204), never a switch that is not locked', () => {
+  it('the locked selected marks are the reviewed ones (design\'s image-only and chip rule, the anchor by PR #205, and a checkbox the person lock holds by PR #204), never a switch that is not locked', () => {
     const marks = [...new Set(appRules()
       .filter((rule) => SELECTED.test(rule.selector) && LOCKED.test(rule.selector))
       .filter((rule) => rule.decls.some((decl) => DISABLED_TOKEN.test(decl.value) || DISABLED_VALUE.test(decl.value)))
@@ -134,7 +134,7 @@ describe('Remotion\'s anchor cells', () => {
     done();
   });
 
-  it('chosen and locked: the cell\'s disabled look, with the shared grey selected mark so the choice still reads (GM PR #205 r1)', () => {
+  it('chosen and locked: the cell\'s disabled look, with the shared grey selected mark so the choice still reads (design, PR #205)', () => {
     const { chosen, other, done } = cells(true);
     for (const key of ['|background', '|opacity']) expect(value(chosen, key), key).toBe(value(other, key));
     expect(value(chosen, '|background')).toBe('transparent');

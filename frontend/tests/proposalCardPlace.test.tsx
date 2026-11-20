@@ -46,16 +46,16 @@ import { getNoticeMore } from '../src/lib/noticeMore';
 import { NOTICE_TOP_LINE_ATTR, TOP_BAR_ATTR, noticeTopLimit } from '../src/lib/bottomBar';
 
 /**
- * GM - Design, PR #216 r3: "the notice region is one stack, moves as one;
+ * Design, PR #216: "the notice region is one stack, moves as one;
  * the card is the only part that shrinks."
  * - Under 400 px beside the docked Agent log, the whole stack goes above the
  *   log at the region's full width (the card up to 600), card on top.
- * - The region clears the left tool rail as it clears the log (r2 bug 3).
+ * - The region clears the left tool rail as it clears the log.
  * - The card's cap is the region's room less the notices under it; its body
  *   keeps ~60 px; when even that doesn't fit, the card comes down over the
  *   log's top edge, and its top never passes the inset.
  * jsdom lays nothing out: the cases below run the placement on the live
- * check's measured numbers (docs/notes), and the rules are read as text.
+ * check's measured numbers, and the rules are read as text.
  */
 const CARD_CSS = readFileSync(join(__dirname, '../src/styles/canvasProposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const REGION_CSS = readFileSync(join(__dirname, '../src/styles/noticeRegion.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -72,7 +72,7 @@ function rule(css: string, selector: string): Record<string, string> {
   }));
 }
 
-// The live layout in Slava Restraint (round 2's measurements): the region's
+// The live layout in Slava Restraint (the earlier measurements): the region's
 // bottom line 80 px up, the rail's clearance 70, a docked log 340 wide plus
 // its 8 px gap and 198 tall, the top inset 72, one notice 46 + its 8 px gap.
 const CHROME = 34 + 55 + 2;
@@ -101,15 +101,15 @@ describe('the notice stack and the Agent log', () => {
     expect(place.squeeze).toBe(0);
     expect(card!.top).toBeGreaterThanOrEqual(m.topLine);
     expect(card!.bottom).toBeLessThanOrEqual(m.viewportH);
-    // GM r76 (r6 step 5 amended): the card's foot never comes down over the
+    // Design (step 5 amended): the card's foot never comes down over the
     // docked log; it stops at the log's line (its top less the gap).
     expect(place.over).toBe(0);
     if (place.aboveLog) expect(card!.bottom).toBeLessThanOrEqual(m.viewportH - m.logTop);
     // Header, at least one line of body and footer show while they fit;
     // short of that (the log dragged up), the card caps there and scrolls,
-    // Accept and Reject pinned (GM r69 Q1's `tight`).
+    // Accept and Reject pinned (design's `tight`).
     // With no room for its footer and the row over it, the stack caps at
-    // the room and scrolls, the card at its foot (GM r76).
+    // the room and scrolls, the card at its foot (design).
     if (place.stackCap) expect(stackGeometry(m, place).line - place.stackCap).toBe(m.topLine);
     else if (place.tight) expect(Math.min(card!.top, ...rows.map((row) => row.top))).toBe(m.topLine);
     else expect(card!.bottom - card!.top).toBeGreaterThanOrEqual(CHROME + 20);
@@ -124,7 +124,7 @@ describe('the notice stack and the Agent log', () => {
     expect(placeNoticeStack(measure({ viewportW: 348 + 70 + BESIDE_LOG_MIN_W })).aboveLog).toBe(false);
     expect(room(348 + 70 + BESIDE_LOG_MIN_W - 1)).toBe(399);
     expect(placeNoticeStack(measure({ viewportW: 348 + 70 + BESIDE_LOG_MIN_W - 1 })).aboveLog).toBe(true);
-    // The rule counts the room after both clearances, the rail's and the log's (review 1 LOW-4).
+    // The rule counts the room after both clearances, the rail's and the log's.
     expect(placeNoticeStack(measure({ viewportW: 348 + 16 + BESIDE_LOG_MIN_W, regionLeft: 70 })).aboveLog).toBe(true);
     expect(placeNoticeStack(measure({ viewportW: 348 + 16 + BESIDE_LOG_MIN_W, regionLeft: 16 })).aboveLog).toBe(false);
     // No docked log: nothing to go above.
@@ -132,7 +132,7 @@ describe('the notice stack and the Agent log', () => {
     expect(placeNoticeStack(measure({ logOpen: false })).lift).toBe(0);
   });
 
-  it('caps the card at the room less the notices under it (review 1 HIGH-1)', () => {
+  it('caps the card at the room less the notices under it', () => {
     const alone = placeNoticeStack(measure({ viewportW: 900 }));
     const withTwo = placeNoticeStack(measure({ viewportW: 900, card: { chrome: CHROME, body: 400, items: [46, 46] } }));
     expect(withTwo.mode).toBe('under');
@@ -146,7 +146,7 @@ describe('the notice stack and the Agent log', () => {
     expect(card!.bottom).toBeLessThanOrEqual(700 - 400);
   });
 });
-// GM - Design, PR #216 r5-r7, on the live check's numbers (round 3d, 420
+// Design, PR #216, on the live check's numbers (420
 // wide, the log open): region line 81 up, the log's top line 268 up (its
 // height 180 with no give, its floor of header and 2 rows 91, its header
 // alone 44 collapsed), the top line 116 (the selection toolbar's empty Panel
@@ -170,7 +170,7 @@ const BASE = LIVE.logTop - LIVE.regionBottom;
 /** Header and footer, and the kept lines between two fades. */
 const KEEP = 89 + (142 - 77) + 2 * FADE_PX;
 
-describe('the card body keeps its kept lines (GM r5-r7)', () => {
+describe('the card body keeps its kept lines (design)', () => {
   it('full: note and kept lines whole, the fade under them; min: the kept lines alone between two fades; one: the plan line alone', () => {
     expect(bodyFloors(LIVE_CARD)).toEqual({ full: 142 + FADE_PX, min: 65 + 2 * FADE_PX, one: 33 + 2 * FADE_PX });
     // Without a ⚠ row, the plan line alone.
@@ -182,7 +182,7 @@ describe('the card body keeps its kept lines (GM r5-r7)', () => {
   });
 });
 
-describe('the give-way order (GM r5-r7)', () => {
+describe('the give-way order (design)', () => {
   it('0: the notices stay under the card while its body keeps note and kept lines whole', () => {
     const m = at(700, 1);
     const place = placeNoticeStack(m);
@@ -191,7 +191,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(rows[0].top).toBe(card!.bottom + 8);
   });
 
-  it('GM r57 Q4, notices fold first: past step 0 the older ones fold over the newest before the note clips', () => {
+  it('notices fold first (design): past step 0 the older ones fold over the newest before the note clips', () => {
     const edge = LIVE.logTop + LIVE.topLine + 108 + 89 + 158;
     expect(placeNoticeStack(at(edge, 2)).mode).toBe('under');
     const m = at(edge - 1, 2);
@@ -206,7 +206,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(rows[0].top).toBeGreaterThanOrEqual(LIVE.topLine);
   });
 
-  it('1: notices that never fold stand above the card; the log gives for the note, which clips only past all of it (GM r57 Q4)', () => {
+  it('1: notices that never fold stand above the card; the log gives for the note, which clips only past all of it (design)', () => {
     // Two notices with an Undo: nothing folds. With the log's whole give
     // (89 + 47) the note is whole from 603 px high; a pixel less, pass 2:
     // the kept lines, the log giving only what they need.
@@ -235,7 +235,7 @@ describe('the give-way order (GM r5-r7)', () => {
     const m = at(680, 3);
     const place = placeNoticeStack(m);
     expect(place).toMatchObject({ mode: 'pill', folded: 3, more: 3, fold: [true, true, true], squeeze: 0, collapse: false, underFade: false, keepPlan: false, cap: roomAt(680) - 40 });
-    // At 640 the pill and the log's give (31 px) keep it whole (GM r57 Q4).
+    // At 640 the pill and the log's give (31 px) keep it whole (design).
     expect(placeNoticeStack(at(640, 3))).toMatchObject({ mode: 'pill', squeeze: 89 + 158 - (roomAt(640) - 40), keepPlan: false });
     expect(stackGeometry(m, place).rows.map((row) => row.kind)).toEqual(['more']);
     expect(pillLabel(1)).toBe('1 notice');
@@ -267,7 +267,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(placeNoticeStack(older, { expanded: true })).toMatchObject({ mode: 'above', fold: [false, false, false], more: 2, expanded: true });
   });
 
-  it('with an Undo notice showing, the fold\'s count rides in its own row: no 40 px row of its own (GM r8)', () => {
+  it('with an Undo notice showing, the fold\'s count rides in its own row: no 40 px row of its own (design)', () => {
     // 420x640, 3 notices, the newest with an Undo that can carry "2 more".
     const plain = at(640, 3, {}, [false, false, true]);
     const hosted: StackMeasure = { ...plain, card: { ...plain.card!, host: [false, false, true] } };
@@ -275,7 +275,7 @@ describe('the give-way order (GM r5-r7)', () => {
     const place = placeNoticeStack(hosted);
     expect(place).toMatchObject({ mode: 'pill', fold: [true, true, false], more: 2, moreHost: 2 });
     // The row's 40 px go to the card: the log gives that much less for the
-    // note (GM r57 Q4).
+    // note (design).
     expect(before.squeeze - place.squeeze).toBe(MORE_ROW_PX + 8);
     expect(before.moreHost).toBe(-1);
     const { card, rows } = stackGeometry(hosted, place);
@@ -317,7 +317,7 @@ describe('the give-way order (GM r5-r7)', () => {
   });
 
   it('3: past step 2 the log\'s body gives way, down to its floor', () => {
-    // No notice at 420x560: 71 px of the log's body, for the note whole (GM r57 Q4).
+    // No notice at 420x560: 71 px of the log's body, for the note whole (design).
     expect(placeNoticeStack(at(560, 0))).toMatchObject({ mode: 'under', cap: 89 + 158, squeeze: 89 + 158 - roomAt(560), collapse: false, underFade: false, keepPlan: false, over: 0 });
     // Taller, it gives nothing.
     expect(placeNoticeStack(at(700, 0))).toMatchObject({ squeeze: 0, keepPlan: false });
@@ -348,11 +348,11 @@ describe('the give-way order (GM r5-r7)', () => {
     // A log with no give at all: the body goes under the fade, down to one line, then the card caps.
     const stiff = placeNoticeStack(at(560, 2, { logSpare: 0, logCollapse: 0 }));
     expect(stiff).toMatchObject({ squeeze: 0, collapse: false, underFade: true, cap: roomAt(560) - 40 });
-    // Past one line (GM r76, r6 step 5 amended): the foot never comes over
+    // Past one line (design, step 5 amended): the foot never comes over
     // the log; the card caps under the top line and scrolls (tight).
     const tight = placeNoticeStack(at(460, 2, { logSpare: 0, logCollapse: 0 }));
     // The "2 notices" row over it leaves 36 px, short of its footer: the
-    // stack caps at the room and scrolls, the card keeping its footer (GM r76).
+    // stack caps at the room and scrolls, the card keeping its footer (design).
     expect(tight).toMatchObject({ underFade: true, cap: LIVE_CARD.foot, over: 0, tight: true, lift: BASE, stackCap: roomAt(460) });
     // One line of body, shorter than the plan line: the plan line from the body's top.
     const { card } = stackGeometry(at(460, 2, { logSpare: 0, logCollapse: 0 }), tight);
@@ -372,7 +372,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(card!.plan!.bottom).toBeGreaterThan(card!.footTop - FADE_PX);
   });
 
-  it('a body shorter than the minimum needs no give-way (review 2 NIT-5)', () => {
+  it('a body shorter than the minimum needs no give-way', () => {
     const line = LIVE.viewportH - LIVE.logTop;
     const m: StackMeasure = { ...LIVE, topLine: line - 54 - (89 + 30), card: { ...LIVE_CARD, body: 30, plan: null, first: null, items: [46] } };
     const place = placeNoticeStack(m);
@@ -380,13 +380,13 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(place.cap).toBe(89 + 30);
   });
 
-  it('clears a floating log in the card\'s column: under it with room, else above it (GM r4 6)', () => {
+  it('clears a floating log in the card\'s column: under it with room, else above it (design)', () => {
     const base = { ...LIVE, viewportH: 900, logClearance: 0, logTop: 0, column: { left: 64, right: 404 } };
     const card = { ...LIVE_CARD };
     const high = placeNoticeStack({ ...base, card, floating: { top: 120, bottom: 300, left: 65, right: 403 } });
     expect(high.topLine).toBe(300 + FLOAT_GAP_PX);
     expect(high.lift).toBe(0);
-    // GM r12: a side with no give before one with give: with 376 px free
+    // Design: a side with no give before one with give: with 376 px free
     // above it, the card goes there and the log keeps its body.
     const low = placeNoticeStack({ ...base, card, floating: { top: 500, bottom: 760, left: 65, right: 403 } });
     expect(low).toMatchObject({ float: 'above', lift: 900 - 500 + FLOAT_GAP_PX - LIVE.regionBottom, squeeze: 0, collapse: false, hold: null, keepPlan: false });
@@ -400,7 +400,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(high).toMatchObject({ squeeze: 0, collapse: false, hold: null });
   });
 
-  it('a floating log gives way as the docked one does when the stack sits above it (GM r7)', () => {
+  it('a floating log gives way as the docked one does when the stack sits above it (design)', () => {
     // 420x560, a floating log at 300-480: 123 px under it is short; above,
     // 176 and its give hold the card and the pill.
     const m: StackMeasure = {
@@ -408,7 +408,7 @@ describe('the give-way order (GM r5-r7)', () => {
       floating: { top: 300, bottom: 480, left: 65, right: 403 },
     };
     const place = placeNoticeStack(m);
-    // GM r12: the first pass keeps the note whole: header, footer, note and
+    // Design: the first pass keeps the note whole: header, footer, note and
     // kept lines and the pill need 89 + 158 + 40, 111 more than the 176
     // above it: past its body's 89 it collapses (47).
     const short = 89 + 158 + 40 - (300 - FLOAT_GAP_PX - LIVE.topLine);
@@ -421,7 +421,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(under).toMatchObject({ squeeze: 0, collapse: false, topLine: 300 + FLOAT_GAP_PX });
   });
 
-  it('past its floor a floating log collapses to its header too, as the docked one (GM r8 3)', () => {
+  it('past its floor a floating log collapses to its header too, as the docked one (design)', () => {
     // 420x560, a floating log at 240-480: above it 116 px, short of the card
     // and the pill by 110, more than its body's 89.
     const m: StackMeasure = {
@@ -435,7 +435,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(placeNoticeStack({ ...m, floating: { top: 240, bottom: 480, left: 600, right: 900 } })).toMatchObject({ squeeze: 0, collapse: false });
   });
 
-  it('with no card, the notices alone clear a floating log in their column (GM r8 4)', () => {
+  it('with no card, the notices alone clear a floating log in their column (design)', () => {
     const base: StackMeasure = { ...LIVE, viewportH: 640, logClearance: 0, logTop: 0, card: null, column: { left: 64, right: 404 } };
     const notices = { items: [46, 46], gap: 8 };
     // Under the log's foot there are 640 - 81 - 528 = 31 px, short of 100;
@@ -455,8 +455,8 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(placeNoticeStack({ ...tall, floating: { top: 140, bottom: 380, left: 65, right: 403 } }).lift).toBe(0);
   });
 
-  it('GM r57 Q2: with no card, notices with no room on either side of a floating log fold into the pill, as with a card: no overlap', () => {
-    // Review 3 LOW-4's cell: 1280x560, a 600 px log at 200-354, three
+  it('with no card, notices with no room on either side of a floating log fold into the pill, as with a card: no overlap', () => {
+    // A cell: 1280x560, a 600 px log at 200-354, three
     // notices left after the card goes: they need 154; 118 under it, 42 over.
     const base: StackMeasure = {
       ...LIVE, viewportW: 1280, viewportH: 560, topLine: 150, logClearance: 0, logTop: 0, card: null,
@@ -482,7 +482,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(placeNoticeStack({ ...base, floating: null, notices: three })).toMatchObject({ folded: 0, more: 0 });
   });
 
-  it('GM r57 Q2: the pill with no card reads "N notices"', () => {
+  it('the pill with no card reads "N notices"', () => {
     const { region, stack, more, toasts } = stackDom(3);
     stack.querySelector('[data-notice-shrinks]')!.parentElement!.remove();
     applyNoticeStack(region, stack, {
@@ -495,7 +495,7 @@ describe('the give-way order (GM r5-r7)', () => {
     document.body.innerHTML = '';
   });
 
-  it('GM r9 1: beside a floating log with at least 400 px there (r1\'s rule), the more room first; the log gives nothing', () => {
+  it('beside a floating log with at least 400 px there (the 400 px rule), the more room first; the log gives nothing', () => {
     // 1024x640, the log at its own width (340) from the column's left edge.
     const m: StackMeasure = {
       ...at(640, 2), viewportW: 1024, logClearance: 0, logTop: 0, column: { left: 212, right: 812 },
@@ -508,7 +508,7 @@ describe('the give-way order (GM r5-r7)', () => {
     // The same log by the right edge: on its left.
     const left = placeNoticeStack({ ...m, floating: { top: 192, bottom: 372, left: 600, right: 940 } });
     expect(left).toMatchObject({ float: 'left', inset: { left: 64, right: 1024 - 600 + FLOAT_GAP_PX } });
-    // r1's rule exactly: 400 is beside, 399 is not.
+    // The 400 px rule exactly: 400 is beside, 399 is not.
     const at400 = { ...m, floating: { top: 192, bottom: 372, left: 65, right: 1024 - 16 - FLOAT_GAP_PX - 400 } };
     expect(placeNoticeStack(at400).float).toBe('right');
     const at399 = { ...m, floating: { ...at400.floating, right: at400.floating.right + 1 } };
@@ -525,10 +525,10 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(besideRoom(LIVE, LIVE.regionLeft, LIVE.logClearance)).toBe(420 - 348 - 64);
   });
 
-  it('GM r9 2: with no 400 px beside it, the side of it, under or above, that holds the card; the log never moves', () => {
+  it('with no 400 px beside it, the side of it, under or above, that holds the card; the log never moves', () => {
     // 1024x640, the log at x 300-640: 228 px on its left, 360 on its right.
     const base: StackMeasure = { ...at(640, 2), viewportW: 1024, logClearance: 0, logTop: 0, column: { left: 212, right: 812 } };
-    // GM r12: the note whole first, the log giving only what that needs:
+    // Design: the note whole first, the log giving only what that needs:
     // under it 16 px, above it 81.
     const high = placeNoticeStack({ ...base, floating: { top: 100, bottom: 280, left: 300, right: 640 } });
     expect(high).toMatchObject({ float: 'under', inset: null, squeeze: 16, collapse: false, topLine: 280 + FLOAT_GAP_PX - 16, keepPlan: false, hold: 'top' });
@@ -536,7 +536,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(low).toMatchObject({ float: 'above', inset: null, squeeze: 81, collapse: false, keepPlan: false, hold: 'bottom' });
   });
 
-  it('GM r12: two passes, the note whole first, each beside, under, above, then under and above with give', () => {
+  it('two passes, the note whole first, each beside, under, above, then under and above with give', () => {
     const base = { ...LIVE, logClearance: 0, logTop: 0, card: { ...LIVE_CARD } };
     // Room both sides with no give: under first.
     expect(placeNoticeStack({ ...base, viewportH: 1000, column: { left: 64, right: 404 }, floating: { top: 380, bottom: 560, left: 65, right: 403 } }))
@@ -555,7 +555,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(second).toMatchObject({ float: 'under', squeeze: 0, collapse: false, keepPlan: true, underFade: false });
   });
 
-  it('GM r57 Q3: a floating log with no room on either side: above it under the top line; else under it, into its body, never its header', () => {
+  it('a floating log with no room on either side: above it under the top line; else under it, into its body, never its header', () => {
     // 420x560, a log at 150-470 the person reopened over the card's fold (it
     // may not collapse): with its give, 26 + 89 px above it and 1 + 89
     // under it; the card, one line and the pill need 149. Above holds no
@@ -576,7 +576,7 @@ describe('the give-way order (GM r5-r7)', () => {
     }
     // It crossed the log's body (its bottom 470 - 89), no more than one line needs.
     expect(Math.min(...[card!, ...rows].map((box) => box.top))).toBeLessThan(470 - LIVE.logSpare + FLOAT_GAP_PX);
-    // Review 3 LOW-1's cell: 1024x640 under the offline banner (top line
+    // A cell: 1024x640 under the offline banner (top line
     // 199), a log the person collapsed (all header) at 357-401, two notices,
     // the newest with Undo: no body to cross, so above it, under the banner,
     // the body under one line; nothing over the banner or the log.
@@ -607,7 +607,7 @@ describe('the give-way order (GM r5-r7)', () => {
     for (const box of [placed.card!, ...placed.rows]) expect(box.top).toBeGreaterThanOrEqual(380 - LIVE.logSpare + FLOAT_GAP_PX);
   });
 
-  it('GM r57 Q3: a log the person dragged up to the top line gives under it no more than the stack can use, and the card never stands over the top line', () => {
+  it('a log the person dragged up to the top line gives under it no more than the stack can use, and the card never stands over the top line', () => {
     // 420x560, top line 116 (the offline banner's), the log at 0-330 with
     // its header over the banner's band: under it, its top held, its bottom
     // comes up by the give, but the stack's top never past 116.
@@ -650,7 +650,7 @@ describe('the give-way order (GM r5-r7)', () => {
     expect(stepChanged(place(true, 'folded', 1, 1), place(true, 'folded', 2, 2))).toBe(true);
     expect(stepChanged(place(true, 'folded', 1, 1), place(true, 'above', 0, 1))).toBe(true);
     expect(stepChanged(place(true, 'above', 0, 1), place(true, 'above', 0, 0))).toBe(true);
-    // The count moving into the Undo notice's row is a step (GM r8).
+    // The count moving into the Undo notice's row is a step (design).
     expect(stepChanged(place(true, 'pill', 2, 2), { ...place(true, 'pill', 2, 2), moreHost: 2 })).toBe(true);
     expect(stepChanged(place(true, 'folded', 2, 2), place(true, 'pill', 2, 2))).toBe(true);
     expect(stepChanged(place(true, 'pill', 2, 2), { ...place(true, 'pill', 2, 2), collapse: true })).toBe(true);
@@ -659,7 +659,7 @@ describe('the give-way order (GM r5-r7)', () => {
 });
 
 /**
- * The invariants in every cell of the grid (GM r5-r7): window sizes, the
+ * The invariants in every cell of the grid (design): window sizes, the
  * log open (docked), closed or floating in the card's column, 0-4 notices
  * (none with an Undo, or the newest with one), the offline banner on or off.
  * Nothing on the never-covered list is covered (the card's header and
@@ -670,8 +670,8 @@ describe('the give-way order (GM r5-r7)', () => {
  * numbers (the body it gets, the kept lines' need), and in those the plan
  * line still shows whole unless PLAN_SHORT lists it.
  */
-/** Round 3f's 71 floating cells short of their kept lines, with the log
- * as wide as the card's column (GM r9: "don't accept yet"). */
+/** The 71 floating cells short of their kept lines, with the log
+ * as wide as the card's column (design: "don't accept yet"). */
 const R3F_FLOATING_SHORT = [
   '420x560 floating 0',
   '420x560 floating 0 banner',
@@ -749,9 +749,9 @@ const R3F_FLOATING_SHORT = [
 // fades = 97), [the body it gets, 97]: the 420x560 window under the
 // two-line offline banner with the log docked (12 px short with no Undo
 // notice: 78 px of room, the log's 89 and its collapse's 47, the pill's 40;
-// 26 short with one, whose row now carries the fold's count, GM r8); and a
+// 26 short with one, whose row now carries the fold's count, per design); and a
 // floating log the person left mid-column, at 30% of the height, where
-// nothing fits beside it either (GM r9: under 400 px; its bottom edge stays,
+// nothing fits beside it either (design: under 400 px; its bottom edge stays,
 // so only the room above it grows). `floating wide` is that log resized to
 // the column's width: nothing is ever beside it.
 const EXPECTED_SHORT: Record<string, [number, number]> = {
@@ -788,26 +788,26 @@ const EXPECTED_PLAN_SHORT: Record<string, [number, number]> = {
 const EXPECTED_R11_OWN = [36, 35, 0, 0];
 const EXPECTED_R11_WIDE = [18, 53, 0, 0];
 const EXPECTED_R10_768 = 18;
-/** The whole grid's floating cells (252), by step (GM r11). */
+/** The whole grid's floating cells (252), by step (design). */
 const EXPECTED_R11_ALL = [90, 162, 0, 0];
-/** GM r12: the whole grid's floating cells by step, per log width, and their notes [whole, clipped]. */
+/** Design: the whole grid's floating cells by step, per log width, and their notes [whole, clipped]. */
 const EXPECTED_R12_STEPS = { own: [54, 72, 0, 0], wide: [36, 90, 0, 0] };
 const EXPECTED_R12_NOTES = { own: [110, 16], wide: [102, 24], r3fOwn: [55, 16], r3fWide: [47, 24] };
-/** Round 3k's other floating logs, per kind: [beside, under, above, short
+/** The other floating logs, per kind: [beside, under, above, short
  * (the kept lines under the fade, either side), out of the stack's way]
  * and [note whole, clipped]. */
 const EXPECTED_R3K_GRID = { collapsed: { steps: [147, 16, 15, 39, 35], notes: [180, 72] }, refused: { steps: [168, 28, 36, 20, 0], notes: [189, 63] }, resized: { steps: [168, 28, 56, 0, 0], notes: [216, 36] } };
-/** The cells where a card stands up into a log's body (GM r57 Q3: a shortfall under it). */
+/** The cells where a card stands up into a log's body (design: a shortfall under it). */
 const EXPECTED_R3K_CROSSED: string[] = ['1 banner', '1 banner undo', '2 banner', '2 banner undo', '4 banner', '4 banner undo']
   .map((cell) => `420x560 refused at 0.45 ${cell}`);
-/** GM r57 Q4: the docked log's cells, [note whole, clipped]. */
+/** Design: the docked log's cells, [note whole, clipped]. */
 const EXPECTED_R57_DOCKED_NOTES = { open: [113, 13], closed: [113, 13] };
 
-/** The live card's line boxes (round 3h, 340 px), unscrolled, as LIVE_CARD
+/** The live card's line boxes (340 px), unscrolled, as LIVE_CARD
  * places its kept lines (4 px lower: the 3e model's note margin). */
 const LIVE_LINES: BodyLine[] = [[5.5, 22], [25.8, 42.2], [46, 62.5], [73.8, 87.7], [90.5, 104.5], [112.3, 125.3], [125.3, 138.3], [157.2, 171.2]]
   .map(([top, bottom]) => ({ top: top + 4, bottom: bottom + 4 }));
-/** The live card measured in its narrow layout (round 3h, 1024 x 900): its
+/** The live card measured in its narrow layout (1024 x 900): its
  * narrow minimum, and the card from each width up (the plan line wraps
  * once more under 290 px and once less from 380). */
 const NARROW_MIN = 254;
@@ -826,23 +826,23 @@ describe('the grid', () => {
   const SIZES: Array<[number, number]> = [[420, 560], [420, 640], [420, 760], [420, 900], [768, 600], [1024, 640], [1440, 900]];
   // `floating`: the log at its own width (layouts.css --col-right-w:
   // clamp(340px, 26vw, 460px)), its left edge at the card's column's, where
-  // the person left it; `floating wide`: resized to the column's width (round
-  // 3f's grid had only this one, as `floating`).
+  // the person left it; `floating wide`: resized to the column's width (an earlier
+  // grid had only this one, as `floating`).
   const LOGS = ['open', 'closed', 'floating', 'floating wide'] as const;
   const COUNTS = [0, 1, 2, 3, 4];
   const FLOOR = 91;
   const SHORT: Record<string, [number, number]> = {};
   const PLAN_SHORT: Record<string, [number, number]> = {};
-  /** Where the stack sits by each floating log (GM r9). */
+  /** Where the stack sits by each floating log (design). */
   const SIDE: Record<string, string> = {};
   /** The width each cell's card took beside a log in its narrow layout. */
   const NARROWED: Record<string, number> = {};
-  /** Each floating cell: its note whole (pass 1, GM r12) or clipped. */
+  /** Each floating cell: its note whole (pass 1, per design) or clipped. */
   const NOTE: Record<string, 'whole' | 'clipped'> = {};
   const cells = SIZES.flatMap(([w, h]) => LOGS.flatMap((log) => COUNTS.flatMap((count) => [false, true].flatMap((banner) => (count ? [false, true] : [false]).map((undo) => {
     const regionLeft = 64;
     const column = { left: regionLeft, right: regionLeft + Math.min(600, w - regionLeft - 16) };
-    // The live top lines (round 3d shots): the top bars' bottom plus 8, or
+    // The live top lines (live shots): the top bars' bottom plus 8, or
     // the offline banner's bottom plus 16 (it wraps to two lines at 420).
     const topLine = banner ? (w < 600 ? 214 : 199) : (w < 600 ? 116 : 150);
     // The open log's own height (layouts.css --agent-h-open: clamp(180px, 22vh, 280px)).
@@ -855,7 +855,7 @@ describe('the grid', () => {
       logClearance: floating ? 0 : 348, logTop: log === 'open' ? natural + 88 : log === 'closed' ? CLOSED_LOG + 88 : 0,
       logSpare: gives ? natural - FLOOR : 0, logCollapse: gives ? FLOOR - CLOSED_LOG : 0,
       topLine,
-      // The newest offers Undo, and carries the fold's count in its row (GM r8).
+      // The newest offers Undo, and carries the fold's count in its row (design).
       card: {
         ...LIVE_CARD, items: Array(count).fill(46), lines: LIVE_LINES,
         undo: Array(count).fill(false).map((_, i) => undo && i === count - 1),
@@ -865,7 +865,7 @@ describe('the grid', () => {
       column,
     };
     // As the measure does: the rooms beside the log under 400, from the
-    // card's narrow minimum, and the card at each (GM r10).
+    // card's narrow minimum, and the card at each (design).
     const rooms = floating
       ? [besideRoom(m, regionLeft, w - m.floating!.left + FLOAT_GAP_PX), besideRoom(m, Math.max(regionLeft, m.floating!.right + FLOAT_GAP_PX), 0)]
       : [besideRoom(m, regionLeft, m.logClearance)];
@@ -911,7 +911,7 @@ describe('the grid', () => {
       expect(card!.plan!.top).toBeGreaterThanOrEqual(card!.headBottom);
       expect(card!.plan!.bottom).toBeLessThanOrEqual(card!.footTop - FADE_PX);
     }
-    // GM r10: scrolled, the body stops on a line boundary: the first line
+    // Design: scrolled, the body stops on a line boundary: the first line
     // in view is whole, under the body's top edge (4 px under the header).
     if (card!.scroll) {
       for (const lineBox of placed.lines ?? []) {
@@ -936,7 +936,7 @@ describe('the grid', () => {
       expect(place.moreHost).toBe(count - 1);
       expect(rows.some((row) => row.kind === 'more')).toBe(false);
     }
-    // A floating log (GM r9, r11): beside it, with 400 px there or the
+    // A floating log (design): beside it, with 400 px there or the
     // narrow layout, the region stopping short of it; else under it, its
     // bottom come up by its give; else above it, its top come down by it;
     // never across it.
@@ -946,7 +946,7 @@ describe('the grid', () => {
     if (floating && (place.float === 'left' || place.float === 'right')) {
       const float = m.floating!;
       const inset = place.inset!;
-      // 400 px there, or the card's narrow layout (GM r10).
+      // 400 px there, or the card's narrow layout (design).
       expect(m.viewportW - inset.right - inset.left).toBeGreaterThanOrEqual(place.narrow ? NARROW_MIN : BESIDE_LOG_MIN_W);
       if (place.float === 'left') expect(m.viewportW - inset.right).toBeLessThanOrEqual(float.left - FLOAT_GAP_PX);
       else expect(inset.left).toBeGreaterThanOrEqual(float.right + FLOAT_GAP_PX);
@@ -955,7 +955,7 @@ describe('the grid', () => {
     } else if (floating) {
       expect(place.inset ?? null).toBeNull();
       const float = m.floating!;
-      // The log as it shows, held at the edge away from the card (GM r11).
+      // The log as it shows, held at the edge away from the card (design).
       const shown = place.float === 'under' ? { top: float.top, bottom: float.bottom - give } : { top: float.top + give, bottom: float.bottom };
       expect(shown.bottom - shown.top).toBeGreaterThanOrEqual(CLOSED_LOG);
       if (give) expect(place.hold).toBe(place.float === 'under' ? 'top' : 'bottom');
@@ -982,7 +982,7 @@ describe('the grid', () => {
     }
   });
 
-  it('GM r9-r11: how round 3f\'s 71 floating cells resolve, step by step', () => {
+  it('how the 71 floating cells resolve, step by step', () => {
     // 1: beside the log; 2: under it, its body giving way; 3: above it,
     // the same; each only when the kept lines show; else 4: a named
     // shortfall (SHORT).
@@ -990,8 +990,8 @@ describe('the grid', () => {
     const count = (names: string[]) => [1, 2, 3, 4].map((n) => names.filter((name) => step(name) === n).length);
     const all = Object.keys(SIDE);
     expect(all).toHaveLength(252);
-    // GM r57 Q4, "notices fold first" by the docked log too: [whole,
-    // clipped] (round 3j's order: open 71/55, closed 93/33). The note clips
+    // Design, "notices fold first" by the docked log too: [whole,
+    // clipped] (the order: open 71/55, closed 93/33). The note clips
     // only at 420x560 under the banner, and at 420x640 under the banner with
     // an Undo notice, which never folds.
     const docked = (kind: string) => ['whole', 'clipped'].map((note) => Object.keys(NOTE).filter((name) => name.split(' ')[1] === kind && NOTE[name] === note).length);
@@ -1002,7 +1002,7 @@ describe('the grid', () => {
     const r3f = R3F_FLOATING_SHORT; const r3fWide = r3f.map((name) => name.replace(' floating', ' floating wide'));
     const ownAll = all.filter((name) => !name.includes(' wide')); const wideAll = all.filter((name) => name.includes(' wide'));
     const by = (names: string[]) => [1, 2, 3, 4].map((n) => names.filter((name) => step(name) === n).length);
-    // GM r12, two passes: the note whole first, then the kept lines only.
+    // Design, two passes: the note whole first, then the kept lines only.
     // [beside, under, above, short] per log width, and how many end with
     // the note whole and how many clipped on a line boundary.
     expect({ own: by(ownAll), wide: by(wideAll) }).toEqual(EXPECTED_R12_STEPS);
@@ -1018,12 +1018,12 @@ describe('the grid', () => {
     const own = R3F_FLOATING_SHORT;
     expect(count(own)).toEqual(EXPECTED_R11_OWN);
     // Step 1 takes every 1024x640 cell (595 px beside the log, on its
-    // right) and, in the narrow layout (GM r10), every 768x600 one (339 px);
-    // step 2 the 420 ones, the log giving way under it (GM r11).
+    // right) and, in the narrow layout (design), every 768x600 one (339 px);
+    // step 2 the 420 ones, the log giving way under it (design).
     expect(own.filter((name) => step(name) === 1).every((name) => /^(1024x640|768x600)/.test(name))).toBe(true);
     expect(own.filter((name) => step(name) === 1 && name.startsWith('768x600')).length).toBe(EXPECTED_R10_768);
     expect(own.filter((name) => step(name) === 4)).toEqual(Object.keys(EXPECTED_SHORT).filter((name) => / floating (?!wide)/.test(name)));
-    // With it resized to the column's width, as round 3f's grid had it.
+    // With it resized to the column's width, as the earlier grid had it.
     const wide = R3F_FLOATING_SHORT.map((name) => name.replace(' floating', ' floating wide'));
     expect(count(wide)).toEqual(EXPECTED_R11_WIDE);
     // The wide log's 768x600 cells, "768x600 floating wide 0" among them:
@@ -1033,7 +1033,7 @@ describe('the grid', () => {
     expect(wide768.every((name) => step(name) === 2 && !PLAN_SHORT[name])).toBe(true);
     // No floating cell is a shortfall now, at either width.
     expect(Object.keys(SHORT).filter((name) => name.includes('floating'))).toEqual([]);
-    // GM r10: the narrow layout takes every 768x600 cell beside the log,
+    // Design: the narrow layout takes every 768x600 cell beside the log,
     // docked (356 px) or floating at its own width (339 px), and the wide
     // log's 1024x640 cells (337 px); nothing else goes narrow.
     const narrowed = Object.entries(NARROWED).reduce<Record<string, number>>((acc, [name, width]) => {
@@ -1045,16 +1045,16 @@ describe('the grid', () => {
   });
 
   it('lists the cells where every step leaves the body short of its kept lines', () => {
-    // [the body it gets, the kept lines' need: 65 + two fades, and from
-    // round 3h (GM r10) the 11 px to the line boundary above the top fade].
+    // [the body it gets, the kept lines' need: 65 + two fades, and, once the scroll
+    // stops on a line boundary, the 11 px to the line boundary above the top fade].
     expect(SHORT).toEqual(EXPECTED_SHORT);
     for (const [body, need] of Object.values(SHORT)) expect(body).toBeLessThan(need);
     // The plan line shows whole in every one of them but these.
     expect(PLAN_SHORT).toEqual(EXPECTED_PLAN_SHORT);
     for (const [body, need] of Object.values(PLAN_SHORT)) expect(body).toBeLessThan(need);
-    // GM r7's cells: 420x560, the docked log, the banner, 2-4 notices with
+    // The cells: 420x560, the docked log, the banner, 2-4 notices with
     // no Undo: the plan line whole, the ⚠ line short (under the fade; 12 px
-    // until round 3h, 23 px now the scroll stops on a line boundary).
+    // before the scroll stopped on a line boundary, 23 px now).
     for (const count of [2, 3, 4]) {
       expect(SHORT[`420x560 open ${count} banner`]).toEqual([85, 108]);
       expect(PLAN_SHORT[`420x560 open ${count} banner`]).toBeUndefined();
@@ -1063,17 +1063,17 @@ describe('the grid', () => {
 });
 
 /**
- * Review 3 LOW-1 and MEDIUM-1, GM r57 Q3: floating logs the grid above never
+ * Design: floating logs the grid above never
  * models, at several heights: one the person collapsed (all header, nothing
  * to give), one they reopened over the card's fold (it gives its body down
  * to its floor but never collapses), and one they resized to 300 px with
- * the native corner (MEDIUM-1: it collapses to its header like any other).
+ * the native corner (it collapses to its header like any other).
  * In every cell: no notice overlaps another or the card; the card's header
  * and footer whole; nothing off the window or over the top line (the
- * offline banner's, GM r57 Q3); the log's header never crossed; its body
- * crossed only in a shortfall under it (Q3's last resort).
+ * offline banner's, per design); the log's header never crossed; its body
+ * crossed only in a shortfall under it (the last resort).
  */
-describe('the grid, round 3k: other floating logs (GM r57 Q3)', () => {
+describe('the grid: other floating logs (design)', () => {
   const SIZES: Array<[number, number]> = [[420, 560], [420, 640], [768, 600], [1024, 640], [1280, 560], [1440, 900]];
   const KINDS = ['collapsed', 'refused', 'resized'] as const;
   const TOPS = [0.2, 0.45, 0.7];
@@ -1136,7 +1136,7 @@ describe('the grid, round 3k: other floating logs (GM r57 Q3)', () => {
     for (const box of boxes) expect(clear(box, header)).toBe(true);
     const crosses = boxes.some((box) => !clear(box, shown));
     if (crosses) {
-      // Only a shortfall under it, stood up into its body (GM r57 Q3).
+      // Only a shortfall under it, stood up into its body (design).
       expect(place).toMatchObject({ float: 'under', underFade: true });
       CROSSED.push(name);
     }
@@ -1183,7 +1183,7 @@ describe('the jump frame', () => {
   });
 
   it('the region watches its root marks and wires the jump and the glide in', () => {
-    // Round 3l (GM r69 Q5): a glide's end lets the log's raise go, then places again.
+    // Design: a glide's end lets the log's raise go, then places again.
     expect(REGION).toMatch(/applyNoticeStack\(region, stack, next\.place, stackJumps\(last, next\), dropped \|\| stepChanged\(last\?\.place \?\? null, next\.place\), settled\)/);
     expect(REGION).toMatch(/function settled\(\) \{\s*settle\(\);\s*place\(\);\s*\}/);
   });
@@ -1228,12 +1228,12 @@ describe('the fold, the row and the glide, written to the stack', () => {
     applyNoticeStack(region, stack, place({ mode: 'above', more: 2, expanded: true }));
     expect(toasts.some((toast) => toast.hasAttribute(FOLD_ATTR) || toast.hasAttribute('inert'))).toBe(false);
     expect(more.getAttribute('aria-expanded')).toBe('true');
-    // Unfolded it reads "Show less", as the note's Show all / Show less (GM r6).
+    // Unfolded it reads "Show less", as the note's Show all / Show less (design).
     expect(more.textContent).toBe(SHOW_LESS);
     expect(SHOW_LESS).toBe('Show less');
     applyNoticeStack(region, stack, place({ mode: 'folded', folded: 2, fold: [true, true, false], more: 2 }));
     expect(more.textContent).toBe('2 more notices');
-    // Step 2 (GM r7): every one without an Undo in the pill, "N notices";
+    // Step 2 (design): every one without an Undo in the pill, "N notices";
     // one with an Undo stays whole wherever it sits.
     applyNoticeStack(region, stack, place({ mode: 'pill', folded: 2, fold: [true, false, true], more: 2 }));
     expect(more.textContent).toBe('2 notices');
@@ -1251,7 +1251,7 @@ describe('the fold, the row and the glide, written to the stack', () => {
     expect(toasts[2].hasAttribute('inert')).toBe(true);
   });
 
-  it('a hosting Undo notice carries the count: the region\'s own row hides, the store names the host (GM r8)', () => {
+  it('a hosting Undo notice carries the count: the region\'s own row hides, the store names the host (design)', () => {
     const { region, stack, more, toasts } = stackDom(3);
     applyNoticeStack(region, stack, place({ mode: 'pill', folded: 2, fold: [true, true, false], more: 2, moreHost: 2 }));
     expect(toasts.map((toast) => toast.hasAttribute(MORE_HOST_ATTR))).toEqual([false, false, true]);
@@ -1274,7 +1274,7 @@ describe('the fold, the row and the glide, written to the stack', () => {
     expect(getNoticeMore().host).toBe(null);
   });
 
-  it('beside a floating log, the region stops short of it; with none it takes its own sides again (GM r9)', () => {
+  it('beside a floating log, the region stops short of it; with none it takes its own sides again (design)', () => {
     const { region, stack } = stackDom(1);
     applyNoticeStack(region, stack, place({ float: 'right', inset: { left: 413, right: 16 } }));
     expect([region.style.left, region.style.right]).toEqual(['413px', '16px']);
@@ -1284,7 +1284,7 @@ describe('the fold, the row and the glide, written to the stack', () => {
     expect([region.style.left, region.style.right]).toEqual(['', '']);
   });
 
-  it('a move beside the log or back glides sideways on the spring, no jump (GM r9)', () => {
+  it('a move beside the log or back glides sideways on the spring, no jump (design)', () => {
     const { region, stack, card } = stackDom(0);
     let left = 212;
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
@@ -1321,7 +1321,7 @@ describe('the fold, the row and the glide, written to the stack', () => {
     expect(scroller.scrollTop).toBe(0);
   });
 
-  it('with a ⚠ row, scrolls until the row\'s foot clears the fade: whole lines, never a cut (GM r6)', () => {
+  it('with a ⚠ row, scrolls until the row\'s foot clears the fade: whole lines, never a cut (design)', () => {
     const { region, stack } = stackDom(1);
     const scroller = document.querySelector<HTMLElement>('.body')!;
     const warn = document.createElement('li');
@@ -1340,7 +1340,7 @@ describe('the fold, the row and the glide, written to the stack', () => {
     expect(180 - 64).toBeGreaterThanOrEqual(100 + FADE_PX);
   });
 
-  it('under its kept lines (step 5), the plan line first, just under the top fade, the ⚠ row next (GM r7)', () => {
+  it('under its kept lines (step 5), the plan line first, just under the top fade, the ⚠ row next (design)', () => {
     const { region, stack } = stackDom(1);
     const scroller = document.querySelector<HTMLElement>('.body')!;
     const warn = document.createElement('li');
@@ -1430,7 +1430,7 @@ describe('the fold, the row and the glide, written to the stack', () => {
     vi.spyOn(card, 'getBoundingClientRect').mockReturnValue({ top: 104, bottom: 248, height: 144, left: 40, width: 576 } as DOMRect);
     vi.spyOn(window, 'getComputedStyle').mockReturnValue({ transform: 'matrix(0.96, 0, 0, 0.96, 12, -30)' } as CSSStyleDeclaration);
     // 150 tall (600 wide) at 0.96 about its centre, 30 px up and 12 right
-    // (a sideways glide, GM r9): it rests at 131-281, from 16.
+    // A sideways glide (design): it rests at 131-281, from 16.
     const rest = layoutBox(card);
     expect(rest).toMatchObject({ top: 131, bottom: 281, height: 150 });
     expect(rest.left).toBeCloseTo(16, 6);
@@ -1454,7 +1454,7 @@ describe('the fold, the row and the glide, written to the stack', () => {
   });
 });
 
-describe('the offline banner joins the card\'s top line (GM r4 7)', () => {
+describe('the offline banner joins the card\'s top line (design)', () => {
   afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; });
 
   it('noticeTopLimit is below the banner while it shows, and the floating panels\' line is not', () => {
@@ -1528,7 +1528,7 @@ describe('measured from the live stack', () => {
     const m = measureNoticeStack(region, stack, 72);
     expect(m).toMatchObject({ regionLeft: 70, regionBottom: 80, logClearance: 348, logTop: 206, topLine: 72, logSpare: 198 - 91, logCollapse: 47 });
     // The kept lines: the plan line's top to the first ⚠ row's foot; the
-    // plan line alone; which notices offer Undo (GM r7: they never fold).
+    // plan line alone; which notices offer Undo (design: they never fold).
     expect(m.card).toMatchObject({
       chrome: 100, body: 700, foot: 54, items: [46, 46], plan: { top: 77, bottom: 142 }, first: { top: 77, bottom: 110 }, undo: [false, true], host: [false, true],
     });
@@ -1541,7 +1541,7 @@ describe('measured from the live stack', () => {
     document.documentElement.style.removeProperty('--agent-log-collapse');
   });
 
-  it('with no card, reads the notices shown and their column, and the floating log (GM r8 4)', () => {
+  it('with no card, reads the notices shown and their column, and the floating log (design)', () => {
     for (const [name, value] of Object.entries({ top: 300, bottom: 520, left: 65, right: 403 })) {
       document.documentElement.style.setProperty(`--agent-log-float-${name}`, `${value}px`);
     }
@@ -1552,8 +1552,8 @@ describe('measured from the live stack', () => {
         <div data-notice-slot="c"><div class="toast c"></div></div>
         <div data-notice-slot="d"><div class="toast d"></div></div>
       </div></div>`;
-    // Mid-glide, the notices draw far from where they rest (review 3
-    // MEDIUM-3): the column is read from the layout, the region (its inset a
+    // Mid-glide, the notices draw far from where they rest:
+    // the column is read from the layout, the region (its inset a
     // card left, lifted) and the widest notice showing, centred in it.
     const boxes: Record<string, Partial<DOMRect>> = {
       '[data-notice-region]': { left: 64, right: 404, width: 340, bottom: 559 },
@@ -1567,7 +1567,7 @@ describe('measured from the live stack', () => {
       const hit = Object.entries(boxes).find(([selector]) => this.matches(selector));
       return { top: 0, bottom: 0, left: 0, right: 0, height: 0, width: 0, ...(hit?.[1] ?? {}) } as DOMRect;
     });
-    // The folded one keeps its layout height (out of the flow, GM r57 Q2:
+    // The folded one keeps its layout height (out of the flow, design:
     // it is counted, so it can stay folded); an empty one takes no room.
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
       return this.matches('.b, .c, .a') ? 46 : 0;
@@ -1592,7 +1592,7 @@ describe('measured from the live stack', () => {
       .toMatchObject({ notices: null, column: null, floating: null });
   });
 
-  it('reads the region and the card\'s column as they are with no inset beside a floating log, and puts the inset back (GM r9)', () => {
+  it('reads the region and the card\'s column as they are with no inset beside a floating log, and puts the inset back (design)', () => {
     document.body.innerHTML = `
       <div data-notice-region="" style="left: 413px; right: 16px"><div class="notice-region__stack">
         <div data-notice-slot="proposal"><div class="card" data-notice-shrinks="">
@@ -1619,7 +1619,7 @@ describe('measured from the live stack', () => {
     expect([region.style.left, region.style.right]).toEqual(['413px', '16px']);
   });
 
-  it('the empty toolbar Panel keeps its room in the top line, so a selection never moves the card (GM r6: not (c))', () => {
+  it('the empty toolbar Panel keeps its room in the top line, so a selection never moves the card (design)', () => {
     expect(REGION).toMatch(/measureNoticeStack\(region, stack, noticeTopLimit\(TOP_GUTTER\)\)/);
     document.body.innerHTML = `<div ${TOP_BAR_ATTR}="" class="tabs"></div><div ${TOP_BAR_ATTR}="" class="panel"></div>`;
     const panel = { width: 0 };
@@ -1642,14 +1642,14 @@ describe('measured from the live stack', () => {
     expect(root.style.getPropertyValue(LOG_SQUEEZE_VAR)).toBe('');
   });
 
-  it('re-measures when the stack, the top bars or the root variables change (review 1 HIGH-1, LOW-5)', () => {
+  it('re-measures when the stack, the top bars or the root variables change', () => {
     expect(REGION).toMatch(/watch\(stack\)/);
     expect(REGION).toMatch(/querySelectorAll\(`\[\$\{TOP_BAR_ATTR\}\]`\)\.forEach\(watch\)/);
     expect(REGION).toMatch(/observe\(document\.documentElement, \{ attributes: true, attributeFilter: \['style', BANNER_SHOWN_ATTR, LOG_HELD_ATTR\] \}\)/);
   });
 });
 
-describe('GM r10 (round 3h)', () => {
+describe('the card body\'s line boundaries, the glide and the narrow layout', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -1940,11 +1940,11 @@ describe('GM r10 (round 3h)', () => {
 describe('the rules', () => {
   it('lifts the stack, never the region, and above the log drops only the log clearance', () => {
     expect(rule(REGION_CSS, '.notice-region__stack')['margin-bottom']).toBe('var(--notice-stack-lift, 0px)');
-    // Above the log only the log's clearance goes: the right side panel's (#204 round 18) stays.
+    // Above the log only the log's clearance goes: the right side panel's (#204) stays.
     expect(rule(REGION_CSS, ".notice-region[data-above-log='true']")['--notice-r'])
       .toBe('max(var(--page-gutter, 16px), var(--notice-right-clearance, 0px))');
     const region = rule(REGION_CSS, '.notice-region');
-    // #204 round 18: centred on the window inside the clearances (the left tool rail's and an open side panel's,
+    // #204: centred on the window inside the clearances (the left tool rail's and an open side panel's,
     // both on --notice-left-clearance), narrowing before it gives up the centre.
     expect(region['--notice-l']).toBe('max(var(--page-gutter, 16px), var(--notice-left-clearance, 0px))');
     expect(region['--notice-r']).toBe('max(var(--page-gutter, 16px), var(--agent-log-clearance, 0px), var(--notice-right-clearance, 0px))');
@@ -1961,7 +1961,7 @@ describe('the rules', () => {
     expect(rule(CARD_CSS, '.proposal-bar__head')['flex-shrink']).toBe('0');
     expect(rule(CARD_CSS, '.proposal-bar__footer')['flex-shrink']).toBe('0');
     const scroll = rule(CARD_CSS, '.proposal-bar__scroll');
-    // The r4 overlay is gone (GM r5): the body keeps no room for notices.
+    // The old overlay is gone (design): the body keeps no room for notices.
     expect(scroll['min-height']).toBe('0');
     expect(scroll['padding-bottom']).toBeUndefined();
     expect(CARD_CSS + REGION_CSS).not.toMatch(/notice-overlay|notice-body-floor/);
@@ -1977,10 +1977,10 @@ describe('the rules', () => {
     expect(details.overflow).toBeUndefined();
   });
 
-  it('step 2 puts the card last, a folded notice takes no room, clicks or focus, and the row is one 32 px line (GM r5)', () => {
+  it('step 2 puts the card last, a folded notice takes no room, clicks or focus, and the row is one 32 px line (design)', () => {
     expect(rule(REGION_CSS, ".notice-region:is([data-notice-mode='above'], [data-notice-mode='folded'], [data-notice-mode='pill']) .notice-region__slot > [data-notice-shrinks]").order).toBe('1');
     // Every step that stands the notices above the card is in that rule
-    // (round 3e: the pill was missing, and the card stayed on top).
+    // (an earlier version missed the pill, and the card stayed on top).
     const selector = /\.notice-region:is\(([^)]*)\) \.notice-region__slot > \[data-notice-shrinks\] \{\s*order: 1;/.exec(REGION_CSS)?.[1] ?? '';
     expect([...selector.matchAll(/data-notice-mode='(\w+)'/g)].map((match) => match[1]).sort()).toEqual([...ABOVE_MODES].sort());
     expect(REGION_CSS).not.toMatch(/data-notice-mode='under'/);

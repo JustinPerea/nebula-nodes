@@ -1,5 +1,5 @@
 /**
- * PR #204 round 6, GM r6 (1): Save style refused only because this tab isn't connected as the
+ * PR #204 (design): Save style refused only because this tab isn't connected as the
  * person says so in the "because" form, in the app's notice region (not Creator Studio's
  * toolbar row), and sends the same Style again on the promote, silently, once. Through the
  * real request path (fetch answers 403 person_required).
@@ -74,7 +74,7 @@ async function saveStyle() {
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save current style' })); });
 }
 
-describe('GM r6 (1): Save style retries on the promote, and says so in the notice region', () => {
+describe('Save style retries on the promote, and says so in the notice region', () => {
   it('a refusal by the gate: the because line in the notice region, nothing in the toolbar row', async () => {
     answers.set('POST /api/presets', gate);
     session.reportPersonRequired();

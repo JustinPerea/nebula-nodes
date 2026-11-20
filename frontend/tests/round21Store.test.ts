@@ -1,16 +1,16 @@
 /**
- * Round 21 of PR #195: review 20's store findings and GM's round 21 lines.
- * - M-1's reopen case is in projectSwitchSaves.round20 (the backend keeps
+ * PR #195: the store's behaviour and the design lines.
+ * - The reopen case is in projectSwitchSaves.round20 (the backend keeps
  *   the typing live: test_round21_review20.py).
- * - L-1: every action that changes nodes or edges, or sends a graph write,
+ * - every action that changes nodes or edges, or sends a graph write,
  *   is gated while following and while offline (the Delete key, the chat's
  *   clear, proposal Accept).
- * - L-4/L-5: a sync with no origin whose revision moved is adopted as the
+ * - a sync with no origin whose revision moved is adopted as the
  *   same canvas only when Nebula says its revisions weren't restored, and
  *   the writes held from before go out under the adopted revision.
- * - L-7: a later switch during a follow updates what the bar and the toast name.
- * - GM: an agent's clear is one toast, its line carrying Undo; a delete
- *   answered with a 500 says GM's locked line, its status in the Agent log.
+ * - a later switch during a follow updates what the bar and the toast name.
+ * - Design: an agent's clear is one toast, its line carrying Undo; a delete
+ *   answered with a 500 says design's locked line, its status in the Agent log.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
@@ -161,7 +161,7 @@ const slowListing = () => {
 
 const NOT_EDITS = new Set<string>([]);
 
-describe('L-1: every edit is gated, following and offline', () => {
+describe('every edit is gated, following and offline', () => {
   it('walks every action of the store: each is gated or listed as not an edit', () => {
     const gated = new Set(graphStoreModule.gatedGraphActions());
     const state = useGraphStore.getState() as unknown as Record<string, unknown>;
@@ -214,7 +214,7 @@ describe('L-1: every edit is gated, following and offline', () => {
   }
 });
 
-describe('G1: Create while following', () => {
+describe('Create while following', () => {
   it("rejects with Create's own heading over who is opening what", async () => {
     expect(graphStoreModule.GENERATE_HEADING).toBe(CREATE_WHILE_FOLLOWING_HEADING);
     agentOpens();
@@ -228,7 +228,7 @@ describe('G1: Create while following', () => {
   });
 });
 
-describe('L-7: a later switch while following is the one named', () => {
+describe('a later switch while following is the one named', () => {
   it('the bar and the toast name the project loaded and the last agent', async () => {
     agentOpens();
     const land = slowListing();
@@ -251,7 +251,7 @@ describe('L-7: a later switch while following is the one named', () => {
   });
 });
 
-describe('L-4/L-5: a sync with no origin whose revision moved', () => {
+describe('a sync with no origin whose revision moved', () => {
   const sameCanvasSync = (extra: Record<string, unknown>) => emit({ type: 'graphSync', workspaceRevision: 'rev-a',
     paramsVersion: GRAPH_PARAMS_VERSION, empty: false, canvasRevision: '17', edges: [],
     nodes: [{ id: 'n1', type: 'model-node', position: { x: 10, y: 20 },
@@ -266,7 +266,7 @@ describe('L-4/L-5: a sync with no origin whose revision moved', () => {
   });
 
   it('revisions not restored: the same canvas, and the held typing goes out under the adopted revision', async () => {
-    // Round 22 (review 21, L-b): only across an actual restart, so the canvas
+    // Only across an actual restart, so the canvas
     // first syncs with one process (its own revision) and then another.
     sameCanvasSync({ canvasRevision: getProjectContext()?.canvas, bootId: 'r21-boot-a' });
     type('Mine');
@@ -280,7 +280,7 @@ describe('L-4/L-5: a sync with no origin whose revision moved', () => {
   });
 });
 
-describe('GM round 21: an agent\'s clear is one toast, its line carrying Undo', () => {
+describe('an agent\'s clear is one toast, its line carrying Undo', () => {
   it('the clear line replaces "<agent> changed the canvas" and keeps its Undo', async () => {
     type('Mine');
     emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION, empty: true, cleared: true,
@@ -292,7 +292,7 @@ describe('GM round 21: an agent\'s clear is one toast, its line carrying Undo', 
   });
 });
 
-describe('GM round 21 (LOCKED): a delete answered with a 500', () => {
+describe('a delete answered with a 500', () => {
   it('names the node, puts it back, and logs the status in the Agent log', async () => {
     useAgentLogStore.getState().clear();
     graphWrites.answer = (_path, init) => Promise.resolve(init?.method === 'DELETE'

@@ -8,9 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CinemaSceneSpec, NodeData } from '../src/types';
 
 /**
- * Round 23 of PR #195 (review 22, L-3): the read-only state reaches every
+ * PR #195: the read-only state reaches every
  * control that acts, and the ratchet is one that would have caught the
- * misses. Review 22: "Make the ratchet render-based. Mount each canvas
+ * misses. Asked in review: "Make the ratchet render-based. Mount each canvas
  * surface in a follow and assert that every button/input not on an explicit
  * allowlist carries data-following-disabled. Or grep for onClick handlers
  * that call an EDIT_GATES action from a file that doesn't apply lock.act."
@@ -21,7 +21,7 @@ import type { CinemaSceneSpec, NodeData } from '../src/types';
  * 2. Rendered: each of those surfaces, following, offline, and offline plus
  *    following: every button, input, select and textarea is disabled (or
  *    read-only) and marked, unless it is on that surface's list of controls
- *    that only look, copy or stop (GM: Settings and Copy stay enabled; a stop
+ *    that only look, copy or stop (design: Settings and Copy stay enabled; a stop
  *    is never refused).
  */
 
@@ -108,7 +108,7 @@ function gatedUses(source: string): string[] {
   return [...new Set([...source.matchAll(store)].map((m) => m[2]).concat([...source.matchAll(pins)].map((m) => m[1])))];
 }
 
-describe('L-3 static: every component that reaches a canvas edit reads the lock', () => {
+describe('static: every component that reaches a canvas edit reads the lock', () => {
   it('finds them (the scan itself works)', () => {
     const shotPanel = readFileSync(join(SRC, 'components/cinema-studio/CinemaShotPanel.tsx'), 'utf8');
     expect(gatedUses(shotPanel)).toEqual(expect.arrayContaining(['executeShot']));
@@ -285,7 +285,7 @@ const SURFACES: Record<string, Surface> = {
     looks: [],
   },
   PinComposer: {
-    // Offline only: a follow closes the dialog (round23Store, M-1).
+    // Offline only: a follow closes the dialog (round23Store).
     mount: () => {
       useCanvasPinsStore.getState().compose({ nodeId: 'n4' });
       render(<PinComposer />);
@@ -317,8 +317,8 @@ const SURFACES: Record<string, Surface> = {
       return at(<EditorTransport editNode={node} sourceUrl="/api/outputs/a.mp4" />);
     },
     // Play, the edit points, Trim/Speed/Vol (select and focus) and zoom only
-    // look. Render preview and Export… lock since PR #200's fix round 3
-    // (review 3 LOW-4: they start a render on the backend).
+    // look. Render preview and Export… lock since PR #200's fix
+    // (they start a render on the backend).
     looks: [/^Play|^Pause/, /edit point/i, /^Drag the clip edges to trim$/, /^Adjust playback speed$/, /^Adjust volume \/ mute$/,
       /zoom/i],
   },
@@ -335,13 +335,13 @@ function remotionNode() {
 
 const CONTROLS = 'button, input, select, textarea';
 
-describe('L-3 rendered: every control that acts is locked', () => {
+describe('rendered: every control that acts is locked', () => {
   for (const [name, surface] of Object.entries(SURFACES)) {
     for (const mode of MODES) {
       if (name === 'PinComposer' && mode !== 'offline') continue;
       it(`${name}, ${mode}`, () => {
         const root = surface.mount();
-        // Names are read unlocked (a locked control's title is GM's line).
+        // Names are read unlocked (a locked control's title is design's line).
         const names = new Map([...root.querySelectorAll<HTMLElement>(CONTROLS)].map((control) => [control, nameOf(control)]));
         const looks = (control: HTMLElement) => surface.looks.some((re) => re.test(names.get(control) ?? nameOf(control)));
         expect([...names.keys()].filter((control) => !looks(control)).length, `${name} renders controls that act`).toBeGreaterThan(0);
@@ -377,10 +377,10 @@ describe('L-3 rendered: every control that acts is locked', () => {
   });
 });
 
-describe('L-3: a locked primary action looks neutral, never orange (GM blocker A)', () => {
-  // GM r24 item 2 made this one rule for every reason a button is disabled
+describe('a locked primary action looks neutral, never orange (design)', () => {
+  // Design made this one rule for every reason a button is disabled
   // (styles/disabled-buttons.css); agentPresenceFollowups.ratchet holds it
-  // for every accent-filled button. Here: the two GM named are in it.
+  // for every accent-filled button. Here: the two design named are in it.
   it('Cinema\'s Generate shot and Create\'s Generate, while following or offline', () => {
     const shared = readFileSync(join(__dirname, '../src/styles/disabled-buttons.css'), 'utf8');
     for (const selector of ['.cinema-shot-panel__action--primary', '.create-composer__generate']) expect(shared).toContain(selector);

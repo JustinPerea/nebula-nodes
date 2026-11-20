@@ -1,5 +1,5 @@
 /**
- * GM r14 (5), PR #204 round 9: Settings' Connect while this tab isn't connected as the person.
+ * Design, PR #204: Settings' Connect while this tab isn't connected as the person.
  * The server refuses it (backend/main.py create_agent_app: require_person, a 403
  * person_required), so it locks in place (aria-disabled, focusable, the held cards' first-moment
  * rule) with "You can connect an agent when this tab is connected as you." under it ("window" in
@@ -27,7 +27,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 const connect = () => screen.getByRole('button', { name: 'Connect' });
 
-describe('GM r14 (5): Connect locks while this tab isn\'t connected as you', () => {
+describe('Connect locks while this tab isn\'t connected as you', () => {
   it('the words: "tab" in a browser, "window" in the app', () => {
     expect(connectAgentLockCopy(false)).toBe(LINE);
     expect(connectAgentLockCopy(true)).toBe('You can connect an agent when this window is connected as you.');

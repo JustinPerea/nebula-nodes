@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 13 (review 12; GM r21, GM's #198 r12 answers), on round
- * 12's keyed backend in small (graphStore.fix12's harness):
- * - Review 12 L-1: a second clash during the answer's save keeps the stop;
+ * PR #198 fix (design), on graphStore.fix12's
+ * keyed backend in small (graphStore.fix12's harness):
+ * - a second clash during the answer's save keeps the stop;
  *   its failed answer goes back to stopped, never the timed retries.
- * - GM #198 r12 answer 1 (review 12 N-1): a stopped save's own try refused
+ * - Design (#198): a stopped save's own try refused
  *   400 or 413 speaks once, in a line that promises no retry, keeps
  *   [Try again] on the mark, and nothing tries again by itself until the
  *   person edits or presses it. The Agent log has the status and code.
- * - GM r21 answer 3: a delete's sync is ONE toast: the deleted line with
+ * - Design: a delete's sync is ONE toast: the deleted line with
  *   Codex's [Undo]; when the write did more than delete the scene, one
- *   sentence (GM r22 note 3): "Codex changed the canvas and deleted …".
- * - GM #198 r12 answer 2 (review 12 L-2): a clash waiting when the scene was
+ *   sentence (design): "Codex changed the canvas and deleted …".
+ * - Design (#198): a clash waiting when the scene was
  *   deleted is asked again once it is back, against the restored scene; the
  *   same value is no clash; the clash prompt takes the deleted toast's place.
  */
@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -236,7 +236,7 @@ const CANT = 'Nebula can’t save your changes to “Opening”.';
 const TOO_BIG = '“Opening” is too big to save. Remove something from it, then try again.';
 const DELETED = 'Codex deleted “Opening”, so your changes to it can’t be saved.';
 const CLASH = 'Codex changed “Opening” while you were editing it.';
-// GM r28 item 2 (round 19): the stop lines are a state, in their own slot.
+// Design: the stop lines are a state, in their own slot.
 const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
 /** Both notice slots' lines, and the state slot's, from now on (a line
  * beside an undo offer goes in the message slot). */
@@ -267,7 +267,7 @@ function watchLog() {
   return { lines, off: () => window.removeEventListener('nebula:agent-log-entry', on) };
 }
 
-describe('review 12, L-1: a second clash during the answer’s save', () => {
+describe('a second clash during the answer’s save', () => {
   it('keeps the stop: the second answer, failing, goes back to stopped; no timed retries, no new line', async () => {
     const h = backend(S3);
     const before = await stoppedByServer(h);
@@ -286,7 +286,7 @@ describe('review 12, L-1: a second clash during the answer’s save', () => {
     const saidBefore = [...said];
     const toasts = watchToasts();
     useGraphStore.getState().resolveSceneClash('n1', 'mine');
-    // GM r30 (round 21): the answered prompt stays, sending, until its save is
+    // Design: the answered prompt stays, sending, until its save is
     // answered; the second clash is the prompt asked again (not sending).
     await vi.waitFor(() => expect(clashes().n1?.sending).toBeUndefined(), { timeout: 3000, interval: 5 });
     expect(clashes().n1).toBeTruthy();
@@ -308,7 +308,7 @@ describe('review 12, L-1: a second clash during the answer’s save', () => {
   });
 });
 
-describe('GM #198 r12 answer 1 (review 12 N-1): a stopped save’s own try refused 400 or 413', () => {
+describe('a stopped save’s own try refused 400 or 413 (design, #198)', () => {
   it.each([
     ['400', 400, { detail: 'params.scene nested too deeply', code: 'bad_params' }, CANT, 'HTTP 400 bad_params'],
     ['413', 413, { detail: 'Project snapshot exceeds the 16 MiB limit', limit: 'size' }, TOO_BIG, 'HTTP 413'],
@@ -381,7 +381,7 @@ describe('GM #198 r12 answer 1 (review 12 N-1): a stopped save’s own try refus
   });
 });
 
-describe('GM r21 answer 3: the delete’s sync is ONE toast', () => {
+describe('the delete’s sync is ONE toast', () => {
   it('Codex’s write only deleted the scene: the toast says the deleted line and keeps Codex’s [Undo]', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([60]);
@@ -397,7 +397,7 @@ describe('GM r21 answer 3: the delete’s sync is ONE toast', () => {
     expect(said).toEqual([]);
   });
 
-  it('Codex’s write did more: one sentence with its [Undo] (GM r22 note 3)', async () => {
+  it('Codex’s write did more: one sentence with its [Undo] (design)', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([60]);
     h.failNext(1);
@@ -441,7 +441,7 @@ describe('GM r21 answer 3: the delete’s sync is ONE toast', () => {
   });
 });
 
-describe('GM #198 r12 answer 2 (review 12 L-2): a clash waiting when the scene was deleted', () => {
+describe('a clash waiting when the scene was deleted (design, #198)', () => {
   async function clashThenDelete(h: ReturnType<typeof backend>) {
     store.setSceneRetryDelaysForTests([40]);
     h.failNext(1000);

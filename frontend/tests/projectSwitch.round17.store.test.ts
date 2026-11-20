@@ -1,5 +1,5 @@
 /**
- * Round 17 of PR #114, review 16 M1 (live F and G): an agent's switches while
+ * PR #114: an agent's switches while
  * the tab is offline. The tab keeps the newest switch notice, its held save
  * goes to its own project, a recovered copy is made only when that project's
  * saved copy lacks something the tab holds, and the toast names the project
@@ -107,7 +107,7 @@ function holdUnsavedChange(): void {
   useGraphStore.setState({ nodes: [{ ...first, position: { x: 99, y: 99 } }] });
 }
 
-describe('A → B → C while offline (review 16 F)', () => {
+describe('A → B → C while offline', () => {
   it('the held save goes to A, no copy is made, and the toast names C with the way back to A', async () => {
     await startOn('A');
     holdUnsavedChange();
@@ -132,7 +132,7 @@ describe('A → B → C while offline (review 16 F)', () => {
   });
 });
 
-describe('C → D → back to C while offline (review 16 G)', () => {
+describe('C → D → back to C while offline', () => {
   it("C's save is refused (it was opened again) and C already holds it: no copy, and no way back", async () => {
     await startOn('C');
     noteBackendConnection('offline');

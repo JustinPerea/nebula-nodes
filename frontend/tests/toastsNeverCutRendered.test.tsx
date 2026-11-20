@@ -7,15 +7,15 @@ import { ProjectHome, type ProjectSummary } from '../src/components/projects/Pro
 vi.mock('../src/lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8060${url}` }));
 
 /**
- * GM r8/r9 ("Toasts wrap to 3 lines and never cut a sentence"), measured on
- * what renders, not on selector names (review 8 of PR #199, N-4): the
+ * Design ("Toasts wrap to 3 lines and never cut a sentence"), measured on
+ * what renders, not on selector names (PR #199): the
  * Projects home's toasts and notices are rendered with every stylesheet in
  * src applied, and each element that holds their text, and every element
  * around it up to the toast or notice, is checked through getComputedStyle
  * for anything that cuts text: an ellipsis, one line (nowrap / pre), a line
  * clamp, or hidden overflow under a fixed or maximum height. jsdom does no
- * layout, so the live check (catalog-build/fix8/live) measures the same
- * elements' scroll sizes in Chromium; this one runs in CI.
+ * layout, so a live check in Chromium (not in the repo) measures the same
+ * elements' scroll sizes; this one runs in CI.
  */
 const root = join(__dirname, '../src');
 const sheets: string[] = [];
@@ -66,7 +66,7 @@ function cuts(surface: Element): string[] {
 }
 
 const surfaces = () => [...document.querySelectorAll('.project-home__toast, .project-home__notice')];
-/** The notices load as their own chunk (PR #199 round 23's first-load split): wait for `count` of them. */
+/** The notices load as their own chunk (PR #199's first-load split): wait for `count` of them. */
 const surfacesReady = (count: number) => waitFor(() => expect(surfaces().length).toBeGreaterThanOrEqual(count), { timeout: 60_000 });
 
 describe('no Projects home toast or notice cuts its text (rendered)', { timeout: 120_000 }, () => {

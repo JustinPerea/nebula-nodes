@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 15 (GM r24), on round 12's keyed backend in small
+ * PR #198 fix (design), on graphStore.fix12's keyed backend in small
  * (graphStore.fix14's harness):
  * - Answer 1: an agent's undo that deleted the scene the person has unsaved
  *   changes to is one toast, one sentence, however much else it undid:
@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -193,7 +193,7 @@ const AGENT_UNDO = { edit: { id: 'ed_agent_undo', actor: { kind: 'agent', name: 
 const offer = () => (useGraphStore.getState() as unknown as { undoNotice: { offer?: string } | null }).undoNotice?.offer;
 const ONE_SENTENCE = 'Codex undid its edit and deleted “Opening”, so your changes to it can’t be saved.';
 
-describe('GM r24 answer 1: an agent’s undo that deleted the scene is one sentence', () => {
+describe('an agent’s undo that deleted the scene is one sentence', () => {
   it.each([
     ['only deleted the scene', false],
     ['undid more besides', true],
@@ -226,7 +226,7 @@ describe('GM r24 answer 1: an agent’s undo that deleted the scene is one sente
   });
 });
 
-describe('GM r24 answer 2: "Undid Codex’s edit." with its period', () => {
+describe('"Undid Codex’s edit." with its period', () => {
   it('every form of the person’s Undo and Redo line is a sentence', async () => {
     const { undoNoticeText } = await import('../../src/lib/canvasUndo');
     const agent = { kind: 'foreign', source: 'agent', agentName: 'Codex' } as never;

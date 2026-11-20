@@ -1,5 +1,5 @@
 /**
- * PR #204 round 9 (review 7 NIT-1): gate forms the backend scan (tests/personGateRoutes.py)
+ * PR #204: gate forms the backend scan (tests/personGateRoutes.py)
  * missed in synthetic code, each pinned to its exact route or unreadable line.
  * - The "person_required" code counts anywhere outside a comparison or a docstring: set by
  *   subscript, held in a local, a positional argument, or a string constant.
@@ -53,7 +53,7 @@ const PROBES: Record<string, Probe> = {
   'a gated route that also loops a gate list is just listed': { main: `${HEAD}${PG}CHECKS = [require_person]\n${POST}def probe(request):\n    require_person(request.headers)\n    for c in CHECKS:\n        c(request.headers)\n`, routes: ROUTE },
 };
 
-describe('round 9: gate forms the scan missed (review 7 NIT-1)', () => {
+describe('gate forms the scan missed', () => {
   for (const [form, { main, routes, unreadable = [], files = {} }] of Object.entries(PROBES)) {
     it(form, { timeout: 30_000 }, () => {
       const all = { ...GATE_FILES, ...files, 'main.py': main };

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Round 22 of PR #199, 2a (review 20 RV LOW-2, LU "on main, scope only"):
+ * PR #199:
  * World Labs records belong to a project. The backend's journals list every
  * project's records with no project on them, and node ids repeat across
  * projects, so the tab never matches a record to a node by node id alone. A
@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * record's ID. An unconfirmed start carries no ID: it holds a node only when
  * its run is this project's.
  *
- * LR1: Delta's own n1 is a Text Input the person renamed "Delta brief";
+ * Delta's own n1 is a Text Input the person renamed "Delta brief";
  * Alpha's n1 has a recovery record (op-alpha-probe) that Delta's run history
  * doesn't name.
  */
@@ -65,7 +65,7 @@ beforeEach(() => {
     runHistory: [run('run-delta')] });
 });
 
-describe('LR1: Alpha’s n1 record never holds Delta’s n1', () => {
+describe('Alpha’s n1 record never holds Delta’s n1', () => {
   it('Delete of Delta’s renamed n1 goes', () => {
     expect(useGraphStore.getState().allowCanvasDelete(['n1'])).toBe(true);
     useGraphStore.getState().deleteNode('n1');
@@ -168,7 +168,7 @@ describe('an unconfirmed start holds a node only when its run is this project’
   });
 });
 
-describe('P7: a hydrate never writes another project’s ID into this project’s node', () => {
+describe('a hydrate never writes another project’s ID into this project’s node', () => {
   it('Delta’s World n1 keeps its own Resume Operation ID and never gets Alpha’s', () => {
     set({ nodes: [world('n1', { resume_operation_id: 'op-delta' })], providerRecoveries: [] });
     useGraphStore.getState().hydrateProviderRecoveries([alphaRecord('n1', 'op-alpha')]);

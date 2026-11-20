@@ -4,7 +4,7 @@ import type { NodeData } from '../src/types';
 import { measureShape, serializeGraph } from '../src/lib/graphFileShared';
 import shared from '../../backend/tests/fixtures/save_count_parity.json';
 
-// Review 7 of PR #205 (limits MEDIUM-3): Save's count of a canvas, as the
+// PR #205: Save's count of a canvas, as the
 // backend counts it before an agent's edit (backend
 // tests/test_save_count_parity.py reads the same canvases and pins the same
 // numbers).

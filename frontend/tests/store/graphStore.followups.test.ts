@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * The follow-up to PR #114 (GM's r18 rulings, review 17):
- * - GM: the project store's 507 (its storage case) gets its own line, by
+ * The follow-up to PR #114 (design rulings):
+ * - Design: the project store's 507 (its storage case) gets its own line, by
  *   node or for the whole run.
- * - GM: never count 1. A single item is always named; counts start at 2 for
- *   kept nodes and settings mixed, and at 4 otherwise. G2: "settings" when
+ * - Design: never count 1. A single item is always named; counts start at 2 for
+ *   kept nodes and settings mixed, and at 4 otherwise. Say "settings" when
  *   every counted item is a setting, "changes" only when mixed.
- * - Review 17 L2 (probe Z2): a Cinema shot's merge, marked as run output,
+ * - a Cinema shot's merge, marked as run output,
  *   doesn't stop Undo of an Accept from putting the scene back.
  */
 
@@ -60,7 +60,7 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.useRealTimers(); });
 
-describe('GM: the project store\'s 507 (storage case)', () => {
+describe('the project store\'s 507 (storage case)', () => {
   const refuseWith = (path: string, body: Record<string, unknown>) => fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST' && String(url).endsWith(path)) return json(body, 507);
     return json({});
@@ -95,7 +95,7 @@ describe('GM: the project store\'s 507 (storage case)', () => {
   });
 });
 
-describe('GM: never count 1 (and G2\'s settings-or-changes rule)', () => {
+describe('never count 1 (and the settings-or-changes rule)', () => {
   const agent = { kind: 'agent' as const, name: 'Codex' };
   const you = { kind: 'you' as const };
   const unknown = { kind: 'unknown' as const };
@@ -114,7 +114,7 @@ describe('GM: never count 1 (and G2\'s settings-or-changes rule)', () => {
       .toBe('Undid the proposal except “Kept”. It was changed after you accepted.');
   });
 
-  it('settings across nodes: counted from 2 (GM pr198 r1), "settings"', () => {
+  it('settings across nodes: counted from 2 (design), "settings"', () => {
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A'] }, { node: 'Logo', settings: ['B'] }], agent, false))
       .toBe('Undid the proposal except 2 settings Codex changed after you accepted.');
     expect(acceptUndoLine([{ node: 'Hero', settings: ['A', 'B'] }, { node: 'Logo', settings: ['C'] }], unknown, false))
@@ -155,7 +155,7 @@ describe('GM: never count 1 (and G2\'s settings-or-changes rule)', () => {
   });
 });
 
-describe('Review 17 L2 (probe Z2): a Cinema shot\'s merge is run output', () => {
+describe('a Cinema shot\'s merge is run output', () => {
   async function acceptWith(reply: Record<string, unknown>, during?: () => void) {
     useCanvasProposalsStore.getState().open({ id: 'p', status: 'open', agent: { id: 'a', name: 'Codex', color: '#fff', verified: false },
       note: 'x', createdAt: Date.now(), expiresAt: Date.now() + 600000, nodes: [], edges: [], params: [], run: [] } as never, 'key', {});

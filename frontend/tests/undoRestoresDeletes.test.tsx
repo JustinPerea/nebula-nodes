@@ -1,5 +1,5 @@
 /**
- * Undo puts back everything a delete removed (GM - Design, 2026-10-23, item 1):
+ * Undo puts back everything a delete removed (design, 2026-10-23):
  * "Make undo complete. ... When it lands, every delete path becomes "Deleted
  * {n} nodes." / "Deleted the node." with Undo. ... If one can't be reopened,
  * the Undo notice says so: "Restored {n} nodes. 1 proposal couldn't be
@@ -104,7 +104,7 @@ afterEach(() => {
   useUIStore.setState(initialUi, true);
 });
 
-describe("GM's lines", () => {
+describe("the design lines", () => {
   it('names one node and many', () => {
     expect(deletedNoticeText(1)).toBe('Deleted the node.');
     expect(deletedNoticeText(3)).toBe('Deleted 3 nodes.');
@@ -114,7 +114,7 @@ describe("GM's lines", () => {
     expect(restoredNoticeText(1, 2)).toBe("Restored the node. Nebula couldn’t reopen 2 proposals.");
   });
 
-  // GM, 2026-10-23: a pin whose node came back as another model is counted like proposals.
+  // Design, 2026-10-23: a pin whose node came back as another model is counted like proposals.
   it('counts pins that couldn\'t go back, alone and with proposals', () => {
     expect(restoredNoticeText(1, 0, 1)).toBe("Restored the node. Nebula couldn’t reattach 1 pin.");
     expect(restoredNoticeText(2, 0, 2)).toBe("Restored 2 nodes. Nebula couldn’t reattach 2 pins.");
@@ -137,7 +137,7 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     expect(notice()).toMatchObject({ text: 'Deleted the node.', offer: 'undo' });
   });
 
-  it('the selection toolbar deletes at once: "Deleted 2 “Text Input” nodes." (GM r6 naming rule)', async () => {
+  it('the selection toolbar deletes at once: "Deleted 2 “Text Input” nodes." (design naming rule)', async () => {
     useGraphStore.setState({ nodes: [textNode('n1', true), textNode('n2', true)] });
     render(<SelectionToolbar />);
     fireEvent.click(screen.getByLabelText('Delete selected nodes'));
@@ -230,8 +230,8 @@ describe('every delete path: no confirm, a notice with Undo', () => {
     useGraphStore.getState().deleteGeneration(['n2']);
     await settle();
     expect(ids()).toEqual([]);
-    // GM r6: a multi-delete names its nodes ("Text Input" is textNode's label),
-    // in canvas order (GM, PR #200 r2 item 3): the upstream node first, as the
+    // Design: a multi-delete names its nodes ("Text Input" is textNode's label),
+    // in canvas order (design, PR #200): the upstream node first, as the
     // canvas holds it, not the result the delete started from.
     expect(notice()).toMatchObject({ text: 'Deleted “Text Input” and “Nano Banana”.', offer: 'undo' });
     render(<StudioNotice />);

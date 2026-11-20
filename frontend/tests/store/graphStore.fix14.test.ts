@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 14 (GM r22), on round 12's keyed backend in small
+ * PR #198 fix (design), on graphStore.fix12's keyed backend in small
  * (graphStore.fix12's harness, as fix13 uses it):
- * - Q3: one line per status everywhere: a save that wasn't stopped, refused
- *   400 or 413, says GM's line once with [Try again] and waits for the
+ * - one line per status everywhere: a save that wasn't stopped, refused
+ *   400 or 413, says design's line once with [Try again] and waits for the
  *   person, as a stopped one does. No line promises a retry.
- * - Q1: with the "Unsaved" mark's popover open, the toast with the same line
+ * - with the "Unsaved" mark's popover open, the toast with the same line
  *   and [Try again] leaves and doesn't come back; a line that comes while it
  *   is open shows only there.
  * - Notes 1 and 3: "Codex changed the canvas." ends with its period; a write
@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -213,7 +213,7 @@ afterEach(() => store.setSceneQuietRetryForTests(null));
 
 const CANT = 'Nebula can’t save your changes to “Opening”.';
 const TOO_BIG = '“Opening” is too big to save. Remove something from it, then try again.';
-// GM r28 item 2 (round 19): the stop lines are a state, in their own slot.
+// Design: the stop lines are a state, in their own slot.
 const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
 /** Both notice slots' lines, and the state slot's, from now on (a line
  * beside an undo offer goes in the message slot). */
@@ -251,16 +251,16 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// Design: the stop line with [Try again] is in the state
 // slot now; the event slots never carry it.
 const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
   .map((line) => ({ text: line.text, retryScene: { nodeId: 'n1' } }));
 
-describe('GM r22 Q3: one line per status, a save that wasn’t stopped too', () => {
+describe('one line per status, a save that wasn’t stopped too', () => {
   it.each([
     ['400', 400, { detail: 'params.scene nested too deeply', code: 'bad_params' }, CANT, 'HTTP 400 bad_params'],
     ['413', 413, { detail: 'Project snapshot exceeds the 16 MiB limit', limit: 'size' }, TOO_BIG, 'HTTP 413'],
-  ])('%s on an ordinary save: GM’s line once, with [Try again]; never a retry by itself; the Agent log has the status', async (_what, status, body, line, logged) => {
+  ])('%s on an ordinary save: the design line once, with [Try again]; never a retry by itself; the Agent log has the status', async (_what, status, body, line, logged) => {
     const h = backend(S3);
     const log = watchLog();
     const lines = watchSlots();
@@ -302,7 +302,7 @@ describe('GM r22 Q3: one line per status, a save that wasn’t stopped too', () 
 
   it('no 400 or 413 line anywhere promises a retry', () => {
     for (const line of [copy.sceneCantSaveLine('Opening'), copy.sceneTooBigToSaveLine('Opening')]) {
-      // GM's 413 line asks the person to try again; neither says Nebula will.
+      // The 413 line design wrote asks the person to try again; neither says Nebula will.
       expect(line).not.toMatch(/will try|will save|Nebula will/i);
     }
     expect(copy).not.toHaveProperty('BAD_SAVE');
@@ -311,10 +311,10 @@ describe('GM r22 Q3: one line per status, a save that wasn’t stopped too', () 
   });
 });
 
-describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
-  // GM r28 item 2 (round 19) changed "closing brings none back": a stop line
+describe('the popover open, the matching toast steps aside', () => {
+  // Design changed "closing brings none back": a stop line
   // is a state, so it is back once the popover closes.
-  it('opening the popover takes the line and [Try again] away; closing it brings the line back (a state, GM r28)', async () => {
+  it('opening the popover takes the line and [Try again] away; closing it brings the line back (a state, design)', async () => {
     const h = backend(S3);
     await stoppedByServer(h);
     expect(retryToasts().map((notice) => notice.text)).toEqual([STOPPED]);
@@ -342,7 +342,7 @@ describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
     store.noteScenePopover('n1', false);
   });
 
-  // GM r28 item 2 (round 19): the line is a state; it shows in the state slot
+  // Design: the line is a state; it shows in the state slot
   // once the popover closes (it was never said as a toast before).
   it('a line that comes while the popover is open shows only there; closed, it is the state slot’s line', async () => {
     const h = backend(S3);
@@ -372,7 +372,7 @@ describe('GM r22 Q1: the popover open, the matching toast steps aside', () => {
   });
 });
 
-describe('GM r22 notes 1 and 3: the agent’s toast is a sentence', () => {
+describe('the agent’s toast is a sentence (design)', () => {
   it('"Codex changed the canvas." ends with its period, at the source', async () => {
     const h = backend(S3);
     h.other((shots) => setPrompt(shots, 's3', 'codex'), 'agent');
@@ -416,7 +416,7 @@ function withRestore(h: ReturnType<typeof backend>) {
 const CLASH14 = 'Codex changed “Opening” while you were editing it.';
 const DELETED14 = 'Codex deleted “Opening”, so your changes to it can’t be saved.';
 
-describe('review 13 LOW-1 (GM r23 answer 2): the delete toast’s own [Undo] asks a waiting clash again', () => {
+describe('the delete toast’s own [Undo] asks a waiting clash again', () => {
   async function clashThenDelete(h: ReturnType<typeof backend>) {
     store.setSceneRetryDelaysForTests([40]);
     h.failNext(1000);
@@ -480,7 +480,7 @@ describe('review 13 LOW-1 (GM r23 answer 2): the delete toast’s own [Undo] ask
   });
 });
 
-describe('review 13 LOW-2 (GM r23 answer 1): a refused [Try again] or edit stays stopped for good', () => {
+describe('a refused [Try again] or edit stays stopped for good', () => {
   it.each([
     ['400', 400, { detail: 'bad', code: 'bad_params' }, CANT],
     ['413', 413, { detail: 'too big', limit: 'size' }, TOO_BIG],

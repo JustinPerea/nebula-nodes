@@ -3,16 +3,16 @@ import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 
 /**
- * PR #198 fix round 2 (review 2, GM's round-2 rulings):
- * - M1: no undo snapshot carries a transient run status (a shot's optimistic
+ * PR #198 fix (design rulings):
+ * - no undo snapshot carries a transient run status (a shot's optimistic
  *   'running', a node's executing/queued), and a shot that is rendering
- *   can't be removed (GM: block it).
- * - L2: inside a clip the Accept changed, whatever the run wrote there goes
+ *   can't be removed (design: block it).
+ * - inside a clip the Accept changed, whatever the run wrote there goes
  *   back with it (speed and duration stay consistent); shot images don't.
- * - L3: a list both the Accept and someone since reordered: Undo says so.
- * - N3: Redo after a run keeps the run's shot media and its flat keys.
- * - N5: a part a run's render kept never names an agent.
- * - GM ask 3: an unlabeled setting is "a setting on “<node>”" in the line,
+ * - a list both the Accept and someone since reordered: Undo says so.
+ * - Redo after a run keeps the run's shot media and its flat keys.
+ * - a part a run's render kept never names an agent.
+ * - Design: an unlabeled setting is "a setting on “<node>”" in the line,
  *   its raw key in the Agent log.
  */
 
@@ -99,9 +99,9 @@ async function step(action: 'undo' | 'redo') {
   return { bodies, notice: useGraphStore.getState().undoNotice?.text ?? null };
 }
 
-// -- M1 ----------------------------------------------------------------------------
+// -- no transient run status in undo steps -----------------------------------------
 
-describe('M1: no undo step carries a transient run status', () => {
+describe('no undo step carries a transient run status', () => {
   it('a snapshot taken while a shot renders holds it settled: "done" with its image, else "idle"', () => {
     useGraphStore.setState({ nodes: [{ ...cinema(scene(
       { id: 's1', prompt: 'a', output: { imageUrl: '/api/outputs/old.png', status: 'running' } },
@@ -156,9 +156,9 @@ describe('M1: no undo step carries a transient run status', () => {
   });
 });
 
-// -- L2 ----------------------------------------------------------------------------
+// -- a clip the Accept changed -----------------------------------------------------
 
-describe('L2: in a clip the Accept changed, the run\'s writes go back with it', () => {
+describe('in a clip the Accept changed, the run\'s writes go back with it', () => {
   const asNode = (params: Record<string, unknown>, definitionId = 'video-edit') => node('n1', params, 'Cut', definitionId) as unknown as Node<NodeData>;
   const undoOf = (was: Node<NodeData>, accepted: Node<NodeData>, now: Node<NodeData>) => {
     const s = ownAddStep([], [paramChange(was, accepted)!]);
@@ -168,14 +168,14 @@ describe('L2: in a clip the Accept changed, the run\'s writes go back with it', 
   };
   const clip = (id: string, speed: number, duration: number, sourceOut = 4) => ({ id, start: 0, duration, sourceIn: 0, sourceOut, speed });
 
-  it('P2: Accept set only c1\'s speed; the run derived its duration: Undo puts both back', () => {
+  it('Accept set only c1\'s speed; the run derived its duration: Undo puts both back', () => {
     const { params, kept } = undoOf(asNode({ clips: [clip('c1', 1, 4)] }), asNode({ clips: [clip('c1', 2, 4)] }),
       asNode({ clips: [clip('c1', 2, 2)] }));
     expect(params.clips[0]).toMatchObject({ speed: 1, duration: 4, sourceOut: 4 });
     expect(kept).toEqual([]);
   });
 
-  it('P2b: a frame-snapped sourceOut goes back with the clip too', () => {
+  it('a frame-snapped sourceOut goes back with the clip too', () => {
     const { params } = undoOf(asNode({ clips: [clip('c1', 1, 4)] }), asNode({ clips: [clip('c1', 2, 2)] }),
       asNode({ clips: [clip('c1', 2, 1.98, 3.96)] }));
     expect(params.clips[0]).toMatchObject({ speed: 1, duration: 4, sourceOut: 4 });
@@ -198,10 +198,10 @@ describe('L2: in a clip the Accept changed, the run\'s writes go back with it', 
   });
 });
 
-// -- L3 ----------------------------------------------------------------------------
+// -- both sides reordered a list ---------------------------------------------------
 
-describe('L3: both sides reordered the same list: Undo says so', () => {
-  it('P3b: the order is kept and named as one item', () => {
+describe('both sides reordered the same list: Undo says so', () => {
+  it('the order is kept and named as one item', () => {
     const asNode = (params: Record<string, unknown>) => cinema(params) as unknown as Node<NodeData>;
     const was = asNode(scene({ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'b' }, { id: 's3', prompt: 'c' }));
     const accepted = asNode(scene({ id: 's2', prompt: 'b' }, { id: 's1', prompt: 'a' }, { id: 's3', prompt: 'c' }));
@@ -211,7 +211,7 @@ describe('L3: both sides reordered the same list: Undo says so', () => {
     expect(kept).toEqual([{ nodeId: 'n1', keys: [], wholeNode: false, order: 'shots' }]);
   });
 
-  it('GM\'s lines, by who reordered', () => {
+  it('the design lines, by who reordered', () => {
     const order = [{ node: 'Opening', settings: [], order: 'shots' as const }];
     expect(acceptUndoLine(order, { kind: 'you' }, true)).toBe('Nothing was undone. You reordered the shots in another tab after you accepted.');
     expect(acceptUndoLine(order, { kind: 'agent', name: 'Codex' }, true)).toBe('Nothing was undone. Codex reordered the shots after you accepted.');
@@ -238,10 +238,10 @@ describe('L3: both sides reordered the same list: Undo says so', () => {
   });
 });
 
-// -- N3 ----------------------------------------------------------------------------
+// -- Redo after a run --------------------------------------------------------------
 
-describe('N3: Redo after a run keeps what the run wrote', () => {
-  it('P1: Accept, Undo, s2 renders, Redo: s2\'s image never leaves the canvas', async () => {
+describe('Redo after a run keeps what the run wrote', () => {
+  it('Accept, Undo, s2 renders, Redo: s2\'s image never leaves the canvas', async () => {
     useGraphStore.setState({ nodes: [cinema(scene({ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'other' }))] } as never);
     const accepted = cinema(scene({ id: 's1', prompt: 'b' }, { id: 's2', prompt: 'other' }));
     await acceptWith({ nodes: [], edges: [], updatedNodes: [accepted], runNodeIds: [], idMap: {} }, () => own([accepted]));
@@ -255,7 +255,7 @@ describe('N3: Redo after a run keeps what the run wrote', () => {
     expect(media(shotOf((bodies[0].nodes[0].params?.scene as { shots: Shot[] }).shots, 's2'))).toContain('paid-s2.png');
   });
 
-  it('P10: the person\'s own Cinema step: Undo after a render keeps the render', async () => {
+  it('the person\'s own Cinema step: Undo after a render keeps the render', async () => {
     useGraphStore.setState({ nodes: [cinema(scene({ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'other' }))] } as never);
     useGraphStore.getState().updateScene('n1', (current) => ({ ...current,
       shots: current.shots.map((shot) => (shot.id === 's1' ? { ...shot, prompt: 'typed' } : shot)) }));
@@ -267,7 +267,7 @@ describe('N3: Redo after a run keeps what the run wrote', () => {
     expect(media(shotOf(shotsNow(), 's2'))).toContain('paid-s2.png');
   });
 
-  it('P1b: a flat key a run wrote between Undo and Redo stays', async () => {
+  it('a flat key a run wrote between Undo and Redo stays', async () => {
     useGraphStore.setState({ nodes: [node('n1', { value: 'a', other: 'o' }, 'Brief')] } as never);
     const accepted = node('n1', { value: 'b', other: 'o' }, 'Brief');
     await acceptWith({ nodes: [], edges: [], updatedNodes: [accepted], runNodeIds: [], idMap: {} }, () => own([accepted]));
@@ -282,9 +282,9 @@ describe('N3: Redo after a run keeps what the run wrote', () => {
   });
 });
 
-// -- N5 ----------------------------------------------------------------------------
+// -- a run's render never names an agent -------------------------------------------
 
-describe('N5: what a run\'s render kept never names an agent', () => {
+describe('what a run\'s render kept never names an agent', () => {
   it('a shot the Accept added and a run rendered: the line drops the actor', async () => {
     useGraphStore.setState({ nodes: [cinema(scene({ id: 's1', prompt: 'a' }, { id: 's2', prompt: 'x' }))] } as never);
     const accepted = cinema(scene({ id: 's1', prompt: 'b' }, { id: 's2', prompt: 'x' }, { id: 's3', prompt: 'new' }));
@@ -303,9 +303,9 @@ describe('N5: what a run\'s render kept never names an agent', () => {
   });
 });
 
-// -- GM ask 3 ----------------------------------------------------------------------
+// -- an unlabeled setting ----------------------------------------------------------
 
-describe('GM ask 3: an unlabeled setting is "a setting on “<node>”"; the Agent log names the key in words', () => {
+describe('an unlabeled setting is "a setting on “<node>”"; the Agent log names the key in words (design)', () => {
   it('the undo line and the log', async () => {
     const fal = (scale: number, steps: number) => node('n1', { endpoint_id: 'fal-ai/flux', guidance_scale: scale, num_steps: steps },
       'Flux', 'fal-universal');

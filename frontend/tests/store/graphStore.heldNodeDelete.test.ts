@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Error copy round 3b, item 5. The canvas keeps a node that holds World
+ * Error copy. The canvas keeps a node that holds World
  * Labs state (a recovery record or an unconfirmed start) when the person
- * presses Delete, without a request. Before that round it said nothing
+ * presses Delete, without a request. Before that change it said nothing
  * ("Dropped without a word"); since, it says why once per press, in the
  * canvas's own short notice (undoNotice). Nothing is sent, and the wires
  * stay (the Delete key's guard runs before React Flow removes anything).
  *
- * Round 4 (GM - Design, "TRIMS to one line at 560 px"): "Couldn't delete the
+ * Design ("TRIMS to one line at 560 px"): "Couldn't delete the
  * node. It's waiting on World Labs. Check Marble, then unlock it." The forget
  * form: "Couldn't delete the node. It's waiting on World Labs. Check Marble,
  * then forget it in Run history." If that still wraps, use "Couldn't delete
@@ -18,14 +18,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * with the full heading, so they take the short one ("Couldn't delete it.",
  * and for several nodes "Couldn't delete them.", the same pattern).
  *
- * Round 4b (GM - Design, on #181): every line for several nodes starts
+ * Design (on #181): every line for several nodes starts
  * "Couldn't delete them.", and every forget form for several nodes ends
  * "Check Marble, then use run history." ("Use the same tail on every forget
  * form that wraps, so the single-node one stays as it is."). With one of
- * several held, the unlock line is GM's newest: "Couldn't delete them. One
+ * several held, the unlock line is design's newest: "Couldn't delete them. One
  * is waiting on World Labs. Check Marble, then unlock it." (it replaces the
  * counted "Couldn't delete {n} nodes. One is waiting …").
- * 2026-10-24 (GM): with every node held, the forget form ends "Check Marble
+ * 2026-10-24 (design): with every node held, the forget form ends "Check Marble
  * and Run history." ("Couldn't delete them. They're waiting on World Labs.
  * Check Marble and run history."); the other forget forms keep the tail.
  *
@@ -33,7 +33,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * (backend/main.py _paid_state_person, pinned equal to lib/worldLabsWaiting.ts
  * by backend/tests/test_error_copy_round3b.py) and the specific text to
  * agents; both stay word for word. When the canvas didn't know the node was
- * held, the person still reads GM's line: the canvas maps the backend's
+ * held, the person still reads design's line: the canvas maps the backend's
  * line to it.
  */
 
@@ -49,19 +49,19 @@ const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 const { useGraphStore } = await import('../../src/store/graphStore');
 
 // The backend's lines for the person, word for word (lib/worldLabsWaiting.ts;
-// GM's round 13 wording of PR #114).
+// Design's wording of PR #114).
 const BACKEND_UNLOCK = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
 const BACKEND_FORGET = '“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.';
 const BACKEND_ACTIVE = 'A World Labs run is still starting. Try again in a moment.';
-// GM's lines (round 4, and round 4b for several nodes).
-// GM, round 15 of PR #114: one node reads "Couldn't delete “<node>”. <reason
+// The design lines for several nodes.
+// Design, PR #114: one node reads "Couldn't delete “<node>”. <reason
 // line>", the shared World Labs reason with the button named.
 const ONE_UNLOCK = "Nebula couldn’t delete “World” because a World Labs run needs your check first. Use the notice at the top of the screen.";
 const ONE_FORGET = "Nebula couldn’t delete “World” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.";
 const SOME_UNLOCK = "Nebula couldn’t delete these 2 nodes because one is waiting on World Labs. Check Marble, then unlock it.";
 const SOME_FORGET = "Nebula couldn’t delete these 2 nodes because one is waiting on World Labs. Check Marble, then use run history.";
 const ALL_UNLOCK = "Nebula couldn’t delete these 2 nodes because they’re waiting on World Labs. Check Marble, then unlock them.";
-// GM - Design, 2026-10-24: every node held, forget form.
+// Design, 2026-10-24: every node held, forget form.
 const ALL_FORGET = "Nebula couldn’t delete these 2 nodes because they’re waiting on World Labs. Check Marble and run history.";
 const MANY_UNLOCK = (held: number, total = 3) => `Nebula couldn’t delete these ${total} nodes because ${held} are waiting on World Labs. Check Marble, then unlock them.`;
 const MANY_FORGET = (held: number, total = 3) => `Nebula couldn’t delete these ${total} nodes because ${held} are waiting on World Labs. Check Marble, then use run history.`;
@@ -81,7 +81,7 @@ beforeEach(() => {
   useGraphStore.setState({ nodes: [node('n1'), node('n2')], edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
     undoStack: [], redoStack: [], isExecuting: false, undoNotice: null,
     providerRecoveries: [recovery('n1')], providerStartAmbiguities: [],
-    // The records' runs (r1, r2) are this project's (review 20 of PR #199, LOW-2).
+    // The records' runs (r1, r2) are this project's (PR #199).
     runHistory: ['r1', 'r2'].map((id) => ({ id, trigger: 'graph', startedAt: 1, status: 'complete', snapshot: { nodes: [], edges: [] } })) } as never);
 });
 
@@ -118,7 +118,7 @@ describe('Delete on a node that holds World Labs state', () => {
     expect(useGraphStore.getState().nodes).toHaveLength(2);
   });
 
-  it('several selected nodes, one with an unconfirmed start: GM\'s "Couldn\'t delete them. One is waiting …"', () => {
+  it('several selected nodes, one with an unconfirmed start: design\'s "Couldn\'t delete them. One is waiting …"', () => {
     useGraphStore.setState({ nodes: [node('n1', true), node('n2', true), node('n3', true)],
       providerRecoveries: [], providerStartAmbiguities: [ambiguity('n2')] } as never);
     useGraphStore.getState().deleteSelected();
@@ -183,14 +183,14 @@ describe('the backend refuses a Delete the canvas didn\'t know was held', () => 
     useGraphStore.setState({ providerRecoveries: [], providerStartAmbiguities: [] } as never);
   });
 
-  it('the backend\'s forget line: the person reads GM\'s', async () => {
+  it('the backend\'s forget line: the person reads design\'s', async () => {
     refuseWith(BACKEND_FORGET);
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }]);
     await vi.waitFor(() => expect(notice()?.text).toBe(ONE_FORGET));
     expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['n1', 'n2']);
   });
 
-  it('the backend\'s unlock line: the person reads GM\'s', async () => {
+  it('the backend\'s unlock line: the person reads design\'s', async () => {
     refuseWith(BACKEND_UNLOCK);
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }]);
     await vi.waitFor(() => expect(notice()?.text).toBe(ONE_UNLOCK));
@@ -208,7 +208,7 @@ describe('the backend refuses a Delete the canvas didn\'t know was held', () => 
     await vi.waitFor(() => expect(notice()?.text).toBe(ALL_FORGET));
   });
 
-  it('two held among three refused: GM\'s sentence counts them, the other reason kept', async () => {
+  it('two held among three refused: design\'s sentence counts them, the other reason kept', async () => {
     useGraphStore.setState({ nodes: [node('n1'), node('n2'), node('n3')] } as never);
     refuseWith(BACKEND_UNLOCK, BACKEND_UNLOCK, 'A run is going.');
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }, { id: 'n2', type: 'remove' }, { id: 'n3', type: 'remove' }]);
@@ -216,7 +216,7 @@ describe('the backend refuses a Delete the canvas didn\'t know was held', () => 
       "Nebula couldn’t delete these 3 nodes because 2 are waiting on World Labs. Check Marble, then unlock them. A run is going."));
   });
 
-  it('a held node and another reason: GM\'s sentence for the held one, the other reason kept', async () => {
+  it('a held node and another reason: design\'s sentence for the held one, the other reason kept', async () => {
     refuseWith(BACKEND_UNLOCK, 'A run is going.');
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }, { id: 'n2', type: 'remove' }]);
     await vi.waitFor(() => expect(notice()?.text).toBe(
@@ -236,7 +236,7 @@ describe('the backend refuses a Delete the canvas didn\'t know was held', () => 
     await vi.waitFor(() => expect(notice()?.text).toBe("Nebula couldn’t delete 2 nodes because a run is going."));
   });
 
-  it('a line GM didn\'t trim (a run still going) stays the backend\'s', async () => {
+  it('a line design didn\'t trim (a run still going) stays the backend\'s', async () => {
     refuseWith(BACKEND_ACTIVE);
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }]);
     await vi.waitFor(() => expect(notice()?.text).toBe('Nebula couldn’t delete the node because a World Labs run is still starting. Try again in a moment.'));

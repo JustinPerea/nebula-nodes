@@ -1,11 +1,11 @@
 /**
- * Round 20 of PR #199 (GM r29):
- * - fix 2: every line with "tab" or "window" uses the shared word (lib/tabWord):
+ * PR #199 (design):
+ * - every line with "tab" or "window" uses the shared word (lib/tabWord):
  *   "tab" in the browser, "window" in the desktop app;
- * - 1 and fix 1: Nebula's own reopen this tab couldn't follow shows on
+ * - Nebula's own reopen this tab couldn't follow shows on
  *   Projects in the neutral box, the line ending at the failure, with
  *   [Open “Delta”] in place of Try again;
- * - 2: the recover answer's `sourceName` reaches the tab.
+ * - the recover answer's `sourceName` reaches the tab.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -25,10 +25,10 @@ import { apiRequest } from '../src/lib/apiRequest';
 
 const src = (file: string) => readFileSync(resolve(__dirname, '../src', file), 'utf8');
 
-describe('GM r29 fix 2: the shared tab/window word', () => {
+describe('the shared tab/window word (design)', () => {
   afterEach(() => { delete (window as { nebulaDesktop?: unknown }).nebulaDesktop; vi.resetModules(); });
 
-  it('GM r31, 3: the other-tab follow failure is active, in the browser’s word and the desktop app’s', async () => {
+  it('the other-tab follow failure is active, in the browser’s word and the desktop app’s', async () => {
     vi.resetModules();
     const browser = await import('../src/store/projectFlows');
     expect(browser.personFollowFailedLine('Delta')).toBe('You reopened “Delta” in another tab, but this tab couldn’t follow it.');
@@ -77,7 +77,7 @@ describe('GM r29 fix 2: the shared tab/window word', () => {
 const base = { projects: [], loading: false, busy: false, error: null,
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() } satisfies ProjectHomeProps;
 
-describe('GM r29, 1 and fix 1: the boot-follow box on Projects', () => {
+describe('the boot-follow box on Projects (design)', () => {
   it('neutral, the line ending at the failure, and [Open “Delta”] as its only button', () => {
     const onRetry = vi.fn();
     const { container } = render(<ProjectHome {...base} onRetry={onRetry} retry="openFollowed" openFollowedName="Delta"
@@ -109,7 +109,7 @@ describe('GM r29, 1 and fix 1: the boot-follow box on Projects', () => {
   });
 });
 
-describe('GM r30 item 2: the lock line under the open project’s card', () => {
+describe('the lock line under the open project’s card', () => {
   const card = (id: string, name: string) => ({ id, name, createdAt: '2026-10-09T10:00:00Z', updatedAt: '2026-10-09T10:00:00Z',
     lastOpenedAt: null, nodeCount: 1, edgeCount: 0, thumbnail: null });
   it('the line goes under the held card only, Open stays live and is described by it', () => {
@@ -134,7 +134,7 @@ describe('GM r30 item 2: the lock line under the open project’s card', () => {
   });
 });
 
-describe('GM r29, 2: the recover answer’s source reaches the tab', () => {
+describe('the recover answer’s source reaches the tab', () => {
   const answer = (more: Record<string, unknown>) => ({ project: { id: 'c', name: 'Recovered Shot 7 copy' }, workspaceRevision: 'r', ...more });
 
   it('`sourceName` is kept with the copy', async () => {
@@ -150,7 +150,7 @@ describe('GM r29, 2: the recover answer’s source reaches the tab', () => {
   });
 });
 
-describe('review 18 MEDIUM-1: a handoff names its deletes', () => {
+describe('a handoff names its deletes', () => {
   const sent = () => JSON.parse(String((vi.mocked(apiRequest).mock.calls.at(-1)![2] as RequestInit).body)) as Record<string, unknown>;
   it('the tab-local nodes this tab deleted go as deletedNodeIds; none, no field (an omission is never a delete)', async () => {
     fetched.body = { project: { id: 'alpha', name: 'Alpha' }, workspaceRevision: 'r' };

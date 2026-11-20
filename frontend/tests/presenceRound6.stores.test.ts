@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionEvent } from '../src/lib/wsClient';
 
-// PR #204 round 6, GM r7 (2): a load screen refused only because this tab isn't connected as the
+// PR #204 (design): a load screen refused only because this tab isn't connected as the
 // person says so in the "because" form, shows no Try again (the promote does the retry), and
 // loads again on the promote through retryOnPromote. Any other failure keeps its Try again.
 // Harness from paramsVersionReload.test.ts.
@@ -90,7 +90,7 @@ const SWITCH = { type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: G
   projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'alpha',
     previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' } } };
 
-describe('GM r7 (2): the load screens retry on the promote', () => {
+describe('the load screens retry on the promote', () => {
   it('a switch refused by the gate: the because line, no Try again, and the load runs again on the promote', async () => {
     session.reportPersonRequired();
     vi.mocked(projects.listProjects).mockRejectedValueOnce(gate("Couldn't load your projects."));
@@ -138,7 +138,7 @@ describe('GM r7 (2): the load screens retry on the promote', () => {
     await vi.waitFor(() => expect(vi.mocked(projects.recoverProject).mock.calls.length).toBeGreaterThan(sent));
   });
 
-  // Review 5 NIT-3 (round 7): by the screen's state, not its line.
+  // By the screen's state, not its line.
   it('a screen that loaded another way is not loaded again on the promote', async () => {
     session.reportPersonRequired();
     vi.mocked(projects.listProjects).mockRejectedValueOnce(gate("Couldn't load your projects."));

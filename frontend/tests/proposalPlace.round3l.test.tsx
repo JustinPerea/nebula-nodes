@@ -17,10 +17,10 @@ import {
 } from '../src/lib/noticeStackPlace';
 
 /**
- * PR #216 round 3l: GM r69 Q1 and Q4 in the placement, and review 4's
- * surviving mutants pinned (logic NIT-1).
+ * PR #216: the design rulings in the placement, and the
+ * surviving mutants pinned.
  *
- * The card is the live one (round 3h, 340 px: header and footer 89, the plan
+ * The card is the live one (340 px: header and footer 89, the plan
  * line 77-110 and the first ⚠ row's foot at 142 in a 198 px body), notices 46
  * tall with 8 px gaps, the region's line 81 px over the window's foot.
  */
@@ -33,10 +33,10 @@ const BASE: StackMeasure = {
 };
 const cell = (over: Partial<StackMeasure>): StackMeasure => ({ ...BASE, ...over });
 
-/** Every box the stack draws, and the invariants GM r69 Q1 holds at rest. */
+/** Every box the stack draws, and the invariants design holds at rest. */
 function boxes(m: StackMeasure, place: StackPlace) {
   const geo = stackGeometry(m, place);
-  // GM r76: a stack capped at its room scrolls; what it scrolls out of view
+  // Design: a stack capped at its room scrolls; what it scrolls out of view
   // is drawn nowhere (its top edge is the cap's).
   const from = place.stackCap !== null && place.stackCap !== undefined ? geo.line - place.stackCap : Number.NEGATIVE_INFINITY;
   return [geo.card!, ...geo.rows].map((box) => ({ ...box, top: Math.max(box.top, from) })).filter((box) => box.bottom > box.top);
@@ -56,11 +56,11 @@ function clearOfBannerAndHeader(m: StackMeasure, place: StackPlace) {
   }
 }
 
-describe('GM r69 Q1: the card never covers the offline banner', () => {
-  it('review 4 logic LOW-2\'s cell (784x431, banner line 199, a collapsed log at 190-234): under the log, not above it over the banner', () => {
+describe('the card never covers the offline banner', () => {
+  it('a collapsed log at 190-234 under a banner line at 199 (784x431): under the log, not above it over the banner', () => {
     const m = cell({ viewportW: 784, viewportH: 431, topLine: 199, column: { left: 92, right: 692 }, floating: { top: 190, bottom: 234, left: 92, right: 692 } });
     const place = placeNoticeStack(m);
-    // GM r76: 19 px of body holds no whole line, so the card scrolls as a
+    // Design: 19 px of body holds no whole line, so the card scrolls as a
     // whole (tight), Accept and Reject pinned.
     expect(place).toMatchObject({ float: 'under', tight: true });
     const { card } = stackGeometry(m, place);
@@ -69,7 +69,7 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
     clearOfBannerAndHeader(m, place);
   });
 
-  it('above while its header and footer fit under the banner and under-crossing holds no line (review 3 LOW-1\'s cell, r57)', () => {
+  it('above while its header and footer fit under the banner and under-crossing holds no line (a cell from the design rulings)', () => {
     const m = cell({
       viewportW: 1024, viewportH: 640, topLine: 199, column: { left: 212, right: 812 }, floating: { top: 357, bottom: 401, left: 212, right: 812 },
       card: { ...CARD, items: [46, 46], undo: [false, true], host: [false, true] },
@@ -101,7 +101,7 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
             const place = placeNoticeStack(m);
             clearOfBannerAndHeader(m, place);
             // Capped under header, one line and footer only when nothing
-            // else fits (GM r76: under one line, the card scrolls whole).
+            // else fits (design: under one line, the card scrolls whole).
             if (place.tight) expect(place.cap!).toBeLessThan(CARD.chrome + CARD.line);
           });
         }
@@ -114,7 +114,7 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
       const m = cell({ topLine: 220, floating: { top: 230, bottom: 274, left: 100, right: 700 } });
       const place = placeNoticeStack(m);
       // 57 px: room for the footer and 3 px of the header's line, which
-      // would cut it; the footer alone (GM r76, snapTight).
+      // would cut it; the footer alone (design, snapTight).
       expect(place).toMatchObject({ float: 'under', tight: true, cap: CARD.foot });
       clearOfBannerAndHeader(m, place);
       // With no log at all, a banner over most of the window: the same cap.
@@ -122,7 +122,7 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
       const nonePlace = placeNoticeStack(none);
       expect(nonePlace).toMatchObject({ tight: true, cap: 339 - 300 });
       clearOfBannerAndHeader(none, nonePlace);
-      // A docked log under it (GM r76, r6 step 5 amended): the card never
+      // A docked log under it (design step 5 amended): the card never
       // comes down over the log; it caps between the banner and the log's
       // line (its top less the gap).
       const docked = cell({ topLine: 200, logClearance: 360, logTop: 160, floating: null, viewportW: 800 });
@@ -137,7 +137,7 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
     });
   });
 
-  it('a seeded sweep of short windows with the banner, Undo notices in every cell (GM r76): nothing at rest over the banner or a floating log\'s header', () => {
+  it('a seeded sweep of short windows with the banner, Undo notices in every cell (design): nothing at rest over the banner or a floating log\'s header', () => {
     let seed = 216_3;
     const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
     const pick = <T,>(list: readonly T[]) => list[Math.floor(rand() * list.length)];
@@ -165,7 +165,7 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
       });
       // The log's header itself under the banner's line: the person put it there.
       if (top < topLine) continue;
-      // GM r76 (round 3m): the cells 3l skipped, Undo notices with no room
+      // Design: the cells the earlier sweep skipped, Undo notices with no room
       // for them and the card's footer, are in: they keep their line (cut
       // with "…"), and past that the stack caps at its room and scrolls.
       const place = placeNoticeStack(m);
@@ -240,8 +240,8 @@ describe('GM r69 Q1: the card never covers the offline banner', () => {
   });
 });
 
-describe('GM r69 Q4: with no card, the expanded stack caps to the side with more room and scrolls', () => {
-  // Review 4 layout LOW-2's cell: 1280x560, a 600 px log at 340-940 x 200-354
+describe('with no card, the expanded stack caps to the side with more room and scrolls', () => {
+  // A cell: 1280x560, a 600 px log at 340-940 x 200-354
   // (header 200-244), three notices the person expanded ("Show less").
   const base: StackMeasure = {
     ...BASE, viewportW: 1280, viewportH: 560, topLine: 150, card: null,
@@ -322,8 +322,8 @@ describe('GM r69 Q4: with no card, the expanded stack caps to the side with more
   });
 });
 
-describe('review 4 NIT-1: the surviving mutants, pinned', () => {
-  it('R3: glideStack settles once, when every move it started has finished', () => {
+describe('the surviving mutants, pinned', () => {
+  it('glideStack settles once, when every move it started has finished', () => {
     const finishes: Array<() => void> = [];
     const els = [0, 1].map(() => {
       const el = document.createElement('div');
@@ -346,7 +346,7 @@ describe('review 4 NIT-1: the surviving mutants, pinned', () => {
     els.forEach((el) => el.remove());
   });
 
-  it('R31: with no card, the measure reads which notice can carry the fold\'s count', () => {
+  it('with no card, the measure reads which notice can carry the fold\'s count', () => {
     document.body.innerHTML = `
       <div data-notice-region=""><div class="notice-region__stack">
         <div data-notice-slot="a"><div class="toast"><span>Saved.</span></div></div>
@@ -361,7 +361,7 @@ describe('review 4 NIT-1: the surviving mutants, pinned', () => {
     document.body.innerHTML = '';
   });
 
-  it('F2: under a floating log counts the 8 px gap under its foot', () => {
+  it('under a floating log counts the 8 px gap under its foot', () => {
     // 1024x656, the log across the column at 280-324: under it 575 - 332 =
     // 243 with the gap, 251 without; the note whole needs 89 + 158 = 247.
     // Above it 280 - 8 - 16 = 256: the card goes above, the note whole.
@@ -369,7 +369,7 @@ describe('review 4 NIT-1: the surviving mutants, pinned', () => {
     expect(placeNoticeStack(m)).toMatchObject({ float: 'above', keepPlan: false });
   });
 
-  it('F16: in a shortfall, beside the log is among the places the body may have the most room', () => {
+  it('in a shortfall, beside the log is among the places the body may have the most room', () => {
     // 1024x300 under a banner at 80: beside the log (448 px on its left) the
     // body has 139 - 89 = 50 (one line, short of the kept lines); under and
     // above it, nothing.
@@ -380,7 +380,7 @@ describe('review 4 NIT-1: the surviving mutants, pinned', () => {
   });
 });
 
-describe('review 4 logic NIT-3: the open log\'s max-height while a give springs back', () => {
+describe('the open log\'s max-height while a give springs back', () => {
   it('a give of 0.001 px or more bounds it at its shown height on a window up to 12,500 px tall', () => {
     const css = readFileSync(join(__dirname, '../src/styles/layouts.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const match = /max-height: max\(var\(--agent-log-shown-h\), calc\(80vh - var\(--agent-log-give\) \* (\d+)\)\);/.exec(css);

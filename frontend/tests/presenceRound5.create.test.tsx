@@ -1,5 +1,5 @@
 /**
- * PR #204 round 5, review 3 MEDIUM-1: Create's two lines, Generate's and Save style's, refused
+ * PR #204: Create's two lines, Generate's and Save style's, refused
  * only because this tab isn't connected as the person, clear on the promote. Through the real
  * request path: fetch answers 403 person_required, the cluster's FailureNotice carries the
  * refusal's code (and when it was sent), CreateView registers the line. A line with another
@@ -63,10 +63,10 @@ afterEach(() => {
 
 const gate = { status: 403, body: { detail: 'Only the person can do this.', code: 'person_required' } };
 const alerts = () => screen.queryAllByRole('alert').map((node) => node.textContent ?? '');
-// GM r8 (3), #204 round 7: Generate's line is in the app's notice region (graphStore notify).
+// Design (PR #204): Generate's line is in the app's notice region (graphStore notify).
 const runNotices = () => { const state = useGraphStore.getState(); return [state.messageNotice?.text, state.undoNotice?.text].filter((text): text is string => Boolean(text)); };
 
-describe('review 3 MEDIUM-1: Create\'s lines clear on the promote', () => {
+describe('Create\'s lines clear on the promote', () => {
   it('Generate refused by the gate: the line shows, and goes on the promote', async () => {
     answers.set('POST /api/graph/cluster', gate);
     session.reportPersonRequired();
@@ -96,7 +96,7 @@ describe('review 3 MEDIUM-1: Create\'s lines clear on the promote', () => {
     render(<CreateView />);
     fireEvent.click(screen.getByRole('button', { name: 'Styles' }));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save current style' })); });
-    // GM r6: the line is in the notice region now (graphStore notify), not the toolbar.
+    // Design: the line is in the notice region now (graphStore notify), not the toolbar.
     const notice = () => { const state = useGraphStore.getState(); return state.messageNotice?.text ?? state.undoNotice?.text ?? ''; };
     await waitFor(() => expect(notice()).toContain(PERSON_LINE));
     act(() => { session.notePersonPromoted(); });

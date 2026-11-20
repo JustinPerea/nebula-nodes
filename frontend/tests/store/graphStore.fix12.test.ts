@@ -1,24 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 12 (review 11; GM r19 and r20), on round 11's keyed
+ * PR #198 fix (design), on graphStore.fix11's keyed
  * backend in small (graphStore.fix11's), which can also delete the scene
  * node (404 node_gone with deletedBy), put it back, refuse a save as another
  * project opened (workspace_moved) or as 400 / 413:
- * - M-1 (GM r19 answer 2, r20 answer 1): a clash answered while the save was
+ * - Design: a clash answered while the save was
  *   stopped sends the save once; landed, the stopped state is gone; failed,
  *   back to stopped with the same line, no new toast, no timed retries, and
  *   the quiet try comes back.
- * - L-1 (GM r19 answer 3, r20 answer 2): "another window" only for the
+ * - Design: "another window" only for the
  *   person's own tab; anyone else unknown, and the line says nothing of who.
- * - L-2 (GM r16, r20 answer 3): a deleted scene says so once and stops for good, and picks the save back
+ * - Design: a deleted scene says so once and stops for good, and picks the save back
  *   up when the delete is undone; a workspace move says nothing of its own.
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -202,7 +202,7 @@ const QUIET = 80;
 const stopped = () => useGraphStore.getState().stoppedScenes;
 const clashes = () => useGraphStore.getState().sceneClashes;
 const toast = () => (useGraphStore.getState() as unknown as { undoNotice: { text: string; retryScene?: { nodeId: string } } | null }).undoNotice;
-// GM r28 item 2 (round 19): the stop line, with [Try again], is a state in its own slot.
+// Design: the stop line, with [Try again], is a state in its own slot.
 const stopLineOf = (nodeId: string) => store.sceneStopLines(useGraphStore.getState()).find((line) => line.nodeIds.includes(nodeId))?.text ?? null;
 const UNKNOWN = { edit: { id: 'ed_unknown', actor: { kind: 'anonymous', name: 'Someone' } } };
 
@@ -246,7 +246,7 @@ function busyCodex(h: ReturnType<typeof backend>, writer?: { kind: string; name:
 beforeEach(() => store.setSceneQuietRetryForTests(QUIET));
 afterEach(() => store.setSceneQuietRetryForTests(null));
 
-describe('M-1 (GM r19 answer 2): a clash answered while the save was stopped', () => {
+describe('a clash answered while the save was stopped (design)', () => {
   it('Keep mine, and its save fails: back to stopped with the same line, no new toast, no timed retries', async () => {
     const h = backend(S3);
     const before = await stoppedByServer(h);
@@ -276,7 +276,7 @@ describe('M-1 (GM r19 answer 2): a clash answered while the save was stopped', (
     expect(h.backendBrief()[0]).toBe('s1:mine');
   });
 
-  it('GM r20 answer 1: after the fall back to stopped, the quiet try comes back (one try per quiet stretch)', async () => {
+  it('after the fall back to stopped, the quiet try comes back (one try per quiet stretch)', async () => {
     const h = backend(S3);
     const before = await stoppedByServer(h);
     h.other((shots) => setPrompt(shots, 's1', 'codex s1'), 'agent');
@@ -345,7 +345,7 @@ describe('M-1 (GM r19 answer 2): a clash answered while the save was stopped', (
     said = [];
     useGraphStore.setState({ notify: (text: string) => { said.push(text); } } as never);
     typeIn('s2', 'later');
-    // GM r36 Q1: the retries' line is a state (the state slot), not a toast.
+    // Design: the retries' line is a state (the state slot), not a toast.
     await vi.waitFor(() => expect(stopLineOf('n1')).toBe(RETRYING), { timeout: 3000, interval: 5 });
     expect(said).toEqual([]);
     await vi.waitFor(() => expect(unsaved()).toBeNull(), { timeout: 3000, interval: 5 });
@@ -368,7 +368,7 @@ describe('M-1 (GM r19 answer 2): a clash answered while the save was stopped', (
   });
 });
 
-describe('L-1 (GM r19 answer 3, r20 answer 2): "another tab" only for the person’s own tab', () => {
+describe('"another tab" only for the person’s own tab (design)', () => {
   it('a sync from a writer nobody knows: the neutral clash line, and [Use theirs]', async () => {
     const h = backend(S3);
     store.setSceneRetryDelaysForTests([400]);
@@ -443,8 +443,8 @@ describe('L-1 (GM r19 answer 3, r20 answer 2): "another tab" only for the person
   });
 });
 
-describe('L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused', () => {
-  // GM #198 r12 answer 1 (round 13) changed this: a stopped save's quiet try
+describe('what the quiet try says when it is refused (design)', () => {
+  // Design changed this (#198): a stopped save's quiet try
   // refused 400 or 413 speaks once and stops; graphStore.fix13 pins it.
 
   it('a server failure stays quiet (unchanged)', async () => {
@@ -505,7 +505,7 @@ describe('L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused
     h.remove(by, origin);
     await sleep(150);
     expect(nodeOf('n1')).toBeUndefined();
-    // GM r21 answer 3 (round 13): Codex's delete is one toast, its line with
+    // Design: Codex's delete is one toast, its line with
     // Codex's [Undo]; another window or a script brings no toast, so the
     // line shows on its own.
     if (by.kind === 'agent') {
@@ -555,7 +555,7 @@ describe('L-2 (GM r16, r20 answer 3): what the quiet try says when it is refused
   });
 });
 
-describe('L-4 (review 11, probe B1): two quick restarts never freeze the card', () => {
+describe('two quick restarts never freeze the card', () => {
   it('a late health answer from the short-lived middle process doesn’t retire the newest one', async () => {
     const h = backend(S3);
     h.emit({ bootId: 'boot-a', bootStartedAt: 1_000 });

@@ -1,5 +1,5 @@
 /**
- * Review 17 L1 (probes H1, H2): during an outage an agent makes a new project
+ * During an outage an agent makes a new project
  * and deletes the one the tab left. On reconnect the held save into the
  * deleted project is refused (404) and the project can't be read. Whether
  * work was really lost is judged against what the tab last saved for that
@@ -116,8 +116,8 @@ async function newProjectThenDeleteTheOneLeft(hold: () => void): Promise<void> {
   await vi.waitFor(() => expect(state().busy).toBe(false));
 }
 
-describe('L1: the project the tab left was deleted while Nebula was offline', () => {
-  it('H1, only the view moved: no recovered copy, and no way back to the deleted project', async () => {
+describe('the project the tab left was deleted while Nebula was offline', () => {
+  it('only the view moved: no recovered copy, and no way back to the deleted project', async () => {
     await newProjectThenDeleteTheOneLeft(() => {
       useUIStore.setState({ canvasViewport: { x: -300, y: -200, zoom: 1.7 } } as never);
     });
@@ -127,7 +127,7 @@ describe('L1: the project the tab left was deleted while Nebula was offline', ()
     expect(state().activeProject?.id).toBe('E');
   });
 
-  it('H2, a node moved (real held work): one recovered copy, still no way back to the deleted project', async () => {
+  it('a node moved (real held work): one recovered copy, still no way back to the deleted project', async () => {
     await newProjectThenDeleteTheOneLeft(() => {
       const [first] = useGraphStore.getState().nodes;
       useGraphStore.setState({ nodes: [{ ...first, position: { x: 99, y: 99 } }] });

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * PR #198 fix round 9 (review 8, H-1): the reviewer's three-actor fuzz as a
+ * PR #198 fix: a three-actor fuzz found in review as a
  * test. One Cinema scene, three actors on disjoint fields: the person types
  * into Shot 1 on this tab, Codex writes Shot 2 (and sometimes reorders), and
  * a second window writes Shot 3 with a conditional write. The keyed backend
@@ -213,7 +213,7 @@ async function run(o: Opts): Promise<string[]> {
   return problems.map((problem) => `seed ${o.seed}: ${problem}`);
 }
 
-describe('three actors on one scene, the socket late (review 8, H-1)', () => {
+describe('three actors on one scene, the socket late', () => {
   it('disjoint fields: nobody\'s change is lost, the card is the backend\'s, nothing asks', async () => {
     const problems: string[] = [];
     for (let seed = 1; seed <= 12; seed += 1) {

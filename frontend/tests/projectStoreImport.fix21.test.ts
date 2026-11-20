@@ -1,5 +1,5 @@
 /**
- * Round 21 of PR #199 (CI on round 20): importing the project store
+ * PR #199: importing the project store
  * subscribes to nothing. The held-reopen line and the reload line watch the
  * stores only while they show, so a module that mocks the graph store with
  * just `getState` (as tests/components/CreateView.save does) still loads it.

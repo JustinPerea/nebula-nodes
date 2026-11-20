@@ -1,5 +1,5 @@
 /**
- * PR #199 fix round 24, found in the live check after the merge: React Flow marks a node
+ * PR #199 fix, found in the live check after the merge: React Flow marks a node
  * `selected` a render after the store says so, so the toolbar's first placement from no
  * selection ran before any node was marked and left the toolbar 'clear', over a node near
  * the top, until something else moved it (a real click did the same). A node gaining the

@@ -2,20 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 fix round 21, on graphStore.fix20's keyed backend:
- * - Review 19 LOW-1 (GM r31): a delete keeps the stop in every state: a
+ * PR #198 fix, on graphStore.fix20's keyed backend:
+ * - Design: a delete keeps the stop in every state: a
  *   save still out (Undo, Redo, Undo while the restore's save is out), a
  *   [Try again] out, a stopped scene with a clash waiting. Undo then sends
- *   GM's one save, for every cause; answering the clash Undo asks again is
- *   that one try (GM r31 answer 1).
- * - Review 19 LOW-2 (GM r31): a try with no answer in 15 s counts as failed;
+ *   design's one save, for every cause; answering the clash Undo asks again is
+ *   that one try (design).
+ * - Design: a try with no answer in 15 s counts as failed;
  *   a late success while the card still holds what it sent clears the stop
  *   and the mark at once; after the person's edit the stop stays; a late
  *   failure changes nothing.
- * - GM r31 answer 2: a run lock refusing the one try shows the run's own
+ * - Design: a run lock refusing the one try shows the run's own
  *   line and saves when the run ends; it is not a server stop.
- * - GM r31 answer 3: the row tolerance is a quarter of the smaller card.
- * - Review 19 NIT-1: a try cleared by the person's edit, and by a clash.
+ * - Design: the row tolerance is a quarter of the smaller card.
+ * - a try cleared by the person's edit, and by a clash.
  */
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
@@ -233,7 +233,7 @@ function watchStopLines() {
 
 const tries = () => useGraphStore.getState().sceneTries;
 const clashOf = (id: string) => (useGraphStore.getState().sceneClashes as Record<string, { sending?: string }>)[id] ?? null;
-// GM r32 answer 1: the run's line is not a failure.
+// Design: the run's line is not a failure.
 const RUN_LINE = 'Your changes to “Opening” are kept. Nebula will save them when the run finishes.';
 const CAUSES: Cause[] = ['server', 400, 413];
 /** Queue the refusal `cause` keeps giving (a server error keeps failing by itself). */
@@ -258,7 +258,7 @@ const putCalls = (id: string) => fetchMock.mock.calls.filter(([url, init]) => (i
   && String(url).includes(`/api/graph/node/${id}`)).length;
 async function deleteAndWait(id: string) {
   useGraphStore.getState().deleteNode(id);
-  // The store's hold, not only the notice text (PR #221 review 2 LOW-3).
+  // The store's hold, not only the notice text (PR #221).
   await deleteLanded(useGraphStore);
   await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
   await sleep(20);
@@ -270,8 +270,8 @@ async function settled(h: ReturnType<typeof backend>, id: string, from: number) 
   return h.putsOf(id).length - from;
 }
 
-describe('review 19 LOW-1: a delete keeps the stop in every state; Undo sends GM’s one save', () => {
-  it('A: Undo, Redo while the restore’s save is out, Undo again: one save, for every cause, back stopped with its line', async () => {
+describe('a delete keeps the stop in every state; Undo sends design’s one save', () => {
+  it('Undo, Redo while the restore’s save is out, Undo again: one save, for every cause, back stopped with its line', async () => {
     for (const cause of CAUSES) {
       const h = backend({ n1: 'Opening' });
       await stopBy(h, 'n1', cause);
@@ -296,7 +296,7 @@ describe('review 19 LOW-1: a delete keeps the stop in every state; Undo sends GM
     }
   });
 
-  it('A2: a [Try again] out, the person deletes the scene, the try fails, Undo: one save, for every cause', async () => {
+  it('a [Try again] out, the person deletes the scene, the try fails, Undo: one save, for every cause', async () => {
     for (const cause of CAUSES) {
       const h = backend({ n1: 'Opening' });
       await stopBy(h, 'n1', cause);
@@ -308,7 +308,7 @@ describe('review 19 LOW-1: a delete keeps the stop in every state; Undo sends GM
       useGraphStore.getState().deleteNode('n1');
       await sleep(60);
       // The try's PUT stays held while the delete goes out; once it fails,
-      // Undo waits for the delete's answer, never a fixed sleep (PR #221 review 1).
+      // Undo waits for the delete's answer, never a fixed sleep (PR #221).
       release();
       await deleteLanded(useGraphStore);
       stillFailing(h, 'n1', cause);
@@ -322,7 +322,7 @@ describe('review 19 LOW-1: a delete keeps the stop in every state; Undo sends GM
     }
   });
 
-  it('I: stopped with a clash waiting, deleted, Undo asks again; Keep mine is the one try, for every cause', async () => {
+  it('stopped with a clash waiting, deleted, Undo asks again; Keep mine is the one try, for every cause', async () => {
     for (const cause of CAUSES) {
       const h = backend({ n1: 'Opening' });
       await stopBy(h, 'n1', cause);
@@ -345,7 +345,7 @@ describe('review 19 LOW-1: a delete keeps the stop in every state; Undo sends GM
   });
 });
 
-describe('review 19 LOW-2 (GM r31): a try with no answer in 15 s counts as failed', () => {
+describe('a try with no answer in 15 s counts as failed', () => {
   it('the bound is 15 s; past it the scene is stopped again, the same line, [Try again] live; a press sends', async () => {
     expect(store.SCENE_TRY_TIMEOUT_MS).toBe(15_000);
     store.setSceneTryTimeoutForTests(120);
@@ -445,7 +445,7 @@ describe('review 19 LOW-2 (GM r31): a try with no answer in 15 s counts as faile
   });
 });
 
-describe('GM r31 answer 2: a run lock refusing the one try', () => {
+describe('a run lock refusing the one try', () => {
   it.each<['Undo’s save first' | '[Try again]', Cause]>([['Undo’s save first', 400], ['[Try again]', 'server'], ['[Try again]', 413]])(
     '%s (stopped by %s): the run’s own line, not a stop; it saves when the run ends', async (path, cause) => {
       const h = backend({ n1: 'Opening' });
@@ -461,7 +461,7 @@ describe('GM r31 answer 2: a run lock refusing the one try', () => {
       // The run goes on: the next sends are refused the same way.
       for (let i = 0; i < 3; i += 1) h.scenes.get('n1')!.refuse.push({ status: 409, body: { detail: 'A paid run is starting.', code: 'paid_start' } });
       release();
-      // GM r32 answer 3: the run's line is a state line now (no ×, no [Try again]), not a toast; still no stop.
+      // Design: the run's line is a state line now (no ×, no [Try again]), not a toast; still no stop.
       await vi.waitFor(() => expect(stopLines()).toEqual([RUN_LINE]), { timeout: 3000, interval: 5 });
       expect(stopped().n1).toBeUndefined();
       expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'run-lock' });
@@ -476,7 +476,7 @@ describe('GM r31 answer 2: a run lock refusing the one try', () => {
     });
 });
 
-describe('GM r31 answer 3: the row tolerance is a quarter of the smaller card', () => {
+describe('the row tolerance is a quarter of the smaller card', () => {
   const measure = (heights: Record<string, number>, at: Record<string, { x: number; y: number }>) => useGraphStore.setState((s) => ({
     nodes: s.nodes.map((n) => (heights[n.id] ? { ...n, position: at[n.id], measured: { width: 280, height: heights[n.id] } } : n)) }));
 
@@ -502,7 +502,7 @@ describe('GM r31 answer 3: the row tolerance is a quarter of the smaller card', 
   });
 });
 
-describe('review 19 NIT-1: what ends a try', () => {
+describe('what ends a try', () => {
   it('the person’s own edit during a try: the try ends at once (the line is no longer held)', async () => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 'server');

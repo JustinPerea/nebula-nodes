@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Round 17 of PR #114, review 16's store findings and GM's r17 lines:
- * - M2 (probe Y5): Accept's undo compares values with asset links as the
+ * PR #114's store behaviour and the design lines:
+ * - Accept's undo compares values with asset links as the
  *   backend gave them, so an image the proposal set is put back.
- * - L3 (probes Y6, Y7e): a run's own param write-back is run output, not an
+ * - a run's own param write-back is run output, not an
  *   agent's edit; the person's other window says "You"; a mixed or unknown
  *   source drops the actor. A kept node is named as one item.
- * - L2 (probe Y2): the 404 rule's Stop gives up after 15 s, says GM's Stop
+ * - the 404 rule's Stop gives up after 15 s, says design's Stop
  *   line, keeps the run "may still be going" and sends Stop again.
- * - L4: a paid World Labs start whose status check answers 404 gets the same
+ * - a paid World Labs start whose status check answers 404 gets the same
  *   Stop and keeps its uncertain state.
- * - L5: the run-safety line only for the run-safety store's 507.
+ * - the run-safety line only for the run-safety store's 507.
  */
 
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
@@ -48,7 +48,7 @@ const STOP_LINE = "Nebula couldn’t stop the run because the server isn’t ans
 beforeEach(async () => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue(json({}));
-  // The base URL is known, so asset links rewrite as in the app (review 16's Y5 setup).
+  // The base URL is known, so asset links rewrite as in the app.
   await apiFetch('/api/health').catch(() => null);
   fetchMock.mockClear();
   notices.length = 0;
@@ -92,7 +92,7 @@ const agentSync = (nodes: unknown[], name = 'Claude Code') => socketSends({ type
 const otherWindow = (nodes: unknown[]) => socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes,
   edit: { tab: 'other-tab', actor: { kind: 'person' } } });
 
-describe('M2: Accept compares values with asset links as the backend gave them (probe Y5)', () => {
+describe('Accept compares values with asset links as the backend gave them', () => {
   it('an image link the proposal set, untouched since: Undo puts the old one back with no line', async () => {
     const img = (value: string) => node('n1', { filePath: value }, 'Photo', 'image-input');
     socketSends({ type: 'graphSync', ...base, empty: false, edges: [], nodes: [img('/api/outputs/old.png')] });
@@ -115,7 +115,7 @@ describe('M2: Accept compares values with asset links as the backend gave them (
   });
 });
 
-describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
+describe('who changed it (design)', () => {
   it("a run's own param write-back isn't anyone's edit: Undo still removes the node Accept added", async () => {
     const added = (params: Record<string, unknown>) => node('n2', params, 'Added');
     await acceptWith({ nodes: [added({ value: 'p' })], edges: [], updatedNodes: [], runNodeIds: ['n2'], idMap: {} },
@@ -140,7 +140,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
     expect(notice).toBe('Nothing was undone. A setting on “Added” was changed after you accepted.');
   });
 
-  it("the person's other window: \"You … in another tab\" (Y7e)", async () => {
+  it("the person's other window: \"You … in another tab\"", async () => {
     await acceptWith({ nodes: [], edges: [], updatedNodes: [node('n1', { value: 'b' }, 'Brief')], runNodeIds: [], idMap: {} },
       () => { own([node('n1', { value: 'b' }, 'Brief')]); otherWindow([node('n1', { value: 'c' }, 'Brief')]); });
     await sleep(10);
@@ -157,7 +157,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
     expect(notice).toBe('Undid the proposal except a setting on “Brief”. You changed it in another tab after you accepted.');
   });
 
-  it('an agent and the other window: mixed, so the actor goes (two settings on two nodes: counted, GM pr198 r1)', async () => {
+  it('an agent and the other window: mixed, so the actor goes (two settings on two nodes: counted, design)', async () => {
     useGraphStore.setState({ nodes: [node('n1', { value: 'a' }, 'Brief'), node('n3', { value: 'a', y: 1 }, 'Other')] } as never);
     await acceptWith({ nodes: [], edges: [], updatedNodes: [node('n1', { value: 'b' }, 'Brief'), node('n3', { value: 'b', y: 2 }, 'Other')],
       runNodeIds: [], idMap: {} }, () => {
@@ -195,7 +195,7 @@ describe('L3: who changed it (probes Y6, Y7e; GM r17)', () => {
   });
 });
 
-describe("GM's partial-undo lines, every form (exact)", () => {
+describe("the design partial-undo lines, every form (exact)", () => {
   const agent = { kind: 'agent' as const, name: 'Codex' };
   const you = { kind: 'you' as const };
   const unknown = { kind: 'unknown' as const };
@@ -228,7 +228,7 @@ describe("GM's partial-undo lines, every form (exact)", () => {
       .toBe('Nothing was undone. You changed every setting in the proposal in another tab after you accepted.');
   });
   it('mixed or unknown: no actor', () => {
-    // GM r18: never count 1; settings are counted from 4.
+    // Design: never count 1; settings are counted from 4.
     expect(acceptUndoLine(one(['Text']), unknown, false)).toBe('Undid the proposal except “Text” for “Brief”. It was changed after you accepted.');
     expect(acceptUndoLine([{ node: 'A', settings: ['x'] }, { node: 'B', settings: ['y'] }], unknown, false))
       .toBe('Undid the proposal except 2 settings changed after you accepted.');
@@ -260,8 +260,8 @@ const stalls = (init?: RequestInit) => new Promise<Response>((_resolve, reject) 
   init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
 });
 
-describe('L2: the 404 rule\'s Stop has a time limit (probe Y2)', () => {
-  it('15 s with no answer: "may still be going", GM\'s Stop line once, and Stop goes again', async () => {
+describe('the 404 rule\'s Stop has a time limit', () => {
+  it('15 s with no answer: "may still be going", design\'s Stop line once, and Stop goes again', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     expect(STOP_ANSWER_MS).toBe(15_000);
     lostStart(stalls);
@@ -281,7 +281,7 @@ describe('L2: the 404 rule\'s Stop has a time limit (probe Y2)', () => {
   });
 });
 
-describe('L4: a paid World Labs start whose status check answers 404', () => {
+describe('a paid World Labs start whose status check answers 404', () => {
   it('gets the same Stop, once, and keeps its uncertain state and unlock', async () => {
     useGraphStore.setState({ nodes: [node('world', {}, 'World Labs Environment', 'worldlabs-environment')] } as never);
     lostStart(async () => json({ runId: 'x', status: 'cancelled', pendingAdmission: true }));
@@ -294,12 +294,12 @@ describe('L4: a paid World Labs start whose status check answers 404', () => {
   });
 });
 
-describe('L5: the run-safety line only for the run-safety store\'s 507', () => {
+describe('the run-safety line only for the run-safety store\'s 507', () => {
   const refuseWith = (body: Record<string, unknown>) => fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST' && String(url).includes('/api/execute-node')) return json(body, 507);
     return json({});
   });
-  it('run_safeguards: GM\'s locked line', async () => {
+  it('run_safeguards: design\'s locked line', async () => {
     refuseWith({ detail: 'Nebula cannot verify durable paid-start safety storage; no World Labs request was sent', code: 'run_safeguards' });
     await useGraphStore.getState().executeNode('n1');
     expect(notices).toEqual([

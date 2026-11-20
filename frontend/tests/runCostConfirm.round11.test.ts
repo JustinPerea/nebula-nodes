@@ -1,5 +1,5 @@
 /**
- * PR #204 round 11: the run-cost carry-over (PUT /api/settings, the person's alone) goes out
+ * PR #204: the run-cost carry-over (PUT /api/settings, the person's alone) goes out
  * only from a tab connected as the person, once. On f93f2968 it went out from a held tab on
  * every read that lacked the setting, and a refusal reset it to go again on the next read.
  */
@@ -34,7 +34,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('the run-cost carry-over (PR #204 round 11)', () => {
+describe('the run-cost carry-over (PR #204)', () => {
   it('a tab connected as the person carries it over once, however often it reads', async () => {
     applySavedRunCostConfirm({ apiKeys: {} });
     applySavedRunCostConfirm({ apiKeys: {} });
@@ -111,7 +111,7 @@ describe('the run-cost carry-over (PR #204 round 11)', () => {
   });
 });
 
-describe('whenPerson (PR #204 round 11)', () => {
+describe('whenPerson (PR #204)', () => {
   it('runs at once on a connected tab; on a held one, keyed, once on the promote', () => {
     const now = vi.fn();
     whenPerson('a', now);

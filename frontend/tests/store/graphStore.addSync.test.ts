@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { noticeSpy } from '../helpers/noticeSpy';
 
 /**
- * Round 12 of PR #114 (GM approved, 2026-10-26): the first add on an empty
+ * PR #114 (design approved, 2026-10-26): the first add on an empty
  * tab no longer clears the backend's canvas. If the backend has nodes the tab
  * doesn't show (an agent's, or ones this tab missed), the add brings them in
  * through the canvas's normal sync, then adds the node where the person put
@@ -11,7 +11,7 @@ import { noticeSpy } from '../helpers/noticeSpy';
  * Agent log. Character, Moodboard and dynamic nodes go the same way, and a
  * failure never leaves the node only in this tab.
  *
- * Before round 12 the add sent DELETE /api/graph?force=true (an agent's work
+ * Before this change the add sent DELETE /api/graph?force=true (an agent's work
  * wiped by the person's first drop), and Character/Moodboard/dynamic adds
  * added the node locally on any failure, with only a console line.
  */
@@ -137,7 +137,7 @@ const SYNC_FAILURES: [string, () => void, RegExp][] = [
     backendHas({ paramsVersion: GRAPH_PARAMS_VERSION + 1 })), /Nebula was updated while this tab was open/],
 ];
 
-describe('a sync that fails: nothing is added, the person reads GM’s line, the reason goes to the Agent log', () => {
+describe('a sync that fails: nothing is added, the person reads design’s line, the reason goes to the Agent log', () => {
   for (const [what, fail, reason] of SYNC_FAILURES) {
     it.each(ADDS)(`%s, when ${what}`, async (_name, definitionId, add) => {
       fail();
@@ -160,7 +160,7 @@ describe('a sync that fails: nothing is added, the person reads GM’s line, the
     expect(logged()[0]).toMatch(/export broke/);
   });
 
-  it('with no backend found at all, nothing is added and GM’s line says so (round 13, GM: local-only adds are refused)', async () => {
+  it('with no backend found at all, nothing is added and design’s line says so (design: local-only adds are refused)', async () => {
     backendDiscovery.baseUrl = null;
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await useGraphStore.getState().addNode('text-input', { x: 10, y: 20 })).toBeNull();
@@ -210,7 +210,7 @@ describe('a refused create after the sync: the add path’s own line, and nothin
       .mockResolvedValueOnce(json({ detail: 'Graph has protected provider state' }, 409));
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
-    // Round 13 (review 12 item 5): GM's quoted heading on every add path.
+    // The heading design quoted, on every add path.
     expect(alerted()).toEqual([`Nebula couldn’t add “${label(definitionId)}”. Graph has protected provider state.`]);
   });
 
@@ -224,8 +224,8 @@ describe('a refused create after the sync: the add path’s own line, and nothin
   });
 });
 
-// Round 13 of PR #114 (GM) said "Couldn’t add “Text Input” while Nebula is
-// offline."; round 14 (GM) dropped it: offline is read-only, so an add while
+// PR #114 (design) said "Couldn’t add “Text Input” while Nebula is
+// offline."; design dropped it: offline is read-only, so an add while
 // the banner shows sends nothing and says nothing (the banner pulses;
 // graphStore.readOnly.test.ts walks every edit), and an add whose sync finds
 // the backend gone reads the add heading, as any failed sync.
@@ -235,7 +235,7 @@ describe('an add while Nebula is offline', () => {
     expect(await add({ x: 10, y: 20 })).toBeNull();
     expect(useGraphStore.getState().nodes).toEqual([]);
     expect(alerted()).toEqual([couldntAdd(definitionId)]);
-    // The reason still goes to the Agent log, under GM's line.
+    // The reason still goes to the Agent log, under design's line.
     expect(logged()[0]).toMatch(/Failed to fetch|Nebula[’']s/);
   });
 
@@ -266,7 +266,7 @@ describe('an add while Nebula is offline', () => {
   });
 });
 
-// Review 12 (R12-A/B): the add's own read of the backend's graph must never
+// The add's own read of the backend's graph must never
 // overwrite a newer socket sync that landed while that read was out.
 const base = { activeProjectId: 'A', workspaceRevision: 'a', paramsVersion: GRAPH_PARAMS_VERSION };
 const textNode = (id: string, value: string, position: { x: number; y: number }, outputs = {}) => ({
@@ -278,8 +278,8 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe('a socket sync that lands while the add’s export is out wins (R12-A/B)', () => {
-  it("R12-A: an agent's Clear lands first; the stale export brings nothing back", async () => {
+describe('a socket sync that lands while the add’s export is out wins', () => {
+  it("an agent's Clear lands first; the stale export brings nothing back", async () => {
     const exported = deferred<Response>();
     const created = deferred<Response>();
     fetchMock.mockReturnValueOnce(exported.promise).mockReturnValueOnce(created.promise);
@@ -299,7 +299,7 @@ describe('a socket sync that lands while the add’s export is out wins (R12-A/B
     expect(n1.data.outputs).toEqual({});
   });
 
-  it("R12-B: an agent's delete lands first, then the create is refused; the deleted node stays gone", async () => {
+  it("an agent's delete lands first, then the create is refused; the deleted node stays gone", async () => {
     const exported = deferred<Response>();
     fetchMock.mockReturnValueOnce(exported.promise).mockResolvedValueOnce(json({ detail: 'nope' }, 409));
     const adding = useGraphStore.getState().addNode('text-input', { x: 10, y: 20 });
@@ -323,10 +323,10 @@ describe('a socket sync that lands while the add’s export is out wins (R12-A/B
   });
 });
 
-// Review 12 (R12-C): an add's undo step owns only the node it added. On an
+// An add's undo step owns only the node it added. On an
 // empty tab the add brings the backend's nodes in first; Undo must not take
 // those away.
-describe('Undo after the first add on an empty tab removes only the new node (R12-C)', () => {
+describe('Undo after the first add on an empty tab removes only the new node', () => {
   it('addDynamicNode', async () => {
     fetchMock.mockResolvedValueOnce(backendHas());
     const created = deferred<Response>();
@@ -350,8 +350,8 @@ describe('Undo after the first add on an empty tab removes only the new node (R1
   });
 });
 
-// Review 12 item 6 (GM: the settling line is fine on other writes as long as
-// each leads with its own "Couldn’t <action>."): an add refused while a World
+// Design: the settling line is fine on other writes as long as
+// each leads with its own "Couldn’t <action>.": an add refused while a World
 // Labs run is still starting.
 describe('the World Labs starting line on an add leads with the add’s own heading', () => {
   it('addNode', async () => {

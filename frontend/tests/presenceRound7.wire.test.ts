@@ -1,7 +1,7 @@
 /**
- * PR #204 round 7, review 5 MEDIUM-1: a wire the gate refused only because this tab isn't
+ * PR #204: a wire the gate refused only because this tab isn't
  * connected as the person says so, and its line clears on the promote (it goes through notify
- * with the refusal and its own stamp). The reviewer's probe, kept as tests; harness from it.
+ * with the refusal and its own stamp). A probe found in review, kept as tests; harness from it.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
@@ -102,7 +102,7 @@ import { PERSON_REQUIRED_COPY } from '../src/lib/errorCopy';
 const shown = () => { const s = useGraphStore.getState(); return s.undoNotice?.text ?? s.messageNotice?.text ?? null; };
 const GATE = { status: 403, body: { detail: 'Only the person can wire nodes.', code: 'person_required' } };
 
-describe('review 5 MEDIUM-1: a wire the gate refused', () => {
+describe('a wire the gate refused', () => {
   beforeEach(() => { session.resetPersonSessionForTests(); session.reportPersonRequired(); });
 
   it('a connection: its line says why, and clears on the promote', async () => {
@@ -137,7 +137,7 @@ describe('review 5 MEDIUM-1: a wire the gate refused', () => {
     expect(shown()).toBeNull();
   });
 
-  it('review 5 LOW-4, the text path: an answer with no code whose words say it (an older backend) clears on the promote too', async () => {
+  it('the text path: an answer with no code whose words say it (an older backend) clears on the promote too', async () => {
     net.held.add('/api/graph/connect');
     useGraphStore.getState().onConnect(connection('n1', 'n2'));
     await release('/api/graph/connect', { status: 403, detail: PERSON_REQUIRED_COPY });

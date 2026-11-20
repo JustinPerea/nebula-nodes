@@ -1,5 +1,5 @@
 /**
- * PR #204 round 6, review 4 NIT-1 (survivor M2): in the lock's first 150 ms on a page not answered
+ * PR #204: in the lock's first 150 ms on a page not answered
  * yet, Accept and Reject keep their look (aria-disabled, data-held-pending, not disabled), so a
  * press reaches their handler: it must send nothing.
  */
@@ -73,7 +73,7 @@ afterEach(() => {
 const acceptButton = () => screen.getByRole('button', { name: /^Accept and run/  }) as HTMLButtonElement;
 const rejectButton = () => screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement;
 
-describe('survivor M2: a press in the lock\'s first moment sends nothing', () => {
+describe('a press in the lock\'s first moment sends nothing', () => {
   it('Accept and Reject, aria-disabled and pending, do nothing on a click', async () => {
     session.resetPersonSessionForTests({ unanswered: true });
     open(proposal('p_a'));

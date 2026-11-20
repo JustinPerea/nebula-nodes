@@ -4,7 +4,7 @@ import type { NodeData } from '../src/types';
 import { saveStepToFit, undosToFitSave, type SaveUndoWalk, type UndoWalkStep } from '../src/lib/saveFixStep';
 import { assertGraphComplexityWithinLimits, saveShapeLine, serializeGraph, measureShape, GRAPH_MAX_VALUES } from '../src/lib/graphFileShared';
 
-// GM PR #205 r16 item 1 (review 7 limits MEDIUM-4): Save names the Undo that
+// PR #205 (design): Save names the Undo that
 // brings the canvas back within its limits, not the newest step. The top step
 // alone: its owner (the three endings). More: "Undo the last N changes". None
 // does: the first sentence only.
@@ -29,7 +29,7 @@ const line = (nodes: Node<NodeData>[], w: SaveUndoWalk) => {
 };
 
 describe('Save names the Undo that fixes its refusal', () => {
-  it('the reviewer\'s live order: the person\'s deep value, then Codex\'s rename on top: "Undo the last 2 changes"', () => {
+  it('the live order found in review: the person\'s deep value, then Codex\'s rename on top: "Undo the last 2 changes"', () => {
     const canvas = [deepNode('a'), node('b', {}, 'Codex title')];
     // Newest first: Codex renamed b (its slice), the person typed a's value (a snapshot before it).
     const steps = [slice({ b: node('b') }), snapshot([node('a'), node('b')])];

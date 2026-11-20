@@ -1,10 +1,10 @@
 /**
- * PR #204 round 5, the stores:
- * - GM r5 item 1: a project save the gate refused only as "not connected" goes again on the
+ * PR #204, the stores:
+ * - Design: a project save the gate refused only as "not connected" goes again on the
  *   promote, silently, through the one retry mechanism (retryOnPromote, which mark-read uses
  *   too): the header reads its normal "Saving…" while it does, and a retry that fails keeps
  *   "Save failed · Retry" with the new reason. Another failure isn't retried.
- * - Review 3 NIT: a refused run's nodes go back to how they were on the promote (a complete
+ * - a refused run's nodes go back to how they were on the promote (a complete
  *   node shows its result again, not idle); a newer line on a node stays.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,7 +74,7 @@ const gate = () => new projects.ProjectRequestError('Only the person can do this
   { heading: "Couldn't save the project.", detail: 'Only the person can do this.', code: PERSON_REQUIRED_CODE });
 const broken = () => new projects.ProjectRequestError('The disk said no.', 500, { heading: "Couldn't save the project." });
 
-describe('GM r5 item 1: a save refused as "not connected" goes again on the promote, silently', () => {
+describe('a save refused as "not connected" goes again on the promote, silently', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     resetPersonSessionForTests();
@@ -168,7 +168,7 @@ describe('GM r5 item 1: a save refused as "not connected" goes again on the prom
   });
 });
 
-describe('review 3 NIT: a refused run\'s nodes go back to how they were on the promote', () => {
+describe('a refused run\'s nodes go back to how they were on the promote', () => {
   const done = {
     id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
     data: { label: 'Krea 2', definitionId: 'krea-2-generate', params: { _kreaAuth: 'mcp' }, state: 'complete' as const,

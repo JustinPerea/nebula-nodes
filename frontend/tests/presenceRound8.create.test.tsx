@@ -1,5 +1,5 @@
 /**
- * PR #204 round 8, review 6 LOW-6 (M18): Generate's line goes with its own refusal's stamp. A
+ * PR #204: Generate's line goes with its own refusal's stamp. A
  * cluster sent while this tab was held, refused, and answered after the promote, has nothing left
  * to wait for: its line goes at once, not at the next promote. Through the real request path.
  */
@@ -60,10 +60,10 @@ afterEach(() => {
 });
 
 const gate = { status: 403, body: { detail: 'Only the person can do this.', code: 'person_required' } };
-// GM r8 (3), #204 round 7: Generate's line is in the app's notice region (graphStore notify).
+// Design (PR #204): Generate's line is in the app's notice region (graphStore notify).
 const runNotices = () => { const state = useGraphStore.getState(); return [state.messageNotice?.text, state.undoNotice?.text].filter((text): text is string => Boolean(text)); };
 
-describe('review 6 LOW-6: Generate\'s line carries its own refusal', () => {
+describe('Generate\'s line carries its own refusal', () => {
   it('a refusal sent before the promote and answered after it: the line goes at once', async () => {
     session.reportPersonRequired();
     const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {

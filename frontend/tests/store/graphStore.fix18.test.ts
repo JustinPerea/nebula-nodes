@@ -2,22 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 fix round 18 (review 16, GM r27), on graphStore.fix17's harness:
- * - LOW-1 (GM r27 answer 1): while a clash waits on a scene (first or asked
+ * PR #198 fix (design), on graphStore.fix17's harness:
+ * - Design: while a clash waits on a scene (first or asked
  *   again), Codex's edits about that scene alone go only to the Agent log,
  *   as for a stopped scene: one rule for a scene with a line of its own. An
  *   edit to the clashed field rewrites the prompt; one that makes it match
  *   the person's value ends the clash.
- * - LOW-2 (GM r27 answer 2): while a scene is stopped, the person's own
+ * - Design: while a scene is stopped, the person's own
  *   toasts show with the stop line beside them, with [Try again]. Their own
  *   Undo that leaves nothing unsaved clears the stop and the mark.
- * - GM r27 answer 3: a Codex wire from the stopped scene into another node
+ * - Design: a Codex wire from the stopped scene into another node
  *   shows its toast, with the stop line beside it.
  */
 const transport = vi.hoisted(() => ({ handlers: [] as ((event: unknown) => void)[] }));
 vi.mock('../../src/lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn((handler: (event: unknown) => void) => { transport.handlers.push(handler); }),
-    // The project store's own listener (M-3's beforeunload test).
+    // The project store's own listener (the beforeunload test).
     subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 const wsq = { hold: false, queue: [] as Record<string, unknown>[] };
@@ -230,7 +230,7 @@ const slots = () => {
     messageNotice: { text: string; retryScene?: { nodeId: string } } | null };
   return [g.undoNotice, g.messageNotice].filter((notice): notice is { text: string; retryScene?: { nodeId: string } } => Boolean(notice));
 };
-// GM r28 item 2 (round 19): the stop line with [Try again] is in the state
+// Design: the stop line with [Try again] is in the state
 // slot now; the event slots never carry it.
 const stopTexts = (state: unknown) => store.sceneStopLines(state as Parameters<typeof store.sceneStopLines>[0]).map((line) => line.text);
 const retryToasts = () => store.sceneStopLines(useGraphStore.getState()).filter((line) => line.nodeIds.includes('n1'))
@@ -324,7 +324,7 @@ function withRestoreAll(h: ReturnType<typeof backend>) {
   return restores;
 }
 
-describe('review 16 LOW-1 (GM r27 answer 1): while a clash waits, Codex’s edits about that scene alone go to the Agent log', () => {
+describe('while a clash waits, Codex’s edits about that scene alone go to the Agent log', () => {
   it('a first clash: the prompt is its only line; Codex’s edit to another field of it shows no toast, Cmd+Z can undo it; an edit about another node still toasts', async () => {
     const h = backend(S3);
     const lines = watchSlots();
@@ -408,13 +408,13 @@ describe('review 16 LOW-1 (GM r27 answer 1): while a clash waits, Codex’s edit
   });
 });
 
-describe('review 16 LOW-2 (GM r27 answer 2): the person’s own toasts and the stop line show together', () => {
+describe('the person’s own toasts and the stop line show together', () => {
   it('the person deletes another node: "Deleted the node." with [Undo], the stop line above it (the state slot) with [Try again]; Undo: "Restored the node." with [Redo], the stop line still above it', async () => {
     const h = backend(S3);
     withRestoreAll(h);
     await stoppedByServer(h);
     useGraphStore.getState().deleteNode('n2');
-    // GM r28 item 2 (round 19): the stop line is in the state slot above the
+    // Design: the stop line is in the state slot above the
     // event slot, never in the message slot.
     await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
     expect(messageSlot()).toBeNull();
@@ -458,7 +458,7 @@ describe('review 16 LOW-2 (GM r27 answer 2): the person’s own toasts and the s
   });
 });
 
-describe('GM r27 answer 3: a Codex wire from the stopped scene into another node', () => {
+describe('a Codex wire from the stopped scene into another node', () => {
   it('shows its toast; the stop line stays above it (the state slot) with [Try again]', async () => {
     const h = backend(S3);
     await stoppedByServer(h);

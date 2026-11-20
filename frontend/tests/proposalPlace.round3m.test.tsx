@@ -20,7 +20,7 @@ import {
 } from '../src/lib/noticeStackPlace';
 
 /**
- * PR #216 round 3m, GM - Design r76.
+ * PR #216 (design).
  * 1. Undo notices never fold; they follow the card's place (under the
  *    banner; under a floating log into its body, never its header). When at
  *    their full height that leaves the card short of its footer (Accept,
@@ -28,12 +28,12 @@ import {
  *    (`clip`), its full text in its aria-label. Past even that (a window
  *    far shorter than the app's), the stack caps at its room and scrolls.
  * 2. Docked: the card's foot never comes down over the docked log's header
- *    (r6 step 5 amended); the card caps and scrolls, Accept/Reject pinned.
+ *    (step 5 amended); the card caps and scrolls, Accept/Reject pinned.
  *
- * The card is the live one (round 3h: header and footer 89, its footer 54,
+ * The card is the live one (header and footer 89, its footer 54,
  * the plan line 77-110, the first ⚠ row's foot at 142 in a 198 px body), the
  * region's line 81 px over the window's foot, the offline banner's line 199
- * at 800x420 (round 3l live: the banner 150-183 and the 16 px gutter). An
+ * at 800x420 (live: the banner 150-183 and the 16 px gutter). An
  * Undo notice is 46 tall on one line of text (2-line text: 62), 42 kept to
  * one line (its 28 px buttons, live).
  */
@@ -57,7 +57,7 @@ function drawn(m: StackMeasure, place: StackPlace) {
   return { geo, from, boxes: all.map((box) => ({ ...box, top: Math.max(box.top, from) })).filter((box) => box.bottom > box.top) };
 }
 
-/** GM r69 Q1 and r76: nothing at rest over the banner, a floating log's header, or a docked log. */
+/** Design: nothing at rest over the banner, a floating log's header, or a docked log. */
 function clearOfEverything(m: StackMeasure, place: StackPlace) {
   const { boxes, geo } = drawn(m, place);
   const give = place.squeeze + (place.collapse ? m.logCollapse ?? 0 : 0);
@@ -75,7 +75,7 @@ function clearOfEverything(m: StackMeasure, place: StackPlace) {
   expect(geo.line - (place.stackCap ?? 0)).toBeGreaterThanOrEqual(stackLimit(m, place) - 0.5);
 }
 
-describe('GM r76 1: Undo notices follow the card, kept to one line when they must be', () => {
+describe('Undo notices follow the card, kept to one line when they must be', () => {
   it('room for them whole: nothing is kept to one line', () => {
     const m = withNotices([46, 46], [false, true], { topLine: 72 });
     const place = placeNoticeStack(m);
@@ -83,7 +83,7 @@ describe('GM r76 1: Undo notices follow the card, kept to one line when they mus
     clearOfEverything(m, place);
   });
 
-  it('round 3l\'s live cell (800x420, a collapsed log at 250-294, a message and "Moved “Hero shot”. Undo"): nothing over the banner', () => {
+  it('a live cell (800x420, a collapsed log at 250-294, a message and "Moved “Hero shot”. Undo"): nothing over the banner', () => {
     // 3l: the Undo notice stood over the banner here. Above the log 43 px
     // (199 to 242), under it 37, no body to stand in: not even the footer
     // fits, so the stack caps at 43 and scrolls, the card in view at its
@@ -229,8 +229,8 @@ describe('GM r76 1: Undo notices follow the card, kept to one line when they mus
   });
 });
 
-describe('GM r76 2: docked at 800x420, the card\'s foot never comes over the log', () => {
-  // Round 3l's live cell: the docked log 444-784 (its clearance 356 with the
+describe('docked at 800x420, the card\'s foot never comes over the log', () => {
+  // A live cell: the docked log 444-784 (its clearance 356 with the
   // gap), its natural height 180 (header 44, floor 91), so --agent-log-top
   // 268; the banner's line 199.
   const docked = (over: Partial<StackMeasure> = {}) => cell({
@@ -253,7 +253,7 @@ describe('GM r76 2: docked at 800x420, the card\'s foot never comes over the log
     clearOfEverything(m, place);
   });
 
-  it('round 3l had its foot 24 px over the log\'s header there; never again, with notices too', () => {
+  it('an earlier version had its foot 24 px over the log\'s header there; the foot now stays clear, with notices too', () => {
     for (const [items, undo] of [[[46], [true]], [[62, 46], [true, false]], [[62, 62], [true, true]]] as const) {
       const m = cell({
         logClearance: 356, logTop: 268, logSpare: 180 - 91, logCollapse: 91 - HEADER,
@@ -268,7 +268,7 @@ describe('GM r76 2: docked at 800x420, the card\'s foot never comes over the log
   });
 });
 
-describe('GM r76: the clip on the page', () => {
+describe('the clip on the page', () => {
   const page = () => {
     document.body.innerHTML = `
       <div data-notice-region=""><div class="notice-region__stack">

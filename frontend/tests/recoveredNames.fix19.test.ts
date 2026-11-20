@@ -1,5 +1,5 @@
 /**
- * Round 19 of PR #199 (GM r27 2; the rule is GM r29 2's since round 20). The
+ * PR #199 (design, revised later in the PR). The
  * tab's names (lib/recoveredNames: the fallback a recovered copy shows when
  * Nebula's answer had no name) follow the backend's rule; both sides read
  * the same cases (backend/tests/data/copy_name_cases.json), with the source
@@ -21,7 +21,7 @@ const made = ({ source, family, taken }: NameCase) => {
   return recoveredCanvasName(names);
 };
 
-describe('GM r27 2: the tab names copies as Nebula does (the shared cases)', () => {
+describe('the tab names copies as Nebula does (the shared cases)', () => {
   it('reads every case', () => {
     expect(CASES.length).toBeGreaterThan(30);
   });
@@ -46,7 +46,7 @@ describe('the kept Save’s fallback', () => {
   });
 });
 
-describe('review 18 LOW-1 and LOW-2: the cut agrees with the backend on every character', () => {
+describe('the cut agrees with the backend on every character', () => {
   const python = readFileSync(resolve(__dirname, '../../backend/services/project_store.py'), 'utf8');
   it('the same spaces go at a cut (CUT_SPACES), and the same limit', () => {
     const literal = /^CUT_SPACES = "([^"]+)"$/m.exec(python)![1];

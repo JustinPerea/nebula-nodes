@@ -4,13 +4,13 @@ import { join, relative } from 'node:path';
 import { cascaded } from './helpers/cssCascade';
 
 /**
- * The proposal bar's layer, PR #203. GM r7: every modal sits above the bar,
+ * The proposal bar's layer, PR #203. Design: every modal sits above the bar,
  * which stays visible under the modal's scrim, dimmed like the rest of the
- * canvas. GM r9 item 2 and r10 (round 6), the rule: anything the person
+ * canvas. Design, the rule: anything the person
  * opened draws above the proposal bar (every panel, Settings, context menus,
  * popovers, the chat model picker, the drag layer, the viewers, the palette
  * and every other modal), and lasting chrome they didn't open draws under it
- * (the bottom bar, the canvas tabs, the following bar). GM r25 still holds:
+ * (the bottom bar, the canvas tabs, the following bar). The design ruling still holds:
  * the notices sit above every dialog's backdrop.
  *
  * The notice region takes no layer of its own (a fixed box would make one
@@ -105,7 +105,7 @@ function tsxFiles(dir: string): string[] {
 }
 
 /**
- * Review r5 NIT-1: the modal roots, derived, not hand-kept. Every dialog that
+ * The modal roots, derived, not hand-kept. Every dialog that
  * renders through ModalPortal, and every element marked aria-modal="true":
  * its root is the first element after `<ModalPortal>` (or, from the
  * aria-modal element, the nearest one at or before it) whose class the
@@ -120,7 +120,7 @@ function modalRoots(): Array<{ file: string; root: string | null }> {
     const source = readFileSync(path, 'utf8');
     const file = relative(SRC, path);
     // The portal itself holds no dialog: it reads `aria-modal` to isolate
-    // the page behind the one it carries (PR #203 round 7).
+    // the page behind the one it carries (PR #203).
     if (file === join('components', 'ModalPortal.tsx')) continue;
     const names = classNames(source);
     const lines = source.split('\n');
@@ -140,7 +140,7 @@ function modalRoots(): Array<{ file: string; root: string | null }> {
   return found;
 }
 
-describe('the proposal bar between what the person opened and the lasting chrome (GM r7, r9 item 2, r10)', () => {
+describe('the proposal bar between what the person opened and the lasting chrome (design)', () => {
   const proposal = resolve('var(--sr-layer-proposal)');
   const ambient = resolve('var(--sr-layer-ambient)');
   const notice = resolve('var(--sr-layer-notice)');
@@ -150,7 +150,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     document.body.className = '';
   });
 
-  it('GM r10\'s rule is written next to the token, so the next floating surface follows it', () => {
+  it('the design rule is written next to the token, so the next floating surface follows it', () => {
     const at = RAW_CSS.indexOf('--sr-layer-proposal:');
     const before = RAW_CSS.slice(Math.max(0, at - 2500), at);
     expect(before).toMatch(/anything\s+\*?\s*the person opened draws above the proposal bar/);
@@ -176,7 +176,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     }
   });
 
-  // GM r10, by name: context menus, Settings, popovers, the model picker, the viewer and the palette; GM r9: the drag layer.
+  // Design, by name: context menus, Settings, popovers, the model picker, the viewer and the palette; design: the drag layer.
   it.each([
     'context-menu', 'connection-popup', 'panel--settings', 'panel', 'chat-panel', 'panel--library', 'node-inspector-popover',
     'provider-switcher__popover', 'final-export__popover', 'chat-model-picker__dialog', 'slava-library-drag-preview',
@@ -187,7 +187,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     for (const layer of layers) expect(layer).toBeGreaterThan(proposal);
   });
 
-  // GM, PR #203 r13 item 3: the Agent log's layer follows its state, not its
+  // Design, PR #203: the Agent log's layer follows its state, not its
   // name. Collapsed (the default chip) it is lasting chrome, under the bar;
   // expanded, the person opened it, over the bar; collapsed again, under.
   it('the Agent log: collapsed (and its "hidden" notice) under the bar, expanded over it, and back under when collapsed', () => {
@@ -232,7 +232,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     expect(layerOf(toolbar)).toBeGreaterThan(proposal);
   });
 
-  it('the following bar: under the bar while a proposal shows; with a modal open, its raise over the scrim holds (GM r9 item 2)', () => {
+  it('the following bar: under the bar while a proposal shows; with a modal open, its raise over the scrim holds (design)', () => {
     document.body.className = 'app-slava-restraint';
     document.body.innerHTML = `
       <div class="notice-region" data-notice-region><div class="notice-region__stack">
@@ -241,7 +241,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     const tabs = document.querySelector('.canvas-tabs-wrap')!;
     const slot = document.querySelector('[data-notice-slot="proposal"]')!;
     const painter = resolve(/z-index:\s*([^;]+);/.exec(rules().find(([selector]) => selector === '.mask-painter__overlay')![1])![1]);
-    // No proposal: raised as before (over the mask painter's scrim, review 3 LOW-3 of PR #200).
+    // No proposal: raised as before (over the mask painter's scrim of PR #200).
     expect(layerOf(tabs)).toBeGreaterThan(painter);
     const bar = document.createElement('div');
     bar.className = 'proposal-bar';
@@ -260,7 +260,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     expect(layerOf(bar)).toBeLessThan(painter);
   });
 
-  it('the modal roots are derived from the components (review r5 NIT-1), and include every one the old list named', () => {
+  it('the modal roots are derived from the components, and include every one the old list named', () => {
     const roots = modalRoots();
     const missing = roots.filter(({ root }) => root === null).map(({ file }) => file);
     expect(missing, 'a modal with no layered root').toEqual([]);
@@ -292,7 +292,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     expect(items.map(([, text]) => /z-index:\s*var\(--sr-layer-notice, 20010\);/.test(text))).toEqual([true]);
   });
 
-  // Review r5 LOW-3: the notices are above every dialog, and the bar under
+  // The notices are above every dialog, and the bar under
   // them, only because none of the three makes a stacking context.
   it('no stacking context on .notice-region, its __stack or its __slot (and the reason is written in the CSS)', () => {
     const subjects = /\.notice-region(__stack|__slot)?(?![\w-])(\[[^\]]*\]|:[\w-]+(\([^)]*\))?)*$/;
@@ -318,7 +318,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
     expect(regionCss).toMatch(/No stacking context on the region, the stack or the slots/);
   });
 
-  it('the stack never grows into the top bars (GM r9 item 2): placed under the measured top limit, items never shrinking', () => {
+  it('the stack never grows into the top bars (design): placed under the measured top limit, items never shrinking', () => {
     // Main's mechanism (#216): NoticeRegion measures the stack against
     // lib/bottomBar noticeTopLimit and lib/noticeStackPlace places it; the
     // old --notice-room cap is gone. What the CSS still holds: items never shrink.
@@ -327,7 +327,7 @@ describe('the proposal bar between what the person opened and the lasting chrome
   });
 });
 
-describe("a dialog's Tab order skips the proposal bar under its scrim (GM r7, PR #203)", () => {
+describe("a dialog's Tab order skips the proposal bar under its scrim (design, PR #203)", () => {
   it('reaches the notices above the scrim, never the bar under it', async () => {
     const { noticeTabbables } = await import('../src/lib/modalFocus');
     document.body.innerHTML = `

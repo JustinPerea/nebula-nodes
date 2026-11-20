@@ -1,10 +1,10 @@
 /**
- * PR #204 round 7:
- * - GM r9 (3): an old stored Update's Accept and Reject are no longer offered; one Review of the
+ * PR #204:
+ * - Design: an old stored Update's Accept and Reject are no longer offered; one Review of the
  *   same canvas proposal takes their place, so every row decides through the one full view.
- * - Review 5 LOW-5: the proposal stores send no decision while this tab isn't connected as the
+ * - the proposal stores send no decision while this tab isn't connected as the
  *   person, whatever button asked.
- * - Review 5 LOW-8: after Not now the header's unread count is the server's, never the tab's.
+ * - after Not now the header's unread count is the server's, never the tab's.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +33,7 @@ import { notePersonPromoted, reportPersonRequired, resetPersonSessionForTests } 
 const author = { kind: 'agent', id: 'claude', name: 'Claude', color: '#d97757' };
 const stored = (actions: unknown[]) => sanitizeNote({ id: 'u1', author, text: 'Made a change.', at: '2026-10-30T10:00:00Z', actions });
 
-describe('GM r9 (3): an old Update\'s Accept and Reject become one Review', () => {
+describe('an old Update\'s Accept and Reject become one Review', () => {
   it('Accept and Reject of one proposal: one Review of it, marked legacy', () => {
     const note = stored([
       { label: 'Accept', op: { kind: 'proposal.accept', proposalId: 'p1' } },
@@ -55,7 +55,7 @@ describe('GM r9 (3): an old Update\'s Accept and Reject become one Review', () =
   });
 });
 
-describe('review 5 LOW-5: no decision is sent while this tab isn\'t connected as the person', () => {
+describe('no decision is sent while this tab isn\'t connected as the person', () => {
   beforeEach(() => resetPersonSessionForTests());
   afterEach(() => { notePersonPromoted(); vi.clearAllMocks(); });
 
@@ -87,7 +87,7 @@ describe('review 5 LOW-5: no decision is sent while this tab isn\'t connected as
   });
 });
 
-describe('review 5 LOW-8: after Not now the header\'s count is the server\'s', () => {
+describe('after Not now the header\'s count is the server\'s', () => {
   const key = surfaceKey({ kind: 'canvas', projectId: 'alpha' });
   const unreadNote = (id: string): AgentNote => sanitizeNote({ id, author, text: 'Did a thing.', at: '2026-10-30T10:00:00Z' })!;
   beforeEach(() => {

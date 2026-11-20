@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Review 10, L-2: an undo pressed while a beginUndoStep step's request is on
+// An undo pressed while a beginUndoStep step's request is on
 // its way waits for that request (graphStore holdsHistory). So every caller
 // must end its step once the answer is on the canvas (endUndoStep), or cancel
 // it (cancelUndoStep), on every path, or Cmd+Z would wait until the hold
@@ -28,7 +28,7 @@ describe('every beginUndoStep is ended', () => {
       'components/panels/ChatPanel.tsx',
       'components/panels/Toolbar.tsx',
       'lib/canvasFileDrop.ts',
-      // Chat's /clear (review 12, L-4: moved out of ChatPanel so its failure line is tested).
+      // Chat's /clear (moved out of ChatPanel so its failure line is tested).
       'lib/chatCanvasClear.ts',
       'store/canvasProposalsStore.ts',
       'store/graphStore.ts',

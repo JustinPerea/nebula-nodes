@@ -1,11 +1,11 @@
 /**
- * GM r8 (3), PR #204 round 7: no refusal or error sentence in a toolbar row. A screen's lines go
+ * Design (PR #204): no refusal or error sentence in a toolbar row. A screen's lines go
  * to the app's notice region (notify, InNoticeRegion); a toolbar row holds controls and states.
  * The ratchet reads every component: inside a toolbar row (a WorkspaceHeader, or an element whose
  * class names a toolbar, a topbar or a header bar), no `role="alert"` and no child expression
  * that reads an error, a refusal or a failure.
  *
- * Round 9 (review 7 LOW-3) makes it structural, what a row may render: no line component at all
+ * It also makes structural what a row may render: no line component at all
  * (LineText, FailureLines, CommonsErrorLine: tests/lineRegistration.ratchet.test.ts sends every
  * line through one, so a line can't hide behind a neutral name), no sentence in literal text, no
  * `dangerouslySetInnerHTML`, no alert role through a spread; a local helper's call is read
@@ -31,7 +31,7 @@ const ROW_CLASS = /(?:^|[\s_-])(?:toolbar|topbar|header-bar)(?:$|[\s_-])|__topba
 const ROW_TAGS = new Set(['WorkspaceHeader']);
 const SAYS_FAILURE = /(?:error|refus|fail)/i;
 
-/** A const's string value in the same file (`const BAR = 'canvas-toolbar'`), for a class read from it (T10). */
+/** A const's string value in the same file (`const BAR = 'canvas-toolbar'`), for a class read from it. */
 function constText(name: ts.Identifier): string {
   const source = name.getSourceFile();
   let found = '';
@@ -47,8 +47,8 @@ function constText(name: ts.Identifier): string {
   return found;
 }
 
-/** Every word a class expression can hold: literals, a template's text (T14), a helper's
- * arguments (T15), a constant's value (T10), each part apart. */
+/** Every word a class expression can hold: literals, a template's text, a helper's
+ * arguments, a constant's value, each part apart. */
 function classWords(expression: ts.Node, follow = true): string {
   const words: string[] = [];
   const walk = (node: ts.Node) => {
@@ -76,7 +76,7 @@ function className(element: ts.JsxOpeningLikeElement): string {
 
 /** The components that render a line (tests/lineRegistration.ratchet.test.ts): none belongs in a row. */
 const LINE_TAGS = new Set(['LineText', 'FailureLines', 'CommonsErrorLine']);
-/** A sentence in literal text (T17): a capital, a space, and a full stop, ! or ?. A label ("Saved",
+/** A sentence in literal text: a capital, a space, and a full stop, ! or ?. A label ("Saved",
  * "Save failed") or a state or menu item that trails off ("Preparing generation…", "Clear canvas…") isn't one. */
 const SENTENCE = /^[A-Z“"].*\s.*[.!?]["”]?$/s;
 
@@ -89,7 +89,7 @@ function ownSurface(node: ts.Node): boolean {
     && /^(?:dialog|alertdialog|menu|listbox)$/.test(attr.initializer.text));
 }
 
-/** Round 8 (review 6 LOW-4, T3): helpers whose call is a refusal or failure sentence, whatever the name it lands in. */
+/** Helpers whose call is a refusal or failure sentence, whatever the name it lands in. */
 const SENTENCE_CALLS = new Set(['notConnectedBecause', 'personRequiredCopy', 'markReadRefusedCopy', 'failureMessage',
   'failureCopy', 'failureUnder', 'generateRefusedCopy']);
 const isFunctionLike = (node: ts.Node): node is ts.FunctionLikeDeclaration =>
@@ -178,7 +178,7 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
   }
 
   /**
-   * What a value rendered as text can say (round 8, T4): the names it reads, and where a neutral
+   * What a value rendered as text can say: the names it reads, and where a neutral
    * name gets its value (a local, a state's setter calls, the prop its component's uses pass).
    * Only the value's own path: a condition (`a ? b : c`'s `a`, `a && b`'s `a`, a comparison) and
    * a key (`labels[state]`) aren't what is shown, and a handler isn't a line. A store selector
@@ -221,7 +221,7 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
         const callee = ts.isIdentifier(part.expression) ? part.expression.text
           : ts.isPropertyAccessExpression(part.expression) ? part.expression.name.text : '';
         if (SENTENCE_CALLS.has(callee)) said.push(`${callee}()`);
-        // T18 (review 7 LOW-3): a local helper is read through what it returns.
+        // A local helper is read through what it returns.
         if (ts.isIdentifier(part.expression)) returnsOf(part.expression, said, seen, depth);
         if (ts.isPropertyAccessExpression(part.expression)) read(part.expression.expression);
         for (const argument of part.arguments) read(argument);
@@ -242,7 +242,7 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
     read(expression);
   }
 
-  /** What a local function returns, read as text (T18): `function lineFor(x) { return failureMessage(x, 'x'); }`. */
+  /** What a local function returns, read as text: `function lineFor(x) { return failureMessage(x, 'x'); }`. */
   function returnsOf(name: ts.Identifier, said: string[], seen: Set<ts.Node>, depth: number): void {
     const unit = name.getSourceFile();
     const fns: ts.FunctionLikeDeclaration[] = [];
@@ -325,11 +325,11 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
   }
 
   const visitedComponents = new Set<ts.FunctionLikeDeclaration>();
-  /** Everything a toolbar row holds, components it renders included (T1), attribute JSX included (T2). */
+  /** Everything a toolbar row holds, components it renders included, attribute JSX included. */
   function inRow(node: ts.Node): void {
     const visit = (part: ts.Node) => {
       if (ownSurface(part)) return;
-      // T7: a role or aria-live through a spread of an object literal.
+      // A role or aria-live through a spread of an object literal.
       if (ts.isJsxSpreadAttribute(part)) {
         const object = ts.isParenthesizedExpression(part.expression) ? part.expression.expression : part.expression;
         if (ts.isObjectLiteralExpression(object)) {
@@ -341,13 +341,13 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
           }
         }
       }
-      // T17: a sentence in literal text, as JSX text or a literal in an expression.
+      // A sentence in literal text, as JSX text or a literal in an expression.
       if (ts.isJsxText(part) && SENTENCE.test(part.text.trim())) bad.push(`${where(part)} "${part.text.trim()}"`);
       if (ts.isJsxExpression(part) && part.expression && !ts.isJsxAttribute(part.parent) && ts.isStringLiteralLike(part.expression)
         && SENTENCE.test(part.expression.text.trim())) bad.push(`${where(part)} "${part.expression.text.trim()}"`);
       if (ts.isJsxAttribute(part) && ts.isIdentifier(part.name)) {
         const attr = part.name.text;
-        // T13: markup set from a string can be any line.
+        // Markup set from a string can be any line.
         if (attr === 'dangerouslySetInnerHTML') bad.push(`${where(part)} dangerouslySetInnerHTML`);
         if (attr === 'role' && literalsOf(part.initializer).includes('alert')) bad.push(`${where(part)} role="alert"`);
         if (attr === 'aria-live' && literalsOf(part.initializer).includes('assertive')) bad.push(`${where(part)} aria-live="assertive"`);
@@ -380,7 +380,7 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
     visit(node);
   }
 
-  /** A component inside a row (T1): its own JSX is in the row. One that can't be found fails closed. */
+  /** A component inside a row: its own JSX is in the row. One that can't be found fails closed. */
   function child(tag: ts.Identifier): void {
     const declared = components.get(tag.text);
     if (declared && declared.length > 0) {
@@ -426,7 +426,7 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
           return;
         }
       }
-      // A row with no children can still carry JSX in its attributes (T2).
+      // A row with no children can still carry JSX in its attributes.
       if (ts.isJsxSelfClosingElement(node) && (ROW_TAGS.has(node.tagName.getText(source)) || ROW_CLASS.test(className(node)))) {
         inRow(node.attributes);
         return;
@@ -438,7 +438,7 @@ export function toolbarFailures(files: { path: string; text: string }[]): string
   return [...new Set(bad)];
 }
 
-describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
+describe('no refusal or error sentence in a toolbar row', () => {
   it('every toolbar row in the app holds none', { timeout: 120_000 }, () => {
     const files = tsxFiles().map((path) => ({ path, text: readFileSync(path, 'utf8') }));
     expect(toolbarFailures(files)).toEqual([]);
@@ -471,15 +471,15 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
     expect(toolbarFailures([{ path, text: passing }])).toEqual([]);
   });
 
-  // Round 8, review 6 LOW-4: the reviewer's six forms, each now caught, each for its own reason.
+  // Six forms found in review, each now caught, each for its own reason.
   const probe = (text: string) => toolbarFailures([{ path: join(SRC, 'components/create-studio/Probe.tsx'), text }]);
-  it('T1: a component in the row is read as the row (a failure in RunLine)', () => {
+  it('a component in the row is read as the row (a failure in RunLine)', () => {
     expect(probe(`function RunLine() { const e = useGraphStore((s) => s.lastRunFailure); return <span>{e}</span>; }
       export function F() { return <WorkspaceHeader title="x"><RunLine /></WorkspaceHeader>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 lastRunFailure']);
   });
 
-  it('T1: a local component that can\'t be found fails closed; a package\'s doesn\'t', () => {
+  it('a local component that can\'t be found fails closed; a package\'s doesn\'t', () => {
     expect(probe(`import { Line } from './line';
       export function F() { return <WorkspaceHeader title="x"><Line /></WorkspaceHeader>; }`))
       .toEqual(['components/create-studio/Probe.tsx:2 <Line> (a component that can\'t be followed)']);
@@ -487,18 +487,18 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
       export function F() { return <WorkspaceHeader title="x"><Save size={14} /></WorkspaceHeader>; }`)).toEqual([]);
   });
 
-  it('T2: JSX passed as an attribute is in the row', () => {
+  it('JSX passed as an attribute is in the row', () => {
     expect(probe(`export function F({ runError }: { runError: string }) { return <WorkspaceHeader title="x" navigation={<span role="alert">{runError}</span>} />; }
       export const G = () => <F runError="x" />;`))
       .toEqual(['components/create-studio/Probe.tsx:1 role="alert"', 'components/create-studio/Probe.tsx:1 runError']);
   });
 
-  it('T3: a refusal sentence\'s helper is a sentence, whatever it is called', () => {
+  it('a refusal sentence\'s helper is a sentence, whatever it is called', () => {
     expect(probe(`export function F() { return <WorkspaceHeader title="x"><span>{notConnectedBecause('generate')}</span></WorkspaceHeader>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 notConnectedBecause()']);
   });
 
-  it('T4: a neutral name is followed to its value: a prop\'s uses, a state\'s setter, a local', () => {
+  it('a neutral name is followed to its value: a prop\'s uses, a state\'s setter, a local', () => {
     expect(probe(`export function F({ line }: { line: string }) { return <WorkspaceHeader title="x"><span>{line}</span></WorkspaceHeader>; }
       export const G = ({ saveError }: { saveError: string }) => <F line={saveError} />;`))
       .toEqual(['components/create-studio/Probe.tsx:1 saveError']);
@@ -509,7 +509,7 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
       return <WorkspaceHeader title="x"><span>{line}</span></WorkspaceHeader>; }
       export const G = () => <F run={{ failure: '' }} />;`))
       .toEqual(['components/create-studio/Probe.tsx:2 failure']);
-    // A prop no use can be followed for fails closed (the reviewer's T4 as written).
+    // A prop no use can be followed for fails closed.
     expect(probe(`export function F({ line }: { line: string }) { return <WorkspaceHeader title="x"><span>{line}</span></WorkspaceHeader>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 line (a prop no use can be followed for)']);
     // What `a && b` shows is `b`, read; its condition `a` isn't.
@@ -524,13 +524,13 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
       export const G = () => <F state="ok" />;`)).toEqual([]);
   });
 
-  it('T5: aria-live="assertive" in the row', () => {
+  it('aria-live="assertive" in the row', () => {
     expect(probe(`export function F() { return <div className="canvas-toolbar"><span aria-live="assertive">x</span></div>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 aria-live="assertive"']);
   });
 
-  // Round 9, review 7 LOW-3: the reviewer's six more forms, each caught.
-  it('T18: a local helper that wraps a sentence helper is read through its return', () => {
+  // Six more forms found in review, each caught.
+  it('a local helper that wraps a sentence helper is read through its return', () => {
     expect(probe(`function lineFor(x: unknown) { return failureMessage(x, 'x'); }
       export function F({ x }: { x: unknown }) { return <WorkspaceHeader title="x"><span>{lineFor(x)}</span></WorkspaceHeader>; }
       export const G = () => <F x={1} />;`)).toEqual(['components/create-studio/Probe.tsx:2 failureMessage()']);
@@ -539,12 +539,12 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
       .toEqual(['components/create-studio/Probe.tsx:2 notConnectedBecause()']);
   });
 
-  it('T7: a role through a spread', () => {
+  it('a role through a spread', () => {
     expect(probe(`export function F() { return <div className="canvas-toolbar"><span {...{ role: 'alert' }}>x</span></div>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 role="alert"']);
   });
 
-  it('T10, T15, T14: a row class from a constant, a helper or a template', () => {
+  it('a row class from a constant, a helper or a template', () => {
     expect(probe(`const BAR = 'canvas-toolbar'; export function F() { return <div className={BAR}><span role="alert">x</span></div>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 role="alert"']);
     expect(probe(`export function F() { return <div className={cn('canvas-toolbar', 'wide')}><span role="alert">x</span></div>; }`))
@@ -553,12 +553,12 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
       export const G = () => <F wide />;`)).toEqual(['components/create-studio/Probe.tsx:1 role="alert"']);
   });
 
-  it('T13: dangerouslySetInnerHTML in a row', () => {
+  it('dangerouslySetInnerHTML in a row', () => {
     expect(probe(`export function F() { return <div className="canvas-toolbar"><span dangerouslySetInnerHTML={{ __html: x }} /></div>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 dangerouslySetInnerHTML']);
   });
 
-  it('T17: a literal sentence; a label passes', () => {
+  it('a literal sentence; a label passes', () => {
     expect(probe(`export function F() { return <div className="canvas-toolbar">{'Nebula couldn’t start the generation. Try again.'}</div>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 "Nebula couldn’t start the generation. Try again."']);
     expect(probe(`export function F() { return <div className="canvas-toolbar"><span>Couldn’t save the board.</span></div>; }`))
@@ -573,7 +573,7 @@ describe('GM r8 (3): no refusal or error sentence in a toolbar row', () => {
       export const G = () => <F x="Saved" />;`)).toEqual(['components/create-studio/Probe.tsx:1 <FailureLines> (a line)']);
   });
 
-  it('T6: a role read from an expression', () => {
+  it('a role read from an expression', () => {
     expect(probe(`export function F() { return <div className="canvas-toolbar"><span role={'alert'}>x</span></div>; }`))
       .toEqual(['components/create-studio/Probe.tsx:1 role="alert"']);
     expect(probe(`export function F({ a }: { a: boolean }) { return <div className="canvas-toolbar"><span role={a ? 'alert' : 'status'}>x</span></div>; }

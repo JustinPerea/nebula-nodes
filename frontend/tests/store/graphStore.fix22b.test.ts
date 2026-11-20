@@ -2,17 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteLanded } from '../helpers/deleteLanded';
 
 /**
- * PR #198 fix round 22, on graphStore.fix21stops' keyed backend:
- * - Review 20 LOW-1: every one try let go past the 15 s bound is tracked;
- *   each late answer goes through GM r31's rule (a late success with that
+ * PR #198 fix, on graphStore.fix21stops' keyed backend:
+ * - every one try let go past the 15 s bound is tracked;
+ *   each late answer goes through design's rule (a late success with that
  *   try's values unchanged clears the stop; a late failure changes nothing),
  *   for two tries in a row, in either order.
- * - GM r33 answer 1 (review 20 LOW-2): a clash answer's held prompt goes
+ * - Design: a clash answer's held prompt goes
  *   after 15 s; the answer stands and the save carries on as an ordinary
  *   save (its own stop line if it fails).
- * - GM r33 answer 3: a run-locked one try that still fails after the run
+ * - Design: a run-locked one try that still fails after the run
  *   is one try, then back to stopped with its line and [Try again].
- * - Review 20 NIT-1: nothing is sent before the answer to a clash Undo asks
+ * - nothing is sent before the answer to a clash Undo asks
  *   again; a run lock on a stopped scene's own quiet try; the 15 s bound on
  *   a clash answer's one try.
  */
@@ -221,7 +221,7 @@ const lineFor = (cause: Cause, name: string) => (cause === 'server' ? SERVER(`�
 
 const tries = () => useGraphStore.getState().sceneTries;
 const clashOf = (id: string) => (useGraphStore.getState().sceneClashes as Record<string, { sending?: string }>)[id] ?? null;
-// GM r32 answer 1: the run's line is not a failure.
+// Design: the run's line is not a failure.
 const RUN_LINE = 'Your changes to “Opening” are kept. Nebula will save them when the run finishes.';
 /** The next PUT to `id` only waits for `release()`; the others go. */
 function holdNextPut(id: string) {
@@ -243,7 +243,7 @@ const putCalls = (id: string) => fetchMock.mock.calls.filter(([url, init]) => (i
   && String(url).includes(`/api/graph/node/${id}`)).length;
 async function deleteAndWait(id: string) {
   useGraphStore.getState().deleteNode(id);
-  // The store's hold, not only the notice text (PR #221 review 2 LOW-3).
+  // The store's hold, not only the notice text (PR #221).
   await deleteLanded(useGraphStore);
   await vi.waitFor(() => expect(toast()?.text).toBe('Deleted the node.'), { timeout: 3000, interval: 5 });
   await sleep(20);
@@ -281,7 +281,7 @@ async function tryPastBound(id: string) {
 }
 const RUN_LOCK = { status: 409, body: { detail: 'A paid run is starting.', code: 'paid_start' } };
 
-describe('review 20 LOW-1: two tries in a row past the 15 s bound; every late answer goes through GM’s rule', () => {
+describe('two tries in a row past the 15 s bound; every late answer goes through design’s rule', () => {
   it.each<[string, [number, Outcome], [number, Outcome]]>([
     ['the first try’s answer, then the second’s; both fail', [0, 'fail'], [1, 'fail']],
     ['the second try’s answer, then the first’s; both fail', [1, 'fail'], [0, 'fail']],
@@ -353,7 +353,7 @@ async function clashNotStopped(h: ReturnType<typeof backend>) {
   expect(stopped().n1).toBeUndefined();
 }
 
-describe('GM r33 answer 1 (review 20 LOW-2): a clash answer’s held prompt waits 15 s at most', () => {
+describe('a clash answer’s held prompt waits 15 s at most', () => {
   it('past the bound the prompt goes; the answer stands and its save carries on; a late success saves it, nothing more shows', async () => {
     store.setSceneTryTimeoutForTests(120);
     const h = backend({ n1: 'Opening' });
@@ -396,7 +396,7 @@ describe('GM r33 answer 1 (review 20 LOW-2): a clash answer’s held prompt wait
       expect(store.sceneStopLines(useGraphStore.getState())[0]?.retry).toBe(true);
     });
 
-  it('NIT-1: a clash answer’s one try out of a stop keeps its own bound: the prompt gives way to the stop line in one update', async () => {
+  it('a clash answer’s one try out of a stop keeps its own bound: the prompt gives way to the stop line in one update', async () => {
     store.setSceneTryTimeoutForTests(120);
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 'server');
@@ -419,7 +419,7 @@ describe('GM r33 answer 1 (review 20 LOW-2): a clash answer’s held prompt wait
   });
 });
 
-describe('GM r33 answer 3: a run-locked one try that still fails after the run', () => {
+describe('a run-locked one try that still fails after the run', () => {
   it.each<[string, Cause]>([['[Try again] (stopped by server), a server error after the run', 'server'],
     ['[Try again] (stopped by 400), a 400 after the run', 400]])('%s: one try, then back to stopped with its line and [Try again]', async (_name, cause) => {
     const h = backend({ n1: 'Opening' });
@@ -462,8 +462,8 @@ describe('GM r33 answer 3: a run-locked one try that still fails after the run',
   });
 });
 
-describe('review 20 NIT-1: untested branches', () => {
-  it('GM r31 answer 1: when Undo asks a stopped scene’s clash again, nothing is sent before the answer; the answer sends one', async () => {
+describe('untested branches', () => {
+  it('when Undo asks a stopped scene’s clash again, nothing is sent before the answer; the answer sends one', async () => {
     const h = backend({ n1: 'Opening' });
     await stopBy(h, 'n1', 'server');
     h.codex('n1', [{ id: 's1', prompt: 'codex s1' }, { id: 's2', prompt: 'b' }]);

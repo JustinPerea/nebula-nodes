@@ -1,13 +1,13 @@
 /**
- * Round 22 of PR #195 (review 21, L-a and L-b), against the fake Nebula of
- * round 17. Nebula restarted without canvas-revisions.json, so its canvas
+ * PR #195, against the fake Nebula (helpers/undoFakeBackend).
+ * Nebula restarted without canvas-revisions.json, so its canvas
  * revisions start again from a boot-unique base and every sync says
  * `canvasRevisionRestored: false` for that run.
- * - L-a: typing sent before the socket's first sync is refused as out of
+ * - Typing sent before the socket's first sync is refused as out of
  *   date (the old canvas header). It is kept and sent again under the
  *   adopted revision once that sync shows the same canvas; when the sync is
  *   another canvas, the line names it. Never lost with no line.
- * - L-b: the same-canvas adoption happens only across an actual restart
+ * - The same-canvas adoption happens only across an actual restart
  *   (the sync's `bootId` differs from the one the canvas last synced with),
  *   once per boot. A missed agent clear in the same boot that re-adds the
  *   same ids reads as a replacement: old typing never lands on its n1.
@@ -74,7 +74,7 @@ const refuseCanvas = (canvas: string) => {
 const BASE = '1793000000000';
 let clock = Date.now();
 
-describe('review 21: a restart that lost the canvas revisions', () => {
+describe('a restart that lost the canvas revisions', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
     clock += 600_000;
@@ -111,7 +111,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     sync(canvas, { bootId: boot });
   };
 
-  it('L5W: typing refused before the first sync goes out again under the adopted revision and lands', async () => {
+  it('typing refused before the first sync goes out again under the adopted revision and lands', async () => {
     start([textFakeNode('n1'), textFakeNode('n2')], '1', 'boot-A');
     await settle();
     // Nebula restarts (boot-B) with no revisions file: a write naming "1" is out of date.
@@ -131,7 +131,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     expect(lines()).toEqual([]);
   });
 
-  it('L5W, the answer after the sync: the refused typing is sent again at once', async () => {
+  it('the answer after the sync: the refused typing is sent again at once', async () => {
     start([textFakeNode('n1'), textFakeNode('n2')], '1', 'boot-A');
     await settle();
     refuseCanvas('1');
@@ -149,7 +149,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     expect(lines()).toEqual([]);
   });
 
-  it('L5W, another canvas after the restart: the refused typing is named, never lost silently', async () => {
+  it('another canvas after the restart: the refused typing is named, never lost silently', async () => {
     start([textFakeNode('n1'), textFakeNode('n2')], '1', 'boot-A');
     await settle();
     refuseCanvas('1');
@@ -179,7 +179,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     expect(lines()).toEqual(["Nebula couldn’t save “Text” for “n2”."]);
   });
 
-  it('L4P: in the same boot, a missed agent clear that re-added the same ids reads as a replacement', async () => {
+  it('in the same boot, a missed agent clear that re-added the same ids reads as a replacement', async () => {
     start([textFakeNode('n1')], '1', 'boot-A');
     await settle();
     // The restart: adopted once, as the same canvas.
@@ -199,7 +199,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     expect(valueOf('n1')).toBe('AG');
   });
 
-  it('L4P: a broadcast sync with no bootId in the same boot is the same process too', async () => {
+  it('a broadcast sync with no bootId in the same boot is the same process too', async () => {
     start([textFakeNode('n1')], '1', 'boot-A');
     await settle();
     sync(BASE, { bootId: 'boot-B', canvasRevisionRestored: false });
@@ -215,7 +215,7 @@ describe('review 21: a restart that lost the canvas revisions', () => {
     expect(nebula().valueOf('n1')).toBe('AG');
   });
 
-  it('RSTB: a write still waiting in the tab goes out under the adopted revision', async () => {
+  it('a write still waiting in the tab goes out under the adopted revision', async () => {
     start([textFakeNode('n1'), textFakeNode('n2')], '2', 'boot-A');
     await settle();
     type('n2', 'Typed');

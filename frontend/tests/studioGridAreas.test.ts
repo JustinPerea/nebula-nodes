@@ -83,7 +83,7 @@ const STUDIOS: Studio[] = [
       { tag: 'aside', cls: 'commons-filters' }, { tag: 'main', cls: 'commons-main' }],
   },
   {
-    // PR #204 round 18d (GM r31 layout M): the Commons turned off, mid-visit (CommonsView) or on a
+    // PR #204 (design layout): the Commons turned off, mid-visit (CommonsView) or on a
     // tab opened on it (CommonsOffView): the header, the offline row and the one line.
     name: 'Commons turned off', root: 'commons-view commons-scope',
     owners: ['styles/commons.css'], component: ['components/commons/CommonsOffView.tsx', 'components/commons/CommonsView.tsx'],
@@ -130,7 +130,7 @@ const STUDIOS: Studio[] = [
 ];
 
 /**
- * The widths to check (review 1 LOW-4): 700, 1000, 1440 and 1600, and both
+ * The widths to check: 700, 1000, 1440 and 1600, and both
  * sides of every min-width and max-width breakpoint the app's sheets use
  * (N and N+1 for a max-width N, N-1 and N for a min-width N), so a rule
  * that only holds between two sampled widths is still seen. Widths at which
@@ -179,7 +179,7 @@ function splitSlash(value: string): string[] {
 }
 
 /**
- * What a `grid-template` or `grid` value sets (review 1 MEDIUM-1): `none`;
+ * What a `grid-template` or `grid` value sets: `none`;
  * `<rows> / <columns>`; or `"a b" <row size>? "c d" <row size>? / <columns>`.
  * A `grid` with `auto-flow` sets no template areas, and no explicit tracks on
  * its auto-flow side.
@@ -209,7 +209,7 @@ const LONGHANDS = { areas: 'grid-template-areas', rows: 'grid-template-rows', co
  * and `grid` shorthands that also set it, in cascade order. Two top
  * declarations from different sheets that tie (same importance and
  * specificity) are a problem: cssCascade orders sheets alphabetically, not
- * as the bundle does, so it must never decide a studio template (LOW-3).
+ * as the bundle does, so it must never decide a studio template.
  */
 function resolveTemplate(root: Element, viewport: Viewport): { template: Template; from: Record<string, string>; ties: string[] } {
   const template: Template = {};
@@ -350,7 +350,7 @@ describe('every studio names its offline row and every child in its own template
           expect(text, studio.name).toMatch(/<WorkspaceHeader|<SafeHeader/);
           expect(source('components/StudioOfflineRow.tsx')).toMatch(/className="studio-offline-row"/);
         } else {
-          // Round 17 (review 13 NIT-2): the class as a whole token, so `commons-messages` isn't
+          // The class as a whole token, so `commons-messages` isn't
           // found inside `commons-messages__lock-line` once the row's own class is gone.
           const token = new RegExp(`(?<![\\w-])${own.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`);
           expect(text, `${studio.name}: ${own}`).toMatch(token);
@@ -360,7 +360,7 @@ describe('every studio names its offline row and every child in its own template
   });
 });
 
-describe('the Board view in a narrow window (GM, #209 NIT-1 (b), round 2)', () => {
+describe('the Board view in a narrow window (design, #209)', () => {
   const board = STUDIOS.find((studio) => studio.root.includes('--board'))!;
   const at = (width: number, slava: boolean) => {
     document.body.className = slava ? 'app-slava-restraint' : '';
@@ -440,7 +440,7 @@ describe('the Board view in a narrow window (GM, #209 NIT-1 (b), round 2)', () =
       expect(at(761, slava).areas).toEqual(GRID);
     });
 
-    // #213 review 1 LOW-1 and GM round 3: the row sizes and the panel's box.
+    // Design (#213): the row sizes and the panel's box.
     it(`${skin}: the board's row keeps at least --mb-board-min-h (300 px); the panel's row takes what is left, down to 0`, () => {
       const { root } = at(1440, slava);
       const own = cascaded(root, undefined, { viewport: { width: 1440, height: 900 } });
@@ -470,7 +470,7 @@ describe('the Board view in a narrow window (GM, #209 NIT-1 (b), round 2)', () =
       }
     });
 
-    it(`${skin}: the panel, a tab stop while it scrolls, shows the token focus ring inside its edge (#213 review 1 NIT-5)`, () => {
+    it(`${skin}: the panel, a tab stop while it scrolls, shows the token focus ring inside its edge (#213)`, () => {
       const { root } = at(969, slava);
       const panel = root.querySelector('.moodboard-board-panel')!;
       const ring = appRules().filter((rule) => rule.state.includes('focus-visible') && rule.decls.some((decl) => decl.prop === 'outline')
@@ -481,7 +481,7 @@ describe('the Board view in a narrow window (GM, #209 NIT-1 (b), round 2)', () =
       expect(decls['outline-offset']).toBe('calc(-1 * var(--sr-focus-offset, 2px))');
     });
 
-    it(`${skin}: the folded rail's edges come from the Board's own rule (#213 review 1 NIT-3)`, () => {
+    it(`${skin}: the folded rail's edges come from the Board's own rule (#213)`, () => {
       for (const width of [760, 700]) {
         const { root } = at(width, slava);
         const rail = root.querySelector('.moodboard-studio-view__rail')!;
@@ -555,7 +555,7 @@ describe('helpers/cssCascade reads @container', () => {
   });
 });
 
-describe('the Studio header title (GM, #210 r1)', () => {
+describe('the Studio header title (design, #210)', () => {
   it('cuts with an ellipsis on one line, and never breaks inside a word', () => {
     document.body.className = 'app-slava-restraint';
     document.body.innerHTML = '<header class="workspace-header workspace-header--updates-slot"><div class="workspace-header__identity">'
@@ -587,7 +587,7 @@ function subject(selector: string): string {
 const classesOf = (target: string) => [...target.replace(/:not\([^)]*\)/g, '').matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
 /** A studio root's family: the class without its `--variant`. */
 const family = (cls: string) => cls.replace(/--[\w-]+$/, '');
-/** A class that names a view, a variant of one, or a scope (review 1 MEDIUM-2 (b)). */
+/** A class that names a view, a variant of one, or a scope. */
 const VIEWISH = /-view(?:--[\w-]+)?$|-scope$/;
 /** Every family a studio root's classes belong to, with the sheets that own its template. */
 const OWNERS = new Map<string, Set<string>>();
@@ -650,7 +650,7 @@ describe('only a studio\'s own stylesheet writes its grid template', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('the Board root is framed and painted by moodboard-board.css alone, under both skins (review 1 LOW-2)', () => {
+  it('the Board root is framed and painted by moodboard-board.css alone, under both skins', () => {
     const board = STUDIOS.find((studio) => studio.root.includes('--board'))!;
     const wrong: string[] = [];
     for (const slava of SKINS) {
@@ -693,7 +693,7 @@ function openingTag(text: string, start: number): string {
   return text.slice(start);
 }
 
-describe('every screen with a studio header is checked (review 1 MEDIUM-2 (a))', () => {
+describe('every screen with a studio header is checked', () => {
   /** Every component under src/components, read from disk. */
   const components = (dir = join(SRC, 'components')): string[] => readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -734,7 +734,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(selectorSpecificity('body.s .v:not(.v--board) > .c')).toEqual([0, 4, 1]);
     expect(selectorSpecificity('html body .v.v--board')).toEqual([0, 2, 2]);
     expect(selectorSpecificity('#id :is(.a, #b) p::before')).toEqual([2, 0, 2]);
-    // Round 17 (review 13 NIT-2), each worked by hand from Selectors Level 4, section 16:
+    // Each worked by hand from Selectors Level 4, section 16:
     // a one-colon pseudo-element is a pseudo-element: a (type) + :before (pseudo-element) = (0,0,2).
     expect(selectorSpecificity('a:before')).toEqual([0, 0, 2]);
     expect(selectorSpecificity('p:first-line')).toEqual([0, 0, 2]);
@@ -745,7 +745,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(selectorSpecificity('li:nth-last-child(odd of .a.b)')).toEqual([0, 3, 1]);
     // Without `of`, only the pseudo-class: (0,1,1).
     expect(selectorSpecificity('li:nth-child(2n+1)')).toEqual([0, 1, 1]);
-    // The forms review 13 found right stay right.
+    // The forms found right stay right.
     expect(selectorSpecificity(':is(:where(#z),.q) span')).toEqual([0, 1, 1]);
   });
 
@@ -801,7 +801,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
       '.a.b { --t: 16; }', '.b, .a { --t: 17; }', '* { --t: 18; }', '.\\31 23 { --t: 19; }', '.x :focus-visible { --t: 20; }',
       '.a[data-x] { --t: 21; }', '.x ~ .y { --t: 22; }', '.x + .y { --t: 23; }', ':where(.a) .y { --t: 24; }', '.y:is(.a) { --t: 25; }',
     ].join('\n'));
-    // 25 rules, 26 selectors (`.b, .a` is two): a selector the parser dropped would shrink the table quietly (review 4 NIT-A).
+    // 25 rules, 26 selectors (`.b, .a` is two): a selector the parser dropped would shrink the table quietly.
     expect(rules.length).toBe(26);
     expect(rules.map((rule) => rule.selector)).toEqual(expect.arrayContaining(['.md\\:grid', '.a\\.b', '.\\31 23', '.b', '.a']));
     const index = indexRules(rules);
@@ -822,7 +822,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     }
     // A tie between two selectors of one rule (.b, .a) comes in selector-list order whatever the
     // element's class order, as a full scan meets them. class="a b" is the case that tells the two
-    // apart: its class buckets come .a first (review 4 LOW-A; sorting by rule.order would keep that).
+    // apart: its class buckets come .a first (sorting by rule.order would keep that).
     const tieOrder = rules.find((r) => r.selector === '.b')!.order;
     for (const id of ['id', 'tie']) {
       expect(candidatesIn(index, document.getElementById(id)!).filter((rule) => rule.order === tieOrder)
@@ -833,7 +833,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(differ).toEqual([]);
   });
 
-  it('declarationsOf lists a property\'s declarations in cascade order, the winner last (review 3 LOW-1)', () => {
+  it('declarationsOf lists a property\'s declarations in cascade order, the winner last', () => {
     // Source order and cascade order differ: specificity and !important reorder them.
     const rules = parseRules('.x.y { width: 1px; } .x { width: 2px; } .y { width: 3px !important; } .x { width: 4px; } .z { width: 5px; }');
     document.body.innerHTML = '<div id="t" class="y x"></div>';
@@ -852,7 +852,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(mediaMatches('(forced-colors: active)', at(1000))).toBe(false);
   });
 
-  it('!important beats a more specific normal declaration; a later rule of the same specificity wins (review 1 LOW-3)', () => {
+  it('!important beats a more specific normal declaration; a later rule of the same specificity wins', () => {
     document.body.innerHTML = '<div id="x" class="a b"></div>';
     const el = document.getElementById('x')!;
     const css = '.a.b#x { color: red; } .a { color: blue !important; } .b { width: 1px; } .a { width: 2px; }';
@@ -861,7 +861,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(own.get('|width')?.value).toBe('2px');
   });
 
-  it('reads the grid-template and grid shorthands (review 1 MEDIUM-1)', () => {
+  it('reads the grid-template and grid shorthands', () => {
     expect(parseGridTemplate('"toolbar toolbar" auto "rail main" minmax(0, 1fr) / 240px 1fr', 'grid-template'))
       .toEqual({ areas: '"toolbar toolbar" "rail main"', rows: 'auto minmax(0, 1fr)', columns: '240px 1fr' });
     expect(parseGridTemplate('[top] "a" 44px [mid] "b" / 1fr', 'grid-template')).toEqual({ areas: '"a" "b"', rows: '44px auto', columns: '1fr' });
@@ -878,7 +878,7 @@ describe('helpers/cssCascade reads :is(), :not(), :where() and @media the way th
     expect(template.areas).toContain('offline');
   });
 
-  it('checks both sides of the app\'s breakpoints (review 1 LOW-4)', () => {
+  it('checks both sides of the app\'s breakpoints', () => {
     const widths = VIEWPORTS.map((viewport) => viewport.width);
     const queries = [...new Set(appRules().flatMap((rule) => rule.media))];
     // Every distinct set of width queries the app can be in is checked once.

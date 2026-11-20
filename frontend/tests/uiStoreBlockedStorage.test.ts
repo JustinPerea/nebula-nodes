@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Review r5 LOW-3 of PR #203: a tab with site data blocked throws on every
+ * PR #203: a tab with site data blocked throws on every
  * storage call. uiStore loads with the app (and with canvasProposalsStore,
  * which reads the keys for the key lock), so it must load there with safe
  * defaults, and a change of a remembered choice must hold for the session

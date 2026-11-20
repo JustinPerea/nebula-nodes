@@ -1,10 +1,11 @@
 /**
- * The reviewers' synthetic worlds for the frontend trace (tests/personGatedCallers.ts), shared by
+ * Synthetic worlds for the frontend trace (tests/personGatedCallers.ts), shared by
  * presenceRound7.trace and presenceRound8.trace. Each sends POST /api/presets and shows its
  * refusal's line without registering it (or registers it, where a probe says so).
- * - PROBES: review 5 (round 7), gates-security LOW-1 and held-state-ui LOW-7.
- * - GATES_PROBES: review 6 gates-security LOW-4 (Q1-Q15).
- * - RESPONSE_PROBES: review 6 held-state-ui LOW-5 (R1-R12, a component's own Response).
+ * - PROBES: hook re-exports and aliases, two store layers, destructured actions,
+ *   wrapping components and hooks, path constants and window events.
+ * - GATES_PROBES: the string, template, comment and branch-marker forms.
+ * - RESPONSE_PROBES: a component's own Response.
  */
 export const PRESETS = { method: 'POST', path: '/api/presets' };
 const SEND = `apiRequest('No.', '/api/presets', { method: 'POST' })`;
@@ -100,7 +101,7 @@ export function Panel({ setLine, show }) {
     'store/a.ts': STORE_A,
     'components/C.tsx': panel(`import { useA } from '../store/a';`, `try { await useA.getState().save(); } catch (error) { window.dispatchEvent(new CustomEvent('line', { detail: failureMessage(error, 'No.') })); }`),
   },
-  // Round 7: a marker that ends the line before a branch is that line's, not the branch's.
+  // A marker that ends the line before a branch is that line's, not the branch's.
   P12_marker_on_the_line_before_the_branch: {
     'components/C.tsx': `import { failureMessage } from '../lib/errorCopy';
 export function Panel({ setLine, show }) {
@@ -252,7 +253,7 @@ const RESPONSE_BODIES: Record<string, string> = {
       setLine(await res.text()); }`,
 };
 
-/** Round 8: a marker's words as JSX text are text, not a comment. */
+/** A marker's words as JSX text are text, not a comment. */
 export const ROUND8_PROBES: Record<string, Record<string, string>> = {
   J1_marker_in_jsx_text: {
     'components/C.tsx': `export function Panel({ setLine }) {
@@ -267,8 +268,9 @@ export const ROUND8_PROBES: Record<string, Record<string, string>> = {
 export const RESPONSE_PROBES: Record<string, Record<string, string>> = Object.fromEntries(
   Object.entries(RESPONSE_BODIES).map(([name, body]) => [name, { 'components/C.tsx': comp(body) }]));
 
-// Review 7 (round 9). `go` sends POST /api/presets with apiFetch, and its `!res.ok` branch shows
-// the line without registering it, inside a try whose catch registers (Q6's shape).
+// `go` sends POST /api/presets with apiFetch, and its `!res.ok` branch shows
+// the line without registering it, inside a try whose catch registers (the shape of the
+// registering-catch probe in GATES_PROBES).
 const viaApiFetch = (path: string, before = `const presetsPath = () => '/api/presets';`, branch = 'setLine(await res.text())') => `${before}
 export function Panel({ setLine, show, keep }: any) {
   const go = async () => {
@@ -283,9 +285,9 @@ export function Panel({ setLine, show, keep }: any) {
 const viaLocal = (held: string, before = `const presetsPath = () => '/api/presets';`) => viaApiFetch('url', before)
   .replace('    try {\n', `    try {\n      ${held}\n`);
 
-/** Review 7 LOW-2 and LOW-3. */
+/** Probes of a helper's path through a wrapper, and of a literal path. */
 export const ROUND9_PROBES: Record<string, Record<string, string>> = {
-  // LOW-2: a helper's path through a wrapper is still the transport's.
+  // A helper's path through a wrapper is still the transport's.
   H1_method_helper: { 'components/C.tsx': viaApiFetch('paths.presets()', `const paths = { presets: () => '/api/presets' };`) },
   H2_awaited_helper: { 'components/C.tsx': viaApiFetch('await presetsPath()') },
   H3_helper_as_string: { 'components/C.tsx': viaApiFetch('presetsPath() as string') },
@@ -295,12 +297,12 @@ export const ROUND9_PROBES: Record<string, Record<string, string>> = {
   H12_helper_in_backendUrl: { 'components/C.tsx': viaApiFetch('backendUrl(presetsPath())') },
   H13_helper_satisfies: { 'components/C.tsx': viaApiFetch('presetsPath() satisfies string') },
   H14_helper_type_assertion: { 'components/C.ts': viaApiFetch('<string>presetsPath()') },
-  // LOW-2: the same for a literal path.
+  // The same for a literal path.
   L1_literal_as: { 'components/C.tsx': viaApiFetch(`'/api/presets' as string`, '') },
   L2_literal_in_String: { 'components/C.tsx': viaApiFetch(`String('/api/presets')`, '') },
   L3_literal_in_joinBackendPath: { 'components/C.tsx': viaApiFetch(`joinBackendPath(b, '/api/presets')`, '') },
   L4_literal_non_null: { 'components/C.tsx': viaApiFetch(`('/api/presets')!`, '') },
-  // A const set from the helper is followed as its own function (as in round 8).
+  // A const set from the helper is followed as its own function (as in the probes above).
   H7_helper_in_a_const: { 'components/C.tsx': viaLocal('const url = presetsPath();') },
   // A thrown refusal still goes to the catch: apiRequest isn't a transport.
   K2_wrapped_helper_sent_by_apiRequest: { 'components/C.tsx': viaApiFetch('presetsPath()!').replace(
@@ -327,7 +329,7 @@ export const ROUND9_PROBES: Record<string, Record<string, string>> = {
   U6_helper_in_an_array: { 'components/C.tsx': viaApiFetch('[presetsPath()][0]') },
   U8_helper_that_wraps_its_path: { 'components/C.tsx': viaLocal('const url = presetsPath() as string;', `const presetsPath = () => String('/api/presets');`) },
   U7_method_helper_in_a_local: { 'components/C.tsx': viaLocal('const url = paths.presets()!;', `const paths = { presets: () => '/api/presets' };`) },
-  // LOW-3: the destructure follow in callersOf (D1), a marker above the branch's statement (O3),
+  // The destructure follow in callersOf (D1), a marker above the branch's statement (O3),
   // a marker's words in the middle of a comment (O2), and a marker on its own line in the catch (O4).
   D1_destructured_outside_the_caller: {
     'store/a.ts': STORE_A,
@@ -363,7 +365,7 @@ export function Panel({ setLine }: any) {
   },
 };
 
-/** Review 7 NIT-2: a socket's person-only refusal, read from the syntax tree. */
+/** A socket's person-only refusal, read from the syntax tree. */
 const chat = (open: string, handler: string) => `import { PERSON_REQUIRED_CODE } from '../lib/errorCopy';
 export function Chat({ setLines }: any) {
   const connect = () => {

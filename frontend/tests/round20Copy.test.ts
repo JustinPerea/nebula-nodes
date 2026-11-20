@@ -1,5 +1,5 @@
 /**
- * Round 20 of PR #195: GM - Design's lines, byte-exact (gm-item3-r20.md and
+ * PR #195: the design lines, byte-exact (the original and
  * its follow-up of 2026-10-27).
  */
 import { describe, expect, it } from 'vitest';
@@ -7,7 +7,7 @@ import { agentClearedLine, handoffFailedLine } from '../src/lib/savingCutOff';
 import { openingLine, runWhileFollowingLine, waitToOpenTooltip } from '../src/lib/canvasFollow';
 import { deleteNoAnswerLine } from '../src/lib/deleteCopy';
 
-describe("GM 3 and follow-up 4: an agent's clear dropped the person's editing", () => {
+describe("an agent's clear dropped the person's editing", () => {
   const text = (node: string) => ({ node, setting: 'Text' });
   it('one setting', () => {
     expect(agentClearedLine([text('Hero prompt')], 'Codex'))
@@ -49,7 +49,7 @@ describe("GM 3 and follow-up 4: an agent's clear dropped the person's editing", 
   });
 });
 
-describe('GM follow-up 2: the failed handoff, one line (round 21: non-breaking spaces in the project names)', () => {
+describe('the failed handoff, one line (non-breaking spaces in the project names)', () => {
   it('one setting', () => {
     expect(handoffFailedLine([{ node: 'Hero prompt', setting: 'Text' }], 'Glass campaign', 'Claude Code',
       'Glass campaign (recovered)'))
@@ -74,7 +74,7 @@ describe('GM follow-up 2: the failed handoff, one line (round 21: non-breaking s
   });
 });
 
-describe('GM follow-ups 1 and 3: following an agent\'s switch', () => {
+describe('following an agent\'s switch', () => {
   it('the project bar', () => {
     expect(openingLine('beta')).toBe('Opening “beta”…');
   });
@@ -87,7 +87,7 @@ describe('GM follow-ups 1 and 3: following an agent\'s switch', () => {
   });
 });
 
-describe('GM 1: a failed delete with no answer', () => {
+describe('a failed delete with no answer', () => {
   const tail = 'because the server isn’t answering. Check that Nebula is running, then try again.';
   it('one node', () => {
     expect(deleteNoAnswerLine(['Nano Banana'])).toBe(`Nebula couldn’t delete “Nano Banana” ${tail}`);

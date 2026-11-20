@@ -1,5 +1,5 @@
 /**
- * Q118 (Justin, 2026-10-23, option a): "A project over 16 MiB still can't be
+* Justin, 2026-10-23: "A project over 16 MiB still can't be
  * saved, so the canvas says so, and you remove what you don't need until it
  * saves."
  *
@@ -10,7 +10,7 @@
  * written from plain json.dumps), so the two measures can't drift apart,
  * non-ASCII text, escapes and float spellings included.
  *
- * Display (GM writes "MB" and "16 MB"): MiB values labelled MB with one
+ * Display (design writes "MB" and "16 MB"): MiB values labelled MB with one
  * decimal. Over the limit a size rounds up, so it never reads as the limit;
  * at or under it rounds down. {over} rounds up, so it is never 0.0 while
  * still over.
@@ -71,7 +71,7 @@ describe('the measure is the backend save check, byte for byte', () => {
   });
 });
 
-describe('sizes as GM writes them', () => {
+describe('sizes as design writes them', () => {
   it('one decimal, MiB as "MB"; over the limit rounds up, at or under rounds down', () => {
     expect(displaySize(PROJECT_SAVE_LIMIT_BYTES)).toBe('16.0');
     expect(displaySize(PROJECT_SAVE_LIMIT_BYTES + 1)).toBe('16.1');
@@ -101,7 +101,7 @@ describe('sizes as GM writes them', () => {
 });
 
 describe('which rows the panel lists', () => {
-  // GM - Design (#182): "Rows under 0.1 MB: don't show them. "0.0 MB" tells
+  // Design (#182): "Rows under 0.1 MB: don't show them. "0.0 MB" tells
   // nobody anything. Fold them into the "{n} smaller items, {size} MB in all"
   // line, and show that line even if all the rows would be tiny."
   const rows = (...sizes: number[]) => sizes.map((bytes) => ({ kind: 'project' as const, bytes }));
@@ -118,14 +118,14 @@ describe('which rows the panel lists', () => {
 });
 
 describe('the smaller line', () => {
-  it('says its size, unless that rounds to 0.0 (GM, #182)', () => {
+  it('says its size, unless that rounds to 0.0 (design, #182)', () => {
     expect(smallerLine(5, '1.3')).toBe('5 smaller items, 1.3 MB in all');
     expect(smallerLine(1, '0.2')).toBe('1 smaller item, 0.2 MB in all');
     expect(smallerLine(14, '0.0')).toBe('14 smaller items');
   });
 });
 
-describe("the new project's name for a file over the limit (Q120)", () => {
+describe("the new project's name for a file over the limit", () => {
   it('is the file name without its graph extension', () => {
     expect(projectNameForFile('Big campaign.nebula')).toBe('Big campaign');
     expect(projectNameForFile('Big campaign.nebula.zip')).toBe('Big campaign');

@@ -1,4 +1,4 @@
-// PR #204 round 7, GM r8 (2): in Creator Studio the notice region stays at the
+// PR #204 (design): in Creator Studio the notice region stays at the
 // bottom, just above the composer, and a notice never lands on the content of
 // the popover the person is using. Styles stops above the region's reserved
 // band, as the floating panels do, so the "because" line under a refused Save
@@ -26,7 +26,7 @@ function part(attr: string, rect: DOMRect) {
 beforeEach(() => { Object.defineProperty(window, 'innerHeight', { configurable: true, value: H }); });
 afterEach(() => { cleanup(); document.body.innerHTML = ''; });
 
-describe('Styles in Creator Studio (GM r8, 2)', () => {
+describe('Styles in Creator Studio (design)', () => {
   it('stops above the notice band over the composer, so a notice shows beneath it', async () => {
     // The composer's top at 780; the band (one notice, 46 px, and its 8 px gap) above it.
     part('data-bottom-bar', box(780, 884, 380, 1060));

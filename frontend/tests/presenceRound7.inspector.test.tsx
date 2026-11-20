@@ -1,4 +1,4 @@
-// PR #204 round 7, review 5 LOW-4: the Inspector's upload line carries its own refusal, so it is
+// PR #204: the Inspector's upload line carries its own refusal, so it is
 // read against the promote its request went out under (Inspector.tsx's notify with { error }).
 // Harness from Inspector.fileUpload.test.tsx.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,7 +34,7 @@ afterEach(() => {
   useGraphStore.setState(initialGraph, true);
 });
 
-describe("review 5 LOW-4: the Inspector's upload line and its own stamp", () => {
+describe("the Inspector's upload line and its own stamp", () => {
   it('refused before the promote and answered after it: the line goes at once', async () => {
     let answer!: () => void;
     api.fetch.mockImplementation(async (path: string) => {

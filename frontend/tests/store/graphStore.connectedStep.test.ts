@@ -16,7 +16,7 @@ import { useGraphStore } from '../../src/store/graphStore';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 import { noticeSpy } from '../helpers/noticeSpy';
 
-// Round 3f: the alerts are canvas notices (tests/helpers/noticeSpy.ts).
+// The alerts are canvas notices (tests/helpers/noticeSpy.ts).
 const alert = noticeSpy();
 vi.spyOn(console, 'warn').mockImplementation(() => {});
 const position = { x: 420, y: 100 };
@@ -100,8 +100,8 @@ describe('connected next-step preparation', () => {
     expect(state.edges).toEqual([priorEdge, canonicalEdge]);
     expect(state.runHistory).toBe(before.runHistory);
     expect(state.undoStack).toHaveLength(1);
-    // Round 14 of PR #114: the step owns the node it added. Round 21 (the
-    // #195 merge): #195's step taken before the request, owning the node
+    // PR #114: the step owns the node it added. After the
+    // #195 merge: #195's step taken before the request, owning the node
     // its answer named; the canvas it holds is from before the add.
     expect((state.undoStack[0] as { nodes?: { id: string }[] }).nodes?.map((node) => node.id)).toEqual(['n1', 'n2']);
     expect(transport.fetch).toHaveBeenCalledTimes(1);
@@ -114,7 +114,7 @@ describe('connected next-step preparation', () => {
     expect(useGraphStore.getState().edges).toEqual([priorEdge]);
   });
 
-  it('during a run (GM PR #205 r4 item 3): sends the request and adds the connected node, with no lock line', async () => {
+  it('during a run (design, PR #205): sends the request and adds the connected node, with no lock line', async () => {
     useGraphStore.setState({ isExecuting: true });
     transport.fetch.mockResolvedValueOnce(confirmed());
     const id = await useGraphStore.getState().addNodeAndConnect('veo-3', position, connect);
@@ -189,7 +189,7 @@ describe('connected next-step preparation', () => {
     ['local-only origin', () => useGraphStore.setState({ nodes: [node('local-source')] }), 'veo-3', { ...connect, source: 'local-source' }],
     ['missing port', () => {}, 'veo-3', { ...connect, sourceHandle: 'removed-port' }],
     ['wrong data type', () => {}, 'veo-3', { ...connect, targetHandle: 'prompt' }],
-    // GM PR #205 r4 item 3: a run going no longer guards it (its add and its
+    // Design (PR #205): a run going no longer guards it (its add and its
     // connect are each allowed during a run): see "during a run" below.
     ['active import', () => useGraphStore.setState({ isImportingGraph: true }), 'veo-3', connect],
   ])('guards %s before sending a request', async (_label, setup, definitionId, connection) => {
@@ -221,7 +221,7 @@ describe('connected next-step preparation', () => {
     expect(await pending).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(2);
     expect(useGraphStore.getState().edges).toEqual([]);
-    // Round 17 (M1): Nebula said it made n3, so the add's step owns it and
+    // Nebula said it made n3, so the add's step owns it and
     // waits for its echo; undoing the step takes n3 off.
     expectStepOwnsN3();
   });
@@ -247,7 +247,7 @@ describe('connected next-step preparation', () => {
     expect(await useGraphStore.getState().addNodeAndConnect('veo-3', position, connect)).toBeNull();
     expect(useGraphStore.getState().nodes).toHaveLength(2);
     expect(useGraphStore.getState().edges).toEqual([priorEdge]);
-    // Round 17 (M1): an answer naming a new node (n3) means Nebula made it:
+    // An answer naming a new node (n3) means Nebula made it:
     // the add's step owns it. An invalid one (a node the canvas has, another
     // kind of node) leaves it uncertain, with no step.
     if (body.id === 'n3' && (!('definitionId' in body) || body.definitionId === 'veo-3')) expectStepOwnsN3();

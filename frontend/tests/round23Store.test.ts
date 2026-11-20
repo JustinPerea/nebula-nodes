@@ -1,13 +1,13 @@
 /**
- * Round 23 of PR #195: review 22's store findings.
- * - M-1: the "Note for agents" dialog is part of the read-only state. Its
+ * PR #195: the store's behaviour.
+ * - the "Note for agents" dialog is part of the read-only state. Its
  *   submit and a pin's delete are refused while following (and offline),
  *   through the same lock every canvas surface reads (lib/canvasLock). The
  *   dialog closes when a follow starts or the canvas is replaced (its target
  *   is a node id of the canvas that went); what the person typed is kept in
  *   a notice, never anchored anywhere. The POST says the project and canvas
  *   the note was composed on, so Nebula refuses it once they moved.
- * - L-1: Undo on an agent's clear never overwrites typing Nebula took (its
+ * - Undo on an agent's clear never overwrites typing Nebula took (its
  *   PUT answered 200), whichever of the clear's broadcast and the 200 the
  *   tab reads first: the step waits for saves still on their way and takes
  *   the values that landed.
@@ -184,7 +184,7 @@ const pinAnswer = () => answer(201, { pin: { id: 'pin_new', text: 'Make the sky 
 const resetPins = () => useCanvasPinsStore.setState({ projectId: null, pins: [], composer: null, removing: {}, error: null,
   composerCanvas: null, draft: '', kept: [] } as never);
 
-describe('M-1: the note dialog and the pins while following', () => {
+describe('the note dialog and the pins while following', () => {
   beforeEach(() => resetPins());
   afterEach(() => resetPins());
 
@@ -255,7 +255,7 @@ describe('M-1: the note dialog and the pins while following', () => {
     useCanvasPinsStore.getState().compose({ nodeId: 'n1' });
     noteBackendConnection('offline');
     expect(await useCanvasPinsStore.getState().submit('warmer')).toBe(false);
-    // Offline keeps the dialog open with the text (PR #114, round 15).
+    // Offline keeps the dialog open with the text (PR #114).
     expect(useCanvasPinsStore.getState().composer).toEqual({ nodeId: 'n1' });
     useCanvasPinsStore.setState({ pins: [{ id: 'pin_1', text: 'x', anchor: { nodeId: 'n1' } } as never] });
     await useCanvasPinsStore.getState().remove('pin_1');
@@ -284,7 +284,7 @@ describe('M-1: the note dialog and the pins while following', () => {
   });
 });
 
-describe('L-1: Undo on an agent clear never overwrites a save Nebula took', () => {
+describe('Undo on an agent clear never overwrites a save Nebula took', () => {
   const sentPut = () => vi.waitFor(() => expect(graphWrites.sent.some((write) => write.path === '/api/graph/node/n1')).toBe(true), { timeout: 2000 });
   const holdPut = () => {
     graphWrites.answer = (path, init) => (path === '/api/graph/node/n1' && init?.method === 'PUT' ? land() : Promise.resolve(answer()));
@@ -380,7 +380,7 @@ describe('L-1: Undo on an agent clear never overwrites a save Nebula took', () =
   });
 });
 
-describe('GM round 23: a replacement found with no agent saves the edits as a copy', () => {
+describe('a replacement found with no agent saves the edits as a copy', () => {
   const reconnectFindsAnotherCanvas = () => emit({ type: 'graphSync', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION,
     canvasRevision: '12', empty: false, edges: [],
     nodes: [{ id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
