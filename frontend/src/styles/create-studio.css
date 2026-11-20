@@ -258,9 +258,17 @@ body.app-slava-restraint .model-picker__search {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--sr-edge);
+  /* Design: the shell is inset from the popover's clipped edges and rounded like the
+     styles search row, so the focus ring (drawn on the shell) has room and a shape. */
+  margin: 8px 10px 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
   color: var(--sr-ink-light);
+}
+/* The bare field's focus: the token ring around its search row, as the styles search does. */
+body.app-slava-restraint .model-picker__search:has(input:focus-visible) {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
 }
 body.app-slava-restraint .model-picker__search input {
   flex: 1;
@@ -341,6 +349,6 @@ body.app-slava-restraint .model-picker__row-name { font-size: 13px; overflow-wra
 body.app-slava-restraint .model-picker__row-meta,
 body.app-slava-restraint .model-picker__row-inputs { font-size: 11px; line-height: 1.5; color: var(--sr-ink-light); overflow-wrap: anywhere; }
 body.app-slava-restraint .model-picker__row-check { color: var(--sr-accent); flex-shrink: 0; }
-body.app-slava-restraint .model-picker button:focus-visible,
-body.app-slava-restraint .model-picker input:focus-visible { outline: var(--sr-focus-outline); outline-offset: -2px; }
+/* The search field is not here: its shell takes the ring (.model-picker__search above). */
+body.app-slava-restraint .model-picker button:focus-visible { outline: var(--sr-focus-outline); outline-offset: -2px; }
 
