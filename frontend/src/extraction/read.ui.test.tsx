@@ -246,6 +246,10 @@ describe('sections', () => {
     const rows = screen.getAllByTestId('region-row')
     expect(rows[0].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('you')
     expect(rows[1].querySelector('[data-origin]')!.getAttribute('data-origin')).toBe('agent')
+    // A source tag is a sentence-case badge with one neutral look.
+    const badge = rows[1].querySelector('[data-origin]')!
+    expect(badge.textContent).toBe('Agent')
+    expect(badge.className).toBe('ex-origin')
     expect((screen.getByLabelText('Role of r1') as HTMLSelectElement).value).toBe('navigation')
   })
 

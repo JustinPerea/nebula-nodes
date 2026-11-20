@@ -316,8 +316,6 @@ body { background: #111; }
   color: inherit;
 }
 .ex-swatch-small { width: 12px; height: 12px; }
-.ex-origin-you { background: #2b3550; color: #cfe0ff; }
-.ex-origin-agent { background: #3a2f4d; color: #e2d0ff; }
 .ex-color-on { background: var(--ex-fill-hover); border-radius: 6px; }
 .ex-summary { margin: 0 0 8px; color: var(--ex-strong); }
 

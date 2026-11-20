@@ -8,11 +8,19 @@ const TITLES: Record<OriginTag, string> = {
   agent: 'Changed by an agent',
 }
 
+/** A source tag is a badge: sentence case, one neutral look whoever set the value. */
+const BADGES: Record<OriginTag, string> = {
+  code: 'Code',
+  Claude: 'Claude',
+  'fake reader': 'Fake reader',
+  you: 'You',
+  agent: 'Agent',
+}
+
 export function Origin({ tag }: { tag: OriginTag }) {
-  const tone = tag === 'you' ? ' ex-origin-you' : tag === 'agent' ? ' ex-origin-agent' : ''
   return (
-    <span className={`ex-origin${tone}`} title={TITLES[tag]} data-origin={tag}>
-      {tag}
+    <span className="ex-origin" title={TITLES[tag]} data-origin={tag}>
+      {BADGES[tag]}
     </span>
   )
 }
