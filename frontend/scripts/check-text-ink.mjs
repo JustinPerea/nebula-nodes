@@ -39,7 +39,8 @@ import {
 // Inline TSX: the file is parsed, and an object literal property whose key is a text colour (`color`,
 // `caretColor`, `WebkitTextFillColor`, `WebkitTextStrokeColor`, or the quoted CSS name) and whose value
 // is a string or a plain template that resolves to dim white fails. Comments, regex literals, nested
-// templates and JSX text cannot hide or fake a match.
+// templates and JSX text cannot hide or fake a match. A TS or TSX file that does not parse cleanly
+// fails the check, naming the file and its first parse error.
 //
 // Rules with an unprefixed form and a `body.app-slava-restraint` twin are checked as written, both
 // forms (the unprefixed one is dead CSS that check-skin-shadows reports; checking it as well is
@@ -57,6 +58,9 @@ import {
 //     `el.style.color = ...`, `style.setProperty(...)`, SVG `<text fill=...>` attributes, an inline
 //     custom property that a CSS rule reads as a colour, `fill` on a class that sits on an SVG `<text>`
 //     (only a selector ending in text/tspan is read), and `textPath`;
+//   - computed keys (`['color']: ...`, a template-literal key) are not read;
+//   - colour forms not read: color(), oklch(), oklab(), lab(), lch(), hwb(), relative colours
+//     (`rgb(from ...)`), and calc() or var() inside a colour's channels;
 //   - text at exactly .20 is not checked yet (see above).
 
 const SRC = join(import.meta.dirname, '..', 'src');
@@ -119,7 +123,8 @@ export function isDimLiteral(value) {
   const [a, b, c, alpha] = parts;
   if (!isDimAlpha(parseAlpha(alpha))) return false;
   if (fn[1].startsWith('rgb')) return [a, b, c].every((n) => Number.parseFloat(n) === 255 || n === '100%');
-  return Number.parseFloat(a) === 0 && Number.parseFloat(b) === 0 && Number.parseFloat(c) === 100;
+  // hsl: lightness 100% is white whatever the hue and saturation.
+  return Number.parseFloat(c) === 100;
 }
 
 /** 1 for every character inside a quoted span (quotes included), 0 elsewhere. Backslash escapes are honoured. */
@@ -175,7 +180,7 @@ function splitTopLevel(text) {
 export function resolvesToDim(value, dimVars, definedVars) {
   const v = value.trim().replace(/\s*!important$/i, '').trim();
   if (isDimLiteral(v)) return true;
-  const wrapped = /^var\(([\s\S]*)\)$/.exec(v);
+  const wrapped = /^var\(([\s\S]*)\)$/i.exec(v);
   if (!wrapped) return false;
   const [name, ...rest] = splitTopLevel(wrapped[1]);
   if (dimVars.has(name)) return true;
@@ -367,6 +372,19 @@ export function findTsxTextInk(files, dimVars, definedVars) {
   for (const { file, source } of files) {
     const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
     const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+    // parseDiagnostics is not in TypeScript's public typings; it holds the syntax errors of this parse.
+    const [parseError] = tree.parseDiagnostics ?? [];
+    if (parseError) {
+      const { line } = tree.getLineAndCharacterOfPosition(parseError.start ?? 0);
+      hits.push({
+        file,
+        line: line + 1,
+        selector: 'syntax error',
+        prop: 'parse',
+        value: ts.flattenDiagnosticMessageText(parseError.messageText, ' '),
+        parseError: true,
+      });
+    }
     const visit = (node) => {
       if (ts.isPropertyAssignment(node) && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name))) {
         const key = node.name.text;
@@ -412,7 +430,13 @@ function main() {
   }
   if (hits.length > 0) {
     console.error(FAILURE_MESSAGE);
-    for (const hit of hits) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}`);
+    for (const hit of hits) {
+      console.error(
+        hit.parseError
+          ? `  src/${hit.file}:${hit.line} does not parse, so it was not checked: ${hit.value}`
+          : `  src/${hit.file}:${hit.line} ${hit.selector} sets ${hit.prop}: ${hit.value}`,
+      );
+    }
     process.exit(1);
   }
   console.log(`Text-ink guard passed (${cssFiles.length} stylesheets, ${tsxFiles.length} TS files scanned).`);

@@ -259,3 +259,36 @@ describe('check-text-ink: comments', () => {
     expect(css('/* .a { color: var(--sr-ink-meta); } */\n.b { color: var(--sr-ink-light); }')).toEqual([]);
   });
 });
+
+describe('check-text-ink: further colour forms and parse errors', () => {
+  it.each([
+    'hsl(120 0% 100% / .3)',
+    'hsl(1turn 0% 100% / .3)',
+    'hsl(120 50% 100% / .3)',
+    'hsl(2rad 0% 100% / .3)',
+    'hsla(120, 0%, 100%, .3)',
+  ])('fails %s', (value) => {
+    expect(isDimLiteral(value)).toBe(true);
+  });
+
+  it('passes hsl that is not white', () => {
+    expect(isDimLiteral('hsl(0 0% 99% / .3)')).toBe(false);
+  });
+
+  it('reads var() in any case', () => {
+    expect(css('.a { color: VAR(--sr-ink-meta); }')).toHaveLength(1);
+    expect(css('.a { color: Var(--sr-ink-meta) !IMPORTANT; }')).toHaveLength(1);
+  });
+
+  it('fails a TSX file that does not parse, naming the file and the parse error', () => {
+    const found = tsx("const a = `unterminated;\nconst s = { color: 'var(--sr-ink-meta)' };");
+    expect(found.length).toBeGreaterThan(0);
+    const error = found.find((hit) => hit.parseError);
+    expect(error?.file).toBe('Fixture.tsx');
+    expect(error?.value).toMatch(/unterminated|expected|expression|`/i);
+  });
+
+  it('passes a file that parses cleanly', () => {
+    expect(tsx('const a = 1;')).toEqual([]);
+  });
+});

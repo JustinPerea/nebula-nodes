@@ -402,7 +402,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--agent-color, rgb(255 255 255 / 0.3));
+  background: var(--agent-color);
 }
 
 /* The name never wraps: it takes what's left of the line and truncates. It
@@ -886,7 +886,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--agent-color);
+  background: var(--agent-color, rgb(255 255 255 / 0.3));
 }
 
 .canvas-undo-notice__text {
