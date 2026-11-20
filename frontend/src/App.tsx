@@ -47,7 +47,7 @@ import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import { ProjectCoordinator } from './components/projects/ProjectCoordinator';
 import { ProjectSwitchToast } from './components/projects/ProjectSwitchToast';
 import { ProjectHome } from './components/projects/ProjectHome';
-// Asset proposals (a pinned cover, a board's Send notes) reach this tab on any screen.
+// Asset proposals (a pinned cover, a board's “Moodboard notes to generators”) reach this tab on any screen.
 import './store/assetProposalsSocket';
 import './store/settingsChangedSocket';
 import { useHomeSettingsDock } from './components/projects/useHomeSettingsDock';
@@ -143,7 +143,7 @@ export default function App() {
   // List prices for the Run estimate and the cost confirm, fetched once.
   useEffect(() => { void usePricingStore.getState().load(); }, []);
 
-  // Run History, the tour, the chat, the Inspector, the palette, the mask
+  // Run history, the tour, the chat, the Inspector, the palette, the mask
   // painter, the node mesh / world viewers and more live outside the startup
   // entry (lib/deferredChunks.ts). Fetch them once the first paint is done so
   // a later first open never waits on the network.

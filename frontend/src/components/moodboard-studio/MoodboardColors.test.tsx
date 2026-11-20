@@ -50,8 +50,8 @@ describe('MoodboardColors', () => {
     expect(item.getAttribute('tabindex')).toBe('0');
     const detail = screen.getByRole('tooltip', { hidden: true });
     expect(item.getAttribute('aria-describedby')).toBe(detail.id);
-    expect(within(detail).getAllByText(/^Image #/).map((row) => row.textContent)).toEqual(
-      ['Image #3', 'Image #7', 'Image #1', 'Image #9']);
+    expect(within(detail).getAllByText(/^Image \d/).map((row) => row.textContent)).toEqual(
+      ['Image 3', 'Image 7', 'Image 1', 'Image 9']);
     expect(detail.textContent).toContain('0.35% of the image');
     expect(detail.textContent).toContain('0.14% of the moodboard');
   });

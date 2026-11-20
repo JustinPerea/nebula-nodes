@@ -22,7 +22,7 @@ export function EditorBreadcrumb({ sourceNode, editNode }: Props) {
       {sourceIsVfr && (
         <div className="editor-breadcrumb__vfr">
           <TriangleAlert className="editor-breadcrumb__vfr-icon" aria-hidden="true" focusable="false" />
-          <span>Variable frame rate source. Render Preview is the source of truth.</span>
+          <span>Variable frame rate source. “Render preview” is the source of truth.</span>
         </div>
       )}
     </>

@@ -1888,7 +1888,7 @@ describe('GM r10 (round 3h)', () => {
     document.body.innerHTML = `
       <div data-notice-region=""><div class="notice-region__stack">
         <div data-notice-slot="proposal"><div class="card" data-notice-shrinks="">
-          <div class="head" data-notice-shrink-head=""><span class="name" data-notice-shrink-name="">Claude</span><span>Expires in 14:55</span></div>
+          <div class="head" data-notice-shrink-head=""><span class="name" data-notice-shrink-name="">Claude</span><span>Expires in 15 min</span></div>
           <div class="scroll" data-notice-shrink-body=""><div class="body"><p class="plan" data-notice-keep="">Plan</p></div></div>
           <div class="foot" data-notice-shrink-foot="">Accept</div>
         </div></div>
@@ -1971,7 +1971,7 @@ describe('the rules', () => {
     const body = rule(CARD_CSS, '.proposal-bar__body');
     expect(body['overflow-y']).toBe('auto');
     expect(body['min-height']).toBe('0');
-    // "What Accept writes" scrolls with the body, not on its own.
+    // "What “Accept” saves" scrolls with the body, not on its own.
     const details = rule(CARD_CSS, '.proposal-bar__details');
     expect(details['max-height']).toBeUndefined();
     expect(details.overflow).toBeUndefined();

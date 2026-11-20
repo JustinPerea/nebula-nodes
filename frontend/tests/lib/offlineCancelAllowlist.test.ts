@@ -37,7 +37,7 @@ describe('the cancel allowlist', () => {
     ]);
   });
 
-  // Every Stop control's request: the bottom Stop, Run History's Cancel,
+  // Every Stop control's request: the bottom Stop, Run history's Cancel,
   // Create's "Stop N" and Cinema's Stop scene / Stop shot all call
   // cancelExecution; the editor's render Cancel calls cancelRenderJob; the
   // Commons status line's Stop calls commonsApi.workerStop.

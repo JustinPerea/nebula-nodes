@@ -57,11 +57,11 @@ Call start_here first: the canvas, open pins and proposals, every moodboard, the
 
 The loop:
 1. describe_node: a node type's ports, params and prices (find_nodes searches them).
-2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes your own edit back.
+2. edit_canvas: new nodes ("+img" refs), connections, params, names, moves and removals in one call, all or nothing (or send `steps`). remove_from_canvas deletes nodes or connections. Each edit returns an undo token: undo_canvas_edit takes it back.
 3. run_nodes: runs a node and what feeds it, within the person's spend limits.
 4. view_output: look at what it made.
 5. propose_change instead, for a run over a limit or without a list price, or reworking their graph: the person decides in Nebula; agents cannot accept.
-Off the canvas (a pinned cover, a board's Send notes, Commons curation): propose_asset_change.
+Off the canvas (a pinned cover, “Moodboard notes to generators”, Commons curation): propose_asset_change.
 A decision only the person makes: ask_person; get_answers waits.
 
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
@@ -1400,8 +1400,8 @@ def propose_asset_change(kind: str, id: str, change: dict, note: str,  # noqa: A
       The proposal's `change.cover.auto` is the image the automatic cover
       shows now (null when the project has none).
     - kind "moodboard", `id` a board's id or name, change {"sendNotes": true}:
-      send the board's notes to generators, which only the person may turn
-      on. Decided in Moodboard Studio. Turning it off needs no proposal
+      turn on “Moodboard notes to generators”; only the person may.
+      Decided in Moodboard Studio. Turning it off needs no proposal
       (moodboard_update(send_notes=false)).
     - kind "commons", `id` a reference's id (commons_search / commons_get),
       `brand` the brand you work on: curate the Commons, which only the
@@ -1824,7 +1824,7 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     projectId, projectName, count, fields, detail, note}, `state` one of
     active, ambiguity, recovery, params, bootstrap or run, and `note` says
     which node and project hold and what clears it (the person's Forget ID
-    in Run History for recovery, their "I’ve checked Marble" for ambiguity).
+    in Run history for recovery, their "I’ve checked Marble" for ambiguity).
     It covers Nebula's own holds only: while the person's tab keeps edits
     of its own, an open is refused with code canvas_kept_in_tab, which
     `openHold` doesn't show. A recovered copy's row has `sourceName` (null
@@ -2088,7 +2088,7 @@ def run_no_record_next(run_id: Any) -> str:
     """A run id Nebula has no record of (round 17 of PR #114, review 16 L1):
     it may have run before Nebula restarted, so nothing is said about spend."""
     return (f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
-            "check Run History for what it did.")
+            "check Run history for what it did.")
 
 
 def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
@@ -3457,7 +3457,7 @@ def get_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     which outputs exist, connections in, state, position, and the last `error`),
     with the connections, `cover` (as list_projects has it), `open`, and
     `runHistory`: the newest 20 of `runHistoryCount` runs from the canvas's
-    Run History, each with what it ran (`nodeIds`), its status and timing,
+    Run history, each with what it ran (`nodeIds`), its status and timing,
     and which outputs it made, never their values. view_output shows an
     output once the project is open. A recovered copy has `sourceName` (null
     when unknown or deleted for good) and `sourceProjectId` (while that

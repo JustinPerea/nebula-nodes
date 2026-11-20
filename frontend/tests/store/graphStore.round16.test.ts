@@ -364,7 +364,7 @@ describe('held-delete reason lines (GM, round 16)', () => {
   it("the backend's own refusal of a node is that node's: \"It\"", async () => {
     const { deleteRefusalText } = await import('../../src/lib/worldLabsWaiting');
     expect(deleteRefusalText("Couldn't delete the node.", 1,
-      ['“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.'],
+      ['“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.'],
       '“Lighthouse world”')).toBe(
       "Nebula couldn’t delete “Lighthouse world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });

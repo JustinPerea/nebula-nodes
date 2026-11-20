@@ -396,7 +396,7 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
 
       {item.componentType === 'IsometricBlock' && (
         <section className="remotion-properties-panel__section">
-          <h4>Iso Block</h4>
+          <h4>Iso block</h4>
           <label>
             geometry
             <select

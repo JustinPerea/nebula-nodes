@@ -9,7 +9,7 @@
  *   an agent's switch resets it;
  * - NIT-5: Projects is read when the follow lands;
  * - LOW-4: a Web Lock claims the tab id for the page's life;
- * - lines-ui LOW-1 (GM r34 A4): the rail callout isn't drawn over open Run History;
+ * - lines-ui LOW-1 (GM r34 A4): the rail callout isn't drawn over open Run history;
  * - lines-ui LOW-2 and NIT-1: focus after an in-place reopen; the 4 s poll;
  * - lines-ui NIT-2: the live regions mount empty, then get their text;
  * - lens item 4 (GM r34 A5): the toolbar moves below the World Labs notice;
@@ -208,9 +208,9 @@ const P = 'Glass campaign';
 const RECOVERY_ALPHA = hold('recovery', { nodeId: 'n1', nodeName: 'World', projectId: 'alpha', projectName: P });
 const RECOVERY_OTHER = hold('recovery', { nodeId: 'n4', nodeName: 'World', projectId: 'beta', projectName: 'Alpha' });
 const LINES = {
-  recovery: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run History.`,
-  recoveryOther: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” from “Alpha” in Run History.`,
-  recovery2: `You can reopen “${P}” after you forget 2 World Labs recovery IDs in Run History.`,
+  recovery: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run history.`,
+  recoveryOther: `You can reopen “${P}” after you forget the World Labs recovery ID for “World” from “Alpha” in Run history.`,
+  recovery2: `You can reopen “${P}” after you forget 2 World Labs recovery IDs in Run history.`,
   params: `You can reopen “${P}” after you check the World Labs run for “World” in Marble and clear its “Resume Operation ID”.`,
   active: `You can reopen “${P}” when World Labs confirms the new run.`,
   bootstrap: `Nebula couldn’t save its World Labs safeguards. You can reopen “${P}” after you restart Nebula.`,
@@ -232,7 +232,7 @@ describe('review 20 LOW-5 (P1): the 409’s own hold names the line', () => {
   it('another project’s record: “from “Alpha””, from the 409 body, with no second read and never the refusal’s node', async () => {
     duplicateN1();
     vi.mocked(projects.openProject).mockRejectedValue(refusal(
-      '“Hero prompt” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.',
+      '“Hero prompt” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.',
       { hold: RECOVERY_OTHER }));
     vi.mocked(projects.getOpenHold).mockRejectedValue(new Error('offline'));
     await askToReopen();
@@ -547,7 +547,7 @@ describe('review 20 LOW-4: the tab claims its id with a Web Lock while the page 
   });
 });
 
-describe('review 20 lines-ui LOW-1 (GM r34 A4): no callout over open Run History', () => {
+describe('review 20 lines-ui LOW-1 (GM r34 A4): no callout over open Run history', () => {
   const clock = frames();
   beforeEach(() => clock.install());
   afterEach(() => clock.uninstall());

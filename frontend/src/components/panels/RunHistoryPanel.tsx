@@ -37,7 +37,7 @@ const STATUS_LABEL: Record<RunRecord['status'], string> = {
 };
 
 /**
- * Run History panel — a persistent, newest-first record of graph / single-node /
+ * Run history panel — a persistent, newest-first record of graph / single-node /
  * selection runs. Terminal records replay their frozen request snapshot, while
  * failed records use the more explicit Retry failed action. Cancel propagates
  * to the backend execution task; Clear removes both UI and persisted history.
@@ -97,7 +97,7 @@ export function RunHistoryPanel() {
     const kind = recordNodeType(places[providerRecoveryPlaceKey(runId, nodeId)]?.nodeType, existingWorldId);
     return heldRecordName(nodes, nodeId, owned[index], index === verdictIndex ? openHold : null, inSentence, kind);
   };
-  // GM r34 A4: while Run History is open, the held reopen's Forget ID line
+  // GM r34 A4: while Run history is open, the held reopen's Forget ID line
   // shows at the top of its safeguards (the rail's callout hides). Its own
   // polite region, mounted empty and then given the line, so the first
   // line is announced too.
@@ -131,7 +131,7 @@ export function RunHistoryPanel() {
     return () => window.clearInterval(id);
   }, [visible]);
 
-  // Closing Run History cancels a confirm that's open (review 13, L5: it
+  // Closing Run history cancels a confirm that's open (review 13, L5: it
   // stayed open behind the closing panel and came back when it reopened).
   useEffect(() => {
     if (!visible) setConfirmingForget(null);
@@ -150,7 +150,7 @@ export function RunHistoryPanel() {
       className={`panel panel--history workspace-dock-panel${exiting ? ' panel--exiting' : ''}`}
     >
       <div className="panel__header">
-        <span className="panel__title">Run History</span>
+        <span className="panel__title">Run history</span>
         <div className="run-history__header-actions">
           <button
             type="button"

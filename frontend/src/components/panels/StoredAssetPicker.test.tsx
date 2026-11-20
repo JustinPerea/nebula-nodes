@@ -36,12 +36,12 @@ describe('StoredAssetPicker with a board in Recently deleted', () => {
     expect(await screen.findByText('This moodboard is in Recently deleted. Restore it to use it again.')).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Warm editorial (in Recently deleted)' })).toBeTruthy();
     expect(screen.queryByText(/never existed/)).toBeNull();
-    expect(screen.queryByRole('button', { name: /Open Moodboard/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Open moodboard/ })).toBeNull();
 
     api.lookupStoredAsset.mockResolvedValueOnce({ status: 'ready', asset: {
       id: 'b1', name: 'Warm editorial', thumbnail: '', images: [], mode: 'look' } });
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /Open Moodboard/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Open moodboard/ })).toBeTruthy());
     expect(trash.restoreTrashed).toHaveBeenCalledWith('moodboard', 'b1');
   });
 });

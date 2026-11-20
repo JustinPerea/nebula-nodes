@@ -178,7 +178,7 @@ const ID = '[A-Za-z0-9_-]{1,128}';
  * tests/lib/offlineCancelAllowlist.test.ts pins it, request by request.
  */
 export const OFFLINE_CANCEL_ALLOWLIST: readonly GateRule[] = [
-  // The bottom Stop, Run History's Cancel, Create's "Stop N" and Cinema's
+  // The bottom Stop, Run history's Cancel, Create's "Stop N" and Cinema's
   // Stop scene / Stop shot (graphStore cancelExecution / cancelRun).
   { method: 'DELETE', pattern: new RegExp(`^\\/api\\/executions\\/${ID}$`), what: 'Stop a run' },
   // The video editor's render Cancel (hooks/useRenderJob.ts).

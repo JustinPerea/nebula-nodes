@@ -1245,7 +1245,7 @@ interface GraphState {
   hydrateProviderRecoveries: (checkpoints: ProviderRecoveryCheckpoint[]) => void;
   deleteProviderRecovery: (runId: string, nodeId: string) => Promise<void>;
   /** Whether a recovery record is one the open canvas names as its own
-   * (providerRecoveryOnCanvas on the store as it is now), for Run History.
+   * (providerRecoveryOnCanvas on the store as it is now), for Run history.
    * A store method, so the panel reads it through its selector: importing
    * the function made the presence ratchet's G scan follow it into this
    * file's every same-named definition (round 22 of PR #199). */
@@ -7993,7 +7993,7 @@ export function providerRecordIsThisProjects(state: Pick<GraphState, 'runHistory
 
 /**
  * The one matcher for a recovery record and a canvas node (Delete,
- * Duplicate and Paste, the hydrate write, Run History's names): the same
+ * Duplicate and Paste, the hydrate write, Run history's names): the same
  * node id, and either the record is this project's
  * (providerRecordIsThisProjects) or the node's own settings hold the
  * record's ID (runHistory paramsHoldRecoveryId). Never by node id alone.
@@ -10904,7 +10904,7 @@ function sendRestore(
     if (admission.graph !== canvasReplacementRevision) return;
     set((state) => {
       // A refusal written for the person already says what couldn't be
-      // done ("Couldn’t undo. It would remove “Shot 2”, …"; PR #198 GM r3 item 3).
+      // done ("Nebula couldn’t undo because it would remove “Shot 2”, …"; PR #198 GM r3 item 3).
       const line = how.quiet ? {} : { undoNotice: { id: ++undoNoticeSeq, text: heldLine?.(state) ?? how.text ?? becauseLine({ heading: `Couldn’t ${action} that.`, reason, status: how.status }), offer: null,
         ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) } };
       if (how.text) timeoutNoticeId = undoNoticeSeq;
@@ -15918,7 +15918,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
   },
 
   deleteProviderRecovery: async (runId, nodeId) => {
-    // Round 3b: the person reads these (Run History alerts them), so they are
+    // Round 3b: the person reads these (Run history alerts them), so they are
     // written lines under the button's heading, not developer text.
     if (get().isExecuting) {
       // GM, PR #205 r1: the refused action's lock line, standing alone.
@@ -16635,7 +16635,7 @@ export const NOT_GRAPH_EDITS: ReadonlySet<string> = new Set<string>([
   'sayRefusedConnection', 'sayRefusedDrop',
   // Reads and selection.
   'copySelected', 'selectAll', 'allowCanvasDelete', 'canSwitchProject', 'isShotAdmissionBlocked',
-  // Run History's record matcher (PR #199 round 22): a method only so the
+  // Run history's record matcher (PR #199 round 22): a method only so the
   // panel reads it through the store; it answers from the state and sets nothing.
   'providerRecoveryOnCanvas',
   // Stopping a run or a launch (never refused: it stops spend) and the locks around them.

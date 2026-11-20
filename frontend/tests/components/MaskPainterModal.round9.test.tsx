@@ -14,7 +14,7 @@ afterEach(() => { cleanup(); document.body.replaceChildren(); });
 
 function openPainter(onClose = vi.fn()) {
   const opener = document.createElement('button');
-  opener.textContent = 'Paint Mask';
+  opener.textContent = 'Paint mask';
   document.body.appendChild(opener);
   opener.focus();
   const view = render(<MaskPainterModal imageUrl={null} initialMask={null} onSave={() => {}} onClose={onClose} />);
@@ -33,7 +33,7 @@ describe('the mask painter is a modal dialog', () => {
     expect(isCanvasShortcutTarget(document.body)).toBe(false);
   });
 
-  it('focus starts on Close, Escape closes it, and focus goes back to Paint Mask', () => {
+  it('focus starts on Close, Escape closes it, and focus goes back to Paint mask', () => {
     const { opener, onClose, view } = openPainter();
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     fireEvent.keyDown(screen.getByRole('button', { name: 'Close' }), { key: 'Escape' });

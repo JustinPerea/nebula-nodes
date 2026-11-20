@@ -8,7 +8,7 @@
  * are being used while someone edits."
  *
  * The trim video editor (EditorView, not the Remotion editor) has its
- * transport row (Play / Trim / Speed / Cut / Vol / zoom / Render Preview /
+ * transport row (Play / Trim / Speed / Cut / Vol / zoom / Render preview /
  * Export) and its timeline along the bottom, under the preview. Like the
  * canvas bar, Creator Studio's composer and the Remotion tray, both carry
  * `data-bottom-bar` and write `--bottom-bar-clearance` through the same hook

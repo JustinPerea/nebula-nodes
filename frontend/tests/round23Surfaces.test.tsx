@@ -223,7 +223,7 @@ const SURFACES: Record<string, Surface> = {
         onAddShot={vi.fn()} onRemoveShot={vi.fn()} onReorder={vi.fn()} />);
     },
     // Selecting a shot only looks.
-    looks: [/^Select Shot/],
+    looks: [/^Select shot/],
   },
   CinemaStudioToolbar: {
     mount: () => { cinemaScene(); return at(<CinemaStudioToolbar cinemaNodeId="n1" />); },
@@ -317,7 +317,7 @@ const SURFACES: Record<string, Surface> = {
       return at(<EditorTransport editNode={node} sourceUrl="/api/outputs/a.mp4" />);
     },
     // Play, the edit points, Trim/Speed/Vol (select and focus) and zoom only
-    // look. Render Preview and Export… lock since PR #200's fix round 3
+    // look. Render preview and Export… lock since PR #200's fix round 3
     // (review 3 LOW-4: they start a render on the backend).
     looks: [/^Play|^Pause/, /edit point/i, /^Drag the clip edges to trim$/, /^Adjust playback speed$/, /^Adjust volume \/ mute$/,
       /zoom/i],

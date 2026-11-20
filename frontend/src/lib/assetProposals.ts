@@ -2,7 +2,7 @@ import { apiRequest } from './apiRequest';
 import { RequestFailedError } from './errorCopy';
 
 /** Proposals outside the graph (backend services/asset_proposals.py, U16):
- * a cover the person pinned on a project, a board's Send notes, curating a
+ * a cover the person pinned on a project, a board's “Moodboard notes to generators”, curating a
  * Commons reference (services/commons_proposals.py, Q63 b). The person
  * decides where they work on that thing: the Projects screen, Moodboard
  * Studio, the Commons. */

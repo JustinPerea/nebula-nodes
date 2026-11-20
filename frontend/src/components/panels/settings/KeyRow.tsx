@@ -4,6 +4,7 @@ import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
 import { useProviderReadinessStore } from '../../../store/providerReadinessStore';
 import { keyText } from '../../../lib/directRoute';
+import { endedSentence } from '../../../lib/errorCopy';
 import { keyReadiness } from '../../../lib/providerReadiness';
 import { credentialName as nameOf, credentialNoun, unlockSummary, type ProviderKeySpec } from '../../../lib/providerCatalog';
 import { removeKey, saveKey } from '../../../lib/settingsWrites';
@@ -156,7 +157,7 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
   return (
     <div onKeyDownCapture={onKeyDownCapture}>
       <ProviderRow id={spec.key} moved={moved} tone={state.tone} name={spec.label} status={state.status} statusTone={state.statusTone}
-        summary={summary} wrapSummary={summary === spec.note} title={configured ? readiness.detail : undefined}
+        summary={summary} wrapSummary={summary === spec.note} title={[spec.noteTitle, configured ? readiness.detail : undefined].filter((part): part is string => Boolean(part)).map(endedSentence).join(' ') || undefined}
         action={action}>
         {open === 'manage' && (
           <div id={bodyId} className="settings-row__manage">

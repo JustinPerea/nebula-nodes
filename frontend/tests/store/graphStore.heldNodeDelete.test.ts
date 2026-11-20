@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * Round 4 (GM - Design, "TRIMS to one line at 560 px"): "Couldn't delete the
  * node. It's waiting on World Labs. Check Marble, then unlock it." The forget
  * form: "Couldn't delete the node. It's waiting on World Labs. Check Marble,
- * then forget it in Run History." If that still wraps, use "Couldn't delete
+ * then forget it in Run history." If that still wraps, use "Couldn't delete
  * it." as the heading. "Couldn't delete {n} nodes. One is waiting on World
  * Labs. Check Marble, then unlock it." (and the same forget form). Measured
  * live at 560 px in the canvas notice's 12 px font, both forget forms wrap
@@ -26,7 +26,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * is waiting on World Labs. Check Marble, then unlock it." (it replaces the
  * counted "Couldn't delete {n} nodes. One is waiting …").
  * 2026-10-24 (GM): with every node held, the forget form ends "Check Marble
- * and Run History." ("Couldn't delete them. They're waiting on World Labs.
+ * and Run history." ("Couldn't delete them. They're waiting on World Labs.
  * Check Marble and run history."); the other forget forms keep the tail.
  *
  * The backend's delete refusal says its own, longer line to the person
@@ -51,7 +51,7 @@ const { useGraphStore } = await import('../../src/store/graphStore');
 // The backend's lines for the person, word for word (lib/worldLabsWaiting.ts;
 // GM's round 13 wording of PR #114).
 const BACKEND_UNLOCK = 'A World Labs run needs your check first. Use the notice at the top of the screen.';
-const BACKEND_FORGET = '“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.';
+const BACKEND_FORGET = '“World Labs Environment” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.';
 const BACKEND_ACTIVE = 'A World Labs run is still starting. Try again in a moment.';
 // GM's lines (round 4, and round 4b for several nodes).
 // GM, round 15 of PR #114: one node reads "Couldn't delete “<node>”. <reason
@@ -86,7 +86,7 @@ beforeEach(() => {
 });
 
 describe('Delete on a node that holds World Labs state', () => {
-  it('a recovery record: the notice names Run History\'s forget; nothing is sent, the node and its wire stay', () => {
+  it('a recovery record: the notice names Run history\'s forget; nothing is sent, the node and its wire stay', () => {
     useGraphStore.getState().onNodesChange([{ id: 'n1', type: 'remove' }]);
     expect(notice()).toMatchObject({ text: ONE_FORGET, offer: null });
     expect(fetchMock).not.toHaveBeenCalled();

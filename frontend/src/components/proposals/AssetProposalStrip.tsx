@@ -26,7 +26,7 @@ function editCount(view: AssetProposalView): number {
 }
 
 function headline(view: AssetProposalView): string {
-  if (view.kind === 'moodboard') return 'asks to send these notes to generators';
+  if (view.kind === 'moodboard') return 'asks to turn on “Moodboard notes to generators”';
   if (view.kind === 'commons') {
     const count = editCount(view);
     return count === 1 ? 'proposes a change to this reference' : `proposes ${count} changes to this reference`;
@@ -263,7 +263,7 @@ function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused
 
 /**
  * An agent's proposal for this project, board or Commons reference, where the
- * person works on it: on its card on the Projects screen, beside Send notes in
+ * person works on it: on its card on the Projects screen, beside “Moodboard notes to generators” in
  * Moodboard Studio, on the reference's detail in the Commons. Nothing changes
  * until they accept (backend /api/asset-proposals).
  */

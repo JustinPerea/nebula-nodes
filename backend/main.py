@@ -239,7 +239,7 @@ from services.canvas_proposals import (
     place_new_nodes,
     summarize_cost,
 )
-# Proposals outside the graph: a project's cover, a board's Send notes (U16).
+# Proposals outside the graph: a project's cover, a board's “Moodboard notes to generators” (U16).
 from services.asset_proposals import AssetProposal, asset_proposals
 from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
 from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_outcome_line,
@@ -944,7 +944,7 @@ provider_start_guard = ProviderStartGuard(
 #   needs your check first. Use the notice at the top of the screen." (the
 #   status bar's "I’ve checked Marble")
 # - recovery: "“<node>” has a saved World Labs recovery ID. Check the run in
-#   Marble, then forget the ID in Run History." (Run History's "Forget ID")
+#   Marble, then forget the ID in Run history." (Run history's "Forget ID")
 # - params: "“<node>” has a World Labs ID in its settings. Check it in
 #   Marble, then clear “Resume Operation ID”.", naming the field that
 #   actually holds the ID.
@@ -988,7 +988,7 @@ def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[
         name = f"\u201c{node}\u201d" if node else "\u201cWorld Labs Environment\u201d"
     if state == "recovery":
         return (f"{name} has a saved World Labs recovery ID. "
-                "Check the run in Marble, then forget the ID in Run History.")
+                "Check the run in Marble, then forget the ID in Run history.")
     return f"{name} has a World Labs ID in its settings. Check it in Marble, then clear {_quoted_fields(fields)}."
 
 
@@ -1002,14 +1002,14 @@ CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved 
 def _paid_capacity_person(limit: int | None) -> str:
     """A full World Labs journal (GM - Design, after 3b: "Nebula is already
     waiting on {n} World Labs jobs, the most it can track. Check them in
-    Marble and clear some in Run History, then try again." Used for a run and
+    Marble and clear some in Run history, then try again." Used for a run and
     a canvas edit alike)."""
     if limit == 1:
         return ("Nebula is already waiting on 1 World Labs job, the most it can track. "
-                "Check it in Marble and clear it in Run History, then try again.")
+                "Check it in Marble and clear it in Run history, then try again.")
     head = (f"Nebula is already waiting on {limit} World Labs jobs, the most it can track." if limit else
             "Nebula is already waiting on as many World Labs jobs as it can track.")
-    return f"{head} Check them in Marble and clear some in Run History, then try again."
+    return f"{head} Check them in Marble and clear some in Run history, then try again."
 
 
 def _paid_job_changed_person(button: str) -> str:
@@ -8151,16 +8151,16 @@ def _scene_shot_ids(node: Mapping[str, Any]) -> list[str]:
 
 def _removal_person_line(action: str | None, numbers: list[int], stoppable: bool) -> str:
     """The person's line for a write that would remove a rendering shot.
-    GM, PR #198 r3 item 3, an undo or redo: "Couldn’t undo. It would remove
-    “Shot 2”, which is still running. Stop the run first." ("…Wait for it to
+    An undo or redo, in the because form: "Nebula couldn’t undo because it
+    would remove “Shot 2”, which is still running. Stop the run first." ("…Wait for it to
     finish." when there's no Stop for it). Several shots, and a studio edit
     that isn't an undo, are builder's forms on GM's pattern."""
     what, several = _shot_names(numbers)
     end = "Stop the run first." if stoppable else "Wait for it to finish."
     if action in RESTORE_ACTIONS:
         if len(numbers) >= 4:
-            return f"Couldn’t {action}. It would remove {what} that are still running. {end}"
-        return f"Couldn’t {action}. It would remove {what}, which {'are' if several else 'is'} still running. {end}"
+            return f"Nebula couldn’t {action} because it would remove {what} that are still running. {end}"
+        return f"Nebula couldn’t {action} because it would remove {what}, which {'are' if several else 'is'} still running. {end}"
     return f"Couldn’t remove {what}. {'They' if several else 'It'}’{'re' if several else 's'} still running. {end}"
 
 
@@ -9736,7 +9736,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
         pins = []
     await _sweep_proposals()
     briefs = [_proposal_brief(p) for p in canvas_proposals.open_list()]
-    # Asset proposals too (a cover, Send notes, Commons curation), with the
+    # Asset proposals too (a cover, “Moodboard notes to generators”, Commons curation), with the
     # Update each posted; a commons one only where the caller sees it.
     await _sweep_asset_proposals()
     briefs += [asset_proposals.brief(p) for p in asset_proposals.open_list()
@@ -12520,7 +12520,7 @@ async def dismiss_agent_questions(set_id: str) -> dict[str, Any]:
 # ---------- Asset proposals: changes outside the graph (U16) ----------
 #
 # The canvas proposals' life cycle and accept gate for a project's cover and
-# a board's Send notes (services/asset_proposals.py). Accept applies the
+# a board's “Moodboard notes to generators” (services/asset_proposals.py). Accept applies the
 # change through the route the person's own click uses (the cover route, the
 # board PUT), as the person.
 
@@ -12740,7 +12740,7 @@ async def _asset_proposal_misfit(proposal: AssetProposal, exported: dict[str, An
     if board is None:
         return "the moodboard was deleted"
     if board.get("sendNotes") is True:
-        return "Send notes to generators is already on"
+        return "“Moodboard notes to generators” is already on"
     return None
 
 
@@ -13164,7 +13164,7 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
     if board.get("sendNotes") is True:
         shown = clean_name(board.get("name"), 60, fallback=clean_name(target_id, 60), ellipsis=True)
         raise HTTPException(status_code=409, detail=(
-            f'Send notes to generators is already on for board "{shown}"; nothing to propose.'))
+            f'“Moodboard notes to generators” is already on for board "{shown}"; nothing to propose.'))
     return str(board.get("name") or ""), {"sendNotes": False}, None, None
 
 
@@ -13172,7 +13172,7 @@ async def _asset_proposal_target(kind: str, target_id: str, change: dict[str, An
 async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
     """An agent proposes a change outside the graph; the person decides where
     they work on that thing (a project's cover on the Projects screen, a
-    board's Send notes in Moodboard Studio). Nothing changes until they accept.
+    board's “Moodboard notes to generators” in Moodboard Studio). Nothing changes until they accept.
 
     Body: {kind: "project" | "moodboard", id, change, note}. ``change`` is
     {"cover": url | null} for a project, {"sendNotes": true} for a board."""
@@ -14343,7 +14343,7 @@ def _claim_fresh_paid_worldlabs_starts(
             claimed_node_ids & (recovered_node_ids | canonical_recovery_node_ids)
         )
         if stale_nodes:
-            # The person's line names what clears it (round 3b): Run History's
+            # The person's line names what clears it (round 3b): Run history's
             # forget for a record, else the node's own ID fields.
             journaled = any(node_id in recovered_node_ids for node_id in stale_nodes)
             # The node GM's line names (its card title): the first with a
@@ -18503,7 +18503,7 @@ async def delete_provider_recovery(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if active:
-            # Run History's "Forget ID": the same "still
+            # Run history's "Forget ID": the same "still
             # waiting" line as the node's own refusal (round 3 review).
             raise refusal_copy.refusal(
                 409,
@@ -18520,7 +18520,7 @@ async def delete_provider_recovery(
                 existing_world_id=existing_world_id,
             )
         except ProviderRecoveryConflictError as exc:
-            raise refusal_copy.refusal(409, str(exc), _paid_job_changed_person(f"{FORGET_BUTTON} in Run History"),
+            raise refusal_copy.refusal(409, str(exc), _paid_job_changed_person(f"{FORGET_BUTTON} in Run history"),
                                        route="canvas") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -18783,7 +18783,7 @@ def _shared_id_delete_person(node_id: str, holding: Sequence[Mapping[str, Any]])
       Recently deleted counts) or another project's node holds its ID:
       "Nebula couldn’t delete “Delta brief” because it shares the ID n1 with
       a World Labs run from a project Nebula can’t identify. Check that run
-      in Marble before you forget its ID in Run History, then try again.";
+      in Marble before you forget its ID in Run history, then try again.";
     - a record nothing names (r35, 2, in addendum 2's shape), which wins:
       "Nebula couldn’t delete “Delta brief” because it has a saved World
       Labs recovery ID. Check the run in Marble, then forget that ID in Run
@@ -18825,10 +18825,10 @@ def _shared_id_delete_person(node_id: str, holding: Sequence[Mapping[str, Any]])
         label = _quoted(_node_label(node_id))
         if nowhere:
             return (f"Nebula couldn\u2019t delete {label} because it has a saved World Labs recovery ID. "
-                    "Check the run in Marble, then forget that ID in Run History.")
+                    "Check the run in Marble, then forget that ID in Run history.")
         return (f"Nebula couldn\u2019t delete {label} because it shares the ID {node_id} "
                 "with a World Labs run from a project Nebula can\u2019t identify. "
-                "Check that run in Marble before you forget its ID in Run History, then try again.")
+                "Check that run in Marble before you forget its ID in Run history, then try again.")
     except Exception:  # noqa: BLE001 - the refusal itself never fails over its line
         return None
 
@@ -21593,7 +21593,7 @@ def _renumber_node_records(project_id: str | None, mapping: Mapping[str, str]) -
     """After a renumber's commit (an open, the boot): the records kept
     outside the project by node id follow the nodes too (review 18
     handoff-reopen LOW-2). World Labs recovery checkpoints and paid-start
-    holds ((runId, nodeId), one write each: Run History's Recover and the
+    holds ((runId, nodeId), one write each: Run history's Recover and the
     node's guards find them by the new id, and its moved run record still
     matches), the node's last-run error (the card and agents' look), and
     which run's result landed on it (node_result_runs). Proposals, run
@@ -24388,7 +24388,7 @@ async def get_project_size(project_id: str) -> dict[str, Any]:
         note = (f"Saving is paused: the person's canvas can't save this project until it is "
                 f"{project_size.limit_text(limit)} or less. Make it {project_size.over_by(size, limit)} smaller "
                 "with edit_canvas or remove_from_canvas (`nebula apply`), asking the person before deleting their "
-                "work; it saves again by itself. Run history clears only from the Run History panel, the person's.")
+                "work; it saves again by itself. Run history clears only from the Run history panel, the person's.")
     elif over:
         note = (f"This project is over the {project_size.limit_text(limit)} save limit. It opens, but the canvas "
                 "can't save it until it is made smaller.")

@@ -12,10 +12,16 @@ export interface ProviderKeySpec {
   input?: 'secret' | 'service-account';
   /** Words dropped from node names in this row ("ElevenLabs TTS" reads as "TTS"). */
   brand?: string[];
-  /** Nodes to name first in the row's summary. A test keeps these real. */
-  highlights?: string[];
+  /** The node that leads a row of four or more: the provider's current flagship,
+   *  said by its full card name. A test keeps it real and keeps the name a card's
+   *  `displayName` (design: the name must read on its own). */
+  lead?: string;
+  /** A row whose cards share the provider's name says the count alone ("6 nodes"). */
+  countOnly?: boolean;
   /** Said instead of node names when the node list doesn't explain the key. */
   note?: string;
+  /** The longer form of `note`, shown as the row's hover title. */
+  noteTitle?: string;
   /** What to know before getting this key (where it's sold, setup it needs).
    *  Shown under the key field and in the saved row. */
   caveat?: string;
@@ -65,42 +71,44 @@ export function credentialName(spec: Pick<ProviderKeySpec, 'keyLink' | 'label'>)
 
 export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   { key: 'OPENAI_API_KEY', label: 'OpenAI', keyLink: 'Open OpenAI keys', placeholder: 'sk-...', url: 'https://platform.openai.com/api-keys',
-    brand: ['OpenAI'], highlights: ['gpt-image-2-generate', 'gpt-image-2-5-generate', 'openai-stt', 'openai-tts'] },
+    brand: ['OpenAI'], lead: 'gpt-image-2-5-generate' },
   { key: 'ANTHROPIC_API_KEY', label: 'Anthropic', keyLink: 'Open Anthropic keys', placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
   { key: 'GOOGLE_API_KEY', label: 'Google · Gemini API', keyLink: 'Open Google AI Studio keys', placeholder: 'AIza...', url: 'https://aistudio.google.com/apikey',
-    brand: ['Gemini'], highlights: ['nano-banana', 'veo-3', 'lyria-3', 'gemini-chat'] },
+    brand: ['Gemini'], lead: 'nano-banana' },
   { key: 'GOOGLE_VERTEX_CREDENTIALS', label: 'Google · Vertex AI', keyLink: 'Open Google Cloud service accounts', placeholder: '{"type": "service_account", ...}',
     url: 'https://console.cloud.google.com/iam-admin/serviceaccounts', input: 'service-account',
-    note: 'Veo 3.1 on Google Cloud billing' },
+    note: 'Veo 3.1 on Google Cloud billing', lead: 'veo-3' },
   { key: 'OPENROUTER_API_KEY', label: 'OpenRouter', keyLink: 'Open OpenRouter keys', placeholder: 'sk-or-...', url: 'https://openrouter.ai/keys',
-    note: 'Hundreds of chat models through one key' },
+    note: 'Hundreds of chat models through one key', countOnly: true },
   { key: 'REPLICATE_API_TOKEN', label: 'Replicate', keyLink: 'Open Replicate tokens', placeholder: 'r8_...', url: 'https://replicate.com/account/api-tokens',
-    note: 'Any model on Replicate' },
+    note: 'Any model on Replicate', countOnly: true },
   { key: 'FAL_KEY', label: 'fal.ai', keyLink: 'Open fal.ai keys', placeholder: 'fal_...', url: 'https://fal.ai/dashboard/keys',
-    brand: ['FAL'], highlights: ['kling-v3', 'flux-2-pro', 'seedance-2-t2v', 'veo-3'] },
-  { key: 'MESHY_API_KEY', label: 'Meshy', keyLink: 'Open Meshy keys', placeholder: 'msy_...', url: 'https://app.meshy.ai/settings/api', brand: ['Meshy', 'Meshy 6'] },
+    brand: ['FAL'], lead: 'kling-v3' },
+  { key: 'MESHY_API_KEY', label: 'Meshy', keyLink: 'Open Meshy keys', placeholder: 'msy_...', url: 'https://app.meshy.ai/settings/api', brand: ['Meshy', 'Meshy 6'],
+    lead: 'meshy-text-to-3d' },
   { key: 'RUNWAY_API_KEY', label: 'Runway', keyLink: 'Open Runway keys', placeholder: 'key_...', url: 'https://app.runwayml.com/settings/api-keys', brand: ['Runway'],
-    highlights: ['runway-video', 'runway-aleph', 'runway-act-two'] },
-  { key: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', keyLink: 'Open ElevenLabs keys', placeholder: 'el_...', url: 'https://elevenlabs.io/app/settings/api-keys', brand: ['ElevenLabs'] },
+    lead: 'runway-video' },
+  { key: 'ELEVENLABS_API_KEY', label: 'ElevenLabs', keyLink: 'Open ElevenLabs keys', placeholder: 'el_...', url: 'https://elevenlabs.io/app/settings/api-keys', brand: ['ElevenLabs'],
+    lead: 'elevenlabs-tts' },
   { key: 'MINIMAX_API_KEY', label: 'MiniMax', keyLink: 'Open MiniMax keys', placeholder: 'eyJ...', url: 'https://www.minimaxi.com/platform', brand: ['MiniMax'],
-    note: 'Hailuo 2.3 video from text, an image or a subject' },
-  { key: 'XAI_API_KEY', label: 'xAI (Grok)', keyLink: 'Open xAI keys', placeholder: 'xai-...', url: 'https://console.x.ai' },
+    countOnly: true },
+  { key: 'XAI_API_KEY', label: 'xAI (Grok)', keyLink: 'Open xAI keys', placeholder: 'xai-...', url: 'https://console.x.ai', lead: 'grok-imagine-video' },
   { key: 'HIGGSFIELD_API_KEY', label: 'Higgsfield', keyLink: 'Open Higgsfield keys', placeholder: 'hf_...', url: 'https://app.higgsfield.ai/settings',
-    note: 'Image-to-video: DoP, Kling 2.1, Seedance' },
+    note: 'Image-to-video with DoP, Kling 2.1 and Seedance' },
   { key: 'QUIVER_API_KEY', label: 'QuiverAI (Arrow)', keyLink: 'Open QuiverAI keys', placeholder: 'qvr-...', url: 'https://app.quiver.ai/settings/api-keys', brand: ['Quiver'] },
   { key: 'KREA_API_TOKEN', label: 'Krea · API key', keyLink: 'Open Krea keys', placeholder: 'krea_...', url: 'https://www.krea.ai/api-keys',
-    brand: ['Krea'], highlights: ['krea-2-generate', 'krea-image-google-nano-banana-pro', 'krea-image-openai-gpt-image-2'] },
+    brand: ['Krea'], lead: 'krea-2-generate' },
   { key: 'KREA_USAGE_KEY', label: 'Krea · usage key', keyLink: 'Open Krea keys', placeholder: 'Service key', url: 'https://www.krea.ai/api-keys',
-    note: 'Workspace spend reporting (enterprise)' },
-  { key: 'IDEOGRAM_API_KEY', label: 'Ideogram', keyLink: 'Open Ideogram keys', placeholder: 'ideogram_...', url: 'https://developer.ideogram.ai', brand: ['Ideogram'] },
+    note: 'Workspace spend reporting on enterprise plans' },
+  { key: 'IDEOGRAM_API_KEY', label: 'Ideogram', keyLink: 'Open Ideogram keys', placeholder: 'ideogram_...', url: 'https://developer.ideogram.ai', brand: ['Ideogram'], lead: 'ideogram-v4' },
   { key: 'TYPESAFE_API_KEY', label: 'TypeSafe', keyLink: 'Open TypeSafe keys', placeholder: 'Your TypeSafe key', url: 'https://console.typesafe.ai/keys',
-    brand: ['Jev'], note: 'Typed judge, classify and pick-best decisions (Jev)' },
+    brand: ['Jev'], note: 'Typed decisions with Jev', noteTitle: 'Typed judge, classify and pick-best decisions' },
   { key: 'WORLDLABS_API_KEY', label: 'World Labs', keyLink: 'Open World Labs keys', placeholder: 'wlt_...', url: 'https://platform.worldlabs.ai', brand: ['World Labs'] },
   // Black Forest Labs' own API (api.bfl.ai, x-key header). Keys come from
   // dashboard.bfl.ai under API -> Keys, scoped to a project; credits are
   // shared by the organization. docs/api-guides/bfl.md.
   { key: 'BFL_API_KEY', label: 'Black Forest Labs', keyLink: 'Open Black Forest Labs keys', placeholder: 'bfl_...', url: 'https://dashboard.bfl.ai',
-    brand: ['FLUX'], note: 'FLUX on Black Forest Labs\' own API' },
+    brand: ['FLUX'], note: 'FLUX on Black Forest Labs\' own API', lead: 'flux-3-image' },
   // Optional for the Idol node on Speridlabs' Hugging Face Space: it runs
   // without a token (the first live call, PR #203 round 7), and a token gives
   // its runs the person's own ZeroGPU allowance. Copy: GM, PR #203 r12 item 3
@@ -115,7 +123,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // the rate of $1 per 10 minutes of GPU time."
   { key: 'HF_TOKEN', label: 'Hugging Face', placeholder: 'hf_...',
     url: 'https://huggingface.co/settings/tokens',
-    brand: ['Idol'], note: 'Optional. Gives Idol your own Hugging Face allowance.',
+    brand: ['Idol'], note: 'Optional. Lets Idol use your own allowance.',
     instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
       + 'Nebula uses it only for Idol’s GPU time on Hugging Face.',
     keyLink: 'Open Hugging Face tokens',
@@ -127,7 +135,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // first (404 ModelNotOpen otherwise). docs/api-guides/byteplus.md.
   { key: 'BYTEPLUS_API_KEY', label: 'BytePlus · ModelArk', keyLink: 'Open BytePlus ModelArk keys', placeholder: 'ModelArk API key',
     url: 'https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey', brand: ['Seedream', 'Seedance'],
-    note: 'Seedream and Seedance on ByteDance\'s own API',
+    note: 'Seedream and Seedance on ByteDance\'s own API', lead: 'seedream-4-5',
     caveat: 'BytePlus doesn\'t offer its model services in the United States (BytePlus Service Specific Terms). '
       + 'Use an Asia Pacific (ap-southeast-1) ModelArk key, and activate each model on the ModelArk console\'s '
       + 'Model activation page first; Seedance 2.x also needs USD 30 of BytePlus credits before activation.' },
@@ -158,14 +166,11 @@ function shortName(name: string, brand: readonly string[] = []): string {
   return out.trim();
 }
 
-/** Node names for a row, highlights first, provider name trimmed, no repeats. */
+/** Node names for a row, the lead first, provider name trimmed, no repeats. */
 export function unlockNames(spec: ProviderKeySpec): string[] {
   const nodes = nodesForKey(spec.key);
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const ordered = [
-    ...(spec.highlights ?? []).map((id) => byId.get(id)).filter((node) => node !== undefined),
-    ...nodes.filter((node) => !spec.highlights?.includes(node.id)),
-  ];
+  const lead = nodes.find((node) => node.id === spec.lead);
+  const ordered = [...(lead ? [lead] : []), ...nodes.filter((node) => node !== lead)];
   return [...new Set(ordered.map((node) => shortName(node.displayName, spec.brand)))];
 }
 
@@ -178,18 +183,20 @@ function listNames(names: readonly string[]): string {
  * What a row says a key opens up, from the names of its nodes: with three
  * nodes or fewer, the names alone ("Nano Banana, Veo 3.1 and Lyria 3"); from four,
  * the count and one name ("15 nodes, including Nano Banana"), so rows stay one
- * line and even (design r164).
+ * line and even (design). `lead` is that one name, written in full; a row whose
+ * cards only repeat the provider's name says the count alone ("6 nodes").
  */
-export function summarizeUnlocked(names: readonly string[]): string {
+export function summarizeUnlocked(names: readonly string[], lead?: string): string {
   if (names.length <= 3) return listNames(names);
-  return `${names.length} nodes, including ${names[0]}`;
+  return lead ? `${names.length} nodes, including ${lead}` : `${names.length} nodes`;
 }
 
 /** The row's one-line summary of what the key opens up (connected and add rows read the same). */
 export function unlockSummary(spec: ProviderKeySpec): string {
   const names = unlockNames(spec);
   if (spec.note && names.length <= 3) return spec.note;
-  return summarizeUnlocked(names) || (spec.note ?? '');
+  const lead = spec.lead ? NODE_DEFINITIONS[spec.lead]?.displayName : undefined;
+  return summarizeUnlocked(names, spec.countOnly ? undefined : lead) || (spec.note ?? '');
 }
 
 /** How many nodes the key opens up; the add list sorts by it. */

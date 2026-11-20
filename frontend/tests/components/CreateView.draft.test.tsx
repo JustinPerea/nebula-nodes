@@ -170,7 +170,7 @@ describe('Create draft integration', () => {
     expect(mocks.author).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
     await act(async () => { finish({ ok: false, status: 413, json: async () => ({ detail: 'Image exceeds 20 MB limit' }) }); });
     // error-copy round 2 (GM): "Couldn't upload {filename}." then the reason.
-    expect(await view.findByText('Nebula couldn’t upload “slow.png”. Image exceeds 20 MB limit.')).toBeInTheDocument();
+    expect(await view.findByText('Nebula couldn’t upload “slow.png” because it’s over the 20 MB limit.')).toBeInTheDocument();
     expect(view.getByRole('button', { name: 'Generate' })).toBeDisabled();
     await act(async () => { await mocks.directGenerate!(); });
     expect(mocks.author).not.toHaveBeenCalled();

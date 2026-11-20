@@ -276,7 +276,7 @@ export function BriefFields({
             rows={2}
             value={direction}
             maxLength={BRIEF_LIMITS.direction}
-            placeholder="Say what you want, e.g. warm editorial product shots with soft daylight."
+            placeholder="Say what you want, such as warm editorial product shots with soft daylight."
             onChange={(event) => onChange({ direction: event.target.value })}
             onBlur={onTextDone}
           />
@@ -300,7 +300,7 @@ export function BriefFields({
               aria-label="Add to the avoid list"
               disabled={avoidFull}
               placeholder={avoidFull ? `The list holds ${BRIEF_LIMITS.avoidItems} items. Remove one to add another.`
-                : 'Something to keep out, e.g. neon signage'}
+                : 'Something to keep out, such as neon signage'}
               onChange={(event) => setAvoidText(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addAvoid(); } }}
             />

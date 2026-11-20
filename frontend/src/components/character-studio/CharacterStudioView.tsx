@@ -450,7 +450,7 @@ export function CharacterStudioView() {
         {loading ? (
           <div className="character-studio-view__loading">
             {/* As in the board's Studio (round 3b): no Try again with no project open. */}
-            {shownLoadError ? <div id={loadLineId} role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading Character…'}
+            {shownLoadError ? <div id={loadLineId} role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading character…'}
             {shownLoadError && projectReady && <button type="button" className="character-studio-view__retry"
               aria-describedby={loadLineId} onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}
           </div>
@@ -496,7 +496,7 @@ export function CharacterStudioView() {
 
             {belowMinViews && (
               <div className="character-studio-view__notice character-studio-view__notice--guard">
-                A Character needs at least {MIN_REFERENCE_VIEWS} reference views
+                A character needs at least {MIN_REFERENCE_VIEWS} reference views
                 before it can be saved.
               </div>
             )}

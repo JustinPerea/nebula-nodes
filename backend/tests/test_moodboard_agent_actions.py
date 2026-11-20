@@ -331,14 +331,14 @@ def _words_rows() -> list[tuple[str, dict, dict, str]]:
         ("set aside", dusk, aside, f"Set aside image 1 on {LQ}Dusk{RQ}"),
         ("fields and send notes", {**dusk, "sendNotes": True},
          {**dusk, "sendNotes": False, "direction": "warm dusk"},
-         f"Changed {LQ}Direction{RQ} on {LQ}Dusk{RQ} and turned off {LQ}Send notes to generators{RQ}"),
+         f"Changed {LQ}Direction{RQ} on {LQ}Dusk{RQ} and turned off {LQ}Moodboard notes to generators{RQ}"),
         ("undo", dusk, aside, f"Undid a change to {LQ}Dusk{RQ}"),
         ("rename", light, {**light, "name": "Dusk"}, f"Renamed {LQ}Desert light{RQ} to {LQ}Dusk{RQ}"),
         ("rename and a field", light, {**light, "name": "Dusk", "direction": "warm dusk"},
          f"Renamed {LQ}Desert light{RQ} to {LQ}Dusk{RQ} and changed its direction"),
         ("rename and send notes off", {**light, "sendNotes": True},
          {**light, "name": "Dusk", "sendNotes": False},
-         f"Renamed {LQ}Desert light{RQ} to {LQ}Dusk{RQ} and turned off {LQ}Send notes to generators{RQ}"),
+         f"Renamed {LQ}Desert light{RQ} to {LQ}Dusk{RQ} and turned off {LQ}Moodboard notes to generators{RQ}"),
     ]
 
 
@@ -356,9 +356,9 @@ def test_every_board_change_line_in_gms_words_for_each_surface(label, before, af
     # The journal is the same phrase lower-case, since the actor's name leads it: one source. It names
     # fields, never values, so Send notes is "changed", where the say adds which way it went.
     assert summaries and all(s[0].islower() and not s.endswith(".") and ";" not in s for s in summaries)
-    assert all("#" not in s and "board " not in s for s in summaries)
-    expected = (f"changed {LQ}Direction{RQ} and {LQ}Send notes to generators{RQ} on {LQ}Dusk{RQ}" if label == "fields and send notes"
-                else f"renamed {LQ}Desert light{RQ} to {LQ}Dusk{RQ} and changed its send notes setting"
+    assert all("#" not in s and "board " not in s.replace("Moodboard notes", "") for s in summaries)
+    expected = (f"changed {LQ}Direction{RQ} and {LQ}Moodboard notes to generators{RQ} on {LQ}Dusk{RQ}" if label == "fields and send notes"
+                else f"renamed {LQ}Desert light{RQ} to {LQ}Dusk{RQ} and changed its “Moodboard notes to generators” setting"
                 if label == "rename and send notes off" else line[0].lower() + line[1:])
     assert summaries == [expected]
 
@@ -448,7 +448,7 @@ def test_the_words_modules_use_curly_quotes_only():
         return found
 
     assert scan(actions, None) + scan(edits, words_in_edits) == []
-    assert "\u201c" in edits.board_where({"name": "x"}) and edits.SENTENCE_LABELS["sendNotes"] == "Send notes to generators"
+    assert "\u201c" in edits.board_where({"name": "x"}) and edits.SENTENCE_LABELS["sendNotes"] == "Moodboard notes to generators"
 
 
 def test_a_board_with_no_name_or_id_and_a_cover_with_no_images_say_moodboard():

@@ -115,7 +115,7 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     expect(heldProposalsFor(notes, proposals, false, 'project', 'dusk')).toEqual([]);
     expect(heldProposalsFor(notes, proposals, true, 'project', 'dusk').map((item) => item.proposalId)).toEqual(['pa_1']);
     expect(heldProposalsFor(notes, proposals, true, 'moodboard', 'dusk')).toEqual([
-      { proposalId: 'pa_6', agentName: 'Claude Code', agentColor: '#5B9DFF', header: 'asks to send these notes to generators', at: T0 }]);
+      { proposalId: 'pa_6', agentName: 'Claude Code', agentColor: '#5B9DFF', header: 'asks to turn on “Moodboard notes to generators”', at: T0 }]);
   });
 
   it('a Commons ask uses the real card\'s header, counted from the Update\'s ref', () => {

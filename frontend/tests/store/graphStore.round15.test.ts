@@ -237,7 +237,7 @@ describe('held-delete lines (GM, round 15: "Couldn’t delete “<node>”. <rea
 
   it('the backend\'s recovery refusal is named from its own line', () => {
     expect(deleteRefusalText("Couldn't delete the node.", 1,
-      ['“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History.'])).toBe(
+      ['“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.'])).toBe(
       "Nebula couldn’t delete “Harbor world” because it has a saved World Labs recovery ID. Check the run in Marble, then use “Forget ID” in run history.");
   });
 

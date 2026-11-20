@@ -60,7 +60,7 @@ from tests.test_project_catalog_restore_fix21 import (  # noqa: E402,F401
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 ENVIRONMENT = "worldlabs-environment"
-TAIL = "has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History."
+TAIL = "has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history."
 
 
 # -- A. the person's line places the record as the hold does (GM r34 A1) ----------------------------
@@ -430,7 +430,7 @@ def test_f_the_agents_note_says_the_state_node_project_and_what_clears_it(app, r
     recoveries.set(run_id=run_id, node_id="n1", resume_operation_id="op-1", existing_world_id=None)
     note, printed = _agents_note(client)
     assert note == (f"Opening or switching projects is held (recovery): {said} has a saved World Labs "
-                    "recovery ID; the person forgets it in Run History.")
+                    "recovery ID; the person forgets it in Run history.")
     assert f"Note: {note}" in printed
 
 
@@ -482,7 +482,7 @@ def test_f_agent_docs_describe_round_22():
     assert "`sourceName`" in created and "`sourceProjectId`" in created
     for text in (setup, skill):
         assert "covers Nebula's own holds only" in text and "canvas_kept_in_tab" in text
-        assert "from “Alpha” has a saved World Labs recovery ID; the person forgets it in Run History." in text
+        assert "from “Alpha” has a saved World Labs recovery ID; the person forgets it in Run history." in text
         assert "with no side effect" not in text and "Reading it changes nothing" not in text
     assert "`paid_bootstrap`" in setup and "nodeLandedAt" in setup
     for name in ("list_projects", "get_project", "open_project", "new_project"):

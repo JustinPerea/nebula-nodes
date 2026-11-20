@@ -10,7 +10,7 @@ import { keyIdolInEachTest } from '../helpers/keyedSpace';
 keyIdolInEachTest();
 
 /**
- * GM, PR #203 r8 items 1-3: a Run History replay locks only when the run it
+ * GM, PR #203 r8 items 1-3: a Run history replay locks only when the run it
  * replays includes a real Idol, with Idol's line. A whole-canvas replay skips
  * an agent's placeholder, as a canvas run does; a node's replay runs it.
  */

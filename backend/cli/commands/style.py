@@ -93,7 +93,7 @@ def run(client: NebulaClient, args) -> None:
                 _print_json(listing)
                 return
             if not listing:
-                print("No Styles yet. `nebula style new \"Name\" --prompt \"...\"` saves one.")
+                print("No styles yet. `nebula style new \"Name\" --prompt \"...\"` saves one.")
                 return
             names = boards.project_names(api, headers) if any(s.get("projectId") for s in listing) else {}
             for style in listing:

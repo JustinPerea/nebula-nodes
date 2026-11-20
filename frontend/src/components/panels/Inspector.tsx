@@ -1231,7 +1231,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               focusable="false"
             />
             <span id={rowId} title={uploading ?? loadedFilename ?? undefined}>
-              {uploading ? uploadingLabel(uploading) : loadedFilename ? middleTruncate(loadedFilename) : 'Choose File'}
+              {uploading ? uploadingLabel(uploading) : loadedFilename ? middleTruncate(loadedFilename) : 'Choose file'}
             </span>
             <input
               type="file"
@@ -1573,7 +1573,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                   onPointerEnter={() => void DeferredMaskPainterModal.preload().catch(() => {})}
                   onFocus={() => void DeferredMaskPainterModal.preload().catch(() => {})}
                 >
-                  <Brush size={13} /> {maskData ? 'Edit Mask' : 'Paint Mask'}
+                  <Brush size={13} /> {maskData ? 'Edit mask' : 'Paint mask'}
                 </button>
                 <span className="mask-painter__status">
                   {maskData ? 'Mask painted' : 'No mask yet'}

@@ -87,7 +87,7 @@ describe('M1: Stop works while offline (a false offline must never trap a spendi
     expect(cancelExecution).toHaveBeenCalledOnce();
   });
 
-  it('Run History\'s header Stop stays enabled, unmarked, and calls Stop', () => {
+  it('Run history\'s header Stop stays enabled, unmarked, and calls Stop', () => {
     const cancelExecution = vi.fn(async () => undefined);
     useGraphStore.setState({ runHistory: [running('r1')], isExecuting: true, isCancelling: false, cancelExecution });
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));

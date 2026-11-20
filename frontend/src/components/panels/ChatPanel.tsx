@@ -750,27 +750,27 @@ export function ChatPanel() {
   }, [agent, codexLoginState?.running]);
 
   const claudeStatusLabel = useMemo(() => {
-    if (claudeBackendOffline) return 'Nebula backend offline';
-    if (claudeStatusError) return 'Claude status unavailable';
+    if (claudeBackendOffline) return 'Nebula’s server isn’t answering';
+    if (claudeStatusError) return 'Nebula couldn’t check Claude';
     if (!claudeStatus) return 'Checking Claude…';
-    if (!claudeStatus.installed) return 'Claude not installed';
-    if (!claudeStatus.loggedIn) return 'Claude login needed';
-    if (activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)) return /api|bearer/i.test(activeCatalog.auth.mode || '') ? 'Claude Code · API billing' : 'Claude Code · Provider billing';
-    if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType}`;
+    if (!claudeStatus.installed) return 'Claude isn’t installed';
+    if (!claudeStatus.loggedIn) return 'Claude needs a sign-in';
+    if (activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)) return /api|bearer/i.test(activeCatalog.auth.mode || '') ? 'Claude Code · billed to your API key' : 'Claude Code · billed to your cloud account';
+    if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType.charAt(0).toUpperCase()}${claudeStatus.subscriptionType.slice(1)} plan`;
     if (claudeStatus.authMethod) return `Claude · ${claudeStatus.authMethod}`;
-    return 'Claude logged in';
+    return 'Claude · signed in';
   }, [claudeStatus, claudeStatusError, claudeBackendOffline, activeCatalog]);
 
   const codexStatusLabel = useMemo(() => {
-    if (codexBackendOffline) return 'Nebula backend offline';
-    if (codexStatusError) return 'Codex status unavailable';
+    if (codexBackendOffline) return 'Nebula’s server isn’t answering';
+    if (codexStatusError) return 'Nebula couldn’t check Codex';
     if (!codexStatus) return 'Checking Codex…';
-    if (!codexStatus.installed) return 'Codex not installed';
-    if (!codexStatus.loggedIn) return 'Codex login needed';
-    if (codexStatus.mode === 'chatgpt') return 'Codex · ChatGPT';
-    if (codexStatus.mode === 'api') return 'Codex · API billing';
-    if (codexStatus.mode === 'access_token') return 'Codex · access token';
-    return 'Codex logged in';
+    if (!codexStatus.installed) return 'Codex isn’t installed';
+    if (!codexStatus.loggedIn) return 'Codex needs a sign-in';
+    if (codexStatus.mode === 'chatgpt') return 'Codex · your ChatGPT plan';
+    if (codexStatus.mode === 'api') return 'Codex · billed to your API key';
+    if (codexStatus.mode === 'access_token') return 'Codex · signed in with a token';
+    return 'Codex · signed in';
   }, [codexStatus, codexStatusError, codexBackendOffline]);
 
   const agentConnectHint = useMemo(() => {
@@ -829,7 +829,7 @@ export function ChatPanel() {
       return {
         agent: 'codex' as const,
         open: needsConnection,
-        title: needsConnection ? 'Connect ChatGPT Account' : 'ChatGPT account connected',
+        title: needsConnection ? 'Connect ChatGPT account' : 'ChatGPT account connected',
         status: codexStatusLabel,
         detail,
         canStartLogin: true,
@@ -1791,6 +1791,18 @@ export function ChatPanel() {
     return 'ready';
   }, [connected, busy, cancelState]);
 
+  // The meta line says the panel's state only while it is busy ("thinking…", "canceling…", "cancel failed"):
+  // "ready" next to a sign-in problem contradicted it, and an idle panel needs no word. A running turn means the
+  // agent can run, so those states show whenever they hold, whatever the status check says (design).
+  // A failed cancel matters only while its turn still runs: once the turn ends, the word goes too.
+  const panelState = busy || cancelState === 'requested' ? status : null;
+  // The session's id means nothing to a person on the line itself: it rides in the hover title.
+  const sessionTitle = sessionId ? `Session ${sessionId}` : undefined;
+  // The status call's `message` is the sign-in method's own word ("claude.ai", "none") when the CLI says nothing else, which
+  // is no sentence for a hover title: Claude's title keeps it only when it is something else. Codex's is the CLI's own message.
+  const claudeMessage = claudeStatus?.message && claudeStatus.message !== claudeStatus.authMethod && claudeStatus.message !== 'none'
+    ? claudeStatus.message : undefined;
+
   // Generic drag-to-resize helper. The `edges` string encodes which panel
   // edges the user is dragging: any combination of 'l', 'r', 't', 'b'. We
   // compute the new width/height and, when top or left is in play, the new
@@ -2014,21 +2026,16 @@ export function ChatPanel() {
           {commonsEnabled && <p className="chat-panel__scope-hint">Private reference chats: Claude or Codex.</p>}
           <div className="chat-panel__meta" onMouseDown={(e) => e.stopPropagation()}>
             {personal ? (
-              <span data-chat-personal-agent={personalAgent?.id ?? ''}>
+              <span data-chat-personal-agent={personalAgent?.id ?? ''} title={sessionTitle}>
                 <span className="chat-panel__personal-dot" style={{ background: personalAgent?.color ?? '#888' }} aria-hidden="true" />
-                {agentDisplayName} · your agent
+                {agentDisplayName}
               </span>
             ) : (
-              <span title={agent === 'claude' ? claudeStatus?.message || claudeStatusError || undefined : codexStatus?.message || codexStatusError || undefined}>
+              <span title={[agent === 'claude' ? claudeMessage || claudeStatusError : codexStatus?.message || codexStatusError, sessionTitle].filter(Boolean).join(' · ') || undefined}>
                 {agent === 'claude' ? claudeStatusLabel : codexStatusLabel}
               </span>
             )}
-            <span> · {status}</span>
-            {sessionId && (
-              <span className="chat-panel__session" title={sessionId}>
-                · {sessionId.slice(0, 8)}
-              </span>
-            )}
+            {panelState && <span> · {panelState}</span>}
           </div>
           {personal && personalOptions.length > 0 && (
             // The models (or thinking levels) the agent offers, on their own row
@@ -2142,7 +2149,7 @@ export function ChatPanel() {
                         aria-hidden="true"
                         focusable="false"
                       />
-                      {codexLoginState?.running ? 'Opening ChatGPT…' : 'Connect ChatGPT Account'}
+                      {codexLoginState?.running ? 'Opening ChatGPT…' : 'Connect ChatGPT account'}
                     </button>
                     <button
                       type="button"
@@ -2151,7 +2158,7 @@ export function ChatPanel() {
                       onClick={codexLock.guard(() => handleStartCodexChatGPTLogin(true))}
                       disabled={codexLoginBusy || codexLoginState?.running}
                     >
-                      Device Code
+                      Device code
                     </button>
                   </div>
                   <PersonLockLine lock={codexLock} place="control" />

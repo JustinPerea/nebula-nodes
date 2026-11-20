@@ -369,7 +369,7 @@ export function ProposalBar() {
   const hasDetails = hasChangeLines || moreNotReady;
   // The label never changes (GM - Design, 2026-11-01): the chevron and
   // aria-expanded carry the state.
-  const detailsLabel = hasChangeLines ? 'What Accept writes' : 'Every node that can\u2019t run';
+  const detailsLabel = hasChangeLines ? 'What “Accept” saves' : 'Every node that can\u2019t run';
   const detailsCount = hasChangeLines
     ? changeCountLabel(changeTotal)
     : `${notReadyInDetails.length} node${notReadyInDetails.length === 1 ? '' : 's'}`;

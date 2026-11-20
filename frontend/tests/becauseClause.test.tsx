@@ -120,6 +120,14 @@ describe('the pattern rows and the sentence rule', () => {
       'Nebula couldn’t delete the note because it isn’t there anymore. Reload to get the latest notes.'],
     ["Couldn't restore the moodboard.", 'That board isn’t in Recently deleted anymore. Reload to get the latest list.',
       'Nebula couldn’t restore the moodboard because it isn’t in Recently deleted anymore. Reload to get the latest list.'],
+    ["Couldn't upload “big.mov”.", 'File exceeds 500 MB limit',
+      'Nebula couldn’t upload “big.mov” because it’s over the 500 MB limit.'],
+    ["Couldn't upload “big.mov”.", 'File exceeds 250 MB limit.',
+      'Nebula couldn’t upload “big.mov” because it’s over the 250 MB limit.'],
+    ["Couldn't upload “big.png”.", 'Image exceeds 20 MB limit',
+      'Nebula couldn’t upload “big.png” because it’s over the 20 MB limit.'],
+    ["Couldn't upload “big.pdf”.", 'Document exceeds 20 MB limit',
+      'Nebula couldn’t upload “big.pdf” because it’s over the 20 MB limit.'],
     ["Couldn't create the project.", overProjectLimitCopy(501, 500, 2),
       'Nebula couldn’t create the project because you have 501 projects and the limit is 500. You can make a new one after you delete 2 projects.'],
     ["Couldn't delete the project.", 'A run is still going. Let it finish or stop it.',
@@ -346,7 +354,6 @@ describe('a quoted name in a heading is read whole', () => {
 describe('a reason that is not a clause is not put after “because”', () => {
   const big = 'Couldn’t upload “big.mov”.';
   it.each([
-    ['File exceeds 500 MB limit', 'Nebula couldn’t upload “big.mov”. File exceeds 500 MB limit.'],
     ['File is too small to be a valid media file', 'Nebula couldn’t upload “big.mov”. File is too small to be a valid media file.'],
     ['Source file not found', 'Nebula couldn’t upload “big.mov”. Source file not found.'],
     ['Empty request body.', 'Nebula couldn’t upload “big.mov”. Empty request body.'],

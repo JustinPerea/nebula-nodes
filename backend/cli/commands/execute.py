@@ -61,7 +61,7 @@ def _report(result: dict[str, Any]) -> int:
     if result.get("noRecord"):
         # Round 17 of PR #114: no record here; it may have run before a restart.
         print(f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
-              "check Run History for what it did.")
+              "check Run history for what it did.")
         return 1
     if status == "cancelled" and result.get("neverStarted"):
         # Round 16 of PR #114: the stop beat the start, which Nebula refused.
@@ -92,7 +92,7 @@ def run_cancel(client: NebulaClient, run_id: str) -> int:
     status = result.get("status")
     if result.get("pendingAdmission") and result.get("noRecord"):
         print(f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
-              "check Run History for what it did.")
+              "check Run history for what it did.")
     elif result.get("pendingAdmission"):
         # The stop beat the run's start (round 16 of PR #114): Nebula refuses
         # that run id from now on.

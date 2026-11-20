@@ -19,7 +19,7 @@ import type { NodeData } from '../src/types';
  * - LOW-3: a follow that starts while the mask painter is open: the project
  *   bar sits above the painter's scrim (GM: "the bar goes on top, same as the
  *   other editors"), and the painter's tools and strokes lock.
- * - LOW-4: the read-only trim editor locks Render Preview and Export….
+ * - LOW-4: the read-only trim editor locks Render preview and Export….
  * - LOW-5: the pin card is bounded and scrolls.
  */
 
@@ -238,7 +238,7 @@ describe('LOW-3: the mask painter while following', () => {
   it('its tools lock (Brush, Erase, Size, Clear, Save) with GM\'s tooltip; Cancel and Close stay', () => {
     render(<MaskPainterModal imageUrl={null} initialMask={null} onSave={vi.fn()} onClose={vi.fn()} />);
     follow();
-    for (const name of [/Brush/, /Erase/, /Clear/, /Save Mask/]) {
+    for (const name of [/Brush/, /Erase/, /Clear/, /Save mask/]) {
       const control = screen.getByRole('button', { name });
       expect(control, String(name)).toBeDisabled();
       expect(control, String(name)).toHaveAttribute('title', WAIT);
@@ -258,7 +258,7 @@ describe('LOW-3: the mask painter while following', () => {
 
 // ── LOW-4: the read-only trim editor ───────────────────────────────────────
 
-describe('LOW-4: the read-only trim editor locks Render Preview and Export…', () => {
+describe('LOW-4: the read-only trim editor locks Render preview and Export…', () => {
   const mount = () => {
     const clip = { id: 'c1', start: 0, duration: 2, sourceIn: 0, sourceOut: 2, volume: 1, mute: false };
     const node: Node<NodeData> = { id: 'e1', type: 'model-node', position: { x: 0, y: 0 },

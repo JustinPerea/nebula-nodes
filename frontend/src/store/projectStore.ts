@@ -792,7 +792,7 @@ export function reopenHoldNow(): { id: string; line: string } | null {
  * hold changes; gone the moment none is left, or another project opens, or
  * the person closes it. The Stop form is the canvas notice; the World Labs
  * forms are `heldReopenLine`, in the World Labs notice's box (GM r33, 6) or by
- * Run History (GM r32, 2). */
+ * Run history (GM r32, 2). */
 let shownReopen: { id: string; line: string; place: ReopenHoldPlace; stop: () => void } | null = null;
 /** What a press that couldn't say its line gets back: the chunk's failure. */
 export type ReopenSaid = { lines: unknown } | void;

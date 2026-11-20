@@ -188,8 +188,8 @@ describe('asset studio workspace continuity', () => {
     api.editBoard.mockImplementation(async (id: string) => ({ board: { ...board(id), version: 2 }, version: 2, applied: [], undo: { ops: [] } }));
     useUIStore.getState().enterMoodboardEditor(NEW_MOODBOARD_SENTINEL);
     render(<MoodboardStudioView />); await settle();
-    fireEvent.change(screen.getByLabelText('Add Images'), { target: { files: [new File(['image'], 'a.png', { type: 'image/png' })] } });
-    fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' }));
+    fireEvent.change(screen.getByLabelText('Add images'), { target: { files: [new File(['image'], 'a.png', { type: 'image/png' })] } });
+    fireEvent.click(screen.getByRole('button', { name: '+ New moodboard' }));
     // The save and the switch take a few turns (this file's timers are fake, so no waitFor).
     for (let i = 0; i < 10; i += 1) await settle();
     expect(api.createBoard).toHaveBeenCalledTimes(1);
@@ -267,7 +267,7 @@ describe('asset studio workspace continuity', () => {
     await act(async () => { vi.advanceTimersByTime(600); }); await settle();
     expect(api.updateCharacter).toHaveBeenCalledExactlyOnceWith('created-character', expect.objectContaining({ name: 'Latest canonical name' }));
     expect(api.createCharacter).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: '+ New Character' })); await settle();
+    fireEvent.click(screen.getByRole('button', { name: '+ New character' })); await settle();
     expect(screen.getByLabelText('Name')).toHaveValue('');
     expect(useUIStore.getState().characterEditorId).toBe(NEW_CHARACTER_SENTINEL);
   });

@@ -83,7 +83,7 @@ describe('GM r39 item 2: each run-locked control says its own verb', () => {
     useGraphStore.setState({ nodes: [textNode('n4', 'Brief')], edges: [], isExecuting: true });
     act(() => useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n4', null));
     render(<ContextMenu />);
-    expect(titleOf(/^Run This Node/)).toBe('You can run it when the run finishes.');
+    expect(titleOf(/^Run this node/)).toBe('You can run it when the run finishes.');
     expect(titleOf(/^Duplicate/)).toBe('You can duplicate it when the run finishes.');
     expect(titleOf(/^Delete/)).toBe('You can delete it when the run finishes.');
   });

@@ -470,7 +470,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   it('names the Hugging Face credential a token, optional, with GM\'s r12 helper and r11 lines in order (PR #203 round 7)', async () => {
     await renderSettings({ apiKeys: {} });
     const hf = row('Hugging Face');
-    expect(hf).toHaveTextContent('Optional. Gives Idol your own Hugging Face allowance.');
+    expect(hf).toHaveTextContent('Optional. Lets Idol use your own allowance.');
     expect(hf).not.toHaveTextContent('Needed to run Idol.');
     fireEvent.click(within(hf).getByRole('button', { name: 'Add Hugging Face token' }));
     expect(await screen.findByLabelText('Hugging Face token')).toBeInTheDocument();
@@ -539,7 +539,7 @@ describe('Settings — adding, replacing and removing keys (browser)', () => {
   it('wraps the Hugging Face helper and a long name list instead of cutting them (GM, PR #203 r14 item 1; design, copy sweep)', async () => {
     await renderSettings({ apiKeys: { OPENAI_API_KEY: '***aaaa' } });
     const summary = row('Hugging Face').querySelector('.settings-row__summary');
-    expect(summary).toHaveTextContent('Optional. Gives Idol your own Hugging Face allowance.');
+    expect(summary).toHaveTextContent('Optional. Lets Idol use your own allowance.');
     expect(summary).toHaveClass('settings-row__summary--wrap');
     expect(summary?.textContent).not.toMatch(/…$/);
     // A list of node names wraps too when it is wider than the column (design, copy sweep): no summary is cut with "…".

@@ -159,16 +159,17 @@ function shotList(numbers: readonly number[]): { text: string; several: boolean 
 }
 
 /** GM, PR #198 r3 item 3: an undo or redo that would remove a shot still
- * rendering, refused before it is sent. "Couldn’t undo. It would remove
- * “Shot 2”, which is still running. Stop the run first." ("Couldn't redo.
- * …"; "…Wait for it to finish." with no Stop). Never the run id. Several
+ * rendering, refused before it is sent. "Nebula couldn’t undo because it would
+ * remove “Shot 2”, which is still running. Stop the run first." ("…couldn’t
+ * redo…"; "…Wait for it to finish." with no Stop). Never the run id. Several
  * shots are builder's, on GM's pattern. The backend's 409 says the same
  * (main.py _removal_person_line). */
 export function renderingRemovalLine(action: 'undo' | 'redo', shots: RenderingShots): string {
   const { text, several } = shotList(shots.numbers);
   const end = shots.stoppable ? STOP_FIRST : WAIT_FOR_IT;
-  if (shots.numbers.length >= 4) return `Couldn’t ${action}. It would remove ${text} that are still running. ${end}`;
-  return `Couldn’t ${action}. It would remove ${text}, which ${several ? 'are' : 'is'} still running. ${end}`;
+  const heading = `Couldn’t ${action}.`;
+  if (shots.numbers.length >= 4) return becauseLine({ heading, reason: `it would remove ${text} that are still running. ${end}` });
+  return becauseLine({ heading, reason: `it would remove ${text}, which ${several ? 'are' : 'is'} still running. ${end}` });
 }
 
 /** GM, PR #198 r4 item 3: the Delete over several scenes with shots

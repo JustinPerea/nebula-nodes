@@ -116,7 +116,7 @@ describe('M2: the run lock comes first, and carries no following mark', () => {
     act(() => useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n4', null));
     render(<ContextMenu />);
     // GM r39 item 2: the row's verb plus "it".
-    for (const [name, verb] of [[/^Run This Node/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Delete/i, 'delete']] as const) {
+    for (const [name, verb] of [[/^Run this node/i, 'run'], [/^Duplicate/i, 'duplicate'], [/^Delete/i, 'delete']] as const) {
       const b = button(name)!;
       expect(b, String(name)).toBeDefined();
       expect(b.getAttribute('title'), String(name)).toBe(`You can ${verb} it when the run finishes.`);

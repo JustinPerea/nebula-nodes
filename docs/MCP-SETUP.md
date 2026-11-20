@@ -643,7 +643,7 @@ The server exposes these tools for building and running (see
   exist and never their values, connections in, and a universal node's `ports`
   from its model with `_model_ports` left out of params), plus `state`,
   `position` and the last `error`; then the connections, `cover`, `open`, and `runHistory`, the
-  newest 20 records of the canvas's Run History (`runHistoryCount` counts
+  newest 20 records of the canvas's Run history (`runHistoryCount` counts
   them all), each with its status, timing, `nodeIds` and which outputs it
   made, never its recipe's params or output values. Without `view` the route
   answers as before (the canvas loads it). Deleting a project over MCP waits
@@ -968,8 +968,8 @@ And these canvas tools:
 - `withdraw_proposal`: takes back one of your open proposals. Withdraw one
   that can't run here before proposing something else instead.
 - `propose_asset_change`: proposes a change outside the canvas that is the
-  person's call: a project cover they pinned, a board's Send notes to
-  generators, or curating a Commons reference. They decide on the Projects
+  person's call: a project cover they pinned, a board's “Moodboard notes to generators”,
+  or curating a Commons reference. They decide on the Projects
   screen, in Moodboard Studio or in the Commons; `get_proposal` and
   `withdraw_proposal` take its id. See
   [Proposals outside the canvas](#proposals-outside-the-canvas).
@@ -1381,7 +1381,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `proposal.reopened` | a proposal a node delete invalidated is open again: the undo of that delete put the node back and the proposal still passes Accept's checks (same id, same expiry; it's in the open list and the person's bar again) | `proposalId`, `agentId`, `note`; outside the canvas (a cover whose image went with the node) `kind`, `targetId`, `targetName` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board's images, cards or frames: one event per write, its kind the first of these that applies (`noted` an image's notes, `grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
-| `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way Send notes went. The cover is `board.cover` |
+| `board.fields` | a moodboard edit, save or undo changed the board's own fields, by the person (Moodboard Studio, an accepted proposal) or an agent (`moodboard_update`, `moodboard_edit`'s `restore`, `nebula moodboard set`, `--restore`): one event per write, after the `board.*` event above when the same write changed images too; a write that changes no field writes none | `fields` (the names that changed, in this order: `name`, `notes`, `mode`, `strength`, `direction`, `avoid`, `pinnedColors`, `clashMode`, `colorChoices`, `sendNotes`, `briefOverride`), `boardId`, `boardName`, `scope`; never a value: no Direction, Avoid, notes or brief text, no colour, no strength, not which way “Moodboard notes to generators” went. The cover is `board.cover` |
 | `project.created` / `project.deleted` / `project.restored` | anyone made a project (new, or a stale tab's recovered copy), moved one to Recently deleted, or brought one back | `projectId`, `name`; `wasOpen` on a delete; `createdBy` when an agent made it; `sourceName` and `sourceProjectId` on a recovered copy (its source; never read it from the name) |
 | `project.renamed` | a project's name changed (saving the same name again isn't journaled) | `projectId`, `from`, `to` |
 | `settings.restored` | at start, Nebula put settings.json back from the copy it kept for an in-place save that was cut short and left the file unreadable, after keeping the file it replaced; attributed to Nebula itself (`actor.kind` `system`). Its `summary` is the whole line, never cut: "Nebula restored your settings from its saved copy because the last save didn’t finish. The file it replaced is kept at <path>.", without the "because" clause when the file was changed after that save, so the reason can't be known | `file` (the file's path as the person sees it, `~` for the home folder), `keptAt` (where the replaced file is kept, in Nebula's `settings-copy` folder, which no agent can read; named by the time and a random suffix, `settings-replaced-<UTC time>-<8 hex>.json`, never by what is in it); never a key or a setting. The person's line about it stays at the top of Settings until they dismiss it, across restarts (it is kept in that same folder); no agent route returns it |
@@ -1592,7 +1592,7 @@ token, so Nebula leaves those out. The nodes, connections and settings an
 accepted proposal applies are not counted as your edits (Nebula marks them
 with `proposalId`; a node's name can't pass for one), nor is the board write
 of an accepted `propose_asset_change` of Claude's own (turning on a board's
-Send notes to generators, marked the same way). Another agent's accepted
+“Moodboard notes to generators”, marked the same way). Another agent's accepted
 board proposal still adds a line, since you made it happen. At most 20 passive
 wakes an hour, 30 s apart; anything past a limit arrives with the next one
 (`held` says how many waited), and past 100 waiting edits (or 100 pins, or
@@ -2249,7 +2249,7 @@ claiming nothing ran:
 - `get_run` (and `GET /api/graph/runs/{runId}`) answers `status: "unknown"`
   with `noRecord: true` (no `neverStarted`), and `cancel_run` and `get_run`
   give `next`: "Nebula has no record of run <id>. If it started before
-  Nebula restarted, check Run History for what it did."
+  Nebula restarted, check Run history for what it did."
 - `nebula cancel` and `nebula result` print that same line; `nebula result`
   exits 1.
 
@@ -2303,13 +2303,13 @@ run belongs to another project that still exists (in the list or Recently
 deleted) and the open project's run history doesn't name it; a record whose
 project Nebula can't tell holds, and run histories never release one. A start that is settling or waiting on the person's check holds by node
 id, and so does an ID in the node's settings. The text is the same whoever the
-record belongs to; tell the person, who clears it in Marble and Run History.
+record belongs to; tell the person, who clears it in Marble and Run history.
 
 Round 3b added the World Labs refusals to this split, with the same statuses
 and the same checks: the status bar's "I’ve checked Marble" (`DELETE
 /api/provider-start-ambiguities/...`: "Cannot acknowledge a World Labs
 paid-start ambiguity while that provider handshake is still active", "World
-Labs paid-start ambiguity changed; ..."), Run History's "Forget ID" (`DELETE
+Labs paid-start ambiguity changed; ..."), Run history's "Forget ID" (`DELETE
 /api/provider-recoveries/...`: "World Labs recovery checkpoint changed; ..."),
 a run start the paid-start guard refuses (`POST /api/execute`,
 `/api/execute-node`, shot runs: "Fresh paid ... start is safety-locked ...",
@@ -3522,7 +3522,7 @@ thing:
 | `kind` | `change` | Decided | Applied through |
 |---|---|---|---|
 | `project` (a project id) | `{"cover": url}` (one of `list_project_covers`' images) or `{"cover": ""}` (automatic) | on the project's card on the Projects screen: the cover now and the one proposed, side by side, with **Keep mine** and **Use this cover** | `PUT /api/projects/{id}/cover`, as the person |
-| `moodboard` (a board's id or name) | `{"sendNotes": true}` | in Moodboard Studio, under the board's Send notes switch, with **Keep them here** and **Send them** | `PUT /api/moodboards/{id}`, as the person |
+| `moodboard` (a board's id or name) | `{"sendNotes": true}` | in Moodboard Studio, under the board's “Moodboard notes to generators” switch, with **Keep them here** and **Send them** | `PUT /api/moodboards/{id}`, as the person |
 | `commons` (a reference's id; the body may add `brand`) | one edit, or `{"edits": [...]}` (up to 8): see [Commons curation](#commons-curation) | in the Commons, on the reference's detail (each edit as it is now and as proposed; a line above the grid names the references waiting, and their tiles say "proposal"), with **Don't** and **Apply** (**Apply all** for several edits) | each edit's Commons route (`POST .../corrections`, `POST .../regions`, `PATCH /api/commons/regions/{id}`, `PATCH /api/commons/memberships/{id}`, `POST .../accept`), as the person |
 
 Characters and Styles have nothing only the person may change yet, so their
@@ -3622,8 +3622,7 @@ Commons", "Asks to make 3 changes to an image in the Commons". The proposal's
 corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
 Nebula in the strip's words and attributed to the agent (`author` is the
 agent, `source: "nebula"`, `about: "proposal"`): "Claude Code asks to change
-the cover of Dusk", "Claude Code asks to send Dusk board's notes to
-generators", "Claude Code asks to change a reference in the Commons" (or
+the cover of Dusk", "Claude Code asks to turn on “Moodboard notes to generators” for Dusk board", "Claude Code asks to change a reference in the Commons" (or
 "asks to make 3 changes to a reference in the Commons", "asks to take a
 reference out of the inbox"). Names only: never the agent's note, a board's
 notes, a private note or Commons text. It carries `proposal: {id, kind,
@@ -5016,7 +5015,7 @@ for both, the same words as `hold.detail`. `list_projects` adds `openHold`
 with a `note` that says the state, the node and its project, and what
 clears it, for example "Opening or switching projects is held (recovery):
 “World” (n1) from “Alpha” has a saved World Labs recovery ID; the person
-forgets it in Run History."; `nebula projects` prints that note.
+forgets it in Run history."; `nebula projects` prints that note.
 `openHold` covers Nebula's own holds only: while the person's tab keeps
 edits of its own, your open is refused with `code: "canvas_kept_in_tab"`
 (above), which `openHold` doesn't show.
@@ -5586,8 +5585,8 @@ While protected:
   it can’t be removed. Stop the run first (cancel_run, or `nebula cancel
   <id>`; a run the person started is theirs to stop) or wait for it to
   finish, then try again. Nothing changed." The person reads GM's line
-  instead: an undo or redo reads "Couldn’t undo. It would remove “Shot 2”,
-  which is still running. Stop the run first." ("Couldn’t redo. …"; "…Wait
+  instead: an undo or redo reads "Nebula couldn’t undo because it would remove “Shot 2”,
+  which is still running. Stop the run first." ("Nebula couldn’t redo because …"; "…Wait
   for it to finish." while the run is still being admitted), and the canvas
   refuses that undo itself before sending it;
 - deleting the scene (`remove_from_canvas`, `edit_canvas` `remove`, `DELETE
@@ -5974,8 +5973,8 @@ How a delete or an undo reads depends on whose run it is:
   menu's Delete and Undo/Redo are never silent: a selection of only
   rendering scenes reads GM's scene line ("Couldn’t delete “Scene”. “Shot 2”
   is still running. Stop the run first."), an undo that would remove a
-  rendering shot reads "Couldn’t undo. It would remove “Shot 2”, which is
-  still running. Stop the run first.", and anything else reads the lock's
+  rendering shot reads "Nebula couldn’t undo because it would remove “Shot 2”, which
+  is still running. Stop the run first.", and anything else reads the lock's
   own line alone: "You can delete “Brief” when the run finishes.", "You can
   delete “A”, “B” and “C” when the run finishes.", "You can delete the
   connection when the run finishes.", "You can undo when the run finishes."
@@ -6410,7 +6409,7 @@ nebula moodboard delete <board>
   the board's version: read it again. Each edit answers with `undo`
   (`edit --json` prints it, the plain output prints the command): sent back
   (`moodboard_edit(board, undo["ops"])`, `edit --undo FILE` or `-`), it
-  puts back only what is still as the edit left it and names the rest ("#12
+  puts back only what is still as the edit left it and names the rest ("Image 12
   changed since, left as is"). A `PUT` keeps what it leaves out (images
   merge by id), keeps the saved cards of images already on the board, and
   takes `baseVersion` too.
@@ -6518,8 +6517,7 @@ nebula moodboard delete <board>
   / `clash_mode` picks `leave-out` (default), `flag`, `no-measured` or
   `keep-all`. `colorCheck` is the saved check and its findings.
 - Notes: a board's notes and its images' notes are for the person, their
-  team and agents. Generators get them only when the person turns on "Send
-  these notes to generators" (`sendNotes`; `brief.notesSent` says whether
+  team and agents. Generators get them only when the person turns on “Moodboard notes to generators” (`sendNotes`; `brief.notesSent` says whether
   they went), or a Moodboard node's `send_notes` is `yes`. `--no-send-notes`
   / `send_notes=False` turns it off; turning it on is the person's call, so
   an agent's `--send-notes` / `send_notes=True` is refused and nothing in
@@ -6665,8 +6663,10 @@ nebula moodboard delete <board>
   set <board> --restore <file>` with the saved `set --json` output (or just
   `previous`). Its `undo` goes as one checked write: a setting someone
   changed again since is left as they set it, and the result's `skipped`
-  says so ("Direction changed since, left as is", "#2's weight changed
-  since, left as is"; the CLI prints each line). Images the change took off
+  says so ("Direction changed since, left as is", "Nebula couldn’t undo the
+  change to image 2 because image 2’s weight changed after that."; the CLI
+  prints each line; a client keys on `reason`, `field` and `settings`, never
+  on `message`, which is for people). Images the change took off
   come back with it. Its board-field part is the `undo` the server's `PUT`
   answered with: a direct `PUT /api/moodboards/{id}` answers with the board
   plus `undo`, and sending its `ops` to `POST /api/moodboards/{id}/edits`

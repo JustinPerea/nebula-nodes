@@ -159,7 +159,7 @@ export async function deleteProviderRecovery(
   if ([...query.keys()].length !== 1) {
     throw new Error('Provider recovery deletion requires exactly one recovery ID.');
   }
-  // Run History's "Forget ID" forgets a "World Labs recovery safeguard".
+  // Run history's "Forget ID" forgets a "World Labs recovery safeguard".
   await apiRequest(FORGET_RECOVERY_HEADING,
     `/api/provider-recoveries/${encodeURIComponent(runId)}/${encodeURIComponent(nodeId)}?${query.toString()}`,
     { method: 'DELETE' },

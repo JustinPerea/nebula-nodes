@@ -118,7 +118,7 @@ EVENT_KINDS = frozenset({
     # The image the board opens on changed (a cover pick; nothing moves).
     "board.cover",
     # The board's own fields changed (Direction, Avoid, pinned colours, its
-    # notes, Send notes, strength...): data {boardId, boardName, scope,
+    # notes, “Moodboard notes to generators”, strength...): data {boardId, boardName, scope,
     # fields}, the field names only, never a value (Justin's Q91).
     "board.fields",
     "board.sorted",

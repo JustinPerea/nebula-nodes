@@ -10,7 +10,7 @@ import type { NodeData } from '../src/types';
  * The follow-up to PR #114, GM's r18 rulings and review 17 L3:
  * - G4: Stop's icon gets a 16px slot like Run's; the dots stay 14px, centred.
  * - The video editor offline: the banner sits right under the editor header;
- *   Trim, Speed, Cut and Vol get the disabled style; Render Preview's disabled
+ *   Trim, Speed, Cut and Vol get the disabled style; Render preview's disabled
  *   state is neutral, like Export's; Play, scrub and the timecode stay usable.
  * - Home: a card's rename, cover and delete icons, disabled offline, get the
  *   disabled style.
@@ -110,10 +110,10 @@ describe('the video editor offline', () => {
     expect(app).toMatch(/placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\}/);
   });
 
-  it('Trim, Speed, Cut and Vol, Render Preview and Export are disabled with the offline mark; Play and the edit points stay', () => {
+  it('Trim, Speed, Cut and Vol, Render preview and Export are disabled with the offline mark; Play and the edit points stay', () => {
     noteBackendConnection('offline');
     render(<EditorTransport editNode={editNode} sourceUrl="/api/outputs/v.mp4" />);
-    for (const name of ['Trim', 'Speed', 'Cut', 'Vol', 'Render Preview', 'Export…']) {
+    for (const name of ['Trim', 'Speed', 'Cut', 'Vol', 'Render preview', 'Export…']) {
       const button = screen.getByText(name).closest('button')!;
       expect(button, name).toBeDisabled();
       expect(button, name).toHaveAttribute('data-offline-disabled');
@@ -134,12 +134,12 @@ describe('the video editor offline', () => {
 
   it('online, they are enabled', () => {
     render(<EditorTransport editNode={editNode} sourceUrl="/api/outputs/v.mp4" />);
-    for (const name of ['Trim', 'Speed', 'Cut', 'Vol', 'Render Preview', 'Export…']) {
+    for (const name of ['Trim', 'Speed', 'Cut', 'Vol', 'Render preview', 'Export…']) {
       expect(screen.getByText(name).closest('button'), name).toBeEnabled();
     }
   });
 
-  it('the tools have a disabled style; Render Preview and Export are neutral when disabled', () => {
+  it('the tools have a disabled style; Render preview and Export are neutral when disabled', () => {
     const styles = css('styles/slava-restraint.css');
     expect(rule(styles, 'body.app-slava-restraint .editor-transport__tool:disabled')).toMatch(/opacity:\s*var\(--sr-disabled-opacity\)/);
     for (const selector of ['body.app-slava-restraint .editor-transport__btn--render:disabled',

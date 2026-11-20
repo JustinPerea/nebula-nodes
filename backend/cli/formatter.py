@@ -1424,7 +1424,7 @@ def _asset_change_lines(view: dict[str, Any], where: str | None) -> list[str]:
         lines.extend(_commons_edit_line(edit) for edit in (view.get("change") or {}).get("edits") or [])
     for key, values in (view.get("change") or {}).items():
         if isinstance(values, dict):
-            label = {"cover": "cover", "sendNotes": "send notes"}.get(key, key)
+            label = {"cover": "cover", "sendNotes": "“Moodboard notes to generators”"}.get(key, key)
             lines.append(f"  sets   {label}: {_asset_value(values.get('from'))} → {_asset_value(values.get('to'))}")
             lost = values.get("lostPin") if key == "cover" else None
             if isinstance(lost, dict):

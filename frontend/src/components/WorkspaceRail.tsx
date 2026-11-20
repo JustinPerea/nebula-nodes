@@ -91,7 +91,7 @@ export function WorkspaceRail() {
       if (event.key !== 'Escape' || event.defaultPrevented || !useUIStore.getState().leftDock) return;
       // Any open dialog, menu or popup owns Escape; a modal one (an
       // alertdialog too) wherever focus is (review 8, L-d; review 13, L5 of
-      // PR #114: the Forget ID confirm's Escape closed Run History).
+      // PR #114: the Forget ID confirm's Escape closed Run history).
       if (keyBlockedByModal() || document.querySelector('[role="dialog"], [role="alertdialog"], [aria-modal="true"], .command-palette, .context-menu, .connection-popup')) return;
       useUIStore.getState().setLeftDock(null);
     }
@@ -140,7 +140,7 @@ export function WorkspaceRail() {
             active={leftDock === 'assets'}
             onClick={() => toggleDock('assets')}
           />
-          {/* The held-reopen line's Forget ID form sits beside Run History (GM r32, 2). */}
+          {/* The held-reopen line's Forget ID form sits beside Run history (GM r32, 2). */}
           <div className="workspace-rail__anchor">
             <RailItem
               label="Open run history"

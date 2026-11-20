@@ -71,7 +71,7 @@ function expectBackendOfflineHint() {
   expect(hint).not.toBeNull();
   expect(hint!).toHaveTextContent('Start Nebula backend');
   expect(hint!).toHaveTextContent('Backend offline');
-  expect(hint!.textContent).not.toMatch(/Connect Claude|Connect ChatGPT Account|claude auth login|codex login/);
+  expect(hint!.textContent).not.toMatch(/Connect Claude|Connect ChatGPT account|claude auth login|codex login/);
 }
 
 describe('ChatPanel with the Nebula backend unreachable', () => {
@@ -79,7 +79,7 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
     await waitFor(expectBackendOfflineHint);
-    expect(screen.queryByText('Claude status unavailable')).toBeNull();
+    expect(screen.queryByText('Nebula couldn’t check Claude')).toBeNull();
   });
 
   it('Codex: shows the start-backend hint, not ChatGPT login advice', async () => {
@@ -88,7 +88,7 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Codex' })); });
     await waitFor(() => expect(apiMocks.fetchCodexStatus).toHaveBeenCalled());
     await waitFor(expectBackendOfflineHint);
-    expect(screen.queryByText('Codex status unavailable')).toBeNull();
+    expect(screen.queryByText('Nebula couldn’t check Codex')).toBeNull();
   });
 
   // typeerror (2026-10-24): a TypeError that isn't fetch's no-answer (a bug or
@@ -97,9 +97,9 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new TypeError("Cannot read properties of undefined (reading 'installed')")));
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
-    const [label] = await screen.findAllByText('Claude status unavailable');
+    const [label] = await screen.findAllByText('Nebula couldn’t check Claude');
     expect(label).toHaveAttribute('title', 'Nebula couldn’t check Claude status because the server didn’t accept it. Try again, or reload if it keeps happening.');
-    expect(screen.queryByText('Nebula backend offline')).toBeNull();
+    expect(screen.queryByText('Nebula’s server isn’t answering')).toBeNull();
     expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
   });
 });
@@ -115,8 +115,8 @@ describe('ChatPanel decides "backend offline" from kind and status', () => {
   async function expectNotOffline() {
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
-    await screen.findAllByText('Claude status unavailable');
-    expect(screen.queryByText('Nebula backend offline')).toBeNull();
+    await screen.findAllByText('Nebula couldn’t check Claude');
+    expect(screen.queryByText('Nebula’s server isn’t answering')).toBeNull();
     expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
   }
 
@@ -147,7 +147,7 @@ describe('ChatPanel decides "backend offline" from kind and status', () => {
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
     await waitFor(expectBackendOfflineHint);
-    expect((await screen.findAllByText('Nebula backend offline')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Nebula’s server isn’t answering')).length).toBeGreaterThan(0);
   });
 
   it('an AbortError nobody asked for (no answer) is offline', async () => {

@@ -1,6 +1,6 @@
 /**
  * Error copy round 3b, item 3 (GM - Design: "Never show raw error.message
- * strings in UI."). Run History's "Forget ID" and the status bar's "I've
+ * strings in UI."). Run history's "Forget ID" and the status bar's "I've
  * checked Marble" (round 13 of PR #114 labels) say written copy for every failure: a
  * request's own line, the store's own written refusals, and GM's general line
  * for an error that isn't a request's (no request was made).

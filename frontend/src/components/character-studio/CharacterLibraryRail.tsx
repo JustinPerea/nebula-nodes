@@ -116,7 +116,7 @@ export function CharacterLibraryRail({
 
       <button type="button" className="character-rail__new" disabled={noProject}
         title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>
-        + New Character
+        + New character
       </button>
 
       <div className="character-rail__list">

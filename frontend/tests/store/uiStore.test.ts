@@ -39,7 +39,7 @@ describe('uiStore', () => {
       expect(useUIStore.getState().cinemaSelectedShotIds).toEqual({});
     } finally { useUIStore.setState(original, true); }
   });
-  it('keeps the Run History default fully visible on narrow viewports', () => {
+  it('keeps the Run history default fully visible on narrow viewports', () => {
     expect(defaultRunHistoryPosition(390)).toEqual({ x: 98, y: 60 });
     expect(defaultRunHistoryPosition(250)).toEqual({ x: 16, y: 60 });
   });
@@ -156,7 +156,7 @@ describe('uiStore', () => {
   });
 
   it('clears renderedPreviewUrl on editor enter and exit', () => {
-    // Bug caught in Phase F smoke: clicking Render Preview produced a backend
+    // Bug caught in Phase F smoke: clicking Render preview produced a backend
     // file but the URL was discarded — VideoPreview never swapped its src.
     // The wiring now stores it in the UI store; this test pins the lifecycle
     // so a stale render from a prior edit session never leaks forward.

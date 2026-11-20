@@ -33,10 +33,10 @@ from tests.test_project_catalog_restore_fix12 import CODEX  # noqa: E402
 from tests.test_project_catalog_restore_fix21 import ENVIRONMENT, _alpha_then_delta, _named, recoveries  # noqa: E402,F401
 from tests.test_project_catalog_restore_fix17 import _open, _rev  # noqa: E402
 
-OLD_LINE = "“Delta brief” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History."
+OLD_LINE = "“Delta brief” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history."
 # GM r36 item 2 (round 23), verbatim.
 UNNAMED = ("Nebula couldn’t delete “Delta brief” because it shares the ID n1 with a World Labs run from a project "
-           "Nebula can’t identify. Check that run in Marble before you forget its ID in Run History, then try again.")
+           "Nebula can’t identify. Check that run in Marble before you forget its ID in Run history, then try again.")
 AGENT_DETAIL = ("Cannot delete n1: it has unresolved World Labs paid state. "
                 "Check Marble, then resolve its exact recovery/ambiguity record first.")
 
@@ -85,7 +85,7 @@ def test_alphas_own_world_node_is_refused_in_alpha(app, recoveries):
     _alphas_record(recoveries)
     refused = _delete(client)
     assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"] == "“World” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run History."
+    assert refused.json()["detail"] == "“World” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history."
     assert _delete(client, CODEX).json()["detail"] == AGENT_DETAIL
     assert "n1" in main_module.cli_graph.nodes
 
@@ -120,7 +120,7 @@ def test_a_record_nobody_can_place_is_refused(app, recoveries):
     refused = _delete(client)
     assert refused.status_code == 409, refused.text
     assert refused.json()["detail"] == ("Nebula couldn’t delete “Delta brief” because it has a saved World Labs "
-                                        "recovery ID. Check the run in Marble, then forget that ID in Run History.")
+                                        "recovery ID. Check the run in Marble, then forget that ID in Run history.")
     assert _delete(client, CODEX).json()["detail"] == AGENT_DETAIL
     assert "n1" in main_module.cli_graph.nodes
 

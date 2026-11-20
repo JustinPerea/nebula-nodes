@@ -323,7 +323,7 @@ describe('a line waiting on the chunk', () => {
 });
 
 describe('the rail’s held-reopen callout is its own chunk', () => {
-  it('loads only when a line for Run History arrives, then shows it', async () => {
+  it('loads only when a line for Run history arrives, then shows it', async () => {
     vi.resetModules();
     let loads = 0;
     vi.doMock('../src/components/ReopenHoldCallout', async (original) => {
@@ -339,7 +339,7 @@ describe('the rail’s held-reopen callout is its own chunk', () => {
     act(() => { useProjectStore.setState({ heldReopenLine: { id: 'alpha', line: UNCERTAIN, place: 'worldLabsNotice' } }); });
     await settle();
     expect(loads).toBe(0);
-    const line = `You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run History.`;
+    const line = `You can reopen “${P}” after you forget the World Labs recovery ID for “World” in Run history.`;
     act(() => { useProjectStore.setState({ heldReopenLine: { id: 'alpha', line, place: 'runHistory' } }); });
     await vi.waitFor(() => expect(view.container.querySelector('[data-reopen-hold-callout]')?.textContent).toContain(line));
     expect(loads).toBe(1);

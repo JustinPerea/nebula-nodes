@@ -42,7 +42,7 @@ describe('a deferred chunk that fails to load', () => {
     expect(document.querySelector('[data-deferred-fallback="mesh"]')).toHaveTextContent('GLB model');
   });
 
-  it('does not take the app down when Run History cannot load', async () => {
+  it('does not take the app down when Run history cannot load', async () => {
     render(<div><p>Canvas</p><RunHistoryPanel /></div>);
     act(() => useUIStore.getState().togglePanel('history'));
     await flush();

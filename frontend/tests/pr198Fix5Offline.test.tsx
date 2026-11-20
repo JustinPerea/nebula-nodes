@@ -144,12 +144,12 @@ describe('GM: the Cinema studio is locked offline, and each control says why', (
   it('reorder: the arrows are disabled and say why; Alt + arrow keys and a drop do nothing', () => {
     offline();
     const { onReorder } = renderStudio();
-    for (const name of ['Move Shot 2 earlier', 'Move Shot 2 later']) {
+    for (const name of ['Move shot 2 earlier', 'Move shot 2 later']) {
       const button = screen.getByRole('button', { name });
       expect(button, name).toBeDisabled();
       expect(button, name).toHaveAttribute('title', 'You can reorder shots when Nebula reconnects.');
     }
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Select Shot 2' }), { key: 'ArrowLeft', altKey: true });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Select shot 2' }), { key: 'ArrowLeft', altKey: true });
     const cards = document.querySelectorAll('.cinema-shots-rail__shot');
     expect(cards[0]).toHaveAttribute('draggable', 'false');
     fireEvent.dragStart(cards[1]);
@@ -160,7 +160,7 @@ describe('GM: the Cinema studio is locked offline, and each control says why', (
   it('× remove is disabled and says why', () => {
     offline();
     const { onRemoveShot } = renderStudio();
-    const remove = screen.getByRole('button', { name: 'Remove Shot 3' });
+    const remove = screen.getByRole('button', { name: 'Remove shot 3' });
     expect(remove).toBeDisabled();
     expect(remove).toHaveAttribute('title', 'You can remove shots when Nebula reconnects.');
     fireEvent.click(remove);
@@ -193,11 +193,11 @@ describe('GM: the Cinema studio is locked offline, and each control says why', (
     const { onReorder } = renderStudio();
     expect(screen.getByRole('button', { name: 'Generate all' }))
       .toHaveAttribute('title', 'Generate every shot using the current scene settings');
-    expect(screen.getByRole('button', { name: 'Move Shot 2 earlier' })).toHaveAttribute('title', 'Move shot earlier');
-    expect(screen.getByRole('button', { name: 'Remove Shot 3' })).toHaveAttribute('title', 'Remove shot');
+    expect(screen.getByRole('button', { name: 'Move shot 2 earlier' })).toHaveAttribute('title', 'Move shot earlier');
+    expect(screen.getByRole('button', { name: 'Remove shot 3' })).toHaveAttribute('title', 'Remove shot');
     expect(screen.getByLabelText('Prompt')).not.toHaveAttribute('readonly');
     expect(lockOf('Scene settings')).not.toBeDisabled();
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Select Shot 2' }), { key: 'ArrowLeft', altKey: true });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Select shot 2' }), { key: 'ArrowLeft', altKey: true });
     expect(onReorder).toHaveBeenCalledTimes(1);
   });
 });
@@ -235,7 +235,7 @@ describe('GM\'s merge check: each locked Cinema control looks locked', () => {
     offline();
     renderStudio();
     for (const name of ['Generate shot', 'Generate 2', 'Generate all', '+ Add shot', 'Send to motion',
-      'Move Shot 2 earlier', 'Move Shot 2 later', 'Remove Shot 3']) {
+      'Move shot 2 earlier', 'Move shot 2 later', 'Remove shot 3']) {
       expect(screen.getByRole('button', { name }), name).toHaveAttribute('data-offline-disabled');
       // :disabled, so the shared rule's look is the one it shows.
       expect(screen.getByRole('button', { name }), name).toBeDisabled();

@@ -21,7 +21,7 @@ import type { ModelNodeDefinition } from '../src/types';
  *   while following or offline (finding the node, writing nothing).
  * - Nits: the bar's cut name stays whole graphemes and isolates its
  *   direction (<bdi>); the canvas pill grows to the left while it follows, so
- *   the Canvas and Creator Studio tabs stay put; Run History's Rerun and
+ *   the Canvas and Creator Studio tabs stay put; Run history's Rerun and
  *   Retry say why they are disabled.
  */
 
@@ -212,16 +212,16 @@ describe('L-5: controls the store gate refused silently now take the lock', () =
     }
   });
 
-  it('the mask painter\'s Save Mask takes the lock', () => {
+  it('the mask painter\'s Save mask takes the lock', () => {
     render(<MaskPainterModal imageUrl={null} initialMask={null} onSave={vi.fn()} onClose={vi.fn()} />);
     follow();
-    const save = screen.getByRole('button', { name: 'Save Mask' });
+    const save = screen.getByRole('button', { name: 'Save mask' });
     expect(save).toBeDisabled();
     expect(save).toHaveAttribute('data-following-disabled');
     expect(save).toHaveAttribute('title', WAIT);
   });
 
-  it('Run History\'s Forget confirm takes the lock while following, not only offline', () => {
+  it('Run history\'s Forget confirm takes the lock while following, not only offline', () => {
     const onConfirm = vi.fn();
     render(<ForgetRecoveryConfirm name="“World”" onCancel={vi.fn()} onConfirm={onConfirm} />);
     follow();
@@ -232,9 +232,9 @@ describe('L-5: controls the store gate refused silently now take the lock', () =
   });
 });
 
-// ── N-7: Run History's Rerun and Retry say why ──────────────────────────────
+// ── N-7: Run history's Rerun and Retry say why ──────────────────────────────
 
-describe('review N-7: Run History\'s disabled Rerun and Retry give the reason', () => {
+describe('review N-7: Run history\'s disabled Rerun and Retry give the reason', () => {
   const record = (id: string, status: RunRecord['status']): RunRecord => ({ id, status, trigger: 'graph', startedAt: Date.now(),
     snapshot: { nodes: [{ id: 'n1', definitionId: 'text-input', params: {}, outputs: {} }], edges: [] } });
   beforeEach(() => {

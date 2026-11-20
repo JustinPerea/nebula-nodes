@@ -445,8 +445,8 @@ describe('a paste in the List view', () => {
 
   // /api/uploads never refuses an unconnected tab (it reads the person gate
   // only for create_node): such a tab's paste is written, as its drop and
-  // Add Images are. This guards the line, whatever the refusal.
-  it('an upload refusal shows the same line as Add Images', async () => {
+  // Add images are. This guards the line, whatever the refusal.
+  it('an upload refusal shows the same line as Add images', async () => {
     refuse = { status: 403, body: { detail: 'Only the person can do this, from a Nebula canvas connected as them.',
       code: 'person_required' } };
     await openStudio('list');
@@ -456,7 +456,7 @@ describe('a paste in the List view', () => {
     cleanup();
     useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
     await openStudio('list');
-    const input = screen.getAllByLabelText('Add Images').find((el) => el instanceof HTMLInputElement) as HTMLInputElement;
+    const input = screen.getAllByLabelText('Add images').find((el) => el instanceof HTMLInputElement) as HTMLInputElement;
     act(() => {
       Object.defineProperty(input, 'files', { value: [png('p.png')], configurable: true });
       input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1459,7 +1459,7 @@ describe('adds at once', () => {
     expect(server.uploads).toEqual(['a.png']);
   });
 
-  it('in the List: Add Images stays live with no "Uploading", and each file is an uploading row of its own', async () => {
+  it('in the List: Add images stays live with no "Uploading", and each file is an uploading row of its own', async () => {
     const uploads = holdUploads();
     await openStudio('list');
     paste(clipboard({ files: [png('river-at-dusk.png'), png('two.png', 20)] }));
@@ -1467,9 +1467,9 @@ describe('adds at once', () => {
     expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual(['river-at-dusk.png, uploading', 'two.png, uploading']);
     expect(rows.every((row) => row.getAttribute('aria-busy') === 'true' && row.classList.contains('moodboard-tile--uploading'))).toBe(true);
     expect(rows[0].querySelector('.moodboard-tile__upload-name')!.textContent).toBe('river-at-dusk.png');
-    const input = screen.getByLabelText('Add Images') as HTMLInputElement;
+    const input = screen.getByLabelText('Add images') as HTMLInputElement;
     expect(input.disabled).toBe(false);
-    expect(document.querySelector('.moodboard-dropzone__file-button')!.textContent).toBe('Add Images');
+    expect(document.querySelector('.moodboard-dropzone__file-button')!.textContent).toBe('Add images');
     expect(document.querySelector('.moodboard-dropzone--busy')).toBeNull();
     await uploads.open();
     await waitFor(() => expect(screen.queryAllByRole('status', { name: /uploading$/ })).toHaveLength(0));
@@ -1705,7 +1705,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
       useBoardCanvasStore.getState().setViewport(newKey, { x: 5, y: 6, zoom: 0.7 }, false);
       useBoardCanvasStore.getState().setPlaced(newKey, null);
     });
-    act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+    act(() => { screen.getByRole('button', { name: '+ New moodboard' }).click(); });
     await waitFor(() => expect(store().entries[newKey]?.epoch).toBeGreaterThan(0));
     expect(api.createMoodboard).not.toHaveBeenCalled();
     const canvas = useBoardCanvasStore.getState();
@@ -1725,7 +1725,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
       useBoardCanvasStore.getState().setViewport(newKey, cam, true);
       useBoardCanvasStore.getState().setPlaced(newKey, { kind: 'board' });
     });
-    act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+    act(() => { screen.getByRole('button', { name: '+ New moodboard' }).click(); });
     await waitFor(() => expect(store().entries[madeKey]?.savedId).toBe('made1'));
     await waitFor(() => expect(store().entries[newKey]?.epoch).toBeGreaterThan(0));
     const canvas = useBoardCanvasStore.getState();
@@ -1743,7 +1743,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), name: '' })); });
     paste(clipboard({ files: [png('river.png')] }));
     await waitFor(() => expect(board.placeholders).toHaveLength(1));
-    act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+    act(() => { screen.getByRole('button', { name: '+ New moodboard' }).click(); });
     // Saved under the default name (it had none), so it shows in the rail.
     await waitFor(() => expect(api.createMoodboard).toHaveBeenCalledTimes(1));
     expect(api.createMoodboard.mock.calls[0][0]).toMatchObject({ name: 'Untitled Moodboard' });
@@ -1772,7 +1772,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(api.createMoodboard.mock.calls[0][0].images.map((img: MoodboardImage) => img.url)).toEqual([river]);
     await waitFor(() => expect(store().entries[madeKey]?.savedId).toBe('made1'));
     expect(urlsOf(madeKey)).toEqual([river]);
-    act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+    act(() => { screen.getByRole('button', { name: '+ New moodboard' }).click(); });
     await waitFor(() => expect(store().entries[newKey]?.loaded).toBe(true));
     expect(urlsOf(newKey)).toEqual([]);
     expect(urlsOf(madeKey)).toEqual([river]);
@@ -2161,7 +2161,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(board.placeholders).toHaveLength(1));
     const epoch = store().entries[newKey].epoch;
     api.createMoodboard.mockRejectedValue(Object.assign(new Error('offline'), { status: 0 }));
-    act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+    act(() => { screen.getByRole('button', { name: '+ New moodboard' }).click(); });
     await waitFor(() => expect(store().entries[newKey].saveError).toBeTruthy());
     expect(store().entries[newKey].epoch).toBe(epoch);
     expect(board.placeholders).toHaveLength(1);
@@ -2262,7 +2262,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
   const records = () => JSON.parse(window.sessionStorage.getItem(PENDING) ?? '[]') as PendingRecord[];
   const urlsOf = (key: string) => ((store().entries[key]?.draft as { images?: MoodboardImage[] } | undefined)?.images ?? []).map((img) => img.url);
   const fresh = (name = 'Untitled Moodboard') => ({ name, notes: '', mode: 'look', strength: 0.7, images: [], analysis: null });
-  const clickNew = () => act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+  const clickNew = () => act(() => { screen.getByRole('button', { name: '+ New moodboard' }).click(); });
   /** A held promise and its release. */
   const gate = () => {
     let open: () => void = () => {};
@@ -2983,7 +2983,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
   const records = () => JSON.parse(window.sessionStorage.getItem(PENDING) ?? '[]') as Array<{ id: string; board: string; name: string; page: string; at: number }>;
   const urlsOf = (key: string) => ((store().entries[key]?.draft as { images?: MoodboardImage[] } | undefined)?.images ?? []).map((img) => img.url);
   const fresh = (name = 'Untitled Moodboard') => ({ name, notes: '', mode: 'look', strength: 0.7, images: [], analysis: null });
-  const clickNew = () => act(() => { screen.getByRole('button', { name: '+ New Moodboard' }).click(); });
+  const clickNew = () => act(() => { screen.getByRole('button', { name: '+ New moodboard' }).click(); });
   const gate = () => {
     let open: () => void = () => {};
     const held = new Promise<void>((done) => { open = done; });
@@ -3512,7 +3512,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.edits.map((ops) => ops.map((op) => op.op))).toEqual([['add']]);
     expect(puts).toEqual([expect.objectContaining({ name: 'Rivers' })]);
     const steps = useBoardUndoStore.getState().history(madeKey, store().entries[madeKey].epoch).done;
-    expect(steps.map((step) => [step.label, step.state])).toEqual([['Name', 'saved']]);
+    expect(steps.map((step) => [step.label, step.state])).toEqual([['Changed the name', 'saved']]);
     expect(waiting()).toEqual([]);
   });
 
@@ -3554,7 +3554,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(server.edits.map((ops) => ops.map((op) => op.op))).toEqual([['add']]);
     expect(server.puts).toEqual([expect.objectContaining({ name: 'Rivers' })]);
     const steps = useBoardUndoStore.getState().history(g1Key, store().entries[g1Key].epoch).done;
-    expect(steps.map((step) => [step.label, step.state])).toEqual([['Name', 'saved']]);
+    expect(steps.map((step) => [step.label, step.state])).toEqual([['Changed the name', 'saved']]);
   });
 
   // Round 6d (review 8, MEDIUM-2): a background send cut off by a network drop.
@@ -4827,9 +4827,9 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
   const rect = (placement: MoodboardPlacement) => ({ x: placement.x, y: placement.y, width: placement.w, height: placement.h });
   const [w, h] = sizeFor(1, 1.5);
 
-  it('GM r12 2, the List: offline, Add Images is off with the offline reason and the drop hint goes; back online both come back', async () => {
+  it('GM r12 2, the List: offline, Add images is off with the offline reason and the drop hint goes; back online both come back', async () => {
     await openStudio('list');
-    const input = screen.getByLabelText('Add Images') as HTMLInputElement;
+    const input = screen.getByLabelText('Add images') as HTMLInputElement;
     expect(input.disabled).toBe(false);
     expect(screen.getByText(hint)).toBeTruthy();
     offline();

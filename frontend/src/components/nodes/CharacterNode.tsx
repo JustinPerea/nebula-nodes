@@ -76,7 +76,7 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
           className="character-node__open nodrag"
           onClick={() => enterCharacterEditor(characterId)}
         >
-          Open Character
+          Open character
         </button>
       )}
 

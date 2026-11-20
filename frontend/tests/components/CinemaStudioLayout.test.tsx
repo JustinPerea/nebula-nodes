@@ -169,7 +169,7 @@ describe('Selected Cinema shot continuity and scope', () => {
     panel.scrollTop = 300;
     fireEvent.change(screen.getByRole('textbox', { name: 'Prompt' }), { target: { value: 'Edited at the current scroll position' } });
     expect(panel.scrollTop).toBe(300);
-    fireEvent.click(screen.getByRole('button', { name: 'Select Shot 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select shot 2' }));
     expect(panel.scrollTop).toBe(0);
     expect(executeNode).not.toHaveBeenCalled(); expect(executeShot).not.toHaveBeenCalled();
   });
@@ -182,11 +182,11 @@ describe('Selected Cinema shot continuity and scope', () => {
 
   it('selects the neighboring shot after deleting a middle selection and retains surviving outputs', () => {
     render(<CinemaStudioView />);
-    fireEvent.click(screen.getByRole('button', { name: 'Select Shot 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select shot 2' }));
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue('Second');
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Shot 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove shot 2' }));
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue('Third');
-    expect(screen.getByRole('button', { name: 'Select Shot 2' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Select shot 2' })).toHaveFocus();
     const scene = useGraphStore.getState().nodes[0].data.params.scene as CinemaSceneSpec;
     expect(scene.shots.map((shot) => shot.id)).toEqual(['a', 'c']);
     expect(scene.shots[0].output?.imageUrl).toBe('/first.png');
@@ -198,10 +198,10 @@ describe('Selected Cinema shot continuity and scope', () => {
     second.data.params.scene = spec('Other ');
     useGraphStore.setState((current) => ({ nodes: [...current.nodes, second] }));
     render(<CinemaStudioView />);
-    fireEvent.click(screen.getByRole('button', { name: 'Select Shot 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select shot 2' }));
     act(() => useUIStore.setState({ cinemaEditorNodeId: 'other-scene' }));
     expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue('Other First');
-    expect(screen.getByRole('button', { name: 'Select Shot 1' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Select shot 1' })).toHaveAttribute('aria-pressed', 'true');
     expect(executeNode).not.toHaveBeenCalled(); expect(executeShot).not.toHaveBeenCalled();
   });
 });

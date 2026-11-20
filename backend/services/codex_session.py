@@ -48,7 +48,7 @@ CODEX_FORBIDDEN_API_ENV_KEYS = (
 )
 CODEX_CHATGPT_REQUIRED_MESSAGE = (
     "Codex agent is restricted to ChatGPT account login in Nebula. "
-    "Current Codex auth is {mode}. Use Connect ChatGPT Account in Nebula, "
+    "Current Codex auth is {mode}. Use “Connect ChatGPT account” in Nebula, "
     "or run `codex logout` then `codex login` without `--with-api-key`."
 )
 
