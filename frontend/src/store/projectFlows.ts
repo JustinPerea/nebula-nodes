@@ -721,7 +721,16 @@ async function activate(action: () => Promise<api.ProjectActivation>, retry: { a
     // canvas, where Stop and the World Labs notice are, with the line
     // (review 18 MEDIUM-2, GM r30 item 2). Nothing was replaced.
     // (A second refusal after the one resend has its own line below, for an in-place reopen too.)
-    const refusedAgain = resent && error instanceof api.ProjectRequestError && error.status === 409;
+    // A second stale-revision 409 only: when the resend's 409 is Nebula's own hold (its carried
+    // verdict, or the one read now: the test the branch below uses), the hold handling stays.
+    let refusedAgain = resent && error instanceof api.ProjectRequestError && error.status === 409;
+    if (refusedAgain && inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id) {
+      // The open's own reservation isn't a hold: let it go before asking (as the branch does).
+      if (reserved) { useGraphStore.getState().releaseGraphImport(); reserved = false; }
+      const carried = noteRefusalHold((error as api.ProjectRequestError).hold);
+      if (!carried && !reopenHold(retry.id, true)) await refreshOpenHold();
+      if (carried || reopenHold(retry.id, true)) refusedAgain = false;
+    }
     if (inPlace && retry.action === 'open' && getProjectContext()?.id === retry.id && !(error instanceof OpenTimedOut) && !refusedAgain
       && !(reserved && !(error instanceof api.ProjectRequestError && error.status < 500))) {
       const project = useProjectStore.getState().activeProject?.name ?? '';
@@ -2359,6 +2368,9 @@ function holdFollowWhileTyping(event: GraphSyncEvent): boolean {
       if (!held || typingInStudioField()) return;
       held.stop();
       core.heldFollow = null;
+      // The wait is over: a replay that is still held marks its doubt again, and one that
+      // stops short (a kept canvas, a version change) leaves it to the normal expiry.
+      for (const doubt of core.opensInDoubt) delete doubt.typing;
       for (const next of held.events) workspaceSync(next);
     }, 0);
   };

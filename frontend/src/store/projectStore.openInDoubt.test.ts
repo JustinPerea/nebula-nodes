@@ -17,6 +17,7 @@ vi.mock('../lib/projects', async (importOriginal) => ({
   openProject: vi.fn(),
   createProject: vi.fn(),
   recoverProject: vi.fn(),
+  getOpenHold: vi.fn(),
 }));
 vi.mock('../lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/api')>()),
@@ -29,6 +30,7 @@ import { OPEN_TIMEOUT_MS, openTimedOutLine } from '../lib/errorCopy';
 import { getProjectContext, setProjectContext } from '../lib/projectContext';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { TAB_ID } from '../lib/tabId';
+import { setCanvasKept } from '../lib/keptCanvas';
 import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
 import { useGraphStore } from './graphStore';
 import { useUIStore } from './uiStore';
@@ -41,6 +43,7 @@ const createProject = vi.mocked(api.createProject);
 const getProject = vi.mocked(api.getProject);
 const saveProject = vi.mocked(api.saveProject);
 const graph = vi.mocked(fetchCLIGraph);
+const getOpenHold = vi.mocked(api.getOpenHold);
 
 const summary = (id: string, name: string): ProjectSummary => ({
   id, name, createdAt: '', updatedAt: '2026-10-20T00:00:00Z', lastOpenedAt: null, nodeCount: 0, edgeCount: 0, thumbnail: null,
@@ -97,15 +100,20 @@ let unsubscribe: () => void = () => {};
 
 beforeEach(() => {
   vi.useFakeTimers();
-  for (const mock of [listProjects, openProject, createProject, getProject, saveProject, graph]) mock.mockReset();
+  for (const mock of [listProjects, openProject, createProject, getProject, saveProject, graph, getOpenHold]) mock.mockReset();
+  // Nebula's verdict read now: no hold, unless a test says so.
+  getOpenHold.mockResolvedValue({ hold: null } as never);
   saveProject.mockImplementation(async (id, snapshot) => ({ ...saved(id === 'p1' ? alpha : id === 'p2' ? beta : gamma), snapshot }));
   resetProjectStoreForTests();
   useGraphStore.setState({ nodes: [], edges: [], runHistory: [] });
-  useProjectStore.setState({ busy: false, error: null, errorRetry: null, switchNotice: null, unsavedEdits: null });
+  useProjectStore.setState({ openHold: null, heldReopenLine: null, busy: false, error: null, errorRetry: null, switchNotice: null, unsavedEdits: null });
   unsubscribe = subscribeProjectAutosave();
 });
 
 afterEach(() => {
+  core.shownReopen?.stop();
+  core.shownReopen = null;
+  setCanvasKept(false);
   unsubscribe();
   vi.useRealTimers();
 });
@@ -353,6 +361,38 @@ describe('a commit held for a Studio field in progress', () => {
   });
 });
 
+describe('a held follow that stops before its doubt settles', () => {
+  it('clears the typing mark on blur: a kept canvas entered before the blur leaves the doubt to expire on the next sync', async () => {
+    await alphaLoaded();
+    await betaTimesOut();
+    await state().open('p1');
+    useUIStore.setState({ viewMode: 'moodboard' as never });
+    const field = document.createElement('textarea');
+    document.body.appendChild(field);
+    field.focus();
+    try {
+      server(beta, 'r2');
+      workspaceSync(committed(beta, 'r2'));
+      expect(core.opensInDoubt.map((doubt) => [doubt.id, doubt.typing])).toEqual([['p2', true]]);
+      expect(core.heldFollow).not.toBeNull();
+      // The canvas is kept before the blur: the replay stops at the kept-canvas return.
+      setCanvasKept(true);
+      field.blur();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(core.heldFollow).toBeNull();
+      expect(core.opensInDoubt.every((doubt) => !doubt.typing)).toBe(true);
+      // Out of kept mode, the next sync (past the revision the open went with) expires it.
+      setCanvasKept(false);
+      workspaceSync({ type: 'graphSync', nodes: [], edges: [], empty: true, activeProjectId: 'p2', workspaceRevision: 'r3',
+        paramsVersion: GRAPH_PARAMS_VERSION } as never);
+      expect(core.opensInDoubt).toEqual([]);
+    } finally {
+      field.remove();
+      useUIStore.setState({ viewMode: 'canvas' });
+    }
+  });
+});
+
 describe('a reopen in place that times out (finding 5)', () => {
   const local = [{ id: 'local-1', type: 'model', position: { x: 0, y: 0 },
     data: { definitionId: 'gemini-chat', label: 'Chat', params: { prompt: 'a' }, outputs: {} } }] as never;
@@ -401,6 +441,36 @@ describe('a reopen in place that times out (finding 5)', () => {
     expect(state().error).not.toBe(openTimedOutLine('Beta'));
     expect(state().errorRetry).toEqual({ action: 'load', reopen: 'p1' });
     expect(core.relistBeforeAction).toBe(true);
+  });
+
+  it('refused again after the resend because Nebula holds the reopen (a run): the hold line and notice show, no third request', async () => {
+    await alphaLoaded();
+    useGraphStore.setState({ nodes: local });
+    await state().flush();
+    saveProject.mockClear();
+    await betaTimesOut();
+    useProjectStore.setState({ screen: 'home' });
+    server(null, 'r1');
+    listProjects.mockResolvedValueOnce({ projects: [alpha, beta, gamma], trash: [], activeProjectId: null,
+      workspaceRevision: 'r1', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    // The relist after the first (stale) refusal shows the revision moved.
+    listProjects.mockResolvedValueOnce({ projects: [alpha, beta, gamma], trash: [], activeProjectId: null,
+      workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
+    openProject.mockRejectedValueOnce(stale());
+    // The resend's 409 is Nebula's own hold: a run, named by its verdict.
+    openProject.mockRejectedValueOnce(new api.ProjectRequestError('A run is going.', 409,
+      { hold: { state: 'run', nodeId: 'n1', nodeName: 'Chat', projectId: 'p1', projectName: 'Alpha', count: 1, fields: [] } }));
+    getOpenHold.mockResolvedValue({ hold: { state: 'run', nodeId: 'n1', nodeName: 'Chat', projectId: 'p1', projectName: 'Alpha', count: 1, fields: [] } } as never);
+    openProject.mockClear();
+    await state().open('p1');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(openProject).toHaveBeenCalledTimes(2);
+    expect(core.quietReopenOf).toBeNull();
+    expect(state().screen).toBe('workspace');
+    expect(state().errorRetry).toBeNull();
+    expect(state().openHold).toMatchObject({ state: 'run' });
+    expect(core.shownReopen?.line).toBeTruthy();
+    expect(useGraphStore.getState().messageNotice?.text ?? useGraphStore.getState().undoNotice?.text).toBe(core.shownReopen?.line);
   });
 
   it('quiet (activate’s own second try): nothing is said, and the open is in doubt', async () => {
