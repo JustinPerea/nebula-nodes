@@ -77,8 +77,11 @@ def test_C2_a_filed_revision_compares_the_canvas_header_with_the_filed_canvas(mo
     current = main._workspace_context()
     filed_revision = "rev-filed"
     epoch = main.canvas_undo_book.epoch(current["activeProjectId"])
-    monkeypatch.setitem(main._filed_canvases, filed_revision, ("41", dict(current), epoch))
-    token = main._request_canvas_revision.set("41")
+    # The filed canvas's revision must differ from the live epoch, which counts every clear and import
+    # earlier tests in the same process made: a fixed "41" collided once a shard ran 41 of them first.
+    filed_canvas = str(epoch + 1)
+    monkeypatch.setitem(main._filed_canvases, filed_revision, (filed_canvas, dict(current), epoch))
+    token = main._request_canvas_revision.set(filed_canvas)
     try:
         main._check_workspace_revision(filed_revision)  # the filed canvas: admitted
     finally:
