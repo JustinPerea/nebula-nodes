@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor as eventually } from '@testing-library/react';
 import { vi } from 'vitest';
 import ts from 'typescript';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { LineText } from '../src/components/LineText';
 import { ErrorDetails } from '../src/components/failure/ErrorDetails';
 import { NodeError } from '../src/components/nodes/NodeError';
@@ -97,6 +97,11 @@ const { AssetProposalError } = await import('../src/lib/assetProposals');
 const { NoteText } = await import('../src/components/agent-notes/AgentNoteParts');
 const { useGraphStore } = await import('../src/store/graphStore');
 const { useUIStore } = await import('../src/store/uiStore');
+
+// The agent rows that are not mounted (the proposal note and others) check the source through the compiler's program, which
+// takes a couple of seconds to build the first time. Build it once here, with its own timeout, so no row pays for it
+// against the 5 s default (the first row to ask used to).
+beforeAll(() => { appProgram(); }, 120_000);
 
 const INITIAL_GRAPH = { ...useGraphStore.getState() };
 const INITIAL_UI = { ...useUIStore.getState() };
