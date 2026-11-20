@@ -482,7 +482,7 @@ def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, 
     assert listing["activeProjectId"] is None
     assert [node["params"]["value"] for node in main_module.cli_graph.get_state()["nodes"]] == ["c1"]
     # Opening another project replaces it: held aside first, nothing lost
-    # (PR #199: it was refused until).
+    # (PR #199: it was refused until the restore held the canvas aside first).
     opened = client.post(f"/api/projects/{first}/open", json={"workspaceRevision": listing["workspaceRevision"]},
                          headers=PERSON)
     assert opened.status_code == 200, opened.text

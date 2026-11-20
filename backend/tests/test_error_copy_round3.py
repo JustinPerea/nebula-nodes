@@ -41,7 +41,7 @@ def gone(thing: str, things: str) -> str:
 
 
 NODE_GONE = "That node isn’t on the canvas anymore."
-WAITING = "This node is still waiting on World Labs."  # before PR #114
+WAITING = "This node is still waiting on World Labs."  # before PR #114's World Labs rewording
 # Design's World Labs lines for PR #114, verbatim (each under
 # the screen's own "Couldn't <action>." heading; node names are card titles).
 STARTING = "A World Labs run is still starting. Try again in a moment."
@@ -212,7 +212,7 @@ A_NODE_WAITING = "A node is still waiting on World Labs."
 # start settling); the screen's heading says "Couldn't <action>.". Before
 # These were the node lines ("A node is still waiting on World Labs.
 # Let its run finish, then try again." and the "Checked Marble — …" ones).
-# (design): the state's own line, as for a node (STARTING, NEEDS_CHECK,
+# Design: the state's own line, as for a node (STARTING, NEEDS_CHECK,
 # RECOVERY with the held node's card title).
 GRAPH_PAID_STATE_PERSON = {
     "active": STARTING,

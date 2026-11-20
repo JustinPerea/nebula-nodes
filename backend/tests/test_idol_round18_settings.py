@@ -1,4 +1,4 @@
-"""PR #203, section 2: settings findings and design.
+"""PR #203, section 2: settings findings from review and design's rulings.
 
 - The copy an in-place save keeps, the file a restore replaced
   and every temp file live in <state>/settings-copy (0700), on every agent

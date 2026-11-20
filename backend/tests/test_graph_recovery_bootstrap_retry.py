@@ -1,7 +1,7 @@
 """PR #114: the canvas-replacement paid guard.
 
 1. `_reject_graph_replacement_during_paid_start` reads the
-   ambiguity list once, so its rule is literally the pre-round-13 one. Before,
+   ambiguity list once, so its rule is literally the original one. Before,
    an ambiguity acknowledged between two reads while a recovery record existed
    let the replacement through (the reviewer's probe F); b2b1529e refused it.
 2. The bootstrap retry path (coordinator's decisions, Justin's
@@ -128,7 +128,7 @@ def _restore(canvas, headers):
 # -- 1. nit 7: one read of the ambiguity list ---------------------------------------------
 
 def test_an_ambiguity_that_goes_between_reads_still_refuses_while_a_record_exists(canvas, monkeypatch):
-    """Probe F: b2b1529e refused (409); let it through."""
+    """Probe F: b2b1529e refused (409); the earlier code let it through."""
     main = canvas.main
     reads = iter([[{"kind": "worldlabs-environment", "nodeId": "n9", "runId": "r9"}], []])
     monkeypatch.setattr(main.provider_start_guard, "has_active", lambda: False)
@@ -280,7 +280,7 @@ def test_load_graph_file_hands_the_agent_the_bootstrap_detail(canvas, monkeypatc
     assert "read-only" not in str(refused.value)
 
 
-# -- 4. (+ L7): the retry proves the journal takes a real write -------
+# -- 4. the retry proves the journal takes a real write -------
 
 def _boot_failure(canvas, monkeypatch, directory):
     """A real boot failure: the journal's folder is read-only, so the seed of

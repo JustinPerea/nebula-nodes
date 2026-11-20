@@ -51,7 +51,7 @@ def test_q5_agents_read_the_left_out_records_in_plain_text():
     assert "could not be added back" not in note
     three = main_module._catalog_restore_note(_record(["Alpha", "Beta", "Gamma"]))
     assert '"Alpha", "Beta" and "Gamma" weren\'t added back' in three
-    # Of PR #199: three are named, from four on they're counted.
+    # PR #199: three are named, from four on they're counted.
     four = main_module._catalog_restore_note(_record(["Alpha", "Beta", "Gamma", "Delta"]))
     assert "4 projects weren't added back because the project list is at its limit of 500 projects." in four
     assert '"Delta"' not in four

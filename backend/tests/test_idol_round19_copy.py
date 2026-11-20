@@ -1,4 +1,4 @@
-"""PR #203, section 1: design.
+"""PR #203, section 1: design's copy rulings.
 
 - Item 1: every route line with two actions takes the comma ("Add it in
   Settings, or switch to fal.ai."), and in the Agent Log "Then run the node
@@ -107,7 +107,7 @@ def test_media_is_a_media_input_never_it():
 
 
 # Mass nouns that are one thing the person connects ("Connect it"); design
-# B2 and ruled each. A new one must be ruled before it joins.
+# ruled each. A new one must be ruled before it joins.
 ONE_THING = {"audio", "text", "context", "lighting", "guidance"}
 
 

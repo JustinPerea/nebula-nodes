@@ -46,7 +46,7 @@ def test_cost_for_names_a_krea_copy_on_its_makers_key_with_via():
 
 
 def test_on_the_gateway_a_key_routed_node_names_the_gateway_with_via():
-    # (design's visual pass) replaces "rows on
+    # Design's visual pass replaces the earlier "rows on
     # the gateway keep the card's own display name" for nodes whose route
     # depends on keys: "Grok Imagine 2.0 via Krea".
     from services.canvas_proposals import cost_for

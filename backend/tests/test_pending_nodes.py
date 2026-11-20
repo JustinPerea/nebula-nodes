@@ -721,7 +721,7 @@ def test_run_skips_unit():
     assert pending_nodes.skip_summary({}) is None
 
 
-# -- Design's rulings of 2026-10-25, ------------------------------------------------------
+# -- Design's rulings of 2026-10-25 ------------------------------------------------------
 
 def test_the_skip_line_names_the_agent_when_every_skip_is_one_agents():
     """Design: "The Run skip line names the agent when every skipped node belongs

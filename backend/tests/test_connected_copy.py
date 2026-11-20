@@ -113,7 +113,7 @@ def test_renaming_moving_and_updating_name_the_node_in_quotes(logged):
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {}}).status_code == 200
     assert [say for say in _says(sent) if say][-1] == "Moved “Hero shots”"
     # A params update that names params says which, by the card's label in
-    # curly quotes (design, PR #195; design of PR #114):
+    # curly quotes (design, PRs #195 and #114):
     # no node, never the raw key.
     assert client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"value": "b"}}).status_code == 200
     assert _says(sent)[-1] == "Set “Text”"

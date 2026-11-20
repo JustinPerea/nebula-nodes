@@ -1,6 +1,6 @@
 """PR #199 (design), the backend's part.
 
-- (two lenses): after a reopen or boot that renumbers a tab-local
+- After a reopen or boot that renumbers a tab-local
   node, the tab's handoff counts as unsent only what differs from the node
   as the open (or boot) loaded it, so an agent's edit to the new id stands.
 - The tab's real handoff shape (remapped, no unsent lists).
@@ -224,7 +224,7 @@ def test_medium1_a_later_handoff_counts_only_what_changed_since_the_last(app):
 
 
 def test_medium1_the_late_name_and_place_still_land_against_the_baseline(app):
-    """Still holds through the baseline: what the person changed
+    """The late name and place still hold through the baseline: what the person changed
     since the autosave lands, value, name and place."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)

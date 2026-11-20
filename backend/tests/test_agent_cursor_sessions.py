@@ -718,7 +718,7 @@ def test_nebula_agent_session_is_documented_where_an_orchestrator_looks():
     assert "lowest number free" in skill
 
 
-# -- Design's answers ---------------------------------------------
+# -- review findings and Design's answers ---------------------------------------------
 
 def test_any_param_value_change_shows_type_through_put_and_apply_and_rename_stays_click(sockets):
     """Design, PR #211: a param value change is `type`
@@ -789,7 +789,7 @@ def test_a_person_form_failure_still_sends_the_agent_form_and_never_500s(sockets
 
 def test_the_agents_kept_are_bounded_and_a_left_one_goes_with_its_slots():
     """At most SESSION_AGENT_MEMORY agents keep slots.
-    (design, PR #211): only an agent whose cursors
+    Design (PR #211): only an agent whose cursors
     have all left goes; a live one keeps its numbers, and a new agent past
     the cap gets the plain agent cursor, no session, until room frees."""
     from services.agent_presence import SESSION_AGENT_MEMORY

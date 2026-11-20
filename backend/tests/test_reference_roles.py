@@ -86,7 +86,7 @@ APPROVED_PARAM_LABEL_CHANGES = {
 }
 APPROVED_PORT_LABEL_CHANGES = {
     "identity-edit": {"mask": ("Mask", "Mask · unavailable")},
-    # Sentence case for the names a card shows (design, 2026-11 copy sweep items 13 and 15).
+    # Sentence case for the names a card shows (design, 2026-11 copy sweep).
     "cinema-scene": {"character_refs": ("Character Refs", "Character refs")},
 }
 # Output ports renamed in the same sweep: {node: {port id: (baseline label, current label)}}.

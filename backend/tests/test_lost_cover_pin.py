@@ -1,4 +1,4 @@
-"""A pinned cover whose image left the project stops counting (Justin's, 2026-10-21).
+"""A pinned cover whose image left the project stops counting (Justin's ruling, 2026-10-21).
 
 "a) It stops counting: agents may set a cover directly, and your next pin
 counts again." The question was: you pinned a cover, then deleted the node

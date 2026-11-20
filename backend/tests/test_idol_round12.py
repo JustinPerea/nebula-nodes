@@ -6,7 +6,7 @@ tag in the CLI line, and each surface's words from the one table.
 - Design: person lines say "Krea API key", as the Settings row does.
 - Design: "1 free run (fal)" beside "1 paid run (google)".
 - Design: a value that holds nothing is replaced.
-- (option a): unreadable keys read as none, for the spend
+- Unreadable keys read as none, for the spend
   gate too, and no handler falls back to a token in the environment.
 - An older CLI's `?via=cli` reads as the CLI.
 - And design: "Settings > Providers > Krea".
@@ -160,7 +160,7 @@ def test_desktop_mode_writes_no_keys_to_the_file_readable_or_not(sockets, monkey
         assert "fal-injected" not in sockets.read_text()
 
 
-# -- unreadable keys read as none, for the gate too (option a) ------------
+# -- unreadable keys read as none, for the gate too ------------
 
 
 def test_unreadable_keys_read_as_none_so_an_agent_runs_idol_keyless(sockets, monkeypatch):  # noqa: F811

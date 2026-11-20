@@ -1,6 +1,6 @@
 """Agent cursors, PR #211.
 
-- M3 /: conftest's cursor checks are installed before any fixture,
+- M3: conftest's cursor checks are installed before any fixture,
   so a fixture that patches ``main.manager.broadcast_raw`` can't blind them,
   and every cursor test file passes run alone, in its own pytest run.
 - The checks read the content too. No person-only frame (a cursor

@@ -1,4 +1,4 @@
-"""Commons curation as proposals the person accepts (Justin's, 2026-10-20; audit U13).
+"""Commons curation as proposals the person accepts (Justin's ruling, 2026-10-20; audit U13).
 
 Agents read the Commons and add to it already; curating it (correcting a
 reading, drawing or confirming a region, a reference's role, why or inbox

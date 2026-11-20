@@ -1,12 +1,12 @@
-"""PR #199 (design and design).
+"""PR #199 (design's two rulings).
 
 The person's canvas's protection is written in the same catalog commit
 as its filing (the catalog's `canvasPending`), in the protect and in the
 listing's settle, so a failed state.json write or a crash after the commit
-never leaves a filed project open and unprotected (probes).
+never leaves a filed project open and unprotected (found by review probes).
 Design: the protection ends for good once the person's tab is on the
 project and connected (the person-promoted socket's `viewing` frame); an
-agent can't end it. the CLI prints design's saved-canvas reply. and
+agent can't end it. The CLI prints design's saved-canvas reply, with
 the nits; design's order and duplicate names; design: the agent's copy
 named as the agent's.
 """
@@ -312,7 +312,7 @@ def test_gm10_3_the_edit_reply_says_the_copy_waits(app, monkeypatch):
     assert listing["canvasNotFiled"]["canvases"] == [{"name": None, "agentCopy": {"agent": "Codex"}, "deletes": 1}]
 
 
-# -- Design and design: the copy named as the agent's, in saved order -------------------
+# -- Design: the copy named as the agent's, in saved order -------------------
 
 def test_gm11_4_the_copy_filed_while_the_notice_shows_is_the_agents(app, monkeypatch):
     client, store, _graph, state = app

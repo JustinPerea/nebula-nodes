@@ -240,7 +240,7 @@ def test_message_text_is_cleaned_like_a_pins():
 
 
 def test_more_messages_than_kept_are_counted_never_dropped_and_read_again():
-    # #225, (M11) (B15): past MAX_PENDING a
+    # #225 (M11, B15): past MAX_PENDING a
     # message is counted, the push says how many it didn't list, and the
     # rest (still unsent at Nebula) are read again after the push.
     state = listening()
@@ -261,7 +261,7 @@ def test_more_messages_than_kept_are_counted_never_dropped_and_read_again():
 
 
 def test_a_message_event_from_an_agent_never_wakes_it():
-    # #225, (M17): only the person's route journals
+    # #225 (M17): only the person's route journals
     # person.message, but the actor filter comes first all the same.
     state = listening()
     state.observe(resp(ev(1, mcp_channel.MESSAGE_KIND, actor=OTHER_AGENT,

@@ -1,7 +1,7 @@
 """The Agents panel's backend: a status line per agent, and the
 roster the panel and agents read.
 
-Justin, 2026-10-24: "Yes, all four, in that order" (merge-oks); this is
+Justin, 2026-10-24: "Yes, all four, in that order" (merge-oks); this is the second of the four.
 An identified agent sets one line about what it is working on,
 optionally on a node (`set_status`, `nebula status`, `POST
 /api/canvas/status`). It lasts until the agent replaces or clears it, or

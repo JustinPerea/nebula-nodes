@@ -1,6 +1,6 @@
 """PR #199 (and design, with design's rule (a)).
 
-And design's rule (a): while the person's canvas waits to be saved as a
+Design's rule (a): while the person's canvas waits to be saved as a
 project, every agent write first files it untouched, never opened, and the
 write goes on a new canvas (clear, load) or a copy of it (any other write).
 The matrix: every agent route (HTTP, MCP, CLI; clear, load and five edits)

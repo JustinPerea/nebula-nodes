@@ -1,4 +1,4 @@
-"""Error copy: design's answers to questions, and two fixes.
+"""Error copy: design's answers to the questions the previous error-copy pass raised, and two fixes.
 
 Design, verbatim (2026-10-23):
 
@@ -17,7 +17,7 @@ Design, verbatim (2026-10-23):
   change as an edit, like “Change the lighting and keep everything else the
   same”, or use Veo 3.1 to extend the video.""
 
-The port guard extends 3f's (test_error_copy_round3f.rule_breaks and
+The port guard extends the card-line rules' (test_error_copy_round3f.rule_breaks and
 card_lines): a port's label written into a card line without quotes fails.
 Item 1's interim Delete-key confirm is gone: undo puts back everything a
 delete removed (tests/test_undo_restores_deletes.py). What agents read
@@ -59,7 +59,7 @@ def test_the_port_check_catches_each_shape_and_lets_gms_lines_through() -> None:
         "Disconnect the extra ones, then run the node again.",
     ):
         assert not port_breaks(line), line
-    # 3f's rules still hold on design's examples.
+    # The earlier card-line rules still hold on design's examples.
     assert not rule_breaks("The wire into “Prompt” brings something it can't take.")
 
 
@@ -99,7 +99,7 @@ def test_the_wiring_lines_in_gms_form() -> None:
     assert port_contracts._wrong_kind_line(prompt, "prompt") == (
         "The connection into “Prompt” brings something it can't take. Remove that connection, then connect a matching output.")
     # The label exactly as the node shows it, its note included (a quoted
-    # label may hold parentheses, 3f judgment 11).
+    # label may hold parentheses, the card-line rules' judgment 11).
     mask = {"id": "mask", "label": "Mask (white = edit)"}
     assert port_contracts._wrong_kind_line(mask, "mask").startswith("The connection into “Mask (white = edit)” brings ")
     assert port_contracts._too_many_line(prompt, "prompt", 1) == (
@@ -116,7 +116,7 @@ def test_the_wiring_lines_in_gms_form() -> None:
 
 
 def test_a_port_label_written_into_a_card_line_sits_in_quotes() -> None:
-    # Structurally, as 3f's field_label check: a card line that writes a port's
+    # Structurally, as the card-line rules' field_label check: a card line that writes a port's
     # label from its definition (port_contracts._input_name) quotes it.
     bare = []
     for path in _files():

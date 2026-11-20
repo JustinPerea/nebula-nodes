@@ -4,7 +4,7 @@ decision, PR #203; where the check sits, Justin decided 2026-10-31).
 With HF_TOKEN set, an Idol run uses the person's own ZeroGPU allowance, and
 past it Hugging Face bills a PRO, Team or Enterprise account's prepaid
 credits. Nebula prices Idol at $0 (sourced) and keeps it that way: the route
-carries a separate "may bill" flag (RouteSpec ``mayBillWithKey``). Until
+carries a separate "may bill" flag (RouteSpec ``mayBillWithKey``). Until the Idol gate change,
 ``agent_spend.decide`` refused an agent's whole run that included
 such a node; now only the Hugging Face call is gated: every agent run route
 (/api/execute, /api/execute-node, /api/graph/run, /api/quick and

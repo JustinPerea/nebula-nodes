@@ -1,4 +1,4 @@
-"""PR #199: what makes true (2026-10-27).
+"""PR #199: what the fix makes true (2026-10-27).
 
 - No single bit flip of any structural byte (a record's opening ``{``
   included) silently reverts a project: a record whose opener broke is
@@ -523,7 +523,7 @@ def test_l3_a_damaged_side_file_is_ignored(tmp_path):
     assert a["id"] in fresh.read()["projects"]
 
 
-# -- / design bug 3: restoring past the project limit ----------------------------------
+# -- Design: restoring past the project limit ----------------------------------
 # Justin, 2026-10-29: Undo of a delete may go over the limit
 # when the recovered canvas took the freed slot. RESTORE_MAY_PASS_THE_PROJECT_LIMIT
 # is on, so this is the default path; no switch is flipped here.

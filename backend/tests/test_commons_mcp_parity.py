@@ -1,4 +1,4 @@
-"""Commons for agents, now (Justin's, 2026-10-20; audit U13).
+"""Commons for agents, now (Justin's ruling, 2026-10-20; audit U13).
 
 Read tools for what agents could reach only over raw HTTP: the collections
 (`commons_add` needs one's id), status, borrowings, a borrowing's fidelity

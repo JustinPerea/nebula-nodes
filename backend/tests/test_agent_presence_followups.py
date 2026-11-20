@@ -240,7 +240,7 @@ def test_L2_agents_read_the_lines_in_start_here_mcp_and_the_cli():
     assert '  pin_1 on n4:\n    first line\n    second line' in text
 
 
-# -- PR #200 (design ": keep the break") --
+# -- PR #200 (design: "keep the break") --
 # A note keeps its lines on every surface an agent reads, the channel push
 # included; every line break Unicode knows reads as a newline; a one-line
 # surface (an event summary, `nebula watch`) shows a break as " ⏎ " so one
@@ -315,12 +315,12 @@ def test_r3_N6_start_here_keeps_spacing_as_look_at_canvas_does():
         assert agent_start.pins_part([pin], via=via)["open"][0]["text"] == "lead  tab\nnext   line", via
 
 
-# -- PR #200, revised in ---------------
+# -- PR #200, revised later ---------------
 # The channel puts a note of several lines on its own lines, each indented
 # the same, so a line the person typed to look like the push's own
 # ("Nebula: …" after a typed ‹/pin›) still reads as part of their note.
-# blank-run collapse in the store is reverted by
-# See test_r5_N3 below.
+# The blank-run collapse in the store is reverted later:
+# see test_r5_N3 below.
 
 def test_r4_N4_the_channel_indents_each_later_line_of_a_note():
     from tests.test_mcp_channel import pin, resp, take
@@ -391,8 +391,8 @@ def test_r5_N3_the_store_keeps_what_the_person_typed():
     # Blank lines stay as typed (fold is reverted); the cap bounds them.
     assert clean_text("a\n\n\nb", limit=280, multiline=True) == "a\n\n\nb"
     assert clean_text("a" + "\n" * 278 + "b", limit=280, multiline=True) == "a" + "\n" * 278 + "b"
-    # Whitespace at the ends goes; spaces inside stay (design, PR #200
-    # ); control characters still drop.
+    # Whitespace at the ends goes; spaces inside stay (design, PR #200);
+    # control characters still drop.
     assert clean_text("\n\na  \n\tb\x00\n\n", limit=280, multiline=True) == "a  \n b"
 
 
@@ -404,7 +404,7 @@ def test_r6_N2_the_first_line_keeps_its_indent():
     from services.canvas_pins import clean_text
     import mcp_channel
 
-    # Design (PR #200) replaces: whitespace
+    # Design (PR #200) replaces the earlier rule: whitespace
     # at the ends goes, the first line's indent too; the note is stored trimmed.
     assert clean_text("\n  indented first\nsecond  \n\n", limit=280, multiline=True) == "indented first\nsecond"
     assert mcp_channel.clean_text("  indented first\nsecond", 300, multiline=True) == "indented first\nsecond"

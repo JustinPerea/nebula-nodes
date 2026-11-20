@@ -1,5 +1,5 @@
 """Styles (presets) join Recently deleted like boards and characters, and
-agents get them over MCP and the CLI (Justin's, 2026-10-20; audit U5).
+agents get them over MCP and the CLI (Justin's ruling, 2026-10-20; audit U5).
 
 - DELETE /api/presets/{id} moves a Style to Recently deleted (kind "style");
   anyone may, agents included, since restore_from_trash brings it back.

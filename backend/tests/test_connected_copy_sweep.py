@@ -590,7 +590,7 @@ def test_nebula_delete_keeps_the_id(capsys, ref, label, shown):
     assert capsys.readouterr().out == shown + "\n"
 
 
-# -- the docs agents read: the same ratchet over their prose (finding 6) -------------
+# -- the docs agents read: the same ratchet over their prose -------------
 
 # Prose the docs ratchet doesn't read: fenced code, `backtick spans`, the
 # --wire / --unwire flags, and the one line that names the old word to say

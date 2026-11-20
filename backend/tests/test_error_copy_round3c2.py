@@ -1,6 +1,6 @@
 """Error copy: Nebula's own run lines show again (design).
 
-3c made every node run error with no person line read design's general line with
+The earlier node-run-error pass made every node run error with no person line read design's general line with
 the raw text behind "Details". That hid the lines Nebula already wrote for the
 person ("No mask painted yet — open the Mask Painter node and paint one", the
 route wiring lines, Meshy's Smart Topology line ...). design's guard: "provider
@@ -342,11 +342,11 @@ UNLINED_BASELINE: dict[str, int] = {
     "execution/stream_runner.py": 5, "execution/sync_runner.py": 4, "services/media_input.py": 3,
     "services/qc_common.py": 6, "services/qc_jev.py": 3, "services/typesafe_client.py": 23,
     "services/vision_llm.py": 8, "services/google_vertex.py": 2, "services/quiver_client.py": 9,
-    # The 3c-2 review raised two by one: handlers/replicate_model.py's
+    # A review raised two by one: handlers/replicate_model.py's
     # model_path and maker_routes_google.py's Vertex Veo model check read
     # Nebula's route table, never the person, so they are developer-only and
     # their person lines (which named the ids) went.
-    # Read by the guard from the 3c-2 review on. ffmpeg: tool output, timeouts
+    # Read by the guard from that review on. ffmpeg: tool output, timeouts
     # and developer-only input checks. krea_account: a schema mismatch and
     # malformed job answers. nous_auth: its internal _CredentialRejected
     # checks and the public sign-in errors, which the handler
@@ -355,13 +355,13 @@ UNLINED_BASELINE: dict[str, int] = {
     # krea_mcp_generation: Krea's MCP server contract (a tool or schema it
     # doesn't expose), malformed answers and job states.
     "services/krea_mcp_generation.py": 17,
-    # Lowered fourteen, mostly paid jobs Nebula stopped waiting on
+    # This pass lowered fourteen, mostly paid jobs Nebula stopped waiting on
     # (design's slow-job line) and Krea's lines 1-10.
-    # The 3d review lowered minimax.py by one: its missing task id now reads
+    # A later review lowered minimax.py by one: its missing task id now reads
     # MiniMax's own code (a refused key or no balance gets the table's line),
     # and the exception is built before the raise, so the guard can't read
     # its text; tests/test_error_copy_round3d.py pins it.
-    # Lowered stream_runner.py by one: the image stream's
+    # This pass lowered stream_runner.py by one: the image stream's
     # "ended without a final image event" is built before its raise, so the
     # card can give a fal.ai job still running design's slow-job line;
     # tests/test_error_copy_round3d2.py pins its text.
@@ -391,7 +391,7 @@ FORBIDDEN_IN_A_LINE = re.compile(
     # snake_case ids and keys, a digit before the underscore too ("gen4_turbo").
     r"(?<![{\w])[a-z][a-z0-9]*_[a-z0-9_]+(?![}\w])|[A-Z]{2,}_[A-Z_]+|/api/|nebula trash|\bGET\b|"
     r"\{(?:path|file_path|image_value|img_str|audio_path|value|ref|raw|task_id|job_id|character_id|moodboard_id)\b|"
-    # (design's rules: no ids, no parentheses in error copy): a provider's
+    # Design's rules (no ids, no parentheses in error copy): a provider's
     # kebab-case model id with a digit in it ("gpt-image-2", "k2-large"), a
     # dated one ("seedance-1-0-pro-250528"), one of the makers' id prefixes
     # with none ("grok-imagine-video", "fal-ai/..."), and a parenthesis.
@@ -457,7 +457,7 @@ def forbidden_in_a_line(line: str) -> re.Match[str] | None:
 def test_no_person_line_names_an_id_a_path_a_parameter_key_or_an_env_var() -> None:
     for path in _run_time_files():
         if path.name == "worldlabs.py":
-            continue  # 3c's lines, pinned by test_error_copy_round3c.py
+            continue  # the node-run-error pass's lines, pinned by test_error_copy_round3c.py
         source = path.read_text()
         for lined, text, exc, wrapper in _raises(path):
             if wrapper is None:
@@ -484,7 +484,7 @@ def test_no_person_line_goes_on_a_moderation_block() -> None:
                 assert classify_error(text.replace("{}", "x"))[0] != "blocked", (path.name, text)
 
 
-# Nebula's own instruction around a provider's words: since the raise
+# Nebula's own instruction around a provider's words: now the raise
 # says so with with_provider_line, so the card keeps the instruction and puts
 # the provider's words behind Details (design: "Raw provider text stays behind
 # Details in every case.").
@@ -626,7 +626,7 @@ async def test_a_scene_runs_failed_shot_reads_like_the_node_card(monkeypatch, ma
     assert output.get("errorPerson") == person
 
 
-# -- the review's fixes (3c-2 review) ------------------------------------------
+# -- the review's fixes ------------------------------------------
 
 
 def test_quivers_own_credits_and_key_lines_reach_the_card() -> None:

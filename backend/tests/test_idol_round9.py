@@ -96,7 +96,7 @@ def test_a_key_billing_route_that_is_no_space_gets_its_note_from_the_class():
 def test_the_billing_note_states_the_downstream_rule():
     """An agent that reads only describe_node or find_nodes
     learns the rule before its first stop (at the call,
-    Justin decided 2026-10-31)."""
+    as of Justin's decision, 2026-10-31)."""
     assert ("An agent's run goes ahead up to it, and a result it reuses passes, but while the token is set the "
             "node stops before calling Hugging Face and the nodes after it don't run") in main.HF_SPACE_BILLING_TOKEN
     assert "then an agent's run that reaches it stops at it, before anything is sent" in main.HF_SPACE_BILLING_FREE
@@ -186,7 +186,7 @@ def _signals(broadcast):
 def test_each_key_change_tells_every_socket_with_no_values(stored, monkeypatch):
     client, _path, write, broadcast = stored
     write({"OPENAI_API_KEY": "sk-kept-2222"})
-    # (design, PR #203): the names of the keys that changed, never a value.
+    # Design, PR #203: the names of the keys that changed, never a value.
     signal = {"type": "settingsChanged", "keys": ["HF_TOKEN"]}
     assert client.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "hf_signal_token_5555"}}).status_code == 200
     assert _signals(broadcast) == [signal]

@@ -92,7 +92,7 @@ def test_every_commit_keeps_a_last_good_copy(tmp_path):
     assert oct(store.backup_path.stat().st_mode & 0o777) == "0o600"
     _add(store, "Beta")
     # .bak is the catalog each commit replaced (one commit behind, a hard
-    # link: PR #199, L6); the damaged file holds the newest.
+    # link); the damaged file holds the newest.
     assert _names(json.loads(store.backup_path.read_text())) == {"Alpha"}
     # No temporary copy is left behind.
     assert not list(store.root.glob(".catalog-backup.*")) and not list(store.root.glob(".catalog-bak.*"))

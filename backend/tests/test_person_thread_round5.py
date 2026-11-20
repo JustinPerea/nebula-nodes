@@ -9,9 +9,9 @@
   or more, Nebula won't guess (replyTo None, and a note says why).
 - Design: a reply goes to the thread of the message it answers, with an
   Update on the open project naming it ("Claude Code replied in “Coast”."),
-  whose Open opens that thread; no message and no project: line.
+  whose Open opens that thread; no message and no project: the refusal line.
 - `nebula pin resolve` from the session's shell ends that pin's span.
-- Rows carry ``rev``, and the survivors B6, B7, B13.
+- Rows carry ``rev``, and the remaining review findings (B6, B7, B13).
 """
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ def test_a_reply_after_a_project_switch_goes_to_its_messages_thread_both_ways(th
 
 def test_a_reply_saved_in_another_project_keeps_no_node_of_the_open_canvas(thread):
     # The node is on the other project's canvas, not the open one: it is
-    # ignored (design b: no cursor flies, the Update is the signal).
+    # ignored (design: no cursor flies, the Update is the signal).
     first = thread.project_id
     coast = _new_project(thread, "Coast")
     a = _listen(thread, SESSION_A)
@@ -118,7 +118,7 @@ def test_a_reply_in_the_open_project_posts_no_update(thread):
 
 
 def test_the_oldest_open_push_is_answered_first_across_projects(thread):
-    # (the push ledger): oldest first follows the order Claude
+    # The push ledger: oldest first follows the order Claude
     # answers its queued pushes in.
     coast = _new_project(thread, "Coast")
     a = _listen(thread, SESSION_A)
@@ -232,7 +232,7 @@ def test_a_crashed_sessions_leftover_never_blocks_the_answer(thread):
 
 
 def test_the_launch_command_makes_a_session_id_per_launch():
-    # (all three lenses): no uuidgen (Debian/Ubuntu ship it apart,
+    # No uuidgen (Debian/Ubuntu ship it apart,
     # and without it every launch was the bare session "cc-"). POSIX only:
     # the shell's clock and its own process id, at each launch.
     from cli.commands import mcp_connect

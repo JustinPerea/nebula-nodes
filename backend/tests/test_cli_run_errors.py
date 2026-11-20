@@ -88,7 +88,7 @@ def agent_log(monkeypatch):
     """What the canvas's Agent log lists, from both of its sources: an
     in-app chat turn's lines (publish_action's `thinking` events, shown as
     they are) and each agent cursor event's line, its `log` else its `say`
-    (frontend agentLogStore.agentActionEntry). design, PR #203: a
+    (frontend agentLogStore.agentActionEntry). Design, PR #203: a
     refused run is one line there, whoever asked."""
     import main
     from services.chat_actions import register_action_handler, unregister_action_handler

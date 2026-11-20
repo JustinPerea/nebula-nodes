@@ -1,21 +1,21 @@
 """PR #199: backend items and design.
 
-- (design): the open/replacement
+- Design: the open/replacement
   hold is the backend's own verdict, read with no side effect
   (``_graph_replacement_hold``: GET /api/projects/open-hold, the listing's
   ``openHold``, and ``hold`` on the open route's 409), with the held node and
   the project it belongs to; agents read it in list_projects and `nebula
   projects`. The states are one list both sides read
   (tests/data/replacement_hold_states.json).
--: a run result's landing stamp
+- A run result's landing stamp
   (``resultLandedAt``) is kept with it, so a handoff after a restart still
   knows which run is newer; equal times keep Nebula's.
 - A refused delete is never silent (``deletesKept``).
-- Mutants B4, B12, B13b, B16;.
+- Mutants B4, B12, B13b, B16.
 - A recovered copy's source, for agents.
-- (design): the person's newer result replacing a
+- Design: the person's newer result replacing a
   node's is journaled (``node.result``).
-- agents-docs design question (design): the `nebula watch` line for a reopen in place.
+- Design's question: the `nebula watch` line for a reopen in place.
 """
 from __future__ import annotations
 
@@ -790,7 +790,7 @@ def test_19_nothing_is_journaled_when_nebulas_result_stands(app):
     assert not _events("node.result", since)
 
 
-# -- (design): `nebula watch` for a reopen in place ---------------------------------------------
+# -- Design: `nebula watch` for a reopen in place ---------------------------------------------
 
 def _replaced(since: int) -> dict:
     return _events("canvas.replaced", since)[-1]

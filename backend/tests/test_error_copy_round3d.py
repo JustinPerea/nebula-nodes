@@ -1,6 +1,6 @@
 """Error copy: design's lines for the other handlers' run errors.
 
-Design owns the copy; design's lines are verbatim here. design: "Raw provider text stays
+Design owns the copy; design's lines are verbatim here. Design: "Raw provider text stays
 behind Details in every case." The exception text is what agents, MCP, the
 run record and the journal read, and none of it changes: every test asserts
 the exact text beside the line.
@@ -653,7 +653,7 @@ def test_seedances_dated_ids_leave_the_card() -> None:
     assert person_line(exc) == "Seedance 2.5 on BytePlus renders 480p, 720p or 1080p. Pick one in “Resolution”."
     exc = _raised(_whole_seconds, 3.5, SEEDANCE_2_5)
     assert str(exc).startswith("BytePlus takes whole seconds from 4 to 30 for this model (received 3.5).")
-    # Design's own example of the rule, the label in quotes since (rule 5).
+    # Design's own example of the rule, the label in quotes, per rule 5.
     assert person_line(exc) == "Set “Duration” to whole seconds from 4 to 30. It was 3.5."
     exc = _raised(_frames, SEEDANCE_1_0_PRO_FAST, ["https://e.com/a.png"], ["https://e.com/end.png"])
     assert str(exc) == f"BytePlus's {SEEDANCE_1_0_PRO_FAST} takes a start image only, not an end image"
@@ -700,7 +700,7 @@ def test_the_guard_knows_kebab_and_dated_ids_and_parentheses() -> None:
 
 def test_nebulas_words_around_a_providers_keep_the_providers_behind_details() -> None:
     # Two lines wrap Nebula's instruction around the provider's own words
-    # (3c-2's allowlist): the card shows the instruction, Details the rest.
+    # (the guard's allowlist): the card shows the instruction, Details the rest.
     for name, start in (("handlers/elevenlabs.py", "Your ElevenLabs API key can't list your voices ({exc})"),
                         ("services/typesafe_client.py", "{label} is damaged or incomplete: {exc}")):
         source = (BACKEND / name).read_text()
@@ -786,7 +786,7 @@ def test_hailuo_and_grok_lines_name_the_model_not_its_id() -> None:
                                 "the node again.")
 
 
-# -- review of 3d -------------------------------------------------------------
+# -- review of this pass -------------------------------------------------------------
 # Four findings from the review, each pinned before its fix.
 
 

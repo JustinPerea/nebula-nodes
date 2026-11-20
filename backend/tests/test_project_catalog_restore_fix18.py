@@ -1,12 +1,12 @@
 """PR #199 (design), the backend's part.
 
-- (both lenses): an agent's reopen of the project the tab shows
+- An agent's reopen of the project the tab shows
   renumbers a duplicated or pasted node (U -> n2), and the tab's handoff,
   taken before the open, still holds U. The handoff now learns the open's
   {old: new}: one n2 with the tab's late typing, on disk and live.
 - The boot renumbering takes the project's newer values, numbers
   past every id the project used, and reloads a tab from before the boot.
-- (renumber-everywhere): CLIGraph itself refuses a non-nN id.
+- CLIGraph itself refuses a non-nN id.
 - The boot's renumbering rides on first syncs only until a
   replacement or the person's read of the project.
 - Imported output types read the shared port rule.

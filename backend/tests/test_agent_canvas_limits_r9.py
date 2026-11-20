@@ -303,7 +303,7 @@ def test_the_no_worse_walk_on_the_largest_canvas_save_allows_is_within_budget(ap
     no_worse = time.perf_counter() - started
     assert found is not None and found[2] == {"kind": "values", "max": main.RESTORE_MAX_GRAPH_VALUES}
     # Measured at load average ~30: 0.04 s per walk (0.115 s for
-    # walk), 0.17 s for the whole check (two walks and the export), 0.28 s
+    # the earlier walk), 0.17 s for the whole check (two walks and the export), 0.28 s
     # for the refused PUT. The bounds leave room for a machine under load.
     assert one_walk < 1.0, one_walk
     assert no_worse < 2.5, no_worse

@@ -1,4 +1,4 @@
-"""PR #199: what makes true (2026-10-28).
+"""PR #199: what the fix makes true (2026-10-28).
 
 - Whether the live canvas waits is read from the canvas itself: an
   agent's write right after a catalog restore, before any listing, settles
@@ -413,7 +413,7 @@ def test_l1_failed_opens_hold_the_canvas_once_and_it_is_filed_once(app, monkeypa
     other = next(pid for pid in catalog["projects"] if pid != catalog["activeProjectId"])
     _free_a_slot(client, other)
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]  # one project, never two
-    assert "restoreRoom" not in after  # no restore verdict since
+    assert "restoreRoom" not in after  # no restore verdict since it was removed
 
 
 # -- One file per canvas, no shared cap, agents capped like a project --------------
@@ -654,7 +654,7 @@ def test_n2_a_restore_lands_however_many_canvases_wait(app, monkeypatch):
 
 
 # -- Design: the person's own clear and load ----------------------------------------
-# Design #3 dropped the person's lines: the tab never reaches the
+# Design: dropped the person's lines: the tab never reaches the
 # refusal (a waiting canvas leaves the tab on Projects home, where clear and
 # load aren't offered). A person request that gets here anyway is refused in
 # the agents' lines, with no `audience`.

@@ -1,4 +1,4 @@
-"""(Justin, 2026-10-23): "a): "Download your edits" plus "Continue
+"""Justin, 2026-10-23: "a): "Download your edits" plus "Continue
 without them"."
 
 A stale tab saves its unsaved edits as a recovered project

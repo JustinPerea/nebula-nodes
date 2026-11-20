@@ -287,7 +287,7 @@ def test_weight_normalize_matches_mode():
     assert "nano-banana: weight mode at-creation needs normalize sum-to-one (has rank)" in _problems(
         _with_entry("nano-banana", _refs(weight={"mode": "at-creation", "field": "image_weights",
                                                  "normalize": "rank"})))
-    # "none" (strength x weight, the pre- behaviour) is for test fixtures only.
+    # "none" (strength x weight, the earlier behaviour) is for test fixtures only.
     raw = {**_table()["entries"]["krea-2-generate"]["weight"], "normalize": "none"}
     assert "krea-2-generate: weight normalize none is for test fixtures only" in _problems(
         _with_entry("krea-2-generate", {**krea, "weight": raw}))

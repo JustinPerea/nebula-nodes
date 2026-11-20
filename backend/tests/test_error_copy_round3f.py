@@ -1,4 +1,4 @@
-"""Error copy: design's rules for every card line (design's 3f message).
+"""Error copy: design's rules for every card line (design's message).
 
 Design: "RULES FOR EVERY CARD LINE (the "shown again, word for word" list breaks
 these all over; each one can be applied mechanically)":
@@ -104,7 +104,7 @@ def _port_labels() -> list[str]:
 
 
 _PORTS = "|".join(re.escape(label) for label in _port_labels())
-# (design): "anything a person reads as a label on the node goes in
+# Design: "anything a person reads as a label on the node goes in
 # quotes, field or port." A port named by its label, bare.
 _BARE_PORT = re.compile(
     # "the node's Prompt input", "Krea 2's Moodboard input", "this node's Image input"

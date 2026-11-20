@@ -1,4 +1,4 @@
-"""PR #203, section 1: design's words, and where it rewrote them.
+"""PR #203, section 1: design's words, and where later passes rewrote them.
 
 1. The Idol agent stop: its own card body for the person, its
    own body when the click came from a tab not connected as the person, and the agents' text.

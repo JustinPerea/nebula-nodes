@@ -1,10 +1,10 @@
-"""Placeholders, (feat/agent-presence, design's
-round-7 rulings of 2026-10-26).
+"""Placeholders (feat/agent-presence, design's
+rulings of 2026-10-26).
 
-Justin: what runs never costs more than the person was shown.,
-(design's answer): the canvas shows the amount the person confirms in cents,
+Justin: what runs never costs more than the person was shown.
+Design's answer: the canvas shows the amount the person confirms in cents,
 rounded up, and sends exactly that; Nebula lets no run exceed it, so no slack
-above the confirmed total. design, polish: a status cut to 140 characters
+above the confirmed total. Design, polish: a status cut to 140 characters
 is cut at a word.
 """
 from __future__ import annotations

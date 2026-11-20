@@ -1,4 +1,4 @@
-"""PR #203: design.
+"""PR #203: the card's route lines and a refused run's card heading, with design's rulings.
 
 - The card's route lines quote the node's name, as the bar and the log do.
 - A refused run's card heading is the Agent log's "Nebula couldn’t start the
@@ -68,7 +68,7 @@ def test_a_real_stop_with_four_resolutions_lists_them_then_the_comma():
     assert line.endswith(" or 4K, or switch to Replicate.")
 
 
-# -- Of design's card note: quoted names on the card -----------------------------
+# -- Design's card note: quoted names on the card -----------------------------
 
 def test_the_card_quotes_the_node_name_as_the_log_does():
     flux3 = NodeRegistry().get_all()["flux-3-image"]

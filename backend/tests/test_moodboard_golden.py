@@ -107,7 +107,7 @@ before it was replaced (the review lists every path that moved):
   file before the change with those paths normalized
   (``_without_weight_zero``), and ``tests/test_moodboard_weight_zero.py``
   pins that no generator request changes.
-- 2026-10-21, (Justin: "a) Yes: the same check, and the same
+- 2026-10-21, outside image links (Justin: "a) Yes: the same check, and the same
   placeholder for old boards"; contract 07 section 1.19). The 3 boards with
   an external https image (``prebrief_v2_edited``, ``v3_current``,
   ``v4_current_private``) moved on 15 paths: the node bundle's ``images``
@@ -121,7 +121,7 @@ before it was replaced (the review lists every path that moved):
   ``test_q21b_changed_only_the_krea_style_references`` normalizes those
   paths too (``_without_outside_links``); the file at 26572670, the file
   just before this change and this one give the same hash.
-  A review (same day) moved 9 more paths on those 3 boards: the bundle's
+  A review of the outside-link change (same day) moved 9 more paths on those 3 boards: the bundle's
   and the CLI's ``analysis.summary`` count drops by one (the outside image
   steers by its settings but no generator gets it, so it isn't counted,
   ``moodboard_analysis.counts``), and ``outsideNote`` tells an agent to ask
@@ -373,9 +373,9 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
 # The weight-0 change (2026-10-20) moves only the paths ``_without_weight_zero``
 # normalizes, so the hash is of the file at 26572670 with those normalized too
 # (it was c97b6c2d4b07... before them); the file just before that change gives
-# the same hash. (2026-10-21) moves only the paths ``_without_outside_links``
+# the same hash. The outside-link change (2026-10-21) moves only the paths ``_without_outside_links``
 # normalizes, so the hash is of the file at 26572670 with those normalized too
-# (it was ef8f5d4016bb... before them); the file just before and the file
+# (it was ef8f5d4016bb... before them); the file just before the outside-link change and the file
 # after it give the same hash.
 BEFORE_Q21B_WITHOUT_KREA_REFS = "5cc3283db0dfd28e80d29ef1651607f2926df7a7fac5d3fd24661d438a45ac1c"
 # The analyzer version a never-analyzed board reported at 26572670.
@@ -405,7 +405,7 @@ _OUTSIDE_NOTE = re.compile(r"from outside Nebula")
 
 
 def _without_outside_links(outputs: dict[str, Any]) -> None:
-    """The paths moved (2026-10-21), normalized in place: an image that
+    """The paths the outside-link change moved (2026-10-21), normalized in place: an image that
     is a link to another site out of the bundle's ``images`` and
     ``analysis.images`` (where the file before it still had them), the run
     note that says so, and the CLI view's ``outside`` mark and
@@ -468,6 +468,6 @@ def test_q21b_changed_only_the_krea_style_references() -> None:
 
 def test_the_golden_docstring_records_the_q21b_change() -> None:
     doc = __doc__ or ""
-    assert "Q21 b" in doc
+    assert "2026-10-20" in doc
     assert ("Krea 2 board refs scaled to add up to the board's strength; unchanged: refs, order, "
             "every other key") in " ".join(doc.split())

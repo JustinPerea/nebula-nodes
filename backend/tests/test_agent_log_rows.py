@@ -478,7 +478,7 @@ def test_nodes_with_the_same_name_are_counted_and_a_rename_says_from_what(api): 
 
 
 def test_one_rename_names_both_ends_and_two_or_more_are_a_count(api):  # noqa: F811
-    """Design."""
+    """Design: a rename names both ends; two or more are a count."""
     ids = [_label(api, api.graph.add_node("text-input", {"value": str(i)}), name) for i, name in enumerate("ABC")]
     _apply(api, {"rename": {ids[0]: "Prefix"}})
     assert _rows(api)[-1] == ("Claude Code", "Renamed “A” to “Prefix”")

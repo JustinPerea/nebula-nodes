@@ -4,7 +4,7 @@ Design, verbatim: "Cursor bubble for 3 or more labels:
 "Changed N settings" (was "Set N settings"). Keep "Set “Aspect ratio”" for
 one or two labels."
 
-(nit): a universal node's configured model brings its own fields
+A universal node's configured model brings its own fields
 (``dynamicParams``); the Agent log listed their labels in key order, not in
 the order the card shows them. They now follow the card.
 """

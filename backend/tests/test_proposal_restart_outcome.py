@@ -1,4 +1,4 @@
-"""An Update whose ask was open when Nebula restarted (Justin's, 2026-10-21).
+"""An Update whose ask was open when Nebula restarted (Justin's ruling, 2026-10-21).
 
 "a) "Closed: Nebula restarted" (the agent can ask again)." Proposals live in
 memory and Updates are saved with the project, so after a restart an asset

@@ -1,4 +1,4 @@
-"""PR #199: what makes true (2026-10-28).
+"""PR #199: what the fix makes true (2026-10-28).
 
 - Salvage reads JSON's whitespace only (space, tab, LF, CR), never
   Python's ``\\s``: one bit turning an earlier record's ``]`` into 0x1d no
@@ -132,7 +132,7 @@ def test_m1_the_trimmed_text_between_records_is_json_whitespace_only():
 def _with_logo_at(tmp_path: Path, where: str):
     """Fuzz base with Logo's record (the one changed after the
     copy) moved first, to the middle, or last, in the copy and catalog.json
-    alike (prepare keeps key order), .bak.1 gone as in g1."""
+    alike (prepare keeps key order), .bak.1 gone as in the g1 case below."""
     base, ids = _fuzz_base(tmp_path)
     for name in (store_module.BACKUP_NAME, "catalog.json"):
         path = base.root / name
@@ -154,7 +154,7 @@ def _with_logo_at(tmp_path: Path, where: str):
 @pytest.mark.parametrize("where", ["middle", "last"])
 def test_m1_every_bit_of_every_structural_byte_with_the_changed_record_anywhere(tmp_path, quick_disk, where):
     """g1 (16 silent reverts with Logo last), for every place the
-    changed record can sit: 0 silent reverts. First is own
+    changed record can sit: 0 silent reverts. First is test_m2's own
     sweep (test_m2_every_bit_of_every_structural_byte_never_reverts_silently:
     Logo is the first record of _fuzz_base)."""
     base, ids = _with_logo_at(tmp_path, where)
@@ -172,7 +172,7 @@ def test_m1_every_bit_of_every_structural_byte_with_the_changed_record_anywhere(
 
 
 def test_a_record_whose_key_and_unreadable_id_both_changed_is_never_deleted_after_the_copy(tmp_path):
-    """Found by this round's gate run of 1,500 two-flip set (its
+    """Found by a gate run of the 1,500 two-flip set (its
     ids are random, so a pair lands on new bytes each run): Old's key
     changed to another valid id one character off ("9311…" -> "1311…") and
     its own id field to one that isn't an id ("…9883=1f4…"). The file still
@@ -525,7 +525,7 @@ def _waiting(client, store, graph, state, monkeypatch, owner="e" * 32) -> list[s
     """Three projects at a limit of 3, the live canvas unfiled and waiting,
     holding a node no project has. Added as the person's (no tab: the person
     can't reach a waiting canvas from one), since an agent's add at the
-    limit is refused from on."""
+    limit is refused since the waiting-canvas guard was added."""
     ids = _unfiled_at_the_limit(client, store, graph, state, monkeypatch, owner)
     listing = client.get("/api/projects", headers=PERSON).json()
     assert listing["canvasNotFiled"]["reason"] == "projects"
@@ -608,7 +608,7 @@ def test_m3_a_clear_or_graph_load_at_the_limit_is_refused_and_changes_nothing(ap
     assert response.status_code == 409, response.text
     body = response.json()
     assert body["code"] == "canvas_waiting" and body["reason"] == "projects"
-    # Design #3: the person's own lines were dropped as
+    # Design: the person's own lines were dropped as
     # unreachable from the tab; a person request that gets here anyway is
     # still refused, in the one set of lines.
     assert body["detail"] == main_module.CANVAS_WAITING_REFUSAL
@@ -658,12 +658,12 @@ def test_m3_below_the_limit_a_clear_or_load_holds_the_canvas_first(app, monkeypa
     else:
         response = client.request("DELETE", "/api/graph?force=true", headers=AGENT)
     assert response.status_code == 200, response.text
-    # (design's rule (a)): filed untouched first, never opened.
+    # Design's rule (a): filed untouched first, never opened.
     assert response.json()["savedCanvas"]["name"] == "Recovered canvas"
     assert _held(store) == []
     events = [call.args[0] for call in sent.call_args_list if call.args and call.args[0].get("type") == "projectsChanged"]
     action = "replaced" if route == "import" else "cleared"
-    # The agent's own row from on (design): its id and colour too.
+    # The agent's own row from then on (design): its id and colour too.
     assert any(event.get("change") == "canvasHeld" and {"action": action, "agent": "Probe", "agentId": "ext:probe",
                                                         "savedAs": "Recovered canvas"}.items()
                <= (event.get("canvasHeld") or {}).items() for event in events)
@@ -806,7 +806,7 @@ def test_m3_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch)
     applied = client.post("/api/graph/apply", headers=AGENT,
                           json={"note": "x", "nodes": [{"ref": "+a", "definitionId": "text-input", "params": {"value": "applied"}}]})
     assert applied.status_code == 200, applied.text
-    # (design's rule (a)): the person's canvas is filed first, and
+    # Design's rule (a): the person's canvas is filed first, and
     # the apply is on a copy (waiting: the free place went to the canvas).
     assert _held(store) == []
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
@@ -883,5 +883,5 @@ def test_m3_nothing_in_it_is_lost_on_every_path(app, monkeypatch):
     assert _held(store) == []
 
 
-# The route-coverage test (every canvas replacement) became
+# The route-coverage test (every canvas replacement) became the
 # fence-based one: tests/test_project_catalog_restore_fix6.py.

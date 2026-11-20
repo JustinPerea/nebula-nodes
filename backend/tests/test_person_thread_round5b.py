@@ -5,8 +5,8 @@
   questionIds), and a reply answers its session's OLDEST open push, in that
   push's project, marked once the row is saved.
 - Design: one "replied in" Update per agent and project while unread,
-  updated in place with a count; design d: “Untitled”.
-- Design b: a reply for another project's thread ignores
+  updated in place with a count; design: “Untitled”.
+- Design: a reply for another project's thread ignores
   its node, flies no cursor, and says so.
 - Design: the no-project refusal points at open_project, in the refusal,
   the tool's docstring, MCP-SETUP and SKILL.md.
@@ -164,7 +164,7 @@ def test_5_a_coast_message_then_a_harbor_answer_the_second_reply_lands_in_harbor
 
 
 def test_6_an_answered_message_then_ten_replies_go_to_the_open_project_with_no_update(thread):
-    # (34 Updates in 60 s): only a reply that answers a
+    # 34 Updates in 60 s: only a reply that answers a
     # push goes elsewhere.
     coast = thread.project_id
     forest = _new_project(thread, "Forest")
@@ -299,7 +299,7 @@ def test_16_a_cross_project_reply_with_a_node_is_saved_without_it_flies_nothing_
     assert answer.json()["projectId"] == coast and _replies_in(thread, coast)[0]["nodeId"] is None
     assert answer.json()["note"] == ("Nebula posted this reply in “Coast” but didn’t point at n3 because that "
                                      "project isn’t open, so your cursor stayed where it was.")
-    assert len([m for m in thread.sent if m.get("type") == "agentPresence"]) == before  # Design b
+    assert len([m for m in thread.sent if m.get("type") == "agentPresence"]) == before  # Design
 
 
 def test_a_node_on_the_open_canvas_is_still_checked_and_points(thread):

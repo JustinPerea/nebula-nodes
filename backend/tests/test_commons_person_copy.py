@@ -215,13 +215,13 @@ def test_written_evaluation_reasons_stay_as_they_are(client):
     h = human()
     r = client.post("/api/commons/evaluation/prepare", json={"path": "relative/path"}, headers=h)
     assert r.status_code == 409
-    assert r.json()["detail"] == "Enter the folder's full path, starting with /."  # Design
+    assert r.json()["detail"] == "Enter the folder's full path, starting with /."
 
 
 # -- the specific text reaches the terminal ------------------------------------
 # The backend configures no logging, so `routes.commons`
 # inherits the root's WARNING level and a logger.info line is dropped at run
-# time. design: "Log str(exc)". These tests don't lower the level.
+# time. Design: "Log str(exc)". These tests don't lower the level.
 
 def _logged(caplog, needle: str) -> list[logging.LogRecord]:
     return [record for record in caplog.records

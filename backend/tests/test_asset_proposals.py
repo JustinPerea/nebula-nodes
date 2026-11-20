@@ -1,4 +1,4 @@
-"""Proposals for changes outside the graph (audit U16; Justin's, 2026-10-20).
+"""Proposals for changes outside the graph (audit U16; Justin's ruling, 2026-10-20).
 
 `propose_change` carries only graph changes. This covers the person's calls
 that live on an asset or a project:

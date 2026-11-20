@@ -301,7 +301,7 @@ class TestMergeShotResult:
             "imageUrl": "URL_B_old",
             "status": "error",
             "error": "Shot generation failed: executor exploded",
-            # -2: the panel reads an unexpected failure with design's
+            # The panel reads an unexpected failure with design's
             # general line, the text behind Details (agents keep `error`).
             "errorCategory": "unknown",
         }

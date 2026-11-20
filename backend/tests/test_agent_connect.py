@@ -1050,7 +1050,7 @@ def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
 def test_gm_r59_r60_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
     """Design's exact strings. Nothing introduces a command or a path with a colon:
     a sentence ends with a period and the command goes on the next line."""
-    # OpenClaw's and the plain case, the command on its own line.
+    # The OpenClaw and plain cases, the command on its own line.
     monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: None)
     assert mcp_connect.run_disconnect(args("openclaw"), home=tmp_path) == 0
     assert capsys.readouterr().out.splitlines()[:2] == ["Stop the OpenClaw Gateway, then run this command.",
@@ -1342,7 +1342,7 @@ def test_a_second_listener_process_on_the_same_session_says_why_it_cant_listen(c
     # One session is one process (each beat carries its nonce).
     # Design: it first waits quietly (a restart's leftover entry times
     # out within 45 s); still refused after 60 s, it is a real second
-    # process, and Nebula's line (design) says so, once.
+    # process, and Nebula's line (design's wording) says so, once.
     import main
     import mcp_server
     from services import channel_listeners

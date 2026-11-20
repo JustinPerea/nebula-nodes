@@ -11,7 +11,7 @@ Nebula still refuses, agents' text is as it was; the person's is the
 record's own line, or design's shared-id line when Nebula can't identify the
 record's project.
 
-Since (Justin's answer), only the stamp Nebula
+Since Justin's answer (2026-10-31), only the stamp Nebula
 writes with a record releases a node: a record here is "Alpha's" because
 it is stamped with Alpha (``project=``); an unstamped one holds
 (test_world_labs_stamp_fix23 tests the stamp itself).
@@ -112,8 +112,8 @@ def test_the_open_projects_record_keeps_its_own_line_when_a_duplicate_copied_its
 
 
 def test_a_record_nobody_can_place_is_refused(app, recoveries):
-    """Refused; since (design) the person reads design's line in
-    Shape (test_project_catalog_fix23); agents' text as before."""
+    """Refused; the person reads design's line in its fixed
+    shape (test_project_catalog_fix23); agents' text as before."""
     client, *_ = app
     _delta_brief(client)
     _alphas_record(recoveries, run_id="wl-run-nowhere")

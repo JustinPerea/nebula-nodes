@@ -1,9 +1,9 @@
-"""Placeholders, (feat/agent-presence, design's
-round-5 rulings of 2026-10-25).
+"""Placeholders (feat/agent-presence, design's
+rulings of 2026-10-25).
 
 Justin: a paid placeholder never runs without the person's
 confirmation, and what runs never costs more than the person was shown.
-Found the backend's own estimate of the person's run left out a
+A review found the backend's own estimate of the person's run left out a
 price read from an input's size, refused forever when the tab and the
 server priced with different keys, and let a confirmation without a
 total through at any cost; the comparison rounded differently from the

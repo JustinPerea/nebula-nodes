@@ -1,4 +1,4 @@
-"""PR #205 (design
+"""PR #205 (design,
 items 2 and 3): every agent path is measured against Save's limits, "no
 worse" compares measures that never stop early, an Accept that would leave
 the canvas past them is refused on the click (the proposal stays open), and an
@@ -297,7 +297,7 @@ def test_accept_with_the_canvas_unchanged_goes_through(api, person, monkeypatch)
     assert accepted.status_code == 200, accepted.text
 
 
-# ---- / design: the import's own checks answer with codes -------
+# ---- design: the import's own checks answer with codes -------
 
 @pytest.mark.parametrize("body, code", [
     ({"nodes": [{"id": "a", "definitionId": "no-such-node", "params": {}}], "edges": []}, "unknown_definition"),

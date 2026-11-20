@@ -1,4 +1,4 @@
-"""PR #203, sections 2 and 3: findings and design.
+"""PR #203, sections 2 and 3: review findings and design's rulings.
 
 Settings durability:
 - With no flock, a save never removes another save's fresh temp
@@ -256,7 +256,7 @@ def test_a_waiter_stops_at_the_lock_deadline_while_another_process_holds_it(keye
 
 @pytest.mark.parametrize("write", ["put", "delete"])
 def test_a_settings_write_another_nebula_holds_past_the_wait_is_a_409(keyed, lock_held, monkeypatch, write):
-    """A bare 500 before. design's line,
+    """A bare 500 before. Design's line,
     neutral, with its own code."""
     monkeypatch.setattr(settings, "LOCK_TIMEOUT_SECONDS", 0.3)
     monkeypatch.setattr(settings, "_INJECTED_KEYS", {})

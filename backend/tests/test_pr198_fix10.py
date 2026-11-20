@@ -4,7 +4,7 @@ and ``onlyIfFree`` on inputs that take several connections.
 - A write that sends no session (``nebula set``, a plain PUT) and
   never read is held to the newest read by any session of that name, so an
   MCP read guards it; a session that never read falls back to the name's.
-  A verified token stays its own reader. a
+  A verified token stays its own reader. A
   writer's own read comes first, so a CLI write built on its older read is
   refused even after a fresh MCP read.
 - ``onlyIfFree`` refuses only an input that takes one connection.

@@ -210,7 +210,7 @@ def rendering(monkeypatch):
 
 
 def test_a_canvas_run_still_frees_a_scene_once_the_engine_is_done_with_it(api, rendering):  # noqa: F811
-    """Stays for a run of the graph: only a shot run holds its
+    """The earlier rule stays for a run of the graph: only a shot run holds its
     upstream scenes to the end (its passes render them again)."""
     client, graph, _sent = api
     node = graph.add_node("cinema-scene", {"scene": _scene("s1", "s2")})

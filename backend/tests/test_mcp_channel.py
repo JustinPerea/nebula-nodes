@@ -7,7 +7,7 @@ server that declares `experimental['claude/channel']` send
 MCP server does that for the person's pins and edits, its own proposals'
 decisions and its own runs' ends, under the limits; without the flag
 nothing about the server changes. What wakes it and what that turn may do
-follow Justin's (2026-10-26).
+follow Justin's ruling (2026-10-26).
 
 Two layers are tested: the decisions (mcp_channel.ChannelState, every method
 takes the time, so no test sleeps for a quiet period), and the wiring (the
@@ -896,7 +896,7 @@ def test_get_run_still_follows_and_drops_its_own_runs():
     assert state.tracked_runs == {"run_mine"}
 
 
-# -- Low findings ------------------------------------------------------------
+# -- Smaller findings ------------------------------------------------------------
 
 @pytest.mark.parametrize("kinds,summary", [
     (["board.resized"], "resized #3 on board Dusk"),
@@ -1268,8 +1268,8 @@ def test_a_board_write_not_marked_with_its_own_proposal_is_still_the_persons(pro
 @pytest.mark.parametrize("kind", ["project.cover", "commons.corrected", "commons.region", "commons.membership"])
 def test_the_other_writes_an_asset_accept_makes_never_wake_or_ride(kind):
     # Every write an asset accept journals: a board's (marked, above), a
-    # project cover's and the Commons'. The last two aren't edits, the
-    # person's own or an accept's, so they never wake it or ride a push.
+    # project cover's and the Commons'. The last two aren't edits under Justin's 2026-10-26
+    # definition, the person's own or an accept's, so they never wake it or ride a push.
     state = ChannelState(now=0.0)
     _own_asset_proposal(state)
     state.observe(resp(ev(1, kind, data={"projectId": "p1"},
@@ -1985,7 +1985,7 @@ def test_a_failing_pin_check_never_holds_an_accept_or_an_edit():
 
 
 def test_a_pin_check_for_another_project_confirms_none_of_its_pins():
-    # (b): an answer for a project other than the pins' (or than
+    # An answer for a project other than the pins' (or than
     # the one the channel believes open) confirms nothing, even pins it lists open.
     def waiting() -> ChannelState:
         state = ChannelState(now=0.0)
@@ -2104,7 +2104,7 @@ def _stale_check_fuzz(seed: int) -> tuple[list, int, int]:
             # The H1 race: now and then the answer comes from the project open
             # before the last switch, which the channel already knows of (its
             # own open_project, or the journal's answer naming the new one).
-            # One it can't know of yet is: live when Nebula answered.
+            # One it can't know of yet is live when Nebula answered.
             stale = state.project_id == open_project and rnd.random() < 0.3
             listed = before if stale else open_project
             state.confirm_pins(checked, {"projectId": listed,
@@ -2291,7 +2291,7 @@ def test_a_new_pin_after_a_failing_episode_starts_afresh():
 
 
 def test_a_check_that_fails_with_no_pin_waiting_ends_the_episode():
-    # (probe probe_r6_episode): the only pin was answered by
+    # Probe probe_r6_episode: the only pin was answered by
     # another agent while a check hung; that check then failed with no pin
     # waiting, yet armed the backoff and the failure clock. A pin an hour
     # later inherited the episode: checks 10, 20, 40 s apart, and "failed for
@@ -2463,8 +2463,8 @@ def test_the_pin_check_gives_up_after_a_few_seconds(nebula, monkeypatch):
     # times out after PIN_CHECK_TIMEOUT (it was 15 s), and the person's edit
     # that waited with the pin goes then, gated, without it. The shipped
     # timeout is checked as a number; the behaviour runs on a short one, with
-    # deadlines only as hang guards, so a loaded runner can't fail it (review
-    # 16 of PR #203: it waited out the real 4 s inside a 9 s budget).
+    # deadlines only as hang guards, so a loaded runner can't fail it (PR
+    # #203: it waited out the real 4 s inside a 9 s budget).
     shipped = mcp_channel.PIN_CHECK_TIMEOUT
     assert 3.0 <= shipped <= 5.0
     monkeypatch.setattr(mcp_channel, "PIN_CHECK_TIMEOUT", 0.3)

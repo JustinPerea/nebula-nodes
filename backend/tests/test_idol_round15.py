@@ -1,10 +1,10 @@
-"""PR #203: design.
+"""PR #203: an unwritable settings file, and design's lines for it.
 
 - Item 4: a settings file Nebula can read but isn't allowed to change gets a
   409 with the code ``settings_unwritable`` and design's line, by who asked,
   never a 500: the file read-only, its folder read-only (a save writes a temp
   file there and renames it over the file), or either one turning read-only
-  between the read and the write. PUT and DELETE settings; since
+  between the read and the write. PUT and DELETE settings; since the in-place save was added,
   the desktop's credentials/update keeps only the read check, and a
   read-only folder with a writable file saves in place (test_idol_round16).
   The read failures carry codes too, so the client picks its line by the
@@ -284,7 +284,7 @@ def _gate_states(client) -> tuple[int, int, int]:
 
 
 def test_a_folder_on_the_way_that_is_a_file_reads_as_no_file_as_before_round_14(tmp_path, monkeypatch, sockets):  # noqa: F811
-    """ENOTDIR is "the file isn't there", as exists() said before:
+    """ENOTDIR is "the file isn't there", as exists() said before the read-failure codes:
     defaults, and the gate's reach is what it was."""
     parent = tmp_path / "f"
     parent.write_text("a file, not a folder", encoding="utf-8")

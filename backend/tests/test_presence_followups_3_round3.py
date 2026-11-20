@@ -4,12 +4,12 @@ One agent's open asks on one asset target share one Update, and
 its ref named only the newest ask. A tab not connected as the person counts
 from the Update, so it read "1 proposal" dated by the newest ask, and the
 promote (which brings the real views) read "2 proposals" dated by the oldest:
-the row moved. design: nothing moves on the promote. The shared Update's ref now
+the row moved. Design: nothing moves on the promote. The shared Update's ref now
 says how many open asks it stands for (``asks``) and the oldest one's time
 (``firstSince``), kept current as asks join and leave it: a new ask, one of
 them closing (the follow's retarget), an undo reopening one.
 
-The no-op retarget compares the words too. the ref bounds are
+The no-op retarget compares the words too. The ref bounds are
 the backend's own constants, and the frontend's copies are pinned to them.
 """
 from __future__ import annotations

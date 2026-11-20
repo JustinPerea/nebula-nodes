@@ -1,4 +1,4 @@
-"""(Justin, 2026-10-23, option a): "Let Load graph open bigger .nebula
+"""Justin, 2026-10-23, option a: "Let Load graph open bigger .nebula
 files (up to the 512 MiB it already allows for a bundle) as a new project. A
 project over 16 MiB still can't be saved, so the canvas says so, and you
 remove what you don't need until it saves."
@@ -250,7 +250,7 @@ def test_the_persons_own_load_graph_and_edits_are_never_refused_for_size(api):
 
 
 def test_load_graph_can_ask_to_be_refused_when_the_file_is_over_the_limit_on_its_own(api):
-    # (Justin): "Files over the limit open as a new project named after
+    # Justin: "Files over the limit open as a new project named after
     # the file. The open project is left as it was." The person's Load graph
     # first asks the import to refuse a graph that would be over the limit as
     # a project of its own, measured as the save check measures it; on that

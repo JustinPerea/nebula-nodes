@@ -253,7 +253,7 @@ def test_the_final_reply_is_a_needed_turn(counter):
 # -- Design's run ---------------------------------------------------------------------
 
 def gm_run() -> Transcript:
-    """Design's calls and final reply, as docs/agent-runs/2026-10-20-cli-headless.md records them."""
+    """Design's 15 calls and final reply, as docs/agent-runs/2026-10-20-cli-headless.md records them."""
     unrecognized = "Exit code 2\nusage: nebula [--url URL] <command> [options]\nnebula: error: unrecognized arguments: {}"
     return (Transcript()
             .call("nebula projects", text="I'll find your project first.")

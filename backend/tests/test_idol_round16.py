@@ -1,4 +1,4 @@
-"""PR #203: design.
+"""PR #203: the merged Agent log line for refused runs, and how a settings save writes.
 
 Item 1: every refused run the person sees in the Agent log reads the merged
 line, whoever asked for it (an MCP agent, a CLI agent, an in-app chat turn),
@@ -167,7 +167,7 @@ def test_a_long_log_line_is_kept_when_its_start_is_the_bubble(monkeypatch):
     assert len(event["log"]) > agent_presence.MAX_SAY_CHARS
 
 
-# -- section 2, (settings-keychain): every way a save can write ------------------------
+# -- section 2 (settings-keychain): every way a save can write ------------------------
 # Atomic where that is safe, in place where it isn't, refused only when
 # neither way can write, with the line naming the real cause (design items 1
 # and 2).
@@ -226,7 +226,7 @@ def client_delete_ok():
     return _person().delete("/api/settings/api-keys/FAL_KEY").status_code == 200
 
 
-@pytest.mark.unprivileged  # root ignores the ACL, so its rename isn't refused (scan)
+@pytest.mark.unprivileged  # root ignores the ACL, so its rename isn't refused
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS ACLs (chmod +a)")
 def test_an_acl_that_denies_delete_saves_in_place_and_keeps_the_acl(home_file):
     subprocess.run(["chmod", "+a", "everyone deny delete", str(home_file)], check=True)
@@ -276,8 +276,8 @@ def _xattrs(path):
 
 @pytest.mark.skipif(not hasattr(os, "setxattr") and not shutil.which("xattr"), reason="no xattr support")
 def test_a_file_with_its_own_extended_attribute_keeps_it(home_file):
-    """Since the attribute is carried onto the new file, so the save
-    stays atomic (a; tests/test_idol_round17_settings.py)."""
+    """The attribute is now carried onto the new file, so the save
+    stays atomic (part a; tests/test_idol_round17_settings.py)."""
     _set_xattr(home_file, "nebula-tag", b"kept")
     assert _put().status_code == 200
     assert _saved(home_file) == ["saved"] and "nebula-tag" in _xattrs(home_file)
@@ -435,9 +435,9 @@ def test_the_temp_file_is_this_users_only_while_it_holds_the_keys(home_file, mon
 
 
 def test_stale_temp_files_beside_the_settings_are_swept_at_startup(home_file):
-    """Only Nebula's own temp names since (settings
+    """Only Nebula's own temp names go (settings
     tests/test_idol_round17_settings.py has the person's look-alikes).
-    Since the sweep holds the save's lock, so a fresh temp file is
+    The sweep holds the save's lock, so a fresh temp file is
     a save cut short too, and goes."""
     folder = home_file.parent
     old = folder / ".settings-nebula-123-abc12345.tmp"

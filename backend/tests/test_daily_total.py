@@ -156,7 +156,7 @@ def test_the_combined_reason_puts_the_total_first():
     assert unpriced.wait.bar_line() == "This would pass the $5 daily total, and “Mystery” has no list price."
 
 
-# Design, PR #212, verbatim (Justin's).
+# Design, PR #212, verbatim (Justin's ruling).
 SKETCH_BAR = "“Mystery” has no list price, so Nebula can’t count it toward the $5 daily total."
 SKETCH_UPDATE = "It has no list price, so Nebula can’t count it toward the $5 daily total."
 SKETCH_AGENT = SKETCH_BAR + " Proposing it for the person’s OK."
@@ -164,7 +164,7 @@ UNPRICED_ONLY = [{"id": "n2", "definitionId": "unpriced", "params": {}}]
 
 
 def test_the_total_alone_makes_an_unpriced_node_ask_even_with_room():
-    """Justin's (a): with the daily total on, a node with no list price
+    """Justin's ruling (a): with the daily total on, a node with no list price
     always waits for the person's OK, with no per-run limit and room left."""
     decision = _decide(0.4, 0.0, items=UNPRICED_ONLY)
     wait = decision.wait

@@ -1,4 +1,4 @@
-"""PR #203: design.
+"""PR #203: a null or unreadable settings.json, and design's rulings.
 
 - A settings.json that is exactly `null` fails closed
   again, as every other file that isn't an object: GET and every write get
@@ -64,7 +64,7 @@ def home_file(sockets, tmp_path, monkeypatch):  # noqa: F811
     return path
 
 
-# -- `null` fails closed, as before ----------------------------------
+# -- `null` fails closed, as before the null guard ----------------------------------
 
 
 def _writes(client):

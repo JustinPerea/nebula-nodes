@@ -1,4 +1,4 @@
-"""Every canvas proposal posts an Update (Justin's, 2026-10-21).
+"""Every canvas proposal posts an Update (Justin's ruling, 2026-10-21).
 
 "a) Yes, every one: "Proposes 3 changes on the canvas", with
 Review taking you to the canvas and its bar. It settles like the others
@@ -144,7 +144,7 @@ def test_what_counts_as_a_change(canvas):
 
 
 def test_every_proposal_gets_its_own_update(canvas):
-    """"every one". Unlike an asset proposal's, a second canvas proposal
+    """Justin: "every one". Unlike an asset proposal's, a second canvas proposal
     from the same agent doesn't replace the first one's Update."""
     n1 = canvas.graph.add_node("text-input", {"value": "a cat"})
     first = _propose(canvas, _upscale_body(n1)).json()["proposal"]["id"]
@@ -442,7 +442,7 @@ def test_a_proposal_that_closes_while_its_update_is_written_settles_at_once(canv
 
 
 def test_a_new_proposal_folds_away_the_same_agents_withdrawn_update(canvas):
-    """"withdraw it first, then propose again": the withdrawn one's
+    """Justin: "withdraw it first, then propose again": the withdrawn one's
     Update leaves the list when the same agent proposes again (the socket's
     `removed`), so a propose/withdraw loop can't flood the list or push the
     person's older Updates past the cap. Only the agent's own withdrawn

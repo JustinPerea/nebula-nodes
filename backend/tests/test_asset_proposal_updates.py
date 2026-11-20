@@ -1,4 +1,4 @@
-"""Every asset proposal posts an Update (Justin's, 2026-10-21).
+"""Every asset proposal posts an Update (Justin's ruling, 2026-10-21).
 
 "a) Keep the wording, and each proposal also posts an Update ("Claude Code
 asks to change the cover of X", with Review)." A cover proposal shows on the

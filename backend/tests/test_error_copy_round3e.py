@@ -1,6 +1,6 @@
 """Error copy: a pre-run check's line for two readers (design).
 
-Split a node's run error in two: `error` is the specific text for
+An earlier pass split a node's run error in two: `error` is the specific text for
 agents, `person` is the line the canvas card shows. The pre-run check
 (execution/engine.validate_graph) still gave one text to both: "Missing API
 key: OPENAI_API_KEY", "Required input port prompt is not connected",
@@ -213,8 +213,8 @@ def test_a_route_stopped_by_a_setting_names_the_setting_by_its_label(monkeypatch
     [error] = _for(validate_graph(nodes, [_edge("t", "text", "n1", "prompt")], keys), "n1")
     assert "can't run on Black Forest Labs" in error.message
     line = _clean(error.person)
-    # Design's words, the setting by its label in quotes; design, PR #203
-    # The node's name in quotes too.
+    # Design's words, the setting by its label in quotes; design, PR #203:
+    # the node's name in quotes too.
     assert line.startswith("“Fixture Image” can’t run on Black Forest Labs with “Safety tolerance” set to 6.")
     # Design: who can take it is named in the one action sentence.
     assert line.endswith("Change that setting, or switch to fal.ai.")
@@ -259,7 +259,7 @@ def _contracts(nodes: list[tuple[str, str]], edges: list[tuple[str, str, str, st
 def test_a_wire_of_the_wrong_kind_names_the_input_by_its_label():
     [issue] = _contracts([("a", "image-input"), ("b", "gpt-image-1-generate")], [("a", "image", "b", "prompt")])
     assert issue.message.startswith("Incompatible port types: source 'image' on node a")
-    # (design): the port's label in quotes.
+    # Design: the port's label in quotes.
     assert _clean(issue.person) == ("The connection into “Prompt” brings something it can't take. "
                                     "Remove that connection, then connect a matching output.")
 
@@ -269,7 +269,7 @@ def test_too_many_wires_into_one_input_has_a_line():
                         [("a", "text", "b", "prompt"), ("c", "text", "b", "prompt")])
     [issue] = [i for i in issues if "multiple connections" in i.message]
     assert issue.message == "Input port 'prompt' on node b does not allow multiple connections"
-    # (design): the port's label in quotes.
+    # Design: the port's label in quotes.
     assert _clean(issue.person) == "“Prompt” takes one connection. Remove the extra one, then run the node again."
 
 
@@ -358,7 +358,7 @@ def test_an_agents_refused_run_keeps_its_text_word_for_word(canvas):
     # The agent's cursor on the canvas says the person's line, not the keys.
     [said] = [m["say"] for m in sent if m.get("type") == "agentPresence" and "needs" in str(m.get("say"))]
     assert "OPENAI_API_KEY" not in said and "'prompt'" not in said
-    # Design, PR #203: the bubble says the needs sentence only (kept the "Connect ..." second sentence).
+    # Design, PR #203: the bubble says the needs sentence only (the earlier version kept the "Connect ..." second sentence).
     assert said.endswith("needs a prompt and your OpenAI API key.")
     assert "Connect the prompt" not in said
 

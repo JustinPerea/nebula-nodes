@@ -271,7 +271,7 @@ def test_a_route_line_names_the_node_in_curly_quotes():
     assert main._quoted_name_line("needs a key", "Hero shot", flux) == "needs a key"
 
 
-# -- (design, PR #216; -L3, N1) ---------------
+# -- (design, PR #216) ---------------
 
 KREA = {"nodeId": "n4", "name": "Krea 2 (n4)", "title": "Krea 2", "model": "Krea 2",
         "changes": {"model": {"from": "a", "to": "b"}}}
@@ -300,7 +300,7 @@ def test_gm_r3_examples_word_for_word():
 
 
 def test_nodes_merge_by_id_never_by_name():
-    """Design, PR #216 (6): another node with a name already said
+    """Design, PR #216: another node with a name already said
     reads "another “Image”"; two in one group, "2 “Image” nodes"; no model."""
     image = {**KREA, "nodeId": "n2", "title": "Image", "model": "GPT Image 2"}
     another = _view(params=[image], run=["n7"], names={"n2": "Image", "n7": "Image"},
@@ -319,7 +319,7 @@ def test_adds_two_runs_one():
 
 
 def test_an_unnamed_run_target_never_reads_none_or_turns_the_rest_into_a_count():
-    """Mutant B4."""
+    """Mutant B4: a run target with no name."""
     view = _view(params=[KREA], run=["n4", "n9"], cost={"freeRuns": 2})
     line = plan_line(view)
     assert line == "Changes and runs “Krea 2”, runs 1 node · free"
@@ -329,7 +329,7 @@ def test_an_unnamed_run_target_never_reads_none_or_turns_the_rest_into_a_count()
 
 
 def test_a_change_whose_run_waits_on_placeholders_never_says_changes_and_runs():
-    """Mutant B11."""
+    """Mutant B11: a run held by placeholders."""
     view = _view(params=[KREA], run=["n4"], cost={"pendingSkipped": {"count": 1, "agents": ["Codex"]}})
     assert plan_line(view) == "Changes “Krea 2” · runs nothing until Codex finishes 1 node"
 
@@ -380,7 +380,7 @@ def test_no_group_holds_two_ands_outside_quoted_names():
 
 
 def test_change_count_counts_every_operation():
-    """Design, PR #216-r3: node added, node changed, connection added,
+    """Design, PR #216: node added, node changed, connection added,
     connection removed are one each; field lines don't count."""
     from services.canvas_proposals import ParamChange, ProposalSpec, ProposedEdge, ProposedNode
 

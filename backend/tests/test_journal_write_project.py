@@ -359,7 +359,7 @@ def test_a_rename_is_journaled_before_a_switch(race):
 
 
 # -- an undo's link keeps every event it journaled -----------------
-# Item 1: an undo's link keeps every event it journaled. The old code took the
+# An undo's link keeps every event it journaled. The old code took the
 # link's events in journal_done, before _undo_removals journaled pin.reattached
 # and proposal.reopened under the same link, so the link (and the person's
 # later Cmd+Z of that undo, edit.undone.data.events) missed them. Now the pins
@@ -519,7 +519,7 @@ def test_an_undo_never_reopens_a_proposal_after_another_project_opened(race, mon
 
 
 # -- a timer armed inside an undo ----------------------------------
-# Item 2: a timer armed inside an undo ran with the undo's request context
+# A timer armed inside an undo ran with the undo's request context
 # (loop.call_later copies it), so a reopened proposal's later proposal.expired,
 # and every other proposal swept with it, carried the undo's edit tag and could
 # land in the link's events. Timers now run in a fresh context.

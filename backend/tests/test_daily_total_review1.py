@@ -1,5 +1,5 @@
 """The daily total, PR #212: findings and design's
-answers to it (2026-10-31). Each test here fails on the round-1 head
+answers to it (2026-10-31). Each test here fails on the head before the review fixes
 (696c3c85): the first-turn read names the total; only callers that name
 themselves get the automatic proposal; full proposal slots get design's line and
 a neutral Agent log line; retries arriving together open one proposal; the
@@ -448,7 +448,7 @@ def test_the_in_app_chat_prompt_says_a_waiting_run_was_already_proposed():
     assert "A run answered 'waiting' was already sent as a proposal" in text
 
 
-# -- Justin's: the total alone makes an unpriced node ask ---------------------------
+# -- Justin's ruling: the total alone makes an unpriced node ask ---------------------------
 
 SKETCH_BAR = "“Writer” has no list price, so Nebula can’t count it toward the $5 daily total."
 SKETCH_UPDATE = "Wants to run “Writer”. It has no list price, so Nebula can’t count it toward the $5 daily total."

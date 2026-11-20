@@ -1,6 +1,6 @@
 """Error copy: a node run error for two readers (design).
 
-Design, verbatim: "On 3c's World node run errors: the person reads these on the
+Design, verbatim: "On the World node run errors: the person reads these on the
 node, so their lines shouldn't carry ids or record names. ... Get agents
 their facts through the person/agent split you built. The node's
 error stores the specific text for agents (and the run record and MCP keep
@@ -285,7 +285,7 @@ async def test_the_engine_carries_the_person_line_beside_the_specific_text() -> 
     async def failing(_node, _inputs, _keys):
         raise with_person_line(RuntimeError("Provider X failed for op-123 (job_id=9)"), "The person's line.")
 
-    # Gives a provider's status a line from one table
+    # Now gives a provider's status a line from one table
     # (tests/test_error_copy_round3d.py); a failure it can't tell keeps none.
     async def plain(_node, _inputs, _keys):
         raise RuntimeError("Provider X stopped: worker exited")

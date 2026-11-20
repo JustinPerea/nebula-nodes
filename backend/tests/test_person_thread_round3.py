@@ -1,4 +1,4 @@
-"""The Message box thread, (#225 and design).
+"""The Message box thread (#225 and design).
 
 - The person's messages still in flight are never trimmed (agent
   rows go first), and reply_to_person is paced per agent (5 in a row, then
@@ -187,7 +187,7 @@ def test_an_answer_racing_a_withdrawal_is_refused_and_nothing_goes_out(thread):
 
 
 def test_a_new_question_posts_its_own_update_while_an_answered_one_reads_past_tense(thread):
-    """Design CHECK (shot 6): a question asked after another was answered
+    """Design's check of a screenshot: a question asked after another was answered
     posts its own Update, "has a question." with Answer, unread; the
     answered one keeps "asked a question." and "Answered.", read. The shot's
     card was the earlier Update still up (the corner shows one card at a
@@ -374,7 +374,7 @@ def test_an_edit_with_no_note_logs_the_persons_words_never_the_terse_summary(thr
                                 json={"params": [{"nodeId": n1, "params": {"value": "a warmer cat"}}]})
     assert edited.status_code == 200, edited.text
     event = _presence(thread)[before:][-1]
-    assert event["say"] == "Changed 1 node"  # the person's bubble counts (main's design person_say)
+    assert event["say"] == "Changed 1 node"  # the person's bubble counts (main's person_say)
     label = thread.main._card_label(thread.main.node_registry.get("text-input") or {}, thread.graph.nodes[n1], "value")
     assert event["log"] == f"Changed “{label}” on “Hero shot”"
     before = len(_presence(thread))

@@ -529,7 +529,7 @@ def test_undoing_an_outside_images_removal_names_the_image(client, root):
 
 def test_agents_are_told_to_ask_the_person_before_fetching_an_old_outside_link():
     """An old board's outside link may have been planted by anyone who could
-    reach the routes: fetching it from the person's machine is the leak
+    reach the routes: fetching it from the person's machine is the leak the refusal
     closes. Agent guidance never tells an agent to fetch it on its own."""
     import mcp_server
     import moodboard_client as boards

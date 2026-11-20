@@ -1,4 +1,4 @@
-"""PR #195: (the backend half) and.
+"""PR #195: the backend half of the person's-note fence.
 
 - A person's note is anchored by a node id of the canvas it was written
   on. Node ids restart at n1 in every project and after a clear, so a note

@@ -13,7 +13,7 @@
 - G4. The handoff's refusal reads "Nebula couldn't keep this save's unsent
   changes in the project because <why>, so nothing was saved."
 - G5. Recovered copies are numbered: "Recovered <project>", then
-  "Recovered <project> 2", 3 and so on (design a on PR #199); a new copy never reuses an earlier one.
+  "Recovered <project> 2", 3 and so on (design, PR #199); a new copy never reuses an earlier one.
 """
 from __future__ import annotations
 

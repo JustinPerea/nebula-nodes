@@ -63,8 +63,8 @@ def test_each_node_gets_the_shared_cost_class(case):
     assert result["sourcedZero"] is expected["sourcedZero"]
     for node in expected["plan"]:
         assert result["reasons"][node] == {"kind": "plan"}
-    # Each node's reason, as the frontend's tooltip groups them (design, PR #203
-    # The same reasons, so the merged line agrees).
+    # Each node's reason, as the frontend's tooltip groups them (design, PR #203:
+    # the same reasons, so the merged line agrees).
     if "reasons" in expected:
         assert result["reasons"] == expected["reasons"]
 
@@ -369,7 +369,7 @@ def test_a_save_writes_back_every_entry_it_was_not_asked_to_change(sockets):
     assert settings.load_settings()["apiKeys"] == {"OPENAI_API_KEY": "sk-padded-1111", "FAL_KEY": "fal-3333"}
 
 
-# -- Design, and the shared "can be stored" predicate ----------
+# -- Design's empty-key refusal, and the shared "can be stored" predicate ----------
 
 
 def test_the_empty_key_refusal_says_nothing_was_saved():

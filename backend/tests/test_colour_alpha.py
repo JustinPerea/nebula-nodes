@@ -641,7 +641,7 @@ def test_the_cli_estimate_follows_the_readers_person_line_for_a_missing_key(caps
     assert "Providers" not in said("GOOGLE_API_KEY")
 
 
-# -- (affb9b25): each fails there ------------------------------------------
+# -- each of these fails at affb9b25 ------------------------------------------
 
 def line_art_2048() -> Image.Image:
     """1px orange lines every 128px at offset 4, on a clear 2048 canvas."""

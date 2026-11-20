@@ -1,6 +1,6 @@
 """How a proposal counts a run that may bill the person's own account.
 
-Design, PR #203 items 2, 4 and 6, and: Idol runs free on Hugging Face's
+Design, PR #203: Idol runs free on Hugging Face's
 shared GPUs without a token and on the person's own allowance with one. It is
 never counted as "paid": with a token it "may cost" (its own count, named,
 with the account it may bill), without one it is free. It adds nothing to the

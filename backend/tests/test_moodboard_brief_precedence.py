@@ -12,7 +12,7 @@ Justin's answers (2026-10-19):
 - P4: board notes (and image notes, and the cues lifted from them) never go to
   generators by default; a board or a node opts in. Only the person may opt in.
 
-The board below is the Good Machines board 4df26f93ff63 as design set it on
+The board below is the Good Machines board 4df26f93ff63 as the studio set it on
 2026-10-19: its measured colours and shares, Direction, Avoid and pin. Its
 notes text and image links are left out; the notes here are made up.
 """

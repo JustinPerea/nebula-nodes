@@ -1,5 +1,5 @@
-"""Placeholders, (feat/agent-presence, design's
-round-4 rulings of 2026-10-25).
+"""Placeholders (feat/agent-presence, design's
+rulings of 2026-10-25).
 
 Justin: the person's direct run makes the placeholders it needs
 normal and runs them, but when any of them calls a paid model Nebula ALWAYS

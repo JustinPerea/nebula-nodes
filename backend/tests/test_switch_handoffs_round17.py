@@ -133,7 +133,7 @@ def test_handoffs_are_bounded_oldest_first(workspace, person):
 
 
 def test_a_catalog_with_the_old_single_handoff_still_takes_that_save(workspace, person):
-    """A catalog written before kept ``handoff`` ({projectId,
+    """A catalog written before the per-project handoffs kept ``handoff`` ({projectId,
     revision}); it reads as one of the handoffs."""
     client, _, store = workspace
     mine = _create(client, "Mine", headers=person.headers)

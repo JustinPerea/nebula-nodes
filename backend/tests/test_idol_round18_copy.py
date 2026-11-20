@@ -1,4 +1,4 @@
-"""PR #203, section 2: copy findings, design.
+"""PR #203, section 2: copy findings from review and design's rulings.
 
 - B1: after a count, a numbered input's action names what to
   connect: "Connect an output to “Text 1” on each".
@@ -121,7 +121,7 @@ def test_claude_needs_messages_connect_them(monkeypatch, agent_log, chat_turn, p
     assert agent_log == [f"{HEADING} “Claude” needs messages. Connect them, then run the node again."]
 
 
-# "Media" left the mass nouns in (design: "a media input";
+# "Media" left the mass nouns (design: "a media input";
 # test_idol_round19_copy.py).
 @pytest.mark.parametrize("label,pronoun", [("Audio", "it"), ("Text", "it"), ("Context", "it"), ("Lighting", "it"),
                                            ("Messages", "them"), ("Guidance", "it")])
@@ -166,7 +166,7 @@ def test_a_route_line_that_opens_with_the_name_is_the_bubble_alone(monkeypatch, 
 @WHO
 def test_an_unwired_input_is_the_bubbles_needs_line_with_the_name_once(monkeypatch, agent_log, bubbles,  # noqa: F811
                                                                         chat_turn, person, who):
-    # Design, PR #203 items 1-2: the bubble says the needs in form, the node named once,
+    # Design, PR #203 items 1-2: the bubble says the needs in the earlier form, the node named once,
     # with no "then run it again" (the "can’t run." prefix stays for a line with no name of its
     # own; test_idol_round19_review18 pins that one).
     body = _run(monkeypatch, [("claude-chat", {})], _headers(who, chat_turn), agent_log, bubbles)

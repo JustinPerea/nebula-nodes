@@ -3,7 +3,7 @@
 Justin, 2026-10-20: "They should normalize for however any nodes need the
 information." The board images sent add up to ``board.strength``; wired
 references keep their own strengths; a board at strength 0 sends nothing,
-text included (then). Plan sections 4.8 and 5.7.4.
+text included (Justin's wording, changed once). Plan sections 4.8 and 5.7.4.
 """
 from __future__ import annotations
 
@@ -91,18 +91,18 @@ async def test_board_scaling_covers_only_images_sent() -> None:
 @pytest.mark.asyncio
 async def test_single_board_image_goes_at_board_strength() -> None:
     refs, _ = await _refs(_board([0.4], strength=0.7))
-    # Before it went at 0.7 x 0.4 = 0.28.
+    # Before the board-strength rule it went at 0.7 x 0.4 = 0.28.
     assert refs == [{"url": "https://assets.example/1.png", "strength": 0.7}]
 
 
 @pytest.mark.asyncio
 async def test_board_strength_zero_sends_no_board_refs() -> None:
-    # The engine drops a strength-0 board before Krea 2 sees it (
+    # The engine drops a strength-0 board before Krea 2 sees it (see
     # tests/test_moodboard_strength_zero.py); called directly, the handler
     # still sends none of its images and says the same.
     refs, notes = await _refs(_board([1.0, 0.5], strength=0.0))
     assert refs == []
-    # Justin's wording (2026-10-20), replacing.
+    # Justin's wording (2026-10-20), replacing the earlier wording.
     assert notes == ["Board strength is 0: board not sent"]
 
 

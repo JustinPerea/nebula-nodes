@@ -961,7 +961,7 @@ def test_a_reopen_checks_the_wires_it_removes(api):
 
 
 def test_accept_journals_each_removed_wire_as_the_persons(api):
-    """-R7, R13 (B19): one edge.removed per dropped wire, by the
+    """R13 (B19): one edge.removed per dropped wire, by the
     person, naming the proposal, in the journal's words."""
     import main as main_module
 

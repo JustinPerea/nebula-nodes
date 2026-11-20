@@ -1,6 +1,6 @@
 """feat/agent-presence: design's lines.
 
-Refused a Krea node's run when a required field (Aspect ratio,
+The earlier check refused a Krea node's run when a required field (Aspect ratio,
 Width, ...) had nothing in it, reading only the definition. Three Krea copies
 run on their maker's own API when that key is set (GPT Image 2.5 Flare and
 Sunburst with an OpenAI key, Grok Imagine 2.0 with an xAI key), and those
@@ -157,7 +157,7 @@ def test_no_krea_token_says_add_the_token_not_the_field(maker_client):
     assert lines == ["Add a Krea API key in Settings to run this node."], lines
 
 
-# -- B probes, adapted -------------------------------------------
+# -- Probes from the review, adapted -------------------------------------------
 
 def _keys(pend, monkeypatch, keys):
     monkeypatch.setattr(pend.main, "load_settings", lambda: {"apiKeys": dict(keys)})

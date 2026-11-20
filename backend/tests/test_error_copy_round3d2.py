@@ -1,8 +1,8 @@
 """Error copy: the status comes from the call, not the text.
 
-Table found a provider's HTTP status by searching the error text,
-provider bodies included. That read facts out of free text again (the bug 3c
-fixed): a presigned storage upload's 403 read as a refused key, and "Prompt is
+The first table found a provider's HTTP status by searching the error text,
+provider bodies included. That read facts out of free text again (the bug the earlier
+node-run-error pass fixed): a presigned storage upload's 403 read as a refused key, and "Prompt is
 too long: 500 characters over" read as provider trouble. Now:
 
 - A raise after the provider's own API answered attaches that status to the
@@ -525,7 +525,7 @@ async def test_a_cinema_shots_job_failure_is_never_auth(monkeypatch) -> None:
     assert output.get("errorCategory") != "auth"
 
 
-# Every terminal job failure raise (the list 3d's text pattern was written
+# Every terminal job failure raise (the list the earlier text pattern was written
 # from): the provider took the job, then reported it failed, cancelled or
 # expired.
 JOB_FAILURE_RAISES: dict[str, list[str]] = {

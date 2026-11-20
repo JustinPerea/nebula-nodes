@@ -250,7 +250,7 @@ def test_only_the_person_starts_a_codex_login(monkeypatch, person, headers):
 
 
 def test_a_pasted_hugging_face_token_is_saved_trimmed(settings_client):
-    """Design PR #203: a token's leading and trailing spaces and line breaks
+    """Design, PR #203: a token's leading and trailing spaces and line breaks
     go without a word (Settings trims the same); other keys keep theirs."""
     client, path, _initial, _clear = settings_client
     response = client.put("/api/settings", json={"apiKeys": {"HF_TOKEN": "  hf_synthetic0123\r\n"}})

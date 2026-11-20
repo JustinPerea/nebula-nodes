@@ -6,7 +6,7 @@ change before the merge OK. Unlike proposals (staged against the live
 graph, 15-minute expiry), a question set depends on nothing in the graph,
 has no time limit, and matters most while the person is away during a long
 run, and an outside agent (Claude Code in a terminal) outlives a Nebula
-restart. design agreed.
+restart. Design agreed.
 
 So sets are kept on the project record, ``catalog["projects"][id]
 ["agentQuestions"]``, next to pins and agentNotes and outside the snapshot

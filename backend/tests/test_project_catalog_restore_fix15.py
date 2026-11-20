@@ -1,6 +1,6 @@
 """PR #199, the backend's part.
 
-- (design's call): kept mode outlasts the person's kept tab's socket by
+- Design's call: kept mode outlasts the person's kept tab's socket by
   KEPT_GRACE_SECONDS, so an agent's write in a network blip waits as it
   would with the tab connected. A tab that said kept:false before closing
   ends it at once; a tab back within the grace that says kept:true carries

@@ -35,7 +35,7 @@ from tests.test_params_version_gate import workspace  # noqa: F401 - fixture
 AGENT = {"X-Nebula-Agent": "Codex"}
 BASE = {"version": 1, "base": {"model": "seedream-4-5"}, "aspectRatio": "16:9"}
 
-# Every malformed shape found (and a few more of the same kind), by
+# Every malformed shape the review found (and a few more of the same kind), by
 # what a lenient read makes of it: (scene as saved, check on the result).
 SHAPES = {
     "base as a string": {**BASE, "base": "nano-banana", "shots": [{"id": "s1", "prompt": "a"}]},

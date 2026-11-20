@@ -4,10 +4,10 @@ Design, on the delete line: "'settle' and 'start' are internal.
 Write it as: 'This node is still waiting on World Labs. Check the job in
 Marble, then {the node's actual button label} before you delete it.'" and the
 pattern for new refusals: "say what's needed in plain words, give the count,
-then what to do." design again: "People get the written line and agents keep the
+then what to do." Design again: "People get the written line and agents keep the
 specific detail. Keep it that way."
 
-Left "Checked Marble — unlock"'s refusals ("Cannot acknowledge a World
+The earlier pass left "Checked Marble — unlock"'s refusals ("Cannot acknowledge a World
 Labs paid-start ambiguity while that provider handshake is still active",
 "World Labs paid-start ambiguity changed; refresh ...") and the run-start
 refusals ("Fresh paid ... start is safety-locked after an ambiguous provider

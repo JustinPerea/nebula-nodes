@@ -247,7 +247,7 @@ def test_r21_3_refused_wires_are_dropped_and_reported_and_the_good_ones_kept(app
     mapping = body["renumbered"]
     dropped = {wire["id"]: wire for wire in body["droppedWires"]}
     assert set(dropped) == {"w-img", "w-second", "w-loop", "w-dup"}
-    # The shared kinds (type and limit, where said contract).
+    # The shared kinds (type and limit; they used to say contract).
     assert {wire["id"]: wire["kind"] for wire in body["droppedWires"]} == {
         "w-img": "type", "w-second": "limit", "w-loop": "loop", "w-dup": "duplicate"}
     # By the copy's ids, with the agents' detail (no person line).
@@ -284,7 +284,7 @@ def test_r21_3_only_recover_drops_other_saves_still_refuse(app):
     assert saved.status_code == 400 and "Duplicate project connection" in saved.text
 
 
-# -- Design and design: the agents' restore note ---------------------------------------
+# -- Design: the agents' restore note ---------------------------------------
 
 _DAMAGED = {"kind": "restored", "reason": "corrupt", "source": "catalog.json.bak", "damagedReadWhole": False,
             "damagedRecordsUnread": False, "projectLimit": 3}

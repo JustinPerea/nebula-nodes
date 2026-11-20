@@ -1349,7 +1349,7 @@ def test_mcp_set_aside_is_the_excluded_switch(app, tmp_path):
 
 
 def test_show_says_a_board_at_strength_zero_sends_nothing(capsys, monkeypatch):
-    # (Justin 2026-10-20): strength 0 turns the board off for every
+    # Justin, 2026-10-20: strength 0 turns the board off for every
     # node it's wired into, so its brief isn't "sent to generators".
     off = {"id": "mb_off", "name": "Off", "mode": "look", "strength": 0.0, "images": [],
            "brief": {"styleBrief": "Quiet coastal mornings.", "negativePrompt": "blurry"}}
@@ -1406,7 +1406,7 @@ def test_cli_and_mcp_read_a_transparent_board_by_its_visible_colours(app, tmp_pa
     assert ALPHA_OUTDATED in out and "changes include edits to the board" not in out
 
     # Its brief is built from those colours, and says so on every surface
-    # (design verbatim): a run analyzes again and sends a new one.
+    # Design, verbatim: a run analyzes again and sends a new one.
     brief_line = "This brief uses the old colors. The next run analyzes the board again and sends an updated one."
     assert mcp_server.moodboard_get(board["id"])["brief"]["outdated"] == brief_line
     assert [b["brief"]["outdated"] for b in mcp_server.moodboard_list(project_id="none")] == [brief_line]

@@ -1,4 +1,4 @@
-"""PR #199: what makes true (2026-10-28).
+"""PR #199: what the fix makes true (2026-10-28).
 
 - One guard at the graph-write fence covers every agent write while
   the live canvas waits to be saved as a project: at the limit refused (409
@@ -11,7 +11,7 @@
   failed too; the digest check drops a copy only while state.json is that
   canvas too.
 - The listing carries the backend's own restore verdict, held canvases
-  counted, and how many deletes really free a place (design's).
+  counted, and how many deletes really free a place (design's answer).
 - A commit number carries a CRC (``commitCheck``): a flipped digit is
   unproven and never outranks the side file.
 - The agents' "room now" note, every canvas named,
@@ -169,7 +169,7 @@ def test_m1_two_agent_writes_at_once_hold_the_canvas_once(app, monkeypatch):
         response = client.post("/api/graph/node", headers=CODEX,
                                json={"definitionId": "text-input", "params": {"value": value}})
         statuses.append(response.status_code)
-    # (design's rule (a)): the first files the person's canvas once;
+    # Design's rule (a): the first files the person's canvas once;
     # the second is on the copy, which waits at the limit, so it is refused.
     assert statuses == [200, 409]
     assert _held(store) == []
@@ -229,7 +229,7 @@ def test_n6_every_graph_write_route_goes_through_the_guard(app, monkeypatch):
             assert response.status_code == 409 and response.json().get("code") == "canvas_waiting", \
                 (method, route.path, response.status_code, response.text[:200])
             seen += 1
-    assert seen >= 20  # 26 at
+    assert seen >= 20  # 26 when the fence was added
     assert _live_values(graph) == before and _held(store) == []
 
 
@@ -392,7 +392,7 @@ def test_l2_no_hold_is_ever_released_by_name():
     assert "_release_hold" not in source
 
 
-# -- The restore verdict, gone ---------------------------------
+# -- The restore verdict, gone later ---------------------------------
 # Justin, 2026-10-29: a restore from Recently deleted may pass the project
 # limit, so the listing carries no `restoreRoom` verdict and a held canvas
 # holding the last place never refuses a restore.

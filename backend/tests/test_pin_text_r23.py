@@ -1,4 +1,4 @@
-"""PR #200, design (and the lines).
+"""PR #200, design's rulings (and the lines).
 
 1(a) E0100-E01EF stays only for a pair the Ideographic Variation Database
      registers (vendored by scripts/generate-pin-text-unicode.py).
@@ -235,7 +235,7 @@ def _tags(spec: str) -> str:
 
 
 def test_gm_r26_the_channel_keeps_the_three_flags_and_drops_every_other_tag():
-    """Design, reverting change: a bare 🏴 is
+    """Design, reverting the earlier change that stripped a bare 🏴: a bare 🏴 is
     another symbol, so the England, Scotland and Wales flags reach the channel
     whole. Every other tag character goes, by the one shared rule
     (canvas_pins.agent_line, as agent_text and the card's count), in either mode."""

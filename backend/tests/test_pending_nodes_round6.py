@@ -1,9 +1,9 @@
-"""Placeholders, (feat/agent-presence, design's
-round-6 rulings of 2026-10-26).
+"""Placeholders (feat/agent-presence, design's
+rulings of 2026-10-26).
 
 Justin: a paid placeholder never runs without the person's
 confirmation, and what runs never costs more than the person was shown.
-An agent finishing its placeholders while the dialog was open
+A review found that an agent finishing its placeholders while the dialog was open
 left nothing for Nebula to hold the run to (no placeholders left, so no
 check), and a pricier model ran at a total nobody saw. A run that carries
 ``confirmedCost`` is now held to it whether or not a placeholder is left.

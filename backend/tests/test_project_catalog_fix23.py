@@ -7,7 +7,7 @@
   2 projects." At the limit and past it (a kept save, a restore or an Undo
   of a delete may take the list past it).
 - A delete refused by a World Labs recovery record no project's run history
-  names says design's line in shape: "Nebula couldn’t delete
+  names says design's line in its fixed shape: "Nebula couldn’t delete
   “Delta brief” because it has a saved World Labs recovery ID. Check the run
   in Marble, then forget that ID in Run history." Agents' text is unchanged.
 """

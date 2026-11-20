@@ -1,14 +1,14 @@
-"""PR #199 (design and design).
+"""PR #199 (design's two rulings).
 
 `canvasPending` sits in the catalog's head (before `activeProjectId`),
 a restore keeps what the copy and each damaged file's head still say, and a
 restore that couldn't read the damaged file whole protects the reopened
 project again when it is the live canvas's (a record the damage took fails
-safe). -cut-point sweep: every cut keeps the person's canvas.
+safe). A 30-cut-point sweep: every cut keeps the person's canvas.
 An agent's copy carries its own name and agent in state.json (and a
 held copy in its entry), so a damaged catalog never files it as "Recovered
 canvas N" or names it as the person's.
-And design: protection ends only on the person's own open of the
+Design: protection ends only on the person's own open of the
 project (a `viewing` frame with `openedBy: "person"`, refused when the last
 switch to it was an agent's; or `personOpen`) or their first own edit there
 (`personInput`): a tab that followed an agent's switch, an agent's write and
@@ -94,8 +94,8 @@ def test_high1_every_cut_of_the_catalog_keeps_the_persons_canvas(app, monkeypatc
     then catalog.json is cut (damage: an atomic rename never tears it). After
     a restart, a listing and an agent's clear, the person's canvas is still
     exactly in a project, wherever the cut landed (at
-    7738ed8f, 9 of these lose it in this test; counted 10 in its
-    own probe)."""
+    7738ed8f, 9 of these lose it in this test; the reviewer's
+    own probe counted 10)."""
     client, store, graph, state = app
     _listed_fresh(client, store, graph, state, monkeypatch)
     before = _live_values(main_module.cli_graph)

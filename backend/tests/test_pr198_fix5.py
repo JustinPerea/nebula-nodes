@@ -1,6 +1,6 @@
 """PR #198 (backend lane).
 
-- Item 1 (design question 3): a scene write refused for removing a rendering shot
+- Design: a scene write refused for removing a rendering shot
   (``PUT /api/graph/node/{id}``, and the canvas's undo/redo restore) carries
   ``code: "rendering_shots"`` and ``rendering: {shotIds, shots, stoppable}``,
   the same shape as the scene DELETE's, so the canvas can put back only those

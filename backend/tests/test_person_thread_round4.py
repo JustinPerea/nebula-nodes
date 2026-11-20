@@ -10,7 +10,7 @@
 - Revoking a token settles its listener's messages in flight.
 - The inbox and accept find a message in any project, and
   a lost journal stretch or a failed read re-arms the inbox.
-- Live L1 / parity B7, live L3.
+- Live-check and parity findings (L1, B7, L3).
 """
 from __future__ import annotations
 
@@ -206,7 +206,7 @@ def test_a_token_file_open_to_others_fails_closed_without_the_token(token_file):
     with pytest.raises(nebula_api.NebulaAPIError) as refused:
         nebula_api.with_identity()
     assert "a" * 40 not in refused.value.detail
-    # Design: shape, the reason as a clause after the variable, the command on its own line.
+    # Design: the same shape as the agent lines above, the reason as a clause after the variable, the command on its own line.
     assert refused.value.detail == (
         "Nebula couldn’t read this agent’s token because NEBULA_APP_TOKEN_FILE points to a file other users "
         "can read. Copy a new one from Settings › Connect your agent, then run this command.\n"
@@ -235,7 +235,7 @@ def test_each_token_file_reason_reads_as_a_clause(token_file, content, clause):
 
 
 def test_a_reply_from_the_listening_sessions_own_shell_settles_its_message(thread):
-    """/ live M1: `nebula reply` from Claude's Bash has the
+    """Live M1: `nebula reply` from Claude's Bash has the
     token but the CLI's cursor session, not the MCP process's."""
     a = _listen(thread, SESSION_A)
     sent = _send(thread, a, "make it warmer").json()["row"]

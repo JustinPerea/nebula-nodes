@@ -1,6 +1,6 @@
 """PR #199: backend items and design.
 
-- / agents-docs main LOW (design): the person's
+- Design: the person's
   refusal line for a whole-canvas replacement (the open, Clear canvas,
   Create, a graph replace, a bundle restore) places the held record as the
   hold does: "“World” from “Alpha”" for another project's record, "A World
@@ -88,7 +88,7 @@ SURFACES = ["open", "clear", "create", "import", "restore"]
 @pytest.mark.parametrize("record,subject", [
     # Alpha's n1 "World" (its run history has the run); Delta is open, its own n1 "Delta World".
     ({"run_id": "wl-run-alpha", "resume_operation_id": "op-1"}, "“World” from “Alpha”"),
-    # Delta's own record: as before.
+    # Delta's own record: as before the hold was added.
     ({"run_id": "wl-run-delta", "resume_operation_id": "op-1"}, "“Delta World”"),
     # No project's run history has it, and no stored node holds its ID: the project can't be known.
     # An Existing World ID is only a World Labs Environment node's.

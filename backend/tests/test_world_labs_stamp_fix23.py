@@ -84,7 +84,7 @@ def _duplicate(store, project_id, name):
     return twin
 
 
-# -- 1. two repros now -----------------------------------------------------
+# -- 1. The reviewer's two repros now answer 409 -----------------------------------------------------
 
 @pytest.mark.parametrize("stamped", [True, False], ids=["stamped", "legacy-unstamped"])
 def test_an_agent_forging_another_projects_history_cant_release_the_open_projects_record(app, recoveries, stamped):
@@ -159,7 +159,7 @@ def test_a_stamp_releases_in_recently_deleted_too(app, recoveries):
 
 
 def test_an_unstamped_record_placed_in_alpha_by_history_holds(app, recoveries):
-    """The fail-open row of table: history placement may only add holds."""
+    """The fail-open row of the reviewer's table: history placement may only add holds."""
     client, *_ = app
     _delta_brief(client)
     _set(recoveries, "wl-run-alpha")
@@ -175,7 +175,7 @@ def test_an_unstamped_ambiguous_record_holds(app, recoveries):
 
 
 def test_a_stamp_naming_a_project_deleted_for_good_holds_with_the_shared_line(app, recoveries):
-    """The coordinator's call 1: "deleted for good -> 409" row stays 409."""
+    """The coordinator's call 1: a stamp naming a project deleted for good still answers 409."""
     client, store, *_ = app
     alpha, _delta = _delta_brief(client)
     with store.transaction() as catalog:

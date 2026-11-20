@@ -239,7 +239,7 @@ def canvas_project(tmp_path, monkeypatch) -> str:
         store.commit(catalog)
     monkeypatch.setattr(main, "project_store", store)
     # The live canvas is this project's (state.json's projectId), so nothing
-    # files or closes it on the next listing (H1 of PR #199's).
+    # files or closes it on the next listing (H1 of PR #199).
     monkeypatch.setattr(main.cli_graph, "owner", project["id"])
     return project["id"]
 
@@ -500,8 +500,7 @@ def broadcast_capture(monkeypatch) -> BroadcastCapture:
 # -- every broadcast_raw stand-in takes ``others=`` (PR #211) --
 #
 # A stand-in that can't take ``others=`` raises a TypeError that _show_agent
-# swallows, so presence events vanish from a test with no failure (
-# ). The old guard read the test files' syntax and missed
+# swallows, so presence events vanish from a test with no failure. The old guard read the test files' syntax and missed
 # functools.partial, a class with __call__, string-path and keyword setattr
 # and direct assignment. This checks behaviour instead: whatever sits at
 # main.manager.broadcast_raw after any monkeypatch.setattr, and again when a
@@ -573,8 +572,7 @@ pytest.MonkeyPatch.setattr = _checked_setattr  # type: ignore[method-assign]
 # and forwards everything else to it. It is a check for
 # the ways the suite patches senders (monkeypatch.setattr on the manager),
 # not a wall: a test that patches the class, uses mock.patch.object or
-# sends from a thread after the call phase can still go around it (
-# ); the AST guards read main.py for those.
+# sends from a thread after the call phase can still go around it; the AST guards read main.py for those.
 
 _PRESENCE_ROUTE: contextvars.ContextVar[bool] = contextvars.ContextVar("nebula_presence_route", default=False)
 # Where the checks record a stray event while a test runs; None between tests.

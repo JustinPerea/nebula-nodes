@@ -1,4 +1,4 @@
-"""A Commons curation proposal posts an Update too (Justin's, 2026-10-21).
+"""A Commons curation proposal posts an Update too (Justin's ruling, 2026-10-21).
 
 The words follow the line above the Commons grid (CommonsProposalsLine:
 "asks to change a reference"). No Commons text in it: not the proposed
@@ -75,7 +75,7 @@ def test_an_inbox_ask_says_so_in_the_ref_and_nothing_else_does(cx, canvas_projec
 
 
 def test_a_fallback_to_the_older_ask_rewrites_the_words_with_the_count(cx, canvas_project):
-    """PR #202 (design's ruling on its): when the agent's newer
+    """PR #202 (design's ruling on the first question): when the agent's newer
     ask on a reference closes and its Update falls back to the older, open
     one, the Update's words change in place with its ref: both say the older
     ask, so the corner, a held tab's line and its placeholder agree."""

@@ -1,4 +1,4 @@
-"""PR #203: design and the two CI failures on 485fb5e0.
+"""PR #203: design's rulings and the two CI failures on 485fb5e0.
 
 - Design items 1 and 2: the CLI tags each part by where its runs go, in one
   id style, with a count per id once there's more than one: "1 free

@@ -90,7 +90,7 @@ def _refused(answer: Any, detail: str = MOVED) -> None:
     assert answer.json()["detail"] == detail
 
 
-# -- the agent's model change:, both routes ------------------------------------------
+# -- the agent's model change, both routes ------------------------------------------
 
 @pytest.mark.parametrize("route", ["put", "apply"])
 def test_an_agents_model_change_never_lands_on_the_project_opened_during_its_lookup(race, monkeypatch, route):
@@ -236,7 +236,7 @@ def test_a_canvas_run_never_starts_on_the_project_opened_during_its_spend_check(
 # -- item 6: a rolled-back upload node leaves the open canvas too --------------------------
 
 def _upload_failing_with_a_switch_away_and_back(race, monkeypatch) -> Any:
-    """The upload's sync opens B, then A again, then fails (case 3)."""
+    """The upload's sync opens B, then A again, then fails (upload case 3)."""
     main = race.main
     from services.agent_presence import _request_headers
 
@@ -276,7 +276,7 @@ def test_an_upload_rolled_back_off_the_live_graph_leaves_the_stored_project_too(
 
 
 def test_an_upload_rolled_back_off_the_live_graph_resyncs_the_open_canvas(race, monkeypatch):
-    """Case 3: during the upload's failed sync the person opens B and then A
+    """Upload case 3: during the upload's failed sync the person opens B and then A
     again. A's reopen sent the canvas a graph with the upload's node (the
     switch had saved it into A); the rollback takes it off the live graph,
     so the canvas is synced again and holds what the backend holds."""

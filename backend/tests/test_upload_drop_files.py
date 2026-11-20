@@ -339,7 +339,7 @@ def test_nebula_upload_at_takes_a_negative_x(argv_at):
 
 
 # An image's size as shown goes with its preview (services/preview_size.py,
-# #226): the Inspector's preview has its height before it decodes.
+# #226: the Inspector's preview has its height before it decodes.
 def _image_bytes(fmt: str, size: tuple[int, int], orientation: int | None = None) -> bytes:
     from PIL import Image
 
@@ -602,7 +602,7 @@ def test_an_agent_apply_that_sets_another_file_drops_the_old_size(client, monkey
     assert "_previewSize" not in _params(node_id)
 
 
-# #226: the rules mutants showed untested.
+# #226: the rules the mutants showed untested.
 def test_the_cli_that_sets_only_another_preview_drops_the_old_size(client, tmp_path, monkeypatch):
     # Under the output root, so the canvas sync's normalizer leaves the
     # preview as sent (it imports a file from outside and names its own).

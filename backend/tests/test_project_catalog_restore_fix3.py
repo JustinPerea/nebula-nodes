@@ -1,4 +1,4 @@
-"""PR #199: what makes true (2026-10-27).
+"""PR #199: what the fix makes true (2026-10-27).
 
 - M1 (agents' half). The restore's rows that no longer hold (the project
   moved since) are marked and left out of the agents' note.

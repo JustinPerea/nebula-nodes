@@ -33,7 +33,7 @@ CLI = {"X-Nebula-Client": "nebula-cli"}
 # The packaged desktop renderer (a file: page) sends no Origin, but does send Sec-Fetch-Site.
 DESKTOP = {"Sec-Fetch-Site": "same-site", **CANVAS_PARAMS_VERSION}
 
-# (design): "'settle' and 'start' are internal." These nodes' start is
+# Design: "'settle' and 'start' are internal." These nodes' start is
 # still in flight (has_active_node), so the line says to let the run finish;
 # tests/test_error_copy_round3.py has the line for each other record.
 PAID_PERSON = "A World Labs run is still starting. Try again in a moment."  # Design, PR #114

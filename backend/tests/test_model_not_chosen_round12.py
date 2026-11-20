@@ -41,7 +41,7 @@ TOPAZ = "krea-enhance-topaz-standard-enhance"
 GM_LINE = "Choose a model for “Clean plate” first."
 
 
-# (design: only the first missing field, in the card's order): Topaz
+# Design's rule (only the first missing field, in the card's order): Topaz
 # Standard's Width and Height come before its Model, so these set them.
 SIZE = {"width": 2048, "height": 2048}
 

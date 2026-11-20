@@ -8,7 +8,7 @@
 3. settings.not_restored's line by cause (design for any cause but
    not being allowed).
 5. The replaced file is named by the time and a random suffix, kept once.
-6. The guards mutants R1, R8 and R9 reached.
+6. The guards that mutants R1, R8 and R9 reached.
 7. The Settings notice lasts until the person dismisses it, across a
    restart, and stays the person's only.
 """
@@ -336,7 +336,7 @@ def test_the_replaced_file_is_named_by_time_and_kept_once(home_state):
     assert stat.S_IMODE(first.stat().st_mode) == 0o600
 
 
-# -- 6. the guards mutants reached ----------------------------------------------------
+# -- 6. the guards that mutants reached ----------------------------------------------------
 
 def test_the_copys_temp_without_the_lock_is_never_taken_while_fresh(keyed, monkeypatch, shared_temp_name):
     """R1: an in-place save with no flock writes its copy through the copy's

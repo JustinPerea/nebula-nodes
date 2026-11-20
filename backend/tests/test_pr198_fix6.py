@@ -1,4 +1,4 @@
-"""PR #198 (design's pr198 rulings): the stray shot-port lines.
+"""PR #198 (design's rulings): the stray shot-port lines.
 
 Design's words, verbatim:
 - "Removed the connection to shot port <port> on “Scene”, node n4. That shot
@@ -120,4 +120,4 @@ def test_a_project_open_with_a_port_and_no_connection_says_nothing(workspace, pe
         _rf_scene("n2", "Next", _scene("t1"), {})], [])
     assert opened.status_code == 200, opened.text
     assert opened.json()["warnings"] == []
-    assert BASE  # the shared fixtures are the ones
+    assert BASE  # the shared fixtures are test_pr198_fix5's ones

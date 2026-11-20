@@ -1,6 +1,6 @@
 """PR #199 (design), the backend's part.
 
-- (renumber-recover): Nebula's live graph never holds a
+- Nebula's live graph never holds a
   node id that isn't ``nN``. Duplicate and Paste make tab-local uuid nodes;
   autosave writes them into the project; an open used to load them into the
   live graph, where the tab's typing never reached them, and an agent's read
@@ -11,9 +11,9 @@
 - ASCII digits only; node references in params move; recover
   checks every connection as the live route does, and reports each it drops.
 - The shared port rules file, and droppedWires' structured entries.
-- (no selection or
-  view while kept); design e ("1 node", the restore note's canvas line said
-  once) and a ("Recovered Delta").
+- No selection or
+  view while kept; design ("1 node", the restore note's canvas line said
+  once) and ("Recovered Delta").
 """
 from __future__ import annotations
 
@@ -694,7 +694,7 @@ def test_kept_ui_low1_a_catalog_restore_clears_the_published_selection(app):
     assert _settles(lambda: main_module.selection_context.current() == [])
 
 
-# -- Design e: "1 node", and the canvas said once --------------------------------------------
+# -- Design: "1 node", and the canvas said once --------------------------------------------
 
 def test_r23e_counts_are_singular_for_one():
     assert counted(1, "node") == "1 node" and counted(2, "node") == "2 nodes" and counted(0, "project") == "0 projects"
@@ -723,7 +723,7 @@ def test_r23e_the_restore_note_leaves_the_waiting_canvas_to_its_block():
     assert "couldn't be filed as its own" not in text
 
 
-# -- Design a: "Recovered Delta" ---------------------------------------------------------------
+# -- Design: "Recovered Delta" ---------------------------------------------------------------
 
 def test_r23a_recovered_copies_are_named_recovered_delta_then_numbered(app):
     client, store, *_ = app

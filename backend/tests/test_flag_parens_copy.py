@@ -16,7 +16,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 # Anywhere inside the parens, not only first.
 FLAG_IN_PARENS = re.compile(r"\([^)]*\bNEBULA_[A-Z0-9_]+")
 SKIP_DIRS = {".venv", "tests", "__pycache__", "node_modules"}
-# (design): terminal help text is exempt by SURFACE, not by file: "(default:
+# Design: terminal help text is exempt by SURFACE, not by file: "(default:
 # $NEBULA_URL)" is that medium's convention. A string is help text when it is (part of) the value
 # of one of these keywords in any call: argparse's help, description, epilog and usage (CLI help
 # and usage), and the description of an MCP tool or parameter (Field(description=...), a tool's
@@ -126,12 +126,12 @@ def test_the_startup_lines_for_the_person_are_checked():
             assert any(text.startswith(start) for text in checked), f"{name}: {start!r} is not scanned"
 
 
-# (design): what the person reads in the terminal uses curly apostrophes, as the app's
+# Design: what the person reads in the terminal uses curly apostrophes, as the app's
 # lines do: the startup lines (the sign-in link and its startup errors) and `nebula mcp connect`
 # and `disconnect`, which the person runs. Help, description, epilog and usage stay exempt by
 # surface. Agents may read the mcp messages too (an agent running the command for the person);
 # the words mean the same either way.
-# (design): the same lines carry no semicolon and no aside in parentheses either: a
+# Design: the same lines carry no semicolon and no aside in parentheses either: a
 # second clause is its own sentence, and a detail such as the parser's words gets its own line.
 PERSON_READ = ("services/person_session.py", "devserver.py", "cli/commands/mcp_connect.py")
 STRAIGHT_APOSTROPHE = re.compile(r"\w'\w|^'\w")
@@ -205,7 +205,7 @@ def test_the_semicolon_and_parens_check_catches_what_it_is_for():
     assert not semicolons_or_parens('"""A docstring (with an aside); and more."""\n', "m.py")
 
 
-# (design): nothing introduces a command or a path with a colon. A
+# Design: nothing introduces a command or a path with a colon. A
 # sentence ends with a period and the command goes on the next line ("Run this command."), and a
 # path sits in the sentence ("Nebula saved a backup at {backup}."). The check reads each message
 # whole, as the person sees it: a printed, logged or raised line, or a prompt, with f-string parts

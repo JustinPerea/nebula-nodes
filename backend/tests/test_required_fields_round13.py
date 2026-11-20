@@ -8,7 +8,7 @@ fills no value in, so Nebula refuses the run up front, on every run path,
 with design's line "Choose an aspect ratio for “X” first." When several fields
 are missing, only the first in the card's field order is named.
 
-/api/quick (`nebula quick`) never checked: it now refuses the same way,
+/api/quick (`nebula quick`) never checked the field; it now refuses the same way,
 before the spend check and before anything runs.
 
 The canvas's model picker tells "reading the provider's settings
