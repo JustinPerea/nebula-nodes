@@ -7,10 +7,10 @@ export type AssetStudioSaveState = 'draft' | 'idle' | 'saving' | 'saved' | 'erro
 export type StudioFailure = string | FailureCopy;
 /** A neutral line of the Studio's own about this board: its text, and a title (the full value a clipped line shortened). */
 export type StudioNotice = string | { text: string; title?: string };
-/** What the toolbar's Retry runs again for `saveError` (GM, error-copy round
- * 3: "Make Retry redo the failed action, never a different one."). 'reload'
+/** What the toolbar's Retry runs again for `saveError` (design, error copy:
+ * "Make Retry redo the failed action, never a different one."). 'reload'
  * is a failed save no button redoes: its line's step is a reload (signed
- * out, or the board changed somewhere else; GM r16), so no Retry shows. */
+ * out, or the board changed somewhere else), so no Retry shows. */
 export type StudioRetry = 'save' | 'analyze' | 'undo' | 'redo' | 'reload';
 
 export interface AssetStudioDraftEntry<D = unknown> {
@@ -25,7 +25,7 @@ export interface AssetStudioDraftEntry<D = unknown> {
   /** The action that failed with `saveError`, which the toolbar's Retry
    * runs again: a save, an analyze, or an undo or redo of `retryStep`. Null
    * for a line no button redoes (an upload, the brief, no project open):
-   * then Retry is hidden and the line keeps GM's full reason; with a retry
+   * then Retry is hidden and the line keeps design's full reason; with a retry
    * it takes the short one (WRAP rule). Any other line patched in clears it. */
   retry?: StudioRetry | null;
   /** The undo step an undo or redo failed on: Retry runs only while it is
@@ -41,22 +41,22 @@ export interface AssetStudioDraftEntry<D = unknown> {
    * every create of it after (a board's: lib/api createMoodboard), so a
    * create sent again after its answer was lost returns the asset the first
    * one made. A new draft (reset) starts without one. Null: the server
-   * refused the id (round 6g), so its creates go without one. */
+   * refused the id, so its creates go without one. */
   createRequestId?: string | null;
-  /** What each create of the unsaved asset sent (round 6g, GM r15 1): its
+  /** What each create of the unsaved asset sent (design): its
    * attempt number (sent beside `createRequestId`), the queued ops it held
    * and its fields as sent. A create sent again whose board an earlier
    * attempt made rebases on that attempt's, so the board's own later
    * changes win and only what came after it replays. */
   createAttempts?: CreateAttempt[];
   /** When each top-level draft field was last edited (ms), for "the later
-   * edit wins" when a repeat finds the board changed too (round 6g). */
+   * edit wins" when a repeat finds the board changed too. */
   fieldEditedAt?: Record<string, number>;
-  /** A neutral line of the Studio's own about this draft (round 6g: "Kept
+  /** A neutral line of the Studio's own about this draft ("Kept
    * the name “Rivers” from the board."); the next edit clears it. */
   notice?: StudioNotice | null;
-  /** The failed save (`saveError`) found the saved board deleted (round 6l,
-   * GM r21 Q3): in Recently deleted ('trashed', deleted then, for the rail's
+  /** The failed save (`saveError`) found the saved board deleted: in Recently deleted
+   * ('trashed', deleted then, for the rail's
    * order) or gone for good ('purged'). Any other line patched in clears it. */
   saveGone?: { kind: 'trashed' | 'purged'; deletedAt?: string } | null;
 }
@@ -98,7 +98,7 @@ interface AssetStudioDraftState {
    * save leaves the draft dirty: an undo that didn't land changed nothing. */
   failSave: (key: string, id: string, message: StudioFailure,
     options?: { retry?: Extract<StudioRetry, 'save' | 'undo' | 'redo' | 'reload'>; step?: string }) => void;
-  /** GM, #204 r3: a failure shown on this draft whose only reason was this tab
+  /** PR #204 (design): a failure shown on this draft whose only reason was this tab
    * not being connected as the person (`error` is the person gate's refusal)
    * goes when the tab is promoted, while it is still the failure shown; the
    * draft reads as unsaved again, so its next save runs. */
@@ -107,7 +107,7 @@ interface AssetStudioDraftState {
   /** As copyTo, but when `destination` already holds a loaded draft (the
    * board was opened from the rail while this one was unsaved), that draft
    * stays, with its epoch and so its Undo, and `merge` folds in what this
-   * one still has to send (round 6g, review 9 R9-B). */
+   * one still has to send. */
   handOver: (key: string, destination: string,
     merge: (into: AssetStudioDraftEntry, from: AssetStudioDraftEntry) => Partial<AssetStudioDraftEntry>) => void;
   /** The asset moved (Global <-> a project): drafts kept for it take its new

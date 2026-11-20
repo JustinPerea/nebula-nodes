@@ -1,7 +1,7 @@
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 
 /**
- * The agent cursors' socket feed, in the startup entry (review 3, N3).
+ * The agent cursors' socket feed, in the startup entry.
  *
  * Presence that arrives before the cursor chunk loads must not be missed: a
  * person tab's replay comes right after its hello, before any agent acts. So
@@ -13,7 +13,7 @@ import { wsClient, type ExecutionEvent } from '../lib/wsClient';
  * Bounded: a replay replaces every cursor, so what came before it goes. The
  * latest replay is kept apart, and past AGENT_PRESENCE_FEED_MAX events after
  * it the oldest of those go (a cursor that loses its event shows again on
- * its next one), never the replay itself (review 4, NIT-3).
+ * its next one), never the replay itself.
  */
 export const AGENT_PRESENCE_FEED_MAX = 64;
 

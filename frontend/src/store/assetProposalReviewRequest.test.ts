@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { requestReview, takeReview } = await import('./assetProposalReviewRequest');
 const { useAssetProposalsStore } = await import('./assetProposalsStore');
 
-describe('a Review request (Q92 a)', () => {
+describe('a Review request', () => {
   beforeEach(() => {
     useAssetProposalsStore.getState().clear();
     vi.useRealTimers();

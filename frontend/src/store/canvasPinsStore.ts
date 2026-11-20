@@ -17,17 +17,17 @@ interface CanvasPinsState {
   projectId: string | null;
   pins: Pin[];
   composer: PinComposerTarget | null;
-  /** Round 23 (review 22, M-1): the project and canvas the open dialog's
+  /** The project and canvas the open dialog's
    * target belongs to (its node id names a node of that canvas only). The
    * note is sent for it, so Nebula refuses it once that canvas has gone. */
   composerCanvas: ProjectContext | null;
   /** That project's name as the dialog opened (a kept note names it on
-   * another project, review 3 M-2). */
+   * another project). */
   composerProjectName: string;
   /** What the person has typed in the open dialog (the dialog starts with it). */
   draft: string;
   /** Drafts the person closed with × or Esc, by the project they were
-   * written in (fix round 2 of PR #200, GM 2026-10-28 answer 1: a note
+   * written in (design, PR #200, 2026-10-28: a note
    * written for project A never shows in project B's dialog). The next
    * dialog on that project starts with its draft; only sending drops it, or
    * clearing the field and closing. A closed draft is the person's own: it
@@ -36,39 +36,38 @@ interface CanvasPinsState {
   drafts: Record<string, string>;
   /** Notes that couldn't be added because their canvas went before they
    * were sent (a follow, a replacement, Nebula's out-of-date refusal): each
-   * one's text, kept for the person, never anchored anywhere, GM's line
+   * one's text, kept for the person, never anchored anywhere, the design line
    * saying why (lib/canvasPins noteKeptLine) and the project it was written
-   * in. One per project, oldest first (fix round 3 of PR #200, review 3
-   * M-2: a second interruption on another project never replaces the
+   * in. One per project, oldest first (a second interruption on another project never replaces the
    * first). The next dialog on a note's project starts with it, and only
    * that notice closes; elsewhere the dialog starts empty and every notice
    * (each with Copy note and ×) stays until its own × drops it. */
   kept: KeptNote[];
-  /** The project a failed send's error is about (review 3 N-3): the error
+  /** The project a failed send's error is about: the error
    * shows on that project only. null: not tied to one (a delete). */
   errorProject: string | null;
   /** Deletes sent but not yet confirmed: hidden even if a stale update still lists them. */
   removing: Record<string, true>;
-  /** A refusal's one neutral line (GM r20 Q1): what happened, then what to do. */
+  /** A refusal's one neutral line (design): what happened, then what to do. */
   error: string | null;
-  /** GM r24: `error` is the person gate's refusal (person_required) of a send
-   * ('add') or, GM r30 item 2, a delete ('delete'). While the banner shows,
+  /** Design: `error` is the person gate's refusal (person_required) of a send
+   * ('add') or, design, a delete ('delete'). While the banner shows,
    * the toast says only "Your note wasn’t added." or "Your note wasn’t
    * deleted." (PinComposer decides as it draws: the banner can come or go).
-   * Review 17 LOW-1: the server promoting the tab clears it. */
+   * The server promoting the tab clears it. */
   errorPersonGate: false | 'add' | 'delete';
-  /** GM r23 item 2: the open dialog's node was removed (Nebula said so, or
+  /** Design: the open dialog's node was removed (Nebula said so, or
    * the canvas lost it): Send note is disabled with the line as its reason;
    * Cancel and the typed text stay. */
   targetGone: boolean;
-  /** Review 13 NIT-3: how many note_too_long refusals the open dialog has
+  /** How many note_too_long refusals the open dialog has
    * had; each one turns its "N left" on. */
   tooLongRefusals: number;
   /** The open dialog's node went from the canvas (PinComposer watches the graph). */
   targetRemoved: () => void;
   /** The removed node came back (Undo or any other path) while the dialog is
    * open: Send note is live again, and the "removed" line, no longer true,
-   * leaves (review 14 LOW-2 and GM, PR #200 fix round 16). */
+   * leaves (design, PR #200). */
   targetReturned: () => void;
   hydrate: () => Promise<void>;
   apply: (event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>) => void;
@@ -103,7 +102,7 @@ function sanitize(raw: unknown): Pin | null {
   const agent = reply?.agent as Record<string, unknown> | undefined;
   return {
     id: pin.id,
-    // Bounded as the backend counts it (fix round 11: what shows, not code units).
+    // Bounded as the backend counts it (what shows, not code units).
     text: fitNote(rememberRaw(pin.id, pin.text)),
     anchor: safeAnchor,
     position: position && finite(position.x) && finite(position.y) ? { x: position.x, y: position.y } : null,
@@ -127,7 +126,7 @@ function sanitize(raw: unknown): Pin | null {
   };
 }
 
-/** Each pin's text as the backend sent it (review 16 NIT 2, fix round 19):
+/** Each pin's text as the backend sent it:
  * fitNote and the card's form depend on the Unicode data, so when that comes
  * in after the pins (a failed chunk loaded again) they are fitted again. */
 const rawTexts = new Map<string, string>();
@@ -140,7 +139,7 @@ function sanitizeAll(raw: unknown): Pin[] {
   return Array.isArray(raw) ? raw.map(sanitize).filter((pin): pin is Pin => pin !== null) : [];
 }
 
-// PR #218 review 1 MEDIUM-1: one order for every whole-set listing, pushes
+// PR #218: one order for every whole-set listing, pushes
 // and hydrates alike. A push takes its number as it arrives, a hydrate as its
 // fetch starts; a listing is applied only if nothing later in the order has
 // been applied already. Without it, a hydrate's older listing that resolved
@@ -151,11 +150,11 @@ let appliedOrder = 0;
 const nextListingOrder = () => { listingOrder += 1; return listingOrder; };
 
 function applyListing(event: Pick<CanvasPinsEvent, 'projectId' | 'pins'>, order: number): void {
-  // Review 13 L-2: a listing that comes before the Unicode data waits for it,
+  // A listing that comes before the Unicode data waits for it,
   // and is never shown unsanitized. It keeps the number it was given, so the
   // order between listings holds whichever wait settles first; one overtaken
   // by a later listing is dropped, never applied over it.
-  // Review 14 MEDIUM-1: it waits only while the import is pending. After a
+  // It waits only while the import is pending. After a
   // failed import it applies at once in the strict fallback form, and the
   // chunk is tried once more.
   retryPinText();
@@ -188,10 +187,10 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   targetGone: false,
   tooLongRefusals: 0,
   hydrate: async () => {
-    // Review 14 MEDIUM-1: a failed chunk is tried once more (here, or on the
+    // A failed chunk is tried once more (here, or on the
     // next pins push, which every reconnect starts with).
     retryPinText();
-    // PR #218 review 1 MEDIUM-1: the listing takes its place in the order as
+    // PR #218: the listing takes its place in the order as
     // the fetch starts, and is dropped if a push numbered after it was
     // applied first. That push alone can be older than this answer: it may
     // have been built before the fetch started and just arrived late. The
@@ -202,10 +201,10 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
     // has a push of its own still coming, and it outranks both. The last
     // push applied is never older than an answer that was dropped, once the
     // pushes in flight land. That ordering per socket is the backend's to
-    // keep: see main.py ConnectionManager.broadcast_raw (#220 review 1 LOW-2).
+    // keep: see main.py ConnectionManager.broadcast_raw (PR #220).
     const order = nextListingOrder();
     try {
-      // Review 13 L-2: the Unicode data is its own chunk; sanitize needs it.
+      // The Unicode data is its own chunk; sanitize needs it.
       const [listing] = await Promise.all([fetchPins(), pinTextSettling()]);
       applyListing(listing, order);
     } catch {
@@ -214,15 +213,15 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
   },
   // A pushed listing (the canvasPins event): its place in the order is its arrival.
   apply: (event) => applyListing(event, nextListingOrder()),
-  // Round 23 (review 22, M-1): the dialog is part of the canvas's read-only
+  // The dialog is part of the canvas's read-only
   // state (lib/canvasLock, the one source every surface reads): opening it,
   // sending it and deleting a note are refused while following an agent's
   // switch and while offline, and nothing is sent.
   compose: (target) => {
     if (refuseCanvasEdit()) return;
-    // GM r26: the dialog needs the Unicode data; a failed chunk loads again.
+    // Design: the dialog needs the Unicode data; a failed chunk loads again.
     retryPinText();
-    // GM (2026-10-28 answer 1): the kept note, else the draft × or Esc left,
+    // Design (2026-10-28): the kept note, else the draft × or Esc left,
     // starts the dialog, on the project it was written in only. Elsewhere the
     // dialog starts empty, and the kept note's notice stays.
     const canvas = getProjectContext();
@@ -247,16 +246,16 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       return false;
     }
     const project = projectKey(canvas);
-    // Offline is read-only (round 15 of PR #114): nothing is sent; the note
-    // stays open and the banner pulses. Following the same (round 23).
+    // Offline is read-only (PR #114): nothing is sent; the note
+    // stays open and the banner pulses. Following the same.
     if (refuseCanvasEdit()) return false;
     try {
-      // For the canvas it was written on (round 23): never the one open now.
+      // For the canvas it was written on: never the one open now.
       // Whole: the dialog already holds it to 280 shown characters, and the
-      // backend refuses past that (fix round 11: a slice by code units cut a
+      // backend refuses past that (a slice by code units cut a
       // note of flags or pasted codes, and sent the hidden-text refusal nothing).
       const answer = await createPin(trimmed, target, canvas);
-      await pinTextSettling();  // review 13 L-2: sanitize needs the Unicode data (or its fallbacks)
+      await pinTextSettling();  // Sanitize needs the Unicode data (or its fallbacks)
       const pin = sanitize(answer);
       set((state) => ({
         composer: null,
@@ -273,7 +272,7 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
           kept: keepNote(state.kept, trimmed, project, state.composerProjectName, followingSwitch()) }));
         return false;
       }
-      // GM r20 Q1 (PR #200 fix round 13), after GM r18 Q1: any refusal keeps
+      // PR #200 (design): any refusal keeps
       // the dialog open with the note as typed, and one neutral line says
       // what happened and what to do. (Not a draft yet: the dialog holds it,
       // and × or Esc keeps it as one.)
@@ -302,9 +301,9 @@ export const useCanvasPinsStore = create<CanvasPinsState>((set, get) => ({
       const line = pinDeleteLine(error);
       set((state) => ({
         pins: restored && !state.pins.some((p) => p.id === id) ? [...state.pins, restored] : state.pins,
-        // GM r20 Q1: the pin stays, and the line says so in its own words.
-        // Review 16 LOW-1 / GM r29 (fix round 19): refused because this tab
-        // isn't connected as the person, it's the Q116a line (how to fix it),
+        // Design: the pin stays, and the line says so in its own words.
+        // Design: refused because this tab
+        // isn't connected as the person, it's the line (how to fix it),
         // never "try again in a moment", which can't work from this tab.
         error: line,
         errorPersonGate: error instanceof RequestFailedError && error.code === PERSON_REQUIRED_CODE
@@ -336,7 +335,7 @@ function canvasWentFor(error: unknown): boolean {
 }
 
 /** Which project a note was written in: a note never starts another
- * project's dialog (GM 2026-10-28 answer 1). A clear or an import of the same
+ * project's dialog (design, 2026-10-28). A clear or an import of the same
  * project keeps it: the person sees it in the dialog and chooses again. */
 function projectKey(canvas: ProjectContext | null): string {
   return canvas?.id ?? '';
@@ -349,7 +348,7 @@ function projectNameOf(canvas: ProjectContext | null): string {
 }
 
 /** `kept` with this note as its project's one kept note, at the bottom
- * (newest): a note kept for another project stays (review 3 M-2). */
+ * (newest): a note kept for another project stays. */
 function keepNote(kept: KeptNote[], text: string, project: string, projectName: string,
   following: ReturnType<typeof followingSwitch>): KeptNote[] {
   const reason = following ? { agent: following.agent, projectName: following.projectName } : null;
@@ -357,7 +356,7 @@ function keepNote(kept: KeptNote[], text: string, project: string, projectName: 
     { text, line: noteKeptLine(reason), project, projectName, following: reason }];
 }
 
-/** `drafts` with `text` kept as `project`'s draft; a whitespace-only text drops it (review 2 N-4). */
+/** `drafts` with `text` kept as `project`'s draft; a whitespace-only text drops it. */
 function keepDraft(drafts: Record<string, string>, project: string, text: string): Record<string, string> {
   const { [project]: _gone, ...rest } = drafts;
   void _gone;
@@ -366,9 +365,8 @@ function keepDraft(drafts: Record<string, string>, project: string, text: string
 
 /** The open dialog's target was a node or a spot of the canvas that is
  * going (a follow started) or went (a replacement): the dialog closes, and
- * what the person typed is kept, with GM's line saying why (round 23,
- * review 22 M-1). Its target is never re-anchored: the canvas that replaces
- * it reuses the same ids. Fix round 2 of PR #200 (GM 2026-10-28 answer 1):
+ * what the person typed is kept, with the design line saying why. Its target is never re-anchored:
+ * the canvas that replaces it reuses the same ids. PR #200 (design):
  * only an open dialog's note is cut off. A draft the person closed on
  * purpose gets no line; it stays their project's draft. A send that had
  * already failed keeps its own failure line. */
@@ -376,7 +374,7 @@ function closeComposerForGoneCanvas(following: ReturnType<typeof followingSwitch
   const { composer, composerCanvas, composerProjectName, draft, drafts, kept, error, errorProject } = useCanvasPinsStore.getState();
   if (!composer) return;
   const text = draft.trim();
-  // A send already refused (its line showing, GM r20 Q1: the dialog stays
+  // A send already refused (its line showing, design: the dialog stays
   // open on any failure) keeps that line: its note goes back to its
   // project's draft, never "wasn’t sent because the canvas changed".
   if (error && errorProject === projectKey(composerCanvas)) {
@@ -403,7 +401,7 @@ wsClient.subscribe((event) => {
   }
 });
 
-// Review 17 LOW-1 (fix round 20), through GM's #204 round 3 mechanism: the
+// Through the PR #204 mechanism: the
 // server promoted this tab (lib/wsClient saw the person-only proposalSync): a
 // refusal for not being connected as the person is no longer true, so its
 // toast goes, never turning into the full "isn’t connected as you" line as
@@ -413,7 +411,7 @@ function clearPinRefusalOnPromote(error: unknown, line: string | null): void {
     () => useCanvasPinsStore.getState().clearError());
 }
 
-// Review 16 NIT 2 (fix round 19): the Unicode data loaded (by the dialog
+// The Unicode data loaded (by the dialog
 // opening, a hydrate or a push): the pins on screen are fitted again from
 // their raw text and redrawn in the full form now, not at the next push.
 onPinTextLoaded(() => {

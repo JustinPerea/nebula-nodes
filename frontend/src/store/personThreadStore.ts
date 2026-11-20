@@ -20,12 +20,12 @@ import type { AnswerGoneCause } from '../lib/personThreadBox';
 import { useUIStore } from './uiStore';
 
 /**
- * The Message box's state (GM - Design r50, r55), loaded with the app so no
+ * The Message box's state (design), loaded with the app so no
  * reply, listener change or session event is missed before the deferred box
  * (components/panels/MessageBox.tsx, in the Agent log's chunk) arrives.
  * The thread itself lives on the backend per project (services/person_thread.py):
  * this is the tab's copy, its draft and its one send in flight. Only what
- * the socket's events need is here (GM r70's budget): the draft's and the
+ * the socket's events need is here (design's budget): the draft's and the
  * send's code is lib/personThreadCompose.ts's, in the box's chunk.
  */
 
@@ -40,8 +40,8 @@ export interface PendingSend {
 export interface SendFailureState {
   kind: SendFailure;
   /** Only for a failure that is neither the server's nor the listener's
-   * (failureMessage's words). Those two get r50's lines, which the box
-   * writes with the recipient's cursor label (r61 answer 3). */
+   * (failureMessage's words). Those two get the design lines, which the box
+   * writes with the recipient's cursor label. */
   line: string | null;
   /** The failed send's id: Try again with the same words reuses it, so the server keeps one row. */
   clientId: string;
@@ -50,7 +50,7 @@ export interface SendFailureState {
   to: string;
 }
 
-/** r61 answer 4: a question with no options, answered from the composer.
+/** A question with no options, answered from the composer.
  * Sending answers it (question.answered), never a thread message. */
 export interface AnsweringState {
   setId: string;
@@ -58,8 +58,8 @@ export interface AnsweringState {
   question: string;
 }
 
-/** Why the "Answering" chip went while the person typed (GM r79.6, r89.3;
- * 'gone' for a set this tab no longer holds, GM r94.1).
+/** Why the "Answering" chip went while the person typed (design;
+ * 'gone' for a set this tab no longer holds, design).
  * `held`: the next Enter (or Send) only says so; the one after posts. */
 export interface AnswerGone {
   cause: AnswerGoneCause;
@@ -75,7 +75,7 @@ interface PersonThreadState {
   listeners: ChannelListener[];
   /** The last event of each agent session (by cursor key): when, and its action line. */
   activity: Record<string, SessionActivity>;
-  /** Kept in tab memory across collapse, view changes and failures (r50). */
+  /** Kept in tab memory across collapse, view changes and failures. */
   draft: string;
   /** The nodes riding along with this draft, picked when typing started. */
   contextIds: string[];
@@ -83,7 +83,7 @@ interface PersonThreadState {
   chosen: string | null;
   /** Replies that came while the panel was closed. */
   unread: number;
-  /** GM r100.3: replies saved in another project's thread (the message they
+  /** Design: replies saved in another project's thread (the message they
    * answer is there), by project: that thread's unread once it opens. */
   unreadElsewhere: Record<string, number>;
   /** The live region's latest words, once per reply. */
@@ -91,7 +91,7 @@ interface PersonThreadState {
   pending: PendingSend | null;
   failure: SendFailureState | null;
   answering: AnsweringState | null;
-  /** GM r79.6, r89.3: the question being answered went (withdrawn, or answered
+  /** Design: the question being answered went (withdrawn, or answered
    * or closed in another tab) with words in the draft: the composer's line. */
   answerGone: AnswerGone | null;
   removeContext: () => void;
@@ -164,8 +164,8 @@ const countedElsewhere = new Map<string, Set<string>>();
 export function receiveRows(projectId: string | null, incoming: ThreadRow[]): void {
   const state = usePersonThreadStore.getState();
   if (state.projectId !== null && projectId !== null && projectId !== state.projectId) {
-    // A reply in another project's thread (GM r100.3): unread there, once,
-    // by its id (review 4 NIT-6: a re-sent copy, a newer rev, counts once).
+    // A reply in another project's thread (design): unread there, once,
+    // by its id (a re-sent copy, a newer rev, counts once).
     // Tied to the count: none held there (none yet, or read since) starts afresh.
     const seen = (projectId in state.unreadElsewhere && countedElsewhere.get(projectId)) || new Set<string>();
     countedElsewhere.set(projectId, seen);
@@ -192,7 +192,7 @@ export function receiveRows(projectId: string | null, incoming: ThreadRow[]): vo
 export function receiveSync(projectId: string | null, rows: ThreadRow[]): void {
   const state = usePersonThreadStore.getState();
   const same = projectId === state.projectId;
-  // A reply that landed while the socket was down (review 1, LOW-3) counts as
+  // A reply that landed while the socket was down counts as
   // unread with the panel closed; a burst after a reconnect isn't spoken.
   const known = new Set(state.rows.map((row) => row.id));
   const missed = same && state.rows.length > 0 && !useUIStore.getState().agentLogOpen
@@ -200,19 +200,19 @@ export function receiveSync(projectId: string | null, rows: ThreadRow[]): void {
   const { [projectId ?? '']: waiting = 0, ...elsewhere } = state.unreadElsewhere;
   usePersonThreadStore.setState({
     projectId,
-    // The same thread again (a reconnect, a stale hello): merged, never replaced (LOW-4).
+    // The same thread again (a reconnect, a stale hello): merged, never replaced.
     rows: same ? syncRows(state.rows, rows) : rows,
     // Another project's thread: nothing of the old one is unread, but what
-    // came for this one while another was open is (GM r100.3).
+    // came for this one while another was open is (design).
     unread: same ? state.unread + missed : useUIStore.getState().agentLogOpen ? 0 : waiting,
     unreadElsewhere: same ? state.unreadElsewhere : elsewhere,
   });
 }
 
-/** Bubble forms that never reach the thread (GM r79.2): "changed 1", "moved 2", "no change"... */
+/** Bubble forms that never reach the thread (design): "changed 1", "moved 2", "no change"... */
 const TERSE = /\b(?:added|connected|changed|renamed|moved|removed|disconnected) \d|\bmade \d+ ready\b|^\d+ placeholders?\b|^no change$/;
 
-/** An event's words for the working line (GM r79.2): its say, else its log,
+/** An event's words for the working line (design): its say, else its log,
  * else its did line as the Agent log words it ("Changed “Hero shot”"); never
  * a terse summary. `nebula` is true when the words are Nebula's own (the
  * backend's `log`, not the agent's `say`): the working line curls those and
@@ -237,9 +237,9 @@ export function noteActivity(event: AgentPresenceEvent): void {
   if (!key) return;
   const at = Number.isFinite(event.at) && event.at > 0 ? event.at : now();
   const state = usePersonThreadStore.getState();
-  // GM r79.1: a reply's own cursor say ("Replied on …") is not an action. The
-  // say is the reply's first sentence with its whitespace collapsed (review 2
-  // LOW-3: "Made  it warmer."), so both sides are compared collapsed.
+  // Design: a reply's own cursor say ("Replied on …") is not an action. The
+  // say is the reply's first sentence with its whitespace collapsed ("Made it warmer."), so both
+  // sides are compared collapsed.
   const say = typeof event.say === 'string' ? oneSpace(event.say.replace(/…$/, '')) : '';
   if (event.did?.verb?.startsWith('Replied') && say && state.rows.some((row) => row.kind === 'reply'
     && row.sessionKey === key && oneSpace(row.text ?? '').startsWith(say))) return;
@@ -270,7 +270,7 @@ wsClient.subscribe((event) => {
   }
 });
 
-// Opening the panel reads every reply (r50: "Opening the panel clears it").
+// Opening the panel reads every reply ("Opening the panel clears it").
 useUIStore.subscribe((state, previous) => {
   if (state.agentLogOpen && !previous.agentLogOpen && usePersonThreadStore.getState().unread > 0) {
     usePersonThreadStore.getState().markRead();
@@ -278,7 +278,7 @@ useUIStore.subscribe((state, previous) => {
 });
 
 /** Which listener gets a message, and whether the composer is locked: the
- * Message box's, and the shortcut sheet's "/" label (GM r94.2), one source. */
+ * Message box's, and the shortcut sheet's "/" label (design), one source. */
 export function useMessageAvailability(): Availability {
   const listeners = usePersonThreadStore((s) => s.listeners);
   const chosen = usePersonThreadStore((s) => s.chosen);

@@ -14,10 +14,10 @@ import { clearLineOnPromote } from '../lib/clearsOnPromote';
 import { personUnconfirmed } from '../lib/personSession';
 
 /**
- * Questions agents asked the person (Q125 item 1), from the socket:
+ * Questions agents asked the person, from the socket:
  * `questionsSync` after hello, `questionsOpened`, `questionsClosed`. Kept by
  * set id; `openByAgent` reads them by agent for the Agents panel to come
- * (Q125 item 2: an agent's state as the person sees it). Imported at startup
+ * (an agent's state as the person sees it). Imported at startup
  * (App.tsx) so no question is missed before the Updates corner's chunk lands.
  *
  * The person's answers are drafts kept per set until Send or Dismiss, so a
@@ -205,7 +205,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
 
     send: async (setId) => {
       const entry = get().sets[setId];
-      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      // Design: a tab not confirmed as the person sends nothing (its form's buttons lock).
       if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       const inputs = answerInputs(entry.view, get().drafts[setId]);
       if (inputs.length === 0) return false;
@@ -214,7 +214,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
         await answerQuestions(setId, entry.answerKey, inputs);
       } catch (error) {
         // The set closed first (withdrawn, or answered in another tab): it is
-        // closed here too, and nothing went out (GM r79.6's race). The
+        // closed here too, and nothing went out (design's race). The
         // composer then says what happened; the row shows its outcome.
         const already = error instanceof RequestFailedError && error.status === 409
           ? /already (answered|dismissed|withdrawn)/.exec(String(error.detail ?? '')) : null;
@@ -224,7 +224,8 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
         }
         const line = failureMessage(error, "Couldn’t send the answers.");
         set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
-        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        // PR #204 (design): a refusal only for not being connected as the person goes on the
+        // promote.
         clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.answer
           () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
@@ -237,7 +238,7 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
 
     dismiss: async (setId) => {
       const entry = get().sets[setId];
-      // GM r7 (1): a tab not confirmed as the person sends nothing (its form's buttons lock).
+      // Design: a tab not confirmed as the person sends nothing (its form's buttons lock).
       if (!answerable(entry) || get().busy[setId] || personUnconfirmed()) return false;
       set((state) => ({ busy: { ...state.busy, [setId]: true }, errors: without(state.errors, setId) }));
       try {
@@ -245,7 +246,8 @@ export const useAgentQuestionsStore = create<AgentQuestionsState>((set, get) => 
       } catch (error) {
         const line = failureMessage(error, "Couldn’t dismiss the questions.");
         set((state) => ({ busy: without(state.busy, setId), errors: { ...state.errors, [setId]: line } }));
-        // GM, #204 r3: a refusal only for not being connected as the person goes on the promote.
+        // PR #204 (design): a refusal only for not being connected as the person goes on the
+        // promote.
         clearLineOnPromote(error, () => get().errors[setId], line, // clears-on-promote: questions.dismiss
           () => set((state) => ({ errors: without(state.errors, setId) })));
         return false;
@@ -265,7 +267,7 @@ export function canSend(state: Pick<AgentQuestionsState, 'sets' | 'drafts'>, set
   return answerable(entry) && answerInputs(entry.view, state.drafts[setId]).length > 0;
 }
 
-/** Each agent's open sets, oldest first: what "Needs you" lists (Q125 item 2). */
+/** Each agent's open sets, oldest first: what "Needs you" lists. */
 export function openByAgent(state: Pick<AgentQuestionsState, 'sets'>): Record<string, QuestionSetView[]> {
   const byAgent: Record<string, QuestionSetView[]> = {};
   const open = Object.values(state.sets).map((entry) => entry.view).filter((view) => view.status === 'open');

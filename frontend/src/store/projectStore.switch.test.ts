@@ -114,7 +114,7 @@ describe('following an agent’s project switch', () => {
     expect(useProjectStore.getState()).toMatchObject({ activeProject: { id: 'p1' }, switchNotice: null });
   });
 
-  describe('GM r108 D1: the toast clears once its way back is the open project, by any route', () => {
+  describe('the toast clears once its way back is the open project, by any route (design)', () => {
     async function followed() {
       socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
         projectSwitch: { ...agentSwitch, created: false } } as never);
@@ -161,12 +161,12 @@ describe('following an agent’s project switch', () => {
     await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
     expect(api.recoverProject).toHaveBeenCalledTimes(1);
     expect(useProjectStore.getState().switchNotice?.keptCopy).toBe(true);
-    // GM - Design, 2026-10-24: "Claude Code made “{name}”. Edits saved as a copy."
+    // Design: "Claude Code made “{name}”. Edits saved as a copy."
     expect(switchMessage(useProjectStore.getState().switchNotice!))
       .toBe('Claude Code made “Agent sketches”. Edits saved as a copy.');
   });
 
-  // GM - Design, 2026-10-24 (the project is on screen, so "made" already says
+  // Design, 2026-10-24 (the project is on screen, so "made" already says
   // it opened): three lines, verbatim. The opened-with-no-copy line and the
   // agent's name are unchanged.
   it.each([
@@ -174,7 +174,7 @@ describe('following an agent’s project switch', () => {
     [true, true, 'Claude Code made “Agent sketches”. Edits saved as a copy.'],
     [false, false, 'Claude Code opened “Agent sketches”.'],
     [true, false, 'Claude Code made “Agent sketches”.'],
-  ])('the toast for created=%s, keptCopy=%s reads GM\'s line', (created, keptCopy, line) => {
+  ])('the toast for created=%s, keptCopy=%s reads the design line', (created, keptCopy, line) => {
     expect(switchMessage({ actorName: 'Claude Code', created, projectName: 'Agent sketches',
       previousProjectId: 'p1', previousProjectName: 'Loop', keptCopy })).toBe(line);
   });
@@ -207,7 +207,7 @@ describe('following an agent’s project switch', () => {
     expect(useProjectStore.getState().error).toContain('another tab');
   });
 
-  it('PR #198 fix round 12 (GM r20 answer 3): a scene save refused because another tab switched project: only the outdated-workspace banner says it', async () => {
+  it('PR #198 (design): a scene save refused because another tab switched project: only the outdated-workspace banner says it', async () => {
     const notify = vi.fn();
     useGraphStore.setState({ notify, undoNotice: null, messageNotice: null, unsavedScenes: {}, nodes: [{
       id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
@@ -243,7 +243,7 @@ describe('following an agent’s project switch', () => {
     }
   });
 
-  it('PR #198 fix round 13 (review 12, M-1): another tab switches while a scene edit is unsaved, though the autosave already sent it: the edits are kept as a recovered copy', async () => {
+  it('PR #198: another tab switches while a scene edit is unsaved, though the autosave already sent it: the edits are kept as a recovered copy', async () => {
     const notify = vi.fn();
     useGraphStore.setState({ notify, undoNotice: null, messageNotice: null, unsavedScenes: {}, nodes: [{
       id: 'n1', type: 'cinemaSceneNode', position: { x: 0, y: 0 },
@@ -284,7 +284,7 @@ describe('following an agent’s project switch', () => {
     }
   });
 
-  it('PR #198 fix round 14 (GM r22 Q2): once Try again has saved them, a neutral notice with [Open] takes the banner’s place and names the copy', async () => {
+  it('PR #198 (design): once Try again has saved them, a neutral notice with [Open] takes the banner’s place and names the copy', async () => {
     useGraphStore.setState({ notify: vi.fn(), undoNotice: null, messageNotice: null });
     setPrompt('typed before a switch elsewhere');
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
@@ -307,7 +307,7 @@ describe('following an agent’s project switch', () => {
     expect(useProjectStore.getState().copyNotice).toBeNull();
   });
 
-  it('PR #198 fix round 14 (GM r22 Q2): with nothing unsaved, Try again only reloads: no saved-as notice', async () => {
+  it('PR #198 (design): with nothing unsaved, Try again only reloads: no saved-as notice', async () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     expect(useProjectStore.getState().error).toBe('The active project changed in another tab. Reload projects to continue.');
     vi.mocked(api.recoverProject).mockClear();

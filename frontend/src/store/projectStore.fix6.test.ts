@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fix round 6 of PR #199 (GM r7, "attribute the row to the agent"; review 6,
-// N-3): the waiting canvas's held and refused lines are the agent's own rows
-// in the Agent log, with its name and colour, so filtering the log to Codex
-// shows what Codex tried. An unnamed agent's stays Nebula's. And the
+// PR #199 (design: "attribute the row to the agent"): the waiting canvas's
+// held and refused lines are the agent's own rows in the Agent log, with its
+// name and colour, so filtering the log to Codex shows what Codex tried. An
+// unnamed agent's stays Nebula's. And the
 // listing's restore verdict, counted lines and saved names reach the store.
 
 vi.mock('../lib/wsClient', () => ({
@@ -38,7 +38,7 @@ beforeEach(() => {
   subscribeProjectAutosave();
 });
 
-describe("N-3: the Agent log row is the agent's", () => {
+describe("the Agent log row is the agent's", () => {
   it("files Codex's refused change under Codex", () => {
     send({ type: 'projectsChanged', change: 'canvasHoldRefused', projectId: null,
       canvasHeld: { action: 'change', agent: 'Codex', agentId: 'ext:codex', color: '#5B9DFF' } });
@@ -65,7 +65,7 @@ describe("N-3: the Agent log row is the agent's", () => {
   });
 });
 
-describe("the listing's round 6 fields reach the store", () => {
+describe("the listing's fields reach the store", () => {
   it('keeps the waiting canvases, the unreadable note and every filed name', async () => {
     listProjects.mockResolvedValueOnce({ projects: [], trash: [], activeProjectId: null, workspaceRevision: 'r2',
       paramsVersion: GRAPH_PARAMS_VERSION, projectLimit: 3,
@@ -78,13 +78,13 @@ describe("the listing's round 6 fields reach the store", () => {
     const state = useProjectStore.getState();
     expect('restoreRoom' in state).toBe(false);
     expect(state.canvasNotFiled?.canvases).toEqual([{ name: 'Delta' }, { name: null }]);
-    // `at` keys the person's × (GM r9, fix round 8).
+    // `at` keys the person's × (design).
     expect(state.canvasHeldUnreadable).toEqual({ count: null, at: '2026-10-28T10:00:00Z' });
     expect(state.canvasSaved?.filed?.map((row) => row.name)).toEqual(['Recovered canvas', 'Recovered canvas 2']);
   });
 });
 
-describe('GM r17 (fix round 13): each waiting canvas keeps its own count', () => {
+describe('each waiting canvas keeps its own count', () => {
   it("the listing's per-canvas `deletes` reach the store, so each line counts its own", async () => {
     listProjects.mockResolvedValueOnce({ projects: [], trash: [], activeProjectId: null, workspaceRevision: 'r3',
       paramsVersion: GRAPH_PARAMS_VERSION, projectLimit: 3,

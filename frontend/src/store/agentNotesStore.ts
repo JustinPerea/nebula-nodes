@@ -59,7 +59,7 @@ interface AgentNotesState {
   error: string | null;
   /** Bumped by every canvas socket message, so a slower fetch never overwrites a newer push. */
   canvasSeq: number;
-  /** The board whose Updates show now (Moodboard Studio on it, Q113 c), or
+  /** The board whose Updates show now (Moodboard Studio on it), or
    *  null. Only its added updates drop a card; another board's just wait.
    *  Set, and its list loaded, by the deferred corner (lib/agentNotesBoard.ts). */
   boardInView: string | null;
@@ -121,16 +121,16 @@ interface ReadWanted {
 }
 
 /**
- * PR #204 round 13 (review 10 held-calls MEDIUM-1): the mark-read (POST …/agent-notes/read) is
+ * PR #204: the mark-read (POST …/agent-notes/read) is
  * the person's alone. On a tab that isn't connected as the person (held, demoted, or before the
  * socket's first answer) nothing is sent: one read per list waits, the newest `upTo` and every
  * id asked for, and goes once on the promote (lib/personWork whenPerson). No line: the updates
  * simply stay unread until the tab connects. A read refused after it went out (a demote while it
  * was in flight, or the promote's own send refused again) joins the same wait, with no line either
- * (GM, #204 r23 item 5): a mark-read is never the person's own press, the page's because line says
+ * PR #204 (design): a mark-read is never the person's own press, the page's because line says
  * why, and nothing was marked read in the tab, so the updates simply stay unread.
  *
- * Round 14 (review 11 LOW-1): `covered` keeps the unread updates an `upTo` read covered when it was
+ * `covered` keeps the unread updates an `upTo` read covered when it was
  * held. An agent's next "since its last turn" update replaces its previous one, so the `upTo` may
  * have left the list by the promote; the read then goes for those it covered that are still there.
  */
@@ -168,7 +168,7 @@ function holdRead(surface: AgentNotesSurface, key: string, wanted: ReadWanted): 
 
 /** Send a list's waiting read, once: what is still unread of it, as one `upTo` (or all) read and
  * one read of the ids it doesn't cover. An `upTo` that has left the list goes as the ids it
- * covered that are still listed (review 11 LOW-1). */
+ * covered that are still listed. */
 function sendHeldRead(key: string): void {
   const held = heldReads.get(key);
   heldReads.delete(key);
@@ -190,7 +190,7 @@ function sendHeldRead(key: string): void {
 }
 
 /**
- * Round 14 (review 11 NIT-3): the reads on their way, by list and what they read, so the same read
+ * The reads on their way, by list and what they read, so the same read
  * asked again while one is in flight (the promote's held read, then the list opened again at once)
  * waits for that one instead of going twice.
  */
@@ -199,21 +199,21 @@ const readKey = (key: string, wanted: ReadWanted) =>
   `${key}|${wanted.ids ? `ids:${[...wanted.ids].sort().join(',')}` : wanted.upTo ? `upTo:${wanted.upTo}` : 'all'}`;
 
 /**
- * Send a read; the Updates read only when the server says so (GM, #204 r3 item 1: the
+ * Send a read; the Updates read only when the server says so (design, PR #204: the
  * header says "all read" for real or not at all), from its `ids` and count. On failure
  * nothing was read, so nothing changes but the line. A refusal only because this tab
- * isn't the person's shows nothing (GM, #204 r23 item 5): the read joins the list's one
+ * isn't the person's shows nothing (design, PR #204): the read joins the list's one
  * wait and goes once on the promote, however many times it was refused.
  */
 async function sendRead(surface: AgentNotesSurface, key: string, wanted: ReadWanted): Promise<void> {
   const { getState, setState } = useAgentNotesStore;
   if (personUnconfirmed()) {
-    // Not connected as the person: nothing goes, and no line (round 13).
+    // Not connected as the person: nothing goes, and no line.
     holdRead(surface, key, wanted);
     whenPerson(`agentNotes.read:${key}`, () => sendHeldRead(key));
     return;
   }
-  // The same read already on its way: wait for it instead of sending it twice (NIT-3).
+  // The same read already on its way: wait for it instead of sending it twice.
   const id = readKey(key, wanted);
   const going = readsInFlight.get(id);
   if (going) return going;
@@ -230,7 +230,7 @@ async function sendRead(surface: AgentNotesSurface, key: string, wanted: ReadWan
     answered();
     if (isPersonRefusal(error)) {
       // Refused only because this tab isn't connected as the person (a demote while it was in
-      // flight): no line, nothing marked read here; it re-joins the list's one wait (round 14).
+      // flight): no line, nothing marked read here; it re-joins the list's one wait.
       holdRead(surface, key, wanted);
       afterPersonRefusal(`agentNotes.read:${key}`, error, () => sendHeldRead(key));
     } else {
@@ -376,7 +376,7 @@ export const useAgentNotesStore = create<AgentNotesState>((set, get) => ({
     const now = new Date().toISOString();
     set((state) => ({
       arrivals: state.arrivals.filter((a) => a.id !== id),
-      // Review 5 LOW-8 (round 7): the header's unread count is the server's (GM r4), never the
+      // The header's unread count is the server's (design), never the
       // tab's hope: the note greys at once, the count waits for the answer.
       lists: withList(state.lists, key, (list) => ({
         ...list, notes: list.notes.map((n) => (n.id === id ? { ...n, dismissedAt: n.dismissedAt ?? now } : n)),

@@ -6,11 +6,11 @@ import { selectCanvasList, useAgentNotesStore } from './agentNotesStore';
 import { proposalAgentColor, useAssetProposalsStore, type AssetProposalEntry } from './assetProposalsStore';
 
 /**
- * GM r34 (PR #200 fix round 23, review 19 NIT-4): while this tab isn't
+ * PR #200 (design): while this tab isn't
  * connected as the person, a new asset proposal reaches it only as its
  * Update (the proposal and its accept key go to the person's sockets only,
  * main.py `broadcast_browser`). Its strip shows a placeholder card for it,
- * built from the Update alone: who asks (in the agent's own colour, GM r35),
+ * built from the Update alone: who asks (in the agent's own colour, design),
  * the real card's header, and one line. No thumbnails, no buttons, no
  * request path. The person's sync after
  * the promote brings the real card into the same place; an Update resolved
@@ -19,22 +19,23 @@ import { proposalAgentColor, useAssetProposalsStore, type AssetProposalEntry } f
 export interface HeldProposal {
   proposalId: string;
   agentName: string;
-  /** GM r35: the asking agent's identity colour, as on the real card (who asks, not a status). */
+  /** Design: the asking agent's identity colour, as on the real card (who asks, not a status). */
   agentColor: string;
   header: string;
   at: number;
 }
 
-/** An Update's held Review (and an asset proposal's lock): "window" in the app (PR #204 round 10,
- * review 8 NIT-2), through the one lock line (lib/errorCopy personLockLine). */
+/** An Update's held Review (and an asset proposal's lock): "window" in the app (PR #204), through
+ * the one lock line (lib/errorCopy personLockLine). */
 export const heldProposalLine = (): string => personLockLine('review this');
-/** GM, 2026-10-29: a question set's held action (the Agents panel's Needs-you row), worded as the line above. */
+/** Design: a question set's held action (the Agents panel's Needs-you row), worded as the line
+ * above. */
 export const heldQuestionsLine = (): string => personLockLine('answer this');
 
 const NO_NOTES: readonly AgentNote[] = [];
 
 /** A ref's count of changes: 1 to 999, anything else (absent, 0) one change
- * (PR #202 review 1 NIT-2: a real ask has at least one edit). */
+ * (a real ask has at least one edit). */
 function changesOf(ref: AgentNoteProposal | null | undefined): number {
   const count = ref?.changes;
   return typeof count === 'number' && Number.isInteger(count) && count >= 1 && count <= 999 ? count : 1;
@@ -42,7 +43,7 @@ function changesOf(ref: AgentNoteProposal | null | undefined): number {
 
 /** When the ask was made, for ordering as the real cards and the promoted
  * line order (by the proposal's createdAt): the ref's `since`, which a
- * fallback to an older ask refreshes (PR #202 review 2 LOW-A); an older ref
+ * fallback to an older ask refreshes (PR #202); an older ref
  * without it, the Update's time. */
 function askedAt(note: AgentNote): number {
   if (typeof note.proposal?.since === 'number') return note.proposal.since;
@@ -52,17 +53,16 @@ function askedAt(note: AgentNote): number {
 
 /** Oldest ask first, the order the held placeholders and lines and the
  * promoted cards and line share; two asks made in the same millisecond go by
- * their proposal ids, so they don't swap on the promote either (PR #202
- * review 3 NIT-1). */
+ * their proposal ids, so they don't swap on the promote either (PR #202). */
 export function askedOrder(left: { at: number; id: string }, right: { at: number; id: string }): number {
   if (left.at !== right.at) return left.at - right.at;
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
 /** The real card's header for each kind, from the Update's structured ref
- * (agent_notes.proposal_detail), never its text: review 20 NIT-3, an agent's
- * name in the text could spoof a count. A cover says which kind (GM, PR #200
- * follow-up 2); a ref without it keeps GM r34's "proposes a new cover". */
+ * (agent_notes.proposal_detail), never its text: an agent's name in the
+ * text could spoof a count. A cover says which kind (design, PR #200); a ref
+ * without it keeps design's "proposes a new cover". */
 function headerFor(kind: AssetProposalKind, ref: AgentNoteProposal | null | undefined): string {
   if (kind === 'moodboard') return 'asks to turn on “Moodboard notes to generators”';
   if (kind === 'commons') {
@@ -99,7 +99,7 @@ export function useHeldProposals(kind: AssetProposalKind, targetId: string): Hel
     [notes, proposals, awaitingSync, kind, targetId]);
 }
 
-/** GM, PR #202 r1: the Commons proposals line while this tab is held. One
+/** PR #202 (design): the Commons proposals line while this tab is held. One
  * entry per open Update, each standing for one proposal, worded as the
  * promoted line words one proposal; CommonsProposalsLine merges them per
  * reference as it does the proposals, with no Review until the promote. The

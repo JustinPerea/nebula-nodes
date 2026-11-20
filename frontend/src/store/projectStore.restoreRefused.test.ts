@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fix round 12 of PR #199 (Justin, 2026-10-29): after a delete freed the
-// slot the waiting canvas then took, Undo may pass the project limit, so it
-// is never refused by it (rounds 4-11 refused it with GM r6's line in the
-// Undo toast's place). Any other refusal still says so in the banner.
+// PR #199: after a delete freed the slot the waiting canvas then took, Undo
+// may pass the project limit, so it is never refused by it (it used to be
+// refused with the design line in the Undo toast's place). Any other refusal
+// still says so in the banner.
 
 vi.mock('../lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },

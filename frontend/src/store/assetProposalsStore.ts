@@ -23,7 +23,7 @@ export interface AssetProposalEntry {
   closing?: Exclude<AssetProposalStatus, 'open'>;
 }
 
-/** Review on a proposal's Update (Q92 a): the strip for this target brings
+/** Review on a proposal's Update: the strip for this target brings
  * itself into view and takes it (lib/assetProposalReview.ts, deferred). */
 export interface ReviewRequest {
   kind: AssetProposalKind;
@@ -34,7 +34,7 @@ export interface ReviewRequest {
 interface AssetProposalsState {
   proposals: Record<string, AssetProposalEntry>;
   review: ReviewRequest | null;
-  /** GM r34 (PR #200 fix round 23, review 19 NIT-4): true from the moment the
+  /** PR #200 (design): true from the moment the
    * person gate holds until the person's next assetProposalSync. Meanwhile
    * a new proposal's Update has no card here (its frame is person-only), so
    * the strip shows a placeholder for it (store/heldAssetProposals.ts); the
@@ -63,7 +63,7 @@ const exitTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** The agent's identity colour as a proposal card draws it (its dot and
  * name): it goes into CSS, so only plain hex passes. The held placeholder
- * uses it too (GM r35), with the same agent's colour from its Update. */
+ * uses it too (design), with the same agent's colour from its Update. */
 export function proposalAgentColor(color: unknown): string {
   return typeof color === 'string' && SAFE_COLOR.test(color) ? color : '#5B9DFF';
 }
@@ -178,7 +178,7 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
   const store = useAssetProposalsStore;
   const entry = store.getState().proposals[id];
   if (!entry || entry.closing || store.getState().pending[id]) return;
-  // Review 5 LOW-5 (round 7): no decision is sent while this tab isn't connected as the person.
+  // No decision is sent while this tab isn't connected as the person.
   if (personUnconfirmed()) return;
   store.setState((state) => ({ pending: { ...state.pending, [id]: verb }, errors: without(state.errors, id) }));
   try {
@@ -189,12 +189,12 @@ async function decide(id: string, verb: 'accept' | 'reject', reason?: string): P
   } catch (error) {
     // A 409 means it no longer fits; the backend closes it and says so over the socket.
     // A 409 whose reason is already Nebula's whole sentence about this accept (the moodboard that didn't
-    // take the change, design r161) is the line itself: no "Couldn’t accept the proposal." over it.
+    // take the change, design) is the line itself: no "Couldn’t accept the proposal." over it.
     const message = verb === 'accept' && error instanceof AssetProposalError && error.status === 409
       && error.reason.startsWith(ACCEPT_REFUSED_LEAD)
       ? error.reason : failureMessage(error, `Couldn’t ${verb} the proposal.`);
     store.setState((state) => ({ pending: without(state.pending, id), errors: { ...state.errors, [id]: message } }));
-    // Review 17 LOW-1, through GM's #204 round 3 mechanism: the person gate's
+    // Through the PR #204 mechanism: the person gate's
     // refusal goes when the server promotes the tab, while it is still this error.
     clearLineOnPromote(error, () => store.getState().errors[id], message, // clears-on-promote: asset-proposals.decide
       () => store.setState((state) => ({ errors: without(state.errors, id) })));
