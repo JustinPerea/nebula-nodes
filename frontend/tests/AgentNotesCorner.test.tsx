@@ -629,5 +629,69 @@ describe('no card for a proposal the bar already shows (design)', () => {
       expect(api.markAgentNotesRead).not.toHaveBeenCalled();
       expect(chip().querySelector('.agent-notes-chip__count')!.textContent).toBe('1');
     });
+
+    describe('with the list open', () => {
+      const hold = async (ids: string[], proposal = 'cp_1') => {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+        useCanvasProposalsStore.setState({ barShownId: proposal });
+        render(<AppAgentNotes />);
+        sync([]);
+        ids.forEach((id, i) => added(proposalNote(id, proposal), i + 1));
+        tick(1000);
+        fireEvent.click(chip());
+        // Let the open's own read answer, so a later read is not folded into it.
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        api.markAgentNotesRead.mockClear();
+        // The server answers a read as it does: the ids it read, and the count left.
+        api.markAgentNotesRead.mockImplementation(async (_surface: unknown, upTo?: string, ids?: string[]) => {
+          const read = ids ?? (upTo ? [upTo] : []);
+          act(() => { emit({ type: 'agentNotes', surface: 'canvas', op: 'read', projectId: 'p1', ids: read, unread: 0, at: 9 }); });
+          return { ids: read, unread: 0, projectId: 'p1' };
+        });
+      };
+      const header = () => screen.getByRole('dialog', { name: 'Updates' }).textContent ?? '';
+
+      it('visible after the proposal expired: read as a live arrival would be, and counted', async () => {
+        vi.useFakeTimers();
+        await hold(['an_1']);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        setVisibility('visible');
+        tick(100);
+        expect(api.markAgentNotesRead).toHaveBeenCalledWith({ kind: 'canvas' }, 'an_1');
+        expect(header()).toContain('1 new');
+      });
+
+      it('several hidden/visible flips: no held id is lost or counted twice', async () => {
+        vi.useFakeTimers();
+        await hold(['an_1']);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        setVisibility('visible');
+        tick(100);
+        setVisibility('hidden');
+        useCanvasProposalsStore.setState({ barShownId: 'cp_2' });
+        added(proposalNote('an_2', 'cp_2'), 2);
+        tick(100);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        setVisibility('visible');
+        tick(100);
+        setVisibility('hidden');
+        setVisibility('visible');
+        tick(100);
+        const reads = api.markAgentNotesRead.mock.calls.map((call) => call[1]);
+        expect(reads).toEqual(['an_1', 'an_2']);
+        expect(header()).toContain('2 new');
+      });
+
+      it('a note deleted while held is neither counted nor marked', async () => {
+        vi.useFakeTimers();
+        await hold(['an_1']);
+        act(() => { useCanvasProposalsStore.setState({ barShownId: null }); });
+        emit({ type: 'agentNotes', surface: 'canvas', op: 'dismissed', projectId: 'p1', ids: ['an_1'], unread: 0, at: 5 });
+        setVisibility('visible');
+        tick(100);
+        expect(api.markAgentNotesRead).not.toHaveBeenCalled();
+        expect(header()).not.toContain('1 new');
+      });
+    });
   });
 });

@@ -403,6 +403,12 @@ function markSeenElsewhere(sections: AgentNotesCornerSection[], ids: string[]): 
   }
 }
 
+/** An Update that lands while the list is open is read as it arrives: one read up to the newest of these, in their list. */
+function markArrivedRead(surface: AgentNotesSurface, ids: string[]): void {
+  if (ids.length === 0) return;
+  void useAgentNotesStore.getState().markRead(surface, ids[ids.length - 1]);
+}
+
 /** Lists that are each newest first, merged newest first by time; each list keeps its own order. */
 function mergeNewestFirst(lists: AgentNote[][]): AgentNote[] {
   const filled = lists.filter((notes) => notes.length > 0);
@@ -502,7 +508,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
         const ids = taken.filter((id) => !seen.includes(id));
         if (ids.length === 0) continue;
         arrived.push(...ids);
-        if (openRef.current) void store.markRead(section.surface, ids[ids.length - 1]);
+        if (openRef.current) markArrivedRead(section.surface, ids);
       }
       if (arrived.length === 0) return;
       setPop((value) => value + 1);
@@ -528,7 +534,15 @@ export function AgentNotesCorner({ sections, agents = null }: {
       });
       if (missed.length === 0) return;
       setPop((value) => value + 1);
-      if (openRef.current) setNewCount((value) => value + missed.length);
+      if (openRef.current) {
+        // Same as a live arrival while the list is open: read, and counted.
+        const { lists } = useAgentNotesStore.getState();
+        for (const section of sectionsRef.current) {
+          const mine = missed.filter((id) => (lists[section.listKey] ?? section.list).notes.some((n) => n.id === id));
+          markArrivedRead(section.surface, mine);
+        }
+        setNewCount((value) => value + missed.length);
+      }
       else setQueue((current) => [...current, ...missed]);
     };
     const unsubscribe = useAgentNotesStore.subscribe(handle);
