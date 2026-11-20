@@ -24,14 +24,25 @@ before merge. The agent merges, and Justin checks the result afterwards.
 
 ## High
 
-The tier controls themselves are high tier: `RISK-TIERS.md`, `.claude/high-tier-paths`, `.claude/settings.json`, `.claude/hooks/` and `.github/workflows/`. A change to them can weaken every other gate.
+The tier controls themselves are high tier: `RISK-TIERS.md`,
+`.claude/high-tier-paths`, `.claude/settings.json`, `.claude/hooks/` and
+`.github/workflows/`. A change to them can weaken every other gate.
 
 Needs: everything medium needs, then one final adversarial review of the whole
-diff in a fresh context, with every finding it raises fixed or answered before
-merge. The agent then merges without asking Justin. His word, 2026-11-20: "once
-a PR has been checked and is okay to go, merge it into main without asking me.
-This includes high-tier paths." The PR description says which reviews ran. A
-merge that needs `--admin` still needs his OK for that PR.
+diff in a fresh context. Each finding is fixed, or answered in the PR
+description with the reason it stands. The merging agent lists the reviews that
+ran in the PR description, merges without asking Justin, and says afterwards
+what it merged so he can check the result. In his words, 2026-11-20: "once a PR
+has been checked and is okay to go, merge it into main without asking me. This
+includes high-tier paths."
+
+That covers the merge. A change that is itself his decision needs his OK before
+it is built: raising a spend or usage limit, changing what spends money,
+building something he hasn't approved, or a destructive data migration. Once he
+has given it, the merge follows the rule above. His word is about merges, not
+deploys, releases or anything published. A merge that needs `--admin` needs his
+OK for that PR, in his own words in his own message, with the date and his
+words in the PR description.
 
 These paths are high tier:
 
@@ -53,11 +64,13 @@ These paths are high tier:
 
 `.claude/high-tier-paths` holds the same list as globs (Python `fnmatch`, where
 `*` also matches `/`), one per line, matched against repo-relative paths. A
-guard hook reads it and lets `gh pr merge` through on a diff that touches one of
-them only when GitHub shows the PR open, not a draft, every check finished and
-passing, and the merge state clean. The guard sees CI and mergeability, not the
-reviews above, so those stay the merging agent's job. Keep the two lists in step
-when you change either.
+guard hook on Justin's machine reads it before `gh pr merge`. On a diff that
+touches one of these paths it refuses the merge unless GitHub shows the PR open,
+not a draft, every check finished and passing, and the merge state clean. When
+it can't read the PR's files or checks, it lets the merge through. It sees CI
+and mergeability, not the reviews above, and runs only on his machine, so the
+reviews stay the merging agent's job. Keep the two lists in step when you change
+either.
 
 ## Verification hooks
 
