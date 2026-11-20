@@ -50,7 +50,14 @@ function reading(errors: Pick<ExecutionValidationError, 'message' | 'person' | '
 }
 
 /** A Cinema shot whose run the check refused, with no node named. */
-export const SHOT_NOT_STARTED_LINE = 'Nothing ran. Check the scene’s inputs and API keys, then generate the shot again.';
+export const SHOT_NOT_STARTED_LINE = 'Nebula couldn’t start the shot. Check the scene’s inputs and API keys, then generate it again.';
+/** A shot in a run where another node has the fix to make (design). OTHER_NODE_LINE stays for the canvas's own nodes. */
+export const SHOT_OTHER_NODE_LINE = 'Nebula couldn’t start the shot because another node in this run needs a fix first.';
+/** The shot's World Labs environment has not run on the canvas yet (design). */
+export const SHOT_WORLD_LABS_FIRST_LINE = 'Nebula couldn’t generate the shot because its World Labs environment hasn’t run yet. Run it on the canvas, then generate the shot.';
+/** A shot that failed with nothing more said: the text agents read in `output.error`, and the line the panel shows (design). */
+export const SHOT_FAILED_TEXT = 'Shot generation failed.';
+export const SHOT_FAILED_LINE = 'Nebula couldn’t generate the shot. Generate it again.';
 
 /** A written line Nebula's canvas says itself: the heading over it, no Details. */
 export function writtenReading(line: string): ValidationReading {

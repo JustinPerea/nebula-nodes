@@ -86,7 +86,7 @@ describe('a key-billing route on another account is named by that account', () =
     expect(summary.paid).toEqual([]);
     expect(summary.mayCost).toEqual([{ name: 'Synthetic', account: 'Replicate' }]);
     expect(runChipLabel(summary)).toBe('1 may cost');
-    expect(runChipTitle(summary)).toBe('Synthetic can use your Replicate credits.');
+    expect(runChipTitle(summary)).toBe('“Synthetic” may use your Replicate credits');
     // Without the key it is free and the chip says nothing.
     const free = summarizeRunScope([node()], [], { kind: 'graph' }, { pricing, apiKeys: {} });
     expect([free.paid, free.mayCost, runChipLabel(free)]).toEqual([[], undefined, null]);

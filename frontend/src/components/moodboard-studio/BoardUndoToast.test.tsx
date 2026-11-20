@@ -7,7 +7,7 @@ import { BOARD_TOAST_MS, BoardUndoToast } from './BoardUndoToast';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-const toast = (run = vi.fn()) => ({ id: 1, text: 'Removed #1', skipped: ['#2 changed since, left as is'],
+const toast = (run = vi.fn()) => ({ id: 1, text: 'Removed #1', skipped: ['#2 changed after that step, so Nebula left it as it is.'],
   action: { label: 'Undo' as const, run } });
 
 describe('the board undo toast', () => {
@@ -17,7 +17,7 @@ describe('the board undo toast', () => {
     render(<BoardUndoToast toast={toast(run)} onDismiss={onDismiss} />);
     const status = screen.getByRole('status', { name: 'Moodboard undo' });
     expect(status.textContent).toContain('Removed #1');
-    expect(status.textContent).toContain('#2 changed since, left as is');
+    expect(status.textContent).toContain('#2 changed after that step, so Nebula left it as it is.');
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(run).toHaveBeenCalledTimes(1);
     expect(onDismiss).toHaveBeenCalledTimes(1);

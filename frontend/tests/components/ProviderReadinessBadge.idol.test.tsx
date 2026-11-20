@@ -14,12 +14,12 @@ const IDOL = NODE_DEFINITIONS['speridlabs-idol'];
 afterEach(() => cleanup());
 
 describe('ProviderReadinessBadge on Idol (GM, PR #203 r12)', () => {
-  it('reads "Hugging Face · Free" without the token, with GM\'s detail', () => {
+  it('reads "Hugging Face · free" without the token, with GM\'s detail', () => {
     useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys: {} } });
     const { container } = render(<ProviderReadinessBadge definition={IDOL} />);
     expect(container.querySelector('.provider-readiness')).not.toHaveClass('provider-readiness--warning');
-    const label = screen.getByText('Free').closest('.provider-readiness__label');
-    expect(label).toHaveTextContent(/^Hugging Face · Free$/);
+    const label = screen.getByText('free').closest('.provider-readiness__label');
+    expect(label).toHaveTextContent(/^Hugging Face · free$/);
     expect(label).toHaveAttribute('title', 'Idol runs free on Hugging Face’s shared GPUs, which can be busy. '
       + 'Add a Hugging Face token in Settings to use your own allowance.');
   });

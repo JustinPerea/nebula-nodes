@@ -78,7 +78,7 @@ import { selectedImageIds } from './boardNodes';
 import { isStudioShortcutTarget, studioKey } from './studioKeys';
 import { boardCover } from '../../lib/moodboardCover';
 import { FieldStepTracker, fieldGroups, fieldStepKeys, type FieldStep } from './fieldSteps';
-import { keptUndoLine, undoneLine } from './undoLines';
+import { keptUndoLine, partialUndoLine, undoneLine } from './undoLines';
 import '../../styles/moodboard-studio.css';
 import '../../styles/moodboard-board.css';
 import { NoticeLeave } from '../../lib/noticeLeave';
@@ -1098,7 +1098,7 @@ function skippedLines(edited: MoodboardEditResult): string[] {
   return [...new Set(edited.applied.flatMap((entry) => {
     const skipped = Array.isArray(entry.skipped) ? entry.skipped as Array<{ message?: unknown; number?: unknown }> : [];
     return skipped.map((slice) => (typeof slice.message === 'string' && slice.message ? slice.message
-      : typeof slice.number === 'number' ? `Image ${slice.number} changed since, left as is` : 'Part of it changed since, left as is'));
+      : typeof slice.number === 'number' ? `Image ${slice.number} changed after that step, so Nebula left it as it is.` : 'Part of it changed after that step, so Nebula left it as it is.'));
   }))];
 }
 
@@ -2045,11 +2045,15 @@ export function MoodboardStudioView() {
       if (!isCurrent()) return;
       // An undo that put nothing back because an image changed after the step is not an "Undid": it says so,
       // draws as every other undo toast does (neutral), and offers no Redo.
-      const kept = direction === 'undo' && !next.length
-        ? keptUndoLine(step.label, edited.applied.flatMap((entry) => (Array.isArray(entry.skipped) ? entry.skipped : []))) : null;
+      const keptSlices = edited.applied.flatMap((entry) => (Array.isArray(entry.skipped) ? entry.skipped : []));
+      const kept = direction === 'undo' && !next.length ? keptUndoLine(step.label, keptSlices) : null;
+      // Some parts back and some kept because their images changed after the step (design): one line, no second one.
+      const partial = !kept && next.length ? partialUndoLine(direction, step.label, keptSlices) : null;
+      const redo = direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined;
       const line = kept ? { text: kept }
+        : partial ? { text: partial, action: redo }
         : { text: undoneLine(direction, step.label), skipped: skippedLines(edited),
-          action: direction === 'undo' && next.length ? { label: 'Redo' as const, run: () => { void runUndo('redo'); } } : undefined };
+          action: redo };
       if (direction === 'undo') showUndone(line, step.id);
       else showToast(line);
     } catch (err) {

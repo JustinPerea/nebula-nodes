@@ -111,7 +111,7 @@ import { ORDER, PRESENCE, WHOLE, mergeScenes, stillClashing, unionFields, withFi
 import { cleanPending, pendingSkipLine, type PendingAgent, type PendingSkipSummary } from '../lib/pendingNodes';
 import { MISSING_KEY_FAILURE, MODEL_SETTINGS_FAILURE, MODEL_SETTINGS_FAILURE_HEADER, modelKeyMissingText, modelSettingsFailedText, modelSetupFailedText } from '../lib/failureLines';
 import { bringBackFailedText, cleanRemovals, deletedNoticeText, DROPPED_REDO_TEXT, DROPPED_UNDO_TEXT, skippedPressText, lateRestoreText, mergeRemovals, notRestoredText, pinsOnAnotherModel, restoredNoticeText, supersededBy, type RemovalRecord } from '../lib/deleteNotice';
-import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_NOT_STARTED_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
+import { NOTHING_RAN_LINE, OTHER_NODE_LINE, SHOT_FAILED_LINE, SHOT_FAILED_TEXT, SHOT_NOT_STARTED_LINE, SHOT_OTHER_NODE_LINE, SHOT_WORLD_LABS_FIRST_LINE, validationReadings, writtenReading, type ValidationReading } from '../lib/validationCopy';
 import {
   RUNTIME_FIELDS, applySlice, captureOwnAdd, diffCanvas, edgeKey, stableJson, editArrivedText, foldArrange, forgetClearedPlaceholders,
   foreignSource, isForeignEdit, isOwnAdd, isOwnEcho, isSliceStep, ownAddStep, paramChange, renameOwnedNode, restoreRequest,
@@ -7542,7 +7542,9 @@ function settleTrackedExecutionStatus(
     if (scene?.shots) applySceneToNode(set, owner.nodeId, { ...scene, shots: scene.shots.map((shot) =>
       shot.id === owner.shotId && shot.output?.status === 'running'
         ? { ...shot, output: { ...shot.output, status: status === 'cancelled' ? 'idle' : failed ? 'error' : shot.output.imageUrl ? 'done' : 'idle',
-          error: failed ? (shot.output.error ?? 'Shot generation failed.') : undefined } }
+          error: failed ? (shot.output.error ?? SHOT_FAILED_TEXT) : undefined,
+          // The panel's line (design); `error` stays the text agents read.
+          errorPerson: failed ? (shot.output.error ? shot.output.errorPerson : SHOT_FAILED_LINE) : undefined } }
         : shot) });
   }
   if (get().providerRecoveryWarning === WORLD_LABS_STATUS_UNCERTAIN_WARNING) {
@@ -11584,7 +11586,8 @@ function applyGraphSyncNow(event: ExecutionEvent, options: { fromExport?: boolea
         const active = [...activeRunOwners.values()].some((owner) => owner.nodeId === node.id && owner.shotId === shot.id);
         if (!status || active || shot.output?.status !== 'running') return shot;
         return { ...shot, output: { ...shot.output, status: status === 'failed' ? 'error' as const : 'idle' as const,
-          error: status === 'failed' ? 'Shot generation failed.' : undefined } };
+          error: status === 'failed' ? SHOT_FAILED_TEXT : undefined,
+          errorPerson: status === 'failed' ? SHOT_FAILED_LINE : undefined } };
       }),
     } } } };
   });
@@ -14302,7 +14305,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
       applySceneToNode(set, nodeId, patchShot(scene, {
         ...withoutShotError(shot.output),
         status: 'error',
-        error: 'Run the World Labs Environment on Canvas first, then generate this shot from its recovered output.',
+        error: SHOT_WORLD_LABS_FIRST_LINE,
       }));
       return;
     }
@@ -14382,7 +14385,7 @@ export const useGraphStore = create<GraphState>()(noticeFollowsStacks((set, get)
           // (error copy round 3e); the answer names no node from an older backend.
           const { byNode, global } = validationReadings(result.errors);
           failShot(SHOT_NOT_STARTED_LINE, byNode.get(nodeId) ?? global
-            ?? (byNode.size ? writtenReading(OTHER_NODE_LINE) : writtenReading(SHOT_NOT_STARTED_LINE)));
+            ?? (byNode.size ? writtenReading(SHOT_OTHER_NODE_LINE) : writtenReading(SHOT_NOT_STARTED_LINE)));
         } else failShot(notStartedMessage("Couldn’t start the shot.", result.status));
         settleTrackedExecutionStatus('failed', runId, set, get);
         return;

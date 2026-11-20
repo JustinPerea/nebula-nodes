@@ -66,7 +66,7 @@ def test_a_field_changed_since_is_left_and_named(client, root):
     undone = _ok(_edit(client, answer["undo"]["ops"], headers=PERSON))
     assert undone["board"]["direction"] == "agent dawn"
     assert undone["board"]["avoid"] == []
-    assert [item["message"] for item in undone["applied"][0]["skipped"]] == ["Direction changed since, left as is"]
+    assert [item["message"] for item in undone["applied"][0]["skipped"]] == ["Direction changed after that step, so Nebula left it as it is."]
 
 
 def test_two_puts_of_one_field_undo_in_order_in_one_batch(client, root):

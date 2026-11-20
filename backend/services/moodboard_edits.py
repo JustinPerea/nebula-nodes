@@ -136,6 +136,13 @@ def in_quotes(text: Any) -> str:
     return "\u201c" + str(text).replace("\u201c", "\u2018").replace("\u201d", "\u2019") + "\u201d"
 
 
+def kept_clause(subject: str) -> str:
+    """The line for a part an undo left as it is because it changed after the
+    step (design: "Image 5 changed after that step, so Nebula left it as it
+    is."). Agents, the CLI and MCP read it; the ``reason`` stays "changed since"."""
+    return f"{subject} changed after that step, so Nebula left it as it is."
+
+
 def join_words(words: list[str]) -> str:
     """Words joined as "a", "a and b" or "a, b and c", as the Studio's ``joined`` does."""
     if len(words) < 2:
@@ -916,7 +923,7 @@ class _Batch:
         ‘Moodboard notes to generators’")."""
         noun = FIELD_NOUNS.get(key, key)
         if reason == "changed since":
-            return {"part": "fields", "field": key, "reason": reason, "message": f"{FIELD_LABELS[key]} {reason}, left as is"}
+            return {"part": "fields", "field": key, "reason": reason, "message": kept_clause(FIELD_LABELS[key])}
         if key == "sendNotes":
             step = f"{'Turned on' if expect else 'Turned off'} \u2018Moodboard notes to generators\u2019"
         elif key == "coverImageId":
@@ -959,6 +966,8 @@ class _Batch:
             report["message"] = f"Nebula couldn’t undo the change to {subject} because its place on the moodboard was taken or removed after that."
         elif reason == "isn’t one of Nebula’s own files":
             report["message"] = f"Nebula couldn’t undo the change to {subject} because {subject} isn’t one of Nebula’s own files."
+        elif reason == "changed since":
+            report["message"] = kept_clause(label if item.get("image") is not None else in_quotes(label))
         else:
             report["message"] = f"{label} {reason}, left as is"
         return report

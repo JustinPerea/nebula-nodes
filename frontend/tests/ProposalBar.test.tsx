@@ -947,7 +947,7 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     render(<ProposalBar />);
     const accept = screen.getByRole('button', { name: 'Accept and run 1 may cost' });
     expect(accept).not.toHaveAttribute('aria-disabled');
-    expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title', 'Idol can use your Hugging Face credits.');
+    expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title', '“Idol” may use your Hugging Face credits');
     // The plan line is the backend's (services/canvas_proposals.plan_line, tested in
     // test_proposal_plan_line.py: "may cost" clauses, no price); the bar shows it as written.
     expect(document.querySelector('.proposal-bar__plan')).toHaveTextContent('Adds “Idol” · Runs “Idol” · may use your Hugging Face credits');
@@ -975,7 +975,7 @@ describe('ProposalBar with Idol, keyless (GM, PR #203 r11 item 2 and r12)', () =
     render(<ProposalBar />);
     const accept = screen.getByRole('button', { name: 'Accept and run 2 paid · 1 may cost' });
     expect(accept.querySelector('.proposal-bar__count')).toHaveAttribute('title',
-      '“Nano Banana” and “Hero still” call paid providers. Estimated cost $0.13. Idol can use your Hugging Face credits.');
+      '“Nano Banana” and “Hero still” call paid providers. Estimated cost $0.13. “Idol” may use your Hugging Face credits');
     graph.state.nodes = [];
   });
 

@@ -161,7 +161,7 @@ export function getCinemaUploadIssue(nodeId: string, shotId?: string, includeAll
   verb: 'generate' | 'generate all' = 'generate'): string | null {
   const uploads = useCinemaUploadStore.getState().uploads.filter((upload) => upload.nodeId === nodeId
     && (includeAllShots || !upload.shotId || upload.shotId === shotId));
-  if (uploads.some((upload) => upload.status === 'uploading')) return 'Wait for reference uploads to finish before generating.';
+  if (uploads.some((upload) => upload.status === 'uploading')) return `You can ${verb} when the reference uploads finish.`;
   // GM PR #205 r14 item 3: a lock reason, in the lock form, naming the
   // uploads by the shared name-list rule (up to 3 by name, from 4 a count).
   // GM PR #205 r17: one sentence per kind, from what each row offers. The

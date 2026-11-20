@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import {
-  cinemaSceneBase, describeRunScope, runChipLabel, runChipTitle, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
+  cinemaSceneBase, describeRunScope, mayCostSentence, runChipLabel, runChipTitle, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
   summarizeRunScope,
 } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
@@ -156,8 +156,8 @@ describe('run cost', () => {
     expect(signed.cost?.lines).toEqual([]);
     expect(signed.mayCost).toEqual([{ name: 'Idol', account: 'Hugging Face' }]);
     expect(runChipLabel(signed)).toBe('1 may cost');
-    expect(runChipTitle(signed)).toBe('Idol can use your Hugging Face credits.');
-    expect(describeRunScope(signed)).toBe('Runs 1 node.\nIdol can use your Hugging Face credits.');
+    expect(runChipTitle(signed)).toBe('“Idol” may use your Hugging Face credits');
+    expect(describeRunScope(signed)).toBe('Runs 1 node.\n“Idol” may use your Hugging Face credits');
   });
 
   it('counts Idol apart beside paid models: "2 paid · 1 may cost", and a priced chip keeps its amount with Idol\'s sentence last', () => {
@@ -174,15 +174,15 @@ describe('run cost', () => {
     // GM, PR #203 r20 item 2: line 1 and the reason line naming the same nodes are one.
     // One line left, so Idol's sentence joins it, as in the priced shape below.
     expect(runChipTitle(unpricedPair)).toBe('“Writer” and “Editor” call paid providers that have no listed price. '
-      + 'Idol can use your Hugging Face credits.');
+      + '“Idol” may use your Hugging Face credits');
     expect(runChipTitle({ ...unpricedPair, cost: undefined }))
-      .toBe('“Writer” and “Editor” call paid providers. Idol can use your Hugging Face credits.');
+      .toBe('“Writer” and “Editor” call paid providers. “Idol” may use your Hugging Face credits');
     const withPrice = summarizeRunScope([idol, priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing, apiKeys: keys });
     // GM, PR #203 r14 item 4, by r20's rule ("+" joins money, "·" joins
     // classes): "~$0.13 · 1 may cost", the tooltip in item 3's shape.
     expect(runChipLabel(withPrice)).toBe('~$0.05 · 1 may cost');
     expect(runChipTitle(withPrice)).toBe(
-      `“${withPrice.paid[0]}” calls a paid provider. Estimated cost $0.05. Idol can use your Hugging Face credits.`);
+      `“${withPrice.paid[0]}” calls a paid provider. Estimated cost $0.05. “Idol” may use your Hugging Face credits`);
     expect(runChipTitle(withPrice)).not.toMatch(/~|\n/);
   });
 
@@ -598,5 +598,24 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     const summary = summarizeRunScope([upload({}), seedvr], wire, { kind: 'graph' }, context);
     expect(summary.cost!.sizeRefs).toEqual([]);
     expect(summary.cost!.awaitingInput).toEqual(['Upscale']);
+  });
+});
+
+describe('the may-cost sentence (design: one verb, "may", the name in curly quotes, no full stop)', () => {
+  it('names one node, several, and a count from four', () => {
+    expect(mayCostSentence([{ name: 'Idol', account: 'Hugging Face' }])).toBe('“Idol” may use your Hugging Face credits');
+    expect(mayCostSentence([{ name: 'Idol', account: 'Hugging Face' }, { name: 'Idol', account: 'Hugging Face' }]))
+      .toBe('“Idol” may use your Hugging Face credits');
+    expect(mayCostSentence([{ name: 'Idol', account: 'Hugging Face' }, { name: 'Splat', account: 'Hugging Face' }]))
+      .toBe('“Idol” and “Splat” may use your Hugging Face credits');
+    expect(mayCostSentence(['A', 'B', 'C', 'D'].map((name) => ({ name, account: 'Hugging Face' }))))
+      .toBe('4 nodes may use your Hugging Face credits');
+  });
+
+  it('says each account in its own sentence, the last without its full stop, and nothing for none', () => {
+    expect(mayCostSentence([{ name: 'Idol', account: 'Hugging Face' }, { name: 'Synthetic', account: 'Replicate' }]))
+      .toBe('“Idol” may use your Hugging Face credits. “Synthetic” may use your Replicate credits');
+    expect(mayCostSentence([])).toBeNull();
+    expect(mayCostSentence(undefined)).toBeNull();
   });
 });

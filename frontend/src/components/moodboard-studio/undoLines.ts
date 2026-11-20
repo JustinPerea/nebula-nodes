@@ -6,8 +6,10 @@
  * never on its sentence): an image that changed after the step, an image
  * removed after it, and a field changed again after it. Any other kept reason
  * (a switch only the person turns on, a colour choice made since, a card that
- * can't go back there) still reads "Undid" with the server's line under it,
- * and so does an undo that put some parts back.
+ * can't go back there) still reads "Undid" with the server's line under it.
+ * An undo that put some parts back and kept images that changed after the step
+ * says so in one line (partialUndoLine); any other partial mix keeps the server's
+ * line under "Undid".
  */
 
 import { FIELD_NOUNS } from './fieldSteps';
@@ -99,4 +101,26 @@ export function keptUndoLine(label: string, skipped: readonly SkippedSlice[]): s
     ...(notNebulas.length ? [`${imageNumbers(notNebulas)} ${notNebulas.length === 1 ? 'isn’t' : 'aren’t'} one of Nebula’s own files`] : []),
   ];
   return `Nebula couldn’t undo ${inQuotes(label)} because ${joined(parts)}.`;
+}
+
+/**
+ * The toast for an undo (or redo) that put some parts back and kept others, in one line (design): "Undid “Moved
+ * image 5” except image 5, which changed after that.", "... except images 3 and 5, which changed after that."
+ * (three: "images 2, 3 and 5"), and from four on a count: "... except 4 images that changed after that.". Only for
+ * kept slices that are an image or a card with a number and the reason "changed since"; any other mix (a field, a
+ * look, an image without a number, one of its settings, another reason) is null, and the toast keeps "Undid" with
+ * the server's line under it. Keyed on `part`, `reason` and `number`, never on the server's sentence.
+ */
+export function partialUndoLine(direction: 'undo' | 'redo', label: string, skipped: readonly SkippedSlice[]): string | null {
+  if (skipped.length === 0) return null;
+  const numbers: number[] = [];
+  for (const slice of skipped) {
+    if (slice.reason !== 'changed since' || (slice.part !== 'image' && slice.part !== 'card')) return null;
+    if (typeof slice.number !== 'number' || slice.settings !== undefined) return null;
+    if (!numbers.includes(slice.number)) numbers.push(slice.number);
+  }
+  numbers.sort((a, b) => a - b);
+  const done = undoneLine(direction, label);
+  if (numbers.length >= 4) return `${done} except ${numbers.length} images that changed after that.`;
+  return `${done} except ${imageNumbers(numbers)}, which changed after that.`;
 }

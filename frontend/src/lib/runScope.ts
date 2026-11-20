@@ -600,7 +600,7 @@ export interface CostTitleParts {
  * calls a paid provider. Estimated cost $0.13." No heading. Each reason for
  * an unpriced part goes on its own line under line 1 ("“B” has no listed
  * price.": GM, PR #198 r9 bug 2), and the may-cost sentence comes last
- * ("Idol can use your Hugging Face credits."); with no reasons it is all one
+ * ("“Idol” may use your Hugging Face credits"); with no reasons it is all one
  * line. Undefined when nothing is paid or may cost.
  */
 export function costTitle({ paid, estimate, reasons, mayCost, sourcedZero }: CostTitleParts): string | undefined {
@@ -623,8 +623,9 @@ export function costTitle({ paid, estimate, reasons, mayCost, sourcedZero }: Cos
 /** The sourced "$0" chip's tooltip (GM, PR #203 r11 item 4). */
 export const SOURCED_ZERO_TITLE = 'This costs nothing to run.';
 
-/** "Idol can use your Hugging Face credits.": the may-cost sentence, last in
- * the chip's tooltip (GM, PR #203 r11 item 2), one per account. */
+/** "“Idol” may use your Hugging Face credits": the may-cost sentence, last in the chip's tooltip, one per account
+ * (design: one verb, "may", as the proposal's plan line says it; the node's name in curly quotes; no full stop).
+ * Several accounts are separate sentences, the last without its full stop. */
 export function mayCostSentence(mayCost: RunScopeSummary['mayCost']): string | null {
   if (!mayCost?.length) return null;
   const byAccount = new Map<string, string[]>();
@@ -633,10 +634,7 @@ export function mayCostSentence(mayCost: RunScopeSummary['mayCost']): string | n
     if (!names.includes(name)) names.push(name);
     byAccount.set(account, names);
   }
-  return [...byAccount].map(([account, names]) => {
-    const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-    return `${who} can use your ${account} credits.`;
-  }).join(' ');
+  return [...byAccount].map(([account, names]) => `${nodeNameList(names)} may use your ${account} credits`).join('. ');
 }
 
 type ReasonGroup = { id: string; line: (names: string, several: boolean) => string; names: string[] };

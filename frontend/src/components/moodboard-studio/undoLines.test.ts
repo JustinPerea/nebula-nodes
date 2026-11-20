@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keptUndoLine, undoneLine } from './undoLines';
+import { keptUndoLine, partialUndoLine, undoneLine } from './undoLines';
 
 describe('the undo and redo toasts’ words (design r160 and r161)', () => {
   it('have no colon: the step’s label sits in curly quotes', () => {
@@ -78,5 +78,56 @@ describe('the undo and redo toasts’ words (design r160 and r161)', () => {
     expect(keptUndoLine('Changed the direction', [{ reason: 'changed since' }])).toBeNull();
     expect(keptUndoLine('Changed the direction', [{ part: 'fields', field: 'direction', reason: 'something else' }])).toBeNull();
     expect(keptUndoLine('x', [{ reason: 'is an image link from outside Nebula', number: 1 }])).toBeNull();
+  });
+});
+
+describe('the toast for an undo that put some parts back and kept others (design)', () => {
+  const image = (number: number, extra: Record<string, unknown> = {}) => ({ part: 'image', reason: 'changed since', number, ...extra });
+
+  it('names one image', () => {
+    expect(partialUndoLine('undo', 'Changed the weight of image 5', [image(5)]))
+      .toBe('Undid “Changed the weight of image 5” except image 5, which changed after that.');
+  });
+
+  it('names two and three images, with no serial comma', () => {
+    expect(partialUndoLine('undo', 'Moved 2 images', [image(5), image(3)]))
+      .toBe('Undid “Moved 2 images” except images 3 and 5, which changed after that.');
+    expect(partialUndoLine('undo', 'Moved 3 images', [image(5), image(2), image(3)]))
+      .toBe('Undid “Moved 3 images” except images 2, 3 and 5, which changed after that.');
+  });
+
+  it('counts from four images on', () => {
+    expect(partialUndoLine('undo', 'Moved 4 images', [image(1), image(2), image(3), image(4)]))
+      .toBe('Undid “Moved 4 images” except 4 images that changed after that.');
+    expect(partialUndoLine('undo', 'x', [1, 2, 3, 4, 5, 6].map((n) => ({ part: 'card', reason: 'changed since', number: n }))))
+      .toBe('Undid “x” except 6 images that changed after that.');
+  });
+
+  it('counts an image once, whatever the slices it has', () => {
+    expect(partialUndoLine('undo', 'x', [image(5), { part: 'card', reason: 'changed since', number: 5 }]))
+      .toBe('Undid “x” except image 5, which changed after that.');
+    expect(partialUndoLine('undo', 'x', [image(1), image(2), image(3), image(3), image(2)]))
+      .toBe('Undid “x” except images 1, 2 and 3, which changed after that.');
+  });
+
+  it('says “Redid” for a redo', () => {
+    expect(partialUndoLine('redo', 'Moved image 5', [image(5)])).toBe('Redid “Moved image 5” except image 5, which changed after that.');
+  });
+
+  it('keeps the old toast (null) for any other mix', () => {
+    expect(partialUndoLine('undo', 'x', [])).toBeNull();
+    // a field
+    expect(partialUndoLine('undo', 'x', [{ part: 'fields', field: 'direction', reason: 'changed since' }])).toBeNull();
+    // a look
+    expect(partialUndoLine('undo', 'x', [{ part: 'frame', reason: 'changed since' }])).toBeNull();
+    // an image without a number
+    expect(partialUndoLine('undo', 'x', [{ part: 'image', reason: 'changed since' }])).toBeNull();
+    // a different reason
+    expect(partialUndoLine('undo', 'x', [image(5, { reason: 'removed since' })])).toBeNull();
+    expect(partialUndoLine('undo', 'x', [image(5), image(6, { reason: 'removed since' })])).toBeNull();
+    // images and fields together
+    expect(partialUndoLine('undo', 'x', [image(5), { part: 'fields', field: 'direction', reason: 'changed since' }])).toBeNull();
+    // an image's settings
+    expect(partialUndoLine('undo', 'x', [{ part: 'settings', reason: 'changed since', number: 5, settings: ['notes'] }])).toBeNull();
   });
 });

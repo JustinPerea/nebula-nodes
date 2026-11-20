@@ -125,7 +125,7 @@ function applyOp(next: Moodboard, op: MoodboardOp, skipped: Array<Record<string,
         for (const key of Object.keys(slice.before)) {
           if (same(fields[key], slice.before[key])) continue;
           if (!same(fields[key], slice.expect[key])) {
-            skipped.push({ part: 'fields', field: key, reason: 'changed since', message: `${LABELS[key]} changed since, left as is` });
+            skipped.push({ part: 'fields', field: key, reason: 'changed since', message: `${LABELS[key]} changed after that step, so Nebula left it as it is.` });
             continue;
           }
           fields[key] = clone(slice.before[key]);
@@ -144,7 +144,7 @@ function applyOp(next: Moodboard, op: MoodboardOp, skipped: Array<Record<string,
           if (p.id !== slice.placement) return p;
           if (same(p, slice.before)) return p;
           if (!same(p, slice.expect)) {
-            skipped.push({ part: 'card', image: img.id, reason: 'changed since', message: '#1 changed since, left as is' });
+            skipped.push({ part: 'card', image: img.id, reason: 'changed since', message: '#1 changed after that step, so Nebula left it as it is.' });
             return p;
           }
           return clone(slice.before) as unknown as MoodboardPlacement;

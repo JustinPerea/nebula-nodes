@@ -317,7 +317,7 @@ def test_undo_leaves_a_cover_someone_changed_since(client, root):
     assert undone["board"]["coverImageId"] == "img-c"
     assert undone["applied"][0]["skipped"] == [
         {"part": "fields", "field": "coverImageId", "reason": "changed since",
-         "message": "The cover changed since, left as is"}]
+         "message": "The cover changed after that step, so Nebula left it as it is."}]
 
 
 def test_undoing_a_cover_whose_image_was_removed_since_is_left_as_is(client, root):

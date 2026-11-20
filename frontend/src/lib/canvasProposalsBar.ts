@@ -242,7 +242,7 @@ export function acceptLabel(view: ProposalView): string {
 }
 
 /** The count chip's tooltip when part of the run may bill the person's own
- * account: "Idol can use your Hugging Face credits." (GM, PR #203 r11 item
+ * account: "“Idol” may use your Hugging Face credits" (GM, PR #203 r11 item
  * 2, as the Run chip's last sentence). Null otherwise. */
 export function proposalMayCostSentence(view: ProposalView): string | null {
   return mayCostSentence(mayCostRows(view));
