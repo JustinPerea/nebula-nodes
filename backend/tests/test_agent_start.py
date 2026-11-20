@@ -502,3 +502,14 @@ def test_every_command_the_cli_answer_names_parses(start, monkeypatch):
         if len(words) == 1 and words[0] in ("info", "propose"):
             continue  # the command named in a sentence, its arguments given beside it
         build_parser().parse_args(words)
+
+
+def test_the_view_says_whether_a_tab_is_connected(start, monkeypatch):
+    """`view.connected` is a person tab's open socket (main.manager), `stale` the
+    30 s view report; the snapshot and start both carry it (design)."""
+    ctx = start
+    assert _get(ctx)["canvas"]["view"] == {"stale": True, "connected": False}
+    assert ctx.client.get("/api/canvas/snapshot", headers=CLAUDE).json()["view"]["connected"] is False
+    monkeypatch.setattr(ctx.main.manager, "browser_connections", {object()})
+    assert _get(ctx)["canvas"]["view"] == {"stale": True, "connected": True}
+    assert ctx.client.get("/api/canvas/snapshot", headers=CLAUDE).json()["view"]["connected"] is True

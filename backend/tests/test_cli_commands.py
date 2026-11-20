@@ -228,7 +228,7 @@ def test_format_start_prints_every_part():
         "next": {"events": {"cursor": 4, "journal": "j1"}, "describe": "`nebula info <id>`: ...",
                  "propose": "`nebula propose` ...", "pins": "`nebula pin resolve` ..."},
     })
-    for expected in ("CANVAS: Good Machines (p1), 3 nodes, open in the browser", "selected: n2",
+    for expected in ("CANVAS: Good Machines (p1), 3 nodes\n  Watching: the canvas.", "selected: n2",
                      "Codex's cursor is at n1", "n2  Hero (nano-banana) [complete] <- n1.text→prompt",
                      'aspect_ratio="16:9"', "also: n3 Preview", "PINS (1 open)", 'pin_1 on n2: "warmer"',
                      "mb1  Dusk [current] 4 images, analyzed — quiet", "Utility: text-input free",

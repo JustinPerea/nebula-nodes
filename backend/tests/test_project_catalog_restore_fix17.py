@@ -701,7 +701,7 @@ def test_r23e_counts_are_singular_for_one():
     assert counted(1, "canvas") == "1 canvas" and counted(3, "canvas") == "3 canvases"
     start = {"canvas": {"nodeCount": 1, "view": {"stale": True}}, "pins": {}, "proposals": {}, "boards": {},
              "nodes": {}, "spend": {}, "next": {}}
-    assert "CANVAS: no project open, 1 node, no browser watching" in format_start(start)
+    assert "CANVAS: no project open, 1 node\n  No Nebula tab is open." in format_start(start)
 
 
 _WAITING_RESTORE = {"kind": "restored", "reason": "corrupt", "source": "catalog.json.bak",

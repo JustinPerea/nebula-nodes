@@ -26,7 +26,7 @@ from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, WITHDRAW_MCP, agent_wording
 from services import agent_spend as _agent_spend
 from services import universal_ports as _universal_ports
-from services.wording import counted
+from services.wording import capped_paths, collapsed_owner, collapsed_summary, counted, port_words
 from services.cursor_actions import (ACTIONS as _CURSOR_ACTIONS, surface_clash as _surface_clash,
                                      surface_clash_refusal as _surface_clash_refusal,
                                      surface_exclusive_refusal as _surface_exclusive_refusal,
@@ -454,8 +454,14 @@ def start_here(ctx: Context | None = None) -> str:
     copy's ids (null for a node not in the copy, its tab id in
     `sourceWas` / `targetWas`), names, port labels and types, `kind` and
     `detail`; while kept, the canvas shows no selection and no view):
-    - `canvas`: the project, `view.stale` (no browser watching), the
-      selection (with `tabOnlyCount` and `tabOnlyNote` when the person
+    - `canvas`: the project, `view` (`connected`: a Nebula tab is open now;
+      `kept`: that tab keeps edits of its own, so its view isn’t shared;
+      `stale`: its view is more than 30 s old; not connected is “No Nebula tab
+      is open.”, connected and kept is “A tab is open, but it’s keeping edits
+      of its own, so its view isn’t shared.”, connected and stale is “A tab is
+      open, but its view is more than 30 s old.”, else it is watching;
+      `onScreen` counts the canvas’s nodes in the browser’s visible area, sent
+      only when that area is known), the selection (with `tabOnlyCount` and `tabOnlyNote` when the person
       selected nodes only their tab has, never listed), other agents' cursors, and the nodes (id, name,
       definitionId, state, onScreen, inputsFrom, up to 8 params cut to 60
       characters). A big canvas shows its first nodes in full (selected
@@ -511,8 +517,13 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     params, `fileNames` ({param: name}): the name the canvas shows, which is
     the name the file was uploaded with, else the path's own name, and
     "Uploaded file" for a bare stored hash (a `filePath` is a stored, hashed
-    name). `view.stale` is
-    true when no browser has reported recently (the canvas may be closed).
+    name). `view.connected` is true while a Nebula tab is open (a tab opened
+    without the person link counts), `view.kept` is true while that tab keeps
+    edits of its own (it shares no view then), and
+    `view.stale` is true when its view report is more than 30 s old (positions
+    and states may be out of date; with `connected` false, no Nebula tab is
+    open; `view.onScreen` counts the nodes in the visible area, sent only when it
+    is known).
     A node whose last run failed has `error`, the message its card shows
     (and `errorHint` when Nebula has a plainer reading of it). An OpenRouter,
     Nous Portal or Replicate node set up for its model has `ports`
@@ -2048,7 +2059,23 @@ def _absolute(value: Any) -> Any:
     return value
 
 
-def _brief_outputs(outputs: Any) -> dict[str, Any]:
+def _is_output_paths(value: Any) -> bool:
+    """A list of Nebula’s own output files ("/api/outputs/..."). It is not
+    collapsed to a summary (no tool returns the whole list: view_output shows a
+    contact sheet of the first four), so the paths stay; past 20 the list is cut
+    to its first 20 and a line with the count (services.wording.capped_paths)."""
+    return (isinstance(value, list) and bool(value)
+            and all(isinstance(item, str) and item.startswith("/api/outputs/") for item in value))
+
+
+def _brief_outputs(outputs: Any, node_id: str = "", names: Any = None) -> dict[str, Any]:
+    """A node’s outputs as a run result carries them. A string over the limit is cut;
+    a dict or a list whose JSON is over it (not a list of output file paths: the first 20 stay, then
+    “and N more (T in all)”; no tool returns the full list) comes back as one line (design: “Preview” ·
+    moodboard bundle, 51 KB. view_output shows it whole.; with more than one port of
+    results the port follows the name: “Preview”’s images · …). ``names``: a function
+    that returns {"names": {node id: name}, "ports": {node id: {port id: label}}},
+    called only when a value collapses."""
     brief: dict[str, Any] = {}
     for port, entry in (outputs or {}).items():
         if not isinstance(entry, dict):
@@ -2056,6 +2083,15 @@ def _brief_outputs(outputs: Any) -> dict[str, Any]:
         value = entry.get("value")
         if isinstance(value, str) and len(value) > _TEXT_LIMIT:
             value = value[:_TEXT_LIMIT] + f"… ({len(value)} characters; view_output shows it all)"
+        elif isinstance(value, (dict, list)) and not _is_output_paths(value) \
+                and len(_json.dumps(value, ensure_ascii=False)) > _TEXT_LIMIT:
+            found = (names() if callable(names) else names) or {}
+            owner = collapsed_owner(
+                (found.get("names") or {}).get(node_id) or node_id,
+                port_words(((found.get("ports") or {}).get(node_id) or {}).get(port), port) if len(outputs) > 1 else None)
+            value = f"{owner} · {collapsed_summary(entry.get('type'), value)}. view_output shows it whole."
+        if _is_output_paths(value):
+            value = capped_paths(value)
         brief[port] = {"type": entry.get("type"), "value": _absolute(value)}
     return brief
 
@@ -2110,7 +2146,9 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
                                                             "canvasSync", "canvasSyncDetail")
              if key in payload}
     if payload.get("results"):
-        shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
+        # The names come with the result: no canvas read (it would note this agent’s scene reads).
+        names = {"names": payload.get("names"), "ports": payload.get("ports")}
+        shown["outputs"] = {node: _brief_outputs(outputs, node, names) for node, outputs in payload["results"].items()}
     if payload.get("errors"):
         shown["errors"] = payload["errors"]
     if payload.get("stopped"):
@@ -2179,7 +2217,11 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     of yours with upload_file first); an input another node makes in this
     same run isn't known yet, so connect an Image Input holding the file to
     it, or propose it. Waits up to
-    `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
+    `wait_seconds` (max 300). Finished: outputs per node (a text cut at 4000
+    characters, and a dict or list over 4000 characters, such as a
+    Moodboard bundle, comes back as one line, “Preview” · moodboard bundle,
+    51 KB, instead of its value: view_output has it whole; a list of output
+    file paths always comes back whole), errors, `skipped`
     (nodes a gate such as Jev Decide's On Pass / On Fail withheld, and
     another agent's placeholders with the nodes that need them, each with
     the reason; they never ran and cost nothing; your own placeholders run
@@ -2205,7 +2247,8 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
 @_tool(annotations=_READ)
 async def get_run(run_id: str, wait_seconds: float = DEFAULT_RUN_WAIT, ctx: Context | None = None) -> list:
     """Collect a run that run_nodes reported as still running; waits up to
-    `wait_seconds` (max 300) for it to finish. Same result shape as run_nodes.
+    `wait_seconds` (max 300) for it to finish. Same result shape as run_nodes,
+    a big output value included as one line (view_output has it whole).
     Status is running, finished, cancelled or failed (a node failed: `errors`).
     It also reads a run the person started on the canvas (the `runId` of its
     run.started events): that result has `source` "canvas" and `startedBy`.

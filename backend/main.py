@@ -9567,6 +9567,18 @@ async def report_canvas_view(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _mark_tab_connected(snapshot: dict[str, Any]) -> None:
+    """Add ``view.connected``: a canvas tab is open now (any socket without an
+    agent marker, so a tab opened without the person link counts: it draws the
+    canvas and reports its view too), and ``view.kept``: that tab keeps edits of
+    its own, which hides its view from agents. ``stale`` stays "no view report
+    in 30 s", so a tab that is open but quiet reads as connected and stale
+    (design: the states in `nebula context`)."""
+    view = snapshot.setdefault("view", {})
+    view["connected"] = manager.canvas_open()
+    view["kept"] = manager.kept_in_tab()
+
+
 @app.get("/api/canvas/snapshot")
 async def get_canvas_snapshot() -> dict[str, Any]:
     """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors.
@@ -9575,6 +9587,7 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     read = selection_context.snapshot(cli_graph, node_registry)
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
     snapshot.update(tab_only_fields(read))
+    _mark_tab_connected(snapshot)
     # Why a node's last run failed, as its card says it (services/node_errors.py).
     key_words = _agent_key_secrets()
     for node in snapshot.get("nodes") or []:
@@ -9728,6 +9741,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
     # The selection's nodes only the person's tab has, counted (review 17 agents-docs LOW-2).
     snapshot.update(tab_only_fields(read))
+    _mark_tab_connected(snapshot)
     catalog = project_store.read()  # every project's name, for the boards part
     active_id = catalog.get("activeProjectId")
     projects = catalog.get("projects") or {}
@@ -26591,7 +26605,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     # A run that crashed after it started is a failed run, never an error
     # answer an agent could read as "didn't start" (report_failure).
     response = await _cli_run_response(run_id, None if wait is None else float(wait), report_failure=True)
-    return _hide_run_key_echoes({**response, **synced})
+    return _hide_run_key_echoes(_with_result_names({**response, **synced}))
 
 
 # The Agent Log's heading for a run its pre-call check stopped: the card's
@@ -26939,13 +26953,14 @@ async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
         return {"runId": run_id, "status": "cancelled", "source": "canvas", "neverStarted": True}
     if _cli_runs.get(run_id) is None and (execution_runs.get(run_id) is not None or reports.known(run_id)):
         response = await _canvas_run_response(run_id, wait)
-        return _hide_run_key_echoes({**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
-                                     "nodes": reports.progress(run_id)})
+        return _hide_run_key_echoes(_with_result_names(
+            {**response, "startedBy": actor_record(canvas_events.run_actor(run_id)),
+             "nodes": reports.progress(run_id)}))
     response = await _cli_run_response(run_id, wait, report_failure=True)
     if response.get("status") == "running" and reports.known(run_id):
         response = {**response, "nodes": reports.progress(run_id),
                     "startedBy": actor_record(canvas_events.run_actor(run_id))}
-    return _hide_run_key_echoes(response)
+    return _hide_run_key_echoes(_with_result_names(response))
 
 
 def _agent_key_secrets() -> list[str]:
@@ -26969,6 +26984,43 @@ def _hide_run_key_echoes(response: dict[str, Any]) -> dict[str, Any]:
     from services.key_echoes import hide_in_run
 
     return hide_in_run(response, _agent_key_secrets())
+
+
+def _with_result_names(response: dict[str, Any]) -> dict[str, Any]:
+    """A run response with ``names`` (node id -> its name as the canvas shows
+    it) and ``ports`` (node id -> {output port id: label}) for the nodes in
+    ``results``, so the CLI and MCP print a collapsed output by name without
+    reading the canvas (a read of /api/graph or the snapshot notes the
+    reader's Cinema scene keys, which a run result must not do). A node no
+    longer on the canvas is left out: the caller names it by its id."""
+    results = response.get("results") if isinstance(response, dict) else None
+    if not isinstance(results, dict) or not results:
+        return response
+    definitions = node_registry.get_all()
+    names: dict[str, str] = {}
+    ports: dict[str, dict[str, str]] = {}
+    failed = 0
+    first: Exception | None = None
+    for node_id in results:
+        node = cli_graph.nodes.get(str(node_id))
+        if not node:
+            continue
+        try:
+            definition_id = str(node.get("definitionId") or "")
+            definition = definitions.get(definition_id)
+            name = node_route.node_name(definition, node.get("label"), definition_id or str(node_id))
+            labels = {str(p.get("id")): p.get("label")
+                      for p in node_ports(definition_id, node.get("params"), definition, "outputPorts")
+                      if isinstance(p, dict)}
+        except Exception as exc:  # noqa: BLE001 - a finished run, perhaps a paid one, must still return its results
+            failed += 1
+            first = first or exc
+            continue  # this node is named by its id and its ports by their ids in words
+        names[str(node_id)] = name
+        ports[str(node_id)] = labels
+    if failed:
+        logging.getLogger("nebula.run").debug("%d node(s) left unnamed in a run result", failed, exc_info=first)
+    return {**response, "names": names, "ports": ports}
 
 
 def _run_reports():
