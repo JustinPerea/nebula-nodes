@@ -112,7 +112,7 @@ export function StoredAssetPicker({ kind, label, value, onChange, readOnly = fal
       {value && !missing && !trashed && (
         <button type="button" className="inspector__action-button" onClick={open}>
           <ExternalLink className="inspector__action-icon" size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
-          <span>Open {kind === 'moodboard' ? 'Moodboard' : 'Character'}</span>
+          <span>Open {kind === 'moodboard' ? 'moodboard' : 'character'}</span>
         </button>
       )}
     </div>

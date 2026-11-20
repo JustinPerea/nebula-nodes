@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cascaded } from './helpers/cssCascade';
 
 /**
- * GM r9 item 1 of PR #203: Run History's Rerun and "Retry failed", and the
+ * GM r9 item 1 of PR #203: Run history's Rerun and "Retry failed", and the
  * deferred "Run now", locked by a missing key (aria-disabled), take the
  * shared disabled label (styles/disabled-buttons.css, GM r33's tokens since
  * PR #198: a ghost's grey --disabled-label, a filled button's dark
@@ -33,7 +33,7 @@ function labelColours(button: HTMLElement) {
     const candidate = styles.get(`${state}|color`);
     if (candidate && (!focused || beats(candidate, focused))) focused = candidate;
   }
-  // Run History's buttons have no ring of their own: the app-wide one,
+  // Run history's buttons have no ring of their own: the app-wide one,
   // `:where(body.app-slava-restraint :focus-visible)`, draws it. The helper
   // files a state inside :where() under rest, so it is read from there.
   const appRing = styles.get('|outline');

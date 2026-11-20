@@ -134,7 +134,7 @@ export function ContextMenu() {
   const keyLock = runKeyLockLine(graphNodes, graphEdges, { kind: 'node', nodeId }, settingsCache);
   const items: MenuItem[] = [
     {
-      label: 'Run This Node',
+      label: 'Run this node',
       kept: 'run',
       // The missing key after kept (which comes first of all), then the run lock's line (M2): run, follow, offline: withKeyLock.
       keyLock,

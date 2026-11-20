@@ -198,7 +198,7 @@ describe('the context menu while offline', () => {
     useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n4', null);
     render(<ContextMenu />);
     act(() => noteBackendConnection('offline'));
-    for (const name of ['Run This Node', 'Leave a note for agents…', /^Duplicate/, /^Delete/]) {
+    for (const name of ['Run this node', 'Leave a note for agents…', /^Duplicate/, /^Delete/]) {
       const item = screen.getByRole('button', { name });
       expect(item).toBeDisabled();
       expect(item).toHaveAttribute('data-offline-disabled');

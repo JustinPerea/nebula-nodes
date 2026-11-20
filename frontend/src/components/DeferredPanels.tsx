@@ -18,7 +18,7 @@ import { dropIntent, heldIntent, holdIntent, isIntentClaimed } from '../lib/held
 import { DeferredBoundary } from './DeferredBoundary';
 
 /**
- * Run History, the onboarding tour and the canvas connection popup ("add a
+ * Run history, the onboarding tour and the canvas connection popup ("add a
  * next step" after dropping a wire), loaded on first open.
  *
  * None of them draws anything while closed, so each stays unmounted until it is
@@ -187,7 +187,7 @@ export function ChatPanel() {
 /**
  * The node Inspector popover (with the Inspector inside). Hidden at every
  * start; it opens on a node's intent (its settings button, a double click), so
- * it mounts on the first open and stays mounted, like Run History.
+ * it mounts on the first open and stays mounted, like Run history.
  */
 export function NodeInspectorPopover() {
   const { opened, opens } = useOpens(useUIStore((s) => s.panels.inspector.visible));

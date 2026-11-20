@@ -425,7 +425,7 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
   it('names every board field as a noun after its one "the"', () => {
     expect(keptFromBoardLine(['direction', 'avoid', 'pinnedColors'])).toBe('Kept the direction, avoid list and pinned colors from the moodboard.');
     expect(keptFromBoardLine(['briefOverride', 'clashMode', 'colorChoices'])).toBe('Kept the brief, clash setting and color choices from the moodboard.');
-    expect(keptFromBoardLine(['sendNotes', 'strength'])).toBe('Kept the notes setting and strength from the moodboard.');
+    expect(keptFromBoardLine(['sendNotes', 'strength'])).toBe('Kept the “Moodboard notes to generators” setting and strength from the moodboard.');
   });
 
   // Round 6l (GM r21 Q1): kept image changes, one item per image. Round 6m (GM r53): by the label the person sees.

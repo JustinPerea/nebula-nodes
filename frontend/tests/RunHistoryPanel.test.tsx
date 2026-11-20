@@ -492,7 +492,7 @@ describe('RunHistoryPanel replay actions', () => {
   });
 
   // Review 13, L5 (live L8, probes U2/U3).
-  it('the dialog owns Escape however focus got there (a backdrop click), and Run History stays open', () => {
+  it('the dialog owns Escape however focus got there (a backdrop click), and Run history stays open', () => {
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({ providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node',
       resumeOperationId: 'op-1', existingWorldId: null, durable: true }], deleteProviderRecovery });
@@ -523,7 +523,7 @@ describe('RunHistoryPanel replay actions', () => {
     expect(document.activeElement?.textContent).toBe('Cancel');
   });
 
-  it('closing Run History cancels the dialog; it does not come back on reopen, and nothing is forgotten', () => {
+  it('closing Run history cancels the dialog; it does not come back on reopen, and nothing is forgotten', () => {
     vi.useFakeTimers();
     const deleteProviderRecovery = vi.fn(async () => undefined);
     useGraphStore.setState({ providerRecoveries: [{ runId: 'paid-run', nodeId: 'world-node',

@@ -346,14 +346,14 @@ describe('N-2: a locked picker uploads nothing from its own onChange', () => {
     fireEvent.change(input);
   };
 
-  it('Choose File and Extract from reference, a file set on the input while following: no upload, no extract', async () => {
+  it('Choose file and Extract from reference, a file set on the input while following: no upload, no extract', async () => {
     select('image-input', { filePath: '' });
     await act(async () => { await Promise.resolve(); });
     calls.upload = 0;
     act(() => setFollowingSwitch(reason));
-    pick(screen.getByText('Choose File').closest('label')!.querySelector('input')!);
+    pick(screen.getByText('Choose file').closest('label')!.querySelector('input')!);
     await act(async () => { await Promise.resolve(); });
-    expect(calls.upload, 'Choose File').toBe(0);
+    expect(calls.upload, 'Choose file').toBe(0);
     cleanup();
     select('cinema-color', { palette: ['#ff0000'] });
     await act(async () => { await Promise.resolve(); });

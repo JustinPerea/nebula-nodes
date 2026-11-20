@@ -28,7 +28,7 @@ vi.mock('../../src/lib/deferredChunks', async (importOriginal) => {
   return {
     ...actual,
     DeferredRunHistoryPanel: lazyWithPreload(
-      flaky('history', { RunHistoryPanel: () => <p>Run History stub</p> }), (m) => m.RunHistoryPanel),
+      flaky('history', { RunHistoryPanel: () => <p>Run history stub</p> }), (m) => m.RunHistoryPanel),
     DeferredMaskPainterModal: lazyWithPreload(
       flaky('mask', { MaskPainterModal: () => <div role="dialog" aria-label="Real mask painter" /> }),
       (m) => m.MaskPainterModal),
@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe('a deferred panel whose chunk keeps failing', () => {
-  it('Run History does not stay marked open after a retry that failed too', async () => {
+  it('Run history does not stay marked open after a retry that failed too', async () => {
     chunks.failures.set('history', 2);
     render(<RunHistoryPanel />);
     act(() => useUIStore.getState().togglePanel('history'));
@@ -60,11 +60,11 @@ describe('a deferred panel whose chunk keeps failing', () => {
     // click is an open, not a toggle off of an empty dock.
     act(() => useUIStore.getState().togglePanel('history'));
     await flush();
-    expect(screen.queryByText('Run History stub')).toBeNull();
+    expect(screen.queryByText('Run history stub')).toBeNull();
     expect(useUIStore.getState().panels.history.visible).toBe(false);
 
     act(() => useUIStore.getState().togglePanel('history'));
-    expect(await screen.findByText('Run History stub')).toBeInTheDocument();
+    expect(await screen.findByText('Run history stub')).toBeInTheDocument();
     expect(useUIStore.getState().panels.history.visible).toBe(true);
   });
 

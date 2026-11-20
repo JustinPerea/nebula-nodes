@@ -282,7 +282,7 @@ export function AssetsPanel() {
         {tab !== 'styles' && (
           <button type="button" className="character-palette__new" onClick={handleNew} disabled={noProject}
             title={noProject ? NO_PROJECT_OPEN : undefined}>
-            + New {tab === 'characters' ? 'Character' : 'Moodboard'}
+            + New {tab === 'characters' ? 'character' : 'moodboard'}
           </button>
         )}
 
@@ -305,7 +305,7 @@ export function AssetsPanel() {
 
           {!noProject && !busy && !failed && tab === 'characters' && (
             filteredCharacters.length === 0 ? (
-              <div className="character-palette__empty">No Characters{q ? ' match' : ' yet'}.</div>
+              <div className="character-palette__empty">No characters{q ? ' match' : ' yet'}.</div>
             ) : (
               filteredCharacters.map((c) => (
                 <AssetItem
@@ -333,7 +333,7 @@ export function AssetsPanel() {
 
           {!noProject && !busy && !failed && tab === 'moodboards' && (
             filteredMoodboards.length === 0 ? (
-              <div className="character-palette__empty">No Moodboards{q ? ' match' : ' yet'}.</div>
+              <div className="character-palette__empty">No moodboards{q ? ' match' : ' yet'}.</div>
             ) : (
               filteredMoodboards.map((m) => (
                 <AssetItem
@@ -363,7 +363,7 @@ export function AssetsPanel() {
 
           {!noProject && !busy && !failed && tab === 'styles' && (
             filteredPresets.length === 0 ? (
-              <div className="character-palette__empty">No Styles{q ? ' match' : ' yet'}.</div>
+              <div className="character-palette__empty">No styles{q ? ' match' : ' yet'}.</div>
             ) : (
               filteredPresets.map((p) => (
                 <AssetItem

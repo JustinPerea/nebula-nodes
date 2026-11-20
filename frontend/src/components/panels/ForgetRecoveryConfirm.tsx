@@ -4,7 +4,7 @@ import { FORGET_BODY, FORGET_LABEL, forgetHeading } from '../../lib/worldLabsWai
 import '../../styles/prompt-dialog.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 
-/** Run History's "Forget ID" confirm (GM - Design, round 13 of PR #114), in
+/** Run history's "Forget ID" confirm (GM - Design, round 13 of PR #114), in
  * the app's own dialog on the page body, never window.confirm. The same
  * pattern as the Projects screen's "Continue without them" confirm
  * (UnsavedEditsNotice): focus starts on Cancel, Escape is Cancel, Tab stays
@@ -16,9 +16,9 @@ import { useCanvasLock } from '../../lib/canvasLock';
  * button; orange is run/go). Review 13, L5: the dialog owns Escape and Tab
  * whenever it is open, however focus got where it is (a click on the
  * backdrop sent it to the page), through a capture listener on the document,
- * so Escape never reaches Run History or the rail behind it; the backdrop
- * keeps focus where it was. It renders only while Run History is visible,
- * and closing Run History cancels it (review 14, nit 1: the old `closing`
+ * so Escape never reaches Run history or the rail behind it; the backdrop
+ * keeps focus where it was. It renders only while Run history is visible,
+ * and closing Run history cancels it (review 14, nit 1: the old `closing`
  * prop could never be true, so it is gone). Offline (round 15), its "Forget
  * ID" is disabled, as the row's is; Cancel still closes it. */
 export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {

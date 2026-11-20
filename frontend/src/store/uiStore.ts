@@ -115,7 +115,7 @@ const DEFAULT_PANELS = {
   // Unified Assets panel (Characters · Moodboards · Styles) — replaces the
   // separate character/moodboard library panels. Opened from its launcher.
   assets: { visible: false, position: { x: 16, y: 360 } },
-  // Run History panel — persistent record of graph/node/cluster runs.
+  // Run history panel — persistent record of graph/node/cluster runs.
   history: { visible: false, position: { x: 16, y: 60 } },
 };
 

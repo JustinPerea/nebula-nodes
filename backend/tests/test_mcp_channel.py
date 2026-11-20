@@ -34,6 +34,7 @@ from mcp.shared.message import SessionMessage
 
 import mcp_channel
 import mcp_server
+from services import moodboard_edits
 from mcp_channel import ChannelState, Limits
 
 PERSON = {"kind": "person"}
@@ -1213,13 +1214,20 @@ def _own_asset_proposal(state: ChannelState, proposal_id: str = "pa_1", now: flo
                         {"proposal": {"id": proposal_id, "status": "open"}}, now)
 
 
+# What the journal says for a board's Send notes switch turning on, from the real journal function
+# (services.moodboard_edits.fields_entry), so a check on the new name means something.
+_SEND_NOTES_SUMMARY = moodboard_edits.fields_entry(
+    {"fields": ["sendNotes"]}, {"id": "b1", "name": "Dusk", "images": [], "sendNotes": False},
+    {"id": "b1", "name": "Dusk", "images": [], "sendNotes": True})["summary"]
+
+
 def _asset_accept(seq: int, proposal_id: str, board_proposal: str | None = None) -> list[dict]:
     """What accepting a board's Send notes proposal journals: the board write
     (main._apply_asset_proposal, marked with the proposal), then the decision."""
     board = {"boardId": "b1", "boardName": "Dusk", "scope": "global", "fields": ["sendNotes"]}
     if board_proposal:
         board["proposalId"] = board_proposal
-    return [ev(seq, "board.fields", data=board, summary="changed Send notes to generators on board Dusk"),
+    return [ev(seq, "board.fields", data=board, summary=_SEND_NOTES_SUMMARY),
             ev(seq + 1, "proposal.accepted", data={"proposalId": proposal_id, "kind": "moodboard",
                                                    "targetId": "b1", "targetName": "Dusk", "note": "dusk",
                                                    "applied": {"sendNotes": True}},
@@ -1237,7 +1245,8 @@ def test_its_accepted_asset_proposals_board_write_never_gates_its_next_push():
     state.run_ended({"runId": "run_o", "status": "finished", "nodesExecuted": 1}, now=60.0)
     pushes = drain(state, 40.0, 200.0)
     assert [(at, p.wake, p.gate) for at, p in pushes] == [(40.0, "proposal", False), (70.0, "run", False)]
-    assert all("Send notes" not in p.content and "the person" not in p.content.lower() for _, p in pushes)
+    assert all("Send notes" not in p.content and "Moodboard notes to generators" not in p.content
+               and "the person" not in p.content.lower() for _, p in pushes)
     assert state.tool_started("run_nodes", {}, now=71.0) is None
 
 
@@ -1252,7 +1261,7 @@ def test_a_board_write_not_marked_with_its_own_proposal_is_still_the_persons(pro
     state.observe(resp(_asset_accept(1, "pa_x", board_proposal=proposal)[0]), now=40.0)
     state.observe(resp(edit(2)), now=41.0)
     push = take(state, 49.0)
-    assert push is not None and push.gate and "Send notes" in push.content
+    assert push is not None and push.gate and "Moodboard notes to generators" in push.content
 
 
 @pytest.mark.parametrize("kind", ["project.cover", "commons.corrected", "commons.region", "commons.membership"])

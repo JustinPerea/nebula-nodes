@@ -1102,7 +1102,7 @@ export function refusedForGood(error: unknown): boolean {
  * status bar's "I’ve checked Marble". Redoing it fails the same check, so it
  * offers no Try again, and the line is the backend's refusal for the same
  * state (round 3b review; GM's line for it since round 13 of PR #114, in
- * place of round 12's "Open Run History…", which named the wrong place). A
+ * place of round 12's "Open Run history…", which named the wrong place). A
  * run that is only going keeps the busy line and its Try again: that one can
  * succeed once the run ends. */
 export class WorldLabsHold extends FailureNotice {

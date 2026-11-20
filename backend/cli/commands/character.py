@@ -54,7 +54,7 @@ def run(client: NebulaClient, args) -> None:
                 print(json.dumps(listing, indent=2, ensure_ascii=False))
                 return
             if not listing:
-                print("No Characters yet. Character Studio makes them.")
+                print("No characters yet. Character Studio makes them.")
                 return
             names = boards.project_names(client.api, headers) if any(c.get("projectId") for c in listing) else {}
             for character in listing:

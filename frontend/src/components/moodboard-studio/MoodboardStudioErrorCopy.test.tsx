@@ -275,7 +275,7 @@ describe('a new board\'s save (its create) that fails', () => {
     // An image on the unsaved board: New saves it first (GM r8 answer 1).
     act(() => { useAssetStudioDraftStore.getState().edit(JSON.stringify(['moodboard', 'global', 'new']),
       (draft) => ({ ...(draft as object), images: board().images })); });
-    fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ New moodboard' }));
   };
 
   // A create cut off with no answer probes first (round 6g, GM r15 4): the banner's probe finds Nebula online here.

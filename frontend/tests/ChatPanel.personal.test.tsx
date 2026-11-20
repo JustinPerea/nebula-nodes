@@ -105,7 +105,7 @@ describe('Personal agents in the chat panel', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /Fake Agent/ }));
     await waitFor(() => expect(within(dialog).queryByRole('radio', { name: 'Sonnet' })).toBeNull());
     expect(within(dialog).getByText(/doesn.t choose its model/)).toBeInTheDocument();
-    expect(screen.getByText(/Fake Agent · your agent/)).toBeInTheDocument();
+    expect(document.querySelector('.chat-panel__meta')?.textContent).toBe('Fake Agent');
   });
 
   it('PR #204 round 14 (GM r23 answer 6): a demoted tab lists no personal agents and says why under the heading', async () => {

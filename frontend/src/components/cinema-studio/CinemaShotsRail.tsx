@@ -154,7 +154,7 @@ export function CinemaShotsRail({
               }}
               type="button"
               className="cinema-shots-rail__select"
-              aria-label={`Select Shot ${idx + 1}`}
+              aria-label={`Select shot ${idx + 1}`}
               aria-pressed={selected}
               tabIndex={shot.id === tabStopId ? 0 : -1}
               title="Select shot. Arrow keys change shots; Alt + arrow keys reorder."
@@ -167,7 +167,7 @@ export function CinemaShotsRail({
                 ) : (
                   <span className="cinema-shots-rail__thumb-empty">{idx + 1}</span>
                 )}
-                {badge && <span role="status" aria-label={`${badge.description} Shot ${idx + 1}`}
+                {badge && <span role="status" aria-label={`${badge.description} shot ${idx + 1}`}
                   className={`cinema-shots-rail__badge ${badge.cls}`}>{badge.label}</span>}
               </span>
               <span className="cinema-shots-rail__caption">
@@ -177,16 +177,16 @@ export function CinemaShotsRail({
             <div className="cinema-shots-rail__actions">
               {selected && <>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} earlier`}
+                  aria-label={`Move shot ${idx + 1} earlier`}
                   {...lockedAction(lock, { kept: 'scene', disabled: idx === 0, title: 'Move shot earlier', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
                   onClick={() => reorder(shot.id, idx - 1, true)}>←</button>
                 <button type="button" className="cinema-shots-rail__move"
-                  aria-label={`Move Shot ${idx + 1} later`}
+                  aria-label={`Move shot ${idx + 1} later`}
                   {...lockedAction(lock, { kept: 'scene', disabled: idx === scene.shots.length - 1, title: 'Move shot later', offline: 'reorder shots' }, { verb: OFFLINE_VERBS.reorderShots })}
                   onClick={() => reorder(shot.id, idx + 1, true)}>→</button>
               </>}
               <button type="button" className="cinema-shots-rail__remove"
-                aria-label={`Remove Shot ${idx + 1}`}
+                aria-label={`Remove shot ${idx + 1}`}
                 // M2: a run that holds the shot says so first, over following
                 // and offline (lib/canvasLock's order).
                 {...lockedAction(lock, { kept: 'scene', title: 'Remove shot', offline: 'remove shots' }, block

@@ -263,7 +263,7 @@ describe('a file upload into a file param', () => {
     useGraphStore.setState({ nodes: [node], edges: [], undoNotice: null });
     useUIStore.getState().selectNode('n1');
     const { getByText, findByTestId } = render(<Inspector embedded />);
-    await act(async () => { fireEvent.click(getByText(/Paint Mask/)); });
+    await act(async () => { fireEvent.click(getByText(/Paint mask/)); });
     const save = await findByTestId('mask-save');
     act(() => { useGraphStore.getState().updateNodeData('n1', { params: { ...params(), polarity: 'black-edit' } }); });
     await act(async () => { fireEvent.click(save); });

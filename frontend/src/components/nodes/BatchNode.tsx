@@ -38,7 +38,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
       <div className="batch-node__header">
         <strong className="batch-node__name">{name}</strong>
         <span className="batch-node__count">{items.length} item{items.length === 1 ? '' : 's'}</span>
-        <button type="button" className="batch-node__edit nodrag" aria-label="Edit Batch items"
+        <button type="button" className="batch-node__edit nodrag" aria-label="Edit batch items"
           data-node-inspector-anchor={id} aria-haspopup="dialog"
           aria-expanded={inspectorExpanded}
           onMouseDown={(event) => event.stopPropagation()}
@@ -54,7 +54,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
         {items.length > 8 && <span className="batch-node__overflow">+ {items.length - 8} more</span>}
       </div>
       <PlaceholderLine pending={nodeData.pending} />
-      <p className="batch-node__guidance">Cap {cap} · Run explicitly. Editing does not generate.</p>
+      <p className="batch-node__guidance">Cap {cap} · run explicitly. Editing does not generate.</p>
       {authoringError && <p className="batch-node__warning" role="alert"><LineText text={authoringError} /></p>}
       {items.length > cap && !stoppedOnCap && <p className="batch-node__warning" role="alert">
         {items.length} items exceed the cap of {cap}. Reduce items or raise the cap in settings (maximum 25).

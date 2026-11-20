@@ -1,34 +1,10 @@
 {
   "entries": [
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/canvas/ProposalBar.tsx",
-      "rule": "title-case",
-      "text": "What Accept writes"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/character-studio/CharacterDefinitionPanel.tsx",
       "rule": "sentence-punctuation",
       "text": "Current models use image references and trait guidance. Strength is unsupported; saved value"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/character-studio/CharacterLibraryRail.tsx",
-      "rule": "title-case",
-      "text": "+ New Character"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
-      "rule": "title-case",
-      "text": "A Character needs at least"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/character-studio/CharacterStudioView.tsx",
-      "rule": "title-case",
-      "text": "Loading Character…"
     },
     {
       "family": "sentence-punctuation",
@@ -49,30 +25,6 @@
       "text": "Select shot. Arrow keys change shots; Alt + arrow keys reorder."
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
-      "rule": "title-case",
-      "text": "Move Shot {} earlier"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
-      "rule": "title-case",
-      "text": "Move Shot {} later"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
-      "rule": "title-case",
-      "text": "Remove Shot {}"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/cinema-studio/CinemaShotsRail.tsx",
-      "rule": "title-case",
-      "text": "Select Shot {}"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/commons/CommonsEvaluation.tsx",
       "rule": "sentence-punctuation",
@@ -91,28 +43,10 @@
       "text": "Library analysis is paused: the agent graded these references before the blind labels were sealed, so they can no longer be sealed as blind labels. Close them as an assisted review (in Agent review or Blind labeling){}"
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/ContextMenu.tsx",
-      "rule": "title-case",
-      "text": "Run This Node"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/create-studio/ResultComparison.tsx",
       "rule": "sentence-punctuation",
       "text": "Two previews kept for this comparison. Reuse settings prepares a draft; choose Generate to run it."
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/create-studio/ResultsGallery.tsx",
-      "rule": "title-case",
-      "text": "Selected ({}) · Show all"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/editor/EditorTransport.tsx",
-      "rule": "title-case",
-      "text": "Render Preview"
     },
     {
       "family": "sentence-punctuation",
@@ -121,35 +55,10 @@
       "text": "Open the moodboard on this image. Nothing moves: no image changes number."
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/moodboard-studio/MoodboardListView.tsx",
-      "rule": "title-case",
-      "text": "Add Images",
-      "count": 2
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
       "rule": "sentence-punctuation",
       "text": "moodboard off: connected nodes get none of it"
-    },
-    {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "sentence-punctuation",
-      "text": "Off: notes are for you, your team and agents."
-    },
-    {
-      "family": "sentence-punctuation",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "sentence-punctuation",
-      "text": "On: generators get these notes with the brief."
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/moodboard-studio/MoodboardStudioView.tsx",
-      "rule": "title-case",
-      "text": "+ New Moodboard"
     },
     {
       "family": "em-dashes",
@@ -158,28 +67,10 @@
       "text": "{} of {} — {}"
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/nodes/BatchCarousel.tsx",
-      "rule": "title-case",
-      "text": "{} result{} · Running"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/nodes/BatchNode.tsx",
       "rule": "sentence-punctuation",
       "text": ". Reduce items or raise the cap in settings (maximum 25)."
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/nodes/BatchNode.tsx",
-      "rule": "title-case",
-      "text": "Edit Batch items"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/nodes/CharacterNode.tsx",
-      "rule": "title-case",
-      "text": "Open Character"
     },
     {
       "family": "sentence-punctuation",
@@ -200,18 +91,6 @@
       "text": "Out of date — source updated"
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/nodes/MoodboardNode.tsx",
-      "rule": "title-case",
-      "text": "Choose one in the Inspector"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/nodes/MoodboardNode.tsx",
-      "rule": "title-case",
-      "text": "Open Moodboard"
-    },
-    {
       "family": "sentence-punctuation",
       "file": "frontend/src/components/nodes/ReferenceSetNode.tsx",
       "rule": "sentence-punctuation",
@@ -228,24 +107,6 @@
       "file": "frontend/src/components/panels/AssetsPanel.tsx",
       "rule": "title-case",
       "text": "Double-click to use in Create"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/AssetsPanel.tsx",
-      "rule": "title-case",
-      "text": "No Characters"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/AssetsPanel.tsx",
-      "rule": "title-case",
-      "text": "No Moodboards"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/AssetsPanel.tsx",
-      "rule": "title-case",
-      "text": "No Styles"
     },
     {
       "family": "sentence-punctuation",
@@ -266,47 +127,10 @@
       "text": "Private reference chats: Claude or Codex."
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/ChatPanel.tsx",
-      "rule": "title-case",
-      "text": "Connect ChatGPT Account",
-      "count": 2
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/ChatPanel.tsx",
-      "rule": "title-case",
-      "text": "Device Code"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/DeferredMaskPainter.tsx",
-      "rule": "title-case",
-      "text": "Paint Mask"
-    },
-    {
       "family": "em-dashes",
       "file": "frontend/src/components/panels/Inspector.tsx",
       "rule": "em-dash",
       "text": "Node info — inputs, outputs, and settings"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/Inspector.tsx",
-      "rule": "title-case",
-      "text": "Choose File"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/Inspector.tsx",
-      "rule": "title-case",
-      "text": "Edit Mask"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/Inspector.tsx",
-      "rule": "title-case",
-      "text": "Paint Mask"
     },
     {
       "family": "em-dashes",
@@ -327,28 +151,10 @@
       "text": "Paint the region to change. Polarity is applied by the node's “Painted Area Means” setting at run time."
     },
     {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
-      "rule": "title-case",
-      "text": "Paint Mask"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/MaskPainterModal.tsx",
-      "rule": "title-case",
-      "text": "Save Mask"
-    },
-    {
       "family": "em-dashes",
       "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
       "rule": "em-dash",
       "text": "Recovery ID unavailable — check Marble and the live World node"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/panels/RunHistoryPanel.tsx",
-      "rule": "title-case",
-      "text": "Run History"
     },
     {
       "family": "sentence-punctuation",
@@ -379,30 +185,6 @@
       "file": "frontend/src/components/video-editor/RemotionComposition.tsx",
       "rule": "em-dash",
       "text": "— renderer not yet implemented]"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/video-editor/RemotionEditorToolbar.tsx",
-      "rule": "title-case",
-      "text": "+ Iso Block"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/video-editor/RemotionEditorToolbar.tsx",
-      "rule": "title-case",
-      "text": "To Back"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/video-editor/RemotionEditorToolbar.tsx",
-      "rule": "title-case",
-      "text": "To Front"
-    },
-    {
-      "family": "title-case-labels",
-      "file": "frontend/src/components/video-editor/RemotionPropertiesPanel.tsx",
-      "rule": "title-case",
-      "text": "Iso Block"
     },
     {
       "family": "title-case-labels-node-definitions",

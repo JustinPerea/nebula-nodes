@@ -3530,7 +3530,7 @@ function MoodboardRail({
         </button>
       </div>
       <button type="button" className="moodboard-rail__new" disabled={noProject}
-        title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New Moodboard</button>
+        title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New moodboard</button>
       <div className="moodboard-rail__list" ref={rows}>
         {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status"><LineText text={notice} /></div>}
         {busy && <div className="moodboard-rail__empty">Loading…</div>}
@@ -3580,10 +3580,10 @@ function NotesSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) =>
       <button type="button" role="switch" aria-checked={on} aria-describedby={hintId}
         className="moodboard-switch__control" onClick={() => onChange(!on)}>
         <span className="moodboard-switch__track" aria-hidden="true"><span className="moodboard-switch__thumb" /></span>
-        <span className="moodboard-switch__label">Send these notes to generators</span>
+        <span className="moodboard-switch__label">Moodboard notes to generators</span>
       </button>
       <span id={hintId} className="moodboard-switch__hint">
-        {on ? 'On: generators get these notes with the brief.' : 'Off: notes are for you, your team and agents.'}
+        {on ? 'When it’s on, generators get these notes with the brief.' : 'When it’s off, notes are for you, your team and agents.'}
       </span>
     </div>
   );

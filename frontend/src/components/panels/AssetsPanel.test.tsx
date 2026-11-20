@@ -151,7 +151,7 @@ describe('Assets panel Project tab', () => {
     expect(screen.queryByRole('button', { name: /^A board/ })).toBeNull();
     expect(api.fetchMoodboards).toHaveBeenCalledWith('project', 'pB');
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ New moodboard' }));
     expect(enterMoodboardEditor).toHaveBeenCalledWith('new', 'project');
   });
 
@@ -162,7 +162,7 @@ describe('Assets panel Project tab', () => {
     expect(await screen.findByText('Open a project to see its Characters.')).toBeTruthy();
     await waitFor(() => expect(api.fetchCharacters).toHaveBeenCalledTimes(1));
     expect(api.fetchCharacters).toHaveBeenCalledWith('global', undefined);
-    const newButton = screen.getByRole('button', { name: '+ New Character' }) as HTMLButtonElement;
+    const newButton = screen.getByRole('button', { name: '+ New character' }) as HTMLButtonElement;
     expect(newButton.disabled).toBe(true);
     fireEvent.click(newButton);
     expect(enterCharacterEditor).not.toHaveBeenCalled();
@@ -261,7 +261,7 @@ describe('Assets panel Styles', () => {
     await waitFor(() => expect(presets.deletePreset).toHaveBeenCalledWith('s1'));
     expect(await screen.findByText('Moved “Neon noir” to Recently deleted')).toBeTruthy();
     await waitFor(() => expect(presets.fetchPresets.mock.calls.length).toBeGreaterThan(listed));
-    expect(await screen.findByText('No Styles yet.')).toBeTruthy();
+    expect(await screen.findByText('No styles yet.')).toBeTruthy();
 
     presets.fetchPresets.mockResolvedValue([style]);
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));

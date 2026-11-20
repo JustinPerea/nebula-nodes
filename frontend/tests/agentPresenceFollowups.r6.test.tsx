@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * Fix round 6 of PR #200 (review 6 and GM's r8/r9 answers), the component
  * and style side:
  * - LOW-1 (GM r9 answer 3): a locked Inspector "+ Add", "Extract from
- *   reference" and every "Choose File" get the one disabled treatment (the
+ *   reference" and every "Choose file" get the one disabled treatment (the
  *   shared grey, no pointer, no hover) and the lock's reason, follow first,
  *   then offline ("You can choose a file when Nebula reconnects.").
  * - GM r8: a filled destructive confirm is the red fill (#ff887d) with
@@ -157,9 +157,9 @@ describe('LOW-1: a locked Inspector picker or Add says why, in the shared grey',
     expect(extract()).toHaveAttribute('data-offline-disabled');
   });
 
-  it('"Choose File": "You can choose a file when Nebula reconnects." offline, the follow reason following (GM r9 answer 3)', () => {
+  it('"Choose file": "You can choose a file when Nebula reconnects." offline, the follow reason following (GM r9 answer 3)', () => {
     select('image-input', { filePath: '' });
-    const choose = () => labelOf('Choose File');
+    const choose = () => labelOf('Choose file');
     expect(choose()).not.toHaveAttribute('title');
     expect(choose()).not.toHaveAttribute('aria-disabled');
     act(() => noteBackendConnection('offline'));

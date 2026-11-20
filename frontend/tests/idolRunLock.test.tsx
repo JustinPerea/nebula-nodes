@@ -85,7 +85,7 @@ const surfaces = [
   ['the context menu', () => {
     useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n1', null);
     render(<ContextMenu />);
-    return screen.getByRole('button', { name: 'Run This Node' });
+    return screen.getByRole('button', { name: 'Run this node' });
   }],
 ] as const;
 
@@ -125,7 +125,7 @@ describe('a keyed Space route without its key (Idol\'s keyed shape): Run is lock
         useUIStore.getState().showContextMenu({ x: 20, y: 30 }, 'n2', null);
         render(<ContextMenu />);
       }
-      const run = where === 'the context menu' ? screen.getByRole('button', { name: 'Run This Node' })
+      const run = where === 'the context menu' ? screen.getByRole('button', { name: 'Run this node' })
         : where === 'the Inspector' ? (render(<Inspector embedded />), screen.getByRole('button', { name: /^Run/ }))
           : (render(<ReactFlowProvider><SelectionToolbar /></ReactFlowProvider>),
             screen.getByRole('button', { name: 'Run selected nodes' }));

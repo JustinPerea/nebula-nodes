@@ -103,7 +103,7 @@ describe('Character Studio rail', () => {
     await openStudio('c1', 'global', 'Nari');
     fireEvent.click(tab('Project'));
     expect(await screen.findByText('Open a project to see its Characters.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: '+ New Character' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '+ New character' }) as HTMLButtonElement).disabled).toBe(true);
     expect(api.fetchCharacters).not.toHaveBeenCalledWith('project', expect.anything());
   });
 

@@ -48,8 +48,8 @@ export function reopenHoldLine(project: string, openId: string, hold: ReopenHold
         : `${reopen} after you check the World Labs run${forNode(hold, openId)} in Marble and press “${UNLOCK_LABEL}”.`;
     case 'recovery':
       return hold.count >= 2
-        ? `${reopen} after you forget ${hold.count} World Labs recovery IDs in Run History.`
-        : `${reopen} after you forget the World Labs recovery ID${forNode(hold, openId)} in Run History.`;
+        ? `${reopen} after you forget ${hold.count} World Labs recovery IDs in Run history.`
+        : `${reopen} after you forget the World Labs recovery ID${forNode(hold, openId)} in Run history.`;
     case 'params':
       return `${reopen} after you check the World Labs run${forNode(hold, openId)} in Marble and clear its ${fieldList(hold.fields)}.`;
     case 'bootstrap':

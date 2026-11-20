@@ -43,7 +43,7 @@ describe('CommandPalette node insertion', () => {
     ).toBe(true);
   });
 
-  it('opens from the workspace rail event and exposes Run History', () => {
+  it('opens from the workspace rail event and exposes Run history', () => {
     render(
       <ReactFlowProvider>
         <CommandPalette />

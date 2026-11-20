@@ -98,7 +98,7 @@ describe('the file row while an upload is on its way', () => {
     const { container } = show();
     await pick(container);
     // A quick upload changes nothing (#204's one loading look).
-    expect(row(container).textContent).toBe('Choose File');
+    expect(row(container).textContent).toBe('Choose file');
     await wait(PALETTE_PENDING_DELAY_MS + 50);
     expect(row(container).textContent).toBe('Uploading “green.png”…');
     const input = container.querySelector('.inspector__file-input') as HTMLInputElement;

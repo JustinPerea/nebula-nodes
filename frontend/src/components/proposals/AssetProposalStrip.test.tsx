@@ -38,11 +38,11 @@ describe('AssetProposalStrip', () => {
   it('asks about a board in its own words', () => {
     useAssetProposalsStore.getState().open(coverProposal({
       kind: 'moodboard', target: { kind: 'moodboard', id: 'mb1', name: 'Dusk board' },
-      change: { sendNotes: { from: false, to: true } }, summary: 'send the notes of “Dusk board” to generators',
+      change: { sendNotes: { from: false, to: true } }, summary: 'turn on “Moodboard notes to generators” for “Dusk board”',
       decideIn: 'moodboard-studio',
     }), 'k1');
     render(<AssetProposalStrip kind="moodboard" targetId="mb1" />);
-    const strip = screen.getByRole('group', { name: 'Claude Code asks to send these notes to generators' });
+    const strip = screen.getByRole('group', { name: 'Claude Code asks to turn on “Moodboard notes to generators”' });
     expect(strip.querySelector('img')).toBeNull();
     expect(screen.getByRole('button', { name: 'Send them' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Keep them here' })).toBeTruthy();

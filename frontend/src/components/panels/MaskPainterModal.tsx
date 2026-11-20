@@ -183,7 +183,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
     <div {...dialog} className="mask-painter__overlay" role="dialog" aria-modal="true" aria-label="Mask painter">
       <div className="mask-painter__panel">
         <div className="mask-painter__header">
-          <span className="mask-painter__title">Paint Mask</span>
+          <span className="mask-painter__title">Paint mask</span>
           <span className="mask-painter__hint">
             Paint the region to change. Polarity is applied by the node&apos;s
             &ldquo;Painted Area Means&rdquo; setting at run time.
@@ -270,7 +270,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             // (fix round 2 of PR #200, review 2 L-5; GM's sweep list).
             {...lock.act({ disabled: !natural || !hasStrokes, offline: true, kept: 'live' })}
           >
-            Save Mask
+            Save mask
           </button>
         </div>
       </div>

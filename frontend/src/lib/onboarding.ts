@@ -28,7 +28,7 @@ export const ONBOARDING_TOUR: readonly OnboardingTourStep[] = [
   },
   {
     target: 'history', selector: '[data-onboarding-target="history"]', title: 'Keep your earlier runs',
-    body: 'Inspect saved recipes and earlier results in Run History. Explicitly rerun a recipe when you want a new result; browsing keeps earlier runs intact.',
+    body: 'Inspect saved recipes and earlier results in Run history. Explicitly rerun a recipe when you want a new result; browsing keeps earlier runs intact.',
   },
   {
     target: 'chat', selector: '[data-onboarding-target="chat"]', title: 'Build with the agent',

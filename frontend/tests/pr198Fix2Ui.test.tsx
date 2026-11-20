@@ -144,7 +144,7 @@ describe('GM: Cinema, Create and Remotion actions are disabled offline, neutral,
     useGraphStore.setState({ nodes: [] } as never);
     offline();
     render(<RemotionEditorToolbar remotionNodeId="r1" />);
-    for (const name of ['+ Text', '+ SVG', '+ Image', '+ Video', '+ Iso Block', '+ Lottie', '● REC', 'Export']) {
+    for (const name of ['+ Text', '+ SVG', '+ Image', '+ Video', '+ Iso block', '+ Lottie', '● REC', 'Export']) {
       gated(screen.getByRole('button', { name }));
     }
   });
@@ -171,16 +171,16 @@ describe('GM: a shot that is rendering can\'t be removed', () => {
   it('with a stop control on the shot: "Stop the run first."', () => {
     useGraphStore.setState({ activeRuns: [{ id: 'r1', kind: 'cinema-shot', nodeId: 'n1', shotId: 's2', nodeIds: ['n1'], status: 'running' }] } as never);
     rail();
-    const remove = screen.getByRole('button', { name: 'Remove Shot 2' });
+    const remove = screen.getByRole('button', { name: 'Remove shot 2' });
     expect(remove).toBeDisabled();
     expect(remove).toHaveAttribute('title', 'Stop the run first.');
-    expect(screen.getByRole('button', { name: 'Remove Shot 1' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Remove shot 1' })).toBeEnabled();
   });
 
   it('a whole-scene run has Stop scene: "Stop the run first." for every shot', () => {
     useGraphStore.setState({ activeRuns: [{ id: 'r1', kind: 'graph', nodeIds: ['n1'], status: 'running' }] } as never);
     rail();
-    for (const name of ['Remove Shot 1', 'Remove Shot 2']) {
+    for (const name of ['Remove shot 1', 'Remove shot 2']) {
       expect(screen.getByRole('button', { name })).toHaveAttribute('title', 'Stop the run first.');
       expect(screen.getByRole('button', { name })).toBeDisabled();
     }
@@ -190,9 +190,9 @@ describe('GM: a shot that is rendering can\'t be removed', () => {
     const scene = { ...SCENE, shots: [SCENE.shots[0], { ...SCENE.shots[1], output: { status: 'running' as const } }] };
     render(<CinemaShotsRail cinemaNodeId="n1" scene={scene} selectedShotId="s1" onSelect={() => {}}
       onAddShot={() => {}} onRemoveShot={() => {}} onReorder={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Remove Shot 2' })).toHaveAttribute('title', 'You can remove “Shot 2” when it finishes.');
-    expect(screen.getByRole('button', { name: 'Remove Shot 2' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Remove Shot 1' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Remove shot 2' })).toHaveAttribute('title', 'You can remove “Shot 2” when it finishes.');
+    expect(screen.getByRole('button', { name: 'Remove shot 2' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove shot 1' })).toBeEnabled();
   });
 });
 

@@ -119,7 +119,7 @@ describe('ProposalBar', () => {
     render(<ProposalBar />);
     const name = screen.getByText('Portable Agent - Brand');
     expect(name.getAttribute('title')).toBe('Portable Agent - Brand');
-    expect(name.closest('.proposal-bar__head')?.textContent).toMatch(/proposes.*Expires in \d+:\d\d$/);
+    expect(name.closest('.proposal-bar__head')?.textContent).toMatch(/proposes.*Expires in \d+ min$/);
     expect(screen.getByText('Generate the warm take')).toBeTruthy();
     expect(screen.getByText(plan).className).toBe('proposal-bar__plan');
     // Nothing above the disclosure names a node by id (the details fall back
@@ -144,7 +144,7 @@ describe('ProposalBar', () => {
     expect(price.getAttribute('title')).toBe('List prices, not a quote');
     expect(line.querySelector('.proposal-bar__sr-only')?.textContent).toBe(' (list prices, not a quote)');
     expect(line.textContent).toBe('Runs “Nano Banana” · ~$0.07 (list prices, not a quote)');
-    const details = screen.getByLabelText('What Accept writes');
+    const details = screen.getByLabelText('What “Accept” saves');
     expect(details.firstElementChild?.textContent).toBe('List prices, not a quote');
   });
 
@@ -222,8 +222,8 @@ describe('ProposalBar', () => {
         sourceName: `Photo ${i}`, targetName: 'Second take', targetLabel: 'Images' })),
     }));
     render(<ProposalBar />);
-    const row = screen.getByRole('button', { name: /^What Accept writes/ });
-    expect(row.textContent).toBe('What Accept writes3 changes');
+    const row = screen.getByRole('button', { name: /^What “Accept” saves/ });
+    expect(row.textContent).toBe('What “Accept” saves3 changes');
     fireEvent.click(row);
     const removed = document.querySelector('.proposal-bar__wires[data-kind="unwired"]')!;
     expect(removed.previousElementSibling?.textContent).toBe('Removed connections');
@@ -457,22 +457,22 @@ describe('ProposalBar', () => {
       params: { n1: { value: { from: 'a', to: 'b' } } },
     });
     render(<ProposalBar />);
-    const row = screen.getByRole('button', { name: /^What Accept writes/ });
+    const row = screen.getByRole('button', { name: /^What “Accept” saves/ });
     // A real disclosure: its label never changes; aria-expanded and the
     // chevron carry the state, and it names the panel it controls.
     expect(row.getAttribute('aria-expanded')).toBe('false');
     // One unit, the operation (GM - Design, PR #216 r2): the new node, the
     // changed node and the wire, never their field lines.
-    expect(row.textContent).toBe('What Accept writes3 changes');
+    expect(row.textContent).toBe('What “Accept” saves3 changes');
     const panel = document.getElementById(row.getAttribute('aria-controls')!)!;
     expect(panel.getAttribute('data-open')).toBe('false');
     expect(panel.hasAttribute('inert')).toBe(true);
     fireEvent.click(row);
     expect(row.getAttribute('aria-expanded')).toBe('true');
-    expect(row.textContent).toBe('What Accept writes3 changes');
+    expect(row.textContent).toBe('What “Accept” saves3 changes');
     expect(panel.getAttribute('data-open')).toBe('true');
     expect(panel.hasAttribute('inert')).toBe(false);
-    const details = screen.getByLabelText('What Accept writes');
+    const details = screen.getByLabelText('What “Accept” saves');
     expect(details.textContent).toContain('New “Nano Banana”');
     expect(details.textContent).toContain('num_images8');
     expect(details.textContent).toContain(long);
@@ -488,7 +488,7 @@ describe('ProposalBar', () => {
     open(proposal('p_a', { params: [{ nodeId: 'n1', name: 'Hero shot (n1)', title: 'Hero shot', model: 'Krea 2',
       changes: { aspect_ratio: { from: '16:9', to: '1:1' } } }] }));
     render(<ProposalBar />);
-    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^What “Accept” saves/ }));
     const titles = [...document.querySelectorAll('.proposal-bar__group-title')].map((el) => el.textContent);
     expect(titles).toEqual(['New “Nano Banana”', '“Hero shot” · Krea 2', 'New connections']);
   });
@@ -497,9 +497,9 @@ describe('ProposalBar', () => {
     open(proposal('p_a', { createdAt: 1 }));
     open(proposal('p_b', { createdAt: 2 }));
     render(<ProposalBar />);
-    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^What “Accept” saves/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Next proposal' }));
-    expect(screen.getByRole('button', { name: /^What Accept writes/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: /^What “Accept” saves/ }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it("names the run's nodes that can't run here, and leaves Accept as the Run button is", () => {
@@ -730,12 +730,12 @@ describe('ProposalBar', () => {
     // The details hold the list and what Accept writes under one toggle,
     // whose name never changes (GM - Design, 2026-11-01: the chevron and
     // aria-expanded carry the state).
-    const toggle = screen.getByRole('button', { name: /^What Accept writes/ });
+    const toggle = screen.getByRole('button', { name: /^What “Accept” saves/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.queryByRole('button', { name: /See what Accept writes|Show the list|Show the details/ })).toBeNull();
-    const details = screen.getByRole('group', { name: 'What Accept writes' });
+    const details = screen.getByRole('group', { name: 'What “Accept” saves' });
     for (const ref of ['+a', '+b', '+c', '+d', '+e'].slice(0, count)) expect(details.textContent).toContain(`(${ref})`);
   });
 
@@ -773,8 +773,8 @@ describe('ProposalBar', () => {
     sameNamed(3);
     const list = screen.getByRole('list', { name: 'Can’t run here' });
     expect(list.textContent).toBe('⚠4 nodes can’t run here yet.');
-    fireEvent.click(screen.getByRole('button', { name: /^What Accept writes/ }));
-    expect([...screen.getByRole('group', { name: 'What Accept writes' }).querySelectorAll('p')].map((p) => p.textContent)).toEqual([
+    fireEvent.click(screen.getByRole('button', { name: /^What “Accept” saves/ }));
+    expect([...screen.getByRole('group', { name: 'What “Accept” saves' }).querySelectorAll('p')].map((p) => p.textContent)).toEqual([
       '3 “Krea 2” nodes need your Krea plan. Sign in to Krea in Settings.',
       '“Claude” needs your Anthropic API key. Add it in Settings.',
     ]);
@@ -797,11 +797,11 @@ describe('ProposalBar', () => {
     expect(list.textContent).toContain('4 nodes can’t run here yet.');
     // The ⚠ line is kept in view with the plan line (GM r6).
     expect(list.querySelector('li')!.hasAttribute('data-notice-keep')).toBe(true);
-    const toggle = screen.getByRole('button', { name: /^What Accept writes/ });
+    const toggle = screen.getByRole('button', { name: /^What “Accept” saves/ });
     toggle.focus();
     fireEvent.click(toggle);
     expect(document.activeElement).toBe(toggle);
-    expect(screen.getByRole('group', { name: 'What Accept writes' }).textContent).toContain('(+d)');
+    expect(screen.getByRole('group', { name: 'What “Accept” saves' }).textContent).toContain('(+d)');
   });
 
   it('with no changes, the row reads "Every node that can’t run" with the count', () => {
@@ -841,7 +841,7 @@ describe('ProposalBar', () => {
     expect(shown.getAttribute('data-open')).toBe('true');
     expect(screen.getByRole('button', { name: 'Show less' }).getAttribute('aria-expanded')).toBe('true');
     // The note never goes into the details again.
-    expect(screen.queryByRole('button', { name: /What Accept writes|Read the whole note/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /What “Accept” saves|Read the whole note/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
     expect(shown.hasAttribute('data-open')).toBe(false);
     heights.mockRestore();

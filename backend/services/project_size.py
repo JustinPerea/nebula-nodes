@@ -26,7 +26,7 @@ Parts of a node (the fields they cover):
   ports, the last error, run notes).
 A tie goes to the earlier part in that list.
 
-Rows that aren't nodes: "runHistory" (the Run History panel's records, which
+Rows that aren't nodes: "runHistory" (the Run history panel's records, which
 stay when a node is deleted), "wires" (every connection), "createDraft"
 (Create's unsent draft) and "project" (what is left: the view, the session
 id, the keys and separators between the parts).

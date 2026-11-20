@@ -1108,7 +1108,7 @@ def test_undoing_a_set_skips_an_image_setting_changed_since(app, client, root):
     board, _removed, _redo, skipped = _undo(app, previous)
     a, b = board["images"]
     assert a["weight"] == 0.3 and b["notes"] == ""
-    assert skipped == ["Image 1\u2019s weight changed since, left as is"]
+    assert skipped == ["Nebula couldn’t undo the change to image 1 because image 1\u2019s weight changed after that."]
 
 
 def test_an_untouched_undo_of_a_set_puts_everything_back(app, client, root):
@@ -1177,7 +1177,7 @@ def test_a_fields_restore_is_checked_and_skips_what_only_the_person_may_turn_on(
     done = _ok(_edit(client, [stale], headers=AGENT))
     assert done["board"]["direction"] == "was" and done["board"]["sendNotes"] is False
     assert [s["message"] for s in done["applied"][0]["skipped"]] == [
-        "Send notes to generators is the person’s to turn on, left as is"]
+        "Nebula couldn’t undo “Turned off ‘Moodboard notes to generators’” because only you can turn it on."]
     # As the person, the same slice turns it on.
     write_board(root, {**fixture_board(), "sendNotes": False, "direction": "now"})
     assert _ok(_edit(client, [stale], headers=PERSON))["board"]["sendNotes"] is True
@@ -1214,7 +1214,7 @@ def test_undoing_an_unpin_leaves_a_keep_anyway_chosen_since(app, client, root):
     # undo doesn't own: the pins are left as they are, and it says so.
     board, _removed, redo, skipped = _undo(app, previous)
     assert _colors(board) == ({"include": [], "exclude": []}, ["#ff0000"])
-    assert skipped == ["The pinned colours would undo a colour choice made since, left as is"]
+    assert skipped == ["Nebula couldn’t undo “Changed the pinned colors” because a color was chosen after that."]
     assert redo == {}
 
 

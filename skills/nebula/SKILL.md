@@ -156,10 +156,10 @@ listed in the save's `deletesKept`).
 `list_projects`' `openHold`, `GET /api/projects/open-hold`) says so, with
 the state, the node, its project and what clears it: "Opening or switching
 projects is held (recovery): “World” (n1) from “Alpha” has a saved World
-Labs recovery ID; the person forgets it in Run History." `--json` and
+Labs recovery ID; the person forgets it in Run history." `--json` and
 `openHold` have the fields (`state`: `active`, `ambiguity`, `recovery`,
 `params`, `bootstrap` or `run`). Reading it changes no canvas or project;
-wait, or ask the person to clear it (Run History's Forget ID for
+wait, or ask the person to clear it (Run history's Forget ID for
 `recovery`, the World Labs notice for `ambiguity`). It covers Nebula's own
 holds only: while the person's tab keeps edits of its own, an open answers
 `canvas_kept_in_tab`, which it doesn't show. A recovered copy's row says its source: `sourceName` (null when
@@ -505,7 +505,7 @@ this id can’t start again. Start a new run with a new id."
 
 If Nebula has no record of the id at all (it may have run before Nebula
 restarted, or the id is wrong), both commands print "Nebula has no record
-of run <id>. If it started before Nebula restarted, check Run History for
+of run <id>. If it started before Nebula restarted, check Run history for
 what it did." Don't tell the person nothing ran: ask them to check Run
 History in Nebula.
 
@@ -605,7 +605,7 @@ don't tell them it failed or offer to retry it.
 Refusals give you the specific text (an id, the field, the command to run);
 the person's canvas gets a written line instead. Read `detail`, not the
 person's wording. That includes the World Labs holds: a run start, the
-person's "I’ve checked Marble" (the status bar) and "Forget ID" (Run History)
+person's "I’ve checked Marble" (the status bar) and "Forget ID" (Run history)
 refused while a job is still waiting keep their exact text for you. A node's run error works the same way:
 `error` (in `nebula result`, `nebula look` and the run record) is the specific
 text, ids and parameter names included; the card shows a written line (the
@@ -872,7 +872,7 @@ nebula moodboard delete <board>
   "<board id>", "change": {"sendNotes": true}, "note": "..."}`, or
   `propose_asset_change` over MCP), which the person decides in Moodboard
   Studio; `nebula proposal <id> --wait --timeout 60` follows it. Every such
-  proposal (a cover, Send notes, Commons curation) also posts an Update in
+  proposal (a cover, “Moodboard notes to generators”, Commons curation) also posts an Update in
   the person's Updates corner ("<you> asks to ...", with Review); a new one
   on the same target replaces it, and `nebula notes` shows how it ended
   (an expired one says "Expired" on time; one that was open when Nebula
@@ -897,7 +897,7 @@ nebula moodboard delete <board>
 - Every board write is journaled in its writer's name, so `nebula watch
   --kinds board` sees the person's edits too: an image, card or frame
   change is `board.added`, `board.moved`, ...; a change to the board's own
-  fields (Direction, Avoid, pinned colours, its notes, Send notes, strength,
+  fields (Direction, Avoid, pinned colours, its notes, “Moodboard notes to generators”, strength,
   a rename...) is `board.fields`, whose `fields` lists the names that
   changed. It never carries their values: read the board (`show`) for them.
 - Without `--project` a board is Global: it belongs to no project, so every

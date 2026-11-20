@@ -8,7 +8,7 @@ import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 /**
  * Round 17 of PR #114, GM's visual rulings and the draft rules they extend:
  * - A: the bottom toolbar's Stop dots sit in the icon slot.
- * - B: Run History's Stop is at full opacity while a run is going.
+ * - B: Run history's Stop is at full opacity while a run is going.
  * - C: on the home screen the offline banner sits under the top bar.
  * - Commons label drafts follow the rename-draft rules on reconnect.
  * - A dropped rename names who renamed the node only when its source is known.
@@ -96,7 +96,7 @@ describe('A: the bottom Stop\'s dots sit in its icon slot', () => {
   });
 });
 
-describe('B: Run History\'s Stop is at full opacity while a run is going', () => {
+describe('B: Run history\'s Stop is at full opacity while a run is going', () => {
   it('the header Stop carries its own class, and that class is full opacity when enabled', () => {
     useGraphStore.setState({ runHistory: [running('r1')], isExecuting: true, isCancelling: false });
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));

@@ -10,7 +10,7 @@ import { COMMONS_OFF_REVIEW_LINE, commonsOffNow } from './commonsOff';
 /**
  * Review on an asset proposal's Update (Justin's Q92 a): take the person to
  * where they accept or reject it. A cover on the Projects screen at that
- * project's card, Send notes in Moodboard Studio on that board, a Commons
+ * project's card, “Moodboard notes to generators” in Moodboard Studio on that board, a Commons
  * curation on that reference's detail. The strip there brings itself into
  * view (AssetProposalStrip takes the request). Only the Updates corner, a
  * deferred chunk, imports this.

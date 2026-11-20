@@ -241,7 +241,7 @@ describe('M1: during the tab\'s own run, every delete and undo path says why', (
     const added = await ownShotRun(true);
     useGraphStore.getState().undo();
     await sleep(20);
-    expect(notice()).toBe("Couldn’t undo. It would remove “Shot 3”, which is still running. Stop the run first.");
+    expect(notice()).toBe("Nebula couldn’t undo because it would remove “Shot 3”, which is still running. Stop the run first.");
     expect(restoresSent()).toBe(0);
     expect(shotsOf('n4').map((shot) => shot.id)).toEqual(['s1', 's2', added]);
   });

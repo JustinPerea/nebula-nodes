@@ -75,7 +75,7 @@ describe('Batch authoring card', () => {
     colors.forEach((color) => expect(screen.getByText(color)).toBeInTheDocument());
     expect(screen.getByTestId('handle-source-set')).toHaveAttribute('aria-label', 'Batch items output');
     expect(screen.getByText(/Cap 10.*Editing does not generate/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Batch items' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit batch items' }));
     expect(useUIStore.getState().selectedNodeId).toBe('batch');
     expect(useUIStore.getState().panels.inspector.visible).toBe(true);
     expect(transport.apiFetch).not.toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe.each([['ModelNode', false], ['DynamicNode', true]] as const)('%s Batch 
     fireEvent.click(screen.getByRole('button', { name: 'Next batch result' }));
     act(() => useGraphStore.setState({ nodes: [node('preview', 'preview', { state: 'executing', streamingText: 'live green' })] }));
     expect(screen.queryByText('[orange]')).toBeNull();
-    expect(screen.getByText('7 results · Running')).toBeInTheDocument();
+    expect(screen.getByText('7 results · running')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next batch result' })).toBeDisabled();
     expect(view.container.querySelector('.model-node__preview-text')).toHaveTextContent('live green');
     act(() => useGraphStore.setState({ nodes: [node('preview', 'preview', { batchRunId: 'run-b', batchOutputs: [text('pink'), text('cyan')],

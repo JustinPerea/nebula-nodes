@@ -20,15 +20,15 @@ const ADD_BUTTONS: Array<{ label: string; componentType: TrackComponentType }> =
   { label: '+ SVG', componentType: 'SVGInput' },
   { label: '+ Image', componentType: 'ImageAssetNode' },
   { label: '+ Video', componentType: 'VideoAssetNode' },
-  { label: '+ Iso Block', componentType: 'IsometricBlock' },
+  { label: '+ Iso block', componentType: 'IsometricBlock' },
   { label: '+ Lottie', componentType: 'LottieNode' },
 ];
 
 const Z_ORDER_BUTTONS: Array<{ label: string; title: string; action: TrackItemOrderAction }> = [
-  { label: 'To Back', title: 'Send selected layer to back', action: 'send-to-back' },
+  { label: 'To back', title: 'Send selected layer to back', action: 'send-to-back' },
   { label: 'Back', title: 'Send selected layer backward', action: 'send-backward' },
   { label: 'Forward', title: 'Bring selected layer forward', action: 'bring-forward' },
-  { label: 'To Front', title: 'Bring selected layer to front', action: 'bring-to-front' },
+  { label: 'To front', title: 'Bring selected layer to front', action: 'bring-to-front' },
 ];
 
 export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarProps) {

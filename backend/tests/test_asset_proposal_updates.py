@@ -78,7 +78,7 @@ def test_a_send_notes_proposal_posts_an_update_without_the_boards_text(api):
     assert put.status_code == 200, put.text
     view = _propose(api, {"sendNotes": True}, kind="moodboard", target=board["id"]).json()["proposal"]
     (note,) = _proposal_notes(api)
-    assert note["text"] == "Claude Code asks to send Dusk board's notes to generators"
+    assert note["text"] == "Claude Code asks to turn on “Moodboard notes to generators” for Dusk board"
     assert _review(note) == {"kind": "proposal.review", "proposalId": view["id"], "target": "moodboard",
                              "targetId": board["id"]}
     text = json.dumps(note)

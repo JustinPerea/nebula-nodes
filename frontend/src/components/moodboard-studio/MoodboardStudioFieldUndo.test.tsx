@@ -69,7 +69,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stri
 const LABELS: Record<string, string> = {
   name: 'The name', notes: "The board's notes", mode: 'Mode', strength: 'Strength', direction: 'Direction',
   avoid: 'The Avoid list', pinnedColors: 'The pinned colours', clashMode: 'The clash mode',
-  colorChoices: 'The colour choices', sendNotes: 'Send notes to generators', briefOverride: 'The hand-written brief',
+  colorChoices: 'The colour choices', sendNotes: '“Moodboard notes to generators”', briefOverride: 'The hand-written brief',
 };
 const FIELDS = Object.keys(LABELS);
 type Slice = { part: string; before: Record<string, unknown>; expect: Record<string, unknown>; image?: string; placement?: string };
@@ -269,7 +269,7 @@ describe('a text field is one step when you leave it', () => {
       { part: 'fields', before: { direction: '' }, expect: { direction: 'warm dusk' } }] }]);
     await waitFor(() => expect(server.board.direction).toBe(''));
     await waitFor(() => expect(direction().value).toBe(''));
-    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Direction”/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Changed the direction”/);
   });
 
   it('typing then Cmd+Z inside the textarea is the textarea\'s own undo, not a Studio step', async () => {
@@ -339,7 +339,7 @@ describe('a text field is one step when you leave it', () => {
     await settled();
     undo();
     await waitFor(() => expect(server.board.briefOverride).toEqual({ text: '' }));
-    expect(await screen.findByText(/Undid “Your brief”/)).toBeTruthy();
+    expect(await screen.findByText(/Undid “Changed the brief”/)).toBeTruthy();
     await settled();
     undo();
     await waitFor(() => expect(server.board.briefOverride).toBeNull());
@@ -360,7 +360,7 @@ describe('a text field is one step when you leave it', () => {
     expect(restores()).toHaveLength(2);
     expect(restores()[1]).toEqual([{ op: 'restore', slices: [
       { part: 'fields', before: { direction: 'warm dusk' }, expect: { direction: '' } }] }]);
-    expect((await screen.findByText(/Redid “Direction”/))).toBeTruthy();
+    expect((await screen.findByText(/Redid “Changed the direction”/))).toBeTruthy();
     await waitFor(() => expect(direction().value).toBe('warm dusk'));
   });
 });
@@ -380,7 +380,7 @@ describe('a control is one step when its change is done', () => {
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => expect(server.board.strength).toBe(0.7));
     expect(restores()).toHaveLength(1);
-    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Strength”/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Changed the strength”/);
     await settled();
     undo();
     await pause(300);
@@ -418,7 +418,7 @@ describe('a control is one step when its change is done', () => {
 
     undo();
     await waitFor(() => expect(server.board.pinnedColors?.include).toEqual(['#112233']));
-    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Pinned colors”/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Changed the pinned colors”/);
     await settled();
     undo();
     await waitFor(() => expect(server.board.pinnedColors?.include).toEqual([]));
@@ -463,13 +463,13 @@ describe('a control is one step when its change is done', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Mode' }), { target: { value: 'world' } });
     await waitFor(() => expect(server.board.mode).toBe('world'), { timeout: 3000 });
     await settled();
-    fireEvent.click(screen.getByRole('switch', { name: /Send these notes/ }));
+    fireEvent.click(screen.getByRole('switch', { name: /Moodboard notes to generators/ }));
     await waitFor(() => expect(server.board.sendNotes).toBe(true), { timeout: 3000 });
     await settled();
 
     undo();
     await waitFor(() => expect(server.board.sendNotes).toBe(false));
-    expect(await screen.findByText(/Undid “Send notes to generators”/)).toBeTruthy();
+    expect(await screen.findByText(/Undid “Turned on ‘Moodboard notes to generators’”/)).toBeTruthy();
     await settled();
     undo();
     await waitFor(() => expect(server.board.mode).toBe('look'));
@@ -490,7 +490,7 @@ describe('a stale field step follows the card rule: left as is, and named', () =
     await waitFor(() => expect(direction().value).toBe('agent dawn'));
 
     undo();
-    expect(await screen.findByText('Nebula couldn’t undo “Direction” because the direction changed again after that.')).toBeTruthy();
+    expect(await screen.findByText('Nebula couldn’t undo “Changed the direction” because the direction changed again after that.')).toBeTruthy();
     expect(server.board.direction).toBe('agent dawn');
     await settled();
     redo();
@@ -529,7 +529,7 @@ describe('one timeline with the card steps', () => {
     await waitFor(() => expect(server.board.images[0].weight).toBe(0.5), { timeout: 3000 });
     await settled();
     const history = Object.values(useBoardUndoStore.getState().histories)[0];
-    expect(history.done.map((step) => step.label)).toEqual(['Direction', 'Changed the weight of image 1']);
+    expect(history.done.map((step) => step.label)).toEqual(['Changed the direction', 'Changed the weight of image 1']);
 
     undo();
     await waitFor(() => expect(server.board.images[0].weight).toBe(1));
@@ -604,7 +604,7 @@ describe('review fixes', () => {
     await settled();
     expect(server.edits).toHaveLength(2);
     const history = Object.values(useBoardUndoStore.getState().histories)[0];
-    expect(history.done.map((step) => step.label)).toEqual(['Direction', 'Changed the note on image 1']);
+    expect(history.done.map((step) => step.label)).toEqual(['Changed the direction', 'Changed the note on image 1']);
 
     undo();
     await waitFor(() => expect(server.board.images[0].notes).toBe(''));
@@ -627,7 +627,7 @@ describe('review fixes', () => {
 
     undo();
     await waitFor(() => expect(name.value).toBe('Global board'));
-    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Name”/);
+    expect((await screen.findByRole('status', { name: 'Moodboard undo' })).textContent).toMatch(/Undid “Changed the name”/);
     expect(server.edits).toEqual([]);
     await settled();
     undo();
@@ -659,7 +659,7 @@ describe('review fixes', () => {
     expect(server.puts).toEqual([]);
     undo();
     await waitFor(() => expect(direction().value).toBe(''));
-    expect(await screen.findByText(/Undid “Direction”/)).toBeTruthy();
+    expect(await screen.findByText(/Undid “Changed the direction”/)).toBeTruthy();
     expect(server.edits).toEqual([]);
   });
 

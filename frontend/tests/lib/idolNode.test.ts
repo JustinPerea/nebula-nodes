@@ -95,7 +95,7 @@ describe('the Idol node runs free without a token, and on the person\'s allowanc
   it('Settings lists Idol under the Hugging Face token, as optional, with GM\'s r11 lines and r12 helper', () => {
     expect(nodesForKey('HF_TOKEN').map((node) => node.id)).toEqual(['speridlabs-idol']);
     expect(PROVIDER_KEY_SPECS.HF_TOKEN).toMatchObject({ label: 'Hugging Face', keyLink: 'Open Hugging Face tokens',
-      note: 'Optional. Gives Idol your own Hugging Face allowance.',
+      note: 'Optional. Lets Idol use your own allowance.',
       instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
         + 'Nebula uses it only for Idol’s GPU time on Hugging Face.',
       keyLink: 'Open Hugging Face tokens', url: 'https://huggingface.co/settings/tokens',

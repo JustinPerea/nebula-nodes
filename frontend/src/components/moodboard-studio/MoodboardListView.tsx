@@ -60,14 +60,14 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
         </div>
         <label className={`moodboard-dropzone__file-wrap${offline ? ' moodboard-dropzone__file-wrap--disabled' : ''}`}
           {...(offline ? { title: offlineDisabledReason('add images') } : {})} {...offlineMark(offline)}>
-          <span className="moodboard-dropzone__file-button">Add Images</span>
+          <span className="moodboard-dropzone__file-button">Add images</span>
           <input
             className="moodboard-dropzone__file-input"
             type="file"
             accept="image/*"
             multiple
             disabled={offline}
-            aria-label="Add Images"
+            aria-label="Add images"
             onChange={(event) => {
               onFiles(event.target.files);
               event.target.value = '';

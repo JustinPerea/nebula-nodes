@@ -102,7 +102,7 @@ describe('Moodboard Studio rail', () => {
     await waitFor(() => expect(useUIStore.getState().moodboardEditorScope).toBe('global'));
     await waitFor(() => expect(tab('Global').getAttribute('aria-selected')).toBe('true'));
     expect(await screen.findByRole('button', { name: /Global board/ })).toBeTruthy();
-    expect(screen.queryByText('No Moodboards yet.')).toBeNull();
+    expect(screen.queryByText('No moodboards yet.')).toBeNull();
   });
 
   it('opens on Project for a project board opened from a node (which guesses Global), every time', async () => {
@@ -282,7 +282,7 @@ describe('Moodboard Studio and the open canvas project', () => {
     await openStudio('g1', 'global', 'Global board');
     fireEvent.click(tab('Project'));
     expect(await screen.findByText('Open a project to see its moodboards.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: '+ New Moodboard' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '+ New moodboard' }) as HTMLButtonElement).disabled).toBe(true);
     expect(api.fetchMoodboards).not.toHaveBeenCalledWith('project', expect.anything());
     expect(screen.queryByRole('alert')).toBeNull();
   });
@@ -487,9 +487,9 @@ describe('Moodboard Studio: what generators get', () => {
 
   it('has a notes switch, off, that says who the notes are for', async () => {
     await openStudio('g1', 'global', 'Global board');
-    const toggle = screen.getByRole('switch', { name: 'Send these notes to generators' });
+    const toggle = screen.getByRole('switch', { name: 'Moodboard notes to generators' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByText('Off: notes are for you, your team and agents.')).toBeTruthy();
+    expect(screen.getByText('When it’s off, notes are for you, your team and agents.')).toBeTruthy();
     expect(screen.getByPlaceholderText('Anything about the moodboard, in your words.')).toBeTruthy();
     fireEvent.click(toggle);
     await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)?.[1].sendNotes).toBe(true), { timeout: 3000 });
@@ -511,7 +511,7 @@ describe('Moodboard Studio: choices the person saves', () => {
     act(() => { useUIStore.getState().enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, 'global'); });
     render(<MoodboardStudioView />);
     await screen.findByDisplayValue('Untitled Moodboard');
-    expect(screen.getByRole('switch', { name: 'Send these notes to generators' }).getAttribute('aria-checked'))
+    expect(screen.getByRole('switch', { name: 'Moodboard notes to generators' }).getAttribute('aria-checked'))
       .toBe('false');
     const key = assetStudioDraftKey('moodboard', 'global', NEW_MOODBOARD_SENTINEL, 'p1');
     act(() => {

@@ -52,7 +52,7 @@ describe('ResultsGallery', () => {
     const view = render(<ResultsGallery {...state} />);
     expect(view.getByRole('button', { name: 'Canvas' })).toHaveAttribute('aria-pressed', 'true');
     expect(view.getByRole('status')).toHaveTextContent('1 result');
-    fireEvent.click(view.getByRole('button', { name: 'Selected (1) · Show all' }));
+    fireEvent.click(view.getByRole('button', { name: '1 selected · Show all' }));
     expect(view.getByRole('status')).toHaveTextContent('2 results');
     fireEvent.click(view.getByRole('button', { name: 'Show selected' }));
     expect(view.getByRole('status')).toHaveTextContent('1 result');

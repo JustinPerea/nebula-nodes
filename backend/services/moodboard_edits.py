@@ -104,14 +104,43 @@ FIELD_LABELS = {
     "name": "The name", "notes": "The moodboard\u2019s notes", "mode": "Mode", "strength": "Strength",
     "direction": "Direction", "avoid": "The Avoid list", "pinnedColors": "The pinned colours",
     "clashMode": "The clash mode", "colorChoices": "The colour choices",
-    "sendNotes": "Send notes to generators", "coverImageId": "The cover",
+    "sendNotes": "“Moodboard notes to generators”", "coverImageId": "The cover",
     "briefOverride": "The hand-written brief",
 }
 # The fields a ``board.fields`` journal event names, in this order. The
 # cover is left out: it has its own event (``board.cover``, with the image).
 JOURNAL_FIELDS = tuple(key for key in FIELD_KEYS if key != "coverImageId")
-SETTING_LABELS = {"weight": "weight", "excluded": "Set aside switch", "notes": "notes",
+SETTING_LABELS = {"weight": "weight", "excluded": "set-aside switch", "notes": "note",
                   "privateNote": "private note"}
+# How a kept-undo line names a field step and the field in its reason (design):
+# "Changed the direction", "only you can change the direction". The switch is
+# named as the control is, in quotes, with no "the".
+FIELD_NOUNS = {
+    "name": "the name", "notes": "the moodboard notes", "mode": "the mode", "strength": "the strength",
+    "direction": "the direction", "avoid": "the avoid list", "pinnedColors": "the pinned colors",
+    "clashMode": "the clash mode", "colorChoices": "the color choices",
+    "sendNotes": "\u201cMoodboard notes to generators\u201d", "coverImageId": "the cover", "briefOverride": "the brief",
+}
+# What a refusal to put a field back says, after "because" (design).
+FIELD_KEPT_CLAUSES = {
+    "can\u2019t go back": "a pinned color that step used was removed after that",
+    "would undo a colour choice made since": "a color was chosen after that",
+}
+
+
+def in_quotes(text: Any) -> str:
+    """A name or step label inside a line's own quotes: its inner double quotes
+    turn single (\u2018\u2019), so a line never nests the same mark. The twin of
+    ``inQuotes`` in moodboard-studio/undoLines.ts (shared cases:
+    tests/fixtures/moodboard_undo_lines.json)."""
+    return "\u201c" + str(text).replace("\u201c", "\u2018").replace("\u201d", "\u2019") + "\u201d"
+
+
+def join_words(words: list[str]) -> str:
+    """Words joined as "a", "a and b" or "a, b and c", as the Studio's ``joined`` does."""
+    if len(words) < 2:
+        return "".join(words)
+    return ", ".join(words[:-1]) + " and " + words[-1]
 
 _FRAME_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -251,7 +280,7 @@ class _Batch:
         found = next((f for f in self.frames if f.get("id") == text), None)
         found = found or next((f for f in self.frames if str(f.get("name", "")).casefold() == text.casefold()), None)
         if found is None and not missing_ok:
-            raise EditError(f"no frame “{text[:60]}” on this board")
+            raise EditError(f"no frame {in_quotes(text[:60])} on this board")
         return found
 
     def frame_label(self, frame_id: Any) -> str:
@@ -822,9 +851,10 @@ class _Batch:
                 if img.get(key) != value and key not in stale}
         if stale:
             report = self._skip_report(item)
-            words = " and ".join(SETTING_LABELS[key] for key in stale)
-            report.update({"settings": stale, "message": f"Image {report['number']}\u2019s {words} changed since, left as is"
-                           if "number" in report else f"An image’s {words} changed since, left as is"})
+            words = join_words([SETTING_LABELS[key] for key in stale])
+            report.update({"settings": stale, "message": (
+                f"Nebula couldn’t undo the change to image {report['number']} because image {report['number']}\u2019s {words} changed after that."
+                if "number" in report else f"Nebula couldn’t undo the change to an image because an image’s {words} changed after that.")})
             skipped.append(report)
         if not back:
             return "skipped" if stale else "unchanged"
@@ -835,7 +865,7 @@ class _Batch:
         """Put back the board's own fields, each on its own, as a PUT sets
         them (moodboard_store.apply_fields): one that changed since is left
         as it is, and so is one only the person may set this way (turning
-        Send notes on, the person's own brief) when an agent undoes. Each is
+        “Moodboard notes to generators” on, the person's own brief) when an agent undoes. Each is
         judged by the board as the restore found it, and one whose going
         back would also undo a colour choice made since (a pin back on
         drops a Keep anyway colour) is left as is too."""
@@ -861,27 +891,48 @@ class _Batch:
                 store.apply_fields(self.board, {key: {"text": before} if key == "briefOverride" else before}, by=by)
             except (store.BriefOverrideProtected, store.NotesOptInProtected):
                 skipped.append(self._field_skip(key, "is the person’s to turn on" if key == "sendNotes"
-                                                else "is the person’s to change"))
+                                                else "is the person’s to change", expect))
                 continue
             except ValueError:
                 # Checked up front, so only the board as it is now can refuse it
                 # (a Keep anyway colour pinned out since).
-                skipped.append(self._field_skip(key, "can’t go back"))
+                skipped.append(self._field_skip(key, "can’t go back", expect))
                 continue
             if (key != "colorChoices" and not choices_back
                     and field_value(self.board, "colorChoices") != found["colorChoices"]):
                 for name in ("pinnedColors", "colorChoices"):
                     self.board.pop(name, None)
                 self.board.update(held)
-                skipped.append(self._field_skip(key, "would undo a colour choice made since"))
+                skipped.append(self._field_skip(key, "would undo a colour choice made since", expect))
                 continue
             changed = True
         return changed
 
     @staticmethod
-    def _field_skip(key: str, reason: str) -> dict[str, Any]:
+    def _field_skip(key: str, reason: str, expect: Any = None) -> dict[str, Any]:
+        """A field the undo left as it is. The ``reason`` is the key a client
+        reads; ``message`` says it in the because form, naming the step as the
+        Studio's undo toast does ("Changed the direction", "Turned on
+        ‘Moodboard notes to generators’")."""
+        noun = FIELD_NOUNS.get(key, key)
+        if reason == "changed since":
+            return {"part": "fields", "field": key, "reason": reason, "message": f"{FIELD_LABELS[key]} {reason}, left as is"}
+        if key == "sendNotes":
+            step = f"{'Turned on' if expect else 'Turned off'} \u2018Moodboard notes to generators\u2019"
+        elif key == "coverImageId":
+            step = "Made another image the cover"
+        else:
+            step = f"Changed {noun}"
+        if reason == "is the person’s to turn on":
+            clause = "only you can turn it on"
+        elif reason == "is the person’s to change":
+            clause = f"only you can change {noun}"
+        elif reason == "can’t go back" and key == "coverImageId":
+            clause = "that image was removed after that"
+        else:
+            clause = FIELD_KEPT_CLAUSES.get(reason, reason)
         return {"part": "fields", "field": key, "reason": reason,
-                "message": f"{FIELD_LABELS[key]} {reason}, left as is"}
+                "message": f"Nebula couldn’t undo {in_quotes(step)} because {clause}."}
 
     def _skip_report(self, item: dict[str, Any], reason: str = "changed since") -> dict[str, Any]:
         report: dict[str, Any] = {"part": item["part"]}
@@ -902,7 +953,14 @@ class _Batch:
             report["frame"] = item.get("frame")
             label = self.frame_label(item.get("frame"))
         report["reason"] = reason
-        report["message"] = f"{label} {reason}, left as is"
+        # An image is "image 3" mid-sentence; a look is its name, quoted.
+        subject = f"{label[0].lower()}{label[1:]}" if item.get("image") is not None else in_quotes(label)
+        if reason == "can’t go back there":
+            report["message"] = f"Nebula couldn’t undo the change to {subject} because its place on the moodboard was taken or removed after that."
+        elif reason == "isn’t one of Nebula’s own files":
+            report["message"] = f"Nebula couldn’t undo the change to {subject} because {subject} isn’t one of Nebula’s own files."
+        else:
+            report["message"] = f"{label} {reason}, left as is"
         return report
 
     def _not_nebulas(self, item: dict[str, Any]) -> str | None:
@@ -1291,7 +1349,7 @@ MAX_BOARD_NAME_CHARS = 60
 def quoted(name: str) -> str:
     """A name inside a sentence, in curly quotes: “Dusk”. The one place a
     board, a project or a field is quoted, so a line never says "board Dusk"."""
-    return f"\u201c{name}\u201d"
+    return in_quotes(name)
 
 
 def board_where(board: Mapping[str, Any] | None, *fallbacks: Mapping[str, Any] | None) -> str:
@@ -1397,12 +1455,12 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
 
 # A board field as a sentence quotes it (Studio's own control labels, curly):
 # one list for the journal and the Agent log, so a field is never named two
-# ways. Send notes is the Studio's full label (GM, slice 3b): "turned off
-# “Send notes to generators”".
+# ways. The setting is named as the Studio's switch is: "turned off
+# “Moodboard notes to generators”".
 SENTENCE_LABELS = {
     "name": "Name", "notes": "Moodboard notes", "mode": "Mode", "strength": "Strength", "direction": "Direction",
     "avoid": "Avoid", "pinnedColors": "Pinned colors", "clashMode": "Clash mode", "colorChoices": "Color choices",
-    "sendNotes": "Send notes to generators", "coverImageId": "Cover", "briefOverride": "Your brief",
+    "sendNotes": "Moodboard notes to generators", "coverImageId": "Cover", "briefOverride": "Your brief",
 }
 
 
@@ -1416,7 +1474,7 @@ def field_label(key: str) -> str:
 PLAIN_LABELS = {
     "notes": "notes", "mode": "mode", "strength": "strength", "direction": "direction", "avoid": "avoid list",
     "pinnedColors": "pinned colors", "clashMode": "clash mode", "colorChoices": "color choices",
-    "sendNotes": "send notes setting", "briefOverride": "brief",
+    "sendNotes": "“Moodboard notes to generators” setting", "briefOverride": "brief",
 }
 
 

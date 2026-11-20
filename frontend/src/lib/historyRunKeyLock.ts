@@ -5,7 +5,7 @@ import { currentRunSnapshot, type RunRecord } from './runHistory';
 import { canKeyLock, runKeyLockNodeLine, type LockSettings } from './runKeyLock';
 
 /**
- * A Run History replay's key lock (GM, PR #203 r8 item 3): the saved graph a
+ * A Run history replay's key lock (GM, PR #203 r8 item 3): the saved graph a
  * Rerun or Retry sends (each saved node at its saved settings, an agent's
  * placeholder still marked as the live canvas has it), over what that replay
  * would run (a node's replay with what feeds it, a whole-canvas replay

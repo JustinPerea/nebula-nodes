@@ -139,16 +139,16 @@ describe('Moodboard card', () => {
   it('says a deleted board is in Recently deleted, offers Restore and no Open button', async () => {
     card(MoodboardNode, { moodboard: 'gm' }, true);
     await screen.findByText('Good Machines');
-    expect(screen.getByRole('button', { name: 'Open Moodboard' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Open moodboard' })).toBeVisible();
     trashedBoards.gm = boards.gm;
     delete boards.gm;
     emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: true });
     expect(await screen.findByText('In Recently deleted')).toBeVisible();
     expect(screen.getByText('Good Machines')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Open Moodboard' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open moodboard' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
     expect(await screen.findByText('3 images · look')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Open Moodboard' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Open moodboard' })).toBeVisible();
   });
 
   it('says the board is gone when it is deleted for good, and offers no Open button', async () => {
@@ -158,14 +158,14 @@ describe('Moodboard card', () => {
     emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: true });
     expect(await screen.findByText('Moodboard not found')).toBeVisible();
     expect(screen.getByText('#gm was deleted for good or never existed')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Open Moodboard' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open moodboard' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
   });
 
   it('asks for a board when none is chosen', () => {
     card(MoodboardNode, {});
     expect(screen.getByText('No moodboard chosen')).toBeVisible();
-    expect(screen.getByText('Choose one in the Inspector')).toBeVisible();
+    expect(screen.getByText('Choose one in the inspector')).toBeVisible();
     expect(net.apiFetch).not.toHaveBeenCalled();
   });
 

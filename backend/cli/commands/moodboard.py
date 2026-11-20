@@ -7,6 +7,7 @@ parses arguments and prints.
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -27,6 +28,20 @@ def _fail(message: str) -> None:
 
 def _print_json(data: Any) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+# The frontend's ENDS_A_SENTENCE (lib/errorCopy.ts): closing punctuation, then any closing quotes or brackets.
+_ENDS_A_SENTENCE = re.compile("[.?!\u2026][\u201d\u2019\"')\\]]*$")
+
+
+def _skipped_line(message: str) -> str:
+    """A skipped step, indented, with one closing full stop: the backend’s
+    lines may or may not carry their own, and a line ending in a question
+    mark, an exclamation mark or an ellipsis is left as it is."""
+    text = str(message).rstrip()
+    if not text:
+        return ""
+    return f"  {text}" if _ENDS_A_SENTENCE.search(text) else f"  {text}."
 
 
 def _changes_flags(args) -> bool:
@@ -83,7 +98,7 @@ def _print_edit(result: dict[str, Any], *, undoing: bool) -> None:
         line = f"Edited {label}: {changed} change{'' if changed == 1 else 's'}"
         print(line + (f", {same} already so." if same else "."))
     for message in boards.skipped_messages(result):
-        print(f"  {message}.")
+        print(_skipped_line(message))
     undo = result.get("undo") or {}
     if undo.get("ops"):
         text = json.dumps(undo, ensure_ascii=False, separators=(",", ":"))
@@ -605,7 +620,7 @@ def run(client: NebulaClient, args) -> None:
                 return
             print(f"Updated {boards.shown_name(board)} ({board.get('id')}).")
             for message in skipped:
-                print(f"  {message}.")
+                print(_skipped_line(message))
             for url in removed:
                 print(f"  Took {url} off the board. Put it back with `nebula moodboard add {board.get('id')} {url}`.")
             if not board.get("analysis"):
@@ -799,9 +814,9 @@ def add_parser(sub) -> None:
                               "send every measured colour")
     notes_g = clash_g.add_mutually_exclusive_group()
     notes_g.add_argument("--send-notes", dest="send_notes", action="store_const", const=True, default=None,
-                         help="Send the board's notes to generators (only the person can turn this on)")
+                         help="Turn on “Moodboard notes to generators”: the board's notes go to generators (only the person can turn this on)")
     notes_g.add_argument("--no-send-notes", dest="send_notes", action="store_const", const=False,
-                         help="Keep the board's notes for people and agents only (the default)")
+                         help="Turn off “Moodboard notes to generators”: the notes stay for people and agents (the default)")
     set_p.add_argument("--restore", metavar="FILE",
                        help="Undo a change: the `previous` from `set --json` (or its whole output), "
                             "as a file or - for stdin. What someone changed since is left as they set it, "

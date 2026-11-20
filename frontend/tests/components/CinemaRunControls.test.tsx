@@ -108,7 +108,7 @@ describe('Cinema tracked run controls', () => {
     const completedScene = { ...scene, shots: scene.shots.map((shot) => ({ ...shot, output: { status: 'done' as const, imageUrl: '/api/outputs/old.png' } })) };
     render(<CinemaShotsRail cinemaNodeId="n1" scene={completedScene} selectedShotId="a"
       onSelect={vi.fn()} onAddShot={vi.fn()} onRemoveShot={vi.fn()} onReorder={vi.fn()} />);
-    expect(screen.getByRole('status', { name: 'Generating Shot 1' })).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Generating Shot 2' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Generating shot 1' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Generating shot 2' })).toBeInTheDocument();
   });
 });

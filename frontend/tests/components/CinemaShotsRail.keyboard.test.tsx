@@ -52,14 +52,14 @@ describe('Cinema shot rail keyboard contract', () => {
 
   it('uses native selection buttons with separate destructive controls and one selection tab stop', () => {
     render(<Rail />);
-    const first = screen.getByRole('button', { name: 'Select Shot 1' });
-    const second = screen.getByRole('button', { name: 'Select Shot 2' });
+    const first = screen.getByRole('button', { name: 'Select shot 1' });
+    const second = screen.getByRole('button', { name: 'Select shot 2' });
     expect(first.tagName).toBe('BUTTON');
     expect(first).toHaveAttribute('aria-pressed', 'true');
     expect(first).toHaveAttribute('tabindex', '0');
     expect(second).toHaveAttribute('tabindex', '-1');
     expect(first.querySelector('button')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Remove Shot 1' }).parentElement).not.toBe(first);
+    expect(screen.getByRole('button', { name: 'Remove shot 1' }).parentElement).not.toBe(first);
     fireEvent.click(second);
     expect(select).toHaveBeenCalledExactlyOnceWith('b');
     expect(second).toHaveAttribute('aria-pressed', 'true');
@@ -72,14 +72,14 @@ describe('Cinema shot rail keyboard contract', () => {
 
   it('selects and focuses neighboring shots with arrows and bounds Home and End', () => {
     render(<Rail />);
-    const first = screen.getByRole('button', { name: 'Select Shot 1' });
+    const first = screen.getByRole('button', { name: 'Select shot 1' });
     first.focus();
     fireEvent.keyDown(first, { key: 'ArrowRight' });
-    const second = screen.getByRole('button', { name: 'Select Shot 2' });
+    const second = screen.getByRole('button', { name: 'Select shot 2' });
     expect(second).toHaveFocus();
     expect(second).toHaveAttribute('aria-pressed', 'true');
     fireEvent.keyDown(second, { key: 'End' });
-    const third = screen.getByRole('button', { name: 'Select Shot 3' });
+    const third = screen.getByRole('button', { name: 'Select shot 3' });
     expect(third).toHaveFocus();
     fireEvent.keyDown(third, { key: 'ArrowDown' });
     expect(third).toHaveFocus();
@@ -96,7 +96,7 @@ describe('Cinema shot rail keyboard contract', () => {
 
   it('leaves Enter and Space to native button activation and focus itself changes no selection', () => {
     render(<Rail />);
-    const second = screen.getByRole('button', { name: 'Select Shot 2' });
+    const second = screen.getByRole('button', { name: 'Select shot 2' });
     second.focus();
     fireEvent.keyDown(second, { key: 'Enter' });
     fireEvent.keyDown(second, { key: ' ' });
@@ -113,17 +113,17 @@ describe('Cinema shot rail keyboard contract', () => {
   it('moves the selected stable shot ID by Alt+arrow and keeps its DOM focus and results', () => {
     const original = shots();
     render(<Rail initialShots={original} initialSelected="b" />);
-    const selected = screen.getByRole('button', { name: 'Select Shot 2' });
+    const selected = screen.getByRole('button', { name: 'Select shot 2' });
     selected.focus();
     fireEvent.keyDown(selected, { key: 'ArrowLeft', altKey: true });
     expect(reorder).toHaveBeenLastCalledWith([original[1], original[0], original[2]]);
-    expect(screen.getByRole('button', { name: 'Select Shot 1' })).toBe(selected);
+    expect(screen.getByRole('button', { name: 'Select shot 1' })).toBe(selected);
     expect(selected).toHaveFocus();
     expect(selected).toHaveAttribute('aria-pressed', 'true');
     expect(reorder.mock.calls[0][0][0]).toBe(original[1]);
     fireEvent.keyDown(selected, { key: 'ArrowRight', altKey: true });
     expect(reorder).toHaveBeenLastCalledWith(original);
-    expect(screen.getByRole('button', { name: 'Select Shot 2' })).toBe(selected);
+    expect(screen.getByRole('button', { name: 'Select shot 2' })).toBe(selected);
     expect(selected).toHaveFocus();
     expect(select).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
@@ -132,13 +132,13 @@ describe('Cinema shot rail keyboard contract', () => {
 
   it('provides explicit move buttons with truthful boundaries and selection focus after reorder', () => {
     render(<Rail />);
-    const selected = screen.getByRole('button', { name: 'Select Shot 1' });
-    expect(screen.getByRole('button', { name: 'Move Shot 1 earlier' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Move Shot 1 later' }));
-    expect(screen.getByRole('button', { name: 'Select Shot 2' })).toBe(selected);
+    const selected = screen.getByRole('button', { name: 'Select shot 1' });
+    expect(screen.getByRole('button', { name: 'Move shot 1 earlier' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Move shot 1 later' }));
+    expect(screen.getByRole('button', { name: 'Select shot 2' })).toBe(selected);
     expect(selected).toHaveFocus();
-    fireEvent.click(screen.getByRole('button', { name: 'Move Shot 2 later' }));
-    expect(screen.getByRole('button', { name: 'Move Shot 3 later' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Move shot 2 later' }));
+    expect(screen.getByRole('button', { name: 'Move shot 3 later' })).toBeDisabled();
     expect(selected).toHaveFocus();
     expect(select).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
@@ -146,7 +146,7 @@ describe('Cinema shot rail keyboard contract', () => {
 
   it.each(['ctrlKey', 'metaKey', 'shiftKey'] as const)('leaves Alt plus %s arrow shortcuts outside rail ownership', (extraModifier) => {
     render(<Rail initialSelected="b" />);
-    const selected = screen.getByRole('button', { name: 'Select Shot 2' });
+    const selected = screen.getByRole('button', { name: 'Select shot 2' });
     selected.focus();
     for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
       const nativeEvent = new KeyboardEvent('keydown', { key, altKey: true, [extraModifier]: true, bubbles: true, cancelable: true });
@@ -165,8 +165,8 @@ describe('Cinema shot rail keyboard contract', () => {
   it('keeps pointer drag reorder and clears a cancelled drag before a later drop', () => {
     const original = shots();
     render(<Rail initialShots={original} />);
-    const firstCard = screen.getByRole('button', { name: 'Select Shot 1' }).parentElement!;
-    const thirdCard = screen.getByRole('button', { name: 'Select Shot 3' }).parentElement!;
+    const firstCard = screen.getByRole('button', { name: 'Select shot 1' }).parentElement!;
+    const thirdCard = screen.getByRole('button', { name: 'Select shot 3' }).parentElement!;
     fireEvent.dragStart(firstCard);
     fireEvent.dragEnd(firstCard);
     fireEvent.drop(thirdCard);
@@ -181,13 +181,13 @@ describe('Cinema shot rail keyboard contract', () => {
 
   it('moves focus to a surviving neighbor on selected deletion and Add shot on final deletion', () => {
     render(<Rail initialShots={shots().slice(0, 2)} initialSelected="b" />);
-    const deleteSecond = screen.getByRole('button', { name: 'Remove Shot 2' });
+    const deleteSecond = screen.getByRole('button', { name: 'Remove shot 2' });
     deleteSecond.focus();
     fireEvent.click(deleteSecond);
-    const first = screen.getByRole('button', { name: 'Select Shot 1' });
+    const first = screen.getByRole('button', { name: 'Select shot 1' });
     expect(first).toHaveFocus();
     expect(first).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Shot 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove shot 1' }));
     expect(screen.getByRole('button', { name: '+ Add shot' })).toHaveFocus();
     expect(remove.mock.calls).toEqual([['b'], ['a']]);
     expect(select).not.toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe('Cinema shot rail keyboard contract', () => {
   it('scrolls a changed selection into view and gives an empty rail a working Add button', () => {
     const view = render(<Rail />);
     scrollIntoView.mockClear();
-    fireEvent.click(screen.getByRole('button', { name: 'Select Shot 3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select shot 3' }));
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
     view.unmount();
     render(<Rail initialShots={[]} />);

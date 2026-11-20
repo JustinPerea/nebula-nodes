@@ -5,7 +5,7 @@
  * for example"): the sourced-$0 chip and its tooltip (runScope runChipLabel /
  * runChipTitle, canvasProposals proposalEstimateLabel), and the key lock
  * lines (runKeyLock: the Run line, withKeyLock, Accept's line through
- * proposalAcceptLock, and a Run History replay's: historyRunKeyLock through
+ * proposalAcceptLock, and a Run history replay's: historyRunKeyLock through
  * canKeyLock, review 8 of PR #203, copy NIT-1). Each is exercised here on a synthetic keyed route
  * that is not Idol, so a later Idol-only shortcut can't pass them.
  */
@@ -128,7 +128,7 @@ describe('the key lock lines live in the shared lock helper', () => {
     expect(proposalAcceptLock(view, undefined, { nodes: [], edges: [] }, settings({ [KEY]: 'set' }))).toBeNull();
   });
 
-  it('a Run History replay of the route is locked with its line until the key is set (copy NIT-1, M21)', () => {
+  it('a Run history replay of the route is locked with its line until the key is set (copy NIT-1, M21)', () => {
     expect(canKeyLock(ID)).toBe(true);
     const record = (targetNodeId?: string): RunRecord => ({
       id: 'r1', status: 'complete', trigger: targetNodeId ? 'node' : 'graph', startedAt: 1, targetNodeId,

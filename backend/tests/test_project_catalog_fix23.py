@@ -9,7 +9,7 @@
 - A delete refused by a World Labs recovery record no project's run history
   names says GM's line in addendum 2's shape: "Nebula couldn’t delete
   “Delta brief” because it has a saved World Labs recovery ID. Check the run
-  in Marble, then forget that ID in Run History." Agents' text is unchanged.
+  in Marble, then forget that ID in Run history." Agents' text is unchanged.
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from tests.test_project_catalog_restore_fix20_review18 import TAB_A, _delta, _re
 from tests.test_project_catalog_restore_fix21 import _fresh_books, _quiet, _restart  # noqa: E402,F401
 
 UNPLACED = ("Nebula couldn’t delete “Delta brief” because it has a saved World Labs recovery ID. "
-            "Check the run in Marble, then forget that ID in Run History.")
+            "Check the run in Marble, then forget that ID in Run history.")
 AGENT_DETAIL = ("Cannot delete n1: it has unresolved World Labs paid state. "
                 "Check Marble, then resolve its exact recovery/ambiguity record first.")
 

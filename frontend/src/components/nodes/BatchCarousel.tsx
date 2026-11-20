@@ -11,7 +11,7 @@ export function BatchCarousel({ preview }: { preview: BatchPreview }) {
           onClick={(event) => { event.stopPropagation(); preview.select(preview.index - 1); }}>‹</button>
         <span className="batch-carousel__position" aria-live="polite" title={preview.lineage}>
           {preview.running
-            ? `${preview.count} result${preview.count === 1 ? '' : 's'} · Running`
+            ? `${preview.count} result${preview.count === 1 ? '' : 's'} · running`
             : `${preview.index + 1} of ${preview.count} — ${preview.label}`}
         </span>
         <button type="button" aria-label="Next batch result"
