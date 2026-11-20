@@ -805,7 +805,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <PersonLockLine lock={modelLock} place="control" />
         {modelLoadError && universalProvider === 'nous' && (
           <div className="inspector__model-error">
-            <LineText text={modelLoadError} />
+            <LineText text={modelLoadError} code />
           </div>
         )}
         {selectedModel !== '' && (
@@ -853,7 +853,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
           </div>
         )}
         {selectedModel !== '' && <PersonLockLine lock={favoriteLock} place="control" />}
-        {shownFavoriteError && <div className="inspector__model-error" role="alert"><LineText text={shownFavoriteError} /></div>}
+        {shownFavoriteError && <div className="inspector__model-error" role="alert"><LineText text={shownFavoriteError} code /></div>}
       </div>
     );
   }

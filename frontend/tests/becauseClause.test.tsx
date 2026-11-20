@@ -12,7 +12,7 @@ import {
   ACCESS_LOST_COPY, BACKEND_NOT_RUNNING_COPY, CONNECTION_LOST_COPY, ConnectionLostError, FailureNotice, NEBULA_NOT_ANSWERING_COPY,
   NO_RESPONSE_COPY, PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_COPY, PERSON_REQUIRED_DEV_COPY, REASON_CLAUSES, REFUSED_FALLBACK_COPY,
   RequestFailedError, TOO_LARGE_COPY, becauseLine, besideButton, clauseFor, curlApostrophes, failedWhat, failureCopy, failureMessage,
-  foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
+  couldntLine, endedSentence, foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
 } from '../src/lib/errorCopy';
 import { nodeErrorCopy } from '../src/lib/nodeErrorCopy';
 import { createWhileFollowingLine, runWhileFollowingLine } from '../src/lib/canvasFollow';
@@ -114,41 +114,43 @@ describe('the status rows', () => {
   });
 });
 
+const PATTERN_LINES: [string, string, string][] = [
+  ["Couldn't delete the note.", 'That note isn’t there anymore. Reload to get the latest notes.',
+    'Nebula couldn’t delete the note because it isn’t there anymore. Reload to get the latest notes.'],
+  ["Couldn't restore the moodboard.", 'That board isn’t in Recently deleted anymore. Reload to get the latest list.',
+    'Nebula couldn’t restore the moodboard because it isn’t in Recently deleted anymore. Reload to get the latest list.'],
+  ["Couldn't upload “big.mov”.", 'File exceeds 500 MB limit',
+    'Nebula couldn’t upload “big.mov” because it’s over the 500 MB limit.'],
+  ["Couldn't upload “big.mov”.", 'File exceeds 250 MB limit.',
+    'Nebula couldn’t upload “big.mov” because it’s over the 250 MB limit.'],
+  ["Couldn't upload “big.png”.", 'Image exceeds 20 MB limit',
+    'Nebula couldn’t upload “big.png” because it’s over the 20 MB limit.'],
+  ["Couldn't upload “big.pdf”.", 'Document exceeds 20 MB limit',
+    'Nebula couldn’t upload “big.pdf” because it’s over the 20 MB limit.'],
+  ["Couldn't create the project.", overProjectLimitCopy(501, 500, 2),
+    'Nebula couldn’t create the project because you have 501 projects and the limit is 500. You can make a new one after you delete 2 projects.'],
+  ["Couldn't delete the project.", 'A run is still going. Let it finish or stop it.',
+    'Nebula couldn’t delete the project because a run is still going. Let it finish or stop it.'],
+  ["Couldn't load your projects.", 'Your disk is full. Free up some space, then try again.',
+    'Nebula couldn’t load your projects because your disk is full. Free up some space, then try again.'],
+  ["Couldn't start the run.", 'It couldn’t save its run safeguards. Restart Nebula, then try again.',
+    'Nebula couldn’t start the run because it couldn’t save its run safeguards. Restart Nebula, then try again.'],
+  ["Couldn't load the models.", 'The server is out of date. Restart Nebula, then try again.',
+    'Nebula couldn’t load the models because the server is out of date. Restart Nebula, then try again.'],
+  ["Couldn't save the character.", 'It changed in another tab. Reload to get the latest version.',
+    'Nebula couldn’t save the character because it changed in another tab. Reload to get the latest version.'],
+  ['Nebula couldn’t start the run.', 'Krea’s style images and their strength have no BytePlus equivalent. Remove the style images, or run this on Krea.',
+    'Nebula couldn’t start the run because Krea’s style images and their strength have no BytePlus equivalent. Remove the style images, or run this on Krea.'],
+  ['Nebula couldn’t start the run.', 'A World Labs node can’t run once for each item of a Batch. Give each its own node.',
+    'Nebula couldn’t start the run because a World Labs node can’t run once for each item of a Batch. Give each its own node.'],
+  ["Couldn't refresh the source.", 'Paper can’t find the object. Link it again.',
+    'Nebula couldn’t refresh the source because Paper can’t find the object. Link it again.'],
+  ["Couldn't open the Paper artwork.", 'Paper Desktop didn’t open it. Use “Open source link”.',
+    'Nebula couldn’t open the Paper artwork because Paper Desktop didn’t open it. Use “Open source link”.'],
+];
+
 describe('the pattern rows and the sentence rule', () => {
-  const lines: [string, string, string][] = [
-    ["Couldn't delete the note.", 'That note isn’t there anymore. Reload to get the latest notes.',
-      'Nebula couldn’t delete the note because it isn’t there anymore. Reload to get the latest notes.'],
-    ["Couldn't restore the moodboard.", 'That board isn’t in Recently deleted anymore. Reload to get the latest list.',
-      'Nebula couldn’t restore the moodboard because it isn’t in Recently deleted anymore. Reload to get the latest list.'],
-    ["Couldn't upload “big.mov”.", 'File exceeds 500 MB limit',
-      'Nebula couldn’t upload “big.mov” because it’s over the 500 MB limit.'],
-    ["Couldn't upload “big.mov”.", 'File exceeds 250 MB limit.',
-      'Nebula couldn’t upload “big.mov” because it’s over the 250 MB limit.'],
-    ["Couldn't upload “big.png”.", 'Image exceeds 20 MB limit',
-      'Nebula couldn’t upload “big.png” because it’s over the 20 MB limit.'],
-    ["Couldn't upload “big.pdf”.", 'Document exceeds 20 MB limit',
-      'Nebula couldn’t upload “big.pdf” because it’s over the 20 MB limit.'],
-    ["Couldn't create the project.", overProjectLimitCopy(501, 500, 2),
-      'Nebula couldn’t create the project because you have 501 projects and the limit is 500. You can make a new one after you delete 2 projects.'],
-    ["Couldn't delete the project.", 'A run is still going. Let it finish or stop it.',
-      'Nebula couldn’t delete the project because a run is still going. Let it finish or stop it.'],
-    ["Couldn't load your projects.", 'Your disk is full. Free up some space, then try again.',
-      'Nebula couldn’t load your projects because your disk is full. Free up some space, then try again.'],
-    ["Couldn't start the run.", 'It couldn’t save its run safeguards. Restart Nebula, then try again.',
-      'Nebula couldn’t start the run because it couldn’t save its run safeguards. Restart Nebula, then try again.'],
-    ["Couldn't load the models.", 'The server is out of date. Restart Nebula, then try again.',
-      'Nebula couldn’t load the models because the server is out of date. Restart Nebula, then try again.'],
-    ["Couldn't save the character.", 'It changed in another tab. Reload to get the latest version.',
-      'Nebula couldn’t save the character because it changed in another tab. Reload to get the latest version.'],
-    ['Nebula couldn’t start the run.', 'Krea’s style images and their strength have no BytePlus equivalent. Remove the style images, or run this on Krea.',
-      'Nebula couldn’t start the run because Krea’s style images and their strength have no BytePlus equivalent. Remove the style images, or run this on Krea.'],
-    ['Nebula couldn’t start the run.', 'A World Labs node can’t run once for each item of a Batch. Give each its own node.',
-      'Nebula couldn’t start the run because a World Labs node can’t run once for each item of a Batch. Give each its own node.'],
-    ["Couldn't refresh the source.", 'Paper can’t find the object. Link it again.',
-      'Nebula couldn’t refresh the source because Paper can’t find the object. Link it again.'],
-    ["Couldn't open the Paper artwork.", 'Paper Desktop didn’t open it. Use “Open source link”.',
-      'Nebula couldn’t open the Paper artwork because Paper Desktop didn’t open it. Use “Open source link”.'],
-  ];
+  const lines = PATTERN_LINES;
   it.each(lines)('%s %s', (heading, reason, line) => {
     expect(becauseLine({ heading, reason })).toBe(line);
   });
@@ -480,5 +482,195 @@ describe('a failureCopy goes through oneLine and FailureLines whole', () => {
     const copy = failureCopy(new FailureNotice('', line));
     expect(copy.what).toBe('');
     expect(oneLine(copy)).toBe(line);
+  });
+});
+
+describe('becauseLine: a dot is a sentence end only before whitespace or the end, never inside a code span or a quote', () => {
+  it('keeps a dotted path in a code span whole, with no closing full stop, reading as it does with one', () => {
+    expect(becauseLine({ heading: '', reason: "Couldn't read `~/it's/file.png` because it isn't there" }))
+      .toBe("Nebula couldn’t read `~/it's/file.png` because it isn’t there.");
+  });
+
+  it('keeps it whole with a closing full stop, and names the action', () => {
+    expect(becauseLine({ heading: '', reason: "Couldn't read `~/it's/file.png` because it isn't there." }))
+      .toBe("Nebula couldn’t read `~/it's/file.png` because it isn’t there.");
+    expect(becauseLine({ heading: '', reason: "Couldn't read `~/it's/file.png`. It isn't there." }))
+      .toBe("Nebula couldn’t read `~/it's/file.png` because it isn’t there.");
+  });
+
+  it('keeps a bare dotted file name, a provider domain and a version inside the sentence', () => {
+    expect(becauseLine({ heading: '', reason: "Couldn't read photo.png. The file moved." }))
+      .toBe('Nebula couldn’t read photo.png because the file moved.');
+    expect(becauseLine({ heading: '', reason: "Couldn't reach fal.ai. The server didn't answer." }))
+      .toBe('Nebula couldn’t reach fal.ai because the server didn’t answer.');
+    expect(becauseLine({ heading: '', reason: "Couldn't run Flux 1.1. The key was refused." }))
+      .toBe('Nebula couldn’t run Flux 1.1 because the key was refused.');
+    expect(failedWhat("Couldn't read photo.png.")).toBe('read photo.png');
+    expect(failedWhat("Couldn't reach fal.ai.")).toBe('reach fal.ai');
+    expect(failedWhat("Couldn't run Flux 1.1.")).toBe('run Flux 1.1');
+  });
+
+  it('still splits a two-sentence reason at the real sentence end', () => {
+    expect(becauseLine({ heading: '', reason: "Couldn't read the file. It may have moved." }))
+      .toBe('Nebula couldn’t read the file because it may have moved.');
+  });
+
+  it('keeps a quoted name with a dot whole', () => {
+    expect(becauseLine({ heading: '', reason: "Couldn't open “a.b”. It may have moved." }))
+      .toBe('Nebula couldn’t open “a.b” because it may have moved.');
+    expect(failedWhat("Couldn't open “a. b”.")).toBe('open “a. b”');
+  });
+
+  it('does not end a sentence inside a code span that holds a dot and a space', () => {
+    expect(failedWhat("Couldn't read `a. b`.")).toBe('read `a. b`');
+  });
+
+  it('adds one full stop after a reason that ends in a code span, and none when it already ends a sentence', () => {
+    expect(becauseLine({ heading: "Couldn't read the file.", reason: 'The path is `~/a.png`' }))
+      .toBe('Nebula couldn’t read the file because the path is `~/a.png`.');
+    expect(becauseLine({ heading: "Couldn't read the file.", reason: 'The path is `~/a.png`.' }))
+      .toBe('Nebula couldn’t read the file because the path is `~/a.png`.');
+  });
+});
+
+/** Design: a reason's last full stop does not change what the line says. Backend reasons arrive both ways. */
+const withStop = (text: string) => (/\.$/.test(text) ? text : `${text}.`);
+const withoutStop = (text: string) => text.replace(/\.$/, '');
+const sameLine = (heading: string, reason: string) => {
+  const a = becauseLine({ heading, reason: withoutStop(reason) });
+  const b = becauseLine({ heading, reason: withStop(reason) });
+  expect(withStop(a)).toBe(withStop(b));
+  return [a, b];
+};
+
+describe('a closing full stop does not change the line', () => {
+  const REASONS = [
+    "Couldn't read `~/it's/file.png` because it isn't there",
+    "Couldn't download the result. Its link may have expired",
+    'File exceeds 500 MB limit',
+    "Nebula couldn't save the project because the disk is full",
+    "Krea's key doesn't work",
+  ];
+  it.each(REASONS)('alone: %s', (reason) => {
+    const [a, b] = sameLine('', reason);
+    expect(a).toBe(b);
+  });
+  it.each(REASONS)('with a heading: %s', (reason) => {
+    const [a, b] = sameLine("Couldn't save the project.", reason);
+    expect(a).toBe(b);
+  });
+
+  it('gives the same exact words for the named cases', () => {
+    expect(becauseLine({ heading: '', reason: "Couldn't download the result. Its link may have expired" }))
+      .toBe('Nebula couldn’t download the result because its link may have expired.');
+    expect(becauseLine({ heading: '', reason: "Nebula couldn't save the project because the disk is full" }))
+      .toBe('Nebula couldn’t save the project because the disk is full.');
+    expect(becauseLine({ heading: '', reason: "Krea's key doesn't work" })).toBe('Krea’s key doesn’t work.');
+  });
+
+  const FIXTURES: [string, string][] = [
+    ...TABLE_ROWS.map((row) => [row.heading, row.reason] as [string, string]),
+    ...PATTERN_LINES.map(([heading, reason]) => [heading, reason] as [string, string]),
+  ];
+  it.each(FIXTURES)('%s %s', (heading, reason) => {
+    sameLine(heading, reason);
+    sameLine('', reason);
+  });
+});
+
+describe('becauseLine: ellipses, abbreviations, trailing links and colons', () => {
+  const line = (reason: string, heading = '') => becauseLine({ heading, reason });
+  const both = (reason: string, expected: string, heading = '') => {
+    expect(line(reason, heading)).toBe(expected);
+    expect(line(`${reason}.`, heading)).toBe(expected);
+  };
+
+  it('an ellipsis before a capital ends the sentence and its dots stay out of the action', () => {
+    expect(line("Couldn't read the file... It is gone.")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line("Couldn't read the file... it is gone")).toBe('Nebula couldn’t read the file... it is gone.');
+    expect(line("Couldn't read the file… It is gone")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line("Couldn't read the file.... It is gone.")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line('It is gone... Try again.', "Couldn't read the file.")).toBe('Nebula couldn’t read the file because it is gone... Try again.');
+  });
+  it('an ellipsis in the middle of a sentence does not end it', () => {
+    const text = line("Couldn't read... the file. It is gone");
+    expect(text).toBe('Nebula couldn’t read... the file because it is gone.');
+    expect(line("Couldn't read the file… and the rest. It is gone")).toBe('Nebula couldn’t read the file… and the rest because it is gone.');
+  });
+  it('a trailing ellipsis stays, with no full stop after it', () => {
+    expect(line("Couldn't read the file...")).toBe('Nebula couldn’t read the file...');
+    expect(line("Couldn't read the file…")).toBe('Nebula couldn’t read the file…');
+    expect(line("Couldn't read the file . . .")).toBe('Nebula couldn’t read the file…');
+  });
+  it('spaced dots read as an ellipsis', () => {
+    expect(line("Couldn't read the file . . . It is gone.")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line("Couldn't read the file . . . it is gone")).toBe('Nebula couldn’t read the file . . . it is gone.');
+  });
+  it('a.m., p.m. and etc. before a capital end the sentence and keep their own dot', () => {
+    expect(line("Couldn't connect at 3 p.m. It is down.")).toBe('Nebula couldn’t connect at 3 p.m. because it is down.');
+    expect(line("Couldn't connect at 3 P.M. It is down.")).toBe('Nebula couldn’t connect at 3 P.M. because it is down.');
+    expect(line("Couldn't connect at 9 a.m. It is down.")).toBe('Nebula couldn’t connect at 9 a.m. because it is down.');
+    expect(line("Couldn't read the files, fonts, etc. It is gone.")).toBe('Nebula couldn’t read the files, fonts, etc. because it is gone.');
+    expect(line("Couldn't connect at 3 p.m.")).toBe('Nebula couldn’t connect at 3 p.m.');
+  });
+  it('a kept abbreviation dot or an ellipsis is the full stop: no second one goes after it', () => {
+    // The heading-only path (no reason), and a reason that follows the action as its own sentence.
+    expect(becauseLine({ heading: "Couldn't connect at 3 p.m.", reason: '' })).toBe('Nebula couldn’t connect at 3 p.m.');
+    expect(becauseLine({ heading: "Couldn't read the files, fonts, etc.", reason: '' })).toBe('Nebula couldn’t read the files, fonts, etc.');
+    expect(becauseLine({ heading: "Couldn't connect at 3 p.m.", reason: 'Wait a moment' })).toBe('Nebula couldn’t connect at 3 p.m. Wait a moment.');
+    expect(becauseLine({ heading: "Couldn't connect at 3 p.m.", reason: '', what: 'connect…' })).toBe('Nebula couldn’t connect…');
+    expect(becauseLine({ heading: "Couldn't load the file.", reason: '' })).toBe('Nebula couldn’t load the file.');
+    // A node card's text that is not a clause follows the action as its own sentence.
+    expect(couldntLine('connect at 3 p.m.')).toBe('Nebula couldn’t connect at 3 p.m.');
+    expect(couldntLine('connect…')).toBe('Nebula couldn’t connect…');
+    expect(couldntLine('load the file')).toBe('Nebula couldn’t load the file.');
+  });
+  it('e.g., i.e., vs. and U.S. before a capital stay one sentence, as before', () => {
+    expect(line("Couldn't reach the U.S. It is down.")).toBe('Nebula couldn’t reach the U.S. It is down.');
+    expect(line("Couldn't read the file, e.g. It is gone.")).toBe('Nebula couldn’t read the file, e.g. It is gone.');
+  });
+  it('endedSentence trims trailing whitespace first', () => {
+    expect(endedSentence('x. ')).toBe('x.');
+    expect(endedSentence('x  ')).toBe('x.');
+    expect(endedSentence('x. . . ')).toBe('x. . .');
+  });
+
+  it('abbreviations do not end a sentence', () => {
+    both("Couldn't reach the U.S. region because it is down", 'Nebula couldn’t reach the U.S. region because it is down.');
+    both("Couldn't read the file, i.e. the image, because it is gone", 'Nebula couldn’t read the file, i.e. the image, because it is gone.');
+    both("Couldn't read the file, e.g. the photo. It is gone", 'Nebula couldn’t read the file, e.g. the photo because it is gone.');
+    both("Couldn't send before 9 a.m. Try again", 'Nebula couldn’t send before 9 a.m. Try again.');
+    both("Couldn't read the files vs. the folder. It is gone", 'Nebula couldn’t read the files vs. the folder because it is gone.');
+    both("Couldn't read the images, etc. and the audio. It is gone", 'Nebula couldn’t read the images, etc. and the audio because it is gone.');
+  });
+  it('a sentence that ends in an abbreviation still ends', () => {
+    expect(line("Couldn't reach the U.S. Try again.")).toBe('Nebula couldn’t reach the U.S. Try again.');
+    expect(line("Couldn't reach the server in the U.S.")).toBe('Nebula couldn’t reach the server in the U.S.');
+  });
+
+  it('a trailing link or colon gets no full stop', () => {
+    expect(endedSentence('See https://fal.ai/docs')).toBe('See https://fal.ai/docs');
+    expect(endedSentence('Error:')).toBe('Error:');
+    expect(endedSentence('Reason follows:')).toBe('Reason follows:');
+    expect(line('Error:')).toBe('Error:');
+    expect(line('See https://fal.ai/docs')).toBe('See https://fal.ai/docs');
+  });
+  it('a reason that ends in a code span gets one full stop', () => {
+    expect(endedSentence('`~/a.png`')).toBe('`~/a.png`.');
+    expect(line('`~/a.png`')).toBe('`~/a.png`.');
+    expect(line('See `https://fal.ai/x`')).toBe('See `https://fal.ai/x`.');
+  });
+
+  it('decimals, links, Windows paths, an unclosed backtick, ? and !, trailing space and empty reasons stay whole', () => {
+    both("Couldn't upload 1.5 MB. It is too large", 'Nebula couldn’t upload 1.5 MB because it is too large.');
+    expect(line("Couldn't read https://fal.ai/x.png. It is gone")).toBe('Nebula couldn’t read https://fal.ai/x.png because it is gone.');
+    expect(line("Couldn't read https://fal.ai/x.png")).toBe('Nebula couldn’t read https://fal.ai/x.png.');
+    expect(line("Couldn't read C:\\a.b\\c. It is gone")).toBe('Nebula couldn’t read C:\\a.b\\c because it is gone.');
+    expect(line("Couldn't read `a. It is gone")).toBe('Nebula couldn’t read `a because it is gone.');
+    expect(line('Is it there?', "Couldn't read the file.")).toBe('Nebula couldn’t read the file. Is it there?');
+    expect(line('It is gone!', "Couldn't read the file.")).toBe('Nebula couldn’t read the file because it is gone!');
+    expect(line("Couldn't read the file because it is gone   ")).toBe('Nebula couldn’t read the file because it is gone.');
+    expect(line('', "Couldn't read the file.")).toBe('Nebula couldn’t read the file.');
+    expect(line('`a.b`', "Couldn't read the file.")).toBe('Nebula couldn’t read the file because `a.b`.');
   });
 });

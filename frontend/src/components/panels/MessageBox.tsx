@@ -411,7 +411,7 @@ function QuestionRow({ row }: { row: ThreadRow }) {
         </button>
       )}
       {sends && <PersonLockLine lock={lock} place="control" />}
-      {error && <p className="message-box__line message-box__line--failed"><LineText text={error} /></p>}
+      {error && <p className="message-box__line message-box__line--failed"><LineText text={error} code /></p>}
     </div>
   );
 }
@@ -1052,7 +1052,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
       <PersonLockLine lock={lock} place="control" />
       {lineText && state.kind !== 'offline' && (
         <div className={`message-box__line${failureText && !lockLine ? ' message-box__line--failed' : ''}`}>
-          <span id={lineId}><LineText text={lineText} /></span>
+          <span id={lineId}><LineText text={lineText} code /></span>
           {state.kind === 'notConnected' && !answeringNow && <CopyCommand />}
           {!lockLine && failure?.kind === 'server' && (
             <button type="button" className="message-box__show" {...lock.control()} aria-disabled={!canSend || lock.locked || undefined}

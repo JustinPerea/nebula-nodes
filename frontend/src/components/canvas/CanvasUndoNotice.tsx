@@ -9,7 +9,7 @@ import { useCanvasLock } from '../../lib/canvasLock';
 import { useLeave } from '../../lib/noticeLeave';
 import { useKeptCanvas } from '../../lib/keptCanvas';
 import { LineText } from '../LineText';
-import { curlApostrophes } from '../../lib/errorCopy';
+import { curledWithCodeSpans } from '../../lib/codeSpans';
 
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
@@ -94,7 +94,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
       {...holdHandlers} {...leave.props}
     >
       {shown.agentColor && <span className="canvas-undo-notice__dot" aria-hidden="true" />}
-      <LineText className="canvas-undo-notice__text" text={shown.text}>{noticeText(shown.text, shown.mono)}</LineText>
+      <LineText className="canvas-undo-notice__text" text={shown.text} code>{noticeText(shown.text, shown.mono)}</LineText>
       {(actionable || keptOffer) && (
         <button type="button" className="canvas-undo-notice__action" onClick={act}
           {...lock.act({ kept: 'live', disabled: !actionable, title: actionable ? undefined
@@ -116,7 +116,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
 /** The line, with `mono` (a model id) set in mono where it appears. */
 function noticeText(text: string, mono: string | undefined) {
   const at = mono ? text.lastIndexOf(mono) : -1;
-  if (!mono || at < 0) return text;
-  // Design: the prose around the model id is curled like the rest of the line (LineText curls a string child); the id stays as it is.
-  return <>{curlApostrophes(text.slice(0, at))}<code className="canvas-undo-notice__mono">{mono}</code>{curlApostrophes(text.slice(at + mono.length))}</>;
+  if (!mono || at < 0) return curledWithCodeSpans(text);
+  // Design: the prose around the model id is curled like the rest of the line and takes code spans (a path the backend named); the id stays as it is.
+  return <>{curledWithCodeSpans(text.slice(0, at))}<code className="canvas-undo-notice__mono">{mono}</code>{curledWithCodeSpans(text.slice(at + mono.length))}</>;
 }

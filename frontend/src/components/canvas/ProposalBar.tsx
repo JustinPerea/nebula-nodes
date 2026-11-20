@@ -601,8 +601,8 @@ export function ProposalBar() {
               {errorLeave.shown && (
                 // A neutral line (a coded save-limit refusal) reads as a status, not an alert.
                 isNeutralProposalLine(errorLeave.shown)
-                  ? <p className="proposal-bar__error proposal-bar__error--neutral" role="status" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
-                  : <p className="proposal-bar__error" role="alert" {...errorLeave.props}><LineText text={errorLeave.shown} /></p>
+                  ? <p className="proposal-bar__error proposal-bar__error--neutral" role="status" {...errorLeave.props}><LineText text={errorLeave.shown} code /></p>
+                  : <p className="proposal-bar__error" role="alert" {...errorLeave.props}><LineText text={errorLeave.shown} code /></p>
               )}
             </div>
           </div>

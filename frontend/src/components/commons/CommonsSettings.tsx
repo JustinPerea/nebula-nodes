@@ -69,7 +69,7 @@ export function FolderRow({ link, run }: { link: FolderLink; run: (work: () => P
             <li key={d.path} className="commons-list__item">
               <span className={`commons-badge commons-badge--${d.state}`}>{deviceStateLabel(d.state)}</span>
               <span className="commons-list__text">{d.path.split('/').pop()}</span>
-              {d.error && <span className="commons-meta"><LineText text={d.error} /></span>}
+              {d.error && <span className="commons-meta"><LineText text={d.error} code /></span>}
             </li>
           ))}
         </ul>

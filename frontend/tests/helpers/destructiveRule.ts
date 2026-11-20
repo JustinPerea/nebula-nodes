@@ -40,7 +40,7 @@ const NEUTRAL_SAYS = /\b(?:reset(?:s|ting)?|eras(?:e|es|ed|ing)|sign out)\b/i;
  */
 export const REVIEWED_NEUTRAL: Array<{ file?: string; name: RegExp }> = [
   { name: /^\s*clear (?:the )?(?:search|filters?|selection)\b/i },
-  { file: 'components/commons/CommonsFilters.tsx', name: /^clear$/ },
+  { file: 'components/commons/CommonsFilters.tsx', name: /^Clear$/ },
   { file: 'components/create-studio/ResultsGallery.tsx', name: /^Clear$/ },
   // PR #199: the restore notice's "Open Recently deleted" opens that list on
   // the Projects home; it deletes nothing.

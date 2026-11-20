@@ -476,7 +476,6 @@
   "frontend/src/hooks/useTabHeld.ts": 14,
   "frontend/src/hooks/useTextCut.test.tsx": 4,
   "frontend/src/hooks/useTextCut.ts": 4,
-  "frontend/src/lib/acpToolKind.ts": 3,
   "frontend/src/lib/agentActorLabel.ts": 3,
   "frontend/src/lib/agentAnchorResolve.ts": 4,
   "frontend/src/lib/agentChipChrome.ts": 1,

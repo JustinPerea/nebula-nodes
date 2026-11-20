@@ -1,4 +1,4 @@
-import { becauseLine, curlApostrophes, failedWhat } from './errorCopy';
+import { becauseLine, couldntLine, curlApostrophes, failedWhat } from './errorCopy';
 
 
 /** The Gemini Omni guardrail's text, which agents read word for word, and the reason the card says instead. */
@@ -157,7 +157,7 @@ export function nodeErrorCopy({ raw, category, friendly, person, providerText, p
     const what = failedWhat(heading);
     // The Gemini Omni guardrail's raw text is for agents; the card says it as a reason.
     if (!classified && GEMINI_OMNI_GUARDRAIL.test(named)) return { heading: '', reason: becauseLine({ heading, reason: GEMINI_OMNI_REASON }), details };
-    if (!classified && what !== null) return { heading: '', reason: `Nebula couldn’t ${what}. ${curlApostrophes(named)}`, details };
+    if (!classified && what !== null) return { heading: '', reason: `${couldntLine(what)} ${curlApostrophes(named)}`, details };
     return { heading: '', reason: becauseLine({ heading, reason: (classified && categoryClause(category, provider)) || named }), details };
   }
   return failure(cardGeneralLine(provider, Boolean(text), surface), text || null);
