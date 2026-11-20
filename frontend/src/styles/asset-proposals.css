@@ -190,7 +190,7 @@
 .asset-proposal__edit-why {
   flex-basis: 100%;
   color: var(--sr-ink-light, rgb(255 255 255 / 0.55));
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .asset-proposal__error {

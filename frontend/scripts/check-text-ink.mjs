@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 import {
   collectCssFiles,
   compact,
@@ -11,21 +12,23 @@ import {
   stripComments,
 } from './lib/css-scan.mjs';
 
-// Design: text takes the light ink, var(--sr-ink-light). Meta ink (--sr-ink-meta, white at .40)
-// measures 3.6 to 3.9:1 on every surface the app draws, under the 4.5:1 text needs, so it is for
-// non-text (borders, strokes, ticks, rules, backgrounds, shadows, decoration colours, swatches),
-// for a disabled control, and for the icon-only controls named in ICON_ONLY below (an icon needs
-// 3:1 and .40 clears it). Hierarchy between two text lines is carried by size and weight.
+// Design: text takes the light ink, var(--sr-ink-light) (white at .55). Dimmer white measures under the
+// 4.5:1 text needs on every surface the app draws (meta ink, white at .40, gives 3.6 to 3.9:1), so it
+// is for non-text (borders, strokes, ticks, rules, backgrounds, shadows, decoration colours, swatches),
+// for a disabled control, and for the icon-only controls named in ICON_ONLY below (an icon needs 3:1
+// and .40 clears it). Hierarchy between two text lines is carried by size and weight.
 //
-// What fails: a TEXT declaration that resolves to meta ink. TEXT properties are `color` (a
-// ::placeholder rule's color included), `-webkit-text-fill-color`, `-webkit-text-stroke-color`, `caret-color`, and `fill` on a
-// rule whose selector targets an SVG `text` or `tspan`. "Resolves to meta ink" means:
-//   - var(--sr-ink-meta, ...);
-//   - var(--x) for any custom property that any rule in src defines as meta ink or as another such
-//     alias (followed to a fixed point, so a chain of any length is read);
-//   - white at .4 as a literal in every form: rgba(255,255,255,.4 / .40 / 0.4), rgb(255 255 255 / 40%),
-//     #ffffff66, #fff6, hsla(0,0%,100%,.4), hsl(0 0% 100% / 40%).
-// A fallback counts only when the variable is defined nowhere in src: var(--undefined, <meta>) fails.
+// What fails: a TEXT declaration that resolves to white at an alpha strictly between .20 and .55.
+// TEXT properties are `color` (a ::placeholder rule's color included), `-webkit-text-fill-color`,
+// `-webkit-text-stroke-color`, `caret-color`, and `fill` on a rule whose selector targets an SVG
+// `text` or `tspan`. "Resolves to dim white" means:
+//   - var(--sr-ink-meta, ...), or var(--x) for any custom property that any rule in src defines as
+//     dim white or as another such alias (followed to a fixed point, so a chain of any length is read);
+//   - white at an alpha in that range as a literal in every form: rgba(255,255,255,.45), rgb(255 255
+//     255 / 40%), #ffffff66, #fff8, hsla(0,0%,100%,.3), hsl(0 0% 100% / 50%).
+// A fallback counts only when the variable is defined nowhere in src: var(--undefined, <dim>) fails.
+// .55 and above pass. Exactly .20 (--sr-ink-faint) is outside the check for now: a follow-up audit
+// decides the text at .20, and that change extends the check to it.
 //
 // Exempt:
 //   - a rule whose selector scopes to :disabled, [disabled] or [aria-disabled="true"] on the element
@@ -33,8 +36,10 @@ import {
 //     disabled state; :has() and :not() never scope; a disabled ancestor or earlier sibling does not
 //     (DISABLED_SIBLING names the one sibling form that is allowed);
 //   - the icon-only controls in ICON_ONLY, by exact selector (the part after `body.app-slava-restraint `).
-// Inline TSX (comments are skipped): a `style={{ color: ... }}` (or a `const x = { color: ... }` style object) in src whose
-// color is meta ink or the literal fails too.
+// Inline TSX: the file is parsed, and an object literal property whose key is a text colour (`color`,
+// `caretColor`, `WebkitTextFillColor`, `WebkitTextStrokeColor`, or the quoted CSS name) and whose value
+// is a string or a plain template that resolves to dim white fails. Comments, regex literals, nested
+// templates and JSX text cannot hide or fake a match.
 //
 // Rules with an unprefixed form and a `body.app-slava-restraint` twin are checked as written, both
 // forms (the unprefixed one is dead CSS that check-skin-shadows reports; checking it as well is
@@ -42,17 +47,17 @@ import {
 //
 // Known limits (this is a text check, not a CSS engine):
 //   - nested CSS rules (`&`, or a `{` between declarations) are skipped;
-//   - the value must be the colour itself: color-mix(...) of meta ink, or a calc, is not followed;
-//   - a custom property defined as meta ink in ANY rule makes every use of it meta, even where
+//   - the value must be the colour itself: color-mix(...) of dim white, or a calc, is not followed;
+//   - a custom property defined as dim white in ANY rule makes every use of it dim, even where
 //     another rule overrides it (--swatch is meta by default and overridden per swatch; it is only
 //     read by background, so it passes);
-//   - TSX: only `color:` on an object literal in a style prop or a style-named object is read; a colour
-//     built at run time (a template string, a function result) is not seen;
+//   - TSX: a colour built at run time (a template with a substitution, a function result) is not seen;
 //   - a canvas or library colour passed as a prop (WaveformAudio's waveColor) is shape, not text;
 //   - not seen: a colour held in a const (`color: META`), JSX colour props (`<Icon color=... />`),
 //     `el.style.color = ...`, `style.setProperty(...)`, SVG `<text fill=...>` attributes, an inline
 //     custom property that a CSS rule reads as a colour, `fill` on a class that sits on an SVG `<text>`
-//     (only a selector ending in text/tspan is read), and `textPath`.
+//     (only a selector ending in text/tspan is read), and `textPath`;
+//   - text at exactly .20 is not checked yet (see above).
 
 const SRC = join(import.meta.dirname, '..', 'src');
 const PREFIX = 'body.app-slava-restraint';
@@ -83,20 +88,28 @@ export const ICON_ONLY = new Set([
 
 const META_TOKEN = '--sr-ink-meta';
 
-function alphaIsFortyPercent(raw) {
-  const text = raw.trim();
-  const value = text.endsWith('%') ? Number.parseFloat(text) / 100 : Number.parseFloat(text);
-  return Number.isFinite(value) && Math.abs(value - 0.4) < 0.005;
+// Text white must be at least this alpha. Alphas from DIM_FLOOR (exclusive) to LIGHT_ALPHA (exclusive) fail.
+const DIM_FLOOR = 0.2;
+const LIGHT_ALPHA = 0.55;
+const EPSILON = 1e-6;
+
+function isDimAlpha(alpha) {
+  return Number.isFinite(alpha) && alpha > DIM_FLOOR + EPSILON && alpha < LIGHT_ALPHA - EPSILON;
 }
 
-/** Whether a whole value is white at .4 in any literal form. */
-export function isMetaLiteral(value) {
+function parseAlpha(raw) {
+  const text = raw.trim();
+  return text.endsWith('%') ? Number.parseFloat(text) / 100 : Number.parseFloat(text);
+}
+
+/** Whether a whole value is white at a dim alpha (strictly between .20 and .55) in any literal form. */
+export function isDimLiteral(value) {
   const v = value.trim().toLowerCase().replace(/\s*!important$/, '').trim();
   const hex = /^#([0-9a-f]{3,8})$/.exec(v);
   if (hex) {
     const h = hex[1];
-    if (h.length === 4) return h.slice(0, 3) === 'fff' && h[3] === '6';
-    if (h.length === 8) return h.slice(0, 6) === 'ffffff' && h.slice(6) === '66';
+    if (h.length === 4) return h.slice(0, 3) === 'fff' && isDimAlpha(Number.parseInt(h[3] + h[3], 16) / 255);
+    if (h.length === 8) return h.slice(0, 6) === 'ffffff' && isDimAlpha(Number.parseInt(h.slice(6), 16) / 255);
     return false;
   }
   const fn = /^(rgba?|hsla?)\(([^)]*)\)$/.exec(v);
@@ -104,16 +117,45 @@ export function isMetaLiteral(value) {
   const parts = fn[2].split(/[\s,/]+/).filter(Boolean);
   if (parts.length !== 4) return false;
   const [a, b, c, alpha] = parts;
-  if (!alphaIsFortyPercent(alpha)) return false;
+  if (!isDimAlpha(parseAlpha(alpha))) return false;
   if (fn[1].startsWith('rgb')) return [a, b, c].every((n) => Number.parseFloat(n) === 255 || n === '100%');
   return Number.parseFloat(a) === 0 && Number.parseFloat(b) === 0 && Number.parseFloat(c) === 100;
 }
 
+/** 1 for every character inside a quoted span (quotes included), 0 elsewhere. Backslash escapes are honoured. */
+function quotedMask(text) {
+  const mask = new Uint8Array(text.length);
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c !== '"' && c !== "'") {
+      i += 1;
+      continue;
+    }
+    let j = i + 1;
+    while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1;
+    const end = Math.min(j, text.length - 1);
+    for (let k = i; k <= end; k += 1) mask[k] = 1;
+    i = j + 1;
+  }
+  return mask;
+}
+
+/** The first match of a regex whose start is outside any quoted span, or null. */
+function matchOutsideQuotes(pattern, text) {
+  const mask = quotedMask(text);
+  const global = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+  for (const match of text.matchAll(global)) if (!mask[match.index]) return match;
+  return null;
+}
+
 function splitTopLevel(text) {
+  const mask = quotedMask(text);
   const parts = [];
   let depth = 0;
   let start = 0;
   for (let i = 0; i < text.length; i += 1) {
+    if (mask[i]) continue;
     const c = text[i];
     if (c === '(' || c === '[') depth += 1;
     else if (c === ')' || c === ']') depth -= 1;
@@ -127,22 +169,22 @@ function splitTopLevel(text) {
 }
 
 /**
- * Whether a value resolves to meta ink, given the set of custom properties that do and the set of
+ * Whether a value resolves to dim white, given the set of custom properties that do and the set of
  * custom properties defined anywhere in src (a fallback only matters for a variable defined nowhere).
  */
-export function resolvesToMeta(value, metaVars, definedVars) {
+export function resolvesToDim(value, dimVars, definedVars) {
   const v = value.trim().replace(/\s*!important$/i, '').trim();
-  if (isMetaLiteral(v)) return true;
+  if (isDimLiteral(v)) return true;
   const wrapped = /^var\(([\s\S]*)\)$/.exec(v);
   if (!wrapped) return false;
   const [name, ...rest] = splitTopLevel(wrapped[1]);
-  if (metaVars.has(name)) return true;
+  if (dimVars.has(name)) return true;
   if (definedVars.has(name) || rest.length === 0) return false;
-  return resolvesToMeta(rest.join(','), metaVars, definedVars);
+  return resolvesToDim(rest.join(','), dimVars, definedVars);
 }
 
-/** Every custom property that is meta ink or an alias of one, followed to a fixed point. */
-export function collectMetaVars(sources) {
+/** Every custom property that is dim white or an alias of one, followed to a fixed point. */
+export function collectDimVars(sources) {
   const defs = new Map();
   for (const { source } of sources) {
     const css = stripComments(source);
@@ -156,26 +198,26 @@ export function collectMetaVars(sources) {
     }
   }
   const definedVars = new Set(defs.keys());
-  const metaVars = new Set([META_TOKEN]);
+  const dimVars = new Set([META_TOKEN]);
   let grew = true;
   while (grew) {
     grew = false;
     for (const [name, values] of defs) {
-      if (metaVars.has(name)) continue;
-      if (values.some((value) => resolvesToMeta(value, metaVars, definedVars))) {
-        metaVars.add(name);
+      if (dimVars.has(name)) continue;
+      if (values.some((value) => resolvesToDim(value, dimVars, definedVars))) {
+        dimVars.add(name);
         grew = true;
       }
     }
   }
-  return { metaVars, definedVars };
+  return { dimVars, definedVars };
 }
 
 export function splitList(selector) {
   return splitTopLevel(selector).map((part) => compact(part)).filter(Boolean);
 }
 
-const DISABLED = [/:disabled\b/, /\[disabled\]/, /\[aria-disabled\s*=\s*["']?true["']?\]/];
+const DISABLED = [/:disabled(?![\w-])/, /\[disabled\]/, /\[aria-disabled\s*=\s*["']?true["']?\]/];
 
 // A disabled state on an earlier element (`.f[aria-disabled] ~ .key`) styles that other element, so it
 // does not scope. This one is the exception: the field is aria-disabled and the "/" key hint beside it
@@ -184,8 +226,10 @@ export const DISABLED_SIBLING = new Set([".message-box__field[aria-disabled='tru
 
 /** The index of the `)` that closes the `(` at `open`. */
 function closingParen(text, open) {
+  const mask = quotedMask(text);
   let depth = 0;
   for (let i = open; i < text.length; i += 1) {
+    if (mask[i]) continue;
     if (text[i] === '(') depth += 1;
     else if (text[i] === ')') {
       depth -= 1;
@@ -199,7 +243,7 @@ function closingParen(text, open) {
 function dropNonScoping(part) {
   let out = part;
   for (;;) {
-    const match = /:(?:not|has)\(/.exec(out);
+    const match = matchOutsideQuotes(/:(?:not|has)\(/, out);
     if (!match) return out;
     const open = match.index + match[0].length - 1;
     out = out.slice(0, match.index) + out.slice(closingParen(out, open) + 1);
@@ -208,7 +252,7 @@ function dropNonScoping(part) {
 
 /** Expand :is(...) / :where(...) into one selector per alternative, until none is left. */
 function expandAlternatives(part) {
-  const match = /:(?:is|where)\(/.exec(part);
+  const match = matchOutsideQuotes(/:(?:is|where)\(/, part);
   if (!match) return [part];
   const open = match.index + match[0].length - 1;
   const close = closingParen(part, open);
@@ -219,9 +263,11 @@ function expandAlternatives(part) {
 
 /** The last compound selector: the part after the final combinator outside brackets and parentheses. */
 function lastCompound(part) {
+  const mask = quotedMask(part);
   let depth = 0;
   let cut = 0;
   for (let i = 0; i < part.length; i += 1) {
+    if (mask[i]) continue;
     const c = part[i];
     if (c === '(' || c === '[') depth += 1;
     else if (c === ')' || c === ']') depth -= 1;
@@ -239,7 +285,7 @@ export function isDisabledScoped(part) {
   if (DISABLED_SIBLING.has(stripPrefix(part))) return true;
   return expandAlternatives(part).every((alt) => {
     const subject = lastCompound(dropNonScoping(alt));
-    return DISABLED.some((pattern) => pattern.test(subject));
+    return DISABLED.some((pattern) => matchOutsideQuotes(pattern, subject) !== null);
   });
 }
 
@@ -264,7 +310,7 @@ function isSvgTextSelector(part) {
 }
 
 /** The TEXT declarations in one stylesheet that resolve to meta ink and are not exempt. */
-export function findCssTextInk(files, metaVars, definedVars) {
+export function findCssTextInk(files, dimVars, definedVars) {
   const hits = [];
   for (const { file, source } of files) {
     const css = stripComments(source);
@@ -274,7 +320,7 @@ export function findCssTextInk(files, metaVars, definedVars) {
       const parts = splitList(rule.selector);
       for (const decl of parseDeclarations(rule.body, rule.bodyStart)) {
         const textual = TEXT_PROPS.has(decl.prop) || (decl.prop === 'fill' && parts.some(isSvgTextSelector));
-        if (!textual || !resolvesToMeta(decl.value, metaVars, definedVars)) continue;
+        if (!textual || !resolvesToDim(decl.value, dimVars, definedVars)) continue;
         // Parts of the list this declaration reaches: for fill, only the svg text parts.
         const reached = decl.prop === 'fill' ? parts.filter(isSvgTextSelector) : parts;
         const live = reached.filter((part) => !isDisabledScoped(part) && !isIconOnly(part));
@@ -292,61 +338,53 @@ export function findCssTextInk(files, metaVars, definedVars) {
   return hits;
 }
 
-/**
- * Blank out `//` and block comments, keeping newlines so line numbers hold. A small tokenizer: it skips
- * string and template literals, so a `//` inside a string or a URL is left alone.
- */
-export function stripJsComments(source) {
-  let out = '';
-  let i = 0;
-  while (i < source.length) {
-    const c = source[i];
-    const next = source[i + 1];
-    if (c === '/' && next === '/') {
-      while (i < source.length && source[i] !== '\n') i += 1;
-    } else if (c === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2);
-      const stop = end === -1 ? source.length : end + 2;
-      out += source.slice(i, stop).replace(/[^\n]/g, ' ');
-      i = stop;
-    } else if (c === '"' || c === "'" || c === '`') {
-      let j = i + 1;
-      while (j < source.length && source[j] !== c) {
-        if (source[j] === '\\') j += 1;
-        else if (c !== '`' && source[j] === '\n') break;
-        j += 1;
-      }
-      out += source.slice(i, j + 1);
-      i = j + 1;
-    } else {
-      out += c;
-      i += 1;
-    }
+const TSX_TEXT_KEYS = new Set([
+  'color',
+  'caretColor',
+  'WebkitTextFillColor',
+  'WebkitTextStrokeColor',
+  '-webkit-text-fill-color',
+  '-webkit-text-stroke-color',
+  'caret-color',
+]);
+
+/** The text of a string literal or a plain template, through parentheses and `as` casts; else null. */
+function literalText(node) {
+  let current = node;
+  while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isSatisfiesExpression(current)) {
+    current = current.expression;
   }
-  return out;
+  return ts.isStringLiteral(current) || ts.isNoSubstitutionTemplateLiteral(current) ? current.text : null;
 }
 
 /**
- * Inline TSX: an object literal key `color:` whose value is meta ink. A line scan: the value runs to the
- * next `,` or `}` outside parentheses and quotes. A var() read is checked against the same alias set.
+ * Inline TSX: the file is parsed, and an object literal property whose key is a text colour and whose
+ * value is a string or plain template resolving to dim white is reported. A var() read is checked
+ * against the same alias set.
  */
-export function findTsxTextInk(files, metaVars, definedVars) {
+export function findTsxTextInk(files, dimVars, definedVars) {
   const hits = [];
   for (const { file, source } of files) {
-    const lines = stripJsComments(source).split('\n');
-    lines.forEach((text, index) => {
-      for (const match of text.matchAll(/(?<![\w-])(?:color|caretColor|WebkitTextFillColor|WebkitTextStrokeColor)\s*:\s*(['"`])([^'"`]*)\1/g)) {
-        if (resolvesToMeta(match[2], metaVars, definedVars)) {
-          hits.push({ file, line: index + 1, selector: 'inline style', prop: 'color', value: match[2] });
+    const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+    const visit = (node) => {
+      if (ts.isPropertyAssignment(node) && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name))) {
+        const key = node.name.text;
+        const value = TSX_TEXT_KEYS.has(key) ? literalText(node.initializer) : null;
+        if (value !== null && resolvesToDim(value, dimVars, definedVars)) {
+          const { line } = tree.getLineAndCharacterOfPosition(node.getStart(tree));
+          hits.push({ file, line: line + 1, selector: 'inline style', prop: key, value });
         }
       }
-    });
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
   }
   return hits;
 }
 
 export const FAILURE_MESSAGE =
-  'Text takes the light ink, var(--sr-ink-light). Meta ink (--sr-ink-meta, white at .40) is for non-text (borders, strokes, ticks, backgrounds, shadows), disabled controls and the named icon-only controls (design). Put the text on var(--sr-ink-light); size and weight carry the hierarchy.';
+  'Text takes the light ink, var(--sr-ink-light). White dimmer than the light ink (alpha above .20 and under .55, meta ink --sr-ink-meta among it) is for non-text (borders, strokes, ticks, backgrounds, shadows), disabled controls and the named icon-only controls (design). Put the text on var(--sr-ink-light); size and weight carry the hierarchy.';
 
 function collectFiles(dir, extensions) {
   const out = [];
@@ -359,8 +397,8 @@ function collectFiles(dir, extensions) {
 }
 
 export function scan(cssFiles, tsxFiles) {
-  const { metaVars, definedVars } = collectMetaVars(cssFiles);
-  return [...findCssTextInk(cssFiles, metaVars, definedVars), ...findTsxTextInk(tsxFiles, metaVars, definedVars)];
+  const { dimVars, definedVars } = collectDimVars(cssFiles);
+  return [...findCssTextInk(cssFiles, dimVars, definedVars), ...findTsxTextInk(tsxFiles, dimVars, definedVars)];
 }
 
 function main() {

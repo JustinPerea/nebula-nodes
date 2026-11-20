@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { ICON_ONLY, isDisabledScoped, isMetaLiteral, scan } from '../scripts/check-text-ink.mjs';
+import { ICON_ONLY, isDisabledScoped, isDimLiteral, scan } from '../scripts/check-text-ink.mjs';
 
 /**
  * scripts/check-text-ink.mjs runs in `npm run lint` (design: text takes the light ink; meta ink is
@@ -75,14 +75,50 @@ describe('check-text-ink: literals', () => {
     '#FFF6',
     'hsla(0, 0%, 100%, 0.4)',
     'hsl(0 0% 100% / 40%)',
+    'rgba(255, 255, 255, 0.3)',
+    'rgba(255,255,255,.30)',
+    'rgb(255 255 255 / 0.35)',
+    'rgba(255, 255, 255, 0.45)',
+    'rgb(255 255 255 / 45%)',
+    'rgba(255, 255, 255, 0.5)',
+    'rgb(255 255 255 / 50%)',
+    'rgba(255, 255, 255, 0.54)',
+    'hsla(0, 0%, 100%, 0.5)',
+    '#ffffff80',
+    '#fff8',
+    '#ffffff8c',
+    '#FFFFFF4D',
   ])('fails %s', (literal) => {
-    expect(isMetaLiteral(literal)).toBe(true);
+    expect(isDimLiteral(literal)).toBe(true);
     expect(css(`.a { color: ${literal}; }`, '')).toHaveLength(1);
   });
 
-  it.each(['rgba(255, 255, 255, 0.55)', 'rgba(0, 0, 0, 0.4)', 'rgba(255, 255, 255, 0.45)', '#ffffff', '#ffffff99', 'hsla(0, 0%, 100%, 0.55)', 'red'])('passes %s', (literal) => {
-    expect(isMetaLiteral(literal)).toBe(false);
+  it.each(['rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.5)', '#ffffff', '#ffffff99', 'hsla(0, 0%, 100%, 0.55)', 'red'])('passes %s', (literal) => {
+    expect(isDimLiteral(literal)).toBe(false);
     expect(css(`.a { color: ${literal}; }`, '')).toEqual([]);
+  });
+});
+
+describe('check-text-ink: the dim range', () => {
+  it('fails a token at .35 used through an alias', () => {
+    const defs = ':root { --faded: rgba(255, 255, 255, 0.35); }\n.t { --one: var(--faded); }\n';
+    expect(css('.a { color: var(--faded); }', defs)).toHaveLength(1);
+    expect(css('.a { color: var(--one); }', defs)).toHaveLength(1);
+  });
+
+  it('passes a token at .20 and one at .55, and a dim literal on a non-text property', () => {
+    expect(css('.a { color: var(--faint); }', ':root { --faint: rgba(255, 255, 255, 0.2); }\n')).toEqual([]);
+    expect(css('.a { color: var(--light); }', ':root { --light: rgba(255, 255, 255, 0.55); }\n')).toEqual([]);
+    expect(css('.a { border-color: rgba(255, 255, 255, 0.45); }', '')).toEqual([]);
+  });
+
+  it('exempts a disabled-scoped .45 and an icon-only control at .5', () => {
+    expect(css('.a:disabled { color: rgba(255, 255, 255, 0.45); }', '')).toEqual([]);
+    expect(css('body.app-slava-restraint .project-home__rename { color: rgb(255 255 255 / 0.5); }', '')).toEqual([]);
+  });
+
+  it('fails a dim fallback of an undefined variable', () => {
+    expect(css('.a { color: var(--nowhere, rgb(255 255 255 / 0.45)); }', '')).toHaveLength(1);
   });
 });
 
@@ -115,6 +151,25 @@ describe('check-text-ink: disabled controls', () => {
     ".field[aria-disabled='true'] ~ .key { color: var(--sr-ink-meta); }",
   ])('fails a selector that is not disabled-only: %s', (rules) => {
     expect(css(rules)).toHaveLength(1);
+  });
+
+  it('does not read a quoted paren as a paren (a quoted ) cannot close :is())', () => {
+    expect(isDisabledScoped(".a:is([title=')'], :disabled)")).toBe(false);
+    expect(isDisabledScoped(".a:is([title='('], :disabled)")).toBe(false);
+    expect(isDisabledScoped('.a:is([title=")"], :disabled)')).toBe(false);
+    const found = css("[title='(']:disabled, .x { color: var(--sr-ink-meta); }");
+    expect(found).toHaveLength(1);
+    expect(found[0].selector).toBe('.x');
+    expect(css("[title=')']:disabled, .x { color: var(--sr-ink-meta); }")).toHaveLength(1);
+  });
+
+  it('does not count a disabled state named inside a quoted value, or a longer pseudo name', () => {
+    expect(isDisabledScoped("[title=':disabled']")).toBe(false);
+    expect(isDisabledScoped("[title='[disabled]']")).toBe(false);
+    expect(isDisabledScoped('.a:disabled-x')).toBe(false);
+    expect(isDisabledScoped('.a:disabled')).toBe(true);
+    expect(isDisabledScoped(".a[title='x y']:disabled")).toBe(true);
+    expect(css("[title=':disabled'] { color: var(--sr-ink-meta); }")).toHaveLength(1);
   });
 
   it('does not count :not(:disabled) or an aria-disabled false as disabled', () => {
@@ -158,6 +213,38 @@ describe('check-text-ink: inline TSX', () => {
   it('passes the light ink, and a shape colour that is not a text colour', () => {
     expect(tsx("<span style={{ color: 'var(--sr-ink-light)' }} />")).toEqual([]);
     expect(tsx("const o = { waveColor: 'rgba(255, 255, 255, 0.40)' };")).toEqual([]);
+  });
+});
+
+describe('check-text-ink: inline TSX, read as a syntax tree', () => {
+  const dim = "{ color: 'var(--sr-ink-meta)' }";
+
+  it.each([
+    ['after a URL regex on the same line', `const re = /^https?:\\/\\//; const s = ${dim};`],
+    ['after a regex holding /* with the colour on the next line', `const re = /src\\/*.ts/;\nconst s = ${dim};`],
+    ['after a regex class holding /*', `const re = /[/*]/; const s = ${dim};`],
+    ['after a nested template holding //', "const t = `${ok ? `a//b` : ''}`; const s = { color: 'var(--sr-ink-meta)' };"],
+    ['after JSX text holding http://', `const a = <div><p>see http://x</p><b style={${dim}} /></div>;`],
+    ['as a quoted key', "const s = { 'color': 'var(--sr-ink-meta)' };"],
+    ['as a quoted CSS key', "const s = { '-webkit-text-fill-color': 'var(--sr-ink-meta)' };"],
+    ['as a caret colour', "const s = { caretColor: 'rgba(255,255,255,.45)' };"],
+    ['as a no-substitution template', 'const s = { color: `var(--sr-ink-meta)` };'],
+    ['through a cast', "const s = { color: 'var(--sr-ink-meta)' as const };"],
+    ['at .5', "const s = { color: 'rgb(255 255 255 / 0.5)' };"],
+  ])('fails a dim colour %s', (_name, source) => {
+    expect(tsx(source)).toHaveLength(1);
+  });
+
+  it('reports the line of the property', () => {
+    const found = tsx("const a = 1;\nconst b = 2;\nconst s = {\n  color: 'var(--sr-ink-meta)',\n};");
+    expect(found.map((hit) => hit.line)).toEqual([4]);
+  });
+
+  it('passes the light ink, .20, a template with a substitution and a non-text key', () => {
+    expect(tsx("const s = { color: 'var(--sr-ink-light)' };")).toEqual([]);
+    expect(tsx("const s = { color: 'rgba(255,255,255,.2)' };")).toEqual([]);
+    expect(tsx('const s = { color: `rgba(255,255,255,${a})` };')).toEqual([]);
+    expect(tsx("const s = { borderColor: 'var(--sr-ink-meta)', backgroundColor: 'rgba(255,255,255,.45)' };")).toEqual([]);
   });
 });
 
