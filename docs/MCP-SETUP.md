@@ -5185,8 +5185,10 @@ stays whole: it isn't removed, its params, name and position aren't put
 back, and no connection into it is taken away or put back, because those inputs
 made its result. It is one `skipped` item with reason `ran since`,
 `ranBy` (`[{kind, name}]`), `left` (the parts it kept: `node`, `params`,
-`name`, `position`, `wires in`) and a message such as "n3 ran since (run
-by the person), so it stays". Connections out of it follow the rules above. Only
+`name`, `position`, `wires in`) and a message such as "The person ran
+“Brief” after that step, so Nebula left it as it is." (an agent's name
+leads and isn't quoted: "Codex ran “Brief” after that step, …"; several
+runners join as "The person and Codex ran …"). Connections out of it follow the rules above. Only
 runs the undoing agent started itself don't count, so an agent can still
 undo its own experiments. A run counts if it was asked for after the edit
 landed, including one still going when the undo comes (all the nodes it
@@ -5196,7 +5198,20 @@ reached the node after. The person's own Cmd+Z is unchanged.
 Each part someone changed since is left as it is and listed in `skipped`
 (`{nodeId, part, keys?, wire?, reason, message}`, plus `ranBy` and `left`
 for `ran since`), as a moodboard restore does. A param only the person may change back (opening a Moodboard node's
-"send notes" again) is skipped too. The rest is one restore through the
+"send notes" again) is skipped too: "“Hero”’s model is the person’s to change back. Ask them with propose_change."
+Every line in `message` and `skipped[].message`, and the `summary` an apply
+returns ("Undo removes “Brief” and “Hero”, puts back “Notes”, and returns
+“Model” to how it was. Anything changed or run since is left as it is."),
+names nodes by the name the canvas shows, never by id; the ids stay in
+`nodeId` and the other fields. A node that is gone is named by the name it
+had when the edit was made ("“Brief” was removed after that step, so Nebula
+couldn’t change it back."; a connection: "Nebula couldn’t put back the
+connection from “Hero” to “Brief” because “Brief” is gone."), else its card
+type's name. Other kept lines read "“Brief” changed after that step, so
+Nebula left it as it is.", "“Brief” was connected to “Hero” after that step,
+…", "“Brief” is a different node now, …", "“Brief” was moved after that
+step, so Nebula left it where it is." and "“Brief” changed after that step,
+so Nebula left it as a normal node.". The rest is one restore through the
 same staging as the canvas's Cmd+Z, so it lands whole or not at all, and
 the person can undo the undo. `status` is `undone`; `skipped` when nothing
 could go back (the token keeps working, for when the person puts a changed

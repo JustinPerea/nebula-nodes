@@ -283,7 +283,9 @@ It also prints `Undo: nebula undo <token>`. Run that to take your edit back
 changed or removed comes back, and anything the person changed since stays
 as it is (the output lists it). A run counts as a change: a node the person
 (or another agent) ran since your edit stays with its params, name and
-input connections ("n3 ran since (run by the person), so it stays"). Nodes only
+input connections ("The person ran “Brief” after that step, so Nebula left it
+as it is." or "Codex ran “Brief” after that step, …"; every line names nodes,
+never ids). Nodes only
 you ran still go, so you can undo your own experiments. A node you deleted
 comes back with the person's pins on it ("Back on its node: pin_…"; one the
 person deleted since prints "Couldn't re-attach …" with why) and the

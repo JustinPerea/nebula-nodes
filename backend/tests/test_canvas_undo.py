@@ -138,7 +138,9 @@ def test_an_edit_hands_back_an_undo_token(api):
     assert isinstance(undo["token"], str) and len(undo["token"]) >= 32
     assert undo["editId"].startswith("ed_") and undo["editId"] != undo["token"]
     assert undo["expiresInSeconds"] == 3600
-    assert prompt in undo["summary"]
+    # The summary names the node, never its id (design).
+    assert undo["summary"] == ("Undo returns “Text Input” to how it was. "
+                               "Anything changed or run since is left as it is.")
     # The token is the agent's alone: it never rides on a sync or the journal.
     assert undo["token"] not in repr(api.sent) and undo["token"] not in repr(_events(api))
 
@@ -327,7 +329,8 @@ def test_an_added_node_the_person_changed_or_wired_since_stays(api):
     assert reasons == {a: "changed since", b: "wired since"}
     # The reason stays a code; the message agents and `nebula undo` read says connected (GM, 2026-10-25).
     messages = {item["nodeId"]: item["message"] for item in result["skipped"]}
-    assert messages[b] == f"{b} was connected to {image} since, so it stays"
+    assert messages[b] == "“Text Input” was connected to “Nano Banana” after that step, so Nebula left it as it is."
+    assert messages[a] == "“Text Input” changed after that step, so Nebula left it as it is."
 
 
 def test_a_wire_that_cannot_go_back_is_skipped_and_the_rest_is_undone(api):
@@ -690,7 +693,7 @@ def test_a_node_the_person_ran_since_stays_with_its_input_wires_and_says_why(api
         (combined, "node", "ran since")]
     item = result["skipped"][0]
     assert item["ranBy"] == [{"kind": "person", "name": "You"}]
-    assert item["message"] == f"{combined} ran since (run by the person), so it stays"
+    assert item["message"] == "The person ran “Combine Text” after that step, so Nebula left it as it is."
     assert item["message"] in result["message"]
 
 
@@ -712,7 +715,7 @@ def test_another_agents_run_counts(api):
     [item] = result["skipped"]
     assert (item["nodeId"], item["reason"]) == (combined, "ran since")
     assert item["ranBy"] == [{"kind": "agent", "name": "Codex"}]
-    assert item["message"] == f"{combined} ran since (run by Codex), so it stays"
+    assert item["message"] == "Codex ran “Combine Text” after that step, so Nebula left it as it is."
 
 
 def test_an_unnamed_clients_run_counts(api):
@@ -834,7 +837,8 @@ def test_a_wire_out_of_an_added_node_that_ran_goes(api):
     assert [(item["nodeId"], item["reason"], item["left"]) for item in result["skipped"]] == [
         (source, "ran since", ["node"])]
     # The reply counts the wire it took away, and lists the node once.
-    assert result["message"] == f"Undone: disconnected 1. {source} ran since (run by the person), so it stays."
+    assert result["message"] == ("Undone: disconnected 1. The person ran “Text Input” after that step, "
+                                 "so Nebula left it as it is.")
 
 
 @pytest.mark.parametrize("runner", ["person", "Codex"])
@@ -856,7 +860,7 @@ def test_nothing_but_a_node_that_ran_is_skipped_and_retrying_wont_help(api, runn
     assert [item["reason"] for item in result["skipped"]] == ["ran since"]
     assert "still works" not in result["message"]
     assert "stays for good" in result["message"]
-    assert result["message"].count(f"{combined} ran since") == 1
+    assert result["message"].count("ran “Combine Text” after that step") == 1
 
 
 def test_a_changed_part_and_a_node_that_ran_say_only_the_change_can_be_retried(api):
@@ -1053,7 +1057,343 @@ def test_the_replys_kept_lines_join_with_a_space_and_one_stop(api):
     import main as main_module
 
     lines = [{"nodeId": "n1", "message": "“A” changed after that step, so Nebula left it as it is."},
-             {"nodeId": "n2", "message": "n2 ran since (run by the person), so it stays"}]
+             {"nodeId": "n2", "message": "The person ran “B” after that step, so Nebula left it as it is."}]
     assert main_module._undo_left_text(lines) == (
-        "“A” changed after that step, so Nebula left it as it is. n2 ran since (run by the person), so it stays.")
+        "“A” changed after that step, so Nebula left it as it is. "
+        "The person ran “B” after that step, so Nebula left it as it is.")
     assert main_module._undo_param_label("nano-banana", "no_such_key") == "no such key"
+
+
+# -- the lines name nodes, never ids (design) ------------------------------------------
+
+import re  # noqa: E402
+
+from services.canvas_undo import activity_line, build_inverse, capture_before, describe, plan_undo  # noqa: E402
+
+_NODE_ID = re.compile(r"\bn\d+\b")
+
+
+def _no_removal(_id, _node):
+    return None
+
+
+def _no_refusal(_id, _definition, _before, _after):
+    return None
+
+
+def _plan(inverse, nodes, edges=(), **kw):
+    return plan_undo(inverse, nodes, list(edges), cannot_remove=_no_removal, refused_change=_no_refusal, **kw)
+
+
+def _node(definition_id="text-input", **extra):
+    return {"definitionId": definition_id, "params": {}, **extra}
+
+
+def _inverse(**parts):
+    base = {"added": [], "addedWires": [], "changed": [], "renamed": [], "moved": [], "removed": [],
+            "removedWires": [], "ready": []}
+    return {**base, **parts}
+
+
+def test_a_node_removed_since_is_named_by_the_name_it_had_at_the_step(api):
+    prompt, _image = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    token = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}]})["undo"]["token"]
+    api.graph.remove_node(prompt)
+    result = _undone(api, token)
+    [item] = result["skipped"]
+    assert (item["nodeId"], item["reason"]) == (prompt, "removed since")
+    assert item["message"] == "“Brief” was removed after that step, so Nebula couldn’t change it back."
+    assert prompt not in result["message"]
+
+
+def test_a_node_removed_since_with_no_label_is_named_by_its_card_type(api):
+    prompt, _image = _seed(api)
+    token = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}]})["undo"]["token"]
+    api.graph.remove_node(prompt)
+    [item] = _undone(api, token)["skipped"]
+    assert item["message"] == "“Text Input” was removed after that step, so Nebula couldn’t change it back."
+
+
+def test_a_moved_node_the_person_moved_again_says_so_by_name(api):
+    prompt, _image = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    token = _apply(api, {"move": {prompt: {"x": 40, "y": 40}}})["undo"]["token"]
+    api.graph.update_positions({prompt: {"x": 900, "y": 900}})
+    [item] = _undone(api, token)["skipped"]
+    assert (item["nodeId"], item["reason"]) == (prompt, "moved since")
+    assert item["message"] == "“Brief” was moved after that step, so Nebula left it where it is."
+
+
+def test_a_setting_only_the_person_may_change_back_is_named_by_node_and_label(api):
+    import main as main_module
+
+    board = main_module._moodboard_store().create(name="Undo board")
+    node = api.graph.add_node("nebula-moodboard", {"moodboard": board["id"], "send_notes": "yes"})
+    api.graph.set_label(node, "Hero")
+    token = _apply(api, {"params": [{"nodeId": node, "params": {"send_notes": "no"}}]})["undo"]["token"]
+    [item] = _undone(api, token)["skipped"]
+    label = main_module._undo_param_label("nebula-moodboard", "send_notes")
+    word = label.lower() if label[:1].isupper() and label[1:].islower() else label
+    assert item["message"].startswith("“Hero”’s ") and item["message"].endswith(
+        " is the person’s to change back. Ask them with propose_change.")
+    assert not _NODE_ID.search(item["message"]) and node not in item["message"]
+    assert word.split(" · ")[0].lower() in item["message"].lower()
+
+
+def test_a_wire_to_a_node_gone_since_says_because_it_is_gone(api):
+    board = api.graph.add_node("text-input", {"value": "board"}, position={"x": 0, "y": 0})
+    flux = api.graph.add_node("flux-2-pro", {}, position={"x": 400, "y": 0})
+    api.graph.set_label(flux, "Hero")
+    api.graph.connect(board, "text", flux, "prompt")
+    api.graph.set_label(board, "Brief")
+    applied = _apply(api, {"unwire": [{"source": board, "sourceHandle": "text", "target": flux,
+                                       "targetHandle": "prompt"}]})
+    api.graph.remove_node(board)
+    result = _undone(api, applied["undo"]["token"])
+    [item] = [item for item in result["skipped"] if item["part"] == "wire"]
+    assert item["reason"] == "gone since" and item["nodeId"] == board
+    assert item["message"] == "Nebula couldn’t put back the connection from “Brief” to “Hero” because “Brief” is gone."
+    assert not _NODE_ID.search(result["message"])
+
+
+def test_a_wire_the_canvas_refuses_now_says_which_nodes_without_ids(api):
+    board = api.graph.add_node("text-input", {"value": "board"}, position={"x": 0, "y": 0})
+    flux = api.graph.add_node("flux-2-pro", {}, position={"x": 400, "y": 0})
+    api.graph.set_label(board, "Brief")
+    api.graph.set_label(flux, "Hero")
+    api.graph.connect(board, "text", flux, "prompt")
+    applied = _apply(api, {"remove": [board]})
+    other = api.graph.add_node("text-input", {"value": "other"})
+    assert api.client.post("/api/graph/connect", headers=PERSON, json={
+        "source": other, "sourceHandle": "text", "target": flux, "targetHandle": "prompt"}).status_code == 200
+    result = _undone(api, applied["undo"]["token"])
+    [item] = [item for item in result["skipped"] if item["part"] == "wire"]
+    assert item["message"] == ("Nebula couldn’t put back the connection from “Brief” to “Hero” because the two "
+                               "nodes don’t take that connection now.")
+    assert not _NODE_ID.search(item["message"]) and item["wire"]["source"] == board
+
+
+def test_every_plan_line_names_nodes_exactly_as_designed():
+    nodes = {
+        "n1": _node(label="Brief", params={"value": "x"}),
+        "n2": _node("nano-banana", label="Hero", params={"model": "m2", "seed": 3}),
+        "n3": _node(label="Other"),
+    }
+    names = {"n1": "Brief", "n2": "Hero", "n3": "Other"}
+    inverse = _inverse(
+        added=[{"id": "n1", "definitionId": "text-input", "params": {"value": "old"}, "label": "Brief", "name": "Brief"}],
+        changed=[{"id": "n9", "definitionId": "text-input", "before": {}, "after": {"value": "a"}, "name": "Draft"},
+                 {"id": "n2", "definitionId": "nano-banana", "before": {"model": "m1", "seed": 2},
+                  "after": {"model": "m3", "seed": 3}, "name": "Hero"}],
+        moved=[{"id": "n3", "before": {"x": 0, "y": 0}, "after": {"x": 5, "y": 5}, "name": "Other"}],
+    )
+    plan = _plan(inverse, nodes, name_of=names.__getitem__)
+    lines = {(item["nodeId"], item["reason"]): item["message"] for item in plan.skipped}
+    assert lines[("n1", "changed since")] == "“Brief” changed after that step, so Nebula left it as it is."
+    assert lines[("n9", "removed since")] == "“Draft” was removed after that step, so Nebula couldn’t change it back."
+    assert lines[("n2", "changed since")] == "“Hero”’s model changed after that step, so Nebula left it as it is."
+    assert lines[("n3", "moved since")] == "“Other” was moved after that step, so Nebula left it where it is."
+
+
+def test_a_node_that_is_a_different_node_now_is_named_by_the_step():
+    nodes = {"n1": _node("nano-banana", label="Something else")}
+    inverse = _inverse(changed=[{"id": "n1", "definitionId": "text-input", "before": {}, "after": {"value": "a"},
+                                 "name": "Brief"}])
+    [item] = _plan(inverse, nodes, name_of=lambda _id: "Something else").skipped
+    assert item["message"] == "“Brief” is a different node now, so Nebula left it as it is."
+
+
+def test_a_placeholder_that_changed_since_stays_a_normal_node():
+    nodes = {"n1": _node(label="Brief", params={"value": "edited"})}
+    inverse = _inverse(ready=[{"id": "n1", "pending": {"by": "x"}, "name": "Brief", "definitionId": "text-input",
+                               "params": {"value": "was"}, "label": "Brief", "position": None, "wires": []}])
+    [item] = _plan(inverse, nodes, name_of=lambda _id: "Brief").skipped
+    assert (item["reason"], item["part"]) == ("changed since", "placeholder")
+    assert item["message"] == "“Brief” changed after that step, so Nebula left it as a normal node."
+
+
+def test_several_setting_names_share_one_sentence():
+    nodes = {"n2": _node("nano-banana", label="Hero", params={"model": "b", "seed": 3})}
+    inverse = _inverse(changed=[{"id": "n2", "definitionId": "nano-banana", "before": {"model": "a", "seed": 2},
+                                 "after": {"model": "b", "seed": 3}, "name": "Hero"}])
+    plan = plan_undo(inverse, nodes, [], cannot_remove=_no_removal,
+                     refused_change=lambda *_a: "the person's", name_of=lambda _id: "Hero",
+                     param_label=lambda _d, key: {"model": "Model", "seed": "Seed"}[key])
+    [item] = plan.skipped
+    assert item["message"] == "“Hero”’s model and seed are the person’s to change back. Ask them with propose_change."
+
+
+def test_the_node_that_cannot_be_removed_now_is_named_in_its_reason_too():
+    nodes = {"n1": _node(label="Brief")}
+    inverse = _inverse(added=[{"id": "n1", "definitionId": "text-input", "params": {}, "label": "Brief"}])
+    plan = plan_undo(inverse, nodes, [], cannot_remove=lambda node_id, _n: f"Cannot delete {node_id}: it is paid.",
+                     refused_change=_no_refusal, name_of=lambda _id: "Brief")
+    [item] = plan.skipped
+    assert item["message"] == "Nebula left “Brief” as it is. Cannot delete “Brief”: it is paid."
+
+
+def test_an_inverse_kept_without_names_falls_back_to_the_card_type_then_the_id():
+    old = _inverse(changed=[{"id": "n9", "definitionId": "text-input", "before": {}, "after": {"value": "a"}},
+                            {"id": "n8", "before": {}, "after": {"value": "a"}, "definitionId": "unknown-type"}],
+                   removed=[{"id": "n7", "definitionId": "nano-banana", "params": {}, "outputs": {}, "label": "Hero"}],
+                   removedWires=[["n7", "image", "n9", "input"]])
+    kinds = {"text-input": "Text Input", "nano-banana": "Nano Banana"}
+    plan = _plan(old, {"n1": _node()}, type_name=lambda definition_id: kinds.get(definition_id, ""))
+    lines = [item["message"] for item in plan.skipped]
+    assert "“Text Input” was removed after that step, so Nebula couldn’t change it back." in lines
+    assert "“n8” was removed after that step, so Nebula couldn’t change it back." in lines
+    assert describe(old, lambda definition_id: kinds.get(definition_id, "")) == (
+        "Undo puts back “Hero” and returns “Text Input” and “n8” to how they were. "
+        "Anything changed or run since is left as it is.")
+    # Without a card-type lookup (describe has no graph) the id is the last resort.
+    assert describe(_inverse(added=[{"id": "n5", "definitionId": "text-input"}])).startswith("Undo removes “n5”.")
+
+
+def test_a_node_the_plan_cannot_find_is_named_by_its_removed_copy_label():
+    inverse = _inverse(removed=[{"id": "n7", "definitionId": "nano-banana", "params": {}, "outputs": {}, "label": "Hero"}],
+                       removedWires=[["n7", "image", "n1", "prompt"]])
+    nodes = {"n1": _node(label="Brief")}
+    # n1 exists, n7 is restored by this plan: the wire goes back, nothing is skipped.
+    assert _plan(inverse, nodes, name_of=lambda _id: "Brief").skipped == []
+
+
+def test_the_summary_lists_follow_the_name_list_rules():
+    nodes = [{"id": f"n{i}", "definitionId": "text-input", "name": f"Node {i}"} for i in range(1, 6)]
+    assert describe(_inverse(added=nodes[:2], removed=nodes[2:3], changed=[{**nodes[3], "before": {}, "after": {}}])) == (
+        "Undo removes “Node 1” and “Node 2”, puts back “Node 3”, and returns “Node 4” to how it was. "
+        "Anything changed or run since is left as it is.")
+    assert describe(_inverse(added=nodes[:4])).startswith("Undo removes 4 nodes. ")
+    assert describe(_inverse(added=nodes[:3])).startswith("Undo removes “Node 1”, “Node 2” and “Node 3”. ")
+    assert describe(_inverse(ready=nodes[:1])).startswith("Undo makes “Node 1” a placeholder again.")
+    assert describe(_inverse(ready=nodes[:2])).startswith("Undo makes “Node 1” and “Node 2” placeholders again.")
+    assert describe(_inverse(addedWires=[["a", "b", "c", "d"]])).startswith("Undo puts 1 connection back.")
+
+
+def test_an_edit_records_each_nodes_name_for_the_undo_lines():
+    nodes = {"n1": _node(label="Brief"), "n2": _node("nano-banana", label="Hero", params={"model": "x"})}
+    before = capture_before(nodes, [], removed=["n1"], changed=["n2"], renamed=[], moved=[], shown={},
+                            name_of=lambda node_id: {"n1": "Brief", "n2": "Hero"}[node_id])
+    assert before["removed"][0]["name"] == "Brief"
+    after = {"n2": {**nodes["n2"], "params": {"model": "y"}}, "n3": _node(label="New")}
+    inverse = build_inverse(before, after, [], added=["n3"], name_of=lambda node_id: {"n2": "Hero", "n3": "New"}[node_id])
+    assert inverse["removed"][0]["name"] == "Brief"
+    assert inverse["added"][0]["name"] == "New" and inverse["changed"][0]["name"] == "Hero"
+    # Without a lookup nothing is recorded and old records read the same.
+    assert "name" not in build_inverse(before, after, [], added=["n3"])["added"][0]
+
+
+def test_a_removed_node_is_named_from_the_step_in_the_undo_reply(api):
+    prompt, image = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    applied = _apply(api, {"remove": [prompt]})
+    # The summary is written at edit time, when the node is gone: its name was recorded.
+    assert applied["undo"]["summary"] == "Undo puts back “Brief”. Anything changed or run since is left as it is."
+
+
+def test_the_ran_since_line_names_several_runners_with_the_list_helper():
+    nodes = {"n1": _node(label="Brief")}
+    inverse = _inverse(added=[{"id": "n1", "definitionId": "text-input", "params": {}, "label": "Brief"}])
+    who = [{"kind": "person"}, {"kind": "agent", "id": "codex", "name": "Codex"}, {"kind": "agent", "id": "x", "name": "Claude Code"}]
+    plan = _plan(inverse, nodes, ran={"n1": who}, name_of=lambda _id: "Brief")
+    [item] = plan.skipped
+    assert item["message"] == "The person, Codex and Claude Code ran “Brief” after that step, so Nebula left it as it is."
+    [codex] = _plan(inverse, nodes, ran={"n1": [who[1]]}, name_of=lambda _id: "Brief").skipped
+    assert codex["message"] == "Codex ran “Brief” after that step, so Nebula left it as it is."
+    [anon] = _plan(inverse, nodes, ran={"n1": [{"kind": "anonymous"}]}, name_of=lambda _id: "Brief").skipped
+    assert anon["message"] == "An unnamed client ran “Brief” after that step, so Nebula left it as it is."
+
+
+def test_the_activity_line_names_the_nodes_that_ran_after_the_edit():
+    assert activity_line("Codex", "removed 1", 2, ["Hero", "Brief"]) == (
+        "Codex undid its edit except “Hero” and “Brief”, which ran after that. Undone: removed 1.")
+    assert activity_line("Codex", "", 1, ["Hero"]) == "Codex undid its edit except “Hero”, which ran after that."
+    assert activity_line("Codex", "", 4, ["A", "B", "C", "D"]) == (
+        "Codex undid its edit except 4 nodes that ran after that.")
+    assert activity_line("Codex", "removed 1", 3, ["Hero", "Brief"]) == (
+        "Codex undid its edit except “Hero” and “Brief”, which ran after that. Undone: removed 1. "
+        "Left 1 other part as it is.")
+    assert activity_line("Codex", "removed 1", 4, ["Hero", "Brief"]) .endswith("Left 2 other parts as they are.")
+    # Nothing ran since: the line is as it was.
+    assert activity_line("Codex", "removed 1", 0, []) == "Codex undid its edit: removed 1"
+    assert activity_line("Codex", "removed 1", 2, []) == "Codex undid its edit: removed 1; left 2 parts as is"
+    for line in (activity_line("Codex", "removed 1", 2, ["Hero", "Brief"]), activity_line("Codex", "", 4, list("ABCD"))):
+        assert ":" not in line.split("Undone")[0] and "(" not in line
+
+
+def test_the_routes_activity_line_names_the_nodes_that_ran(api, monkeypatch):
+    import main as main_module
+
+    lines: list[str] = []
+    monkeypatch.setattr(main_module, "publish_action", lines.append)
+    source, combined, rerouted, applied = _added_chain(api)
+    api.graph.set_label(combined, "Mixer")
+    _person_runs(api, combined)
+    result = _undone(api, applied["undo"]["token"])
+    assert result["status"] == "undone"
+    assert lines[-1] == "Claude Code undid its edit except “Mixer”, which ran after that. Undone: removed 1."
+    assert not _NODE_ID.search(lines[-1])
+
+
+def test_the_routes_activity_line_counts_four_or_more_nodes(api, monkeypatch):
+    import main as main_module
+
+    lines: list[str] = []
+    monkeypatch.setattr(main_module, "publish_action", lines.append)
+    applied = _apply(api, {"nodes": [{"ref": f"+{i}", "definitionId": "text-input", "params": {"value": str(i)}}
+                                     for i in range(5)]})
+    for ref in ("+0", "+1", "+2", "+3"):
+        _person_runs(api, applied["idMap"][ref])
+    assert _undone(api, applied["undo"]["token"])["status"] == "undone"
+    assert lines[-1] == "Claude Code undid its edit except 4 nodes that ran after that. Undone: removed 1."
+
+
+def test_the_cli_and_the_reply_carry_the_same_named_lines(api):
+    from cli.formatter import format_undone
+
+    prompt, _image = _seed(api)
+    api.graph.set_label(prompt, "Brief")
+    token = _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}]})["undo"]["token"]
+    api.graph.remove_node(prompt)
+    result = _undone(api, token)
+    line = "“Brief” was removed after that step, so Nebula couldn’t change it back."
+    assert line in result["message"]
+    assert format_undone(result).splitlines()[-1] == f"  {line}"
+    ran = {"status": "skipped", "skipped": [{"nodeId": "n2", "reason": "ran since", "left": ["node"],
+           "message": "Codex ran “Brief” after that step, so Nebula left it as it is."}]}
+    assert format_undone(ran).splitlines()[-1] == "  Codex ran “Brief” after that step, so Nebula left it as it is."
+
+
+def test_no_plan_line_shows_a_node_id():
+    """The kind of mistake that could come back: every reason's message, built with
+    ids shaped like the canvas's, never carries one."""
+    nodes = {"n1": _node(label="Brief", params={"value": "x"}), "n2": _node("nano-banana", params={"model": "m"}),
+             "n3": _node(label="Other"), "n4": _node("nano-banana")}
+    inverse = _inverse(
+        added=[{"id": "n1", "definitionId": "text-input", "params": {}, "label": None},
+               {"id": "n3", "definitionId": "text-input", "params": {}, "label": "Other"}],
+        changed=[{"id": "n2", "definitionId": "nano-banana", "before": {"model": "a"}, "after": {"model": "b"}},
+                 {"id": "n9", "definitionId": "text-input", "before": {}, "after": {"value": "a"}},
+                 {"id": "n4", "definitionId": "text-input", "before": {}, "after": {"value": "a"}}],
+        moved=[{"id": "n3", "before": {"x": 0, "y": 0}, "after": {"x": 5, "y": 5}}],
+        removedWires=[["n8", "text", "n3", "input"]],
+        removed=[{"id": "n8", "definitionId": "text-input", "params": {}, "outputs": {}}],
+    )
+    plan = _plan(inverse, {k: v for k, v in nodes.items()}, ran={"n3": [{"kind": "person"}]},
+                 type_name=lambda definition_id: {"text-input": "Text Input", "nano-banana": "Nano Banana"}[definition_id])
+    assert plan.skipped
+    for item in plan.skipped:
+        assert not _NODE_ID.search(item["message"]), item
+
+
+def test_the_mcp_tool_and_the_docs_quote_the_named_lines():
+    from pathlib import Path
+
+    import mcp_server
+
+    assert "The person ran" in (mcp_server.undo_canvas_edit.__doc__ or "")
+    root = Path(__file__).resolve().parents[2]
+    for page in (root / "docs" / "MCP-SETUP.md", root / "skills" / "nebula" / "SKILL.md"):
+        text = page.read_text()
+        assert "ran “Brief” after that step" in text, page
+        assert "ran since (run by" not in text and "so it stays" not in text, page

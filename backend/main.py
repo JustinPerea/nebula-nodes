@@ -220,8 +220,8 @@ from services.person_gate import (
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_arrange import canvas_arrange
 from services.canvas_undo import (
-    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, build_inverse, capture_before, kept_lines, nothing_went_back,
-    plan_undo, touched_nodes,
+    EDIT_ID_RE, UNDONE_VERBS, CanvasUndoBook, UndoError, activity_line, build_inverse, capture_before, kept_lines,
+    nothing_went_back, plan_undo, touched_nodes,
 )
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
@@ -19802,7 +19802,8 @@ async def _restore_graph(
 # a count of clears from this same base or from 0).
 canvas_undo_book = CanvasUndoBook(
     persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None,
-    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT)
+    unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT,
+    type_name=lambda definition_id: _undo_type_name(definition_id))
 
 
 def _advance_canvas_revision_after_a_failed_load() -> None:
@@ -19837,6 +19838,7 @@ def _canvas_undo_before(spec: EditSpec, shown: Mapping[str, Any]) -> dict[str, A
         moved=[key for key in spec.move if not key.startswith("+")],
         shown=shown,
         ready=list(spec.ready),
+        name_of=_node_label,
     )
 
 
@@ -19845,7 +19847,7 @@ def _canvas_undo_after(before: dict[str, Any], added: list[str]) -> dict[str, An
     and the project it was made in. Built later, it would take in whatever
     another request changed while this one was still broadcasting."""
     project_id, project_name = _open_project_brief()
-    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added),
+    return {"inverse": build_inverse(before, cli_graph.nodes, cli_graph.edges, added=added, name_of=_node_label),
             "projectId": project_id, "projectName": project_name, "epoch": canvas_undo_book.epoch(project_id),
             "mark": canvas_undo_book.mark()}
 
@@ -19981,6 +19983,13 @@ def _undo_param_label(definition_id: str, key: str) -> str:
     return str((param or {}).get("label") or "").split(" \u00b7 ")[0].strip() or _undo_key_words(key)
 
 
+def _undo_type_name(definition_id: str) -> str:
+    """A card type's display name (the canvas title), for an undo line about a node
+    that is gone and whose name the inverse never recorded; "" when unknown."""
+    definition = node_registry.get_all().get(definition_id)
+    return node_route.canvas_title(definition) if definition else ""
+
+
 def _undo_key_words(key: str) -> str:
     """A param key in lower-case words: filePath and file_path both give "file path"."""
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key).replace("_", " ").lower()
@@ -19989,7 +19998,7 @@ def _undo_key_words(key: str) -> str:
 def _undo_left_text(skipped: list[dict[str, Any]]) -> str:
     """The parts an undo left, in its reply's message: the kept lines are
     sentences already, so they join with a space and take no lead-in. A line
-    that isn't a full sentence (a ran-since or moved-since note) gets its stop."""
+    that lacks its stop (an entry from an older record) gets one."""
     return " ".join(line if line.endswith((".", "!", "?")) else line + "." for line in kept_lines(skipped))
 
 
@@ -20050,7 +20059,8 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
                 "message": f"This edit was already undone by {who}; nothing changed."}
     plan = plan_undo(record.inverse, cli_graph.nodes, cli_graph.edges,
                      cannot_remove=_undo_cannot_remove, refused_change=_undo_refused_change,
-                     ran=_undo_ran_since(record), name_of=_node_label, param_label=_undo_param_label)
+                     ran=_undo_ran_since(record), name_of=_node_label, param_label=_undo_param_label,
+                     type_name=_undo_type_name)
     owner = record.actor
     actor = actor_for_headers(headers)
     if plan.empty:
@@ -20073,8 +20083,10 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
             "wire": {key: wire[key] for key in ("source", "sourceHandle", "target", "targetHandle")},
-            "message": (f"the connection {wire['source']}.{wire['sourceHandle']} → {wire['target']}.{wire['targetHandle']} "
-                        f"can't come back: {wire['reason']}")} for wire in wire_skips]
+            # The restore's own reason names ports and ids; the line says what the person can see.
+            "message": (f"Nebula couldn\u2019t put back the connection from {_quoted(_node_label(wire['source']))} to "
+                        f"{_quoted(_node_label(wire['target']))} because the two nodes don\u2019t take that "
+                        "connection now.")} for wire in wire_skips]
         record.state, record.undone_by, record.undo_id = "undone", actor_record(actor), undo_id
         record.last_skipped = skipped
         canvas_undo_book.note_events(undo_id, canvas_events.events_of_edit(undo_id))
@@ -20104,9 +20116,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             # (their fit check awaits): the link lists them too (review 8).
             _note_link_events(undo_id)
     stays = [item["nodeId"] for item in skipped if item.get("reason") == "ran since"]
-    publish_action(f"{identity.name} undid its edit: {done or 'no change'}{left}"
-                   + (f" ({_listed(stays)} ran since, so {'it stays' if len(stays) == 1 else 'they stay'})"
-                      if stays else ""))
+    publish_action(activity_line(identity.name, done, len(skipped), [_node_label(node_id) for node_id in stays]))
     extras = _undo_extras_text(result)
     return {"status": "undone", "editId": record.edit_id, "undoId": undo_id,
             **{key: result.get(key) for key in ("added", "removed", "changed", "renamed", "moved", "wired",
