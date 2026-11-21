@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ACCESS_LOST_COPY, CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY, REFUSED_FALLBACK_COPY, TOO_LARGE_COPY,
+  ACCESS_LOST_COPY, CONNECTION_LOST_COPY, ConnectionLostError, NO_RESPONSE_COPY, refusedFallbackCopy, TOO_LARGE_COPY,
   canTryAgain, copyForError, copyForStatus, failureKind, isConnectionFailure,
 } from '../../src/lib/errorCopy';
 
@@ -24,7 +24,7 @@ describe('the lines are design\'s, verbatim', () => {
     expect(NO_RESPONSE_COPY).toBe(NO_ANSWER);
   });
   it('a 4xx with no detail, 401/403 with no detail, 413 with no detail', () => {
-    expect(REFUSED_FALLBACK_COPY).toBe(REFUSED);
+    expect(refusedFallbackCopy()).toBe(REFUSED);
     expect(ACCESS_LOST_COPY).toBe(ACCESS);
     expect(TOO_LARGE_COPY).toBe(TOO_LARGE);
   });

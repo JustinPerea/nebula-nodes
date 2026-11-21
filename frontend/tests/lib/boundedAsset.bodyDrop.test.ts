@@ -8,7 +8,7 @@ import { downloadSelectedOutputs } from '../../src/lib/canvasSelection';
 import {
   CONNECTION_LOST_COPY,
   ConnectionLostError,
-  REFUSED_FALLBACK_COPY,
+  refusedFallbackCopy,
   failureMessage,
 } from '../../src/lib/errorCopy';
 
@@ -50,7 +50,7 @@ describe('readBoundedAssetResponse body drops', () => {
     const error = await readBoundedAssetResponse(response, 1000, { heading: 'H.' }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(TypeError);
     expect(error).not.toBeInstanceOf(ConnectionLostError);
-    expect(failureMessage(error, 'H.')).toBe(`H. ${REFUSED_FALLBACK_COPY}`);
+    expect(failureMessage(error, 'H.')).toBe(`H. ${refusedFallbackCopy()}`);
   });
 
   it('a used body is a bug, not a no-answer', async () => {

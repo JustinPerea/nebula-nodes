@@ -117,7 +117,7 @@ describe('ChatModelPicker', () => {
     expect(state.onAgentChange).toHaveBeenCalledExactlyOnceWith('codex');
     view.rerender(<ChatModelPicker {...state} agent="codex" />);
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Model catalog is unavailable');
+    expect(screen.getByRole('status')).toHaveTextContent('Nebula couldn’t get the model list. Try again.');
     expect(screen.getByText('Uses your existing Codex connection.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Codex' })).toHaveFocus();
   });
@@ -133,12 +133,34 @@ describe('ChatModelPicker', () => {
     expect(state.onRetry).not.toHaveBeenCalled();
   });
 
+  // The backend's line for the code (services/chat_models.py) is shown as it comes, ending "try again" beside the
+  // Try again button; a catalog that carries none gets Nebula's own line.
   it.each([
-    ['not_installed', 'Claude Code isn’t installed. Install it, then try again.'],
-    ['not_authenticated', 'Sign in to Claude Code, then try again.'],
-    ['unavailable', 'Model catalog is unavailable.'],
-  ] as const)('offers explicit retry for %s without fabricated models', (status, message) => {
+    ['not_installed', 'Claude Code isn’t installed. Install it, then try again.', 'cli_not_installed'],
+    ['not_authenticated', 'Claude Code isn’t signed in, so Nebula can’t list its models. Run `claude` in a terminal and sign in, then try again.', 'auth_required'],
+    ['unavailable', 'Claude Code took too long to list its models. Try again in a moment.', 'catalog_timeout'],
+  ] as const)('offers explicit retry for %s without fabricated models, saying the backend line', (status, message, code) => {
+    const state = props({ catalog: { ...catalog, status, error: { code, message } } });
+    render(<ChatModelPicker {...state} />);
+    open();
+    expect(screen.getByRole('status').textContent).toBe(message.replace(/`/g, ''));
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again to load models' }));
+    expect(state.onRetry).toHaveBeenCalledOnce();
+  });
+
+  it('says Codex on an API key needs Connect ChatGPT account, in the backend line', () => {
+    const message = 'Codex is billed to your API key, so Nebula can’t list its ChatGPT models. Use Connect ChatGPT account above the message box, then try again.';
+    const state = props({ agent: 'codex', catalog: { ...catalog, agent: 'codex', status: 'not_authenticated', error: { code: 'auth_api_key', message } } });
+    render(<ChatModelPicker {...state} />);
+    open();
+    expect(screen.getByRole('status').textContent).toBe(message);
+  });
+
+  it.each(['not_installed', 'not_authenticated', 'unavailable'] as const)(
+    'falls back to Nebula’s own line for %s when the catalog carries none', (status) => {
     const state = props({ catalog: { ...catalog, status } });
+    const message = 'Nebula couldn’t get the model list. Try again.';
     render(<ChatModelPicker {...state} />);
     open();
     expect(screen.getByRole('status')).toHaveTextContent(message);

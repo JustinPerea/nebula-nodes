@@ -79,7 +79,7 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
     await waitFor(expectBackendOfflineHint);
-    expect(screen.queryByText('Nebula couldn’t check Claude')).toBeNull();
+    expect(screen.queryByText('Nebula couldn’t check Claude Code')).toBeNull();
   });
 
   it('Codex: shows the start-backend hint, not ChatGPT login advice', async () => {
@@ -97,8 +97,8 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
     apiMocks.fetchClaudeStatus.mockImplementation(() => Promise.reject(new TypeError("Cannot read properties of undefined (reading 'installed')")));
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
-    const [label] = await screen.findAllByText('Nebula couldn’t check Claude');
-    expect(label).toHaveAttribute('title', 'Nebula couldn’t check Claude status because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
+    const [label] = await screen.findAllByText('Nebula couldn’t check Claude Code');
+    expect(label).toHaveAttribute('title', 'Nebula couldn’t check Claude Code’s status because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
     expect(screen.queryByText('Nebula’s server isn’t answering')).toBeNull();
     expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
   });
@@ -110,12 +110,12 @@ describe('ChatPanel with the Nebula backend unreachable', () => {
 // gateway) answering for a backend it couldn't reach. A refusal whose reason
 // happens to say "network" is the backend answering.
 describe('ChatPanel decides "backend offline" from kind and status', () => {
-  const HEADING = 'Couldn’t check Claude status.';
+  const HEADING = 'Couldn’t check Claude Code’s status.';
 
   async function expectNotOffline() {
     render(<ChatPanel />);
     await waitFor(() => expect(apiMocks.fetchClaudeStatus).toHaveBeenCalled());
-    await screen.findAllByText('Nebula couldn’t check Claude');
+    await screen.findAllByText('Nebula couldn’t check Claude Code');
     expect(screen.queryByText('Nebula’s server isn’t answering')).toBeNull();
     expect(document.querySelector('[data-chat-agent-connect]')?.textContent ?? '').not.toContain('Backend offline');
   }

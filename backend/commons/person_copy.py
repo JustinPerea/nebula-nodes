@@ -12,7 +12,7 @@ from __future__ import annotations
 
 # GM's 4xx fallback, the same words the frontend shows for a refusal with no reason.
 # Round 3f (GM): under a heading, "drop "That didn't work."".
-FALLBACK = "Try again, or reload the page if it keeps happening."
+FALLBACK = "Try again, or reload the page if it keeps happening."  # the browser line, a sentinel: never sent, the frontend says the shell's line
 
 # GM's lines, verbatim.
 BAD_FILTERS = "Those filters didn’t work. Clear them and try again."
@@ -49,3 +49,9 @@ class Refused(ValueError):
 def person_line(exc: BaseException, fallback: str = FALLBACK) -> str:
     """The person's line for a refusal: its own `person`, else `fallback`."""
     return getattr(exc, "person", None) or fallback
+
+
+def person_field(line: str) -> dict[str, str]:
+    """`{"person": line}` for a response body, or `{}` when `line` is FALLBACK: the frontend says the
+    no-reason line itself, for its own shell (reload the page in a browser, View > Reload in the app)."""
+    return {} if line == FALLBACK else {"person": line}

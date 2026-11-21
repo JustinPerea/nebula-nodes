@@ -79,8 +79,11 @@ def test_ended_lines_per_reason():
      "Claude Code isn’t signed in, so Nebula can’t list its models. Run `claude` in a terminal and sign in, "
      "then send again."),
     ("auth_required", "codex",
-     "Codex isn’t signed in, so Nebula can’t list its models. Run `codex` in a terminal and sign in with your "
-     "ChatGPT account, then send again."),
+     "Codex isn’t signed in, so Nebula can’t list its models. Use Connect ChatGPT account above the message box, "
+     "then send again."),
+    ("auth_api_key", "codex",
+     "Codex is billed to your API key, so Nebula can’t list its ChatGPT models. Use Connect ChatGPT account above "
+     "the message box, then send again."),
     ("catalog_unavailable", "claude",
      "Nebula couldn’t get the model list from Claude Code. Check that it’s installed and signed in, then send again."),
     ("catalog_cleanup_failed", "codex",

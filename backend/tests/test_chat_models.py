@@ -317,3 +317,88 @@ def test_every_catalog_code_the_cli_discovery_raises_has_its_own_chat_line():
             line = chat_models.chat_refusal_message(code, agent, "FALLBACK")
             assert line != "FALLBACK", (code, agent)
             assert line.endswith("then send again.") or line.endswith("Send again in a moment."), (code, agent, line)
+
+
+def test_the_picker_and_the_chat_say_the_same_line_for_every_catalog_code():
+    """One table (chat_models._CATALOG_LINES) feeds both: the picker's line ends "then try again." beside its
+    Try again button, the chat's "then send again.". A code with one and not the other, or a line that drifted
+    from its twin, fails here."""
+    import re
+    source = (Path(chat_models.__file__)).read_text()
+    raised = set(re.findall(r'_DiscoveryError\(\s*"([a-z_]+)"', source))
+    raised |= {"cli_not_installed", "catalog_timeout", "catalog_cleanup_failed", "auth_api_key"}
+    for agent in ("claude", "codex"):
+        chat = {code for code in raised if chat_models.chat_refusal_message(code, agent, "") != ""}
+        picker = {code for code in raised if chat_models.catalog_message(code, agent) != ""}
+        assert chat == picker == raised, (agent, raised - chat, raised - picker)
+        for code in raised:
+            picker_line = chat_models.catalog_message(code, agent)
+            chat_line = chat_models.chat_refusal_message(code, agent, "")
+            assert picker_line.endswith("then try again.") or picker_line.endswith("Try again in a moment."), picker_line
+            assert chat_line.replace("then send again.", "then try again.").replace("Send again in", "Try again in") == picker_line
+    assert chat_models.CATALOG_CODES == raised
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("agent,code,message", [
+    ("claude", "catalog_timeout", "Claude Code took too long to list its models. Try again in a moment."),
+    ("codex", "catalog_invalid", "Codex sent a model list Nebula couldn’t read. Update Codex, then try again."),
+])
+async def test_the_rest_catalog_error_message_is_the_picker_line(monkeypatch, agent, code, message):
+    async def fail(*_args, **_kwargs):
+        raise chat_models._DiscoveryError(code, "private detail")
+    monkeypatch.setattr(chat_models, "_capture", AsyncMock(return_value=("1.0\n", 0)))
+    monkeypatch.setattr(chat_models, "_catalog_env", lambda _agent: {})
+    monkeypatch.setattr(chat_models, "_codex_catalog", fail)
+    monkeypatch.setattr(chat_models, "_claude_catalog", fail)
+    result = await chat_models.get_chat_models(agent, refresh=True)
+    assert result["error"] == {"code": code, "message": message} and "private" not in json.dumps(result)
+
+
+@pytest.mark.asyncio
+async def test_codex_signed_in_with_an_api_key_has_its_own_code_and_lines(monkeypatch):
+    """Codex on an API key is signed in, so it is not auth_required: it gets auth_api_key, whose picker line
+    and chat line both send the person to Connect ChatGPT account."""
+    monkeypatch.setattr(chat_models, "_capture", AsyncMock(return_value=("1.0\n", 0)))
+    monkeypatch.setattr(chat_models, "_catalog_env", lambda _agent: {})
+    monkeypatch.setattr(chat_models, "_codex_catalog", AsyncMock(
+        return_value=({"mode": "apiKey", "planType": None, "authenticated": True}, [])))
+    result = await chat_models.get_chat_models("codex", refresh=True)
+    assert result["status"] == "not_authenticated"
+    assert result["error"] == {"code": "auth_api_key", "message": (
+        "Codex is billed to your API key, so Nebula can’t list its ChatGPT models. "
+        "Use Connect ChatGPT account above the message box, then try again.")}
+    assert chat_models.chat_refusal_message("auth_api_key", "codex", "fallback") == (
+        "Codex is billed to your API key, so Nebula can’t list its ChatGPT models. "
+        "Use Connect ChatGPT account above the message box, then send again.")
+    # Not signed in at all stays auth_required.
+    monkeypatch.setattr(chat_models, "_codex_catalog", AsyncMock(
+        return_value=({"mode": None, "planType": None, "authenticated": False}, [])))
+    assert (await chat_models.get_chat_models("codex", refresh=True))["error"]["code"] == "auth_required"
+
+
+@pytest.mark.asyncio
+async def test_codex_auth_required_lines_point_to_the_connect_button_and_claude_keeps_its_terminal_line(monkeypatch):
+    """Nebula needs a ChatGPT account for Codex, so Codex's not-signed-in lines (picker and chat) name the
+    Connect ChatGPT account button, not a terminal command. Claude Code's line keeps `claude`."""
+    assert chat_models.catalog_message("auth_required", "codex") == (
+        "Codex isn’t signed in, so Nebula can’t list its models. "
+        "Use Connect ChatGPT account above the message box, then try again.")
+    assert chat_models.chat_refusal_message("auth_required", "codex", "fallback") == (
+        "Codex isn’t signed in, so Nebula can’t list its models. "
+        "Use Connect ChatGPT account above the message box, then send again.")
+    assert chat_models.catalog_message("auth_required", "claude") == (
+        "Claude Code isn’t signed in, so Nebula can’t list its models. "
+        "Run `claude` in a terminal and sign in, then try again.")
+
+
+@pytest.mark.asyncio
+async def test_only_the_api_key_mode_gets_the_api_key_line(monkeypatch):
+    """account/read reports an API key as type "apiKey". Any other signed-in mode with no models (here
+    amazonBedrock) is catalog_unavailable, not the API-key line."""
+    monkeypatch.setattr(chat_models, "_capture", AsyncMock(return_value=("1.0\n", 0)))
+    monkeypatch.setattr(chat_models, "_catalog_env", lambda _agent: {})
+    for mode, code in (("apiKey", "auth_api_key"), ("amazonBedrock", "catalog_unavailable")):
+        monkeypatch.setattr(chat_models, "_codex_catalog", AsyncMock(
+            return_value=({"mode": mode, "planType": None, "authenticated": True}, [])))
+        assert (await chat_models.get_chat_models("codex", refresh=True))["error"]["code"] == code, mode

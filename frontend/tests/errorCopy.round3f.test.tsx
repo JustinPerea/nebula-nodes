@@ -71,7 +71,7 @@ afterEach(() => {
 
 describe('the general failure line under any other heading', () => {
   it('drops "That didn\'t work."', () => {
-    expect(errorCopy.REFUSED_FALLBACK_COPY).toBe(ELSEWHERE);
+    expect(errorCopy.refusedFallbackCopy()).toBe(ELSEWHERE);
     expect(errorCopy.copyForError(new Error('internal'))).toBe(ELSEWHERE);
   });
 

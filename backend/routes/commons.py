@@ -99,7 +99,12 @@ def refuse(actor: actors_mod.Actor | None, status: int, specific: str, person: s
     specific text it gets today, to fix its call; the person gets `person`,
     written copy, and the specific text goes to the log. `actor` None is a
     human-only route (Depends(human_dep))."""
-    return refusal_copy.refusal(status, specific, person, actor=actor, route=route, log=_log_commons)
+    exc = refusal_copy.refusal(status, specific, person, actor=actor, route=route, log=_log_commons)
+    if person == person_copy.FALLBACK and refusal_copy.person_reads(actor):
+        # The Commons' no-reason line is a sentinel: the person's detail is empty and the frontend says
+        # the line for its own shell (reload the page in a browser, View > Reload in the desktop app).
+        exc.detail = ""
+    return exc
 
 
 def gone(actor: actors_mod.Actor | None, specific: str, thing: str, things: str, route: str) -> HTTPException:
@@ -343,7 +348,7 @@ async def intake_files(collection_id: str = Form(...), role: str = Form("neutral
             # specific text, never shown to the person.
             log_refusal("commons upload of one file refused (%s): %s", exc.code, exc)
             results.append({"filename": upload.filename, "ok": False, "error": str(exc), "reason": exc.code,
-                            "person": person_copy.INTAKE.get(exc.code, person_copy.FALLBACK)})
+                            **person_copy.person_field(person_copy.INTAKE.get(exc.code, person_copy.FALLBACK))})
     return {"results": results}
 
 

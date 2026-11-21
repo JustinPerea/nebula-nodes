@@ -48,17 +48,53 @@ PICK_ANOTHER_MODEL = "Pick another with the model button at the top of the chat,
 _CLI_AUTH_CHECK = {"claude": "claude auth status", "codex": "codex login status"}
 _CLI_SIGN_IN = {
     "claude": "Run `claude` in a terminal and sign in",
-    "codex": "Run `codex` in a terminal and sign in with your ChatGPT account",
+    # Nebula needs a ChatGPT account for Codex, and the Connect ChatGPT account button (above the message box) signs in.
+    "codex": "Use Connect ChatGPT account above the message box",
 }
 _RELOAD = "Nebula couldn\u2019t read that message. Reload the page, then send again."
 
 
+# One line per catalog code, said twice from this one table: the model picker shows it beside its own
+# Try again button (catalog_message, "then try again."), and the chat shows it when a send is refused for
+# the same code (chat_refusal_message, "then send again."). `{again}` is the verb of the surface; `{Again}`
+# is the same at the start of a sentence. A code with a line here has both; a test fails on a code in one
+# and not the other (tests/test_chat_models.py).
+_CATALOG_LINES = {
+    "cli_not_installed": "{cli} isn\u2019t installed. Install it, then {again}.",
+    "auth_required": "{cli} isn\u2019t signed in, so Nebula can\u2019t list its models. {sign_in}, then {again}.",
+    # Codex signed in with an API key: its ChatGPT model list needs a ChatGPT sign-in, which Connect ChatGPT
+    # account (above the message box) does.
+    "auth_api_key": "{cli} is billed to your API key, so Nebula can\u2019t list its ChatGPT models. "
+                    "Use Connect ChatGPT account above the message box, then {again}.",
+    "catalog_unavailable": "Nebula couldn\u2019t get the model list from {cli}. Check that it\u2019s installed and signed in, then {again}.",
+    "catalog_cleanup_failed": "Nebula couldn\u2019t get the model list from {cli}. Check that it\u2019s installed and signed in, then {again}.",
+    "auth_unknown": "Nebula couldn\u2019t tell whether {cli} is signed in. Run `{check}` in a terminal to check, then {again}.",
+    "catalog_invalid": "{cli} sent a model list Nebula couldn\u2019t read. Update {cli}, then {again}.",
+    "catalog_timeout": "{cli} took too long to list its models. {Again} in a moment.",
+}
+CATALOG_CODES = frozenset(_CATALOG_LINES)
+
+
+def _catalog_line(code: str, agent: str, again: str) -> str | None:
+    template = _CATALOG_LINES.get(code)
+    if template is None:
+        return None
+    return template.format(
+        cli=CLI_NAMES.get(agent, agent.title()), again=again, Again=again[0].upper() + again[1:],
+        sign_in=_CLI_SIGN_IN.get(agent, "Sign in to it in a terminal"), check=_CLI_AUTH_CHECK.get(agent, agent))
+
+
+def catalog_message(code: str, agent: str, fallback: str = "") -> str:
+    """The line the model picker shows for a catalog error, beside its Try again button. An unknown
+    ``code`` keeps ``fallback``."""
+    return _catalog_line(code, agent, "try again") or fallback
+
+
 def chat_refusal_message(code: str, agent: str, fallback: str) -> str:
     """What the chat shows when a send is refused for its model choice or its
-    CLI catalog (the agent never ran). The REST catalog keeps its own wording
-    (``catalog.error.message``); this is the chat event's text. An unknown
+    CLI catalog (the agent never ran). A catalog code reads the same line the model picker shows
+    (``catalog_message``), ending "then send again."; the others are the chat's own. An unknown
     ``code`` keeps ``fallback``."""
-    cli = CLI_NAMES.get(agent, agent.title())
     if code in {"model_invalid", "effort_invalid"}:
         return _RELOAD
     if code == "model_required":
@@ -67,20 +103,7 @@ def chat_refusal_message(code: str, agent: str, fallback: str) -> str:
         return f"That model isn\u2019t offered anymore. {PICK_ANOTHER_MODEL}"
     if code == "effort_unsupported":
         return f"This model doesn\u2019t support that thinking effort. {PICK_ANOTHER_MODEL}"
-    if code == "auth_required":
-        return f"{cli} isn\u2019t signed in, so Nebula can\u2019t list its models. {_CLI_SIGN_IN.get(agent, 'Sign in to it in a terminal')}, then send again."
-    if code in {"catalog_unavailable", "catalog_cleanup_failed"}:
-        return f"Nebula couldn\u2019t get the model list from {cli}. Check that it\u2019s installed and signed in, then send again."
-    if code == "auth_unknown":
-        check = _CLI_AUTH_CHECK.get(agent, agent)
-        return f"Nebula couldn\u2019t tell whether {cli} is signed in. Run `{check}` in a terminal to check, then send again."
-    if code == "catalog_invalid":
-        return f"{cli} sent a model list Nebula couldn\u2019t read. Update {cli}, then send again."
-    if code == "catalog_timeout":
-        return f"{cli} took too long to list its models. Send again in a moment."
-    if code == "cli_not_installed":
-        return f"{cli} isn\u2019t installed. Install it, then send again."
-    return fallback
+    return _catalog_line(code, agent, "send again") or fallback
 
 
 class ChatModelSelectionError(ValueError):
@@ -408,7 +431,11 @@ async def _discover(agent: str) -> dict[str, Any]:
                 result["models"] = models
                 if models:
                     result["status"] = "ready"
-                elif not auth["authenticated"] or (agent == "codex" and auth["mode"] != "chatgpt"):
+                elif agent == "codex" and auth["mode"] == "apiKey":
+                    # Signed in with an API key (account/read type "apiKey"): the ChatGPT model list needs a
+                    # ChatGPT sign-in. Any other signed-in mode falls to catalog_unavailable below.
+                    raise _DiscoveryError("auth_api_key", "Codex is signed in with an API key.", "not_authenticated")
+                elif not auth["authenticated"]:
                     raise _DiscoveryError("auth_required", "Sign in through the local official CLI to select chat models.", "not_authenticated")
                 else:
                     raise _DiscoveryError("catalog_unavailable", "The local CLI returned no supported chat models.")
@@ -420,14 +447,15 @@ async def _discover(agent: str) -> dict[str, Any]:
             raise _DiscoveryError("catalog_cleanup_failed", "The local CLI model catalog cleanup failed.") from exc
         if isinstance(exc, FileNotFoundError):
             result["status"] = "not_installed"
-            result["error"] = {"code": "cli_not_installed", "message": f"{CLI_NAMES.get(agent, agent.title())} isn\u2019t installed. Install it, then try again."}
+            result["error"] = {"code": "cli_not_installed", "message": catalog_message("cli_not_installed", agent)}
         elif isinstance(exc, TimeoutError):
-            result["error"] = {"code": "catalog_timeout", "message": "The local CLI model catalog timed out. Check the CLI connection and refresh."}
+            result["error"] = {"code": "catalog_timeout", "message": catalog_message("catalog_timeout", agent)}
         elif isinstance(exc, _DiscoveryError):
             result["status"] = exc.status
-            result["error"] = {"code": exc.code, "message": str(exc)}
+            # The picker's line for the code (the chat's line for it, ending "try again"); a code with none keeps the text.
+            result["error"] = {"code": exc.code, "message": catalog_message(exc.code, agent, str(exc))}
         else:
-            result["error"] = {"code": "catalog_unavailable", "message": "The local CLI model catalog is unavailable. Check the CLI connection and refresh."}
+            result["error"] = {"code": "catalog_unavailable", "message": catalog_message("catalog_unavailable", agent)}
     return result
 
 

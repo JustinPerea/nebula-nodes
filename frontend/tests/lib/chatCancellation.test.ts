@@ -24,10 +24,10 @@ describe('chat cancellation truth state', () => {
 
   it('does not label a request as canceled before confirmation', () => {
     expect(chatCancellationNotice('requested')).toEqual({
-      text: 'Cancellation requested…',
+      text: 'Stopping…',
     });
-    expect(chatCancellationNotice('requested').text).not.toBe('Canceled.');
-    expect(chatCancellationNotice('confirmed')).toEqual({ text: 'Canceled.' });
+    expect(chatCancellationNotice('requested').text).not.toBe('Stopped.');
+    expect(chatCancellationNotice('confirmed')).toEqual({ text: 'Stopped.' });
   });
 
   it('represents failed cancellation without calling it canceled', () => {

@@ -20,7 +20,7 @@ import { refuseWhileCommonsUnsaved } from '../lib/commonsUnsaved';
 import { showNotice } from '../lib/canvasNotice';
 import { focusCanvasSoon } from '../lib/canvasFocus';
 import { isBackendOffline, isOfflineRefusal, waitUntilOnline } from '../lib/backendConnection';
-import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, REFUSED_FALLBACK_COPY, canTryAgain, actionFailedLine, couldntLine, failureCopy, FIRST_LOAD_RETRYING_COPY, isBackendUnreachable, isNoAnswer, nodeNameList, OPEN_TIMEOUT_MS, openTimedOutLine, notConnectedBecause, oneLine } from '../lib/errorCopy';
+import { RequestFailedError, becauseLine, clauseFor, failedWhat, failureMessage, failureUnder, FailureNotice, PERSON_REQUIRED_CODE, isRefusedFallback, canTryAgain, actionFailedLine, couldntLine, failureCopy, FIRST_LOAD_RETRYING_COPY, isBackendUnreachable, isNoAnswer, nodeNameList, OPEN_TIMEOUT_MS, openTimedOutLine, notConnectedBecause, oneLine } from '../lib/errorCopy';
 import { clearLineOnPromote, isPersonRefusal, retryOnPromote } from '../lib/clearsOnPromote';
 import { REOPEN_HOLD_PLACES, readOpenHold } from '../lib/reopenHold';
 import type { ReopenHold, ReopenHoldPlace, OpenHold } from '../lib/reopenHold';
@@ -1072,7 +1072,7 @@ export const runStillGoing = (heading: string) => new FailureNotice(heading, RUN
  * edits' lines warn would lose the unsaved edits. */
 export function reasonSentence(error: unknown): string {
   const { cause: reason = '' } = failureCopy(error);
-  return reason === REFUSED_FALLBACK_COPY ? '' : reason;
+  return isRefusedFallback(reason) ? '' : reason;
 }
 
 /** The clause after "because" for a request's failure, with the button's own "Try again." taken off, for a
@@ -1080,7 +1080,7 @@ export function reasonSentence(error: unknown): string {
  * nothing readable, a write refused offline). */
 function clauseBeforeTryAgain(error: unknown): string | null {
   const { cause, status } = failureCopy(error);
-  if (!cause || cause === REFUSED_FALLBACK_COPY) return null;
+  if (!cause || isRefusedFallback(cause)) return null;
   return clauseFor({ reason: cause, status }, 'button')?.replace(/ Try again\.$/, '') ?? null;
 }
 
@@ -3034,7 +3034,7 @@ export const actions = {
         // Design: refused only because this tab isn't connected as the person.
         if (showNotConnectedLoad(error, saving ? 'save your unsaved edits' : 'load your work')) return;
         const copy = failureCopy(error, { heading: LOAD_HEADING });
-        const general = copy.cause === REFUSED_FALLBACK_COPY;
+        const general = isRefusedFallback(copy.cause ?? '');
         const line = error instanceof RequestFailedError && error.storageFull
           ? oneLine({ heading: LOAD_HEADING, reason: LOAD_DISK_FULL }) : copy.reason;
         const shown = core.pendingRecovery && general ? couldntLine(failedWhat(LOAD_HEADING) ?? '') : line;

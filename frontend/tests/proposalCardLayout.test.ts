@@ -70,8 +70,8 @@ describe('the proposal card is one column', () => {
 
   it('makes Accept the primary button, never the agent colour', () => {
     const primary = rule('.proposal-bar__button--primary');
-    expect(primary.background).toBe('var(--sr-ink, rgb(255 255 255 / 0.92))');
-    expect(primary.color).toBe('var(--sr-canvas, #000)');
+    expect(primary.background).toBe('var(--sr-button-primary-fill, var(--sr-ink, rgb(255 255 255 / 0.92)))');
+    expect(primary.color).toBe('var(--sr-button-primary-ink, var(--sr-canvas, #000))');
     expect(CSS).not.toMatch(/\.proposal-bar__button--primary[^{]*\{[^}]*--agent-color/);
   });
 

@@ -1186,15 +1186,12 @@ body.app-slava-restraint .inspector__palette-pending:focus {
   gap: 5px;
   min-height: 26px;
   max-width: 100%;
-  border: 0;
-  padding: 0 9px;
   font: inherit;
   cursor: pointer;
 }
 
 .chat-panel__connect-btn:disabled {
   cursor: default;
-  opacity: 0.58;
 }
 
 .chat-panel__connect-btn-icon,

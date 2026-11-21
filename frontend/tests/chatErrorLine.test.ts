@@ -260,7 +260,7 @@ describe('the chat line takes its form and tone from the event', () => {
 
   it('every refusal code the backend sends is a whole line', () => {
     const codes = ['personal_session_ended', 'personal_agent_warning_required', 'agent_invalid', 'provider_invalid', 'model_unsupported',
-      'effort_unsupported', 'model_required', 'model_invalid', 'effort_invalid', 'auth_required', 'auth_unknown', 'cli_not_installed',
+      'effort_unsupported', 'model_required', 'model_invalid', 'effort_invalid', 'auth_required', 'auth_api_key', 'auth_unknown', 'cli_not_installed',
       'catalog_unavailable', 'catalog_cleanup_failed', 'catalog_timeout', 'catalog_invalid', 'personal_agent_unknown',
       'personal_agent_disabled', 'personal_agent_not_installed', 'personal_agent_needs_node', 'personal_agent_needs_setup',
       'personal_agent_changed', 'personal_agent_limit', 'personal_agent_shutting_down', 'personal_agent_start_timeout',

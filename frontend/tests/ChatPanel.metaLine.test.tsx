@@ -76,7 +76,7 @@ describe('the chat panel meta line', () => {
   it('names the plan, drops the idle word and keeps the CLI message in the hover title', async () => {
     apiMocks.fetchClaudeStatus.mockResolvedValue(claude());
     render(<ChatPanel />);
-    await waitFor(() => expect(meta().textContent).toBe('Claude · Max plan'));
+    await waitFor(() => expect(meta().textContent).toBe('Claude Code · Max plan'));
     expect(meta().querySelector('span')).toHaveAttribute('title', 'Logged in via the CLI.');
   });
 
@@ -111,7 +111,7 @@ describe('the chat panel meta line', () => {
   it('says Nebula couldn’t check the agent when the status call fails for another reason', async () => {
     apiMocks.fetchClaudeStatus.mockRejectedValue(new Error('boom'));
     render(<ChatPanel />);
-    await waitFor(() => expect(meta().textContent).toBe('Nebula couldn’t check Claude'));
+    await waitFor(() => expect(meta().textContent).toBe('Nebula couldn’t check Claude Code'));
   });
 });
 
@@ -121,7 +121,7 @@ describe('the meta line hover title', () => {
   it('has none for Claude with no sign-in and no session (the status message is only the method word)', async () => {
     apiMocks.fetchClaudeStatus.mockResolvedValue(claude({ loggedIn: false, authMethod: 'none', subscriptionType: null, message: 'none' }));
     render(<ChatPanel />);
-    await waitFor(() => expect(meta().textContent).toBe('Claude needs a sign-in'));
+    await waitFor(() => expect(meta().textContent).toBe('Claude Code needs a sign-in'));
     expect(meta().querySelector('span')).not.toHaveAttribute('title');
   });
 
@@ -131,7 +131,7 @@ describe('the meta line hover title', () => {
     await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
     const socket = ChatTestSocket.instances[0];
     await act(async () => socket.open());
-    await waitFor(() => expect(meta().textContent).toBe('Claude · Max plan'));
+    await waitFor(() => expect(meta().textContent).toBe('Claude Code · Max plan'));
     expect(meta().querySelector('span')).not.toHaveAttribute('title');
     const input = screen.getByPlaceholderText('Message…');
     fireEvent.change(input, { target: { value: 'Hello' } });
@@ -159,26 +159,26 @@ describe('the panel state on the meta line while the agent status is loading or 
     ['failed', () => apiMocks.fetchClaudeStatus.mockRejectedValue(new Error('boom'))],
   ];
 
-  it.each(statuses)('shows thinking, canceling and cancel failed while the status is %s, and nothing when idle', async (_name, setStatus) => {
+  it.each(statuses)('shows thinking, canceling and stop failed while the status is %s, and nothing when idle', async (_name, setStatus) => {
     setStatus();
     render(<ChatPanel />);
     await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
     const socket = ChatTestSocket.instances[0];
     await act(async () => socket.open());
-    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|canceling…|cancel failed)/);
+    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|stopping…|stop failed)/);
     const input = screen.getByPlaceholderText('Message…');
     fireEvent.change(input, { target: { value: 'Hello' } });
     await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
     await waitFor(() => expect(meta().textContent).toMatch(/ · thinking…$/));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop response' })); });
-    expect(meta().textContent).toMatch(/ · canceling…$/);
+    expect(meta().textContent).toMatch(/ · stopping…$/);
     await act(async () => socket.receive({ type: 'cancellation', status: 'failed', active: true, message: 'x' }));
-    expect(meta().textContent).toMatch(/ · cancel failed$/);
+    expect(meta().textContent).toMatch(/ · stop failed$/);
     await act(async () => socket.receive({ type: 'cancellation', status: 'confirmed' }));
-    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|canceling…|cancel failed)/);
+    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|stopping…|stop failed)/);
   });
 
-  it('drops "cancel failed" once the turn it belonged to has ended', async () => {
+  it('drops "stop failed" once the turn it belonged to has ended', async () => {
     apiMocks.fetchClaudeStatus.mockRejectedValue(new Error('boom'));
     render(<ChatPanel />);
     await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
@@ -190,6 +190,6 @@ describe('the panel state on the meta line while the agent status is loading or 
     await waitFor(() => expect(meta().textContent).toMatch(/ · thinking…$/));
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop response' })); });
     await act(async () => socket.receive({ type: 'cancellation', status: 'failed', active: false, message: 'x' }));
-    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|canceling…|cancel failed)/);
+    expect(meta().textContent).not.toMatch(/ · (ready|thinking…|stopping…|stop failed)/);
   });
 });

@@ -97,7 +97,7 @@ import { noteNodeLabels } from '../lib/lastNodeLabels';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { WORLD_LABS_STATUS_UNCERTAIN_WARNING, cardTitle, deleteRefusalText, heldDeleteText, providerRecoveryPlaceKey } from '../lib/worldLabsWaiting';
 import {
-  CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, REFUSED_FALLBACK_COPY,
+  CONNECTION_LOST_COPY, NEBULA_NOT_ANSWERING_COPY, ConnectionLostError, FailureNotice, refusedFallbackCopy,
   RequestFailedError, copyForAnswer, detailText, failureKind, failureCopy, isBackendUnreachable, failureDetails,
   PERSON_REQUIRED_CODE, becauseLine, curlApostrophes, failureMessage, isNamedLine, readRefusal, refusalError, requestError,
   saysPersonRequired, warnFailure, writtenLine, nodeNameList, notConnectedBecause, CLUSTER_NOT_ADDED, GENERATE_HEADING, generateRefusedCopy, generateStartFailedCopy,
@@ -4453,7 +4453,7 @@ function stopLineText(stop: SceneStop, names: string[]): string {
     if (stop.reason !== null) return sceneOtherStopLine(names, stop.reason);
     // A stop line is never empty; with no line kept, it
     // says Nebula's own.
-    return stop.line || sceneOtherStopLine(names, REFUSED_FALLBACK_COPY);
+    return stop.line || sceneOtherStopLine(names, refusedFallbackCopy());
   }
   return sceneStopStateLine(stop.cause, names);
 }
@@ -8672,7 +8672,7 @@ async function bringBackendGraphIntoEmptyTab(
  * console; the person reads the heading and the design line. */
 function notStartedMessage(heading: string, status: string | undefined): string {
   console.warn(`[nebula] ${heading} start status: ${status || 'unknown'}`);
-  return becauseLine({ heading, reason: REFUSED_FALLBACK_COPY });
+  return becauseLine({ heading, reason: refusedFallbackCopy() });
 }
 
 /** The reason line for a refused canvas request (error-copy design):

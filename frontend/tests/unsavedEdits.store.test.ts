@@ -51,7 +51,7 @@ import { reloadPage } from '../src/lib/paramsOutdated';
 import { saveEditsToFile } from '../src/lib/graphFileShared';
 import * as projects from '../src/lib/projects';
 import * as execution from '../src/lib/api';
-import { ConnectionLostError, REFUSED_FALLBACK_COPY } from '../src/lib/errorCopy';
+import { ConnectionLostError, refusedFallbackCopy } from '../src/lib/errorCopy';
 import type { ProjectList, SavedProject } from '../src/lib/projects';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 import { notePersonPromoted } from '../src/lib/personSession';
@@ -168,7 +168,7 @@ describe('a recovered copy the backend refuses for good', () => {
 
   it("a refusal with no reason of its own: GM's second sentence alone (the general line says reload)", async () => {
     falleBehind();
-    vi.mocked(projects.recoverProject).mockRejectedValue(refusal(REFUSED_FALLBACK_COPY, 422));
+    vi.mocked(projects.recoverProject).mockRejectedValue(refusal(refusedFallbackCopy(), 422));
     await useProjectStore.getState().retry();
     expect(state().unsavedEdits).toEqual({ reason: 'Download them so nothing is lost, or continue without them.' });
   });

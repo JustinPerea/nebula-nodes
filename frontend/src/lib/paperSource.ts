@@ -1,5 +1,5 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
-import { copyForStatus, readDetail, REFUSED_FALLBACK_COPY, RequestFailedError, requestSucceeded, warnFailure, withHeading } from './errorCopy';
+import { copyForStatus, readDetail, refusedFallbackCopy, RequestFailedError, requestSucceeded, warnFailure, withHeading } from './errorCopy';
 
 /** Paper owns editable objects. Nebula owns immutable exported snapshots. */
 export interface PaperSourceIdentity {
@@ -125,7 +125,7 @@ async function paperRequest<T>(heading: string, path: string, body?: unknown): P
     payload = await response.json();
   } catch {
     // An answer the browser can't read: GM's general line under the heading.
-    throw new PaperSourceError(heading, response.status, { reason: REFUSED_FALLBACK_COPY });
+    throw new PaperSourceError(heading, response.status, { reason: refusedFallbackCopy() });
   }
   requestSucceeded(heading);
   return rewriteBackendAssetUrls(payload) as T;

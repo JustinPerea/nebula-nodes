@@ -21,7 +21,7 @@ import { PlaceholderLine } from './PlaceholderLine';
 import { pendingAttr } from '../../lib/pendingNodes';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import '../../styles/paper-source-node.css';
-import { failureCopy, failureMessage, oneLine, REFUSED_FALLBACK_COPY } from '../../lib/errorCopy';
+import { failureCopy, failureMessage, oneLine, refusedFallbackCopy } from '../../lib/errorCopy';
 import { fixedCardTitle } from '../../lib/cardTitles';
 import { useCanvasLock } from '../../lib/canvasLock';
 import { writtenDateTime } from '../../lib/writtenDateTime';
@@ -173,7 +173,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
   // round 3e) or, for a record saved before it, GM's general line with the
   // text agents read behind Details. lastError itself is never the line.
   const recordLine = source?.lastError
-    ? oneLine({ heading: REFRESH_HEADING, reason: source.lastErrorPerson || REFUSED_FALLBACK_COPY })
+    ? oneLine({ heading: REFRESH_HEADING, reason: source.lastErrorPerson || refusedFallbackCopy() })
     : '';
   const displayedError = error || recordLine;
   const recordDetails = !error && source?.lastError && !source.lastErrorPerson ? source.lastError : '';

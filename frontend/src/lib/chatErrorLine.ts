@@ -26,7 +26,7 @@ export const WHOLE_LINE_CODES = new Set([
   'personal_session_ended', 'personal_agent_warning_required', 'agent_invalid', 'provider_invalid',
   // The model picker and the CLI's model list (services/chat_models.py): the line says what to pick or check.
   'model_unsupported', 'effort_unsupported', 'model_required', 'model_invalid', 'effort_invalid',
-  'auth_required', 'auth_unknown', 'cli_not_installed',
+  'auth_required', 'auth_api_key', 'auth_unknown', 'cli_not_installed',
   'catalog_unavailable', 'catalog_cleanup_failed', 'catalog_timeout', 'catalog_invalid',
   // A personal agent Nebula could not start or reach (services/personal_agents.py, services/acp_session.py).
   'personal_agent_unknown', 'personal_agent_disabled', 'personal_agent_not_installed', 'personal_agent_needs_node',
